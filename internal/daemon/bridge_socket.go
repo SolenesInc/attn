@@ -147,6 +147,7 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 	if previous != nil {
 		_ = previous.Close()
 	}
+	d.store.StartCopyOrder()
 	d.configureNotebookSync()
 	if !d.life.Go("outpostViews", func() { d.sendOutpostViews(d.life.Context(), conn) }) {
 		_ = conn.Close()

@@ -103,6 +103,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 			d.forgetMonitor(session.ID)
 		}
 	}
+	pausepoint.At(pausepoint.TerminalCopyApplied)
 	opts.HostName = protocol.Deref(msg.HostName)
 	d.expectTerminal(msg.TerminalID, session.ID)
 	if agent != nil && agent.PreviousLink != agent.Link {

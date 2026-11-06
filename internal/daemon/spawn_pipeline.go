@@ -410,6 +410,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 		return &spawnOutcome{err: fmt.Errorf("persist terminal launch intent: %w", err)}
 	}
+	pausepoint.At(pausepoint.SessionLinkSetting)
 	previousLink := d.store.SessionLink(session.ID)
 	if err := d.store.SetSessionLink(session.ID, linkKind(req.link)); err != nil {
 		d.logf("spawn: %v", err)

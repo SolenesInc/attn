@@ -2858,6 +2858,7 @@ export interface ConversationReadinessResult {
 export interface CopyRow {
     columns?: { [key: string]: any };
     key:      string;
+    seq:      number;
     table:    CopyTable;
     [property: string]: any;
 }
@@ -12926,6 +12927,7 @@ export enum TerminalStartMessageCmd {
 export interface CopyElement {
     columns?: { [key: string]: any };
     key:      string;
+    seq:      number;
     table:    CopyTable;
     [property: string]: any;
 }
@@ -21949,6 +21951,7 @@ const typeMap: any = {
     "CopyRow": o([
         { json: "columns", js: "columns", typ: u(undefined, m("any")) },
         { json: "key", js: "key", typ: "" },
+        { json: "seq", js: "seq", typ: 0 },
         { json: "table", js: "table", typ: r("CopyTable") },
     ], "any"),
     "CreateWorktreeFromBranchMessage": o([
@@ -28309,6 +28312,7 @@ const typeMap: any = {
     "CopyElement": o([
         { json: "columns", js: "columns", typ: u(undefined, m("any")) },
         { json: "key", js: "key", typ: "" },
+        { json: "seq", js: "seq", typ: 0 },
         { json: "table", js: "table", typ: r("CopyTable") },
     ], "any"),
     "TerminalText": o([

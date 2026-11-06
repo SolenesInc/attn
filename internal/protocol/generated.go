@@ -2247,6 +2247,9 @@ type CopyRow struct {
 	// Key corresponds to the JSON schema field "key".
 	Key string `json:"key"`
 
+	// Seq corresponds to the JSON schema field "seq".
+	Seq int `json:"seq"`
+
 	// Table corresponds to the JSON schema field "table".
 	Table CopyTable `json:"table"`
 }

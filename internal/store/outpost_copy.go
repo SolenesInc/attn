@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -41,6 +42,10 @@ func (s *Store) OutboxChanged() <-chan struct{} {
 func (s *Store) OutboxBatch(host string, budget int) (OutboxBatch, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	seq, err := copySeq(s.db)
+	if err != nil {
+		return OutboxBatch{}, err
+	}
 	entries, err := queryOutbox(s.db, host)
 	if err != nil {
 		return OutboxBatch{}, err
@@ -54,7 +59,9 @@ func (s *Store) OutboxBatch(host string, budget int) (OutboxBatch, error) {
 			return OutboxBatch{}, err
 		}
 		grown := size
-		for _, row := range rows {
+		for i := range rows {
+			rows[i].Seq = seq
+			row := rows[i]
 			encoded, err := json.Marshal(row)
 			if err != nil {
 				return OutboxBatch{}, err
@@ -77,6 +84,12 @@ func (s *Store) OutboxBatch(host string, budget int) (OutboxBatch, error) {
 		batch.Rows = append(batch.Rows, rows...)
 	}
 	return batch, nil
+}
+
+func copySeq(db *sql.DB) (int, error) {
+	var seq int
+	err := db.QueryRow(`SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name = 'outpost_outbox'), 0)`).Scan(&seq)
+	return seq, err
 }
 
 func queryOutbox(db *sql.DB, host string) ([]outboxEntry, error) {
@@ -158,13 +171,17 @@ func (s *Store) AckOutbox(ids []int64) error {
 }
 
 // ApplyCopy writes a batch of home's copy in one transaction. Apart from migrations, it is the only writer of
-// rows with a host on an outpost, and marks the sessions it writes as copied from home.
+// rows with a host on an outpost, and marks the sessions it writes as copied from home. A launch and the
+// outbox both send session rows, so it skips a session row read before the one this bridge last applied.
 func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.CopyRow) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	rows = slices.DeleteFunc(slices.Clone(rows), func(row protocol.CopyRow) bool {
+		return row.Table == protocol.CopyTableSessions && row.Seq < s.copiedSessionSeq[row.Key]
+	})
 	settingsChanged := false
 	err := transactWritingCopies(ctx, s.db, func(tx *sql.Tx) error {
 		var err error
@@ -236,8 +253,14 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 		return err
 	}
 	for _, row := range rows {
-		if row.Table == protocol.CopyTableSessions && row.Columns == nil {
+		if row.Table != protocol.CopyTableSessions {
+			continue
+		}
+		if row.Columns == nil {
+			delete(s.copiedSessionSeq, row.Key)
 			s.forgetSessionCost(protocol.SessionID(row.Key))
+		} else {
+			s.copiedSessionSeq[row.Key] = row.Seq
 		}
 	}
 	if settingsChanged {
@@ -247,6 +270,14 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 	}
 	s.announceTerminalBindingsLocked()
 	return nil
+}
+
+// StartCopyOrder begins a new bridge from home. Its rows are compared only with each other, because restoring
+// home's database moves its sequence back.
+func (s *Store) StartCopyOrder() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.copiedSessionSeq = make(map[string]int)
 }
 
 // DropCopyNotFrom forgets every row copied here from a daemon other than home, and every closed copied row,
@@ -380,10 +411,15 @@ func jsonList(values []string) string {
 func (s *Store) SessionCopy(session protocol.SessionID) ([]protocol.CopyRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	seq, err := copySeq(s.db)
+	if err != nil {
+		return nil, err
+	}
 	row, err := copyRow(s.db, protocol.CopyTableSessions, string(session), `SELECT * FROM sessions WHERE id = ?`, session)
 	if err != nil {
 		return nil, err
 	}
+	row.Seq = seq
 	return []protocol.CopyRow{row}, nil
 }
 

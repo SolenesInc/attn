@@ -22,9 +22,10 @@ import (
 )
 
 type Store struct {
-	mu     sync.RWMutex
-	db     *sql.DB
-	dbPath string
+	copiedSessionSeq map[string]int
+	mu               sync.RWMutex
+	db               *sql.DB
+	dbPath           string
 
 	durable bool
 
@@ -111,19 +112,20 @@ func newDBStore(db *sql.DB, writes *tableWrites, dbPath string, durable bool) (*
 		db.Close()
 		return nil, err
 	}
-	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes}, nil
+	return &Store{db: db, dbPath: dbPath, durable: durable, settings: settings, settingCopies: copies, writes: writes, copiedSessionSeq: make(map[string]int)}, nil
 }
 
 func newMapBackedStore() *Store {
 	return &Store{
-		sessions:        make(map[protocol.SessionID]*protocol.Session),
-		agentDriverRuns: make(map[protocol.SessionID]AgentDriverReportCursor),
-		teardownIntents: make(map[protocol.SessionID]SessionTeardownIntent),
-		sessionCloses:   make(map[protocol.SessionID]sessionCloseMark),
-		sessionCosts:    make(map[protocol.SessionID]sessioncost.Checkpoint),
-		sessionLabels:   make(map[protocol.SessionID]SessionLabels),
-		agentMetadata:   make(map[protocol.SessionID]string),
-		recentLocations: make(map[recentLocationKey]*protocol.RecentLocation),
+		copiedSessionSeq: make(map[string]int),
+		sessions:         make(map[protocol.SessionID]*protocol.Session),
+		agentDriverRuns:  make(map[protocol.SessionID]AgentDriverReportCursor),
+		teardownIntents:  make(map[protocol.SessionID]SessionTeardownIntent),
+		sessionCloses:    make(map[protocol.SessionID]sessionCloseMark),
+		sessionCosts:     make(map[protocol.SessionID]sessioncost.Checkpoint),
+		sessionLabels:    make(map[protocol.SessionID]SessionLabels),
+		agentMetadata:    make(map[protocol.SessionID]string),
+		recentLocations:  make(map[recentLocationKey]*protocol.RecentLocation),
 	}
 }
 

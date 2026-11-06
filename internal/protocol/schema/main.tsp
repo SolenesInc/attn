@@ -346,7 +346,7 @@ enum OutpostReach {
   unreachable,
 }
 
-// One row of an outpost's copy: the current columns of a sessions or terminal_bindings row the home holds for a terminal that outpost runs, or its deletion when columns is absent.
+// One row of an outpost's copy: the current columns of a sessions or terminal_bindings row the home holds for a terminal that outpost runs, or its deletion when columns is absent. seq is how far the home's copy changes had reached before it read the row, so an outpost can tell which of two reads of a session is newer.
 enum CopyTable {
   sessions,
   terminal_bindings,
@@ -356,6 +356,7 @@ enum CopyTable {
 model CopyRow {
   table: CopyTable;
   key: string;
+  seq: safeint;
   columns?: Record<unknown>;
 }
 

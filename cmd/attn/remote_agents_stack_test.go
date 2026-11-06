@@ -613,6 +613,44 @@ func TestClosingAnOutpostAgentDrainsItsFinalCostAndLeavesItsTranscriptReadable(t
 	}
 }
 
+func TestARemoteCodexTakesItsFirstPromptWhenAnOlderCopyOfItsSessionLandsDuringLaunch(t *testing.T) {
+	home := testworld.NewStack(t)
+	outpost := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	linkSetting := home.PauseAt(pausepoint.SessionLinkSetting)
+	olderCopyRead := home.PauseAt(pausepoint.OutboxSessionRead)
+	launchCopied := outpost.PauseAt(pausepoint.TerminalCopyApplied)
+	olderCopyLanded := outpost.PauseAt(pausepoint.OutboxSessionApplied)
+	pair.Start()
+	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	shareOutpostCodex(t, pair)
+	app := pair.App
+	outpost.SetCodexFolderTrust(outpost.Path("agent"), "trusted")
+	spawned := make(chan protocol.SpawnResultMessage, 1)
+	go func() {
+		result, _, _ := home.RequestSpawn(app, fakeagent.Codex, outpost.Path("agent"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+		spawned <- result
+	}()
+	linkSetting.Await()
+	olderCopyRead.Await()
+	linkSetting.Release()
+	launchCopied.Await()
+	olderCopyRead.Release()
+	olderCopyLanded.Await()
+	launchCopied.Release()
+	result := <-spawned
+	olderCopyLanded.Release()
+	if !result.Success {
+		t.Fatalf("spawn: %s", protocol.Deref(result.Error))
+	}
+	id := string(result.ID)
+	agent := outpost.LaunchedCarrying(app.Terminal(id))
+	app.TypeLine(id, "the first prompt")
+	if got := agent.Prompted(); got != "the first prompt" {
+		t.Fatalf("prompt = %q", got)
+	}
+}
+
 func TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRunning(t *testing.T) {
 	for _, scenario := range []string{"online", "offline-restart", "reload-during-recovery"} {
 		t.Run(scenario, func(t *testing.T) {

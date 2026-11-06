@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
@@ -55,10 +56,17 @@ func (d *Daemon) sendOutpostCopyBatch(ctx context.Context, host string, conn *br
 	if err != nil || len(batch.IDs) == 0 {
 		return false, err
 	}
+	if carriesSession(batch.Rows) {
+		pausepoint.At(pausepoint.OutboxSessionRead)
+	}
 	if err := conn.Call(ctx, bridgeCallCopy, batch.Rows, nil); err != nil {
 		return false, err
 	}
 	return true, d.store.AckOutbox(batch.IDs)
+}
+
+func carriesSession(rows []protocol.CopyRow) bool {
+	return slices.ContainsFunc(rows, func(row protocol.CopyRow) bool { return row.Table == protocol.CopyTableSessions })
 }
 
 func (d *Daemon) outpostHandlers() bridge.Handlers {
@@ -125,6 +133,9 @@ func (d *Daemon) applyCopyCall(ctx context.Context, home string, request []byte)
 		return nil, err
 	}
 	d.pruneRuntimesWithoutSession(d.life.Context())
+	if carriesSession(rows) {
+		pausepoint.At(pausepoint.OutboxSessionApplied)
+	}
 	pausepoint.At(pausepoint.CopyBatchApplied)
 	return nil, nil
 }
