@@ -214,14 +214,22 @@ func TestARingQueuedOnAnOutpostSurvivesItsRestartWhileTheHomeIsAway(t *testing.T
 	outpostReachSince(app, 0, "outpost", protocol.OutpostReachUnreachable)
 	m.pressEsc(t, "the ring")
 	m.outpost.AwaitTimer(daemon.ClaudeModReportRetryTimer)
+	resumeMod := m.run.ModPause()
 	m.outpost.Stop()
-	defer m.outpost.FireTimers(daemon.ClaudeModReportRetryTimer)()
 	m.outpost.Start()
 
+	mark := len(app.Log())
 	m.pair.Reconnect()
 	defer m.home.FireTimers(bridge.RetryTimer)()
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
 	m.workingOn(t, app, "carry on")
-	m.ringHeld(t)
+	m.run.ModGiveBack()
+	if err := m.outpost.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	m.outpost.AwaitTimer(daemon.ClaudeModAckTimer)
+	resumeMod()
+	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
 }
 
 func TestAUserMessageTheModReturnsAfterTheOutpostRestartsReachesTheSessionOnce(t *testing.T) {

@@ -344,7 +344,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
-	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop,
+	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack,
 		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactRequests, methodModCompactReport:
 		modded, ok := a.conv.(*claude)
 		if !ok || modded.mod == nil {

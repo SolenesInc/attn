@@ -377,6 +377,7 @@ func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletio
 	writeNotebookFile(t, home, "while-away.md", "written while the outpost was away")
 	requireStdout(t, home.Attn("settings", "set", "notebook.root", ""))
 
+	home.AwaitTimer(bridge.RetryTimer)
 	pair.Reconnect()
 	home.Advance(bridge.ReconnectInterval)
 	awaitOutpostFile(t, pair, filepath.Join(first, "while-away.md"), "written while the outpost was away", false)

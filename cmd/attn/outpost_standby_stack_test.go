@@ -73,6 +73,7 @@ func TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns(t 
 	}
 
 	next := m.outpost.NextLaunch()
+	m.home.AwaitTimer(bridge.RetryTimer)
 	m.pair.Reconnect()
 	m.home.Advance(bridge.ReconnectInterval)
 	woken := next()

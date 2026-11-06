@@ -108,6 +108,21 @@ func (r *Run) ModStopPolling() {
 	r.call(methodModStop, struct{}{}, nil)
 }
 
+// ModPause stops the mod's loop before its next give-back and poll until resume. ModGiveBack steps the give-back alone.
+func (r *Run) ModPause() (resume func()) {
+	r.t.Helper()
+	r.call(methodModPause, struct{}{}, nil)
+	return func() {
+		r.t.Helper()
+		r.call(methodModResume, struct{}{}, nil)
+	}
+}
+
+func (r *Run) ModGiveBack() {
+	r.t.Helper()
+	r.call(methodModGiveBack, struct{}{}, nil)
+}
+
 func (r *Run) ModSkipNextCompact(reason string) {
 	r.t.Helper()
 	r.call(methodModCompactOutcome, ModCompactReport{Outcome: ModCompactSkipped, Reason: reason}, nil)

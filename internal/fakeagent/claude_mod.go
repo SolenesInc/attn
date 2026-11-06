@@ -41,6 +41,9 @@ const (
 	methodModCompactRelease  = "mod_compact_release"
 	methodModCompactRequests = "mod_compact_requests"
 	methodModCompactReport   = "mod_compact_report"
+	methodModPause           = "mod_pause"
+	methodModResume          = "mod_resume"
+	methodModGiveBack        = "mod_give_back"
 )
 
 const (
@@ -95,6 +98,8 @@ type fakeMod struct {
 	nextCompact ModCompactReport
 	compactHold *fakeModCompactHold
 	compactAsks int
+
+	paused chan struct{}
 }
 
 func newFakeMod(dir string) *fakeMod {
@@ -136,6 +141,13 @@ func (m *fakeMod) load() {
 func (m *fakeMod) pollLoop(ctx context.Context, instance string) {
 	query := url.Values{"terminal": {m.terminal}, "instance": {instance}}.Encode()
 	for ctx.Err() == nil {
+		if paused := m.pausedUntil(); paused != nil {
+			select {
+			case <-ctx.Done():
+			case <-paused:
+			}
+			continue
+		}
 		m.sendGivenBack(instance)
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://attn/claude/next?"+query, nil)
 		if err != nil {
@@ -168,6 +180,12 @@ func (m *fakeMod) pollLoop(ctx context.Context, instance string) {
 			}
 		}
 	}
+}
+
+func (m *fakeMod) pausedUntil() chan struct{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.paused
 }
 
 func (m *fakeMod) place(instance string, message fakeModMessage) {
@@ -294,6 +312,26 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		return struct{}{}, nil
 	case methodModStop:
 		m.stopPolling()
+		return struct{}{}, nil
+	case methodModPause:
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		m.paused = make(chan struct{})
+		return struct{}{}, nil
+	case methodModResume:
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.paused == nil {
+			return nil, errors.New("the mod is not paused")
+		}
+		close(m.paused)
+		m.paused = nil
+		return struct{}{}, nil
+	case methodModGiveBack:
+		m.mu.Lock()
+		instance := m.instance
+		m.mu.Unlock()
+		m.sendGivenBack(instance)
 		return struct{}{}, nil
 	case methodModCompactOutcome:
 		var next ModCompactReport
