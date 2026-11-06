@@ -32,6 +32,9 @@ type codexRemote struct {
 	displayed    string
 	overrides    bool
 	blank        map[string]bool
+	mcpRound     map[string]string
+	rejoinHeld   chan struct{}
+	rejoined     chan struct{}
 }
 
 type codexRemoteThread struct {
@@ -40,6 +43,11 @@ type codexRemoteThread struct {
 		Path string `json:"path"`
 	} `json:"thread"`
 }
+
+const (
+	codexMCPStartupStatus = "mcpServer/startupStatus/updated"
+	codexConfiguredServer = "oven"
+)
 
 const codexTrustQuestion = "Trust this folder? Codex can read, edit, and run files here."
 
@@ -182,6 +190,12 @@ func (c *codexRemote) stayConnected(client *codexshared.Client) {
 	for {
 		<-client.Done()
 		c.lost(client)
+		c.mu.Lock()
+		held := c.rejoinHeld
+		c.mu.Unlock()
+		if held != nil {
+			<-held
+		}
 		for attempt := 0; ; attempt++ {
 			time.Sleep(codexReconnectBackoff[min(attempt, len(codexReconnectBackoff)-1)])
 			next, err := c.connect()
@@ -199,6 +213,12 @@ func (c *codexRemote) stayConnected(client *codexshared.Client) {
 			}
 			client = next
 			c.attach(client)
+			c.mu.Lock()
+			if c.rejoined != nil {
+				close(c.rejoined)
+				c.rejoinHeld, c.rejoined = nil, nil
+			}
+			c.mu.Unlock()
 			break
 		}
 	}
@@ -248,6 +268,8 @@ func (c *codexRemote) live() (*codexshared.Client, error) {
 func (c *codexRemote) observe(m codexshared.Message) {
 	var p struct {
 		ThreadID string `json:"threadId"`
+		Name     string `json:"name"`
+		Status   string `json:"status"`
 		Item     struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
@@ -258,6 +280,8 @@ func (c *codexRemote) observe(m codexshared.Message) {
 	shown := p.ThreadID == c.conversation
 	c.mu.Unlock()
 	switch {
+	case m.Method == codexMCPStartupStatus && shown:
+		c.term.programStatus("state=" + c.mcpRoundState(p.Name, p.Status) + ":app=codex")
 	case m.Method == codexApprovalRequest:
 		c.mu.Lock()
 		c.approvals[p.ThreadID] = m.ID
@@ -280,6 +304,25 @@ func (c *codexRemote) observe(m codexshared.Message) {
 		c.term.print(p.Item.Text)
 		c.term.title(c.restingTitle())
 	}
+}
+
+func (c *codexRemote) mcpRoundState(server, status string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.mcpRound == nil {
+		c.mcpRound = map[string]string{}
+	}
+	c.mcpRound[server] = status
+	if _, configured := c.mcpRound[codexConfiguredServer]; !configured {
+		return "working"
+	}
+	for _, reported := range c.mcpRound {
+		if reported == "starting" {
+			return "working"
+		}
+	}
+	c.mcpRound = nil
+	return "idle"
 }
 
 func (c *codexRemote) showApproval(id json.RawMessage) {
@@ -318,6 +361,25 @@ func (c *codexRemote) answer(id json.RawMessage) {
 
 func (c *codexRemote) askApproval() error {
 	return c.request(methodFakeApproval, map[string]any{"threadId": c.current()}, nil)
+}
+
+func (c *codexRemote) holdRejoin() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.rejoinHeld, c.rejoined = make(chan struct{}), make(chan struct{})
+}
+
+func (c *codexRemote) releaseRejoin() error {
+	c.mu.Lock()
+	held, rejoined := c.rejoinHeld, c.rejoined
+	c.mu.Unlock()
+	close(held)
+	select {
+	case <-rejoined:
+		return nil
+	case <-time.After(HangGuard):
+		return fmt.Errorf("codex --remote did not rejoin its conversation within %s", HangGuard)
+	}
 }
 
 func (c *codexRemote) crashServer() error {

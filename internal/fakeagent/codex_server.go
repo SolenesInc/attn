@@ -43,6 +43,7 @@ const (
 	methodWorkspaceRoots = "workspace_roots"
 	methodPermissions    = "permissions"
 	methodDropControl    = "drop_control"
+	methodMCPStartup     = "mcp_startup"
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
 	methodCloseThread    = "close_thread"
@@ -1005,6 +1006,7 @@ func (s *codexAppServer) unarchive(id string) (any, func(), error) {
 
 type serverThreadParams struct {
 	ThreadID string `json:"threadId"`
+	Server   string `json:"server"`
 	Text     string `json:"text"`
 }
 
@@ -1128,6 +1130,13 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return nil, fmt.Errorf("conversation %s was not started here", p.ThreadID)
 		}
 		return promptedResult{Text: t.instructions, ConversationID: p.ThreadID}, nil
+	case methodMCPStartup:
+		thread, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		s.tell(thread, notification(codexMCPStartupStatus, map[string]any{"threadId": p.ThreadID, "name": p.Server, "status": p.Text}))
+		return struct{}{}, nil
 	case methodDropControl:
 		s.mu.Lock()
 		listed := s.listed

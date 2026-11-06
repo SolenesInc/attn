@@ -625,9 +625,53 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 		_ = down.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
+	joined := &codexJoinedConversations{}
 	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message), error) {
+		if m.Method == "thread/resume" {
+			joined.resuming(s, m)
+		}
 		return r.prepare(connection, v, m)
-	}, nil)
+	}, joined.forwards)
+}
+
+type codexJoinedConversations struct {
+	mu            sync.Mutex
+	conversations map[string]bool
+}
+
+func (j *codexJoinedConversations) resuming(s *codexServer, m *codexshared.Message) {
+	var p struct {
+		ThreadID string `json:"threadId"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return
+	}
+	s.mu.Lock()
+	_, loaded := s.held[p.ThreadID]
+	s.mu.Unlock()
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.conversations == nil {
+		j.conversations = make(map[string]bool)
+	}
+	if _, decided := j.conversations[p.ThreadID]; !decided {
+		j.conversations[p.ThreadID] = loaded
+	}
+}
+
+func (j *codexJoinedConversations) forwards(m codexshared.Message) bool {
+	if m.Method != "mcpServer/startupStatus/updated" {
+		return true
+	}
+	var p struct {
+		ThreadID string `json:"threadId"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return true
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return !j.conversations[p.ThreadID]
 }
 
 func (r *codexShared) proxying(v *codexView) (context.Context, *codexProxy) {

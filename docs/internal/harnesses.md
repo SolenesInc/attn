@@ -824,6 +824,23 @@ Read in the source at openai/codex 1ffa95e:
   was running ends as interrupted (`tui/src/app/reconnect.rs`,
   `tui/src/chatwidget/replay.rs`).
 
+Read in the source at openai/codex rust-v0.164.0 and probed on 0.164.0 with a
+frame tap on attn's view proxy. These decide when a shared Codex tile leaves
+`working`:
+
+- The TUI counts an MCP startup round as a running task, so it reports
+  `working`, with no status row while no turn runs. A round ends only when every
+  server enabled in the TUI's config has reported a state other than `starting`
+  (`tui/src/chatwidget/mcp_startup.rs`,
+  `tui/src/chatwidget/status_surfaces.rs`).
+- `mcpServer/startupStatus/updated` goes only to the connections subscribed to
+  the conversation, with no replay. A TUI that joins a conversation another
+  connection loaded misses what the servers already reported. If a later server
+  still reports, that round starts in the TUI and has no way to end, so the TUI
+  keeps reporting `working` after its turn completes.
+- `thread/resume` can start a round, even for a conversation already loaded.
+  `turn/start` can start a round that reports only `ready`.
+
 Read in the source at openai/codex rust-v0.163.0 and c3bb20602d:
 
 - The TUI reports `blocked` only while a question, an approval overlay or an

@@ -195,6 +195,16 @@ func (r *Run) CrashAppServer() {
 	r.call(methodCrashSrv, struct{}{}, nil)
 }
 
+func (r *Run) HoldRejoin() {
+	r.t.Helper()
+	r.call(methodHoldRejoin, struct{}{}, nil)
+}
+
+func (r *Run) ReleaseRejoin() {
+	r.t.Helper()
+	r.call(methodFreeRejoin, struct{}{}, nil)
+}
+
 func (r *Run) StopReadingTerminal() {
 	r.t.Helper()
 	r.call(methodStopRead, struct{}{}, nil)

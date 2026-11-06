@@ -201,7 +201,7 @@ func (c *Client) Connected() bool {
 	}
 }
 
-func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connection context.Context, m *Message) (func(*Message), error), observe func(Message)) {
+func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connection context.Context, m *Message) (func(*Message), error), forward func(Message) bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
@@ -227,8 +227,8 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connectio
 						data = rewriteReply(data, m)
 					}
 				}
-				if observe != nil {
-					observe(m)
+				if !forward(m) {
+					continue
 				}
 			}
 			if down.Write(ctx, kind, data) != nil {

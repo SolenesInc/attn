@@ -124,6 +124,11 @@ func (s *CodexServer) Instructions(conversation string) string {
 	return started.Text
 }
 
+func (s *CodexServer) ReportMCPStartup(conversation, server, status string) {
+	s.t.Helper()
+	s.call(methodMCPStartup, serverThreadParams{ThreadID: conversation, Server: server, Text: status}, nil)
+}
+
 func (s *CodexServer) DropControl() {
 	s.t.Helper()
 	s.call(methodDropControl, serverThreadParams{}, nil)

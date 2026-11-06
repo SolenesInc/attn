@@ -208,6 +208,9 @@ Codex session can't.
   resume the conversation they show. Hidden sessions whose turns stopped go idle
   at once. A terminal shows its stopped turn as interrupted once it reconnects.
 - A subagent's activity belongs to the session of the conversation that started it.
+- A terminal that reconnects or switches to a conversation the app-server already
+  holds doesn't show that conversation's MCP startup line or startup failure
+  warnings. `/mcp` still lists the servers.
 - In a shared terminal where you picked permissions with `/permissions`,
   Codex refuses `/resume` with `Permission overrides are not supported when
   resuming a remote task.` Resume the conversation from another shared

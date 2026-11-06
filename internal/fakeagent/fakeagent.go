@@ -58,6 +58,8 @@ const (
 	methodModReload  = "mod_reload"
 	methodModStop    = "mod_stop_polling"
 	methodCrashSrv   = "crash_app_server"
+	methodHoldRejoin = "hold_rejoin"
+	methodFreeRejoin = "release_rejoin"
 	methodTranscript = "transcript_written"
 	signalExitBase   = 128
 )
@@ -362,6 +364,16 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		}
 		a.term.programStatus(p.Text)
 		return struct{}{}, nil
+	case methodHoldRejoin, methodFreeRejoin:
+		remote, ok := a.conv.(*codexRemote)
+		if !ok {
+			return nil, fmt.Errorf("%T has no app-server to rejoin", a.conv)
+		}
+		if method == methodHoldRejoin {
+			remote.holdRejoin()
+			return struct{}{}, nil
+		}
+		return struct{}{}, remote.releaseRejoin()
 	case methodCrashSrv:
 		remote, ok := a.conv.(*codexRemote)
 		if !ok {
