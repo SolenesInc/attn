@@ -151,9 +151,21 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   do not guarantee a complete trace of that final call.
 - Enter depends on the byte and on when it arrives. After boot, CR alone
   submits and LF alone inserts a newline. attn does not change the terminal's
-  modes, so the PTY translates CR to LF until Claude switches it to raw: a line
-  typed during boot lands in the composer and is not submitted. Probed on
-  2.1.318 through a PTY, with the turn read from the transcript.
+  modes, so the PTY translates CR to LF until Claude switches it to raw. Probed
+  on 2.1.318 through a PTY, with the turn read from the transcript.
+- A line typed before Claude reads its terminal does not become a turn. Launched
+  with no prompt, the line lands in the composer and is not submitted (4 of 4
+  launches, typed at 0.05 to 0.15 s). Launched with a prompt, as every crew wake
+  is, the line reached neither the screen nor the transcript in 9 of 10 launches
+  typed at 0.05 to 0.35 s. The tenth, typed at 0.35 s, became a turn, as both
+  lines typed at 0.45 s did, in a boot that showed its prompt at about 0.5 s.
+  A line typed as soon as the terminal title appeared became a turn in 7 of 7
+  launches, and one typed at UserPromptSubmit in 3 of 3. SessionStart is too
+  early: typed then, the line was lost in 1 of 3 launches, and a 1.5 s
+  SessionStart hook does not hold the boot back. At the folder trust question
+  Claude sets no title and fires no SessionStart (2 of 2 launches). Probed on
+  2.1.319 on Linux through a PTY with a mock API, with the turn read from the
+  requests.
 - An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
   the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
   hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved

@@ -32,6 +32,11 @@ Read in the source at openai/codex 60947e2341.
   `codex exec`, with a Stop hook that copied the rollout; the TUI was not
   probed).
 
+Launched with no prompt in a trusted folder, the TUI sets its terminal title and
+reports `state=idle` with OSC 7501 once its chat starts, 2.7 s after launch in one
+probe, so attn hears from it without a first turn. Probed on 0.164.0 on Linux
+through a PTY with an isolated `CODEX_HOME`.
+
 Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
 
 - A TUI writes no rollout until its first prompt. The rollout's file name

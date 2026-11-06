@@ -218,9 +218,11 @@ that input. A ring lost to an open menu in the harness stays lost.
   gets rings so that it does not wait forever, even though a ring can land on an
   open menu.
 - attn decides from the agent's state and never reads the agent's screen. attn
-  types nothing while the agent needs approval or is launching. attn also types
-  nothing within 30 seconds of the user's last keystroke in the agent's
-  terminal. Waiting costs no attempt.
+  types nothing while the agent needs approval or is launching. A new or woken
+  agent whose harness has hooks is launching until the harness itself reports,
+  because a harness that has only just started loses what is typed
+  ([Claude Code](harnesses/claude.md)). attn also types nothing within 30 seconds
+  of the user's last keystroke in the agent's terminal. Waiting costs no attempt.
 - A shell never gets a ring.
 - When a ring includes the 📬 line, the address has an outstanding ring until
   the agent reads the inbox or 5 minutes pass. While the address has an
@@ -241,7 +243,7 @@ that input. A ring lost to an open menu in the harness stays lost.
 With the experimental `claude_mod_enabled` setting on, a Claude session's mod
 takes each ring instead of the terminal while the mod is connected, on the home
 and on an outpost. attn types as usual while the mod is not connected, such as
-while Claude starts or waits on its folder trust question. The exception is a
+after Claude first reports and before the mod's first poll. The exception is a
 Claude session that attn resumed for a standby seed's mail: attn waits for its
 mod and never types (see [A seed on standby](#a-seed-on-standby)). With the mod
 connected:
@@ -382,7 +384,7 @@ the session opens on its last desktop. A crew member that tends the seed is
 woken as a member under every value of `garden.tender_wake`.
 
 The woken session gets its mail only through a path that knows when the agent
-reads input. For Codex, attn rings right after the resume. For Claude, attn
+reads input. For Codex, attn rings once the resumed Codex first reports. For Claude, attn
 waits for the reopened session's first Claude mod poll and delivers through the
 mod. attn types nothing into a Claude terminal. A Claude session cannot be woken
 while `claude_mod_enabled` is off, or when its mod does not poll within 30

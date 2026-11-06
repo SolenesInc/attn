@@ -2270,6 +2270,10 @@ func (d *Daemon) handlePTYState(terminal harness.TerminalID, obs pty.Observation
 		return
 	}
 	agent := session.Agent
+	if sessionmonitor.ReportsTurnStarts(string(agent)) {
+		d.traceStateVeto(sessionID, origin, state, "harness_reports_its_own_start")
+		return
+	}
 	d.logf(
 		"pty state update: session=%s agent=%s state=%s source=%s detail=%q observed_at=%s",
 		sessionID, agent, state, obs.Source, obs.Detail, obs.At.Format(time.RFC3339Nano),

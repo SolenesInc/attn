@@ -144,8 +144,10 @@ On a `fakeagent.Run`:
   waits until the job runner is idle, moves the clock one schedule tick, and
   waits until the runner is idle again, so `done` reads settled state. It fails
   after `scheduleTickLimit` ticks.
-- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. Each hold on
-  a terminal returns a `testworld.Pause`. `Await` returns once the daemon has
+- `inBubbleWithAgents` gives the world fake terminals, `w.terms`. A terminal's
+  `WorkerReportsItsProcessRunning()` sends what a PTY worker sends once the
+  daemon watches it, before the agent has started. Each hold on a terminal
+  returns a `testworld.Pause`. `Await` returns once the daemon has
   reached the hold, and `Release` lets the daemon go on. A hold the daemon
   never reaches fails the test at teardown.
   - `Stall(alive, err)` makes the terminal's worker stop answering. Recovery

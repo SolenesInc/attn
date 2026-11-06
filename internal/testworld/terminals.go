@@ -439,6 +439,10 @@ func (t *Terminal) ProgramStatus(claim string) {
 	t.observe(pty.SourceProgramStatus, claim, "")
 }
 
+func (t *Terminal) WorkerReportsItsProcessRunning() {
+	t.observe(pty.SourceWorkerInfo, "working", "watch subscribe replay")
+}
+
 func (t *Terminal) observe(source pty.Source, claim, detail string) {
 	t.owner.mu.Lock()
 	signal := pty.Observation{Source: source, Claim: claim, Detail: detail, At: time.Now()}
