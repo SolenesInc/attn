@@ -8,6 +8,7 @@ import { sessionParticipatesInQueue } from '../utils/queueBands';
 import { automationRunGroups } from '../utils/automationRuns';
 import type { AskHolderSession, AskListItem } from '../utils/asks';
 import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
+import { useDesktopHasShelf } from './SessionTerminalDesktop/DesktopShelf';
 import { useSidebarDrag } from './useSidebarDrag';
 
 const EMPTY_DOCK_ITEMS: DockItem[] = [];
@@ -255,8 +256,11 @@ export function useSidebarState({
     onSessionDragEnd,
   });
 
+  const edgeClassName = useDesktopHasShelf(selectedDesktopId) ? 'sidebar--beside-shelf' : '';
+
   return {
     desktops,
+    edgeClassName,
     selectedId,
     selectedDesktopId,
     selectedTile,

@@ -21,9 +21,10 @@ export function SidebarCollapsed() {
     onGoToDashboard,
     homeActive,
     onToggleCollapse,
+    edgeClassName,
   } = useSidebarContext();
   return (
-    <div className="sidebar collapsed" data-callout-anchor="sidebar">
+    <div className={`sidebar collapsed ${edgeClassName}`.trim()} data-callout-anchor="sidebar">
       {instance && (
         <div
           className="sidebar-instance-marker sidebar-instance-marker--collapsed"

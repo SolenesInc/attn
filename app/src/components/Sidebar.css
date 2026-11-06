@@ -14,6 +14,10 @@
   -webkit-user-select: none;
 }
 
+.sidebar--beside-shelf {
+  border-image: linear-gradient(transparent calc(var(--shelf-row-height) - 1px), var(--color-border) 0) 0 1 0 0;
+}
+
 /* Keep text editable/selectable inside popovers the sidebar hosts (e.g. the
    rename input), which would otherwise inherit the no-select above. */
 .sidebar input,

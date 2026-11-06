@@ -1,10 +1,13 @@
+:root {
+  --shelf-row-height: 30px;
+}
+
 .desktop-shelf {
   position: relative;
   z-index: 30;
   display: flex;
   flex: 1 1 0;
   align-items: center;
-  justify-content: center;
   gap: 4px;
   min-width: 0;
   user-select: none;
@@ -12,8 +15,8 @@
 }
 
 .session-terminal-desktop > .desktop-shelf {
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 var(--shelf-row-height);
+  height: var(--shelf-row-height);
   padding: 0 6px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg-panel);
@@ -159,6 +162,11 @@
   font-size: var(--font-size-sm);
   white-space: nowrap;
   transform: translateX(-50%);
+}
+
+.desktop-shelf-live:first-child .desktop-shelf-stepper {
+  left: 0;
+  transform: none;
 }
 
 .desktop-shelf-stepper::before {

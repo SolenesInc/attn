@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { PNG } from 'pngjs';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -13,6 +14,8 @@ import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioR
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const TILES = 7;
+const SHELF_INSET_PX = 12;
+const PIXEL_NOISE = 2;
 const execFileAsync = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
 const runner = createScenarioRunner(options, {
@@ -115,6 +118,30 @@ async function walkTheRow(label) {
   runner.assert(start[0] === row[0], `${label}: ⌘⌥← slides back to the row's start`, { start, row });
 }
 
+async function assertShelfStartsAtTheLeft(label, shelfSelector) {
+  const shelf = (await request('dom_bounds', { selector: shelfSelector })).bounds;
+  const first = (await request('dom_bounds', { selector: `${shelfSelector} > :first-child` })).bounds;
+  runner.assert(first.x - shelf.x <= SHELF_INSET_PX, `${label}: the shelf group starts at the row's left edge`, { shelf, first });
+}
+
+async function assertNoLineBesideShelf(label) {
+  const shelf = (await request('dom_bounds', { selector: `${surface()} > [data-testid="desktop-shelf"]` })).bounds;
+  const panes = (await request('dom_bounds', { selector: `${surface()} .session-terminal-panes` })).bounds;
+  const capture = await request('capture_screenshot_data', { selector: '.sidebar' });
+  const image = PNG.sync.read(Buffer.from(capture.pngBase64, 'base64'));
+  const pixel = (x, y) => {
+    const at = (Math.round(y) * image.width + x) * 4;
+    return [...image.data.subarray(at, at + 3)];
+  };
+  const edgeAndInside = (y) => ({ edge: pixel(image.width - 1, y), inside: pixel(image.width - 2, y) });
+  const besideShelf = edgeAndInside(shelf.y + shelf.height / 2 - capture.bounds.y);
+  const besideTiles = edgeAndInside(panes.y + panes.height / 2 - capture.bounds.y);
+  runner.log(`${label} sidebar edge`, { besideShelf, besideTiles });
+  const same = ({ edge, inside }) => edge.every((value, index) => Math.abs(value - inside[index]) <= PIXEL_NOISE);
+  runner.assert(same(besideShelf), `${label}: no line between the sidebar and the shelf row`, besideShelf);
+  runner.assert(!same(besideTiles), `${label}: the divider stays beside the tiles`, besideTiles);
+}
+
 async function stepTheWidth(label) {
   const shown = (await shownLeaves()).length;
   runner.assert(shown >= 2, `${label}: two tiles fit, so one fewer can show`, { shown });
@@ -187,10 +214,15 @@ try {
     await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
     await walkTheRow('sidebar-open');
     await stepTheWidth('sidebar-open');
+    await assertShelfStartsAtTheLeft('sidebar-open', `${surface()} > [data-testid="desktop-shelf"]`);
+    await assertNoLineBesideShelf('sidebar-open');
     const shown = (await shownLeaves()).length;
     const clickWidthButton = async (name) => {
       await driver.hover('[data-testid="shelf-live-dots"]');
       await waitDom('[data-testid="shelf-width-control"]');
+      const control = (await request('dom_bounds', { selector: '[data-testid="shelf-width-control"]' })).bounds;
+      const shelf = (await request('dom_bounds', { selector: `${surface()} > [data-testid="desktop-shelf"]` })).bounds;
+      runner.assert(control.x >= shelf.x, 'the width control is not cut off at the row start', { control, shelf });
       await driver.click(`[data-testid="shelf-width-control"] [aria-label="${name}"]`);
     };
     await clickWidthButton('Fewer, wider tiles');
@@ -209,6 +241,8 @@ try {
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     await walkTheRow('sidebar-collapsed');
     await stepTheWidth('sidebar-collapsed');
+    await assertShelfStartsAtTheLeft('sidebar-collapsed', `${surface()} > [data-testid="desktop-shelf"]`);
+    await assertNoLineBesideShelf('sidebar-collapsed');
   });
 
   await runner.step('queue_bar', async () => {
@@ -218,9 +252,11 @@ try {
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     await walkTheRow('queue-bar');
     await stepTheWidth('queue-bar');
+    await assertShelfStartsAtTheLeft('queue-bar', '[data-testid="queue-bar"] [data-testid="desktop-shelf"]');
     await press('session.toggleSidebar');
     await waitDom('[data-testid="queue-bar"]', { absent: true });
     await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await assertNoLineBesideShelf('queue-sidebar');
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await waitDom('.sidebar:not(.collapsed)');
   });

@@ -37,6 +37,7 @@ function SidebarExpanded() {
     criticalNotifications,
     onOpenNotifications,
     harnessLogosEnabled,
+    edgeClassName,
     leafDrag,
     onNewDesktopDrop,
     onGoToDashboard,
@@ -49,7 +50,7 @@ function SidebarExpanded() {
   return (
     <div
       data-callout-anchor="sidebar"
-      className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
+      className={`sidebar ${edgeClassName} ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
       <SidebarHeader />
       {/* Above Home, because it outranks it: this only exists when something is owed. */}
