@@ -44,6 +44,13 @@ func (m *outpostMod) pressEsc(t *testing.T, want string) {
 	}
 }
 
+func (m *outpostMod) escEveryHeldRing(t *testing.T) {
+	t.Helper()
+	if returned := m.run.ModEsc(); len(returned) == 0 {
+		t.Fatal("Esc returned nothing, want the ring")
+	}
+}
+
 func (m *outpostMod) awaitStopped(app *testworld.Peer, mark int) {
 	testworld.AwaitSessionSince(app, mark, m.session, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateIdle && protocol.Deref(s.StateReason) == "turn_aborted"
@@ -205,7 +212,9 @@ func TestARingTheModReturnsAfterTheOutpostRestartsIsUnreadAtHome(t *testing.T) {
 	m.ringHeld(t)
 
 	m.restartOutpost(t, m.pair.App)
-	m.esc(t, "the ring")
+	mark := len(m.pair.App.Log())
+	m.escEveryHeldRing(t)
+	m.awaitStopped(m.pair.App, mark)
 
 	m.workingOn(t, m.pair.App, "carry on")
 	m.ringHeld(t)
@@ -261,8 +270,10 @@ func TestAUserMessageTheModReturnsAfterTheOutpostRestartsReachesTheSessionOnce(t
 	}
 }
 
-func TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread(t *testing.T) {
+func newHomeMod(t *testing.T, prepare func(s *testworld.Stack)) (*outpostMod, *testworld.Peer) {
+	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	prepare(s)
 	s.Start()
 	requireStdout(t, s.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
 	register(t, s, outpostModSender, "reviewer")
@@ -271,19 +282,95 @@ func TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread(t *testing.T) {
 	terminal := protocol.TerminalID(app.Terminal(session))
 	run := s.LaunchedCarrying(string(terminal))
 	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
-	m := &outpostMod{home: s, outpost: s, session: session, terminal: terminal, run: run}
+	return &outpostMod{home: s, outpost: s, session: session, terminal: terminal, run: run, app: app}, app
+}
+
+func TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread(t *testing.T) {
+	m, app := newHomeMod(t, func(*testworld.Stack) {})
 	m.workingOn(t, app, "write the essay")
-	m.sendMail(t, session, "the discount is applied after tax")
+	m.sendMail(t, m.session, "the discount is applied after tax")
 	m.ringHeld(t)
 
-	s.Stop()
-	s.Start()
-	app = s.App()
-	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)
-	m.app = app
-	m.esc(t, "the ring")
+	m.home.Stop()
+	m.home.Start()
+	app = m.home.App()
+	m.home.AwaitTimer(daemon.ClaudeModPollHoldTimer)
+	mark := len(app.Log())
+	m.escEveryHeldRing(t)
+	m.awaitStopped(app, mark)
 	m.workingOn(t, app, "carry on")
 	m.ringHeld(t)
+}
+
+func TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHolds(t *testing.T) {
+	var answering *testworld.Pause
+	m, app := newHomeMod(t, func(s *testworld.Stack) { answering = s.PauseAt(pausepoint.RingPlacementAnswering) })
+	m.workingOn(t, app, "write the essay")
+	if err := m.home.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSession(app, m.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	mailed := make(chan testworld.Result, 1)
+	go func() {
+		mailed <- m.home.Run(testworld.Invocation{Args: []string{"agent", "msg", m.session, "the discount is applied after tax"}, Session: outpostModSender})
+	}()
+	answering.Await()
+	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
+
+	resumeMod := m.run.ModPause()
+	m.home.Kill()
+	<-mailed
+	m.home.Start()
+	app = m.home.App()
+	m.home.AwaitTimer(daemon.ClaudeModAckTimer)
+	resumeMod()
+	answering.Await()
+	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
+	answering.Release()
+
+	mark := len(app.Log())
+	m.escEveryHeldRing(t)
+	m.awaitStopped(app, mark)
+	m.workingOn(t, app, "carry on")
+	m.ringHeld(t)
+}
+
+func TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod(t *testing.T) {
+	m := newOutpostMod(t)
+	app := m.pair.App
+	m.workingOn(t, app, "write the essay")
+	m.sendMail(t, m.session, "the discount is applied after tax")
+
+	resumeMod := m.run.ModPause()
+	mark := len(app.Log())
+	m.outpost.Stop()
+	m.outpost.Start()
+	m.home.FireTimers(bridge.RetryTimer)
+	outpostReachSince(app, mark, "outpost", protocol.OutpostReachReachable)
+	if err := m.outpost.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	m.outpost.AwaitTimer(daemon.ClaudeModAckTimer)
+	resumeMod()
+	m.modEvent(t, fakeagent.ModEventHeld, "attn agent inbox")
+}
+
+func TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto(t *testing.T) {
+	m, app := newHomeMod(t, func(*testworld.Stack) {})
+	m.workingOn(t, app, "write the essay")
+	m.sendMail(t, m.session, "the discount is applied after tax")
+	m.run.ModStopPolling()
+
+	m.home.Stop()
+	m.home.Start()
+	m.home.AwaitTimer(daemon.ClaudeModReachTimer)
+	if err := m.home.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	m.home.FirePending(daemon.ClaudeModReachTimer)
+	if got := m.run.Prompted(); m.run.ThroughMod || !strings.Contains(got, "attn agent inbox") {
+		t.Fatalf("the agent took %q (through the mod: %t), want the ring typed", got, m.run.ThroughMod)
+	}
 }
 
 func TestAReportTheHomeRefusesDoesNotBlockTheOnesBehindIt(t *testing.T) {

@@ -75,6 +75,9 @@ go ./internal/daemon TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSes
 go ./cmd/attn TestAnOutpostSessionClosesWhenItsCompactNeverReportsAnOutcome
 go ./cmd/attn TestARingQueuedOnAnOutpostSurvivesItsRestartWhileTheHomeIsAway
 go ./cmd/attn TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread
+go ./cmd/attn TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHolds
+go ./cmd/attn TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod
+go ./cmd/attn TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto
 go ./cmd/attn TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns
 
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
