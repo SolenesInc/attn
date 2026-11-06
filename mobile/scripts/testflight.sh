@@ -70,7 +70,7 @@ run_logged() {
     if grep -q 'Error Downloading App Information' "${log}"; then
       fail "App Store Connect has no app record for codes.attn.mobile, or the API key cannot see it. Create it once as docs/internal/phone-app-releases.md says (One-time setup), then run this script again. The full log is ${log}"
     fi
-    if refusal="$(grep -E -m1 'Validation failed.*409|Upload limit' "${log}")"; then
+    if refusal="$(grep -E -m1 -A1 'Validation failed.*409|Upload limit' "${log}" | tr '\n' ' ')" && [[ -n "${refusal}" ]]; then
       fail "App Store Connect refused the upload with a 409. If its answer names the upload limit, wait a day, then upload again. Otherwise, fix what it names. The full log is ${log}. Its answer: ${refusal}"
     fi
     fail "${name} failed; the full log is ${log}"
