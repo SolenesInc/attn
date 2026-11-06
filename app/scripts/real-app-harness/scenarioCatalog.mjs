@@ -167,6 +167,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-drags'],
   },
   {
+    id: 'shelf-sidebar-resize',
+    runnerId: 'SHELF-SIDEBAR-RESIZE',
+    label: 'Dragging the open sidebar keeps the tile area frozen, fits each terminal once on release and honors its limits, Esc and double-click',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-sidebar-resize'],
+  },
+  {
     id: 'shelf-motion',
     runnerId: 'SHELF-MOTION',
     label: 'Row moves animate only transform and opacity, resize each terminal at most once and leave nothing behind',
