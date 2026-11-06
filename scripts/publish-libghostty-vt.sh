@@ -6,14 +6,14 @@
 #   make publish-native-vt        # or: ./scripts/publish-libghostty-vt.sh
 #
 # It, for each of ${VT_PLATFORMS[@]} (darwin/arm64 + linux/amd64 + linux/arm64):
-# (1) cross-builds from source with zig (all targets build from one machine);
+# (1) cross-builds from source with zig (all targets build from one Mac);
 # (2) packs a per-platform tarball keyed by the pin; (3) uploads it to the
 # rolling `native-vt-prebuilts` GitHub release (creating the release if absent,
 # clobbering a same-key asset). Then it rewrites ghostty-vt-native.lock with the
 # shared key + one sha256 per platform. COMMIT the updated lock — the Makefile
 # depends on it, so committing it is what makes everyone re-fetch.
 #
-# Requires: zig 0.17.x (cross-compiles all targets from one host), and `gh`
+# Requires: a Mac with the macOS SDK, zig 0.17.x (cross-compiles all targets), and `gh`
 # authenticated with write access to the repo.
 set -euo pipefail
 

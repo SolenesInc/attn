@@ -45,7 +45,7 @@ vt_platform_goos()   { printf '%s' "${1%%_*}"; }
 vt_platform_goarch() { printf '%s' "${1##*_}"; }
 
 # zig -Dtarget / `zig cc -target` triple for a platform tuple. Linux tuples use
-# zig's bundled libc; darwin uses the macOS SDK via SDKROOT when xcrun exists.
+# zig's bundled libc; darwin needs the macOS SDK via SDKROOT.
 vt_zig_target() {
   case "$1" in
     darwin_arm64) printf 'aarch64-macos' ;;
@@ -181,7 +181,7 @@ vt_source_key() {
     vt_commit
     printf '\n%s\n%s\n%s\n' "$platform" "$zig" "${SDKROOT:-}"
     "$zig" version
-    if [[ "$platform" == darwin_* ]] && command -v xcrun >/dev/null; then xcrun --show-sdk-version; fi
+    if [[ "$platform" == darwin_* ]]; then xcrun --show-sdk-version; fi
     cd "$vt_repo_dir" || exit
     shasum -a 256 scripts/build-libghostty-vt.sh scripts/lib/libghostty-vt.sh .tool-versions
   } | shasum -a 256 | awk '{ print $1 }'
@@ -211,11 +211,14 @@ vt_build_from_source() {
     *) echo "error: need zig 0.17.x, found $zig_version (asdf: 'asdf local zig 0.17.0')" >&2; return 1 ;;
   esac
 
-  # On a Mac the macOS target builds against the platform SDK. Everywhere else
-  # zig's bundled libc headers cross-build every target; the archive needs no
-  # framework symbols to be built.
+  # Only the macOS target needs the platform SDK; Linux targets use zig's
+  # bundled libc headers and cross-build from any host.
   sdkroot=""
-  if [[ "$goos" == "darwin" ]] && command -v xcrun >/dev/null; then
+  if [[ "$goos" == "darwin" ]]; then
+    if ! command -v xcrun >/dev/null; then
+      echo "error: building $platform needs a Mac with the macOS SDK: an archive built without it defines _memset twice and fails to link on macOS" >&2
+      return 1
+    fi
     sdkroot="${SDKROOT:-$(xcrun --show-sdk-path)}"
   fi
 
