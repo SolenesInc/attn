@@ -137,4 +137,16 @@ test.describe('Row motion', () => {
     await show(page, { row: ['a', 'b'], first: 0, shown: 2 });
     expect(await animations(page)).toEqual([]);
   });
+
+  test('a tile whose terminal never painted can leave the screen', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await open(page);
+    await show(page, { row: ['never-painted', 'b', 'c'], first: 0, shown: 2 });
+    await page.getByTestId('pane-never-painted').waitFor();
+    await show(page, { row: ['never-painted', 'b', 'c'], first: 1, shown: 2 });
+    await page.getByTestId('pane-c').waitFor();
+    expect(errors).toEqual([]);
+    await atRest(page);
+  });
 });

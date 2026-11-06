@@ -38,6 +38,7 @@ import {
   type LogicalSpan,
 } from '../utils/terminalLinks';
 import { outpostPathRefusal } from '../utils/outpostPaths';
+import { stillFrameOf } from '../utils/stillFrame';
 import {
   initialFocusedMatch,
   startFindScan,
@@ -988,12 +989,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const canvas = canvasRef.current;
       if (!canvas || !rendererRef.current || surfaceReleasedRef.current) return null;
       renderSurface(true);
-      const still = document.createElement('canvas');
-      still.width = canvas.width;
-      still.height = canvas.height;
-      still.style.cssText = canvas.style.cssText;
-      still.getContext('2d')?.drawImage(canvas, 0, 0);
-      return still;
+      return stillFrameOf(canvas);
     }, [renderSurface]);
 
     useEffect(() => {

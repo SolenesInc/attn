@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '../../src/components/SessionTerminalDesktop/SessionTerminalDesktop.css';
 import { useRowMotion, type RowMotionLayout } from '../../src/components/SessionTerminalDesktop/useRowMotion';
 import type { NormalizedPaneBounds } from '../../src/types/desktop';
+import { stillFrameOf } from '../../src/utils/stillFrame';
 import type { HarnessProps } from '../types';
 
 const WIDTH = 900;
@@ -13,6 +14,23 @@ interface Screen {
   shown: number;
   paused?: boolean;
   shelfOff?: boolean;
+}
+
+const NEVER_PAINTED_TILE = 'never-painted';
+
+function TileBody({ id, keepLeavingFrame }: { id: string; keepLeavingFrame: (leafId: string, frame: HTMLCanvasElement | null) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas && id === NEVER_PAINTED_TILE) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+    return () => {
+      if (canvas) keepLeavingFrame(id, stillFrameOf(canvas));
+    };
+  }, [id, keepLeavingFrame]);
+  return <canvas ref={canvasRef} />;
 }
 
 function columnBounds(index: number, count: number): NormalizedPaneBounds {
@@ -41,7 +59,7 @@ export function RowMotionHarness({ onReady, setTriggerRerender }: HarnessProps) 
       heightPx: HEIGHT,
     }
     : null), [hasRow, screen.first, screen.row, shown.join('|')]);
-  useRowMotion({ containerRef, layout, paused: screen.paused ?? false, mountedLeavesKey: shown.join('|') });
+  const { keepLeavingFrame } = useRowMotion({ containerRef, layout, paused: screen.paused ?? false, mountedLeavesKey: shown.join('|') });
 
   useEffect(() => {
     window.__rowMotionShow = setScreen;
@@ -67,6 +85,7 @@ export function RowMotionHarness({ onReady, setTriggerRerender }: HarnessProps) 
                 style={{ left: `${bounds.left * 100}%`, top: 0, width: `${bounds.width * 100}%`, height: '100%' }}
               >
                 {id}
+                <TileBody id={id} keepLeavingFrame={keepLeavingFrame} />
               </div>
             );
           })}
