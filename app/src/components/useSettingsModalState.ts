@@ -530,7 +530,7 @@ export function useSettingsModalState({
             label: 'Agents and models',
             description: 'Defaults for new sessions, with configuration for each agent.',
             keywords:
-              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended seeds standby pull request pr comments ring quiet',
+              'agents executables claude codex default capabilities model effort pricing context window cap tokens compaction auto-approve unattended direct agent launches memory seeds standby pull request pr comments ring quiet',
           },
           {
             id: 'models', label: 'Models', description: 'Tiers describe how much intelligence a task needs. Your changes apply across profiles on this daemon; Reset restores attn’s mapping.', keywords: 'harness model tier light standard deep overrides defaults',
@@ -599,7 +599,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental quick capture global shortcut outposts remote computers nisse harness claude mod crew v2 chief launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
+            keywords: 'experimental quick capture global shortcut outposts remote computers nisse harness claude mod crew v2 chief launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',

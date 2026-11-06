@@ -252,6 +252,21 @@ describe('SettingsModal chief settings', () => {
     expect(savedSettings(daemon)).toEqual([['auto_approve_enabled', 'false']]);
   });
 
+  it('shows direct launches on with no stored value and saves the way off and back', async () => {
+    const daemon = await agentSection('agents', {});
+    const direct = () => screen.getByRole('switch', { name: 'Direct agent launches' });
+
+    expect(direct()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(direct()));
+    expect(direct()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(direct()));
+    expect(direct()).toHaveAttribute('aria-checked', 'true');
+    expect(savedSettings(daemon)).toEqual([
+      ['direct_agent_launch_enabled', 'false'],
+      ['direct_agent_launch_enabled', 'true'],
+    ]);
+  });
+
   it.each(['chief', 'default'] as const)('uses discovered %s model and effort controls with a fixed harness', async (kind) => {
     const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', {});
     const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';

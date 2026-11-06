@@ -11,7 +11,7 @@ var (
 	QuickCaptureEnabled          = feature("quick_capture_enabled", "Quick Capture", Experimental, "2026-10-19", "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.")
 	CrewV2Enabled                = feature("crew_v2_enabled", "Crew v2", Experimental, "2026-10-27", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.")
 	NewSessionLauncherEnabled    = feature("new_session_launcher_enabled", "Launcher 2.0", Experimental, "2026-10-16", "Show the new session launcher: true or false.")
-	DirectAgentLaunchEnabled     = feature("direct_agent_launch_enabled", "Direct agent launches", Experimental, "2026-10-15", "Launch agents directly: true or false.")
+	DirectAgentLaunchEnabled     = feature("direct_agent_launch_enabled", "Direct agent launches", OnByDefault, "2026-10-15", "Launch agents directly, without an attn process beside each one: true or false. On by default; applies to new and reloaded agents.")
 	CodexSharedEnabled           = feature("codex_shared_enabled", "Shared Codex", Experimental, "2026-10-16", "Use the shared Codex app server: true or false.")
 	ClaudeModEnabled             = feature("claude_mod_enabled", "Claude mod", Experimental, "2026-11-04", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.")
 	NisseEnabled                 = feature("nisse_enabled", "Nisse", Experimental, "2026-10-29", "Offer Nisse as a harness: true or false.")

@@ -197,6 +197,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           handleDefaultAgentChange={state.handleDefaultAgentChange}
           autoApproveEnabled={state.autoApproveEnabled}
           handleToggleAutoApprove={state.handleToggleAutoApprove}
+          directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           defaultOverrideAgentList={state.defaultOverrideAgentList}
           actualAgentCapabilities={state.actualAgentCapabilities}
           agentCapabilityOrder={state.agentCapabilityOrder}
@@ -241,7 +242,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           codexSharedEnabled={state.codexSharedEnabled}
           claudeModEnabled={state.claudeModEnabled}
           nisseEnabled={state.nisseEnabled}
-          directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
           calloutsEnabled={state.calloutsEnabled}

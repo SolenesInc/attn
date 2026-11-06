@@ -586,7 +586,6 @@ export function ExperimentalSettings({
   codexSharedEnabled,
   claudeModEnabled,
   nisseEnabled,
-  directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
   phoneAccessEnabled,
@@ -607,7 +606,6 @@ export function ExperimentalSettings({
   | 'codexSharedEnabled'
   | 'claudeModEnabled'
   | 'nisseEnabled'
-  | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
   | 'phoneAccessEnabled'
@@ -648,26 +646,6 @@ export function ExperimentalSettings({
             aria-checked={newSessionLauncherEnabled} aria-describedby="new-session-launcher-description"
             className="settings-action" onClick={() => onSetSetting('new_session_launcher_enabled', newSessionLauncherEnabled ? 'false' : 'true')}>
             {newSessionLauncherEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Direct agent launches</p>
-            <p className="settings-row-copy" id="direct-agent-launch-description">
-              Launch agents using less memory.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Direct agent launches"
-            aria-checked={directAgentLaunchEnabled}
-            aria-describedby="direct-agent-launch-description"
-            className="settings-action"
-            data-testid="settings-direct-agent-launch-toggle"
-            onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
-          >
-            {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
@@ -1045,6 +1023,7 @@ export function AgentSettings({
   handleDefaultAgentChange,
   autoApproveEnabled,
   handleToggleAutoApprove,
+  directAgentLaunchEnabled,
   defaultOverrideAgentList,
   actualAgentCapabilities,
   agentCapabilityOrder,
@@ -1065,6 +1044,7 @@ export function AgentSettings({
   | 'handleDefaultAgentChange'
   | 'autoApproveEnabled'
   | 'handleToggleAutoApprove'
+  | 'directAgentLaunchEnabled'
   | 'defaultOverrideAgentList'
   | 'actualAgentCapabilities'
   | 'agentCapabilityOrder'
@@ -1137,6 +1117,27 @@ export function AgentSettings({
             onClick={handleToggleAutoApprove}
           >
             {autoApproveEnabled ? 'Disable' : 'Enable'}
+          </button>
+        </div>
+        <div className="settings-default-row">
+          <div>
+            <p className="settings-row-title">Direct agent launches</p>
+            <p className="settings-row-copy" id="direct-agent-launch-description">
+              Start agents without an attn process beside each one, which uses less memory. On by default; applies to
+              new and reloaded agents.
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-label="Direct agent launches"
+            aria-checked={directAgentLaunchEnabled}
+            aria-describedby="direct-agent-launch-description"
+            className="settings-action"
+            data-testid="settings-direct-agent-launch-toggle"
+            onClick={() => onSetSetting('direct_agent_launch_enabled', directAgentLaunchEnabled ? 'false' : 'true')}
+          >
+            {directAgentLaunchEnabled ? 'Disable' : 'Enable'}
           </button>
         </div>
       </section>

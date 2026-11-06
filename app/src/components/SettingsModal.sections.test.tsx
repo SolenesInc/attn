@@ -136,7 +136,7 @@ describe('SettingsModal sections', () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['terminal', 'pty', 'Launcher 2.0', 'Shared terminal host', 'Direct agent launches']) {
+    for (const query of ['terminal', 'pty', 'Launcher 2.0', 'Shared terminal host']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
       expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
     }

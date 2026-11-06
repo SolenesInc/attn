@@ -717,6 +717,7 @@ func TestTurningTheSettingsOffAndOnMovesNewTerminalsAndLeavesLiveOnes(t *testing
 	u.turn(app, first, "with-the-settings-off")
 
 	u.storeTheNewDefaults(app)
+	setSetting(t, app, upgradeDirectLaunchEnabled, "true")
 	third := u.spawnAgent(app, fakeagent.Claude)
 	u.assertParent(third.run, "attn-pty-host")
 	for _, agent := range []releaseAgent{first, second, third} {
@@ -800,6 +801,30 @@ func TestDirectLaunchStartsAgentsThroughTheUsersLoginShell(t *testing.T) {
 			if result.Success || !strings.Contains(protocol.Deref(result.Error), `agent "claude" is not available`) {
 				t.Errorf("starting an agent with no harness: success=%t error=%q, want a refusal that names the harness", result.Success, protocol.Deref(result.Error))
 			}
+		})
+		t.Run("an rc file that exits with direct launch "+direct, func(t *testing.T) {
+			t.Parallel()
+			u := startDirectLaunch(t, func(s *testworld.Stack) string {
+				return loginShell(t, s, `case "$*" in *attn-agent*) echo 'rc: broken config' >&2; exit 7;; esac`)
+			})
+			app := u.App()
+			setSetting(t, app, upgradeDirectLaunchEnabled, direct)
+			u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), "rc: broken config")
+		})
+		t.Run("the harness cannot run with direct launch "+direct, func(t *testing.T) {
+			t.Parallel()
+			const name = "claude-cannot-run"
+			u := startDirectLaunch(t, func(s *testworld.Stack) string {
+				path := filepath.Join(s.Dir, name)
+				if err := os.WriteFile(path, []byte("#!/no/such/interpreter\n"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				s.Vars = append(s.Vars, "ATTN_CLAUDE_EXECUTABLE="+path)
+				return ""
+			})
+			app := u.App()
+			setSetting(t, app, upgradeDirectLaunchEnabled, direct)
+			u.assertStopsShowing(app, u.Spawn(app, fakeagent.Claude, u.Path("claude")), name)
 		})
 	}
 }
@@ -1143,11 +1168,10 @@ func (u *releaseUpdate) ensureCurrent() *testworld.Peer {
 	return u.App()
 }
 
-// storeTheNewDefaults stands in for the flips of both settings until they land.
+// storeTheNewDefaults stands in for the flip of the shared host until it lands.
 func (u *releaseUpdate) storeTheNewDefaults(app *testworld.Peer) {
 	u.T.Helper()
 	setSetting(u.t, app, upgradeSharedHostEnabled, "true")
-	setSetting(u.t, app, upgradeDirectLaunchEnabled, "true")
 }
 
 func (u *releaseUpdate) spawnAgent(app *testworld.Peer, h fakeagent.Harness) releaseAgent {
@@ -1220,6 +1244,12 @@ func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {
 	if !strings.Contains(string(parent), want) {
 		u.T.Errorf("%s's parent is %s, want %q", run.Harness, parent, want)
 	}
+}
+
+func (u *releaseUpdate) assertStopsShowing(app *testworld.Peer, session, text string) {
+	u.T.Helper()
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+	requireScreen(u.t, u.Attn("agent", "peek", session).Stdout, "screen at exit", text)
 }
 
 func (u *releaseUpdate) assertNoReloadNotice(app *testworld.Peer, session string) {

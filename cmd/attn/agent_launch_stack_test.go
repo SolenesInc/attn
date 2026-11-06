@@ -19,12 +19,12 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(backend))
 			s.Start()
 			app := s.App()
-			if app.Initial.Settings["direct_agent_launch_enabled"] != "false" {
-				t.Fatal("a fresh daemon must expose the direct-launch experiment as false")
+			if app.Initial.Settings["direct_agent_launch_enabled"] != "true" {
+				t.Fatal("a fresh daemon must report direct launch as on")
 			}
-			for _, direct := range []bool{false, true} {
-				if direct {
-					setSetting(t, app, "direct_agent_launch_enabled", "true")
+			for _, direct := range []bool{true, false} {
+				if !direct {
+					setSetting(t, app, "direct_agent_launch_enabled", "false")
 				}
 				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 					session := s.Spawn(app, h, s.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
@@ -73,7 +73,7 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 	}
 }
 
-func TestTheLaunchExperimentChangesNewAndReloadedAgentsAndSurvivesRestart(t *testing.T) {
+func TestTheDirectLaunchSettingChangesNewAndReloadedAgentsAndSurvivesRestart(t *testing.T) {
 	for _, backend := range testworld.WorkerAndSharedHost {
 		t.Run(string(backend), func(t *testing.T) {
 
@@ -94,7 +94,7 @@ func TestTheLaunchExperimentChangesNewAndReloadedAgentsAndSurvivesRestart(t *tes
 			s.Start()
 			app = s.App()
 			if app.Initial.Settings["direct_agent_launch_enabled"] != "true" {
-				t.Fatal("launch experiment did not survive daemon restart")
+				t.Fatal("the stored direct launch setting did not survive a daemon restart")
 			}
 			for _, direct := range []bool{true, false} {
 				if !direct {

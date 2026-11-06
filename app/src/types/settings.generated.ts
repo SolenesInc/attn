@@ -37,6 +37,7 @@ export const BoolSetting = {
 export type BoolSettingKey = (typeof BoolSetting)[keyof typeof BoolSetting];
 
 export const DEFAULT_ON_SETTINGS: ReadonlySet<string> = new Set([
+  "direct_agent_launch_enabled",
   "queue_show_hidden_sessions",
   "queue_quiet_notifications",
   "auto_approve_enabled",
