@@ -167,14 +167,14 @@ terminal shows.
 
 ## Hidden sessions in the queue
 
-Hidden sessions queue like any other session, so a hidden session that needs an
-answer appears in the queue without a desktop chip. Choose that session and Attn
-opens the session in a tile on the current desktop, resuming the conversation
-there. If the session was waiting on an approval, the approval waits in the
-tile. Answer it as usual.
+By default, hidden sessions queue like any other session, so a hidden session
+that needs an answer appears in the queue without a desktop chip. Choose that
+session and Attn opens the session in a tile on the current desktop, resuming the
+conversation there. If the session was waiting on an approval, the approval waits
+in the tile. Answer it as usual.
 
-To keep hidden sessions out of the queue, turn off **Settings → Experimental → Show
-hidden sessions in the queue**. They stay in the Sessions ledger.
+To keep hidden sessions out of the queue, turn off **Settings → Attention queue →
+Show hidden sessions in the queue**. They stay in the Sessions ledger.
 
 ## Names
 

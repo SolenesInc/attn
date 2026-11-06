@@ -509,9 +509,9 @@ export function useSettingsModalState({
           {
             id: 'hygiene',
             label: 'Attention queue',
-            description: 'When a turn settles itself, which notifications stay out of the queue, and which repositories and authors never reach it.',
+            description: 'When a turn settles itself, which notifications stay out of the queue, whether hidden sessions join it, and which repositories and authors never reach it.',
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications show hidden sessions shared codex',
           },
         ],
       },
@@ -592,7 +592,7 @@ export function useSettingsModalState({
             id: 'experimental',
             label: 'Experimental',
             description: 'Opt in to features that are still being developed.',
-            keywords: 'experimental launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex show hidden sessions in the queue direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
+            keywords: 'experimental launcher 2.0 shared terminal host shelf layout narrowest tile width shared codex direct agent launches terminal pty backend rust workers memory claude one-screen new-session one screen new session project path asks questions answer decisions drawer agent callouts point guided steps phone access mobile iphone usage analytics telemetry',
           },
           {
             id: 'backgroundTasks',

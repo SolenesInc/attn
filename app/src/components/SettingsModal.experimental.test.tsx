@@ -4,7 +4,6 @@ import { openSection, savedSettings } from '../test/settings';
 import { gesture } from '../test/renderApp';
 
 const sharedCodex = () => screen.getByRole('switch', { name: 'Shared Codex' });
-const hiddenInQueue = () => screen.getByRole('switch', { name: 'Show hidden sessions in the queue' });
 const directLaunch = () => screen.getByRole('switch', { name: 'Direct agent launches' });
 
 describe('Experimental settings for shared Codex', () => {
@@ -15,15 +14,6 @@ describe('Experimental settings for shared Codex', () => {
     expect(sharedCodex()).toHaveAttribute('aria-checked', 'true');
     await gesture(daemon, () => fireEvent.click(sharedCodex()));
     expect(savedSettings(daemon)).toEqual([['codex_shared_enabled', 'true'], ['codex_shared_enabled', 'false']]);
-  });
-
-  it('keeps hidden sessions in the queue by default, and lets that change while Shared Codex is off', async () => {
-    const daemon = await openSection('experimental');
-    expect(sharedCodex()).toHaveAttribute('aria-checked', 'false');
-    expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'true');
-    await gesture(daemon, () => fireEvent.click(hiddenInQueue()));
-    expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'false');
-    expect(savedSettings(daemon)).toEqual([['queue_show_hidden_sessions', 'false']]);
   });
 });
 

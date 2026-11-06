@@ -585,7 +585,6 @@ export function ExperimentalSettings({
   codexSharedEnabled,
   claudeModEnabled,
   nisseEnabled,
-  queueShowHiddenSessions,
   directAgentLaunchEnabled,
   asksEnabled,
   calloutsEnabled,
@@ -606,7 +605,6 @@ export function ExperimentalSettings({
   | 'codexSharedEnabled'
   | 'claudeModEnabled'
   | 'nisseEnabled'
-  | 'queueShowHiddenSessions'
   | 'directAgentLaunchEnabled'
   | 'asksEnabled'
   | 'calloutsEnabled'
@@ -800,27 +798,6 @@ export function ExperimentalSettings({
             onClick={() => onSetSetting('nisse_enabled', nisseEnabled ? 'false' : 'true')}
           >
             {nisseEnabled ? 'Disable' : 'Enable'}
-          </button>
-        </div>
-        <div className="settings-row-card">
-          <div>
-            <p className="settings-row-title">Show hidden sessions in the queue</p>
-            <p className="settings-row-copy" id="queue-hidden-sessions-description">
-              For shared Codex sessions. Switching sessions inside Codex can leave the previous session running without
-              an attn tile. Include these hidden sessions in the queue; selecting one opens it in a terminal.
-            </p>
-          </div>
-          <button
-            type="button"
-            role="switch"
-            aria-label="Show hidden sessions in the queue"
-            aria-checked={queueShowHiddenSessions}
-            aria-describedby="queue-hidden-sessions-description"
-            className="settings-action"
-            data-testid="settings-queue-hidden-sessions-toggle"
-            onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
-          >
-            {queueShowHiddenSessions ? 'Disable' : 'Enable'}
           </button>
         </div>
         <div className="settings-row-card">
@@ -1233,6 +1210,7 @@ export function HygieneSettings({
   savedFlash,
   autoSettleCountdownDraft,
   queueQuietNotifications,
+  queueShowHiddenSessions,
   onSetSetting,
   mutedRepos,
   onUnmuteRepo,
@@ -1246,6 +1224,7 @@ export function HygieneSettings({
   | 'savedFlash'
   | 'autoSettleCountdownDraft'
   | 'queueQuietNotifications'
+  | 'queueShowHiddenSessions'
   | 'onSetSetting'
   | 'mutedRepos'
   | 'onUnmuteRepo'
@@ -1373,6 +1352,38 @@ export function HygieneSettings({
               onClick={() => onSetSetting('queue_quiet_notifications', queueQuietNotifications ? 'false' : 'true')}
             >
               {queueQuietNotifications ? 'Disable' : 'Enable'}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <h3>Hidden sessions</h3>
+          <p className="settings-description">
+            Shared Codex sessions that keep running without an attn tile. On by default.
+          </p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <p className="settings-row-title">Show hidden sessions in the queue</p>
+              <p className="settings-row-copy" id="queue-hidden-sessions-description">
+                Switching sessions inside Codex can leave the previous session running without a tile. Include these
+                hidden sessions in the queue; selecting one opens it in a terminal.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-label="Show hidden sessions in the queue"
+              aria-checked={queueShowHiddenSessions}
+              aria-describedby="queue-hidden-sessions-description"
+              className="settings-action"
+              data-testid="settings-queue-hidden-sessions-toggle"
+              onClick={() => onSetSetting('queue_show_hidden_sessions', queueShowHiddenSessions ? 'false' : 'true')}
+            >
+              {queueShowHiddenSessions ? 'Disable' : 'Enable'}
             </button>
           </div>
         </div>

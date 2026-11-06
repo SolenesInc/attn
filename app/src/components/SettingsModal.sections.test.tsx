@@ -167,6 +167,23 @@ describe('SettingsModal sections', () => {
     expect(savedSettings(daemon)).toEqual([['queue_quiet_notifications', 'false']]);
   });
 
+  it('keeps hidden sessions in the queue by default in the attention queue settings, and saves the switch both ways', async () => {
+    const daemon = await openSection('experimental');
+    const hiddenInQueue = () => screen.getByRole('switch', { name: 'Show hidden sessions in the queue' });
+    expect(screen.queryByRole('switch', { name: 'Show hidden sessions in the queue' })).toBeNull();
+
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-hygiene')));
+    expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(hiddenInQueue()));
+    expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'false');
+    await gesture(daemon, () => fireEvent.click(hiddenInQueue()));
+    expect(hiddenInQueue()).toHaveAttribute('aria-checked', 'true');
+    expect(savedSettings(daemon)).toEqual([
+      ['queue_show_hidden_sessions', 'false'],
+      ['queue_show_hidden_sessions', 'true'],
+    ]);
+  });
+
   it('raises a saved mark when a blur-committed field lands, and takes it away', async () => {
     const daemon = await openSection('desktop');
 

@@ -240,7 +240,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           codexSharedEnabled={state.codexSharedEnabled}
           claudeModEnabled={state.claudeModEnabled}
           nisseEnabled={state.nisseEnabled}
-          queueShowHiddenSessions={state.queueShowHiddenSessions}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
@@ -265,6 +264,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           savedFlash={state.savedFlash}
           autoSettleCountdownDraft={state.autoSettleCountdownDraft}
           queueQuietNotifications={state.queueQuietNotifications}
+          queueShowHiddenSessions={state.queueShowHiddenSessions}
           onSetSetting={state.onSetSetting}
           mutedRepos={state.mutedRepos}
           onUnmuteRepo={state.onUnmuteRepo}

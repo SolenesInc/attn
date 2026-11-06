@@ -73,3 +73,28 @@ func TestQuickCaptureShortcutIsDurableAndCanBeDisabled(t *testing.T) {
 		}
 	}
 }
+
+func TestHiddenSessionsQueueByDefaultUntilTheUserTurnsThatOff(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	const key = "queue_show_hidden_sessions"
+	if got := app.Initial.Settings[key]; got != "true" {
+		t.Fatalf("a fresh daemon says %s = %v, want true", key, got)
+	}
+	set := func(value string) {
+		t.Helper()
+		if answer := gardenAdvisorSetSetting(app, key, value); !protocol.Deref(answer.Success) {
+			t.Fatalf("set %s = %s: %s", key, value, protocol.Deref(answer.Error))
+		}
+	}
+	set("false")
+	w.restart()
+	app = w.App()
+	if got := app.Initial.Settings[key]; got != "false" {
+		t.Fatalf("after turning it off and restarting, %s = %v, want false", key, got)
+	}
+	set("true")
+	if got := w.App().Initial.Settings[key]; got != "true" {
+		t.Fatalf("after turning it back on, %s = %v, want true", key, got)
+	}
+}
