@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
+	"github.com/victorarias/attn/internal/toolhome"
 )
 
 func notebookCrewHome(w *world, folder string) string {
@@ -464,5 +466,63 @@ func TestARepointOverlappingAnotherProfilesMemberDoesNotNameIt(t *testing.T) {
 	crewErrorContains(t, err, "overlaps another crew member's home")
 	if err != nil && (strings.Contains(err.Error(), "Hidden") || strings.Contains(err.Error(), hidden.HomeDir)) {
 		t.Fatalf("the refusal names another profile's member: %v", err)
+	}
+}
+
+func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
+	w := newCrewV2World(t, fakeagent.Claude, fakeagent.Codex)
+	cli := w.Client()
+	config := filepath.Join(os.Getenv(toolhome.EnvVar), ".claude.json")
+	original := `{"numStartups":3,"oauthAccount":{"email":"kept"},"projects":{"/elsewhere":{"allowedTools":["Read"]}}}`
+	if err := os.WriteFile(config, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	trusted := func(folder string) bool {
+		t.Helper()
+		raw, err := os.ReadFile(config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var read struct {
+			NumStartups  int
+			OauthAccount struct{ Email string }
+			Projects     map[string]struct {
+				AllowedTools           []string
+				HasTrustDialogAccepted bool
+			}
+		}
+		if err := json.Unmarshal(raw, &read); err != nil {
+			t.Fatal(err)
+		}
+		if read.NumStartups != 3 || read.OauthAccount.Email != "kept" || len(read.Projects["/elsewhere"].AllowedTools) != 1 {
+			t.Fatalf("trusting a folder changed the rest of Claude's config: %s", raw)
+		}
+		return read.Projects[folder].HasTrustDialogAccepted
+	}
+
+	claudeHome, err := filepath.EvalSymlinks(crewRosterMember(t, cli, "keel").HomeDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.Launched(string(wakeCrew(t, cli, "Keel", "claude").SessionID))
+	if !trusted(claudeHome) {
+		t.Fatalf("Claude's config doesn't trust Keel's home %s", claudeHome)
+	}
+
+	codexHome := crewRosterMember(t, cli, "alder").HomeDir
+	w.LeaveCodexFolderTrustUnanswered(codexHome)
+	w.Launched(string(wakeCrew(t, cli, "Alder", "codex").SessionID))
+	if got := w.CodexFolderTrust(codexHome); got != "trusted" {
+		t.Fatalf("Codex saves Alder's home as %q, want trusted", got)
+	}
+
+	chosen := w.Path("chosen")
+	if err := os.MkdirAll(chosen, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	setCrew(t, cli, "Trellis", protocol.CrewSetMessage{Cwd: protocol.Ptr(chosen)})
+	w.Launched(string(wakeCrew(t, cli, "Trellis", "claude").SessionID))
+	if resolved, _ := filepath.EvalSymlinks(chosen); trusted(resolved) {
+		t.Fatalf("a folder the user chose was trusted without asking: %s", resolved)
 	}
 }

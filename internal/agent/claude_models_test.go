@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"context"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -52,5 +56,35 @@ func TestClaudeModelCatalogFailures(t *testing.T) {
 	_, err = readClaudeModels(strings.NewReader(`{"type":"keep_alive"}`), "catalog")
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF, got %v", err)
+	}
+}
+
+func TestClaudeModelDiscoveryLetsClaudeReleaseItsConfigLock(t *testing.T) {
+	dir := t.TempDir()
+	terminated := filepath.Join(dir, "terminated")
+	if err := syscall.Mkfifo(terminated, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	executable := filepath.Join(dir, "claude")
+	script := `#!/bin/sh
+exec 3>"` + terminated + `"
+trap 'echo released >&3; exit 0' TERM
+read -r request
+echo '{"type":"control_response","response":{"subtype":"success","request_id":"attn-model-discovery","response":{"models":[]}}}'
+while :; do sleep 1 & wait $!; done
+`
+	if err := os.WriteFile(executable, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got := make(chan string, 1)
+	go func() {
+		written, _ := os.ReadFile(terminated)
+		got <- string(written)
+	}()
+	if _, err := (&Claude{}).DiscoverModels(context.Background(), executable, dir); err != nil {
+		t.Fatal(err)
+	}
+	if written := <-got; !strings.Contains(written, "released") {
+		t.Fatalf("discovery did not let Claude finish on a signal it can handle: %q", written)
 	}
 }

@@ -317,6 +317,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 
+	d.trustCrewHome(member, agent, directory)
 	initialPrompt := d.crewWakePrompt(member, request.Cause)
 	_, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
