@@ -61,9 +61,24 @@ Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
 `attn-linux-amd64`, `attn-linux-arm64`, `attn-pty-host-linux-amd64`, and
 `attn-pty-host-linux-arm64`, because an outpost install needs both binaries,
 then run `brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
-version. A failed publication leaves a draft and a `Release health` issue.
-After you fix the failure, retry the tag. The retry, like every release run,
-refuses a tag that `reviewed` does not contain:
+version.
+
+Open the upgraded app from Finder and confirm that this first launch starts, and
+that macOS blocks nothing. Then confirm that the host is active and that a new
+agent runs without `attn -s`:
+
+```bash
+attn settings get pty_shared_host_active    # true
+ps -o command= -p "$(ps -o ppid= -p <new agent's pid>)"    # attn-pty-host ..., not attn -s
+```
+
+This is the only check of a notarized bundle that macOS starts through its
+first-launch path. Tests can't reach it, because a released app always opens
+production's data.
+
+A failed publication leaves a draft and a `Release health` issue. After you fix
+the failure, retry the tag. The retry, like every release run, refuses a tag
+that `reviewed` does not contain:
 
 ```bash
 gh api --method POST repos/victorarias/attn/dispatches \
