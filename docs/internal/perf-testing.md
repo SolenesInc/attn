@@ -87,10 +87,14 @@ The garden and session tools measure a copy of a real database in a named
 instance. `scripts/gardenpushperf/copy-production.sh <name> [<source db>]`
 copies the source read-only, production's `~/.attn/attn.db` by default, and
 turns off what the copy would otherwise reach: the real Notebook root, crew
-homes, worktree removal, outposts and every automation. A copied crew member's
-home starts empty in the copy's data folder. Pass a source to measure a copy
-made on another machine, such as a Mac copy under `~/perf-copies/` on
-ai-sandbox.
+homes, conversations, worktree removal, outposts and every automation. A copied
+crew member's home starts empty in the copy's data folder. Every copied session
+moves to the outpost `copy source`, which does not exist, so the copy keeps its
+records and tiles, shows them offline and never runs them, whether its daemon
+starts alone or an app opens on it. No monitor watches a copied session, so a
+copy's idle numbers leave monitors out. A session you start in the copy runs
+normally. Pass a source to measure a copy made on another machine, such as a Mac
+copy under `~/perf-copies/` on ai-sandbox.
 `attn instance resolve --field dataDir` and `--field wsPort` give the copy's
 data directory and port.
 
@@ -189,8 +193,7 @@ reports the daemon's share of a core. `-frames <file>` writes every
 `session_state_changed` frame of the bursts to a file, one per line, to compare
 the wire output of two builds on the same copy. Keep a backup of the copied
 database (`sqlite3 <data dir>/attn.db ".backup <file>"`) and restore it before
-each daemon start. Even then, `state_since` and `state_updated_at` differ
-between starts, because each start marks the copy's sessions recoverable.
+each daemon start.
 
 The worktree sweep's read-only pass still runs on the copy and moves the idle
 rate by tens of milliseconds a second, so whole-daemon CPU per fact is noisy.

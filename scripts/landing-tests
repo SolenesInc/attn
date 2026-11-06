@@ -105,3 +105,6 @@ group app ^app/
 vitest .
 playwright e2e/queue-sidebar-fit.spec.ts
 playwright e2e/notebook-tile.spec.ts
+
+group production-copy ^scripts/gardenpushperf/copy-production\.sh$
+go ./internal/daemon TestACopyOfProductionNeverRunsACopiedAgent
