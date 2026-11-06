@@ -2412,6 +2412,10 @@ export function useUiAutomationBridge({
             const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
             return Boolean(target?.closest('.session-terminal-panes')) && animation.playState === 'running';
           }).length,
+          documentAnimations: document.getAnimations().map((animation) => {
+            const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+            return { name: 'animationName' in animation ? animation.animationName : '', target: target?.getAttribute('class') ?? target?.tagName ?? '', playState: animation.playState };
+          }),
           heldPanes: panes.filter((pane) => !pane.dataset.paneId).length,
           suspendedLeafIds: panes.filter((pane) => pane.hasAttribute('data-pane-suspended')).map((pane) => pane.dataset.paneId),
           willChange: panes.filter((pane) => getComputedStyle(pane).willChange !== 'auto').length,
