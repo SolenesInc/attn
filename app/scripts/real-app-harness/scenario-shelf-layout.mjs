@@ -17,6 +17,9 @@ const TILES = 7;
 const CROWDED_DESKTOPS = 11;
 const DESKTOP_SLOTS = 9;
 const SMALLEST_WINDOW_WIDTH = 800;
+const WIDTH_THAT_HOLDS_EVERY_DESKTOP_BUTTON = 1500;
+const BAND = '[data-testid="title-bar"]';
+const SHELF = `${BAND} [data-testid="desktop-shelf"]`;
 const SHELF_INSET_PX = 12;
 const PIXEL_NOISE = 2;
 const execFileAsync = promisify(execFile);
@@ -127,22 +130,21 @@ async function assertShelfStartsAtTheLeft(label, shelfSelector) {
   runner.assert(first.x - shelf.x <= SHELF_INSET_PX, `${label}: the shelf group starts at the row's left edge`, { shelf, first });
 }
 
-async function assertNoLineBesideShelf(label) {
-  const shelf = (await request('dom_bounds', { selector: `${surface()} > [data-testid="desktop-shelf"]` })).bounds;
+async function assertShelfRowSitsAboveTheSidebar(label) {
+  const shelf = (await request('dom_bounds', { selector: SHELF })).bounds;
   const panes = (await request('dom_bounds', { selector: `${surface()} .session-terminal-panes` })).bounds;
   const capture = await request('capture_screenshot_data', { selector: '.sidebar' });
+  runner.assert(capture.bounds.y >= shelf.y + shelf.height, `${label}: the sidebar and its divider start below the shelf row`, { shelf, sidebar: capture.bounds });
   const image = PNG.sync.read(Buffer.from(capture.pngBase64, 'base64'));
   const pixel = (x, y) => {
     const at = (Math.round(y) * image.width + x) * 4;
     return [...image.data.subarray(at, at + 3)];
   };
-  const edgeAndInside = (y) => ({ edge: pixel(image.width - 1, y), inside: pixel(image.width - 2, y) });
-  const besideShelf = edgeAndInside(shelf.y + shelf.height / 2 - capture.bounds.y);
-  const besideTiles = edgeAndInside(panes.y + panes.height / 2 - capture.bounds.y);
-  runner.log(`${label} sidebar edge`, { besideShelf, besideTiles });
-  const same = ({ edge, inside }) => edge.every((value, index) => Math.abs(value - inside[index]) <= PIXEL_NOISE);
-  runner.assert(same(besideShelf), `${label}: no line between the sidebar and the shelf row`, besideShelf);
-  runner.assert(!same(besideTiles), `${label}: the divider stays beside the tiles`, besideTiles);
+  const y = panes.y + panes.height / 2 - capture.bounds.y;
+  const besideTiles = { edge: pixel(image.width - 1, y), inside: pixel(image.width - 2, y) };
+  runner.log(`${label} sidebar edge`, { besideTiles });
+  const same = besideTiles.edge.every((value, index) => Math.abs(value - besideTiles.inside[index]) <= PIXEL_NOISE);
+  runner.assert(!same, `${label}: the divider stays beside the tiles`, besideTiles);
 }
 
 async function stepTheWidth(label) {
@@ -167,18 +169,18 @@ async function clickEveryDesktopButtonInACrowdedBar() {
   }
   await request('select_desktop', { desktopId: desktop });
   await waitDom('[data-testid="queue-bar-desktop-extras"]');
-  await setWindowWidth(SMALLEST_WINDOW_WIDTH);
-  await focusLeaf(row[2]);
   const shelf = '[data-testid="queue-bar"] [data-testid="desktop-shelf"]';
-  await waitDom(`${shelf} [data-testid="shelf-cap-before"]`);
-  await waitDom(`${shelf} [data-testid="shelf-cap-after"]`);
-  await shot('queue-bar-crowded');
   const bounds = async (selector) => (await request('dom_bounds', { selector })).bounds;
-  const end = await bounds(`${shelf} [data-testid="shelf-cap-after"]`);
-  const firstButton = await bounds('[data-testid="queue-bar-desktop-1"]');
-  runner.assert(end.x + end.width <= firstButton.x, 'the crowded shelf stops before the desktop buttons', { end, firstButton });
-  const pill = await bounds('[data-testid="queue-bar-pill"]');
-  runner.assert(pill.width >= 40, 'the crowded bar keeps the waiting pill readable', { pill });
+  const assertShelfStopsBefore = async (button, width) => {
+    const end = await bounds(`${shelf} > :last-child`);
+    const first = await bounds(button);
+    runner.assert(end.x + end.width <= first.x, `at ${width}px the shelf stops before the desktop buttons`, { end, first });
+  };
+
+  await setWindowWidth(WIDTH_THAT_HOLDS_EVERY_DESKTOP_BUTTON);
+  await focusLeaf(row[2]);
+  await waitDom(shelf);
+  await assertShelfStopsBefore('[data-testid="queue-bar-desktop-1"]', WIDTH_THAT_HOLDS_EVERY_DESKTOP_BUTTON);
   for (let slot = 1; slot <= DESKTOP_SLOTS; slot += 1) {
     const button = `[data-testid="queue-bar-desktop-${slot}"]`;
     await driver.click(button);
@@ -186,8 +188,23 @@ async function clickEveryDesktopButtonInACrowdedBar() {
     await waitDom('[data-testid="shelf-menu-after"]', { absent: true });
     await waitDom('[data-testid="shelf-menu-before"]', { absent: true });
     await request('select_desktop', { desktopId: desktop });
-    await waitDom(`${shelf} [data-testid="shelf-cap-after"]`);
+    await waitDom(shelf);
   }
+
+  await setWindowWidth(SMALLEST_WINDOW_WIDTH);
+  await waitDom('[data-testid="queue-bar-desktops"] .queue-bar-desktop:not(.is-current):not(.is-extra)', { absent: true });
+  await waitDom(`${shelf} [data-testid="shelf-cap-before"]`);
+  await waitDom(`${shelf} [data-testid="shelf-cap-after"]`);
+  await shot('queue-bar-crowded');
+  await waitDom('[data-testid="queue-bar-desktops"] .queue-bar-desktop.is-current');
+  await assertShelfStopsBefore('[data-testid="queue-bar-desktops"] > :first-child', SMALLEST_WINDOW_WIDTH);
+  const pill = await bounds('[data-testid="queue-bar-pill"]');
+  runner.assert(pill.width >= 40, 'the crowded bar keeps the waiting pill readable', { pill });
+  await driver.click('[data-testid="queue-bar-desktop-extras"]');
+  await waitDom('.desktop-overview');
+  await driver.pressKey('Escape');
+  await waitDom('.desktop-overview', { absent: true });
+
   await setWindowWidth(1900);
   await focusLeaf(row[0]);
   await driver.hover(`${surface()} .desktop-pane[data-pane-id="${row[0]}"] .terminal-container`);
@@ -249,17 +266,17 @@ try {
 
   await runner.step('sidebar_open', async () => {
     await waitDom('.sidebar:not(.collapsed)');
-    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await waitDom(SHELF);
     await walkTheRow('sidebar-open');
     await stepTheWidth('sidebar-open');
-    await assertShelfStartsAtTheLeft('sidebar-open', `${surface()} > [data-testid="desktop-shelf"]`);
-    await assertNoLineBesideShelf('sidebar-open');
+    await assertShelfStartsAtTheLeft('sidebar-open', SHELF);
+    await assertShelfRowSitsAboveTheSidebar('sidebar-open');
     const shown = (await shownLeaves()).length;
     const clickWidthButton = async (name) => {
       await driver.hover('[data-testid="shelf-live-dots"]');
       await waitDom('[data-testid="shelf-width-control"]');
       const control = (await request('dom_bounds', { selector: '[data-testid="shelf-width-control"]' })).bounds;
-      const shelf = (await request('dom_bounds', { selector: `${surface()} > [data-testid="desktop-shelf"]` })).bounds;
+      const shelf = (await request('dom_bounds', { selector: SHELF })).bounds;
       runner.assert(control.x >= shelf.x, 'the width control is not cut off at the row start', { control, shelf });
       await driver.click(`[data-testid="shelf-width-control"] [aria-label="${name}"]`);
     };
@@ -275,18 +292,18 @@ try {
   await runner.step('sidebar_collapsed', async () => {
     await press('session.toggleSidebar');
     await waitDom('.sidebar.collapsed');
-    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await waitDom(SHELF);
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     await walkTheRow('sidebar-collapsed');
     await stepTheWidth('sidebar-collapsed');
-    await assertShelfStartsAtTheLeft('sidebar-collapsed', `${surface()} > [data-testid="desktop-shelf"]`);
-    await assertNoLineBesideShelf('sidebar-collapsed');
+    await assertShelfStartsAtTheLeft('sidebar-collapsed', SHELF);
+    await assertShelfRowSitsAboveTheSidebar('sidebar-collapsed');
   });
 
   await runner.step('queue_bar', async () => {
     await request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await waitDom('[data-testid="queue-bar"] [data-testid="desktop-shelf"]');
-    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`, { absent: true });
+    await waitDom(`${BAND} .title-bar-middle`, { absent: true });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     await walkTheRow('queue-bar');
     await stepTheWidth('queue-bar');
@@ -294,8 +311,8 @@ try {
     await clickEveryDesktopButtonInACrowdedBar();
     await press('session.toggleSidebar');
     await waitDom('[data-testid="queue-bar"]', { absent: true });
-    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
-    await assertNoLineBesideShelf('queue-sidebar');
+    await waitDom(SHELF);
+    await assertShelfRowSitsAboveTheSidebar('queue-sidebar');
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await waitDom('.sidebar:not(.collapsed)');
   });

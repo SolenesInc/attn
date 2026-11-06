@@ -223,7 +223,7 @@ try {
     await waitDom('[data-testid="queue-bar"]', { absent: true });
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await waitDom('.sidebar:not(.collapsed)');
-    await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);
+    await waitDom('[data-testid="title-bar"] [data-testid="desktop-shelf"]');
   });
 
   await runner.step('a_browser_tile_hides_for_the_panel_and_returns', async () => {
