@@ -1,0 +1,30 @@
+---
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { recordings, type RecordingId } from '../recordings';
+
+interface Props {
+  id: RecordingId;
+}
+
+const { id } = Astro.props;
+const recording = recordings[id];
+if (!recording) throw new Error(`Recording "${id}" has no entry in src/recordings.ts`);
+const file = `website/public/recordings/${id}.mp4`;
+const recorded = existsSync(join(process.cwd(), 'public/recordings', `${id}.mp4`));
+---
+
+<figure class="recording">
+  {
+    recorded ? (
+      <video src={`/recordings/${id}.mp4`} controls muted playsinline preload="metadata" />
+    ) : (
+      <div class="recording-slot">
+        <span class="label">Recording slot: {id}</span>
+        <p>To fill this slot, add <code>{file}</code></p>
+        <p class="recording-seed">Recorded by seed <code>{recording.seed}</code></p>
+      </div>
+    )
+  }
+  <figcaption>{recording.caption}</figcaption>
+</figure>

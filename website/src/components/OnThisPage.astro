@@ -1,0 +1,19 @@
+---
+import type { MarkdownHeading } from 'astro';
+
+interface Props {
+  headings: MarkdownHeading[];
+}
+
+const { headings } = Astro.props;
+---
+
+<ul class="on-this-page">
+  {
+    headings.map((heading) => (
+      <li class={`depth-${heading.depth}`}>
+        <a href={`#${heading.slug}`} data-section-link>{heading.text}</a>
+      </li>
+    ))
+  }
+</ul>

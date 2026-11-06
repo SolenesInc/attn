@@ -1,0 +1,32 @@
+---
+import type { GuideSection } from '../guide/nav';
+
+interface Props {
+  sections: GuideSection[];
+  current: string | null;
+}
+
+const { sections, current } = Astro.props;
+---
+
+<a class:list={['guide-nav-row', { current: current === null }]} href="/guide/" aria-current={current === null ? 'page' : undefined}>guide</a>
+{
+  sections.map((section) => (
+    <section class="guide-nav-section">
+      <h2 class="label">{section.title}</h2>
+      <ul>
+        {section.topics.map(({ topic }) => (
+          <li>
+            <a
+              class:list={['guide-nav-row', { current: topic === current }]}
+              href={`/guide/${topic}`}
+              aria-current={topic === current ? 'page' : undefined}
+            >
+              {topic}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </section>
+  ))
+}

@@ -57,3 +57,7 @@ app/src-tauri/*.gen.conf.json
 
 /internal/ghosttyvt/native_paths_generated_*.go
 __pycache__/
+
+# attn website
+/website/dist/
+/website/.astro/

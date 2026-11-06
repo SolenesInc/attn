@@ -1,0 +1,9 @@
+---
+import { getEntry } from 'astro:content';
+import GuidePage from '../../layouts/GuidePage.astro';
+
+const entry = await getEntry('guide', 'README');
+if (!entry) throw new Error('docs/guide/README.md is missing from the guide collection');
+---
+
+<GuidePage entry={entry} />

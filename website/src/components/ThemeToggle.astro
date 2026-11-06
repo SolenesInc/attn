@@ -1,0 +1,23 @@
+<button class="theme-toggle" type="button" data-theme-toggle aria-label="Switch theme"></button>
+
+<script>
+  const root = document.documentElement;
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]')!;
+
+  function show() {
+    const other = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    button.textContent = other;
+    button.setAttribute('aria-label', `Switch to ${other} theme`);
+  }
+
+  button.addEventListener('click', () => {
+    const next = root.dataset.theme === 'dark' ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try {
+      localStorage.setItem('theme', next);
+    } catch {}
+    show();
+  });
+
+  show();
+</script>

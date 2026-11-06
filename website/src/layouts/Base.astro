@@ -1,0 +1,53 @@
+---
+import '@fontsource-variable/literata/opsz.css';
+import '@fontsource-variable/literata/opsz-italic.css';
+import '@fontsource-variable/jetbrains-mono/wght.css';
+import '../styles/tokens.css';
+import '../styles/shell.css';
+import Logo from '../components/Logo.astro';
+import ThemeToggle from '../components/ThemeToggle.astro';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script is:inline>
+      (function () {
+        var saved = null;
+        try {
+          saved = localStorage.getItem('theme');
+        } catch (e) {}
+        var dark = matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.dataset.theme = saved || (dark ? 'dark' : 'light');
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="site-home" href="/"><Logo /></a>
+      <nav class="site-nav" aria-label="Site">
+        <a href="/guide/">guide</a>
+        <a href="https://github.com/SolenesInc/attn">github</a>
+        <ThemeToggle />
+      </nav>
+    </header>
+    <slot />
+    <footer class="site-footer">
+      <Logo />
+      <p>Free software under the <a href="https://github.com/SolenesInc/attn/blob/main/LICENSE">GPL 3.0</a>.</p>
+    </footer>
+  </body>
+</html>

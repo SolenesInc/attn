@@ -1,0 +1,120 @@
+---
+import { render, type CollectionEntry } from 'astro:content';
+import '../styles/prose.css';
+import GuideNav from '../components/GuideNav.astro';
+import OnThisPage from '../components/OnThisPage.astro';
+import { GITHUB_BLOB } from '../guide/links.mjs';
+import { guideSections, neighbors } from '../guide/nav';
+import Base from './Base.astro';
+
+interface Props {
+  entry: CollectionEntry<'guide'>;
+}
+
+const { entry } = Astro.props;
+const topic = entry.id === 'README' ? null : entry.id;
+const { Content, headings } = await render(entry);
+const sections = await guideSections();
+const { previous, next } = neighbors(sections, topic);
+const title = headings.find((heading) => heading.depth === 1)?.text ?? entry.id;
+const onThisPage = headings.filter((heading) => heading.depth === 2 || heading.depth === 3);
+const source = entry.filePath!.replace(/^(\.\.\/)+/, '');
+const summary = sections.flatMap((section) => section.topics).find((row) => row.topic === topic)?.summary;
+const command = topic ? `attn guide ${topic}` : 'attn guide';
+---
+
+<Base title={topic ? `${title} | attn guide` : 'The attn guide'} description={summary ?? 'How to use attn.'}>
+  <div class="guide">
+    <aside class="guide-sidebar" aria-label="Guide topics">
+      <nav><GuideNav sections={sections} current={topic} /></nav>
+    </aside>
+
+    <details class="guide-disclosure guide-disclosure-topics">
+      <summary>Topics<code>{topic ?? 'guide'}</code></summary>
+      <nav aria-label="Guide topics"><GuideNav sections={sections} current={topic} /></nav>
+    </details>
+
+    {
+      onThisPage.length > 0 && (
+        <details class="guide-disclosure guide-disclosure-sections">
+          <summary>On this page</summary>
+          <OnThisPage headings={onThisPage} />
+        </details>
+      )
+    }
+
+    <main id="main" class="guide-main">
+      <article class="prose"><Content /></article>
+
+      <nav class="guide-pager" aria-label="Previous and next topic">
+        {
+          previous && (
+            <a class="guide-pager-previous" href={`/guide/${previous.topic}`}>
+              <span class="label">Previous</span>
+              <code>{previous.topic}</code>
+            </a>
+          )
+        }
+        {
+          next && (
+            <a class="guide-pager-next" href={`/guide/${next.topic}`}>
+              <span class="label">Next</span>
+              <code>{next.topic}</code>
+              <span class="guide-pager-summary">{next.summary}</span>
+            </a>
+          )
+        }
+      </nav>
+
+      <dl class="guide-meta">
+        <div>
+          <dt>In your terminal</dt>
+          <dd><code>{command}</code></dd>
+        </div>
+        <div>
+          <dt>Source</dt>
+          <dd><a href={`${GITHUB_BLOB}/${source}`}><code>{source}</code></a></dd>
+        </div>
+      </dl>
+    </main>
+
+    {
+      onThisPage.length > 0 && (
+        <aside class="guide-toc" aria-label="On this page">
+          <h2 class="label">On this page</h2>
+          <OnThisPage headings={onThisPage} />
+        </aside>
+      )
+    }
+  </div>
+</Base>
+
+<script>
+  const links = new Map(
+    [...document.querySelectorAll<HTMLAnchorElement>('.guide-toc [data-section-link]')].map((link) => [
+      decodeURIComponent(link.hash.slice(1)),
+      link,
+    ]),
+  );
+  const headings = [...links.keys()].flatMap((id) => document.getElementById(id) ?? []);
+  let active: HTMLAnchorElement | undefined;
+
+  function currentHeading() {
+    const atPageEnd = scrollY + innerHeight >= document.documentElement.scrollHeight - 1;
+    if (atPageEnd) return headings.at(-1);
+    return headings.filter((heading) => heading.getBoundingClientRect().top < 120).at(-1) ?? headings[0];
+  }
+
+  function markCurrentSection() {
+    const link = links.get(currentHeading()?.id ?? '');
+    if (link === active) return;
+    active?.removeAttribute('aria-current');
+    link?.setAttribute('aria-current', 'location');
+    active = link;
+  }
+
+  if (headings.length > 0) {
+    addEventListener('scroll', markCurrentSection, { passive: true });
+    markCurrentSection();
+  }
+</script>
