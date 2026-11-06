@@ -7,6 +7,10 @@ if ! command -v lsof >/dev/null; then
   echo 'PTY upgrade test requires lsof to discover historical daemon listeners (install lsof).' >&2
   exit 1
 fi
+if ! command -v fish >/dev/null; then
+  echo 'PTY upgrade test requires fish to start agents through a fish login shell (install fish).' >&2
+  exit 1
+fi
 # Last daemon revision before the Rust host: never build both sides from HEAD.
 legacy_revision=f68ab3f02f329f46d3b9b3d1e7603f545c27dd50
 test_root="$(mktemp -d "${TMPDIR:-/tmp}/attn-pty-upgrade.XXXXXX")"
@@ -59,4 +63,4 @@ if [ -z "${ATTN_E2E_BIN:-}" ]; then
     -o "$test_root/attn-current" ./cmd/attn
   export ATTN_E2E_BIN="$test_root/attn-current"
 fi
-go test ./cmd/attn -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*)$' -count=1 -timeout=180s -v "$@"
+go test ./cmd/attn -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestTurningTheSettingsOffAndOn.*|TestDirectLaunchStartsAgents.*)$' -count=1 -timeout=180s -v "$@"

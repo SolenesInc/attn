@@ -24,6 +24,8 @@ func (s *Stack) Reboot() {
 	s.T.Helper()
 	s.Stop()
 	paths, _ := filepath.Glob(filepath.Join(s.Dir, "workers", "*", "registry", "*.json"))
+	hostPaths, _ := filepath.Glob(filepath.Join(s.Dir, "pty-hosts", "*", "registry", "*.json"))
+	paths = append(paths, hostPaths...)
 	var pids []int
 	for _, path := range paths {
 		if entry, err := ptyworker.ReadRegistry(path); err == nil {

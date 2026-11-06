@@ -78,7 +78,6 @@ func (s *Stack) InstallBuild(attn, host string) {
 		s.T.Fatal(err)
 	}
 	s.binary = installed
-	s.Vars = append(s.Vars, "ATTN_WRAPPER_PATH="+installed)
 }
 
 func replaceFile(t testing.TB, from, to string) {

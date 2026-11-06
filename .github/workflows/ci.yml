@@ -455,6 +455,13 @@ jobs:
       - name: Install listener discovery tool
         if: runner.os == 'Linux'
         run: command -v lsof >/dev/null || (sudo apt-get update && sudo apt-get install -y lsof)
+      - name: Install fish for the login shell check
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update && sudo apt-get install -y fish
+          else
+            brew install fish
+          fi
       - name: Verify old daemon and mixed host generations
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle
