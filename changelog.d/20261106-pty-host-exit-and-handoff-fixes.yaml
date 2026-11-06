@@ -1,0 +1,9 @@
+kind: fixed
+area: terminals
+change: >
+  On the shared PTY host, a terminal whose shell or agent exits while a background
+  job still holds the terminal now reports the exit instead of staying running
+  forever. The job ends with the terminal when the terminal is removed; a job
+  that redirected all its output and input off the terminal keeps running. A PTY
+  host out of file descriptors no longer spins a CPU core, and a failed PTY worker
+  upgrade no longer ends a session whose output was stuck behind a slow client.

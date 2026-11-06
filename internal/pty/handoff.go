@@ -61,6 +61,7 @@ func (m *Manager) Handoff(sessionID string) (HandoffState, error) {
 			session.closePTY()
 			return HandoffState{}, fmt.Errorf("handoff of session %s failed after its read loop stopped; session killed: %w", sessionID, err)
 		}
+		_ = session.ptmx.SetReadDeadline(time.Time{})
 		session.quiescing.Store(false)
 		return HandoffState{}, err
 	}

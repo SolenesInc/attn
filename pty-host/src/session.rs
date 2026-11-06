@@ -40,6 +40,7 @@ const EXITED_SESSION_TTL: Duration = Duration::from_secs(45);
 const TERMINATE_TIMEOUT: Duration = Duration::from_secs(10);
 const SIGTERM_TO_HUP_GRACE: Duration = Duration::from_secs(2);
 const SHELL_CLOSE_GRACE: Duration = Duration::from_millis(500);
+const EXIT_DRAIN_GRACE: Duration = Duration::from_millis(500);
 
 pub type Cleanup = Arc<dyn Fn(String) + Send + Sync>;
 pub type Broadcast = Arc<dyn Fn(Value) + Send + Sync>;
@@ -241,6 +242,8 @@ pub struct Session {
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
     reader_finished: AtomicBool,
+    exit_seen: AtomicBool,
+    exit_grace_over: AtomicBool,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, Outbox>>,
@@ -411,6 +414,8 @@ impl Session {
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
             reader_finished: AtomicBool::new(false),
+            exit_seen: AtomicBool::new(false),
+            exit_grace_over: AtomicBool::new(false),
             signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
@@ -587,6 +592,7 @@ impl Session {
         reaper: &ChildReaper,
     ) -> Result<(), String> {
         let Some(fd) = master_fd else {
+            self.reader_finished.store(true, Ordering::Release);
             self.schedule_cleanup();
             return Ok(());
         };
@@ -1035,7 +1041,13 @@ impl Session {
 
     pub fn remove_checked(self: &Arc<Self>) -> Result<(), String> {
         self.mark_removing();
-        let result = self.signal(libc::SIGTERM);
+        let result = if self.is_running() {
+            self.signal(libc::SIGTERM)
+        } else if self.reader_finished.load(Ordering::Acquire) {
+            Ok(())
+        } else {
+            self.signal_processes(libc::SIGKILL)
+        };
         self.finish_cleanup();
         result
     }
@@ -1469,10 +1481,26 @@ fn reap_registered_children(shared: &ChildReaperShared) {
         .map(|(pid, session)| (*pid, session.upgrade()))
         .collect::<Vec<_>>();
     for (pid, session) in sessions {
-        if session
-            .as_ref()
-            .is_some_and(|session| !session.reader_finished.load(Ordering::Acquire))
+        if let Some(session) = session.as_ref()
+            && !session.reader_finished.load(Ordering::Acquire)
+            && !session.exit_grace_over.load(Ordering::Acquire)
         {
+            if !session.exit_seen.load(Ordering::Acquire) && child_has_exited(pid) {
+                session.exit_seen.store(true, Ordering::Release);
+                let drained = Arc::clone(session);
+                let spawned = thread::Builder::new()
+                    .name("pty-exit-drain".to_owned())
+                    .stack_size(128 * 1024)
+                    .spawn(move || {
+                        thread::sleep(EXIT_DRAIN_GRACE);
+                        drained.exit_grace_over.store(true, Ordering::Release);
+                        wake_child_reaper();
+                    });
+                if spawned.is_err() {
+                    session.exit_grace_over.store(true, Ordering::Release);
+                    wake_child_reaper();
+                }
+            }
             continue;
         }
         let mut status = 0;
@@ -1498,6 +1526,23 @@ fn reap_registered_children(shared: &ChildReaperShared) {
             break;
         }
     }
+}
+
+fn child_has_exited(pid: i32) -> bool {
+    let mut info = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid.cast_unsigned(),
+            &raw mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    #[cfg(target_os = "linux")]
+    let reported_pid = unsafe { info.si_pid() };
+    #[cfg(not(target_os = "linux"))]
+    let reported_pid = info.si_pid;
+    result == 0 && reported_pid == pid
 }
 
 fn mark_reaped(shared: &ChildReaperShared, pid: i32, status: i32) {

@@ -30,6 +30,7 @@ use crate::session::{
     Broadcast, ChildReaper, Cleanup, Commit, Session, SessionRuntime, parse_signal,
 };
 
+const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
 const CONNECTION_STACK_BYTES: usize = 256 * 1024;
 
 #[derive(Clone)]
@@ -310,6 +311,7 @@ impl Host {
                 Err(error) if error.kind() == ErrorKind::WouldBlock => continue,
                 Err(error) => {
                     eprintln!("PTY host accept failed: {error}");
+                    thread::sleep(ACCEPT_RETRY_DELAY);
                     continue;
                 }
             };

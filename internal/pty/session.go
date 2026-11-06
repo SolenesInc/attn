@@ -310,7 +310,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	}()
 
 	reads := make(chan ptyRead, 4)
-	go func() {
+	readUntilError := func() {
 		for {
 			buf := make([]byte, OutputReadBufferBytes)
 			n, err := s.ptmx.Read(buf)
@@ -323,7 +323,8 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 				return
 			}
 		}
-	}()
+	}
+	go readUntilError()
 
 	carryover := make([]byte, 0, 64)
 	if len(s.initialCarryover) > 0 {
@@ -412,11 +413,15 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			s.deliveryMu.Unlock()
 		}
 		if err != nil {
-			if errors.Is(err, os.ErrDeadlineExceeded) && s.quiescing.Load() {
-				handedOver = true
-				s.handoffCarryover = append([]byte(nil), carryover...)
-				close(s.quiesced)
-				return
+			if errors.Is(err, os.ErrDeadlineExceeded) {
+				if s.quiescing.Load() {
+					handedOver = true
+					s.handoffCarryover = append([]byte(nil), carryover...)
+					close(s.quiesced)
+					return
+				}
+				go readUntilError()
+				continue
 			}
 			if !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) && logf != nil {
 				logf("pty read error for session %s: %v", s.id, err)
