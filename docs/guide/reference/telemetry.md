@@ -1,14 +1,14 @@
 # Telemetry
 
-Attn can record how it is used on your machine and, if you choose, share that
-record with Attn's maintainers. Both are off by default. **Settings → Analytics**
+Attn can record how it is used on your home and its outposts and, if you choose,
+share that record with Attn's maintainers. Both are off by default. **Settings → Analytics**
 shows every record, exactly as it is stored and sent.
 
 ## Settings
 
 | Setting | Default | What it does |
 |---|---|---|
-| `analytics.enabled` | off | Records usage in the local outbox, gives new sessions `attn vent`, and shows **Settings → Analytics**. Experimental. |
+| `analytics.enabled` | off | Records usage on the home and each outpost, gives new sessions `attn vent`, and shows **Settings → Analytics**. The home decides it. Experimental. |
 | `analytics.sharing_enabled` | off | Uploads the outbox to Attn's maintainers. Needs `analytics.enabled`. |
 | `analytics.share_vents` | off | While sharing is on, queues each new Attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
 | `analytics.tool_vents` | off | Lets new sessions also file tool vents, about the agent's other tools. Tool vents never leave the machine. |
@@ -36,13 +36,18 @@ Every record is one line of JSON:
 
 `seq` counts records within a stream. The server uses it to store each record once.
 
+An outpost records its own usage and sends it to the home, and only the home
+uploads. A record from an outpost names that outpost in its stream, as a hash:
+`bus_m9c1e04b7aa21`. Records wait on the outpost while the home is unreachable.
+
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:
 
 - Numbers, booleans and nulls are kept.
 - A subject (a session, path, pull request or other id) becomes a keyed hash,
-  `h:` and 12 hex digits, with a secret that never leaves the machine
-  (`<data-dir>/analytics-secret`). The same subject always gives the same hash, so records about one thing group together without revealing what the thing is.
+  `h:` and 12 hex digits, with a secret that never leaves your machines
+  (`<data-dir>/analytics-secret` on the home, which copies it to its outposts over
+  the bridge). The same subject always gives the same hash, so records about one thing group together without revealing what the thing is.
 - A string becomes its length, `{"s": 24}`, unless
   `internal/analytics/fields.go` classifies its field. A field whose values
   come from a fixed set, such as a status or a kind, is kept as it is. A field
@@ -145,5 +150,5 @@ After Attn has sent something, **Settings → Analytics** offers **Forget this
 install** when you turn sharing off. **Forget this install** deletes what the
 server holds, then starts a new install with a new install id, token and subject
 secret. When Attn cannot reach the service, nothing changes and **Settings →
-Analytics** reports the failure. **Clear the local record** deletes the local outbox and
-dismissed vents.
+Analytics** reports the failure. **Clear the local record** deletes the outbox on the home and each outpost, and
+dismissed vents. An outpost that is unreachable clears when it reconnects.

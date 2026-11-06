@@ -104,6 +104,7 @@ var Placements = map[string][]Placement{
 	"drop_outpost_copy":                {Placement{LocatorHere, ""}},
 	"fetch_pr_details":                 {Placement{LocatorHome, ""}},
 	"files_edited":                     {Placement{LocatorHere, ""}},
+	"forward_analytics":                {Placement{LocatorHome, ""}},
 	"get_kitty_image":                  {Placement{LocatorTerminal, "id"}},
 	"get_repo_info":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
@@ -1205,6 +1206,18 @@ func (m FilesEditedMessage) Placement() Placement {
 }
 
 func (m FilesEditedMessage) Locate() string {
+	return ""
+}
+
+func (ForwardAnalyticsMessage) CommandName() string {
+	return "forward_analytics"
+}
+
+func (m ForwardAnalyticsMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m ForwardAnalyticsMessage) Locate() string {
 	return ""
 }
 

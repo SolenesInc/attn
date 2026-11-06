@@ -114,6 +114,14 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == setting.AnalyticsEnabled.Key {
 		d.configureAnalytics()
 	}
+	if key == setting.AnalyticsSubjectSecret.Key {
+		d.analyticsSecretChanged()
+	}
+	if key == setting.AnalyticsClearedAt.Key {
+		if _, err := d.store.ClearAnalyticsOutbox(); err != nil {
+			d.logf("analytics: clear as the home asked: %v", err)
+		}
+	}
 	if key == setting.PhoneAccessEnabled.Key {
 		d.configurePhoneAccess()
 	}
@@ -236,6 +244,8 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	for k, v := range stored {
 		settings[k] = v
 	}
+	delete(settings, setting.AnalyticsSubjectSecret.Key)
+	delete(settings, setting.AnalyticsClearedAt.Key)
 
 	for _, name := range agentdriver.List() {
 		driver := agentdriver.Get(name)

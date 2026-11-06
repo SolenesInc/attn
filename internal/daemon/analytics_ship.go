@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/analytics"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 )
@@ -25,7 +26,10 @@ const (
 	analyticsShipInterval = 5 * time.Minute
 	analyticsShipTimeout  = 3 * time.Minute
 
-	analyticsShipBatchRecords = 5000
+	analyticsShipBatchRecords    = 5000
+	analyticsForwardKind         = "analytics_forward"
+	analyticsForwardTimeout      = time.Minute
+	analyticsForwardBatchRecords = 1000
 
 	analyticsUnsentRetention = 30 * 24 * time.Hour
 )
@@ -105,7 +109,7 @@ func (d *Daemon) analyticsSharing() bool {
 
 func (d *Daemon) queueAnalyticsShip() {
 	queue := d.jobQueueRef()
-	if queue == nil || !d.analyticsSharing() {
+	if queue == nil || !d.analyticsSharing() || !d.enrollmentStatus().IsHome() {
 		return
 	}
 	if _, err := queue.Enqueue(analyticsShipKind, jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
@@ -130,6 +134,84 @@ func (d *Daemon) analyticsShipHandler(ctx context.Context, _ *jobs.Job) (any, er
 		return nil, fmt.Errorf("uploading analytics: %w", err)
 	}
 	return map[string]any{"sent": sent}, nil
+}
+
+func (d *Daemon) queueAnalyticsForward() {
+	queue := d.jobQueueRef()
+	if queue == nil || d.enrollmentStatus().IsHome() || !d.analyticsEnabled() {
+		return
+	}
+	if _, err := queue.Enqueue(analyticsForwardKind, jobs.EnqueueOptions{UniqueKey: jobs.CronKey, RunNow: true}); err != nil {
+		d.logf("analytics: queue a forward: %v", err)
+	}
+}
+
+func (d *Daemon) analyticsForwardHandler(ctx context.Context, _ *jobs.Job) (any, error) {
+	forwarded := 0
+	for d.analyticsEnabled() && d.homeBridge() != nil {
+		sent, err := d.forwardAnalyticsBatch(ctx)
+		if err != nil {
+			d.logf("analytics: forward to the home: %v; the records wait for the next tick", err)
+			break
+		}
+		if sent == 0 {
+			break
+		}
+		forwarded += sent
+	}
+	pausepoint.At(pausepoint.AnalyticsForwarded)
+	return map[string]any{"forwarded": forwarded}, nil
+}
+
+func (d *Daemon) forwardAnalyticsBatch(ctx context.Context) (int, error) {
+	unsent, err := d.store.UnsentAnalyticsRecords(analyticsForwardBatchRecords, d.analyticsBuild())
+	if err != nil || len(unsent.Rows) == 0 {
+		return 0, err
+	}
+	secret, err := d.analyticsSecret()
+	if err != nil {
+		return 0, err
+	}
+	machine := analytics.HashSubject(secret, d.enrollmentStatus().DaemonID)
+	records := make([]analytics.Record, len(unsent.Rows))
+	forwarded := make([]string, len(unsent.Rows))
+	for i, row := range unsent.Rows {
+		if err := json.Unmarshal([]byte(row.Record), &records[i]); err != nil {
+			return 0, fmt.Errorf("outbox row %d: %w", row.ID, err)
+		}
+		onMachine := records[i]
+		onMachine.Stream = records[i].Stream.OnMachine(machine)
+		encoded, err := json.Marshal(onMachine)
+		if err != nil {
+			return 0, fmt.Errorf("outbox row %d: %w", row.ID, err)
+		}
+		forwarded[i] = string(encoded)
+	}
+	if _, err := Call[struct{}](ctx, d.router(), protocol.ForwardAnalyticsMessage{Cmd: protocol.CmdForwardAnalytics, Build: unsent.Build, Records: forwarded, SecretCheck: analyticsSecretCheck(secret)}); err != nil {
+		return 0, err
+	}
+	if _, err := d.store.MarkAnalyticsSent(records, time.Now()); err != nil {
+		return 0, fmt.Errorf("the home took %d records, but marking them sent failed, so they will be forwarded again and stored once: %w", len(records), err)
+	}
+	return len(records), nil
+}
+
+func (d *Daemon) receiveForwardedAnalytics(_ context.Context, msg protocol.ForwardAnalyticsMessage) (struct{}, error) {
+	if !d.analyticsEnabled() {
+		return struct{}{}, errors.New("usage analytics is off at this home")
+	}
+	secret, err := d.analyticsSecret()
+	if err != nil {
+		return struct{}{}, err
+	}
+	if msg.SecretCheck != analyticsSecretCheck(secret) {
+		return struct{}{}, errors.New("these analytics records use an older secret, from before this install was forgotten; the outpost drops them when the new secret reaches it")
+	}
+	return struct{}{}, d.store.ImportAnalyticsRecords(msg.Build, msg.Records)
+}
+
+func analyticsSecretCheck(secret []byte) string {
+	return analytics.HashSubject(secret, "analytics-forward")
 }
 
 func (d *Daemon) shipAnalyticsBatch(ctx context.Context) (int, error) {
@@ -238,6 +320,9 @@ func (d *Daemon) forgetAnalyticsInstall(ctx context.Context) error {
 		}
 	}
 	if err := d.stopAnalyticsMirror(); err != nil {
+		return fmt.Errorf("the server copy is deleted, but starting a new install failed: %w", err)
+	}
+	if err := d.store.DeleteUnsentAnalyticsRecords(); err != nil {
 		return fmt.Errorf("the server copy is deleted, but starting a new install failed: %w", err)
 	}
 	d.configureAnalytics()

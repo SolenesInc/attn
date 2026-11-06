@@ -177,6 +177,44 @@ func (s *Store) MarkAnalyticsSent(records []analytics.Record, at time.Time) ([]V
 	return sent, tx.Commit()
 }
 
+func (s *Store) DeleteUnsentAnalyticsRecords() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return nil
+	}
+	_, err := s.db.Exec("DELETE FROM analytics_outbox WHERE sent_at IS NULL AND stream != ?", analytics.StreamVent)
+	return err
+}
+
+func (s *Store) ImportAnalyticsRecords(build analytics.Build, records []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return fmt.Errorf("the analytics outbox needs the SQLite store")
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	buildID, err := analyticsBuildID(tx, build)
+	if err != nil {
+		return err
+	}
+	for _, encoded := range records {
+		var record analytics.Record
+		if err := json.Unmarshal([]byte(encoded), &record); err != nil {
+			return fmt.Errorf("forwarded analytics record: %w", err)
+		}
+		if _, err := tx.Exec("INSERT INTO analytics_outbox (stream, seq, at, record, build_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT (stream, seq) DO NOTHING",
+			record.Stream, record.Seq, record.At.UTC().Format(analyticsTimeLayout), encoded, buildID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) AnalyticsRecords(profileID string, stream analytics.Stream, beforeID int64, limit int) (AnalyticsPage, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -186,8 +224,8 @@ func (s *Store) AnalyticsRecords(profileID string, stream analytics.Stream, befo
 	query := "SELECT id, record FROM analytics_outbox WHERE (stream != ? OR seq IN (SELECT outbox_seq FROM vents WHERE profile_id = ?))"
 	args := []any{analytics.StreamVent, profileID}
 	if stream != "" {
-		query += " AND stream = ?"
-		args = append(args, stream)
+		query += " AND (stream = ? OR stream LIKE ? ESCAPE '\\')"
+		args = append(args, stream, string(stream)+analytics.MachineStreamLike)
 	}
 	if beforeID > 0 {
 		query += " AND id < ?"

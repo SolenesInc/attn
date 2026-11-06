@@ -72,7 +72,7 @@ export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetS
   };
   return (
     <div className="analytics-machine" data-testid="analytics-machine">
-      <Row title="Record on this machine" copy={<>Redacted bus facts, app actions, CLI outcomes, agent runs and resource samples. New sessions get <code>attn vent</code>.</>}>
+      <Row title="Record on this home and its outposts" copy={<>Redacted bus facts, app actions, CLI outcomes, agent runs and resource samples. New sessions get <code>attn vent</code>.</>}>
         <button type="button" className="settings-action" onClick={onDisableRecording}>Disable</button>
       </Row>
       <Row title="Share with attn's maintainers" copy={shareCopy(sharing, status, confirm === 'deleteServerCopy')}>
@@ -88,7 +88,7 @@ export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetS
       <Row title="Tool vents" copy={toolVents ? 'New sessions also vent about their other tools: skills, other CLIs, harness permissions. These never leave this machine.' : 'Agents vent only about attn. Turn on to also hear about their other tools (skills, other CLIs, harness permissions), kept on this machine.'}>
         <button type="button" className="settings-action" onClick={() => onSetSetting('analytics.tool_vents', toggled(toolVents))}>{toolVents ? 'Disable' : 'Enable'}</button>
       </Row>
-      <Row title="Kept on this machine for 7 days" copy={`${status ? `${recordCount(status.records)}, ${formatBytes(status.bytes)}. ` : ''}Dismissed and withdrawn vents are kept 30 days.`} />
+      <Row title="Kept for 7 days" copy={`${status ? `${recordCount(status.records)}, ${formatBytes(status.bytes)}. ` : ''}Dismissed and withdrawn vents are kept 30 days.`} />
       <Row title="Forget this install" copy="Deletes this install's data on the server and starts a new install id.">
         <Confirmable asking={confirm === 'forget'} label="Delete from server" onYes={onForget} onDone={done}>
           <button type="button" className="settings-action danger" onClick={() => setConfirm('forget')}>Forget…</button>

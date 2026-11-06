@@ -111,7 +111,7 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	for _, feature := range perMachine {
 		keys = append(keys, feature.Key)
 	}
-	if want := []string{"analytics.enabled", "pty_shared_host_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
+	if want := []string{"pty_shared_host_enabled"}; !slices.Equal(slices.Sorted(slices.Values(keys)), want) {
 		t.Fatalf("features still decided per machine = %v, want only the named exceptions %v", keys, want)
 	}
 	t.Log("every feature except the named exceptions reads the home's value on an outpost")

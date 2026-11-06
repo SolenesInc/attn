@@ -190,7 +190,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 		return storedVent{}, errSessionNotLive(sessionID)
 	}
 	if !d.analyticsEnabled() {
-		return storedVent{}, errors.New("usage analytics is off on this machine, so attn records no vents. Keep working")
+		return storedVent{}, errors.New("usage analytics is off, so attn records no vents. Keep working")
 	}
 	launch := d.launchVentIntent(sessionID)
 	if !launch.Vent {

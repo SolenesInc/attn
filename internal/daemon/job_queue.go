@@ -64,6 +64,30 @@ func (d *Daemon) startJobQueue(home bool) error {
 		}
 		d.registerWorktreeSweepCron(runner)
 		d.registerAutomationRetentionCron(runner)
+		if err := runner.RegisterCron(
+			analyticsPruneKind,
+			analyticsPruneInterval,
+			d.analyticsPruneHandler,
+			jobs.HandlerConfig{Timeout: analyticsPruneTimeout},
+		); err != nil {
+			d.logf("analytics: register outbox prune tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			analyticsSampleKind,
+			analyticsSampleInterval,
+			d.analyticsSampleHandler,
+			jobs.HandlerConfig{Timeout: analyticsSampleTimeout},
+		); err != nil {
+			d.logf("analytics: register resource sample tick: %v", err)
+		}
+		if err := runner.RegisterCron(
+			analyticsForwardKind,
+			analyticsShipInterval,
+			d.analyticsForwardHandler,
+			jobs.HandlerConfig{Timeout: analyticsForwardTimeout},
+		); err != nil {
+			d.logf("analytics: register forward tick: %v", err)
+		}
 	}
 	if !runner.Disabled() && home {
 
@@ -108,28 +132,12 @@ func (d *Daemon) startJobQueue(home bool) error {
 			}
 		}
 		if err := runner.RegisterCron(
-			analyticsPruneKind,
-			analyticsPruneInterval,
-			d.analyticsPruneHandler,
-			jobs.HandlerConfig{Timeout: analyticsPruneTimeout},
-		); err != nil {
-			d.logf("analytics: register outbox prune tick: %v", err)
-		}
-		if err := runner.RegisterCron(
 			analyticsShipKind,
 			analyticsShipInterval,
 			d.analyticsShipHandler,
 			jobs.HandlerConfig{Timeout: analyticsShipTimeout},
 		); err != nil {
 			d.logf("analytics: register upload tick: %v", err)
-		}
-		if err := runner.RegisterCron(
-			analyticsSampleKind,
-			analyticsSampleInterval,
-			d.analyticsSampleHandler,
-			jobs.HandlerConfig{Timeout: analyticsSampleTimeout},
-		); err != nil {
-			d.logf("analytics: register resource sample tick: %v", err)
 		}
 		if err := runner.RegisterCron(
 			askRepliesForgetKind,

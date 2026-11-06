@@ -97,7 +97,7 @@ maintainers, then close.
 
 Read `attn guide telemetry` and the current `analytics.enabled`,
 `analytics.sharing_enabled`, `analytics.share_vents` and `analytics.tool_vents`
-settings. These settings apply to every profile on this machine. If sharing is
+settings. These settings apply to every profile, on this home and its outposts. If sharing is
 already on, say so, and skip to what's still off.
 
 Ask: "Do you want to help by publishing analytics to attn's maintainers? No

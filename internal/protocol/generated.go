@@ -4647,6 +4647,20 @@ type ForgetAnalyticsInstallResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ForwardAnalyticsMessage struct {
+	// Build corresponds to the JSON schema field "build".
+	Build AnalyticsBuild `json:"build"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Records corresponds to the JSON schema field "records".
+	Records []string `json:"records"`
+
+	// SecretCheck corresponds to the JSON schema field "secret_check".
+	SecretCheck string `json:"secret_check"`
+}
+
 type FsChangedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

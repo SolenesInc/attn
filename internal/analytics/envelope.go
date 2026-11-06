@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -26,6 +27,12 @@ type Record struct {
 	At      time.Time       `json:"at"`
 	Bytes   int             `json:"bytes,omitempty"`
 	Props   json.RawMessage `json:"props,omitempty"`
+}
+
+const MachineStreamLike = `\_m%`
+
+func (s Stream) OnMachine(machine string) Stream {
+	return s + Stream("_m"+strings.TrimPrefix(machine, "h:"))
 }
 
 type Batch struct {

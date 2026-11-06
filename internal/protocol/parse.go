@@ -73,6 +73,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPlantVentSeed:                 decodeInto[PlantVentSeedMessage],
 	CmdUnplantVentSeed:               decodeInto[UnplantVentSeedMessage],
 	CmdNotebookSyncReport:            decodeInto[NotebookSyncReportMessage],
+	CmdForwardAnalytics:              decodeInto[ForwardAnalyticsMessage],
 	CmdNotebookFolders:               decodeInto[NotebookFoldersMessage],
 	CmdSeedArtifactTransferHere:      decodeInto[SeedArtifactTransferHereMessage],
 	CmdNotebookGuide:                 decodeInto[NotebookGuideMessage],

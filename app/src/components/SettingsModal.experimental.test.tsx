@@ -130,7 +130,7 @@ describe('Experimental settings come from the declarations', () => {
       expect(screen.getByTestId(`settings-feature-${feature.key}`)).toBe(toggle);
     }
     expect(within(screen.getByTestId('settings-feature-group-Agents')).getByText('Asks').textContent).toContain('New agents');
-    expect(screen.getByText('Usage analytics').textContent).toContain('This machine');
+    expect(screen.getByText('Shared terminal host').textContent).toContain('This machine');
   });
 
   it('keeps the shelf layout widths under its switch while it is on', async () => {

@@ -100,9 +100,9 @@ var (
 		Since:   "2026-11-02",
 		Search:  "mobile iphone pair",
 	})
-	AnalyticsEnabled = machineFeature("analytics.enabled", "Record usage analytics on this machine: true or false. Experimental; off by default.", Info{
+	AnalyticsEnabled = feature("analytics.enabled", "Record usage analytics on this home and its outposts: true or false. Experimental; off by default.", Info{
 		Name:    "Usage analytics",
-		Summary: "Keep a redacted record of how attn is used on this machine. Nothing is sent.",
+		Summary: "Keep a redacted record of how attn is used on this home and its outposts. Nothing is sent.",
 		Group:   Data,
 		Applies: Now,
 		Stage:   Experimental,
@@ -212,4 +212,6 @@ var (
 	HeadlessTasksEnabledStored   = add(&Setting{Key: "headless_tasks.enabled.stored", Class: Home, Kind: Computed, Description: "Stored background model task switch."})
 	HeadlessTasksEnabledOverride = add(&Setting{Key: "headless_tasks.enabled.override", Class: Home, Kind: Computed, Description: "Environment override for background model tasks."})
 	PluginPriorities             = add(&Setting{Key: "plugin_provider_priorities", Class: Home, Kind: Free, Internal: true})
+	AnalyticsSubjectSecret       = add(&Setting{Key: "analytics.subject_secret", Class: Home, Kind: Free, Internal: true})
+	AnalyticsClearedAt           = add(&Setting{Key: "analytics.cleared_at", Class: Home, Kind: Free, Internal: true})
 )

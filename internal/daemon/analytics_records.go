@@ -27,7 +27,7 @@ func (d *Daemon) appendAnalyticsAt(stream analytics.Stream, name, subject string
 	if err != nil {
 		return fmt.Errorf("encode %s/%s props: %w", stream, name, err)
 	}
-	secret, err := ensureAnalyticsSecret(d.dataRoot)
+	secret, err := d.analyticsSecret()
 	if err != nil {
 		return err
 	}

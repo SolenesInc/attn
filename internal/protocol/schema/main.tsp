@@ -378,6 +378,17 @@ model OutpostNotebook {
   previous_root?: string;
 }
 
+// An outpost sends the home its recorded analytics. Each record is the JSON the
+// outpost stored, with a stream that names the outpost, so a retried batch stores
+// each record once. secret_check names the secret the records were hashed with.
+@extension("x-on", #{ home: true })
+model ForwardAnalyticsMessage {
+  cmd: "forward_analytics";
+  build: AnalyticsBuild;
+  records: string[];
+  secret_check: string;
+}
+
 @extension("x-on", #{ home: true })
 model NotebookSyncReportMessage {
   cmd: "notebook_sync_report";

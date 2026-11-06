@@ -166,6 +166,7 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 			switch state {
 			case bridge.StateConnected:
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
+				d.queueAnalyticsForward()
 			case bridge.StateStalled:
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateLost:

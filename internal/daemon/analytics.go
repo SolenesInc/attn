@@ -30,7 +30,36 @@ const (
 )
 
 func (d *Daemon) analyticsEnabled() bool {
-	return d.on(setting.AnalyticsEnabled)
+	if !d.on(setting.AnalyticsEnabled) {
+		return false
+	}
+	return d.enrollmentStatus().IsHome() || d.setting(setting.AnalyticsSubjectSecret) != ""
+}
+
+func (d *Daemon) analyticsSecret() ([]byte, error) {
+	if !d.enrollmentStatus().IsHome() {
+		return hex.DecodeString(d.setting(setting.AnalyticsSubjectSecret))
+	}
+	secret, err := ensureAnalyticsSecret(d.dataRoot)
+	if err != nil {
+		return nil, err
+	}
+	if encoded := hex.EncodeToString(secret); d.store.GetSetting(setting.AnalyticsSubjectSecret.Key) != encoded {
+		if err := d.store.SetSettingChecked(setting.AnalyticsSubjectSecret.Key, encoded); err != nil {
+			return nil, fmt.Errorf("copy the analytics secret to outposts: %w", err)
+		}
+	}
+	return secret, nil
+}
+
+func (d *Daemon) analyticsSecretChanged() {
+	if err := d.stopAnalyticsMirror(); err != nil {
+		d.logf("analytics: %v", err)
+	}
+	if _, err := d.store.ClearAnalyticsOutbox(); err != nil {
+		d.logf("analytics: clear records hashed with the old secret: %v", err)
+	}
+	d.configureAnalytics()
 }
 
 func (d *Daemon) analyticsCapturedSince(at time.Time) bool {
@@ -46,7 +75,7 @@ func (d *Daemon) configureAnalytics() {
 		}
 		return
 	}
-	secret, err := ensureAnalyticsSecret(d.dataRoot)
+	secret, err := d.analyticsSecret()
 	if err != nil {
 		d.logf("analytics: %v", err)
 		return
@@ -161,6 +190,9 @@ func (d *Daemon) sendClearAnalyticsRecordsWSResult(client *wsClient, msg *protoc
 		return
 	}
 	result.Records = int(cleared)
+	if err := d.store.SetSettingChecked(setting.AnalyticsClearedAt.Key, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		d.logf("analytics: tell outposts to clear their records: %v", err)
+	}
 	vents, err := d.store.DeleteDismissedVents(client.selectedProfile())
 	if err != nil {
 		result.Error = protocol.Ptr(fmt.Sprintf("cleared %d records but not the dismissed vents: %v", cleared, err))
