@@ -1,6 +1,7 @@
 
 import { ShortcutId } from './registry';
 import { modifierTokens, shortcutTokens } from './formatShortcut';
+import { shortcutLabel } from './metadata';
 
 export interface CheatsheetRow {
   label: string;
@@ -24,7 +25,7 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
       rows: [
         { label: 'New terminal on this desktop', combos: [fromId('session.newTerminal')] },
         { label: 'New session on this desktop', combos: [fromId('session.new')] },
-        { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
+        { label: shortcutLabel('session.newHorizontal', shelfLayoutEnabled), combos: [fromId('session.newHorizontal')] },
         { label: 'Close session, focused pane or empty desktop', combos: [fromId('session.close')] },
         {
           label: 'Previous / next desktop (queue mode: agent in the queue)',
@@ -73,8 +74,8 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
       title: 'Panes & Terminals',
       rows: [
         { label: 'Find in terminal', combos: [fromId('terminal.find')] },
-        { label: 'Split pane down', combos: [fromId('terminal.splitVertical')] },
-        { label: 'Split pane sideways', combos: [fromId('terminal.splitHorizontal')] },
+        { label: shortcutLabel('terminal.splitVertical', shelfLayoutEnabled), combos: [fromId('terminal.splitVertical')] },
+        { label: shortcutLabel('terminal.splitHorizontal', shelfLayoutEnabled), combos: [fromId('terminal.splitHorizontal')] },
         {
           label: 'Move focus between panes',
           combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],

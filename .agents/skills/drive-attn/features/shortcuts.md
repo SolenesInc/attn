@@ -10,13 +10,13 @@ restarts.
 
 ## Sub-features
 
-- `cheatsheet`: every shortcut by category, with its keys. The cheat sheet and the editor list the shelf width keys only while `shelf_layout_enabled` is on.
+- `cheatsheet`: every shortcut by category, with its keys. The cheat sheet and the editor list the shelf layout's width, carry and send keys only while `shelf_layout_enabled` is on, and name where ⌘⇧N, ⌘D and ⌘⇧D open with it on.
 - `shortcut-editor`: rebind by recording keys, reset one, unbind one, or restore every default.
 - `conflicts`: the editor asks to Reassign when another action holds the keys, and refuses keys that a required action holds.
 - `protected`: Settings, Keyboard shortcuts and Quit can be rebound but never unbound.
 - `chords`: a leader combination, then one key, within 600 ms.
 - `dock`: the shortcuts the sidebar dock shows, in order, and the dock hidden or shown.
-- `linux-bindings`: Linux defaults, which use Ctrl+Shift where macOS uses ⌘, or Ctrl+Alt where the macOS binding already has Shift.
+- `linux-bindings`: Linux defaults, which use Ctrl+Shift where macOS uses ⌘, or Ctrl+Alt where the macOS binding already has Shift. The shelf layout's carry and send keys are the exception: Ctrl+Alt+Shift+arrows.
 - `keybindings-setting`: rebinds and the dock as the home setting `keybindings_config`, read and reset from a shell.
 
 ## How to get to it
@@ -45,7 +45,7 @@ Preconditions:
 
 - **Read a binding.** Run `bridge shortcut_binding '{"shortcutId":"ui.showShortcuts"}'`. It returns `binding` with `key: "/"` and `meta: true`. `./attn settings get keybindings_config` prints an empty line on a fresh instance.
 - **The cheat sheet with its shortcut.** Press ⌘/: `bridge native_key '{"key":"/","modifiers":["command"]}'`, then `bridge dom_wait '{"selector":"#shortcuts-modal-title","timeoutMs":5000}'`. `bridge dom_text '{"selector":".shortcuts-body"}'` lists the categories, "App" among them, and their rows with keys, "Settings" and "Keyboard shortcuts" among the rows. Press ⌘/ again: `bridge dom_wait '{"selector":"#shortcuts-modal-title","absent":true,"timeoutMs":5000}'` matches.
-- **The shelf width keys follow the setting.** Run `./attn settings set shelf_layout_enabled true`: `.shortcuts-body` holds `Fewer, wider / more, narrower tiles`, and `.shortcut-editor-body` holds `Fewer, wider tiles` and `More, narrower tiles`. Run it with `false`: neither lists them.
+- **The shelf keys and labels follow the setting.** Run `./attn settings set shelf_layout_enabled true`: `.shortcuts-body` holds `Fewer, wider / more, narrower tiles`, `Carry tile along the row`, `Send tile to the shelf`, `New session below`, `New shell beside` and `New shell below`, and `.shortcut-editor-body` holds `Fewer, wider tiles`, `More, narrower tiles` and the same three new-tile labels. Run it with `false`: neither lists the shelf keys, and both read `New session, split sideways`, `Split pane down` and `Split pane sideways`.
 - **The cheat sheet from the palette.** Run `bridge native_key '{"key":"k","modifiers":["command","shift"]}'`, `bridge dom_wait '{"selector":"[role=\"combobox\"][aria-label=\"Commands\"]","focused":true,"timeoutMs":5000}'`, `bridge native_text '{"text":"Keyboard shortcuts"}'` and `bridge native_key '{"key":"Enter"}'`. `#shortcuts-modal-title` appears. Press Escape.
 - **The cheat sheet from What's new.** Open the palette, type `whats new` and press Enter. The title's apostrophe would break the single-quoted JSON, and the command matches through its keywords ([home.md](home.md)). Click `.whats-new-link` ("View all shortcuts →") natively: What's new closes and `#shortcuts-modal-title` appears.
 - **The editor from the cheat sheet.** With the cheat sheet open, click `.shortcuts-edit` ("Edit shortcuts") natively. `bridge dom_wait '{"selector":"#shortcut-editor-title","timeoutMs":5000}'` matches and `#shortcuts-modal-title` is gone. Press Escape.

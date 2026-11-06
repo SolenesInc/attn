@@ -12,6 +12,7 @@ import {
 } from '../shortcuts/registry';
 import {
   SHORTCUT_META,
+  shortcutLabel,
   SHORTCUT_CATEGORY_ORDER,
   SHORTCUT_CATEGORY_LABELS,
   ShortcutCategory,
@@ -111,7 +112,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (id: ShortcutId) =>
-    SHORTCUT_META[id].label.toLowerCase().includes(q) ||
+    shortcutLabel(id, shelfLayoutEnabled).toLowerCase().includes(q) ||
     formatShortcut(id).toLowerCase().includes(q);
   const visibleIds = (category: ShortcutCategory): ShortcutId[] =>
     q ? groups[category].filter(matchesQuery) : groups[category];
@@ -135,7 +136,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
       if (kb.isProtected(conflictId)) {
         setRowError({
           id,
-          message: `${formatShortcut(binding)} is reserved by “${SHORTCUT_META[conflictId].label}” and can’t be reassigned.`,
+          message: `${formatShortcut(binding)} is reserved by “${shortcutLabel(conflictId, shelfLayoutEnabled)}” and can’t be reassigned.`,
         });
         return;
       }
@@ -226,13 +227,13 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                 <ol className="shortcut-editor-dock-list">
                   {kb.dock.items.map((id, index) => (
                     <li className="shortcut-editor-dock-item" key={id}>
-                      <span className="shortcut-editor-dock-name">{SHORTCUT_META[id].label}</span>
+                      <span className="shortcut-editor-dock-name">{shortcutLabel(id, shelfLayoutEnabled)}</span>
                       <span className="shortcut-editor-dock-keys">{formatShortcut(id)}</span>
                       <button
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Move up"
-                        aria-label={`Move ${SHORTCUT_META[id].label} up`}
+                        aria-label={`Move ${shortcutLabel(id, shelfLayoutEnabled)} up`}
                         disabled={index === 0}
                         onClick={() => kb.moveDockItem(id, -1)}
                       >
@@ -242,7 +243,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Move down"
-                        aria-label={`Move ${SHORTCUT_META[id].label} down`}
+                        aria-label={`Move ${shortcutLabel(id, shelfLayoutEnabled)} down`}
                         disabled={index === kb.dock.items.length - 1}
                         onClick={() => kb.moveDockItem(id, 1)}
                       >
@@ -252,7 +253,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Remove from dock"
-                        aria-label={`Remove ${SHORTCUT_META[id].label} from dock`}
+                        aria-label={`Remove ${shortcutLabel(id, shelfLayoutEnabled)} from dock`}
                         onClick={() => kb.setInDock(id, false)}
                       >
                         ✕
@@ -282,7 +283,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                     return (
                       <div className="shortcut-editor-row" key={id}>
                         <span className="shortcut-editor-row-label">
-                          {SHORTCUT_META[id].label}
+                          {shortcutLabel(id, shelfLayoutEnabled)}
                           {customized && (
                             <span className="shortcut-editor-badge">Customized</span>
                           )}
@@ -312,7 +313,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         {isPending ? (
                           <span className="shortcut-editor-reassign">
                             <span className="shortcut-editor-reassign-text">
-                              {formatShortcut(pending!.binding)} is “{SHORTCUT_META[pending!.conflictId].label}”.
+                              {formatShortcut(pending!.binding)} is “{shortcutLabel(pending!.conflictId, shelfLayoutEnabled)}”.
                             </span>
                             <button
                               type="button"

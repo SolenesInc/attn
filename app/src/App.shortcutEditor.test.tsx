@@ -113,6 +113,14 @@ describe('App shortcut editor', () => {
     expect(row('More, narrower tiles')).toHaveTextContent('⌘⌥=');
   });
 
+  it('names where new tiles open while the shelf layout is on', async () => {
+    const { editor } = await renderEditor({ shelfLayout: true });
+    expect(row('New session below')).toBeInTheDocument();
+    expect(row('New shell beside')).toBeInTheDocument();
+    expect(row('New shell below')).toBeInTheDocument();
+    expect(within(editor).queryByText('New session, split sideways')).toBeNull();
+  });
+
   it('leaves out the shelf width keys while the shelf layout is off', async () => {
     const { editor } = await renderEditor();
     expect(within(editor).queryByText('Fewer, wider tiles')).toBeNull();

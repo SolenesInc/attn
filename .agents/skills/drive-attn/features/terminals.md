@@ -32,7 +32,7 @@ came back and close the shells. Terminals keep running when the app or the daemo
 - Tile header (`app/src/components/SessionTerminalDesktop/DesktopAgentHeader.tsx`): "Rename session <name>" on a shell's tile.
 - Size: typing in a terminal (`pty_input`), moving the pointer over it (`terminal_pointer_activity`) or focusing it (`terminal_focus`, sent when the terminal takes focus by click or key) makes the app the terminal's size owner (`internal/daemon/pty_size_owner.go`). The app's `pty_resize` applies only while the app owns the size. A second client, such as `wsctl attach`, takes the size the same way.
 - **Settings → Experimental**, "Shared terminal host" (`app/src/components/SettingsModalSections.tsx`), the machine setting `pty_shared_host_enabled`.
-- Where people see what agents do: a shell an agent opens appears beside the agent with a pulse and takes no focus, and the shell's tile shows what the agent typed and what ran.
+- Where people see what agents do: a shell an agent opens appears beside the agent with a pulse and takes no focus (at the row's end with the shelf layout on, [desktops.md](desktops.md)), and the shell's tile shows what the agent typed and what ran.
 - Their own shell: nothing. `attn terminal`, below, refuses without a calling agent.
 - Splitting, zooming, moving and closing terminal tiles belong to [desktops.md](desktops.md).
 

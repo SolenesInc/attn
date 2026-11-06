@@ -15,10 +15,16 @@ profile                 a separate world for the user's work; like a tenant
 ```text
 desktop                 one arrangement of tiles; like a macOS Space or a
                         virtual desktop
-└─ tile (0..n)          one rectangle on a desktop; like a tile in a tiling
-                        window manager
-   ├─ terminal tile     shows 1 terminal
-   └─ browser, markdown, seed or editor tile
+├─ tile (0..n)          one rectangle on a desktop; like a tile in a tiling
+│  │                    window manager
+│  ├─ terminal tile     shows 1 terminal
+│  └─ browser, markdown, seed or editor tile
+├─ row (1)              the desktop's columns in order, left to right; like
+│  │                    the columns of a scrolling window manager
+│  └─ column (0..n)     one tile, or a stack of tiles one above the other
+└─ shelf (at most 1)    the strip that lists the row's off-screen columns;
+   │                    only with the shelf layout on
+   └─ chip (0..n)       one off-screen column on the shelf; like a tab
 ```
 
 ```text

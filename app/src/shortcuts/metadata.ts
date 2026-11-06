@@ -19,6 +19,7 @@ export interface ShortcutMeta {
    * because AppKit consumes it first, so a rebind here would never fire. */
   nativeDelivery?: boolean;
   requiresShelfLayout?: boolean;
+  shelfLabel?: string;
 }
 
 export const SHORTCUT_CATEGORY_LABELS: Record<ShortcutCategory, string> = {
@@ -40,7 +41,7 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
 export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.new': { label: 'New session on this desktop', category: 'sessions' },
   'session.newTerminal': { label: 'New terminal on this desktop', category: 'sessions', dockLabel: 'terminal' },
-  'session.newHorizontal': { label: 'New session, split sideways', category: 'sessions', dockLabel: 'session h' },
+  'session.newHorizontal': { label: 'New session, split sideways', shelfLabel: 'New session below', category: 'sessions', dockLabel: 'session h' },
   'session.close': { label: 'Close session, focused pane or empty desktop', category: 'sessions' },
   'session.prev': { label: 'Previous desktop (queue mode: previous agent in the queue)', category: 'sessions' },
   'session.next': { label: 'Next desktop (queue mode: next agent in the queue)', category: 'sessions' },
@@ -89,8 +90,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
 
   'terminal.open': { label: 'Focus utility terminal', category: 'panes', requiresTerminal: true },
   'terminal.collapse': { label: 'Collapse utility terminal', category: 'panes' },
-  'terminal.splitVertical': { label: 'Split pane down', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
-  'terminal.splitHorizontal': { label: 'Split pane sideways', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
+  'terminal.splitVertical': { label: 'Split pane down', shelfLabel: 'New shell beside', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
+  'terminal.splitHorizontal': { label: 'Split pane sideways', shelfLabel: 'New shell below', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
   'terminal.toggleZoom': { label: 'Zoom active pane', category: 'panes', dockLabel: 'zoom', requiresTerminal: true },
   'terminal.toggleMaximize': { label: 'Focus active pane', category: 'panes', requiresTerminal: true },
   'terminal.close': { label: 'Close focused pane', category: 'panes', requiresTerminal: true },
@@ -137,4 +138,9 @@ export function isNativeDeliveryShortcut(id: ShortcutId): boolean {
 
 export function dockShortcutLabel(id: ShortcutId): string {
   return SHORTCUT_META[id].dockLabel ?? SHORTCUT_META[id].label;
+}
+
+export function shortcutLabel(id: ShortcutId, shelfLayoutEnabled: boolean): string {
+  const meta = SHORTCUT_META[id];
+  return (shelfLayoutEnabled && meta.shelfLabel) || meta.label;
 }

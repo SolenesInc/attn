@@ -15,11 +15,11 @@ asks.
 - `desktop-sidebar`: desktop flow, with each desktop and its agents and tiles in layout order.
 - `collapsed-rail`: the desktop sidebar collapsed to a column with Home, Commands, the flow switch, the header buttons and desktop chips.
 - `queue-sidebar`: queue flow, with Home, crew, the waiting card with the oldest turns, automation runs and desktop chips.
-- `queue-bar`: the queue sidebar collapsed into a strip: the waiting pill and its peek, asks, runs and desktop chips.
+- `queue-bar`: the queue sidebar collapsed into a strip: the waiting pill and its peek, asks, runs and desktop chips. With the shelf layout on, the shelf sits inside it ([desktops.md](desktops.md)).
 - `agent-list`: every agent of the profile under the waiting card, with a filter.
 - `collapse`: hide the sidebar down to the rail or the bar, and bring it back.
 - `header`: the profile pill, New, Commands, the flow switch, collapse, and the buttons for the garden, notebook, ledger, automations, notifications and asks.
-- `session-rows`: one row per agent with its state, harness mark and actions menu. A clipped name shows in full on hover.
+- `session-rows`: one row per agent with its state, harness mark and actions menu. A clipped name shows in full on hover. With the shelf layout on, clicking the row of an off-screen tile brings the tile beside the active tile, and hovering the row opens its peek panel ([desktops.md](desktops.md)).
 
 ## How to get to it
 

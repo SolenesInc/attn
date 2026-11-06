@@ -17,7 +17,7 @@ the app still shows an older word, the page tells you which label to look for.
 
 | Topic | What it covers |
 |---|---|
-| [desktops](reference/desktops.md) | Desktop flow: desktops, tiles, moving agents between desktops, and profiles |
+| [desktops](reference/desktops.md) | Desktop flow: desktops, tiles, moving agents between desktops, the experimental shelf layout, and profiles |
 | [queue](reference/queue.md) | Queue flow: turns, settling, snoozing and priority |
 | [sessions](reference/sessions.md) | Opening agents and shells, worktrees, the terminal, restarts, the ledger, resume, and sending files to an agent |
 | [delegation](reference/delegation.md) | Agents starting agents you can steer, delegation roles, and the garden |

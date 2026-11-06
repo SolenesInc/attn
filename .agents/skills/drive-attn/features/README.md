@@ -343,7 +343,7 @@ instance. A file whose recipe ran live says so here.
 
 ### Desktops and tiles
 
-- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops.
+- [Desktops and tiles](desktops.md) (both): Arrangements of tiles, like macOS Spaces: switch, split, sort, and move tiles between desktops. The shelf layout's keys, drags and settings ran live.
 - [Terminals](terminals.md) (both): A real PTY in a tile: what the user types and what the program prints, with scrollback, find, links and images.
 - [Markdown tiles](markdown.md) (both): Open a markdown file in a tile, rendered and live as the file changes.
 - [Notebook](notebook.md) (both): The user's notebook and daily journal, edited in a tile or fullscreen. The chief keeps the notebook too.

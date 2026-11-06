@@ -71,6 +71,21 @@ describe('App shortcut cheatsheet', () => {
     expect(combosOf(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' }), 'Fewer, wider / more, narrower tiles')).toEqual(combos);
   });
 
+  it.each([
+    ['on', { shelf_layout_enabled: 'true' }, ['New session below', 'New shell beside', 'New shell below'], ['New session, split sideways', 'Split pane down', 'Split pane sideways']],
+    ['off', {}, ['New session, split sideways', 'Split pane down', 'Split pane sideways'], ['New session below', 'New shell beside', 'New shell below']],
+  ])('names where new tiles open with the shelf layout %s', async (_, settings, shown, hidden) => {
+    const { daemon } = await renderApp({
+      initialState: { settings },
+      script: (scripted) => serveSettings(scripted, settings),
+    });
+    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
+
+    const cheatsheet = screen.getByRole('dialog', { name: 'Keyboard Shortcuts' });
+    for (const label of shown) expect(cheatsheet).toHaveTextContent(label);
+    for (const label of hidden) expect(cheatsheet).not.toHaveTextContent(label);
+  });
+
   it('closes from its close button', async () => {
     const { daemon } = await openCheatsheet();
 

@@ -42,8 +42,9 @@ sidebar to switch to that desktop and drop it there.
 
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
 a desktop, they move to the next desktop. When you close a tile, Attn takes you
-to the tile you used before it. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux)
-move back and forward through the tiles you've looked at.
+to the tile you used before it, unless the [shelf layout](#shelf-layout-experimental)
+is on. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) move back and forward through
+the tiles you've looked at.
 
 When a desktop gets crowded:
 
@@ -64,6 +65,51 @@ drop the agent on a desktop in the sidebar.
 You can ask agents to move themselves, their delegates or any shell, and the
 Chief can move any agent. A delegate opens next to the agent that started it,
 unless you ask for another desktop ("put it on desktop 7").
+
+## Shelf layout (experimental)
+
+The shelf layout shows a desktop as one row of columns, left to right. A column is one tile, or a stack of tiles one above the other. The window shows as many neighbouring columns as fit at a width you can read. The other columns wait as chips on the shelf, a thin strip above the tiles. The shelf shows only while a column is off screen. With the queue sidebar collapsed, the shelf sits inside the queue bar.
+
+To turn it on, use **Settings → Experimental → Shelf layout** or run `attn settings set shelf_layout_enabled true`. It is off by default. Turning it off brings your splits back with no tile lost, although splits you moved may come back at even widths. The rest of this page applies either way, except for what this section changes.
+
+### Keys
+
+| Action | macOS | Linux |
+|---|---|---|
+| Move along the row, and slide the row at the screen's edge. Past the row's end, go to the previous or next desktop. | Cmd+Option+Left, Right | Ctrl+Shift+Left, Right |
+| Carry the active column past its neighbour | Cmd+Option+Shift+Left, Right | Ctrl+Alt+Shift+Left, Right |
+| Send the active tile to the shelf | Cmd+Option+Shift+Up | Ctrl+Alt+Shift+Up |
+| Show fewer, wider tiles or more, narrower tiles | Cmd+Option+-, Cmd+Option+= | Ctrl+Alt+-, Ctrl+Alt+= |
+
+The command palette offers these actions too. Zoom, focus and moving a tile to another desktop keep their keys and work as above.
+
+On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl+Alt+Shift+arrows, so carry and send never reach Attn there. To use them, run the commands from the palette, rebind them in Attn (Cmd+/ on macOS, Ctrl+Shift+/ on Linux, then **Edit shortcuts**), or change GNOME's keys.
+
+### What changes
+
+- **Opening a tile.** Cmd+D, Cmd+N and Cmd+T (Ctrl+Shift+D, N and T on Linux) open beside the active column and take focus, even when the row is full. A tile on the far side goes to the shelf. Cmd+Shift+D (Ctrl+Alt+D on Linux) opens a shell below the active tile, in the same column, and Cmd+Shift+N (Ctrl+Alt+N on Linux) does the same for a new session. When a stack has no room for another tile at 320px, the new tile opens beside instead, and a message gives the numbers.
+- **What agents open.** A terminal an agent starts goes to the row's end and takes no focus. It shows if there is room. If not, its chip flashes and your screen stays as it is. `attn terminal open --down` still stacks the terminal below the agent. A document or browser tile an agent opens goes beside that agent and takes no focus. It slides into view when the active tile can stay on screen. Otherwise its chip counts as waiting, and Cmd+J (Ctrl+Shift+J on Linux) brings it first. Closing the document puts your screen back.
+- **Going to a tile.** A chip, Cmd+J (Ctrl+Shift+J on Linux), the palette, a sidebar click and queue steps bring an off-screen tile beside the active tile. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) slide to it and leave the row's order alone. A tile on another desktop switches desktop and reorders nothing.
+- **Closing a tile.** Attn goes to the next tile in the stack, or else the previous one. If the column was a single tile, Attn goes to the next column, or else the previous one. Entering a stack lands on its most recently used tile.
+- **Sending to the shelf.** A stacked tile leaves its stack for the row's end. A single tile moves past the screen's far side. If nothing else is off screen, the tile stays on the shelf although it would fit. It comes back with its chip, Cmd+J (Ctrl+Shift+J on Linux) or an app restart.
+- **Peeking.** Hover a chip, or the sidebar row of an off-screen tile, to read the terminal's latest text. Type in the box and press Enter to reply without moving anything.
+- **Motion.** Tiles move on one spring. A browser tile snaps into place and reloads its page when it returns to the screen. With **Reduce motion** on in your system settings, nothing animates.
+
+### Widths
+
+A tile never gets narrower than the narrowest width, 66 terminal character columns by default. Set it in **Settings → Experimental**, or with `attn settings set narrowest_tile_cols <number>`. Cmd+Option+- and Cmd+Option+= (Ctrl+Alt+- and Ctrl+Alt+= on Linux) step through 57, 66, 76, 86, 100, 120 and 150 until one tile fewer or one tile more fits. Hovering the dots in the middle of the shelf shows the same control.
+
+Drag the divider between two columns to give them the widths you want, and the other columns share the rest. A drag past the narrowest width moves the far column to the shelf, and dragging back restores it. Esc cancels the drag. To clear the widths beside one divider, double-click it. To clear every dragged width on the desktop, run "Clear dragged widths" from the palette.
+
+### Drags
+
+- Drop a chip on a tile's center to swap the two columns.
+- Drop a chip on a tile's edge to place the chip's column there, or to stack it on the top or bottom edge.
+- Drop a chip between other chips to reorder the row. Focus stays where it is.
+- Drop a tile on the shelf to move it to that place in the row. It stays on the shelf until you bring it back.
+- Drop a chip on a desktop in the sidebar to move its whole column there and go with it.
+
+Esc cancels any of these drags.
 
 ## Profiles
 
