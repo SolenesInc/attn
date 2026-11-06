@@ -49,6 +49,8 @@ go ./cmd/attn TestOneOfTwoRemoteCodexTerminalsCanExitWhileItsConversationKeepsRu
 go ./cmd/attn TestARemoteCodexTakesItsFirstPromptWhenAnOlderCopyOfItsSessionLandsDuringLaunch
 go ./cmd/attn TestOutpostTeardownAcceptsAnAlreadyRemovedTerminal
 go ./cmd/attn TestAnOutpostCodexServerStopsWhenItsLastTerminalIsRemovedBeforeItsKillArrives
+go ./cmd/attn TestAClearAtTheHomeRemovesWhatAnOfflineOutpostHolds
+go ./cmd/attn TestEverySettingAnOutpostChangesTogetherIsNamedToItsApp
 go ./cmd/attn TestAnInterruptedOutpostCodexCloseReleasesItsServerAfterReconnect
 go ./cmd/attn TestAnOutpostReplaysItsPendingConversationAfterRestart
 go ./cmd/attn TestAReplyDuringAnOutpostReconnectKeepsTheSessionWaitingForTheUser

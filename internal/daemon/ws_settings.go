@@ -172,7 +172,7 @@ func (d *Daemon) refreshChangedSettings(before map[string]string) {
 }
 
 func (d *Daemon) projectSettingsUpdated(changedKey string) {
-	d.projectSnapshot(snapshotSettings, func() {
+	d.projectSnapshot(snapshotSettings+":"+changedKey, func() {
 		base := d.daemonSettingsSnapshot()
 		snapshots := map[string]map[string]interface{}{}
 		d.wsHub.ForEachClient(func(client *wsClient) {

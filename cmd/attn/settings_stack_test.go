@@ -12,6 +12,17 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func TestEverySettingAnOutpostChangesTogetherIsNamedToItsApp(t *testing.T) {
+	home, outpost := testworld.NewStack(t, testworld.WithoutAgentKit()), testworld.NewStack(t, testworld.WithoutAgentKit())
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	remote := outpost.App()
+	mark := remote.EventCount()
+	disconnectOutpost(pair)
+	awaitChanged(remote, mark, "outpost_state")
+	awaitChanged(remote, mark, "outpost_last_error")
+}
+
 func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s := testworld.NewStack(t)
 	s.Start()
