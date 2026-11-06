@@ -13,6 +13,18 @@ returns `testworld.Main(m)`.
   the same data. The stack holds its WebSocket listener until cleanup,
   including while the daemon is stopped, so no other process can take the
   listener's address.
+- `testworld.OnPTYBackend(backend)` picks the PTY backend, `testworld.WorkerPTY`
+  when left out. Loop over `testworld.WorkerAndSharedHost` to prove a promise on
+  both. `testworld.SharedHostPTY` is the path users take: the daemon starts on
+  dedicated workers, and the first start turns on the shared host setting.
+  `testworld.SharedHostOnlyPTY` runs the host without the workers. Both skip the
+  test unless `ATTN_TEST_PTY_HOST` names a built host (`make build-pty-host`).
+  To add such a test to CI, add its name to the "Verify instance cleanup with
+  live host generations" step in `.github/workflows/ci.yml`.
+- A test that chooses when the setting turns on calls
+  `s.UseSharedHostBinary(testworld.RequireSharedHost(t))` before starting, then
+  `s.EnableSharedHost(app)`. A test with its own host build passes that build to
+  `s.UseSharedHostBinary` and does not skip.
 - The historical PTY upgrade test uses port `0`. Older binaries cannot inherit
   that listener. After the daemon logs that it is bound, the test runs `lsof` on the captured
   PID to read the assigned port. The test does not release a reservation or

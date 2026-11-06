@@ -3,7 +3,6 @@ package main_test
 import (
 	"encoding/base64"
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -15,23 +14,13 @@ import (
 )
 
 func TestTerminalCLI(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
 			s.Vars = append(s.Vars, "SHELL=/bin/bash")
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to verify terminal CLI on the shared host")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
 			s.Start()
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			caller := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 			s.Launched(caller)
 			run := func(args ...string) testworld.Result {
@@ -295,26 +284,21 @@ func TestTerminalCLIWithoutShellIntegration(t *testing.T) {
 }
 
 func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
 			s.Vars = append(s.Vars, "SHELL=/bin/bash")
 			current := testworld.AttnBinaryWithSnapshotFormat(t, "terminal-text-current")
 			next := testworld.AttnBinaryWithSnapshotFormat(t, "terminal-text-next")
-			if backend == "shared host" {
-				if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to verify text across shared-host handover")
+			hostBuild := func(format string) []string {
+				if backend != testworld.SharedHostPTY {
+					return nil
 				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating")
-				s.StartBinary(current, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "terminal-text-current"))
-			} else {
-				s.StartBinary(current)
+				return []string{"ATTN_PTY_HOST_BINARY=" + ptyhosttest.BuildWithSnapshotFormat(t, format)}
 			}
+			s.StartBinary(current, hostBuild("terminal-text-current")...)
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			caller := s.Spawn(app, fakeagent.Claude, s.Path("upgrade"))
 			s.Launched(caller)
 			run := func(args ...string) testworld.Result {
@@ -336,11 +320,7 @@ func TestTerminalTextSurvivesAnUpgrade(t *testing.T) {
 				t.Fatalf("before upgrade: %+v", got)
 			}
 			s.Stop()
-			if backend == "shared host" {
-				s.StartBinary(next, "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "terminal-text-next"))
-			} else {
-				s.StartBinary(next)
-			}
+			s.StartBinary(next, hostBuild("terminal-text-next")...)
 			app = s.App()
 			terminal := app.Terminal(string(opened.SessionID))
 			for _, session := range app.Initial.Sessions {

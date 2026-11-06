@@ -15,10 +15,7 @@ import (
 )
 
 func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *testing.T) {
-	host := os.Getenv("ATTN_TEST_PTY_HOST")
-	if host == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to verify bounded output across all PTY backends")
-	}
+	testworld.RequireSharedHost(t)
 	for _, sequence := range []struct {
 		name, prefix, suffix string
 		bytes                int
@@ -27,13 +24,10 @@ func TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact(t *test
 		{"kitty-overflow", "\x1b_G", "\x1b\\", (72 << 20) + 2*pty.OutputEventMaxBytes},
 	} {
 		t.Run(sequence.name, func(t *testing.T) {
-			for _, backend := range []string{"embedded", "worker", "shared"} {
-				t.Run(backend, func(t *testing.T) {
-					s := testworld.NewStack(t)
-					s.Vars = append(s.Vars, "ATTN_PTY_BACKEND="+backend, "SHELL=/bin/bash")
-					if backend == "shared" {
-						s.Vars = append(s.Vars, "ATTN_PTY_HOST_BINARY="+host)
-					}
+			for _, backend := range []testworld.PTYBackend{testworld.EmbeddedPTY, testworld.WorkerPTY, testworld.SharedHostOnlyPTY} {
+				t.Run(string(backend), func(t *testing.T) {
+					s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
+					s.Vars = append(s.Vars, "SHELL=/bin/bash")
 					s.Start()
 					app := s.App()
 					shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))

@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -237,22 +236,12 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 }
 
 func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhileItIsStillInstalled(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex), testworld.OnPTYBackend(backend))
 			s.Start()
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
 			setSetting(t, app, "codex_executable", codex)
 			shareCodex(t, app)
@@ -444,22 +433,12 @@ func hiddenWaitingSharedCodex(t *testing.T, s *testworld.Stack, app *testworld.P
 }
 
 func TestRestartNowLetsARunningTurnFinishWhenCodexIsInstalledWithNpm(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to run the app-server on the shared host")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex), testworld.OnPTYBackend(backend))
 			s.Start()
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			setSetting(t, app, "codex_executable", s.InstallNpmCodex("npm", "0.162.1"))
 			shareCodex(t, app)
 			session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))

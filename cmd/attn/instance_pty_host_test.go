@@ -23,10 +23,7 @@ import (
 )
 
 func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
-	binary := os.Getenv("ATTN_TEST_PTY_HOST")
-	if binary == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to run live instance cleanup")
-	}
+	binary := testworld.RequireSharedHost(t)
 	root, err := os.MkdirTemp("/tmp", "pty-clean-")
 	if err != nil {
 		t.Fatal(err)

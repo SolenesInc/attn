@@ -28,7 +28,7 @@ func TestEnablingASharedPTYHostThatCannotStartIsRefusedWithoutBlockingTheDaemonO
 	if err := os.WriteFile(host, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+	s.UseSharedHostBinary(host)
 	s.Start()
 	app := s.App()
 	running := s.Spawn(app, fakeagent.Claude, s.Path("shop"))

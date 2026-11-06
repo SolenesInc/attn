@@ -27,18 +27,20 @@ import (
 
 type Stack struct {
 	*World
-	binary        string
-	daemon        *os.Process
-	exited        chan error
-	allowFallback bool
-	pauses        *pauseSocket
-	clock         *stepclock.Hub
-	wsListener    *net.TCPListener
+	binary                  string
+	daemon                  *os.Process
+	exited                  chan error
+	allowFallback           bool
+	pauses                  *pauseSocket
+	clock                   *stepclock.Hub
+	wsListener              *net.TCPListener
+	enableSharedHostOnStart bool
 }
 
 type stackSetup struct {
 	harnesses       []fakeagent.Harness
 	withoutAgentKit bool
+	backend         PTYBackend
 }
 
 type StackOption func(*stackSetup)
@@ -56,7 +58,7 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	if testing.Short() {
 		t.Skip("a stack test runs the built attn binary, which -short does not build")
 	}
-	var setup stackSetup
+	setup := stackSetup{backend: WorkerPTY}
 	for _, opt := range opts {
 		opt(&setup)
 	}
@@ -84,11 +86,11 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 		"ATTN_WS_PORT="+port,
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
 		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
-		"ATTN_PTY_BACKEND=worker",
 	)
 	t.Cleanup(s.reap)
 	t.Cleanup(s.Stop)
 	s.pauses = s.listenForPauses()
+	s.usePTYBackend(setup.backend)
 	return s
 }
 
@@ -163,6 +165,10 @@ func (s *Stack) checkStarted() {
 		if strings.HasPrefix(warning.Code, "pty_backend_") && !s.allowFallback {
 			s.T.Fatalf("the daemon started on a fallback PTY backend: %s: %s", warning.Code, warning.Message)
 		}
+	}
+	if s.enableSharedHostOnStart {
+		s.EnableSharedHost(probe)
+		s.enableSharedHostOnStart = false
 	}
 	probe.Close()
 }

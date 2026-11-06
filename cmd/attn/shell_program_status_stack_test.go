@@ -13,23 +13,11 @@ import (
 
 func TestAProgramInAShellTileReportsItsStateUntilTheShellPromptReturns(t *testing.T) {
 	t.Parallel()
-	backends := map[string]func(t *testing.T, s *testworld.Stack){
-		"worker": func(t *testing.T, s *testworld.Stack) { s.Start() },
-		"shared host": func(t *testing.T, s *testworld.Stack) {
-			host := os.Getenv("ATTN_TEST_PTY_HOST")
-			if host == "" {
-				t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
-			}
-			s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			s.Start()
-			enableSharedHost(t, s.App())
-		},
-	}
-	for name, start := range backends {
-		t.Run(name, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t)
-			start(t, s)
+			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
+			s.Start()
 			app := s.App()
 			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })

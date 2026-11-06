@@ -1,7 +1,6 @@
 package main_test
 
 import (
-	"os"
 	"os/exec"
 	"testing"
 
@@ -12,12 +11,8 @@ import (
 
 func TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning(t *testing.T) {
 	t.Parallel()
-	host := os.Getenv("ATTN_TEST_PTY_HOST")
-	if host == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host stack tests")
-	}
 	s := testworld.NewStack(t)
-	s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
+	s.UseSharedHostBinary(testworld.RequireSharedHost(t))
 	s.Start()
 	git, settings := s.App(), s.App()
 	cwd := s.Path("shop")
@@ -28,7 +23,7 @@ func TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning(t *testing.T) {
 	for range branchRequests {
 		git.Send(protocol.GetRepoInfoMessage{Cmd: protocol.CmdGetRepoInfo, Repo: cwd})
 	}
-	enableSharedHost(t, settings)
+	s.EnableSharedHost(settings)
 	for range branchRequests {
 		result := testworld.Await(git, protocol.EventGetRepoInfoResult, func(protocol.GetRepoInfoResultMessage) bool { return true })
 		if !result.Success || result.Info == nil || result.Info.CurrentBranch != "main" {

@@ -13,9 +13,9 @@ import (
 )
 
 func TestTheAgentWrapperForwardsEverySignalUnchanged(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
 			executable := filepath.Join(s.Dir, "signal-agent")
 			if err := os.WriteFile(executable, []byte(`#!/bin/sh
 trap 'printf "forwarded-TERM\n"' TERM
@@ -25,18 +25,8 @@ while :; do read hold; done
 `), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to verify wrapper signals on the shared host")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
 			s.Start()
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			id := s.Spawn(app, fakeagent.Claude, s.Path("signals"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(executable) })
 			app.AwaitScreen(id, "signal-ready")
 			terminal := protocol.TerminalID(app.Terminal(id))

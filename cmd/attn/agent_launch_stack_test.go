@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -15,23 +14,13 @@ import (
 )
 
 func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to verify direct children on the shared host")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex), testworld.OnPTYBackend(backend))
 			s.Start()
 			app := s.App()
 			if app.Initial.Settings["direct_agent_launch_enabled"] != "false" {
 				t.Fatal("a fresh daemon must expose the direct-launch experiment as false")
-			}
-			if backend == "shared host" {
-				enableSharedHost(t, app)
 			}
 			for _, direct := range []bool{false, true} {
 				if direct {
@@ -59,7 +48,7 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 					if direct {
 						want = " pty-worker "
 					}
-					if direct && backend == "shared host" {
+					if direct && backend == testworld.SharedHostPTY {
 						want = "attn-pty-host"
 					}
 					if !strings.Contains(string(out), want) {
@@ -85,22 +74,12 @@ func TestAgentsUseTheChosenLaunchModeOnBothPTYBackends(t *testing.T) {
 }
 
 func TestTheLaunchExperimentChangesNewAndReloadedAgentsAndSurvivesRestart(t *testing.T) {
-	for _, backend := range []string{"worker", "shared host"} {
-		t.Run(backend, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 
-			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-			if backend == "shared host" {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to verify shared-host toggles")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
+			s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude), testworld.OnPTYBackend(backend))
 			s.Start()
 			app := s.App()
-			if backend == "shared host" {
-				enableSharedHost(t, app)
-			}
 			session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 			original := s.Launched(session)
 			for _, value := range []string{"true", "false", "true"} {
@@ -137,7 +116,7 @@ func TestTheLaunchExperimentChangesNewAndReloadedAgentsAndSurvivesRestart(t *tes
 				want := " -s "
 				if direct {
 					want = " pty-worker "
-					if backend == "shared host" {
+					if backend == testworld.SharedHostPTY {
 						want = "attn-pty-host"
 					}
 				}

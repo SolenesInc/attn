@@ -258,7 +258,7 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 			case "staged-build":
 				home.Version = "home-" + home.Version
 			case "shared-pty-host":
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
+				s.UseSharedHostBinary(ptyhosttest.BuildWithSnapshotFormat(t, "outpost-install"))
 				s.Start()
 				requireStdout(t, s.Attn("settings", "set", "pty_shared_host_enabled", "true"), "true")
 			}

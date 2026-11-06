@@ -14,14 +14,10 @@ import (
 
 func TestShellTitlesFollowProgramsFoldersNamesAndDaemonRestart(t *testing.T) {
 	t.Parallel()
-	for _, shared := range []bool{false, true} {
-		name := "worker"
-		if shared {
-			name = "shared host"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t)
+			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
 			if err := os.MkdirAll(s.Path("zsh-config"), 0700); err != nil {
 				t.Fatal(err)
 			}
@@ -29,17 +25,7 @@ func TestShellTitlesFollowProgramsFoldersNamesAndDaemonRestart(t *testing.T) {
 				t.Fatal(err)
 			}
 			s.Vars = append(s.Vars, "SHELL=/bin/zsh", "ZDOTDIR="+s.Path("zsh-config"))
-			if shared {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to run shared host titles")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
 			s.Start()
-			if shared {
-				enableSharedHost(t, s.App())
-			}
 			app := s.App()
 			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 			await := func(title string) protocol.Session {
@@ -84,26 +70,12 @@ func TestShellTitlesFollowProgramsFoldersNamesAndDaemonRestart(t *testing.T) {
 
 func TestUnmarkedShellDropsAProgramsTitleWhenItsForegroundGroupReturns(t *testing.T) {
 	t.Parallel()
-	for _, shared := range []bool{false, true} {
-		name := "worker"
-		if shared {
-			name = "shared host"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t)
+			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
 			s.Vars = append(s.Vars, "SHELL=/bin/sh")
-			if shared {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to run shared host titles")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
 			s.Start()
-			if shared {
-				enableSharedHost(t, s.App())
-			}
 			app := s.App()
 			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "shop" })
@@ -123,26 +95,12 @@ func TestUnmarkedShellDropsAProgramsTitleWhenItsForegroundGroupReturns(t *testin
 
 func TestShellProgramTitleInsideHeavyOutputIsKept(t *testing.T) {
 	t.Parallel()
-	for _, shared := range []bool{false, true} {
-		name := "worker"
-		if shared {
-			name = "shared host"
-		}
-		t.Run(name, func(t *testing.T) {
+	for _, backend := range testworld.WorkerAndSharedHost {
+		t.Run(string(backend), func(t *testing.T) {
 			t.Parallel()
-			s := testworld.NewStack(t)
+			s := testworld.NewStack(t, testworld.OnPTYBackend(backend))
 			s.Vars = append(s.Vars, "SHELL=/bin/sh")
-			if shared {
-				host := os.Getenv("ATTN_TEST_PTY_HOST")
-				if host == "" {
-					t.Skip("set ATTN_TEST_PTY_HOST to run shared host titles")
-				}
-				s.Vars = append(s.Vars, "ATTN_PTY_BACKEND=migrating", "ATTN_PTY_HOST_BINARY="+host)
-			}
 			s.Start()
-			if shared {
-				enableSharedHost(t, s.App())
-			}
 			app := s.App()
 			shell := s.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), s.Path("shop"))
 			testworld.AwaitSession(app, shell, func(x protocol.Session) bool { return protocol.Deref(x.Title) == "shop" })
