@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 // Pull in the app's design tokens so the surface renders with the real theme.
 import '../../src/App.css';
 import { NotebookSurfaceProvider, type NotebookSurfaceDaemon, type NotebookSurfaceContextValue } from '../../src/contexts/NotebookSurfaceContext';
 import { NotebookTile } from '../../src/components/notebook/NotebookTile';
+import type { UnmountedDrafts } from '../../src/components/NotebookSurface';
 import type { FsEntry, FsExistsResult, FsReadAssetResult, FsReadResult, FsWatchResult, FsWriteResult, NotebookEntry } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 
@@ -72,6 +73,8 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
   const sendFsWatch = useCallback(async (root?: string): Promise<FsWatchResult> => ({ root: root ?? '' }), []);
   const sendFsUnwatch = useCallback(async (root?: string): Promise<FsWatchResult> => ({ root: root ?? '' }), []);
 
+  const unmountedDrafts = useRef<UnmountedDrafts>(new Map()).current;
+
   const surfaceValue = useMemo<NotebookSurfaceContextValue>(() => ({
     makeDaemon: () => daemon,
     changeSignalFor: () => 0,
@@ -79,7 +82,8 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
     sendFsWatch,
     sendFsUnwatch,
     connectionGeneration: 0,
-  }), [daemon, sendFsWatch, sendFsUnwatch]);
+    unmountedDrafts,
+  }), [daemon, sendFsWatch, sendFsUnwatch, unmountedDrafts]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -93,6 +97,7 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
       <div style={{ width, height: '100%', overflow: 'hidden' }} data-testid="notebook-tile-frame">
         <NotebookSurfaceProvider value={surfaceValue}>
           <NotebookTile
+            tileId="harness-tile"
             initialPath={initialPath}
             onOpenFile={(path) => window.__HARNESS__.recordCall('openFile', [path])}
           />

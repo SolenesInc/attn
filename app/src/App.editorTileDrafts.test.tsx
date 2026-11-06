@@ -5,7 +5,7 @@ import { daemonSession } from './test/daemonFixtures';
 import { laidOutDesktop, pane, split } from './test/desktopLayouts';
 import { fakeRects, sizeTerminals } from './test/layout';
 import type { CommandMessage } from './test/protocol';
-import { gesture, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { serveSettings } from './test/settings';
 
@@ -54,6 +54,13 @@ async function renderRow(settings: Record<string, string>, areaWidth: number, wr
   return { daemon, disk };
 }
 
+async function renderRowInEditor(writeReply?: WriteReply) {
+  const rendered = await renderRow(SHELF_ON, 2000, writeReply);
+  await gesture(rendered.daemon, () => pressShortcut('terminal.focusLeft'));
+  expect(document.querySelector('[data-session-terminal-desktop="ws"]')).toHaveAttribute('data-active-leaf-id', 'tile-note');
+  return rendered;
+}
+
 const field = () => screen.getByRole('textbox', { name: 'File contents' }) as HTMLTextAreaElement;
 const editorGone = () => screen.queryByRole('textbox', { name: 'File contents' });
 const writes = (daemon: ScriptedDaemon) => daemon.sentOf('fs_write').map(({ content, base_hash }) => [content, base_hash]);
@@ -62,8 +69,12 @@ async function edit(daemon: ScriptedDaemon, content: string) {
   await gesture(daemon, () => fireEvent.change(field(), { target: { value: content } }));
 }
 
-async function clickChip(daemon: ScriptedDaemon, id: string) {
-  await gesture(daemon, () => fireEvent.click(screen.getByTestId(`shelf-chip-${id}`)));
+async function sendToShelf(daemon: ScriptedDaemon) {
+  await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
+}
+
+async function bringBack(daemon: ScriptedDaemon) {
+  await gesture(daemon, () => fireEvent.click(screen.getByTestId('shelf-chip-tile-note')));
 }
 
 async function moveTime(daemon: ScriptedDaemon, ms: number) {
@@ -73,15 +84,15 @@ async function moveTime(daemon: ScriptedDaemon, ms: number) {
 
 describe('Editor tile drafts', () => {
   it('saves an edit made just before the tile goes to the shelf, and shows it on return', async () => {
-    const { daemon, disk } = await renderRow(SHELF_ON, 2000);
+    const { daemon, disk } = await renderRowInEditor();
     await edit(daemon, 'original edited');
 
-    await clickChip(daemon, 'pane-s3');
+    await sendToShelf(daemon);
     expect(editorGone()).toBeNull();
     expect(writes(daemon)).toEqual([['original edited', 'h1']]);
     expect(disk.content).toBe('original edited');
 
-    await clickChip(daemon, 'tile-note');
+    await bringBack(daemon);
     expect(field()).toHaveValue('original edited');
     await moveTime(daemon, 1000);
     expect(writes(daemon)).toHaveLength(1);
@@ -104,15 +115,15 @@ describe('Editor tile drafts', () => {
 
   it('brings back the draft and the conflict when the save conflicts while on the shelf', async () => {
     let conflicted = true;
-    const { daemon, disk } = await renderRow(SHELF_ON, 2000, ({ base_hash }) =>
+    const { daemon, disk } = await renderRowInEditor(({ base_hash }) =>
       conflicted && base_hash === 'h1'
         ? { event: 'fs_write_result', success: true, result: { path: 'notes.txt', conflict: true, current_hash: 'h9' } }
         : SAVED);
     await edit(daemon, 'original edited');
-    await clickChip(daemon, 'pane-s3');
+    await sendToShelf(daemon);
     expect(disk.content).toBe('original');
 
-    await clickChip(daemon, 'tile-note');
+    await bringBack(daemon);
     expect(field()).toHaveValue('original edited');
     expect(screen.getByRole('alert')).toHaveTextContent('This file changed on disk since you opened it.');
     await moveTime(daemon, 1000);
@@ -126,15 +137,15 @@ describe('Editor tile drafts', () => {
   });
 
   it('keeps a conflicted draft through a second trip to the shelf', async () => {
-    const { daemon } = await renderRow(SHELF_ON, 2000, () =>
+    const { daemon } = await renderRowInEditor(() =>
       ({ event: 'fs_write_result', success: true, result: { path: 'notes.txt', conflict: true, current_hash: 'h9' } }));
     await edit(daemon, 'original edited');
-    await clickChip(daemon, 'pane-s3');
-    await clickChip(daemon, 'tile-note');
+    await sendToShelf(daemon);
+    await bringBack(daemon);
     await edit(daemon, 'original edited again');
 
-    await clickChip(daemon, 'pane-s3');
-    await clickChip(daemon, 'tile-note');
+    await sendToShelf(daemon);
+    await bringBack(daemon);
 
     expect(field()).toHaveValue('original edited again');
     expect(screen.getByRole('alert')).toHaveTextContent('This file changed on disk since you opened it.');
@@ -142,15 +153,15 @@ describe('Editor tile drafts', () => {
 
   it('brings back the draft and the error when the save fails on the shelf, then saves it', async () => {
     let failing = true;
-    const { daemon, disk } = await renderRow(SHELF_ON, 2000, () =>
+    const { daemon, disk } = await renderRowInEditor(() =>
       failing ? { event: 'fs_write_result', success: false, error: 'disk full' } : SAVED);
     await edit(daemon, 'original edited');
-    await clickChip(daemon, 'pane-s3');
+    await sendToShelf(daemon);
     await moveTime(daemon, 1000);
     expect(writes(daemon)).toHaveLength(1);
 
     failing = false;
-    await clickChip(daemon, 'tile-note');
+    await bringBack(daemon);
     expect(field()).toHaveValue('original edited');
     expect(screen.getByRole('alert')).toHaveTextContent('disk full');
 
@@ -161,10 +172,10 @@ describe('Editor tile drafts', () => {
   });
 
   it('takes over the save still in flight when the tile returns', async () => {
-    const { daemon, disk } = await renderRow(SHELF_ON, 2000, () => undefined);
+    const { daemon, disk } = await renderRowInEditor(() => undefined);
     await edit(daemon, 'original edited');
-    await clickChip(daemon, 'pane-s3');
-    await clickChip(daemon, 'tile-note');
+    await sendToShelf(daemon);
+    await bringBack(daemon);
 
     expect(field()).toHaveValue('original edited');
     expect(screen.getByRole('status')).toHaveTextContent('Saving');
@@ -181,13 +192,13 @@ describe('Editor tile drafts', () => {
   });
 
   it('waits for an autosave in flight instead of conflicting with it when the tile leaves', async () => {
-    const { daemon, disk } = await renderRow(SHELF_ON, 2000, ({ content }) => (content === 'first' ? undefined : SAVED));
+    const { daemon, disk } = await renderRowInEditor(({ content }) => (content === 'first' ? undefined : SAVED));
     await edit(daemon, 'first');
     await moveTime(daemon, 700);
     expect(writes(daemon)).toEqual([['first', 'h1']]);
     await edit(daemon, 'second');
 
-    await clickChip(daemon, 'pane-s3');
+    await sendToShelf(daemon);
     expect(writes(daemon)).toEqual([['first', 'h1']]);
 
     await gesture(daemon, () => daemon.replyTo(daemon.sentOf('fs_write')[0], SAVED));
