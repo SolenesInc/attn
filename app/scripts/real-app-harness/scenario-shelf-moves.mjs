@@ -312,6 +312,8 @@ try {
     runner.assert(brought.includes(active) && brought.includes(documentLeaf), '⌘J brings the document beside the active tile', { brought, active, documentLeaf });
     await hold();
     await shot('document-brought-after-unmount');
+    await press('terminal.close');
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

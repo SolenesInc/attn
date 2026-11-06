@@ -41,10 +41,13 @@ runner.registerCleanup('close_empty_desktop', async () => {
 });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ launcher: LAUNCHER }) });
 
+function desktopIdsInOrder() {
+  return [...observer.desktops].sort((a, b) => (a.order_key < b.order_key ? -1 : a.order_key > b.order_key ? 1 : 0)).map((desktop) => desktop.id);
+}
+
 function desktopAfter(desktopId, key) {
-  const order = [...observer.desktops].sort((a, b) => (a.order_key < b.order_key ? -1 : a.order_key > b.order_key ? 1 : 0));
-  const at = order.findIndex((desktop) => desktop.id === desktopId);
-  return order[(at + STEPS[key] + order.length) % order.length].id;
+  const order = desktopIdsInOrder();
+  return order[(order.indexOf(desktopId) + STEPS[key] + order.length) % order.length];
 }
 
 async function screenState() {
@@ -56,14 +59,15 @@ async function screenState() {
 async function settledOn(desktopId, activeTile) {
   await observer.waitFor(() => observer.currentDesktopId() === desktopId, `current desktop ${desktopId}`);
   const desktop = observer.desktop(desktopId);
-  if (desktop.panes.length === 0) {
+  if (!desktop.tree_json) {
     await waitDom(LAUNCHER);
     await waitDom(LAUNCHER_INPUT, { focused: true });
     return;
   }
   await waitDom(LAUNCHER, { absent: true });
   const pane = desktop.panes.find((entry) => entry.pane_id === (activeTile ?? desktop.active_pane_id));
-  await waitForPaneInputFocus(client, pane.session_id, pane.pane_id);
+  const holdsOnlyTiles = desktop.panes.length === 0;
+  if (!holdsOnlyTiles) await waitForPaneInputFocus(client, pane.session_id, pane.pane_id);
 }
 
 async function press(layout, key, expected) {
@@ -100,8 +104,11 @@ try {
     const created = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, name: 'Empty neighbour', shortcut_slot: 0 });
     keptEmpty = created.desktops[0].id;
     await observer.waitFor(() => observer.desktop(keptEmpty), 'empty neighbour in the arrangement');
-    empty = desktopAfter(home, 'Right');
-    runner.assert(observer.desktop(empty).panes.length === 0, 'an empty desktop follows the row', JSON.parse(observer.describeArrangement()));
+    const others = desktopIdsInOrder().filter((id) => id !== keptEmpty);
+    others.splice(others.indexOf(home) + 1, 0, keptEmpty);
+    await observer.profileCommand('desktop_set_order', { profile_id: observer.profileId, desktop_ids: others });
+    await observer.waitFor(() => desktopAfter(home, 'Right') === keptEmpty, 'empty neighbour right after the row');
+    empty = keptEmpty;
   });
 
   for (const [layout, setting] of [['off', 'false'], ['on', 'true']]) {
