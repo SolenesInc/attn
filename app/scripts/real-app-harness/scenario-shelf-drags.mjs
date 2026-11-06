@@ -236,6 +236,8 @@ try {
     const twoColumns = await shownLeaves();
     const row = await readRow();
     const third = row[row.indexOf(twoColumns.at(-1)) + 1] ?? row[row.indexOf(twoColumns[0]) - 1];
+    const fitted = (await request('get_window_bounds')).logicalBounds;
+    await request('set_window_bounds', { logicalBounds: { ...fitted, width: 1900 } });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '57' });
     await waitDom(paneSelector(third));
     const shown = await shownLeaves();
@@ -270,6 +272,7 @@ try {
     }
     for (const leafId of shown) await waitForWanted(leafId, (cols) => !cols);
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
+    await request('set_window_bounds', { logicalBounds: fitted });
     await waitDom(paneSelector(last), { absent: true });
   });
 
