@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -255,12 +256,12 @@ func (r *codexShared) versionsChanged(profiles ...string) {
 
 func (r *codexShared) settingChanged(key string) {
 	switch key {
-	case string(SettingCodexSharedEnabled):
+	case setting.CodexSharedEnabled.Key:
 		if r.enabledForNewLaunches() {
 			r.d.queueCodexUpdateCheck()
 		}
 		r.versionsChanged()
-	case string(SettingCodexExecutable):
+	case setting.CodexExecutable.Key:
 		r.refreshInstalledSoon()
 	}
 }

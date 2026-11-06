@@ -11,277 +11,105 @@ import (
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/sessioncost"
-	"github.com/victorarias/attn/internal/settingkeys"
-)
-
-type HomeSetting = settingkeys.HomeSetting
-type MachineSetting = settingkeys.MachineSetting
-type ProfileSetting = settingkeys.ProfileSetting
-
-const (
-	settingNotebookSyncState     MachineSetting = "notebook_sync_state"
-	settingNotebookSyncLastError MachineSetting = "notebook_sync_last_error"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
-	settingOutpostsEnabled               = settingkeys.SettingOutpostsEnabled
-	settingOutpostState                  = settingkeys.SettingOutpostState
-	settingOutpostHome                   = settingkeys.SettingOutpostHome
-	settingOutpostLastError              = settingkeys.SettingOutpostLastError
-	SettingProjectsDirectory             = settingkeys.SettingProjectsDirectory
-	SettingUIScale                       = settingkeys.SettingUIScale
-	SettingGardenScale                   = settingkeys.SettingGardenScale
-	SettingSidebarWidth                  = settingkeys.SettingSidebarWidth
-	SettingModelTierOverrides            = settingkeys.SettingModelTierOverrides
-	SettingClaudeExecutable              = settingkeys.SettingClaudeExecutable
-	SettingCodexExecutable               = settingkeys.SettingCodexExecutable
-	SettingEditorExecutable              = settingkeys.SettingEditorExecutable
-	SettingNewSessionAgent               = settingkeys.SettingNewSessionAgent
-	SettingClaudeAvailable               = settingkeys.SettingClaudeAvailable
-	SettingCodexAvailable                = settingkeys.SettingCodexAvailable
-	SettingPTYBackendMode                = settingkeys.SettingPTYBackendMode
-	SettingNewSessionLauncherEnabled     = settingkeys.SettingNewSessionLauncherEnabled
-	SettingDirectAgentLaunchEnabled      = settingkeys.SettingDirectAgentLaunchEnabled
-	SettingSharedPTYHostEnabled          = settingkeys.SettingSharedPTYHostEnabled
-	SettingBackgroundLoginEnvEnabled     = settingkeys.SettingBackgroundLoginEnvEnabled
-	SettingShelfLayoutEnabled            = settingkeys.SettingShelfLayoutEnabled
-	SettingNarrowestTileCols             = settingkeys.SettingNarrowestTileCols
-	SettingSharedPTYHostActive           = settingkeys.SettingSharedPTYHostActive
-	SettingTheme                         = settingkeys.SettingTheme
-	SettingReviewerModel                 = settingkeys.SettingReviewerModel
-	SettingQueueModeEnabled              = settingkeys.SettingQueueModeEnabled
-	SettingQueueCrewEnabled              = settingkeys.SettingQueueCrewEnabled
-	SettingQueueShowHiddenSessions       = settingkeys.SettingQueueShowHiddenSessions
-	SettingQueueQuietNotifications       = settingkeys.SettingQueueQuietNotifications
-	SettingCodexSharedEnabled            = settingkeys.SettingCodexSharedEnabled
-	SettingClaudeModEnabled              = settingkeys.SettingClaudeModEnabled
-	SettingNisseEnabled                  = settingkeys.SettingNisseEnabled
-	SettingSidebarHarnessLogosEnabled    = settingkeys.SettingSidebarHarnessLogosEnabled
-	SettingAutoApproveEnabled            = settingkeys.SettingAutoApproveEnabled
-	SettingOpenSentFilesEnabled          = settingkeys.SettingOpenSentFilesEnabled
-	SettingAutoSettleEnabled             = settingkeys.SettingAutoSettleEnabled
-	SettingAsksEnabled                   = settingkeys.SettingAsksEnabled
-	SettingCaptureShortcut               = settingkeys.SettingCaptureShortcut
-	SettingQuickCaptureEnabled           = settingkeys.SettingQuickCaptureEnabled
-	SettingCrewV2Enabled                 = settingkeys.SettingCrewV2Enabled
-	SettingCalloutsEnabled               = settingkeys.SettingCalloutsEnabled
-	SettingPhoneAccessEnabled            = settingkeys.SettingPhoneAccessEnabled
-	SettingAutoSettleArmSeconds          = settingkeys.SettingAutoSettleArmSeconds
-	SettingAutoSettleCountdownSeconds    = settingkeys.SettingAutoSettleCountdownSeconds
-	SettingKeybindingsConfig             = settingkeys.SettingKeybindingsConfig
-	SettingNewSessionYoloPrefix          = settingkeys.SettingNewSessionYoloPrefix
-	SettingNewSessionDestinationPrefix   = settingkeys.SettingNewSessionDestinationPrefix
-	SettingChiefModelPrefix              = settingkeys.SettingChiefModelPrefix
-	SettingChiefEffortPrefix             = settingkeys.SettingChiefEffortPrefix
-	SettingDefaultModelPrefix            = settingkeys.SettingDefaultModelPrefix
-	SettingDefaultEffortPrefix           = settingkeys.SettingDefaultEffortPrefix
-	SettingNotebookRoot                  = settingkeys.SettingNotebookRoot
-	SettingPullRequestOwnComments        = settingkeys.SettingPullRequestOwnComments
-	SettingGardenTenderWake              = settingkeys.SettingGardenTenderWake
-	SettingNotebookRootEffective         = settingkeys.SettingNotebookRootEffective
-	SettingActivityEnabled               = settingkeys.SettingActivityEnabled
-	SettingActivityConfig                = settingkeys.SettingActivityConfig
-	SettingActivityIntervals             = settingkeys.SettingActivityIntervals
-	SettingActivityPresenceIdleSeconds   = settingkeys.SettingActivityPresenceIdleSeconds
-	SettingGardenAdvisor                 = settingkeys.SettingGardenAdvisor
-	SettingDictationRefinementAgent      = settingkeys.SettingDictationRefinementAgent
-	SettingCrewHeartbeatEnabled          = settingkeys.SettingCrewHeartbeatEnabled
-	SettingCrewAutoSleepEnabled          = settingkeys.SettingCrewAutoSleepEnabled
-	SettingCrewCacheTTLSeconds           = settingkeys.SettingCrewCacheTTLSeconds
-	SettingCrewCacheTTLPrefix            = settingkeys.SettingCrewCacheTTLPrefix
-	SettingCrewHeartbeatLeadSeconds      = settingkeys.SettingCrewHeartbeatLeadSeconds
-	SettingCrewAwaySeconds               = settingkeys.SettingCrewAwaySeconds
-	SettingCrewWakeLimit                 = settingkeys.SettingCrewWakeLimit
-	SettingCrewWakeLimitWindowSeconds    = settingkeys.SettingCrewWakeLimitWindowSeconds
-	SettingChiefContextWindowCap         = settingkeys.SettingChiefContextWindowCap
-	SettingHeadlessContextWindowCap      = settingkeys.SettingHeadlessContextWindowCap
-	SettingDefaultContextWindowCapPrefix = settingkeys.SettingDefaultContextWindowCapPrefix
-	SettingHeadlessTasksEnabled          = settingkeys.SettingHeadlessTasksEnabled
-	SettingHeadlessTasksEnabledStored    = settingkeys.SettingHeadlessTasksEnabledStored
-	SettingHeadlessTasksEnabledOverride  = settingkeys.SettingHeadlessTasksEnabledOverride
-	SettingDBLastBackupAt                = settingkeys.SettingDBLastBackupAt
-	SettingAnalyticsEnabled              = settingkeys.SettingAnalyticsEnabled
-	SettingAnalyticsSharingEnabled       = settingkeys.SettingAnalyticsSharingEnabled
-	SettingAnalyticsShareVents           = settingkeys.SettingAnalyticsShareVents
-	SettingAnalyticsToolVents            = settingkeys.SettingAnalyticsToolVents
-	settingWorktreeSweepEnabled          = settingkeys.SettingWorktreeSweepEnabled
-	SettingSessionsFilters               = settingkeys.SettingSessionsFilters
-	SettingPluginPriorities              = settingkeys.SettingPluginPriorities
-	DestinationNewWorktree               = "new_worktree"
-	DestinationMainRepo                  = "main_repo"
+	DestinationNewWorktree = "new_worktree"
+	DestinationMainRepo    = "main_repo"
 )
 
-type settingScope int
-
-const (
-	daemonScope settingScope = iota + 1
-	profileScope
-)
-
-type settingSpec struct {
-	key          string
-	scope        settingScope
-	class        settingkeys.Class
-	description  string
-	validate     func(*Daemon, string, string) error
-	readOnly     bool
-	experimental bool
-}
-
-func (d *Daemon) homeSetting(key HomeSetting) string {
-	status := d.enrollmentStatus()
-	if !status.IsHome() {
-		return settingkeys.WithDefault(string(key), d.store.CopiedSetting(string(key), status.HomeDaemonID))
+func (d *Daemon) setting(s *setting.Setting) string {
+	if s.Class == setting.Home {
+		if status := d.enrollmentStatus(); !status.IsHome() {
+			return s.WithDefault(d.store.CopiedSetting(s.Key, status.HomeDaemonID))
+		}
 	}
-	return settingkeys.WithDefault(string(key), d.store.GetSetting(string(key)))
-}
-func (d *Daemon) machineSetting(key MachineSetting) string {
-	return settingkeys.WithDefault(string(key), d.store.GetSetting(string(key)))
+	return s.WithDefault(d.store.GetSetting(s.Key))
 }
 
-var settingSpecs = classifiedSettings([]settingSpec{
-	{key: string(settingNotebookSyncState), scope: daemonScope, description: "Current Notebook sync state on this machine.", readOnly: true},
-	{key: string(settingNotebookSyncLastError), scope: daemonScope, description: "Current Notebook sync error and its reason.", readOnly: true},
-	{key: string(settingOutpostsEnabled), scope: daemonScope, experimental: true, description: "Connect to outposts from this home: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(settingOutpostState), scope: daemonScope, description: "Whether a home bridge is connected: bridged or off.", readOnly: true},
-	{key: string(settingOutpostHome), scope: daemonScope, description: "Recorded home daemon id. Release it with attn enrollment leave.", readOnly: true},
-	{key: string(settingOutpostLastError), scope: daemonScope, description: "Last outpost bridge error, kept until the next successful connection.", readOnly: true},
-	{key: string(SettingCaptureShortcut), scope: daemonScope, description: "Global shortcut for Quick Capture. Empty turns the shortcut off.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: string(SettingQuickCaptureEnabled), scope: daemonScope, experimental: true, description: "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingCrewV2Enabled), scope: daemonScope, experimental: true, description: "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingNewSessionLauncherEnabled), scope: daemonScope, experimental: true, description: "Show the new session launcher: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingDirectAgentLaunchEnabled), scope: daemonScope, experimental: true, description: "Launch agents directly: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingCodexSharedEnabled), scope: daemonScope, experimental: true, description: "Use the shared Codex app server: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingClaudeModEnabled), scope: daemonScope, experimental: true, description: "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingNisseEnabled), scope: daemonScope, experimental: true, description: "Offer Nisse as a harness: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingQueueShowHiddenSessions), scope: daemonScope, description: "Include hidden sessions in the queue: true or false. On by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingQueueQuietNotifications), scope: daemonScope, description: "Keep agents a notification woke out of the queue unless they open their turn: true or false. On by default; needs queue flow.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAsksEnabled), scope: daemonScope, experimental: true, description: "Enable agent asks: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAnalyticsEnabled), scope: daemonScope, experimental: true, description: "Record usage analytics on this machine: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAnalyticsSharingEnabled), scope: daemonScope, description: "Upload the recorded usage analytics to attn's maintainers: true or false. Needs analytics.enabled; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAnalyticsShareVents), scope: daemonScope, description: "Send each new attn vent, with its text, in the next upload: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingAnalyticsToolVents), scope: daemonScope, description: "Let new sessions also vent about their other tools, such as skills, other CLIs and harness permissions; tool vents never leave the machine: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingCalloutsEnabled), scope: daemonScope, experimental: true, description: "Let agents point at the app interface: true or false.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingPhoneAccessEnabled), scope: daemonScope, experimental: true, description: "Let paired phones reach this home's sessions: true or false. Off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingChiefContextWindowCap), scope: daemonScope, description: "Chief context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
-	{key: "chief_model_<harness>", scope: daemonScope, description: "Model for chief sessions. Empty uses the deep intelligence tier.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "chief_effort_<harness>", scope: daemonScope, description: "Reasoning effort for chief sessions. Empty uses the default effort.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: string(SettingClaudeExecutable), scope: daemonScope, description: "Executable for Claude. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
-	{key: string(SettingCodexExecutable), scope: daemonScope, description: "Executable for Codex. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
-	{key: string(SettingModelTierOverrides), scope: daemonScope, description: "Models for each intelligence tier as a JSON object. Empty uses harness defaults.", validate: func(d *Daemon, key, value string) error {
+func (d *Daemon) on(s *setting.Setting) bool {
+	return parseBooleanSetting(d.setting(s))
+}
+
+var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error{
+	setting.ChiefContextWindowCap: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) },
+	setting.ClaudeExecutable:      func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
+	setting.CodexExecutable:       func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
+	setting.ModelTierOverrides: func(d *Daemon, key, value string) error {
 		_, err := modeltiers.ParseOverrides(value)
 		return err
-	}},
-	{key: string(SettingProjectsDirectory), scope: daemonScope, description: "Folder used to discover projects. Absolute or ~/ path; must not be empty.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.ProjectsDirectory: func(d *Daemon, key, value string) error {
 		return validateProjectsDirectory(value)
-	}},
-	{key: string(SettingUIScale), scope: daemonScope, description: "App interface scale, from 0.5 to 2.0.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.UIScale: func(d *Daemon, key, value string) error {
 		return validateUIScale(value)
-	}},
-	{key: string(SettingGardenScale), scope: daemonScope, description: "Garden text scale, from 0.5 to 2.0. Empty uses the app scale.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.GardenScale: func(d *Daemon, key, value string) error {
 		if strings.TrimSpace(value) == "" {
 			return nil
 		}
 		return validateUIScale(value)
-	}},
-	{key: string(SettingEditorExecutable), scope: daemonScope, description: "Command to open files in your editor. Empty uses the default editor.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.EditorExecutable: func(d *Daemon, key, value string) error {
 		return validateEditorSetting(value)
-	}},
-	{key: string(SettingNewSessionAgent), scope: daemonScope, description: "Harness selected for new sessions. Empty uses the default harness.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.NewSessionAgent: func(d *Daemon, key, value string) error {
 		return d.validateNewSessionAgent(value)
-	}},
-	{key: string(SettingTheme), scope: daemonScope, description: "App color theme: dark, light or system.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.Theme: func(d *Daemon, key, value string) error {
 		return validateTheme(value)
-	}},
-	{key: string(SettingSharedPTYHostEnabled), scope: daemonScope, experimental: true, description: "Use the experimental shared terminal host, and stream output only to terminals the window draws: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingShelfLayoutEnabled), scope: daemonScope, experimental: true, description: "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: string(SettingNarrowestTileCols), scope: daemonScope, description: "Narrowest width of a tile in the shelf layout, in terminal columns: a positive whole number. Empty uses the default of 66.", validate: func(d *Daemon, key, value string) error { return validateNarrowestTileCols(value) }},
-	{key: string(SettingSidebarWidth), scope: daemonScope, description: "Width of the open sidebar in pixels, from 200 to 600, with the shelf layout on. Empty uses the default of 240.", validate: func(d *Daemon, key, value string) error { return validateSidebarWidth(value) }},
-	{key: string(SettingBackgroundLoginEnvEnabled), scope: daemonScope, experimental: true, description: "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingAutoApproveEnabled), scope: daemonScope, description: "Auto-approve supported agent requests: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingQueueModeEnabled), scope: daemonScope, description: "Use queue flow across all profiles: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingQueueCrewEnabled), scope: daemonScope, description: "Include crew sessions in the queue: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingSidebarHarnessLogosEnabled), scope: daemonScope, description: "Show harness logos in the sidebar: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingAutoSettleEnabled), scope: daemonScope, description: "Settle completed turns automatically: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingActivityEnabled), scope: daemonScope, description: "Track session activity: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingOpenSentFilesEnabled), scope: daemonScope, description: "Open files sent by agents: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingHeadlessTasksEnabled), scope: daemonScope, description: "Run background model tasks: true or false. An environment override takes precedence.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(settingWorktreeSweepEnabled), scope: daemonScope, description: "Remove unused worktrees automatically: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingAutoSettleArmSeconds), scope: daemonScope, description: "Delay before arming automatic settlement, in seconds. Empty uses the default delay.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.NarrowestTileCols: func(d *Daemon, key, value string) error { return validateNarrowestTileCols(value) },
+	setting.SidebarWidth:      func(d *Daemon, key, value string) error { return validateSidebarWidth(value) },
+	setting.AutoSettleArmSeconds: func(d *Daemon, key, value string) error {
 		return validateAutoSettleSeconds("auto-settle delay", value, autoSettleArmMinSeconds, autoSettleArmMaxSeconds)
-	}},
-	{key: string(SettingAutoSettleCountdownSeconds), scope: daemonScope, description: "Automatic settlement countdown, in seconds. Empty uses the default countdown.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.AutoSettleCountdownSeconds: func(d *Daemon, key, value string) error {
 		return validateAutoSettleSeconds("auto-settle countdown", value, autoSettleCountdownMinSeconds, autoSettleCountdownMaxSeconds)
-	}},
-	{key: string(SettingHeadlessContextWindowCap), scope: daemonScope, description: "Background model context budget in tokens, from 10000 to 2000000. Empty uses the default budget.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.HeadlessContextWindowCap: func(d *Daemon, key, value string) error {
 		return validateContextWindowCap(value)
-	}},
-	{key: string(SettingActivityConfig), scope: daemonScope, description: "Session activity tracking configuration as JSON. Empty leaves no agent selected; activity requires a selected agent.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.ActivityConfig: func(d *Daemon, key, value string) error {
 		return d.validateActivitySetting(value)
-	}},
-	{key: string(SettingGardenAdvisor), scope: daemonScope, description: "Garden advisor harness and model as JSON. Empty uses the default advisor.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.GardenAdvisor: func(d *Daemon, key, value string) error {
 		return d.validateGardenAdvisorSetting(value)
-	}},
-	{key: string(SettingDictationRefinementAgent), scope: daemonScope, description: "Harness whose light model cleans up dictated text: claude or codex. Empty uses claude.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.DictationRefinementAgent: func(d *Daemon, key, value string) error {
 		_, err := parseDictationRefinementAgent(value)
 		return err
-	}},
-	{key: string(SettingActivityIntervals), scope: daemonScope, description: "Activity sampling intervals as JSON. Empty uses defaults.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.ActivityIntervals: func(d *Daemon, key, value string) error {
 		_, err := parseActivityIntervals(value)
 		return err
-	}},
-	{key: string(SettingActivityPresenceIdleSeconds), scope: daemonScope, description: "Seconds without input before presence becomes idle.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.ActivityPresenceIdleSeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting(
 			"session activity presence idle",
 			value,
 			activityPresenceIdleMinSeconds,
 			activityPresenceIdleMaxSeconds,
 		)
-	}},
-	{key: string(SettingCrewHeartbeatEnabled), scope: daemonScope, description: "Send crew heartbeats: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingCrewAutoSleepEnabled), scope: daemonScope, description: "Put idle crew members to sleep automatically: true or false.", validate: func(d *Daemon, key, value string) error {
-		return validateBooleanSetting(value)
-	}},
-	{key: string(SettingCrewCacheTTLSeconds), scope: daemonScope, description: "Crew prompt cache lifetime in seconds.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.CrewCacheTTLSeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
-	}},
-	{key: string(SettingCrewHeartbeatLeadSeconds), scope: daemonScope, description: "Seconds before cache expiry to send a crew heartbeat.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.CrewHeartbeatLeadSeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew heartbeat lead", value, crewHeartbeatLeadMinSeconds, crewHeartbeatLeadMaxSeconds)
-	}},
-	{key: string(SettingCrewAwaySeconds), scope: daemonScope, description: "Seconds of user inactivity before crew sleep.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.CrewAwaySeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew away threshold", value, crewAwayMinSeconds, crewAwayMaxSeconds)
-	}},
-	{key: string(SettingCrewWakeLimit), scope: daemonScope, description: "Maximum automatic crew wakes per window. Zero disables automatic wakes.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.CrewWakeLimit: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit", value, 0, crewWakeLimitMax)
-	}},
-	{key: string(SettingCrewWakeLimitWindowSeconds), scope: daemonScope, description: "Crew automatic wake accounting window in seconds.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.CrewWakeLimitWindowSeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
-	}},
-	{key: string(SettingNotebookRoot), scope: profileScope, description: "This profile's folder for the Notebook, journal and seed artifacts, synced with outposts. Absolute or ~/ path. It must be outside attn's data folder, and neither inside nor around another profile's folder or the default folder. Changing it repoints without moving files. Empty uses the default folder.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.NotebookRoot: func(d *Daemon, key, value string) error {
 		value = strings.TrimSpace(value)
 		if value == "" {
 			return nil
@@ -297,116 +125,78 @@ var settingSpecs = classifiedSettings([]settingSpec{
 			return config.RequireWithinHarness(key, root)
 		}
 		return validateNotebookRoot(key, value)
-	}},
-	{key: string(SettingPullRequestOwnComments), scope: profileScope, description: "How a pull request watch treats the comments and review bodies your GitHub account wrote, and the reopened review threads you started on your own pull requests: quiet skips them, ring delivers them to the agent. Agents post as you, so quiet keeps an agent's own comments from coming back to it; ring lets you steer agents with your comments. Comments by others and state changes always reach the agent. Empty means quiet, the default.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.PullRequestOwnComments: func(d *Daemon, key, value string) error {
 		_, err := prreadiness.ParseOwnComments(value)
 		return err
-	}},
-	{key: string(SettingGardenTenderWake), scope: profileScope, description: "Which seed mail wakes the closed session tending a seed on standby: any wakes it for every message, pull request watch update and reminder; watches only for pull request watch updates and reminders; off never resumes a session, and the mail waits. Crew members tending a seed wake under every value. Empty means any, the default.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.GardenTenderWake: func(d *Daemon, key, value string) error {
 		_, err := parseTenderWakeSetting(value)
 		return err
-	}},
-	{key: string(SettingKeybindingsConfig), scope: daemonScope, description: "Keyboard shortcut overrides as JSON. Empty restores default shortcuts.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.KeybindingsConfig: func(d *Daemon, key, value string) error {
 		return validateKeybindingsConfig(value)
-	}},
-	{key: string(SettingSessionsFilters), scope: daemonScope, description: "Saved ledger filters as JSON. Empty restores default filters.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.SessionsFilters: func(d *Daemon, key, value string) error {
 		return validateSessionsFilters(value)
-	}},
-	{key: string(SettingReviewerModel), scope: daemonScope, description: "Review model. Empty uses the default review model.", validate: func(d *Daemon, key, value string) error {
-		return nil
-	}},
-	{key: "<harness>_executable", scope: daemonScope, description: "Executable for this harness. Empty finds the default executable on PATH.", validate: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) }},
-	{key: "new_session_yolo_<location>", scope: daemonScope, description: "Start sessions at this location with approval bypass: true or false. The local location uses new_session_yolo_local.", validate: func(d *Daemon, key, value string) error { return validateBooleanSetting(value) }},
-	{key: "new_session_destination_<repository>", scope: daemonScope, description: "New session destination for a repository: new_worktree or main_repo. Use local_<absolute-path> as the suffix for this machine, or <outpost-id>_<absolute-path> for a repository on an outpost. Empty uses the default destination.", validate: func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) }},
-	{key: "default_model_<harness>", scope: daemonScope, description: "Model for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "default_effort_<harness>", scope: daemonScope, description: "Reasoning effort for new sessions. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return nil }},
-	{key: "default_context_window_cap_<harness>", scope: daemonScope, description: "Context budget for new sessions, from 10000 to 2000000 tokens. Empty uses the harness default.", validate: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) }},
-	{key: "crew.cache_ttl_seconds.<harness>", scope: daemonScope, description: "Crew prompt cache lifetime for this harness, in seconds.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.Executable:              func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
+	setting.NewSessionDestination:   func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) },
+	setting.DefaultContextWindowCap: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) },
+	setting.CrewCacheTTLFor: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
-	}},
-	{key: "session_cost.price.<model>", scope: daemonScope, description: "Custom model token prices as JSON. Empty uses catalog prices.", validate: func(d *Daemon, key, value string) error {
+	},
+	setting.SessionCostPrice: func(d *Daemon, key, value string) error {
 		_, err := sessioncost.ParseOverrides(map[string]string{key: value})
 		return err
-	}},
-	{key: "session_cost.billed_as.<model>", scope: daemonScope, description: "Billing model alias. Empty removes the alias.", validate: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) }},
-	{key: "notebook.root.effective", scope: profileScope, description: "The Notebook folder this profile uses.", readOnly: true},
-	{key: "<harness>_available", scope: daemonScope, description: "Whether this harness executable is available on PATH: true, false, or checking while the daemon reads the login environment.", readOnly: true},
-	{key: "<harness>_cap_<capability>", scope: daemonScope, description: "Whether this harness supports the named capability.", readOnly: true},
-	{key: "pty_backend_mode", scope: daemonScope, description: "Active terminal backend.", readOnly: true},
-	{key: "pty_shared_host_active", scope: daemonScope, description: "Whether the shared terminal host is active.", readOnly: true},
-	{key: "db.last_backup_at", scope: daemonScope, description: "Time of the last database backup.", readOnly: true},
-	{key: "headless_tasks.enabled.stored", scope: daemonScope, description: "Stored background model task switch.", readOnly: true},
-	{key: "headless_tasks.enabled.override", scope: daemonScope, description: "Environment override for background model tasks.", readOnly: true},
-})
-
-func classifiedSettings(specs []settingSpec) []settingSpec {
-	for i := range specs {
-		specs[i].class = settingkeys.ClassOf(specs[i].key)
-	}
-	return specs
+	},
+	setting.SessionCostBilledAs: func(d *Daemon, key, value string) error { return sessioncost.ValidateBilledAs(key, value) },
 }
 
-func settingPatternMatches(pattern, key string) bool {
-	for {
-		start := strings.IndexByte(pattern, '<')
-		if start < 0 {
-			return pattern == key
+func init() {
+	for _, spec := range setting.All() {
+		if spec.Kind == setting.Checked && settingValidators[spec] == nil {
+			panic("setting " + spec.Key + " is declared Checked and has no validator in settingValidators")
 		}
-		prefix := pattern[:start]
-		if !strings.HasPrefix(key, prefix) {
-			return false
-		}
-		key = strings.TrimPrefix(key, prefix)
-		end := strings.IndexByte(pattern[start:], '>') + start
-		pattern = pattern[end+1:]
-		next := strings.IndexByte(pattern, '<')
-		suffix := pattern
-		if next >= 0 {
-			suffix = pattern[:next]
-		}
-		if suffix == "" {
-			return key != ""
-		}
-		at := strings.Index(key, suffix)
-		if at <= 0 {
-			return false
-		}
-		key = key[at:]
 	}
 }
 
-func lookupSetting(key string) (settingSpec, bool) {
-	for _, spec := range settingSpecs {
-		if spec.key == key {
-			return spec, true
+func lookupSetting(key string) (*setting.Setting, bool) {
+	spec, ok := setting.Lookup(key)
+	if !ok || spec.Internal {
+		return nil, false
+	}
+	if spec == setting.Executable && spec.Key != key {
+		if _, known := isAgentExecutableSettingKey(key); !known {
+			return nil, false
 		}
 	}
-	for _, spec := range settingSpecs {
-		if !strings.Contains(spec.key, "<") || !settingPatternMatches(spec.key, key) {
-			continue
-		}
-		if spec.key == "<harness>_executable" {
-			if _, ok := isAgentExecutableSettingKey(key); !ok {
-				continue
-			}
-		}
-		return spec, true
-	}
-	return settingSpec{}, false
+	return spec, true
 }
 
-func writableSetting(key string) (settingSpec, error) {
+func writableSetting(key string) (*setting.Setting, error) {
 	spec, ok := lookupSetting(key)
 	if !ok {
-		return settingSpec{}, fmt.Errorf("unknown setting: %s", key)
+		return nil, fmt.Errorf("unknown setting: %s", key)
 	}
-	if strings.Contains(spec.key, "<") && spec.key == key {
-		return settingSpec{}, fmt.Errorf("setting %s requires a concrete key; replace its placeholders", key)
+	if spec.IsFamily() && spec.Key == key {
+		return nil, fmt.Errorf("setting %s requires a concrete key; replace its placeholders", key)
 	}
-	if spec.readOnly {
-		return settingSpec{}, fmt.Errorf("setting %s is read-only", key)
+	if spec.ReadOnly() {
+		return nil, fmt.Errorf("setting %s is read-only", key)
 	}
 	return spec, nil
+}
+
+func validateSetting(d *Daemon, spec *setting.Setting, key, value string) error {
+	switch spec.Kind {
+	case setting.Bool:
+		return validateBooleanSetting(value)
+	case setting.Checked:
+		return settingValidators[spec](d, key, value)
+	default:
+		return nil
+	}
 }
 
 func validateBooleanSetting(value string) error {
@@ -445,7 +235,7 @@ func validateNarrowestTileCols(value string) error {
 		return nil
 	}
 	if n, err := strconv.Atoi(trimmed); err != nil || n < 1 {
-		return fmt.Errorf("%s must be a positive whole number, got %q", SettingNarrowestTileCols, value)
+		return fmt.Errorf("%s must be a positive whole number, got %q", setting.NarrowestTileCols, value)
 	}
 	return nil
 }
@@ -466,7 +256,7 @@ func validateSidebarWidth(value string) error {
 		return nil
 	}
 	if n, err := strconv.Atoi(trimmed); err != nil || n < narrowestSidebarPx || n > widestSidebarPx {
-		return fmt.Errorf("%s must be a whole number from %d to %d, got %q", SettingSidebarWidth, narrowestSidebarPx, widestSidebarPx, value)
+		return fmt.Errorf("%s must be a whole number from %d to %d, got %q", setting.SidebarWidth, narrowestSidebarPx, widestSidebarPx, value)
 	}
 	return nil
 }
@@ -477,7 +267,7 @@ func resolveSidebarWidth(value string) int {
 
 func (d *Daemon) settingValues() map[string]string {
 	values := d.storedSettingValues()
-	settingkeys.FillDefaults(values)
+	setting.FillDefaults(values)
 	return values
 }
 
@@ -488,7 +278,7 @@ func (d *Daemon) storedSettingValues() map[string]string {
 		return values
 	}
 	for key := range values {
-		if settingkeys.ClassOf(key) == settingkeys.Home {
+		if setting.ClassOf(key) == setting.Home {
 			delete(values, key)
 		}
 	}

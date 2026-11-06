@@ -6,11 +6,11 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const EnvVar = "ATTN_HEADLESS_TASKS"
-
-const SettingKey = "headless_tasks.enabled"
 
 var ErrRefused = errors.New("headless tasks are off")
 
@@ -38,7 +38,7 @@ func resolve() (enabled bool, source string) {
 		return value, EnvVar
 	}
 	if storedOff.Load() {
-		return false, SettingKey
+		return false, setting.HeadlessTasksEnabled.Key
 	}
 	return true, "default"
 }

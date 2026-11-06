@@ -75,6 +75,10 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Start()
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
 	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
+	requireStdout(t, s.Attn("settings", "set", "new_session_launcher_enabled", "TRUE"), "new_session_launcher_enabled = true")
+	if got := s.App().Initial.Settings["new_session_launcher_enabled"]; got != "true" {
+		t.Fatalf("the app reads a boolean written as TRUE as %v, want true: the daemon reads it as on", got)
+	}
 	requireStdout(t, s.Attn("settings", "set", "headless_context_window_cap", "128000"), "128000")
 	requireStdout(t, s.Attn("settings", "set", "headless_context_window_cap", ""))
 	reset := s.Attn("settings", "get", "headless_context_window_cap")

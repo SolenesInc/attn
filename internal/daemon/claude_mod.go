@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -122,7 +123,7 @@ func (d *Daemon) claudeMod() *claudeMod {
 }
 
 func (d *Daemon) claudeModEnabled() bool {
-	return parseBooleanSetting(d.homeSetting(SettingClaudeModEnabled))
+	return d.on(setting.ClaudeModEnabled)
 }
 
 func (d *Daemon) claudeModForLaunch(terminal harness.TerminalID, agent string) agentdriver.ClaudeMod {

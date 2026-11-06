@@ -5,6 +5,7 @@ import (
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -52,8 +53,8 @@ func (d *Daemon) monitorPolicyFrom(sources monitorPolicySources, sessionID proto
 
 func monitorPolicySetting(key string) bool {
 	switch key {
-	case string(SettingAutoSettleEnabled), string(SettingAutoSettleArmSeconds), string(SettingAutoSettleCountdownSeconds), string(SettingHeadlessTasksEnabled),
-		string(SettingQueueQuietNotifications), string(SettingQueueModeEnabled):
+	case setting.AutoSettleEnabled.Key, setting.AutoSettleArmSeconds.Key, setting.AutoSettleCountdownSeconds.Key, setting.HeadlessTasksEnabled.Key,
+		setting.QueueQuietNotifications.Key, setting.QueueModeEnabled.Key:
 		return true
 	}
 	return false

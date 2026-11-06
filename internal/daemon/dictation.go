@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -211,7 +212,7 @@ func (d *Daemon) runDictationRefine(ctx context.Context, request dictationRefine
 	if !headless.Enabled() {
 		return dictationRefineAnswer{err: headless.Refusal("dictation refinement")}
 	}
-	refiner, err := parseDictationRefinementAgent(d.homeSetting(SettingDictationRefinementAgent))
+	refiner, err := parseDictationRefinementAgent(d.setting(setting.DictationRefinementAgent))
 	if err != nil {
 		return dictationRefineAnswer{err: err}
 	}

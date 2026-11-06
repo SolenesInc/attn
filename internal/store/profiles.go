@@ -16,7 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
-	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type LeafMove struct {
@@ -1164,12 +1164,12 @@ func shelfLayoutValue(value string) bool {
 }
 
 func (s *Store) ShelfLayoutOn() bool {
-	return shelfLayoutValue(s.GetSetting(string(settingkeys.SettingShelfLayoutEnabled)))
+	return shelfLayoutValue(s.GetSetting(setting.ShelfLayoutEnabled.Key))
 }
 
 func shelfLayoutOn(tx *sql.Tx) (bool, error) {
 	var value string
-	if _, err := rowFound(tx.QueryRow(`SELECT value FROM settings WHERE key = ?`, string(settingkeys.SettingShelfLayoutEnabled)), &value); err != nil {
+	if _, err := rowFound(tx.QueryRow(`SELECT value FROM settings WHERE key = ?`, setting.ShelfLayoutEnabled.Key), &value); err != nil {
 		return false, err
 	}
 	return shelfLayoutValue(value), nil
@@ -1441,7 +1441,7 @@ func (s *Store) SetDesktopWantedCols(desktopID, leafID string, cols int) (profil
 			return desktop, err
 		}
 		if !shelf {
-			return desktop, profiles.Errorf(profiles.CodeInvalid, "a wanted width needs %s, which is off", settingkeys.SettingShelfLayoutEnabled)
+			return desktop, profiles.Errorf(profiles.CodeInvalid, "a wanted width needs %s, which is off", setting.ShelfLayoutEnabled)
 		}
 		next, ok := layouttree.SetWantedCols(desktop.Tree, leafID, cols)
 		if !ok {
@@ -1464,7 +1464,7 @@ func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64) (
 }
 
 func wholeColumnNeedsShelfLayout(request LeafMoveRequest) error {
-	return profiles.Errorf(profiles.CodeInvalid, "moving the whole column of leaf %q needs %s, which is off", request.LeafID, settingkeys.SettingShelfLayoutEnabled)
+	return profiles.Errorf(profiles.CodeInvalid, "moving the whole column of leaf %q needs %s, which is off", request.LeafID, setting.ShelfLayoutEnabled)
 }
 
 func (r LeafMoveRequest) rowMove() layouttree.RowMove {

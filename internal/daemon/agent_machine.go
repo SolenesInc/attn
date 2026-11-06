@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/sessionstate"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type AgentLaunch struct {
@@ -73,7 +74,7 @@ func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string, 
 	if err != nil {
 		return nil, err
 	}
-	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: parseBooleanSetting(d.homeSetting(SettingDirectAgentLaunchEnabled))}, nil
+	return &AgentLaunch{Context: launch, AwarenessDirs: awareness, Direct: d.on(setting.DirectAgentLaunchEnabled)}, nil
 }
 
 func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) (*preparedPluginReload, error) {
@@ -122,7 +123,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		return nil, fmt.Errorf("unknown agent %q", opts.Agent)
 	}
 	if opts.LaunchExecutable == "" && configuredLaunchExecutable(driver, opts) == "" {
-		opts.LaunchExecutable = strings.TrimSpace(d.machineSetting(MachineSetting(executableSettingKey(opts.Agent))))
+		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
 	}
 	l := d.linkNamed(launch.Link)
 	if err := d.trustUnattendedCodexFolder(opts, launch.Profile, l != nil && l.kind() == codexLinkKind); err != nil {

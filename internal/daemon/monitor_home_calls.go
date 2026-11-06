@@ -11,6 +11,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/headless"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 
 	"github.com/victorarias/attn/internal/attention"
@@ -35,9 +36,9 @@ func (d *Daemon) autoSettleSettings() sessionmonitor.AutoSettleSettings {
 		return sessionmonitor.AutoSettleSettings{}
 	}
 	return sessionmonitor.AutoSettleSettings{
-		Enabled:   parseBooleanSetting(d.homeSetting(SettingAutoSettleEnabled)),
-		Arm:       resolveAutoSettleSeconds(d.homeSetting(SettingAutoSettleArmSeconds), defaultAutoSettleArmSeconds),
-		Countdown: resolveAutoSettleSeconds(d.homeSetting(SettingAutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
+		Enabled:   d.on(setting.AutoSettleEnabled),
+		Arm:       resolveAutoSettleSeconds(d.setting(setting.AutoSettleArmSeconds), defaultAutoSettleArmSeconds),
+		Countdown: resolveAutoSettleSeconds(d.setting(setting.AutoSettleCountdownSeconds), defaultAutoSettleCountdownSeconds),
 	}
 }
 
@@ -284,11 +285,11 @@ func (d *Daemon) classifyPluginStop(session *protocol.Session, text string) (str
 }
 
 func (d *Daemon) quietNotifications() bool {
-	return parseBooleanSetting(d.homeSetting(SettingQueueQuietNotifications)) && d.queueFlowOn()
+	return d.on(setting.QueueQuietNotifications) && d.queueFlowOn()
 }
 
 func (d *Daemon) queueFlowOn() bool {
-	return parseBooleanSetting(d.homeSetting(SettingQueueModeEnabled))
+	return d.on(setting.QueueModeEnabled)
 }
 
 func (d *Daemon) touchSession(sessionID protocol.SessionID) {

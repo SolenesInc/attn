@@ -22,7 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/rankkey"
-	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const sqliteFileConnectionPoolSize = 16
@@ -1577,7 +1577,7 @@ func (c *sqliteConnector) Connect(context.Context) (driver.Conn, error) {
 		_ = connection.Close()
 		return nil, err
 	}
-	if err := connection.RegisterFunc("attn_home_setting", func(key string) bool { return settingkeys.ClassOf(key) == settingkeys.Home }, true); err != nil {
+	if err := connection.RegisterFunc("attn_home_setting", func(key string) bool { return setting.ClassOf(key) == setting.Home }, true); err != nil {
 		_ = connection.Close()
 		return nil, err
 	}

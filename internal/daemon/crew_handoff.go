@@ -17,12 +17,13 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
 
 func (d *Daemon) crewV2Enabled() bool {
-	return parseBooleanSetting(d.homeSetting(SettingCrewV2Enabled))
+	return d.on(setting.CrewV2Enabled)
 }
 
 func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {

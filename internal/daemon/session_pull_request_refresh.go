@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -603,7 +604,7 @@ func (d *Daemon) pullRequestWatchProfileID(watch store.PullRequestWatch) (string
 }
 
 func (d *Daemon) pullRequestOwnComments(profileID string) prreadiness.OwnComments {
-	ownComments, err := prreadiness.ParseOwnComments(d.store.ProfileSetting(profileID, string(SettingPullRequestOwnComments)))
+	ownComments, err := prreadiness.ParseOwnComments(d.store.ProfileSetting(profileID, setting.PullRequestOwnComments.Key))
 	if err != nil {
 		return prreadiness.OwnCommentsQuiet
 	}

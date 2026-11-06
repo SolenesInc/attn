@@ -10,6 +10,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/headless"
 	"github.com/victorarias/attn/internal/modeltiers"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -97,7 +98,7 @@ func (d *Daemon) gardenAdvisorConfig(ctx context.Context) (gardenAdvisorConfig, 
 	if d.store == nil {
 		return gardenAdvisorConfig{}, errors.New("garden advisor settings unavailable")
 	}
-	config, err := parseGardenAdvisorConfig(d.homeSetting(SettingGardenAdvisor))
+	config, err := parseGardenAdvisorConfig(d.setting(setting.GardenAdvisor))
 	if err != nil {
 		return gardenAdvisorConfig{}, err
 	}

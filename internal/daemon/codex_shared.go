@@ -29,6 +29,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -177,7 +178,7 @@ func (r *codexShared) canRun(req *spawnRequest) bool {
 }
 
 func (r *codexShared) enabledForNewLaunches() bool {
-	return parseBooleanSetting(r.d.homeSetting(SettingCodexSharedEnabled))
+	return r.d.on(setting.CodexSharedEnabled)
 }
 
 func (r *codexShared) admit(profile, conversation string) error {

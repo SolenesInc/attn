@@ -8,6 +8,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const sessionActivityKind = "session_activity"
@@ -140,14 +141,14 @@ func (d *Daemon) activityEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return parseBooleanSetting(d.homeSetting(SettingActivityEnabled))
+	return d.on(setting.ActivityEnabled)
 }
 
 func (d *Daemon) activityConfigured() (activityConfig, error) {
 	if d.store == nil {
 		return activityConfig{}, errors.New("session activity settings unavailable")
 	}
-	return parseActivityConfig(d.homeSetting(SettingActivityConfig))
+	return parseActivityConfig(d.setting(setting.ActivityConfig))
 }
 
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
@@ -156,7 +157,7 @@ func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	}
 	raw := ""
 	if d.store != nil {
-		raw = d.homeSetting(SettingActivityIntervals)
+		raw = d.setting(setting.ActivityIntervals)
 	}
 	intervals, err := parseActivityIntervals(raw)
 	if err != nil {
@@ -176,7 +177,7 @@ func (d *Daemon) presenceIdleLimit() time.Duration {
 	seconds := defaultActivityPresenceIdleSeconds
 	if d.store != nil {
 		seconds = resolveBoundedIntSetting(
-			d.homeSetting(SettingActivityPresenceIdleSeconds),
+			d.setting(setting.ActivityPresenceIdleSeconds),
 			defaultActivityPresenceIdleSeconds,
 			activityPresenceIdleMinSeconds,
 			activityPresenceIdleMaxSeconds,

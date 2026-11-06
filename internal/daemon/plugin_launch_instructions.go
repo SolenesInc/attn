@@ -6,6 +6,7 @@ import (
 
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -36,7 +37,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 
 func (d *Daemon) prepareLaunchContext(sessionID protocol.SessionID, isChief, selfReportPullRequests bool) (hooks.Launch, []string, error) {
 	vents := d.launchVentIntent(sessionID)
-	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: vents.Vent, ToolVents: vents.ToolVents, SelfReportPullRequests: selfReportPullRequests, QuickCapture: parseBooleanSetting(d.homeSetting(SettingQuickCaptureEnabled))}
+	launch := hooks.Launch{Garden: true, Asks: d.launchedWithAsks(sessionID), Vent: vents.Vent, ToolVents: vents.ToolVents, SelfReportPullRequests: selfReportPullRequests, QuickCapture: d.on(setting.QuickCaptureEnabled)}
 	if isChief {
 		profileID, err := d.sessionNotebookProfile(sessionID)
 		if err != nil {

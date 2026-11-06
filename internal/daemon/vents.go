@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/shortid"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/transcript"
@@ -46,14 +47,14 @@ func (v ventLaunch) applyTo(intent *store.LaunchIntent) {
 }
 
 func (d *Daemon) toolVentsEnabled() bool {
-	return parseBooleanSetting(d.homeSetting(SettingAnalyticsToolVents))
+	return d.on(setting.AnalyticsToolVents)
 }
 
 func (d *Daemon) experimentalSettingsOn() []string {
 	on := []string{}
-	for _, spec := range settingSpecs {
-		if spec.experimental && parseBooleanSetting(d.settingValue(spec, spec.key, nil, "")) {
-			on = append(on, spec.key)
+	for _, spec := range setting.All() {
+		if spec.Experimental && parseBooleanSetting(d.settingValue(spec, spec.Key, nil, "")) {
+			on = append(on, spec.Key)
 		}
 	}
 	return on
@@ -65,7 +66,7 @@ func (d *Daemon) handleRecordVent(conn net.Conn, msg *protocol.RecordVentMessage
 		d.sendError(conn, err.Error())
 		return
 	}
-	if vent.Kind == protocol.VentKindAttn && d.analyticsSharing() && parseBooleanSetting(d.homeSetting(SettingAnalyticsShareVents)) {
+	if vent.Kind == protocol.VentKindAttn && d.analyticsSharing() && d.on(setting.AnalyticsShareVents) {
 		if err := d.queueVentRecord(vent); err != nil {
 			d.logf("vent %s: queueing its record: %v", vent.ID, err)
 		} else {
@@ -199,7 +200,7 @@ func (d *Daemon) recordVent(msg *protocol.RecordVentMessage) (storedVent, error)
 	case protocol.VentKindAttn:
 	case protocol.VentKindTools:
 		if !d.toolVentsEnabled() || !launch.ToolVents {
-			return storedVent{}, fmt.Errorf("tool vents are off for this session (%s), so it vents only about attn itself. Keep working", SettingAnalyticsToolVents)
+			return storedVent{}, fmt.Errorf("tool vents are off for this session (%s), so it vents only about attn itself. Keep working", setting.AnalyticsToolVents)
 		}
 	default:
 		return storedVent{}, fmt.Errorf("%q is not a vent kind: a vent is about attn or about your other tools", msg.Kind)

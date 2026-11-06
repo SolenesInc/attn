@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/outpostssh"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -55,7 +56,7 @@ type outpostsRuntime struct {
 }
 
 func (d *Daemon) outpostsEnabled() bool {
-	return parseBooleanSetting(d.machineSetting(settingOutpostsEnabled))
+	return d.on(setting.OutpostsEnabled)
 }
 
 func (d *Daemon) configureOutposts() {

@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -99,7 +100,7 @@ func (d *Daemon) analyticsBuild() analytics.Build {
 }
 
 func (d *Daemon) analyticsSharing() bool {
-	return d.analyticsEnabled() && parseBooleanSetting(d.homeSetting(SettingAnalyticsSharingEnabled))
+	return d.analyticsEnabled() && d.on(setting.AnalyticsSharingEnabled)
 }
 
 func (d *Daemon) queueAnalyticsShip() {

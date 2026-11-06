@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -28,7 +29,7 @@ const (
 )
 
 func (d *Daemon) asksSettingOn() bool {
-	return parseBooleanSetting(d.homeSetting(SettingAsksEnabled))
+	return d.on(setting.AsksEnabled)
 }
 
 func (d *Daemon) launchedWithAsks(sessionID protocol.SessionID) bool {

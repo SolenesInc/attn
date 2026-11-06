@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -29,7 +30,7 @@ const (
 )
 
 func (d *Daemon) analyticsEnabled() bool {
-	return parseBooleanSetting(d.machineSetting(SettingAnalyticsEnabled))
+	return d.on(setting.AnalyticsEnabled)
 }
 
 func (d *Daemon) analyticsCapturedSince(at time.Time) bool {

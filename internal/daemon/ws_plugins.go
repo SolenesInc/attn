@@ -11,6 +11,7 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -248,7 +249,7 @@ func (d *Daemon) sendPluginActionResult(client *wsClient, action, name string, s
 }
 
 func (d *Daemon) pluginPriorities() map[string]int {
-	raw := strings.TrimSpace(d.homeSetting(SettingPluginPriorities))
+	raw := strings.TrimSpace(d.setting(setting.PluginPriorities))
 	if raw == "" {
 		return map[string]int{}
 	}
@@ -270,7 +271,7 @@ func (d *Daemon) setPluginPriority(name string, priority int) error {
 	if err != nil {
 		return fmt.Errorf("encode plugin priorities: %w", err)
 	}
-	d.store.SetSetting(string(SettingPluginPriorities), string(encoded))
+	d.store.SetSetting(setting.PluginPriorities.Key, string(encoded))
 	d.ensurePluginRegistry().setPriorities(priorities)
 	return nil
 }

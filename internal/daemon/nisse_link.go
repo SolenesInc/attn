@@ -20,6 +20,7 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/sessionstate"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -71,7 +72,7 @@ func (d *Daemon) nisse() *nisseLink {
 }
 
 func (d *Daemon) nisseEnabled() bool {
-	return parseBooleanSetting(d.homeSetting(SettingNisseEnabled))
+	return d.on(setting.NisseEnabled)
 }
 
 func (d *Daemon) agentOffered(agent string) bool {
@@ -235,7 +236,7 @@ func (l *nisseLink) executable(opts *ptybackend.SpawnOptions) string {
 			return driver.ResolveExecutable(configured)
 		}
 	}
-	return driver.ResolveExecutable(l.d.machineSetting(MachineSetting(executableSettingKey(nisseAgent))))
+	return driver.ResolveExecutable(l.d.setting(executableSetting(nisseAgent)))
 }
 
 func (l *nisseLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOptions) (*nisse.Client, error) {

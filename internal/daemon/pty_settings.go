@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -28,7 +29,7 @@ func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
 	}
 	d.ptySettingsMu.Lock()
 	defer d.ptySettingsMu.Unlock()
-	if err := d.store.SetSettingChecked(string(SettingSharedPTYHostEnabled), strconv.FormatBool(enabled)); err != nil {
+	if err := d.store.SetSettingChecked(setting.SharedPTYHostEnabled.Key, strconv.FormatBool(enabled)); err != nil {
 		return fmt.Errorf("save shared PTY host setting: %w", err)
 	}
 	backend.SetSharedForNewSessions(enabled)
@@ -38,7 +39,7 @@ func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
 func (d *Daemon) sharedPTYHostSettings() (enabled, active bool) {
 	d.ptySettingsMu.Lock()
 	defer d.ptySettingsMu.Unlock()
-	enabled = parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
+	enabled = d.on(setting.SharedPTYHostEnabled)
 	if backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend); ok {
 		active = backend.SharedForNewSessions()
 	} else {
@@ -94,7 +95,7 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 		return
 	}
 	migrating, routed := d.ptyBackend.(*ptybackend.MigratingBackend)
-	if routed && !parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled)) {
+	if routed && !d.on(setting.SharedPTYHostEnabled) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), workerStartupProbeTimeout)
@@ -108,12 +109,12 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	d.ptySettingsChangeMu.Lock()
 	defer d.ptySettingsChangeMu.Unlock()
 	d.ptySettingsMu.Lock()
-	enabled := parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
+	enabled := d.on(setting.SharedPTYHostEnabled)
 	active := enabled && host.SharedArtifactReady()
 	changed := migrating.SharedForNewSessions() != active
 	migrating.SetSharedForNewSessions(active)
 	d.ptySettingsMu.Unlock()
 	if changed {
-		d.publishFact(FactSettingChanged, string(SettingSharedPTYHostActive), nil)
+		d.publishFact(FactSettingChanged, setting.SharedPTYHostActive.Key, nil)
 	}
 }

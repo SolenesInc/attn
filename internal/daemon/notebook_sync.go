@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/syncthing/lib/attnsync"
@@ -1273,10 +1274,10 @@ func (d *Daemon) publishNotebookSyncSettings() {
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
-			d.publishFact(FactSettingChanged, string(settingNotebookSyncState), nil)
+			d.publishFact(FactSettingChanged, setting.NotebookSyncState.Key, nil)
 		}
 		if errorChanged {
-			d.publishFact(FactSettingChanged, string(settingNotebookSyncLastError), nil)
+			d.publishFact(FactSettingChanged, setting.NotebookSyncLastError.Key, nil)
 		}
 	})
 }

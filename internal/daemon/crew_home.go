@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -362,10 +363,10 @@ func (d *Daemon) crewMembersWithHomes(profileID string) (int, error) {
 
 func (d *Daemon) placeChiefNotebook(member crew.Member, revision int64, root string) (crew.Member, int64, error) {
 	if !member.Chief {
-		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", SettingNotebookRoot)
+		return member, revision, fmt.Errorf("only the Chief's setup picks a Notebook folder; set this profile's folder with attn settings set %s <folder>", setting.NotebookRoot)
 	}
 	if member.Agent != "" {
-		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, SettingNotebookRoot)
+		return member, revision, fmt.Errorf("%s's Notebook folder is picked once, at setup; change the profile's folder with attn settings set %s <folder>", member.Name, setting.NotebookRoot)
 	}
 	previous, changed, err := d.pointProfileNotebook(member.ProfileID, root)
 	if err != nil {
@@ -400,7 +401,7 @@ func (d *Daemon) pointProfileNotebook(profileID, root string) (previous string, 
 }
 
 func (d *Daemon) setProfileNotebookRoot(profileID, root string) error {
-	_, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: string(SettingNotebookRoot), Value: root, ProfileID: &profileID})
+	_, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: setting.NotebookRoot.Key, Value: root, ProfileID: &profileID})
 	return err
 }
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 var copyKeys = map[protocol.CopyTable]string{
@@ -198,7 +198,7 @@ func (s *Store) ApplyCopy(ctx context.Context, home string, rows []protocol.Copy
 				bindings = append(bindings, row)
 			case row.Table == protocol.CopyTableSettings:
 				settingsChanged = true
-				if settingkeys.ClassOf(row.Key) != settingkeys.Home {
+				if setting.ClassOf(row.Key) != setting.Home {
 					return fmt.Errorf("cannot copy machine setting %s", row.Key)
 				}
 				if row.Columns != nil {

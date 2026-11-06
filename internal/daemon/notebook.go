@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const originAgent = "agent"
@@ -96,7 +97,7 @@ func expandProfileNotebookRoot(configured string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := config.RequireWithinHarness(string(SettingNotebookRoot), root); err != nil {
+	if err := config.RequireWithinHarness(setting.NotebookRoot.Key, root); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -106,7 +107,7 @@ func (d *Daemon) profileNotebookRoot(profileID string) string {
 	if profileID == "" || !d.enrollmentStatus().IsHome() {
 		return ""
 	}
-	return strings.TrimSpace(d.store.ProfileSetting(profileID, string(SettingNotebookRoot)))
+	return strings.TrimSpace(d.store.ProfileSetting(profileID, setting.NotebookRoot.Key))
 }
 
 func expandNotebookRoot(configured string) (string, error) {

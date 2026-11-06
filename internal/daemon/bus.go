@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -381,7 +382,7 @@ func buildWireProjections() []projection {
 			filter: bus.Filter{FactSettingChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSettingsUpdated(ev.Subject)
-				if ev.Subject == string(settingOutpostsEnabled) {
+				if ev.Subject == setting.OutpostsEnabled.Key {
 					d.projectOutpostReach()
 				}
 				if settingShapesCrewLaunch(ev.Subject) {

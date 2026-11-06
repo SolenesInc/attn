@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -45,7 +46,7 @@ func parseTenderWakeSetting(value string) (tenderWakeSetting, error) {
 }
 
 func (d *Daemon) tenderWakeSetting(profileID string) tenderWakeSetting {
-	setting, err := parseTenderWakeSetting(d.store.ProfileSetting(profileID, string(SettingGardenTenderWake)))
+	setting, err := parseTenderWakeSetting(d.store.ProfileSetting(profileID, setting.GardenTenderWake.Key))
 	if err != nil {
 		return tenderWakeAny
 	}
@@ -158,23 +159,23 @@ func (e tenderWakeTripwire) Error() string {
 }
 
 func (d *Daemon) seedMailWakes(a who.Address, profileID string) (bool, tenderWakeSetting, error) {
-	setting := d.tenderWakeSetting(profileID)
-	switch setting {
+	wake := d.tenderWakeSetting(profileID)
+	switch wake {
 	case tenderWakeOff:
-		return false, setting, nil
+		return false, wake, nil
 	case tenderWakeAny:
-		return true, setting, nil
+		return true, wake, nil
 	}
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
-		return false, setting, err
+		return false, wake, err
 	}
 	for _, delivery := range deliveries {
 		if delivery.Item.Attempts < inbox.MaxAttempts && watchOrReminder(delivery.Item.Item) {
-			return true, setting, nil
+			return true, wake, nil
 		}
 	}
-	return false, setting, nil
+	return false, wake, nil
 }
 
 func watchOrReminder(item inbox.Item) bool {
@@ -195,12 +196,12 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	if !session || standby == nil {
 		return receipt, nil
 	}
-	wakes, setting, err := d.seedMailWakes(a, seed.ProfileID)
+	wakes, wake, err := d.seedMailWakes(a, seed.ProfileID)
 	if err != nil {
 		return receipt, err
 	}
 	if !wakes {
-		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_wake=%s does not wake its tender for this mail", seed.ID, setting)
+		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_wake=%s does not wake its tender for this mail", seed.ID, wake)
 		return receipt, nil
 	}
 	waitForOutpost := func() (inbox.Receipt, error) {
@@ -215,7 +216,7 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
 		claude = true
 		if !d.claudeModEnabled() {
-			receipt.Detail = d.blockTenderWake(a, seed, fmt.Sprintf("its tender is a Claude session, and %s is off, so attn cannot deliver to it once resumed; turn %s on", SettingClaudeModEnabled, SettingClaudeModEnabled))
+			receipt.Detail = d.blockTenderWake(a, seed, fmt.Sprintf("its tender is a Claude session, and %s is off, so attn cannot deliver to it once resumed; turn %s on", setting.ClaudeModEnabled, setting.ClaudeModEnabled))
 			return receipt, nil
 		}
 	}

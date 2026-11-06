@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type wsClient struct {
@@ -1110,11 +1111,11 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdGetSettings:
 		d.handleGetSettingsWS(client)
 	case protocol.CmdSetSetting:
-		setting := msg.(*protocol.SetSettingMessage)
-		if setting.Key == string(SettingSharedPTYHostEnabled) {
-			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, setting) })
+		set := msg.(*protocol.SetSettingMessage)
+		if set.Key == setting.SharedPTYHostEnabled.Key {
+			d.life.Go("handleSetSettingWS", func() { d.handleSetSettingWS(client, set) })
 		} else {
-			d.handleSetSettingWS(client, setting)
+			d.handleSetSettingWS(client, set)
 		}
 	case protocol.CmdUpdateOutpost:
 		d.handleUpdateOutpost(client, msg.(*protocol.UpdateOutpostMessage).ID)

@@ -41,7 +41,7 @@ func (d *Daemon) startAnalyticsMirror(secret []byte) error {
 func mirroredSubject(secret []byte, ev bus.Event) string {
 	if ev.Name == FactSettingChanged {
 		if spec, ok := lookupSetting(ev.Subject); ok {
-			return spec.key
+			return spec.Key
 		}
 	}
 	return analytics.HashSubject(secret, ev.Subject)

@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type outpostListener struct {
@@ -124,10 +125,10 @@ func (d *Daemon) updateOutpostListenerState(run *outpostListener, conn *bridge.C
 	r.mu.Unlock()
 	d.coalesceSnapshots(func() {
 		if stateChanged {
-			d.publishFact(FactSettingChanged, string(settingOutpostState), nil)
+			d.publishFact(FactSettingChanged, setting.OutpostState.Key, nil)
 		}
 		if errorChanged {
-			d.publishFact(FactSettingChanged, string(settingOutpostLastError), nil)
+			d.publishFact(FactSettingChanged, setting.OutpostLastError.Key, nil)
 		}
 	})
 }

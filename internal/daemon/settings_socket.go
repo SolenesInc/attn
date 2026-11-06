@@ -9,17 +9,17 @@ import (
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/setting"
 )
 
-func (d *Daemon) settingEntry(spec settingSpec, key, value string) protocol.SettingEntry {
-	entry := protocol.SettingEntry{Key: key, Scope: protocol.SettingScopeDaemon, Description: spec.description, Value: &value}
-	if spec.scope == profileScope {
+func (d *Daemon) settingEntry(spec *setting.Setting, key, value string) protocol.SettingEntry {
+	entry := protocol.SettingEntry{Key: key, Scope: protocol.SettingScopeDaemon, Description: spec.Description, Value: &value}
+	if spec.Scope == setting.PerProfile {
 		entry.Scope = protocol.SettingScopeProfile
 	}
-	if spec.readOnly {
+	if spec.ReadOnly() {
 		entry.ReadOnly = protocol.Ptr(true)
-	} else if spec.class == settingkeys.Home && !d.enrollmentStatus().IsHome() {
+	} else if spec.Class == setting.Home && !d.enrollmentStatus().IsHome() {
 		entry.SetAtHome = protocol.Ptr(true)
 	}
 	if strings.Contains(key, "<") {
@@ -29,18 +29,17 @@ func (d *Daemon) settingEntry(spec settingSpec, key, value string) protocol.Sett
 	return entry
 }
 
-func (d *Daemon) settingValue(spec settingSpec, key string, computed map[string]interface{}, profileID string) string {
-	if spec.readOnly {
+func (d *Daemon) settingValue(spec *setting.Setting, key string, computed map[string]interface{}, profileID string) string {
+	if spec.ReadOnly() {
 		value, _ := computed[key].(string)
 		return value
 	}
-	if spec.scope == profileScope {
+	if spec.Scope == setting.PerProfile {
 		return d.store.ProfileSetting(profileID, key)
 	}
-	if spec.class == settingkeys.Machine {
-		return d.machineSetting(MachineSetting(key))
-	}
-	return d.homeSetting(HomeSetting(key))
+	concrete := *spec
+	concrete.Key = key
+	return d.setting(&concrete)
 }
 
 func (d *Daemon) settingsProfile(sessionID *protocol.SessionID, requested *string) (profiles.Profile, error) {
@@ -53,7 +52,7 @@ func (d *Daemon) settingsProfile(sessionID *protocol.SessionID, requested *strin
 
 func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.SettingsListResult, *protocol.SettingEntry, error) {
 	key := protocol.Deref(msg.Key)
-	var spec settingSpec
+	var spec *setting.Setting
 	if key != "" {
 		var ok bool
 		spec, ok = lookupSetting(key)
@@ -66,14 +65,14 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	if d.enrollmentStatus().IsHome() {
 		profile, profileErr = d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
 	}
-	if key != "" && spec.scope == profileScope && profileErr != nil {
+	if key != "" && spec.Scope == setting.PerProfile && profileErr != nil {
 		return nil, nil, profileErr
 	}
-	savedAtHome := func(spec settingSpec) bool {
-		return spec.scope == profileScope && !spec.readOnly && d.enrollmentStatus().IsOutpost()
+	savedAtHome := func(spec *setting.Setting) bool {
+		return spec.Scope == setting.PerProfile && !spec.ReadOnly() && d.enrollmentStatus().IsOutpost()
 	}
 	if key != "" && savedAtHome(spec) {
-		return nil, nil, fmt.Errorf("%s is saved at the home for each profile; read it there with attn settings get %s, or read %s for this machine's copy", key, key, SettingNotebookRootEffective)
+		return nil, nil, fmt.Errorf("%s is saved at the home for each profile; read it there with attn settings get %s, or read %s for this machine's copy", key, key, setting.NotebookRootEffective)
 	}
 	notebookProfile := profile.ID
 	if d.enrollmentStatus().IsOutpost() && msg.SourceSessionID != nil {
@@ -90,18 +89,18 @@ func (d *Daemon) settingsList(msg *protocol.GetSettingsMessage) (*protocol.Setti
 	} else if profile.ID != "" {
 		result.Profile = protocol.Ptr(profile.Name)
 	}
-	for _, spec := range settingSpecs {
-		if spec.readOnly && !protocol.Deref(msg.All) || spec.scope == profileScope && profileErr != nil || savedAtHome(spec) {
+	for _, spec := range setting.All() {
+		if spec.ReadOnly() && !protocol.Deref(msg.All) || spec.Scope == setting.PerProfile && profileErr != nil || savedAtHome(spec) {
 			continue
 		}
-		value := d.settingValue(spec, spec.key, values, profile.ID)
-		result.Entries = append(result.Entries, d.settingEntry(spec, spec.key, value))
-		if !strings.Contains(spec.key, "<") {
+		value := d.settingValue(spec, spec.Key, values, profile.ID)
+		result.Entries = append(result.Entries, d.settingEntry(spec, spec.Key, value))
+		if !strings.Contains(spec.Key, "<") {
 			continue
 		}
 		for concrete := range values {
 			matched, ok := lookupSetting(concrete)
-			if ok && matched.key == spec.key && concrete != spec.key {
+			if ok && matched.Key == spec.Key && concrete != spec.Key {
 				value := d.settingValue(spec, concrete, values, profile.ID)
 				result.Entries = append(result.Entries, d.settingEntry(spec, concrete, value))
 			}

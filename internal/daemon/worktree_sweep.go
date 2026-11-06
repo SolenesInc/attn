@@ -15,6 +15,7 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -55,7 +56,7 @@ func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return parseBooleanSetting(d.machineSetting(settingWorktreeSweepEnabled))
+	return d.on(setting.WorktreeSweepEnabled)
 }
 
 func (d *Daemon) registerWorktreeSweepCron(runner *jobs.Runner) {

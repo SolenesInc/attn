@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 // GatewayDevice is a device the caller has already authenticated, with the profile its pairing reaches.
@@ -144,7 +145,7 @@ func (g *gatewayConns) signal(channel func(*gatewayConn) chan struct{}) {
 }
 
 func (d *Daemon) phoneAccessEnabled() bool {
-	return parseBooleanSetting(d.homeSetting(SettingPhoneAccessEnabled))
+	return d.on(setting.PhoneAccessEnabled)
 }
 
 // ServeGateway answers one device until its stream ends, the home turns phone access off, or the daemon stops.

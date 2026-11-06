@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -98,7 +99,7 @@ func (d *Daemon) standbyDeliveryRefusal(caller *protocol.Session, seed garden.Se
 	}
 	return protocol.Refuse(protocol.RefusalWrongState,
 		"this Claude session runs without attn's Claude Code mod, so attn could not deliver %s's mail when it resumes the session; the user turns on %s (attn settings set %s true), and sessions launched after that can go on standby",
-		seed.ID, SettingClaudeModEnabled, SettingClaudeModEnabled)
+		seed.ID, setting.ClaudeModEnabled, setting.ClaudeModEnabled)
 }
 
 func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter who.Actor) (*protocol.SeedStandbyResult, error) {

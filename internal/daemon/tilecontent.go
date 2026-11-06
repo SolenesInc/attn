@@ -14,6 +14,7 @@ import (
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -207,7 +208,7 @@ func (d *Daemon) openSentFilesEnabled() bool {
 	if d.store == nil {
 		return true
 	}
-	return parseBooleanSetting(d.homeSetting(SettingOpenSentFilesEnabled))
+	return d.on(setting.OpenSentFilesEnabled)
 }
 
 func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesMessage) {

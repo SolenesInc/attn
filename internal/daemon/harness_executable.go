@@ -13,7 +13,7 @@ import (
 func (d *Daemon) machineAgentExecutable(driver agentdriver.Driver, configured string) (string, error) {
 	name := strings.TrimSpace(configured)
 	if name == "" && d.store != nil {
-		name = strings.TrimSpace(d.machineSetting(MachineSetting(executableSettingKey(driver.Name()))))
+		name = strings.TrimSpace(d.setting(executableSetting(driver.Name())))
 	}
 	if name == "" {
 		env := pty.MergeEnvironment(os.Environ(), d.launchEnvUntilStop())

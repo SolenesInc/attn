@@ -48,7 +48,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/settingkeys"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -579,7 +579,7 @@ func (d *Daemon) startMigratingPTYBackend() error {
 		return nil
 	}
 
-	sharedEnabled := parseBooleanSetting(d.machineSetting(SettingSharedPTYHostEnabled))
+	sharedEnabled := d.on(setting.SharedPTYHostEnabled)
 	useSharedForNew := sharedEnabled && shared.SharedArtifactReady()
 	if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 		useSharedForNew = true
@@ -648,7 +648,7 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
-	d.backgroundLoginEnv = parseBooleanSetting(d.machineSetting(SettingBackgroundLoginEnvEnabled))
+	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
 	d.emptyDesktops.grace = emptyDesktopGraceFromEnv()
 	d.store.OnEmptyDesktop(d.desktopEmptied)
 	d.removeLegacyStateFile()
@@ -2729,17 +2729,17 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		}
 		homeSetting := false
 		if place.Locator == protocol.LocatorSetting {
-			setting, ok := msg.(*protocol.SetSettingMessage)
+			set, ok := msg.(*protocol.SetSettingMessage)
 			if !ok {
 				d.sendError(conn, "setting locator requires a setting key")
 				return
 			}
-			spec, err := writableSetting(setting.Key)
+			spec, err := writableSetting(set.Key)
 			if err != nil {
 				d.sendError(conn, err.Error())
 				return
 			}
-			homeSetting = spec.class == settingkeys.Home
+			homeSetting = spec.Class == setting.Home
 		}
 		if place.Locator == protocol.LocatorHome || homeSetting {
 			status := d.enrollmentStatus()

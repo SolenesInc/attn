@@ -1,0 +1,149 @@
+package setting
+
+import "strings"
+
+type Class int
+
+const (
+	Home Class = iota + 1
+	Machine
+)
+
+type Scope int
+
+const (
+	AllProfiles Scope = iota
+	PerProfile
+)
+
+type Kind int
+
+const (
+	Bool Kind = iota + 1
+	Free
+	Checked
+	Computed
+)
+
+type Default int
+
+const (
+	Off Default = iota
+	On
+)
+
+type Setting struct {
+	Key          string
+	Class        Class
+	Kind         Kind
+	Scope        Scope
+	Default      Default
+	Experimental bool
+	Internal     bool
+	Description  string
+}
+
+var (
+	all        []*Setting
+	exact      = map[string]*Setting{}
+	prefixLed  []*Setting
+	patternLed []*Setting
+)
+
+func add(s *Setting) *Setting {
+	if !s.Internal {
+		all = append(all, s)
+	}
+	exact[s.Key] = s
+	switch {
+	case !s.IsFamily():
+	case strings.HasPrefix(s.Key, "<"):
+		patternLed = append(patternLed, s)
+	default:
+		prefixLed = append(prefixLed, s)
+	}
+	return s
+}
+
+func All() []*Setting { return all }
+
+func (s *Setting) String() string { return s.Key }
+
+func (s *Setting) IsFamily() bool { return strings.Contains(s.Key, "<") }
+
+func (s *Setting) ReadOnly() bool { return s.Kind == Computed }
+
+func (s *Setting) For(name string) *Setting {
+	concrete := *s
+	start := strings.IndexByte(s.Key, '<')
+	end := strings.IndexByte(s.Key, '>')
+	concrete.Key = s.Key[:start] + name + s.Key[end+1:]
+	return &concrete
+}
+
+func (s *Setting) Matches(key string) bool { return s.IsFamily() && patternMatches(s.Key, key) }
+
+func (s *Setting) WithDefault(stored string) string {
+	if s.Default == On && strings.TrimSpace(stored) == "" {
+		return "true"
+	}
+	return stored
+}
+
+func Lookup(key string) (*Setting, bool) {
+	if s, ok := exact[key]; ok {
+		return s, true
+	}
+	for _, families := range [][]*Setting{prefixLed, patternLed} {
+		for _, s := range families {
+			if s.Matches(key) {
+				return s, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func ClassOf(key string) Class {
+	if s, ok := Lookup(key); ok {
+		return s.Class
+	}
+	return Home
+}
+
+func FillDefaults(values map[string]string) {
+	for _, s := range all {
+		if s.Default == On {
+			values[s.Key] = s.WithDefault(values[s.Key])
+		}
+	}
+}
+
+func patternMatches(pattern, key string) bool {
+	for {
+		start := strings.IndexByte(pattern, '<')
+		if start < 0 {
+			return pattern == key
+		}
+		prefix := pattern[:start]
+		if !strings.HasPrefix(key, prefix) {
+			return false
+		}
+		key = strings.TrimPrefix(key, prefix)
+		end := strings.IndexByte(pattern[start:], '>') + start
+		pattern = pattern[end+1:]
+		next := strings.IndexByte(pattern, '<')
+		suffix := pattern
+		if next >= 0 {
+			suffix = pattern[:next]
+		}
+		if suffix == "" {
+			return key != ""
+		}
+		at := strings.Index(key, suffix)
+		if at <= 0 {
+			return false
+		}
+		key = key[at:]
+	}
+}

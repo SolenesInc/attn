@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 const calloutMaxSteps = 20
@@ -39,7 +40,7 @@ func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
 	if session == nil {
 		return fmt.Errorf("session not found")
 	}
-	if !parseBooleanSetting(d.homeSetting(SettingCalloutsEnabled)) && !d.onboardingChief(session.ID) {
+	if !d.on(setting.CalloutsEnabled) && !d.onboardingChief(session.ID) {
 		return fmt.Errorf("callouts are off: the user can turn them on in Settings > Experimental > Agent callouts")
 	}
 	return nil

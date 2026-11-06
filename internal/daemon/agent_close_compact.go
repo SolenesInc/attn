@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -54,14 +55,14 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 	case string(protocol.SessionAgentCodex):
 		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
 			"this Codex session does not run on the shared Codex app server, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Codex sessions launched after that can close with --compact. Close without --compact instead",
-			SettingCodexSharedEnabled, SettingCodexSharedEnabled)}
+			setting.CodexSharedEnabled, setting.CodexSharedEnabled)}
 	case string(protocol.SessionAgentClaude):
 		if d.claudeModReaches(target.ID) {
 			return nil
 		}
 		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
 			"this Claude session does not run with attn's Claude mod, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Claude sessions launched after that can close with --compact. Close without --compact instead",
-			SettingClaudeModEnabled, SettingClaudeModEnabled)}
+			setting.ClaudeModEnabled, setting.ClaudeModEnabled)}
 	}
 	return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
 		"attn has no way to compact a %s session; close without --compact", target.Agent)}

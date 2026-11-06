@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -103,7 +104,7 @@ func notebookNestings(notebooks []profileNotebook) []notebookNesting {
 }
 
 func (d *Daemon) refuseNestedNotebookSetting(msg protocol.SetSettingMessage) error {
-	if msg.Key != string(SettingNotebookRoot) || !d.enrollmentStatus().IsHome() {
+	if msg.Key != setting.NotebookRoot.Key || !d.enrollmentStatus().IsHome() {
 		return nil
 	}
 	target, err := d.settingsProfile(msg.SourceSessionID, msg.ProfileID)
