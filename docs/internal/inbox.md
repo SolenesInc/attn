@@ -283,8 +283,11 @@ connected:
 ## Notification runs
 
 A notification run is a run that attn's own input started: a ring, or a crew
-member's heartbeat. If the user types into the agent during the run, the run
-becomes the user's.
+member's heartbeat. A Quick Capture is the user's own input, so a ring that
+carries one starts the user's run, even with other items in the same ring. If
+the user types into the agent during a notification run, or a Quick Capture
+reaches it, the run becomes the user's. The user's answer to an ask and a change
+to a seed's authorization do not change whose run it is.
 
 With quiet notifications on (`queue_quiet_notifications`, the default) and the
 queue flow on, attn does not bring the agent to the user for a notification run:

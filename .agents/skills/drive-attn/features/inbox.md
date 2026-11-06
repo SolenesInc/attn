@@ -93,7 +93,7 @@ Preconditions:
 - **Claude mod**: `claude_mod_enabled` changes how a message reaches Claude, not when attn sends it. A plain ring still waits for a prompt-ready session. During a turn's permission question the mod holds what it takes, and the terminal shows nothing until the question closes; a question outside a turn delivers nothing. On an outpost the mod delivers too, and what it gives back reaches the home through a queue that waits for the home link.
 - **Harnesses**: every harness gets the same rings and reads with the same verbs. Plugin harnesses get them through their driver. A shell never gets a ring: the receipt says the message waits there for `attn agent inbox`.
 - **Compatibility across versions**: items written by an earlier version stay readable. The store's inbox and mailbox migrations carry them forward.
-- **Flow**: with queue flow and quiet notifications on, a run a ring started opens no turn when it stops, unless the agent needs approval or attn cannot tell its state ([queue-flow.md](queue-flow.md)). With queue flow off, quiet notifications change nothing.
+- **Flow**: with queue flow and quiet notifications on, a run a ring started opens no turn when it stops, unless the agent needs approval, attn cannot tell its state, or the ring carried a quick capture ([queue-flow.md](queue-flow.md)). With queue flow off, quiet notifications change nothing.
 
 ## Tests
 

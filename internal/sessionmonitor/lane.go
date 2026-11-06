@@ -123,6 +123,10 @@ func ReturnedUserInput(key string, text string) Delivery {
 	return delivery
 }
 
+func (delivery Delivery) speaksForUser() bool {
+	return delivery.origin.kind == originUserConversation || (delivery.Ring != nil && len(delivery.Ring.Captures) > 0)
+}
+
 type runRef struct {
 	epoch uint64
 }
@@ -395,10 +399,12 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 
 // tookLocked credits the user's words to the run going, or to the next turn start when none runs.
 func (l *lane) tookLocked(delivery Delivery) runRef {
-	if delivery.origin.kind != originUserConversation {
+	if delivery.origin.kind == originUserConversation {
+		l.titleLocked(delivery)
+	}
+	if !delivery.speaksForUser() {
 		return runRef{}
 	}
-	l.titleLocked(delivery)
 	if l.run == nil {
 		l.creditNextRun = true
 		return runRef{}

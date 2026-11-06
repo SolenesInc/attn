@@ -739,6 +739,40 @@ func TestAnAnswerThatStartsARunThroughTheModStaysOutOfTheQueue(t *testing.T) {
 	}
 }
 
+func TestAQuickCaptureThroughTheModOpensTheUsersTurn(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.TrustedApp(), w.Client()
+	setSetting(t, app, "queue_mode_enabled", "true")
+	registerSessions(t, w, cli, "reviewer")
+	session, run := moddedClaude(t, w, app)
+	idle := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+
+	sendQuickCapture(t, app, sessionMailbox(session), "what is the review status?")
+	if got := run.Prompted(); !strings.Contains(got, "what is the review status?") {
+		t.Fatalf("the agent took %q, want the user's question", got)
+	}
+	working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	run.Reply("The review is green. <!-- attn:state=waiting_input -->")
+	answered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if !protocol.Deref(answered.TurnOwed) || protocol.Deref(answered.TurnByAgent) {
+		t.Fatalf("the reply stopped with owed=%t by_agent=%t, want the user's turn open", protocol.Deref(answered.TurnOwed), protocol.Deref(answered.TurnByAgent))
+	}
+
+	settled := settleFromApp(app, answered)
+	sendAgentMessage(t, cli, "reviewer", session, "a review arrived")
+	if got := run.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("the agent took %q, want the inbox doorbell", got)
+	}
+	working = testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
+	run.Reply("They approved. <!-- attn:state=waiting_input -->")
+	steered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	if !protocol.Deref(steered.TurnOwed) || protocol.Deref(steered.TurnByAgent) {
+		t.Fatalf("the steered run stopped with owed=%t by_agent=%t, want the user's turn open", protocol.Deref(steered.TurnOwed), protocol.Deref(steered.TurnByAgent))
+	}
+}
+
 func TestARingTheModNeverTookLeavesTheUsersTurnOwedThroughAnUnrelatedRun(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

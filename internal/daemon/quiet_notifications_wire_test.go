@@ -4,13 +4,20 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 	"github.com/victorarias/attn/internal/testworld"
 )
+
+func sessionMailbox(session string) protocol.QuickCaptureMailbox {
+	return protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+}
 
 func quietNotificationsWorld(t *testing.T, quiet bool) (*world, *testworld.Peer, *client.Client) {
 	t.Helper()
@@ -199,6 +206,82 @@ func TestWithoutQuietNotificationsOrTheQueueANotificationRunOpensATurnAsBefore(t
 			}
 		})
 	}
+}
+
+func TestAPairedSendersQuestionPutsTheAgentsReplyInTheQueue(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+	paired := pairSenderInApp(t, cli, app, "Capture")
+	profileID := app.SelectedProfile()
+
+	if _, err := cli.QuickCapture(protocol.QuickCaptureSendMessage{
+		Cmd: protocol.CmdQuickCaptureSend, ProfileID: &profileID, SenderToken: &paired.Token, CaptureID: uuid.NewString(), Content: "What is the review status?", AttachmentIds: []string{},
+		Mailbox: sessionMailbox(session),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := agent.Prompted(); !strings.Contains(got, "What is the review status?") {
+		t.Fatalf("the agent was prompted with %q, want the user's question", got)
+	}
+	working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	agent.Reply("The review is green. <!-- attn:state=idle -->")
+	answered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(answered.TurnOwed) || protocol.Deref(answered.TurnByAgent) {
+		t.Fatalf("the reply to the user's question stopped with owed=%v by_agent=%v, want the user's turn open",
+			protocol.Deref(answered.TurnOwed), protocol.Deref(answered.TurnByAgent))
+	}
+
+	settled = settleFromApp(app, answered)
+	working, _ = notificationRunStarts(t, app, cli, agent, session, settled, "the review is in")
+	agent.Reply("Nothing for this plot. <!-- attn:state=idle -->")
+	if stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle }); protocol.Deref(stopped.TurnOwed) {
+		t.Fatal("the notification run after the user's question opened a turn")
+	}
+}
+
+func TestAQuickCaptureThatSteersANotificationRunOpensItsTurnAtTheStop(t *testing.T) {
+	w, _, cli := quietNotificationsWorld(t, true)
+	app := w.TrustedApp()
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	settled := settleFromApp(app, owed)
+
+	working, _ := notificationRunStarts(t, app, cli, agent, session, settled, "the review is in")
+	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
+	if got := agent.Prompted(); !strings.Contains(got, "what did the reviewer say?") {
+		t.Fatalf("the agent was prompted with %q, want the user's question", got)
+	}
+	agent.Reply("They approved. <!-- attn:state=idle -->")
+	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {
+		t.Fatalf("the steered run stopped with owed=%v by_agent=%v, want the user's turn open",
+			protocol.Deref(stopped.TurnOwed), protocol.Deref(stopped.TurnByAgent))
+	}
+}
+
+func TestAQuickCaptureRungWithOtherItemsOpensItsTurn(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.TrustedApp(), w.Client()
+		setSetting(t, app, "queue_mode_enabled", "true")
+		registerSessions(t, w, cli, "peer")
+		agent := w.bubbleClaude(t, app, "shop")
+
+		app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(agent.self), Data: "half a thought"})
+		synctest.Wait()
+		sendAgentMessage(t, cli, "peer", agent.id, "the review is in")
+		sendQuickCapture(t, app, sessionMailbox(agent.id), "what did the reviewer say?")
+		w.advance(sessionmonitor.QuietWindow)
+
+		pasted := agent.term.Pasted()
+		if len(pasted) != 1 || !strings.Contains(pasted[0], "what did the reviewer say?") || !strings.Contains(pasted[0], inboxDoorbell) {
+			t.Fatalf("once the user was quiet attn pasted %q, want one ring with the capture and the doorbell", pasted)
+		}
+		agent.reply("They approved. <!-- attn:state=idle -->")
+		if stopped := queriedSession(t, cli, agent.id); !protocol.Deref(stopped.TurnOwed) {
+			t.Fatalf("the ring's run stopped %s without opening the user's turn", stopped.State)
+		}
+	})
 }
 
 func TestWithTheQueueFlowOffAnAgentsTurnCommandsChangeNothing(t *testing.T) {
