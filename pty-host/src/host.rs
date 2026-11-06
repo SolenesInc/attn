@@ -310,6 +310,7 @@ impl Host {
                 Err(error) if error.kind() == ErrorKind::WouldBlock => continue,
                 Err(error) => {
                     eprintln!("PTY host accept failed: {error}");
+                    thread::sleep(Duration::from_millis(100));
                     continue;
                 }
             };

@@ -248,6 +248,8 @@ pub struct Session {
     lifecycle: Mutex<Lifecycle>,
     lifecycle_changed: Condvar,
     reader_finished: AtomicBool,
+    exit_seen: AtomicBool,
+    exit_grace_over: AtomicBool,
     signal_order: Mutex<()>,
     subscribers: Mutex<HashMap<String, Subscriber>>,
     watchers: Mutex<HashMap<String, Outbox>>,
@@ -417,6 +419,8 @@ impl Session {
             lifecycle: Mutex::new(parts.lifecycle),
             lifecycle_changed: Condvar::new(),
             reader_finished: AtomicBool::new(false),
+            exit_seen: AtomicBool::new(false),
+            exit_grace_over: AtomicBool::new(false),
             signal_order: Mutex::new(()),
             subscribers: Mutex::new(HashMap::new()),
             watchers: Mutex::new(HashMap::new()),
@@ -1455,10 +1459,19 @@ fn reap_registered_children(shared: &ChildReaperShared) {
         .map(|(pid, session)| (*pid, session.upgrade()))
         .collect::<Vec<_>>();
     for (pid, session) in sessions {
-        if session
-            .as_ref()
-            .is_some_and(|session| !session.reader_finished.load(Ordering::Acquire))
+        if let Some(session) = session.as_ref()
+            && !session.reader_finished.load(Ordering::Acquire)
+            && !session.exit_grace_over.load(Ordering::Acquire)
         {
+            if !session.exit_seen.load(Ordering::Acquire) && child_has_exited(pid) {
+                session.exit_seen.store(true, Ordering::Release);
+                let session = Arc::clone(session);
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(500));
+                    session.exit_grace_over.store(true, Ordering::Release);
+                    wake_child_reaper();
+                });
+            }
             continue;
         }
         let mut status = 0;
@@ -1484,6 +1497,23 @@ fn reap_registered_children(shared: &ChildReaperShared) {
             break;
         }
     }
+}
+
+fn child_has_exited(pid: i32) -> bool {
+    let mut info = unsafe { std::mem::zeroed::<libc::siginfo_t>() };
+    let result = unsafe {
+        libc::waitid(
+            libc::P_PID,
+            pid.cast_unsigned(),
+            &raw mut info,
+            libc::WEXITED | libc::WNOHANG | libc::WNOWAIT,
+        )
+    };
+    #[cfg(target_os = "linux")]
+    let reported_pid = unsafe { info.si_pid() };
+    #[cfg(not(target_os = "linux"))]
+    let reported_pid = info.si_pid;
+    result == 0 && reported_pid == pid
 }
 
 fn mark_reaped(shared: &ChildReaperShared, pid: i32, status: i32) {

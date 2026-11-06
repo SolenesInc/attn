@@ -1,0 +1,7 @@
+kind: fixed
+area: terminals
+change: >
+  A terminal whose shell exits while a background job still holds the terminal
+  now reports the exit instead of staying running forever. A failed PTY upgrade
+  handoff no longer leaves the session's output silent, and a PTY host out of
+  file descriptors no longer spins a CPU core.
