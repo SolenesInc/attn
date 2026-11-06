@@ -286,8 +286,8 @@ A notification run is a run that attn's own input started: a ring, or a crew
 member's heartbeat. If the user types into the agent during the run, the run
 becomes the user's.
 
-With quiet notifications on (`queue_quiet_notifications`) and the queue flow
-on, attn does not bring the agent to the user for a notification run:
+With quiet notifications on (`queue_quiet_notifications`, the default) and the
+queue flow on, attn does not bring the agent to the user for a notification run:
 
 - When the run stops, attn opens no turn, unless the agent needs approval or
   attn cannot tell the agent's state.

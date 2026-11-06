@@ -10,8 +10,9 @@ func TestASettingIsAcknowledgedOnlyOnceItPersistsAndRefusalsLeaveItUnchanged(t *
 	w := newWorld(t)
 	app := w.App()
 	for key, want := range map[string]string{
-		"queue_mode_enabled": "false",
-		"crew.away_seconds":  "9000",
+		"queue_mode_enabled":        "false",
+		"queue_quiet_notifications": "true",
+		"crew.away_seconds":         "9000",
 	} {
 		if got := app.Initial.Settings[key]; got != want {
 			t.Errorf("the app first sees %s = %q, want %q", key, got, want)

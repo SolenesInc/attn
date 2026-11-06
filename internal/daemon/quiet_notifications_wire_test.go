@@ -17,8 +17,8 @@ func quietNotificationsWorld(t *testing.T, quiet bool) (*world, *testworld.Peer,
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "queue_mode_enabled", "true")
-	if quiet {
-		setSetting(t, app, "queue_quiet_notifications", "true")
+	if !quiet {
+		setSetting(t, app, "queue_quiet_notifications", "false")
 	}
 	registerSessions(t, w, cli, "reviewer")
 	return w, app, cli

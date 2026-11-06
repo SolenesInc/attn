@@ -258,7 +258,7 @@ export function useSettingsModalState({
   const claudeModEnabled = settings.claude_mod_enabled === 'true';
   const nisseEnabled = settings.nisse_enabled === 'true';
   const queueShowHiddenSessions = settings.queue_show_hidden_sessions !== 'false';
-  const queueQuietNotifications = settings.queue_quiet_notifications === 'true';
+  const queueQuietNotifications = settings.queue_quiet_notifications !== 'false';
   const directAgentLaunchEnabled = settings.direct_agent_launch_enabled === 'true';
   const quickCaptureEnabled = settings.quick_capture_enabled === 'true';
   const sharedPtyHostEnabled = settings.pty_shared_host_enabled === 'true';
@@ -509,9 +509,9 @@ export function useSettingsModalState({
           {
             id: 'hygiene',
             label: 'Attention queue',
-            description: 'When a turn settles itself, and which repositories and authors never reach the queue at all.',
+            description: 'When a turn settles itself, which notifications stay out of the queue, and which repositories and authors never reach it.',
             keywords:
-              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue',
+              'muted repositories repos authors hide unmute hygiene auto-settle settle turn countdown sidebar attention queue quiet notifications',
           },
         ],
       },

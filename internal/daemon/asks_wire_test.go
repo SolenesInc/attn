@@ -252,7 +252,6 @@ func TestAnAnswerTypedIntoAWorkingAgentAfterARestartLeavesItsResultToTheUser(t *
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "asks_enabled", "true")
 		setSetting(t, app, "queue_mode_enabled", "true")
-		setSetting(t, app, "queue_quiet_notifications", "true")
 		asker := w.bubbleClaude(t, app, "shop")
 		asked, err := cli.AskOpen(protocol.SessionID(asker.id), "", cacheAsk, "", w.Path("shop"))
 		if err != nil {

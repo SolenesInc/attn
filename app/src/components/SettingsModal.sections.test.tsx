@@ -157,6 +157,16 @@ describe('SettingsModal sections', () => {
     expect(screen.getByTestId('settings-auto-settle-countdown')).toBeInTheDocument();
   });
 
+  it('keeps quiet notifications on by default in the attention queue settings, and lets that change', async () => {
+    const daemon = await openSection('hygiene');
+    const toggle = () => screen.getByRole('switch', { name: 'Quiet notifications in the queue' });
+
+    expect(toggle()).toHaveAttribute('aria-checked', 'true');
+    await gesture(daemon, () => fireEvent.click(toggle()));
+    expect(toggle()).toHaveAttribute('aria-checked', 'false');
+    expect(savedSettings(daemon)).toEqual([['queue_quiet_notifications', 'false']]);
+  });
+
   it('raises a saved mark when a blur-committed field lands, and takes it away', async () => {
     const daemon = await openSection('desktop');
 

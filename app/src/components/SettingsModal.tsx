@@ -241,7 +241,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           claudeModEnabled={state.claudeModEnabled}
           nisseEnabled={state.nisseEnabled}
           queueShowHiddenSessions={state.queueShowHiddenSessions}
-          queueQuietNotifications={state.queueQuietNotifications}
           directAgentLaunchEnabled={state.directAgentLaunchEnabled}
           quickCaptureEnabled={state.quickCaptureEnabled}
           asksEnabled={state.asksEnabled}
@@ -265,6 +264,8 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           autoSettleArmDraft={state.autoSettleArmDraft}
           savedFlash={state.savedFlash}
           autoSettleCountdownDraft={state.autoSettleCountdownDraft}
+          queueQuietNotifications={state.queueQuietNotifications}
+          onSetSetting={state.onSetSetting}
           mutedRepos={state.mutedRepos}
           onUnmuteRepo={state.onUnmuteRepo}
           mutedAuthors={state.mutedAuthors}

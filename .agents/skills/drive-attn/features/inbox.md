@@ -28,7 +28,7 @@ does to the queue.
 ### People
 
 - No control of its own opens the inbox. People see a ring as the 📬 line in the agent's terminal, and the typed text of their own answers and quick captures there.
-- **Settings → Experimental**: "Quiet notifications in the queue" keeps a ring's run out of the queue. [queue-flow.md](queue-flow.md) has the recipe that drives it.
+- **Settings → Attention queue**: "Quiet notifications in the queue" keeps a ring's run out of the queue. [queue-flow.md](queue-flow.md) has the recipe that drives it.
 - **Settings → Experimental**: "Claude mod" sets `claude_mod_enabled`, which delivers to Claude sessions through the mod from their next launch.
 - Items people put in come through other features: an answer to an ask ([asks.md](asks.md)), a quick capture ([quick-capture.md](quick-capture.md)) and a change to a seed's authorization ([delegation.md](delegation.md)).
 - Their own shell: `attn agent msg <target> "text" --source-session <id>` sends as that session, and `attn agent inbox --session <id>` reads as it.
