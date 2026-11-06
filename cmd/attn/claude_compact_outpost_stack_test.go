@@ -254,6 +254,88 @@ func TestACompactOnAnOutpostThatMeetsARunningTurnLetsMailThroughAndRetriesAtTheN
 	}
 }
 
+func (m *outpostMod) keepsItsDraftAndTakesMail(t *testing.T, draft string) {
+	t.Helper()
+	m.sendMail(t, m.session, "the review is in")
+	if got := m.run.Prompted(); !m.run.ThroughMod || !strings.Contains(got, outpostCompactRing) {
+		t.Fatalf("the agent took %q (through the mod: %t), want the ring of the mail", got, m.run.ThroughMod)
+	}
+	m.run.Reply(outpostCompactReply)
+	testworld.AwaitSession(m.app, m.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	m.app.Type(m.session, "\r", "keyboard")
+	if got := m.run.Prompted(); got != draft {
+		t.Fatalf("the agent took %q when the user sent the draft, want %q", got, draft)
+	}
+}
+
+func TestADraftTypedWhileAnOutpostsFinishedCompactWaitsForTheHomeKeepsTheSessionAndTheDraft(t *testing.T) {
+	m := newOutpostMod(t)
+	m.workingOn(t, m.app, "write the essay")
+	arrived, release := m.run.ModHoldNextCompact()
+	m.closeCompacting(t)
+	m.run.Reply(outpostCompactReply)
+	arrived()
+
+	m.pair.Disconnect()
+	outpostReachSince(m.app, 0, "outpost", protocol.OutpostReachUnreachable)
+	mark := len(m.app.Log())
+	release()
+	m.outpost.AwaitTimer(daemon.ClaudeModReportRetryTimer)
+
+	m.pair.Reconnect()
+	defer m.home.FireTimers(bridge.RetryTimer)()
+	outpostReachSince(m.app, mark, "outpost", protocol.OutpostReachReachable)
+	const draft = "please keep this draft"
+	m.app.Type(m.session, draft, "keyboard")
+	m.app.AwaitScreen(m.session, draft)
+
+	m.outpost.FirePending(daemon.ClaudeModReportRetryTimer)
+	m.keepsItsDraftAndTakesMail(t, draft)
+}
+
+func TestADraftTypedWhileAnOutpostsCompactWaitsToStartKeepsTheSessionUncompacted(t *testing.T) {
+	m := newOutpostMod(t)
+	m.workingOn(t, m.app, "write the essay")
+	m.closeCompacting(t)
+
+	m.pair.Disconnect()
+	outpostReachSince(m.app, 0, "outpost", protocol.OutpostReachUnreachable)
+	mark := len(m.app.Log())
+	m.run.Reply(outpostCompactReply)
+	m.outpost.AwaitTimer(daemon.ClaudeModReportRetryTimer)
+
+	m.pair.Reconnect()
+	defer m.home.FireTimers(bridge.RetryTimer)()
+	outpostReachSince(m.app, mark, "outpost", protocol.OutpostReachReachable)
+	const draft = "please keep this draft"
+	m.app.Type(m.session, draft, "keyboard")
+	m.app.AwaitScreen(m.session, draft)
+
+	m.outpost.FirePending(daemon.ClaudeModReportRetryTimer)
+	m.keepsItsDraftAndTakesMail(t, draft)
+	if got := m.run.ModCompactRequests(); got != 0 {
+		t.Errorf("the mod received %d compact requests, want none", got)
+	}
+}
+
+func TestADraftTypedWhileTheHomeHandlesAnOutpostsFinishedCompactKeepsTheSessionAndTheDraft(t *testing.T) {
+	var finishing *testworld.Pause
+	m := newOutpostModPrepared(t, func(home, _ *testworld.Stack) {
+		finishing = home.PauseAt(pausepoint.CompactingCloseFinishing)
+	})
+	m.workingOn(t, m.app, "write the essay")
+	m.closeCompacting(t)
+	m.run.Reply(outpostCompactReply)
+	finishing.Await()
+
+	const draft = "please keep this draft"
+	m.app.Type(m.session, draft, "keyboard")
+	m.app.AwaitScreen(m.session, draft)
+
+	finishing.Release()
+	m.keepsItsDraftAndTakesMail(t, draft)
+}
+
 func TestAnOutpostSessionWhoseSeedLeftStandbyStaysOpenInsteadOfCompacting(t *testing.T) {
 	m := newOutpostMod(t)
 	m.workingOn(t, m.app, "write the essay")

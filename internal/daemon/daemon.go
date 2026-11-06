@@ -2000,7 +2000,7 @@ func (d *Daemon) terminateSessionRuntimeChecked(sessionID protocol.SessionID, te
 	return nil
 }
 
-func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionTeardown, error) {
+func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID, unlessUserInputSince *int) (*sessionTeardown, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
 	lifecycleLock.Lock()
 	if err := d.requireLiveSessionHost(sessionID); err != nil {
@@ -2019,7 +2019,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 	}
 	if session != nil && session.Agent != protocol.AgentShellValue && d.unreachableSessionHost(sessionID) == "" {
 		var err error
-		prepared, err = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "prepare"})
+		prepared, err = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "prepare", UnlessUserInputSince: unlessUserInputSince})
 		if err != nil {
 			lifecycleLock.Unlock()
 			return nil, err
@@ -3169,7 +3169,7 @@ func (d *Daemon) projectSessionUnregistered(ev bus.Event) {
 }
 
 func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage) {
-	teardown, err := d.prepareSessionTeardown(msg.ID)
+	teardown, err := d.prepareSessionTeardown(msg.ID, nil)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("prepare session teardown: %v", err))
 		return

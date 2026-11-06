@@ -92,7 +92,7 @@ func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bo
 
 func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, path string) (*protocol.CrewHandoffResult, error) {
 	result := &protocol.CrewHandoffResult{Member: member.ID, Name: member.Name, Path: path}
-	teardown, err := d.prepareSessionTeardown(sessionID)
+	teardown, err := d.prepareSessionTeardown(sessionID, nil)
 	if err != nil {
 		return nil, fmt.Errorf("prepare %s's day to close: %w", member.Name, err)
 	}

@@ -242,6 +242,10 @@ type AgentLaunchCloseMessage struct {
 
 	// TerminalID corresponds to the JSON schema field "terminal_id".
 	TerminalID *TerminalID `json:"terminal_id,omitempty,omitzero"`
+
+	// UnlessUserInputSince corresponds to the JSON schema field
+	// "unless_user_input_since".
+	UnlessUserInputSince *int `json:"unless_user_input_since,omitempty,omitzero"`
 }
 
 type AgentLaunchCloseResult struct {
@@ -2165,6 +2169,9 @@ type CompactingCloseFinishMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+
+	// UserInputs corresponds to the JSON schema field "user_inputs".
+	UserInputs int `json:"user_inputs"`
 }
 
 type CompactingCloseVerdict struct {

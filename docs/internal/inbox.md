@@ -424,7 +424,8 @@ this means:
 - A home that is unreachable or restarting loses nothing. The outpost asks again
   until the home answers, and the session stays open until then. A compact whose
   turn ended while the home was away waits for the home, which decides whether
-  the close still stands.
+  the close still stands. Input typed on the outpost while it waits still cancels
+  the close.
 - A restart of the machine that runs the session drops the close, as a home
   restart does for a session on the home. The session stays open with its lane
   open and takes later items, and a compact already running still finishes. The

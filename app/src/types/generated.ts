@@ -1126,15 +1126,16 @@ export enum AgentInboxMessageCmd {
 }
 
 export interface AgentLaunchCloseMessage {
-    archive?:      boolean;
-    cmd:           AgentLaunchCloseMessageCmd;
-    conversation?: string;
-    driver?:       string;
-    phase:         Phase;
-    profile?:      string;
-    session_id:    string;
-    signal?:       string;
-    terminal_id?:  string;
+    archive?:                 boolean;
+    cmd:                      AgentLaunchCloseMessageCmd;
+    conversation?:            string;
+    driver?:                  string;
+    phase:                    Phase;
+    profile?:                 string;
+    session_id:               string;
+    signal?:                  string;
+    terminal_id?:             string;
+    unless_user_input_since?: number;
     [property: string]: any;
 }
 
@@ -2802,6 +2803,7 @@ export interface CompactingCloseFinishMessage {
     on_standby?: string[];
     reason:      string;
     session_id:  string;
+    user_inputs: number;
     [property: string]: any;
 }
 
@@ -20907,6 +20909,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "signal", js: "signal", typ: u(undefined, "") },
         { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
+        { json: "unless_user_input_since", js: "unless_user_input_since", typ: u(undefined, 0) },
     ], "any"),
     "AgentLaunchCloseResult": o([
         { json: "driver", js: "driver", typ: u(undefined, "") },
@@ -21915,6 +21918,7 @@ const typeMap: any = {
         { json: "on_standby", js: "on_standby", typ: u(undefined, a("")) },
         { json: "reason", js: "reason", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
+        { json: "user_inputs", js: "user_inputs", typ: 0 },
     ], "any"),
     "CompactingCloseVerdict": o([
         { json: "stays_open", js: "stays_open", typ: u(undefined, "") },

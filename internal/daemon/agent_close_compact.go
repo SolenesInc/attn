@@ -257,23 +257,28 @@ func (d *Daemon) reopenCompactingCloseInput(p *pendingCompactClose) {
 }
 
 func (d *Daemon) compactingCloseCanceled(p *pendingCompactClose) string {
-	if why := d.compactingCloseCanceledHere(p); why != "" {
-		return why
-	}
 	verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseCheckMessage{Cmd: protocol.CmdCompactingCloseCheck, SessionID: p.session, OnStandby: p.onStandby})
 	if err != nil {
 		return err.Error()
 	}
-	return protocol.Deref(verdict.StaysOpen)
+	if why := protocol.Deref(verdict.StaysOpen); why != "" {
+		return why
+	}
+	return d.compactingCloseCanceledHere(p)
 }
 
 func (d *Daemon) compactingCloseCanceledHere(p *pendingCompactClose) string {
-	switch {
-	case d.sessionMonitor(p.session) != p.monitor:
+	if d.sessionMonitor(p.session) != p.monitor {
 		return "the session it was asked in is gone"
-	case p.monitor.UserInputs() != p.userInputs:
+	}
+	return userInputCancelsClose(p.monitor, p.userInputs)
+}
+
+func userInputCancelsClose(monitor *sessionmonitor.Monitor, userInputsWhenAsked uint64) string {
+	switch {
+	case monitor.UserInputs() != userInputsWhenAsked:
 		return "the user gave it input after the close was asked"
-	case p.monitor.HasUserDraft():
+	case monitor.HasUserDraft():
 		return "the user has an unsent draft in its terminal"
 	}
 	return ""
@@ -312,7 +317,7 @@ func (d *Daemon) closeAfterCompact(p *pendingCompactClose) {
 		if p.outcome.failed != "" {
 			reason = garden.TrimReason(fmt.Sprintf("%s (the compact did not run: %s)", reason, p.outcome.failed))
 		}
-		verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseFinishMessage{Cmd: protocol.CmdCompactingCloseFinish, SessionID: p.session, Reason: reason, OnStandby: p.onStandby})
+		verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseFinishMessage{Cmd: protocol.CmdCompactingCloseFinish, SessionID: p.session, Reason: reason, OnStandby: p.onStandby, UserInputs: int(p.userInputs)})
 		switch {
 		case errors.Is(err, errDaemonStopping):
 			return
@@ -336,11 +341,16 @@ func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.Compact
 		return compactingCloseVerdict(why), nil
 	}
 	target := d.store.Get(msg.SessionID)
-	d.logf("agent close: session %s closes itself after its compact: %s", target.ID, msg.Reason)
-	closing, err := d.beginSessionClose(target.ID, store.SessionClose{By: who.Session(target.ID).Actor(), Reason: msg.Reason}, nil)
+	pausepoint.At(pausepoint.CompactingCloseFinishing)
+	teardown, err := d.prepareSessionTeardown(target.ID, &msg.UserInputs)
 	if err != nil {
 		return compactingCloseVerdict(fmt.Sprintf("it is still running: %v", err)), nil
 	}
+	closing, err := d.commitSessionClose(target.ID, store.SessionClose{By: who.Session(target.ID).Actor(), Reason: msg.Reason}, nil, teardown)
+	if err != nil {
+		return compactingCloseVerdict(fmt.Sprintf("it is still running: %v", err)), nil
+	}
+	d.logf("agent close: session %s closes itself after its compact: %s", target.ID, msg.Reason)
 	d.noteCloseOnTendedSeeds(target, target, protocol.AgentCloseRuleSelf, msg.Reason)
 	d.finishSessionClose(target.ID, closing)
 	return protocol.CompactingCloseVerdict{}, nil

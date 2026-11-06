@@ -48,6 +48,7 @@ const (
 	TenderDirectoryInspecting  = "tender-directory-inspecting"
 	SessionInputLaneContended  = "session-input-lane-contended"
 	CompactingClosePlacing     = "compacting-close-placing"
+	CompactingCloseFinishing   = "compacting-close-finishing"
 	SessionSnoozeArrived       = "session-snooze-arrived"
 	SessionSnoozeDecided       = "session-snooze-decided"
 	SessionTeardownPrepared    = "session-teardown-prepared"

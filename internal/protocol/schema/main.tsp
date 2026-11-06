@@ -3406,6 +3406,7 @@ model AgentLaunchCloseMessage {
   profile?: string;
   conversation?: string;
   archive?: boolean;
+  unless_user_input_since?: safeint;
 }
 model AgentLaunchCloseResult {
   driver?: string;
@@ -9001,6 +9002,7 @@ model CompactingCloseFinishMessage {
   session_id: SessionID;
   reason: string;
   on_standby?: string[];
+  user_inputs: safeint;
 }
 
 model CompactingCloseVerdict { stays_open?: string; }
