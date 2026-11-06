@@ -9,7 +9,7 @@
   flex: 1 1 0;
   align-items: center;
   gap: 4px;
-  min-width: 0;
+  min-width: min-content;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -24,10 +24,10 @@
 
 .desktop-shelf-chip {
   display: inline-flex;
-  flex: 0 0 108px;
+  flex: 0 1 108px;
   align-items: center;
   gap: 5px;
-  width: 108px;
+  contain: inline-size;
   height: 22px;
   padding: 0 6px;
   overflow: hidden;

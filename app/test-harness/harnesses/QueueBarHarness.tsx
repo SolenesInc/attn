@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Sidebar } from '../../src/components/Sidebar';
+import { useDesktopShelfStore, type ShelfColumn } from '../../src/store/desktopShelf';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
 import { buildQueueBands } from '../../src/utils/queueBands';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
@@ -11,7 +12,8 @@ const long = (words: string) => `${words}-${'and-then-some-more-'.repeat(4)}end`
 
 const params = new URLSearchParams(window.location.search);
 const popupNames = params.has('popupNames');
-const desktopIds = Array.from({ length: params.has('oneDesktop') ? 1 : 11 }, (_, index) => `desk-${index + 1}`);
+const desktopCount = params.has('oneDesktop') ? 1 : Number(params.get('desktops') ?? 11);
+const desktopIds = Array.from({ length: desktopCount }, (_, index) => `desk-${index + 1}`);
 
 const sessions = popupNames ? [
   { id: 'chief', label: 'Chief', state: 'idle' as const, chiefOfStaff: true, desktopId: desktopIds[0] },
@@ -82,7 +84,25 @@ function desktop(id: string, slot: number): Desktop {
 
 const desktops = buildDesktopViewModels(desktopIds.map((id, index) => desktop(id, index + 1)), sessions);
 
+function shelfColumn(key: string): ShelfColumn {
+  return { key, goLeafId: key, label: key, tiles: [{ leafId: key, kind: 'terminal', title: key }] };
+}
+
+if (params.has('shelf')) {
+  const [before, screen, after] = (params.get('shelf') ?? '').split(',').map(Number);
+  const columns = (side: string, count: number) => Array.from({ length: count }, (_, index) => shelfColumn(`${side}-${index}`));
+  useDesktopShelfStore.getState().publishShelf(desktopIds[0], {
+    before: columns('before', before),
+    screen: columns('screen', screen),
+    after: columns('after', after),
+    activeLeafId: 'screen-0',
+    narrowestCols: 66,
+    tileHeightPx: 700,
+  });
+}
+
 export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
+  const [selectedDesktopId, setSelectedDesktopId] = useState(desktopIds[0]);
   useEffect(() => {
     onReady();
     setTriggerRerender(() => noop);
@@ -94,7 +114,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           collapsed
           surface="queue-collapsed"
           selectedId={null}
-          selectedDesktopId={desktopIds[0]}
+          selectedDesktopId={selectedDesktopId}
           headerActions={[]}
           desktops={desktops}
           visualIndexByDesktopId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
@@ -105,7 +125,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}
           onOpenNotifications={noop}
           onSelectSession={noop}
-          onSelectDesktop={noop}
+          onSelectDesktop={setSelectedDesktopId}
           onNewSession={noop}
           onCloseSession={noop}
           onReloadSession={noop}

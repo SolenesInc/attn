@@ -14,6 +14,9 @@ import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioR
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const TILES = 7;
+const CROWDED_DESKTOPS = 11;
+const DESKTOP_SLOTS = 9;
+const SMALLEST_WINDOW_WIDTH = 800;
 const SHELF_INSET_PX = 12;
 const PIXEL_NOISE = 2;
 const execFileAsync = promisify(execFile);
@@ -155,6 +158,41 @@ async function stepTheWidth(label) {
   runner.assert((await shownLeaves()).length === shown, `${label}: ⌘⌥= returns to the same tile count`);
 }
 
+async function clickEveryDesktopButtonInACrowdedBar() {
+  const row = await readRow();
+  for (let extra = 0; observer.desktops.length < CROWDED_DESKTOPS; extra += 1) {
+    const cwd = path.join(runner.sessionDir, `crowd-${extra}`);
+    fs.mkdirSync(cwd, { recursive: true });
+    sessions.push(await createSessionAndWaitForInitialPane({ client, observer, cwd, label: `shelf-crowd-${extra}-${runner.runId}`, agent: 'shell', waitForInitialPaneVisible: false }));
+  }
+  await request('select_desktop', { desktopId: desktop });
+  await waitDom('[data-testid="queue-bar-desktop-extras"]');
+  await setWindowWidth(SMALLEST_WINDOW_WIDTH);
+  await focusLeaf(row[2]);
+  const shelf = '[data-testid="queue-bar"] [data-testid="desktop-shelf"]';
+  await waitDom(`${shelf} [data-testid="shelf-cap-before"]`);
+  await waitDom(`${shelf} [data-testid="shelf-cap-after"]`);
+  await shot('queue-bar-crowded');
+  const bounds = async (selector) => (await request('dom_bounds', { selector })).bounds;
+  const end = await bounds(`${shelf} [data-testid="shelf-cap-after"]`);
+  const firstButton = await bounds('[data-testid="queue-bar-desktop-1"]');
+  runner.assert(end.x + end.width <= firstButton.x, 'the crowded shelf stops before the desktop buttons', { end, firstButton });
+  const pill = await bounds('[data-testid="queue-bar-pill"]');
+  runner.assert(pill.width >= 40, 'the crowded bar keeps the waiting pill readable', { pill });
+  for (let slot = 1; slot <= DESKTOP_SLOTS; slot += 1) {
+    const button = `[data-testid="queue-bar-desktop-${slot}"]`;
+    await driver.click(button);
+    await waitDom(`${button}.is-current`);
+    await waitDom('[data-testid="shelf-menu-after"]', { absent: true });
+    await waitDom('[data-testid="shelf-menu-before"]', { absent: true });
+    await request('select_desktop', { desktopId: desktop });
+    await waitDom(`${shelf} [data-testid="shelf-cap-after"]`);
+  }
+  await setWindowWidth(1900);
+  await focusLeaf(row[0]);
+  await driver.hover(`${surface()} .desktop-pane[data-pane-id="${row[0]}"] .terminal-container`);
+}
+
 runner.registerCleanup('close_server', () => new Promise((resolve) => {
   server.close(resolve);
   server.closeAllConnections();
@@ -253,6 +291,7 @@ try {
     await walkTheRow('queue-bar');
     await stepTheWidth('queue-bar');
     await assertShelfStartsAtTheLeft('queue-bar', '[data-testid="queue-bar"] [data-testid="desktop-shelf"]');
+    await clickEveryDesktopButtonInACrowdedBar();
     await press('session.toggleSidebar');
     await waitDom('[data-testid="queue-bar"]', { absent: true });
     await waitDom(`${surface()} > [data-testid="desktop-shelf"]`);

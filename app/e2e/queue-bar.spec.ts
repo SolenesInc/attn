@@ -111,3 +111,36 @@ test('an open peek shifts back on screen when the UI scale grows under it', asyn
     return box.x + box.width;
   }).toBeLessThanOrEqual(800);
 });
+
+test('the shelf leaves every desktop button clickable in a crowded bar at the smallest window', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/test-harness/?component=QueueBar&popupNames&desktops=8&shelf=1,1,1');
+  await page.evaluate(() => window.__HARNESS_READY__);
+  await expect(page.getByTestId('shelf-cap-before')).toBeVisible();
+  await expect(page.getByTestId('shelf-cap-after')).toBeVisible();
+
+  const clickCentre = async (slot: number) => {
+    const button = page.getByTestId(`queue-bar-desktop-${slot}`);
+    const box = (await button.boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await expect(button).toHaveClass(/is-current/);
+  };
+  for (const slot of [2, 3, 4, 5, 6, 7, 8, 1]) {
+    await clickCentre(slot);
+    await expect(page.getByTestId('shelf-menu-after')).toBeHidden();
+    await expect(page.getByTestId('shelf-menu-before')).toBeHidden();
+    if (slot !== 1) await clickCentre(1);
+  }
+
+  const shelf = (await page.getByTestId('desktop-shelf').boundingBox())!;
+  const firstDesktop = (await page.getByTestId('queue-bar-desktop-1').boundingBox())!;
+  for (const control of ['shelf-cap-before', 'shelf-live-dots', 'shelf-cap-after']) {
+    const box = (await page.getByTestId(control).boundingBox())!;
+    expect(box.x, control).toBeGreaterThanOrEqual(shelf.x);
+    expect(box.x + box.width, control).toBeLessThanOrEqual(Math.min(shelf.x + shelf.width, firstDesktop.x));
+  }
+  expect((await page.getByTestId('queue-bar-pill').boundingBox())!.width).toBeGreaterThan(0);
+
+  await page.getByTestId('shelf-cap-after').click();
+  await expect(page.getByTestId('shelf-menu-after')).toBeVisible();
+});
