@@ -141,10 +141,7 @@ trim_space() {
 executable_var=$1
 explicit_executable=$2
 shift 2
-case "$executable_var" in
- ATTN_CLAUDE_EXECUTABLE) inherited_executable=${ATTN_CLAUDE_EXECUTABLE-} ;;
- ATTN_CODEX_EXECUTABLE) inherited_executable=${ATTN_CODEX_EXECUTABLE-} ;;
-esac
+eval "inherited_executable=\${$executable_var-}"
 trim_space "$inherited_executable"
 executable=${explicit_executable:-${trimmed:-$1}}
 shift

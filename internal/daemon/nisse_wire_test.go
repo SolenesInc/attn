@@ -1,7 +1,9 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -316,5 +318,75 @@ func TestADelegationRoleRunsTheNisseModelThePickerOffered(t *testing.T) {
 	nisse := w.Launched(string(accepted.SessionID))
 	if started := w.NisseServer().Started(nisse.ConversationID); started.Provider != "openai" || started.Model != "gpt-5.5" {
 		t.Fatalf("the delegated conversation started as %+v, want openai's gpt-5.5", started)
+	}
+}
+
+func TestANisseSessionRunsTheExecutableTheOverrideNamesInEveryLaunchMode(t *testing.T) {
+	modes := []struct {
+		name   string
+		direct string
+	}{
+		{name: "default"},
+		{name: "direct", direct: "true"},
+		{name: "launcher", direct: "false"},
+	}
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			w := &world{World: prepareWorld(t, fakeagent.Nisse)}
+			bin := filepath.Join(w.Dir, "bin")
+			elsewhere := filepath.Join(w.Dir, "elsewhere")
+			if err := os.MkdirAll(elsewhere, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			native := filepath.Join(elsewhere, "nisse")
+			if err := os.Rename(filepath.Join(bin, "nisse"), native); err != nil {
+				t.Fatal(err)
+			}
+			config, err := os.ReadFile(filepath.Join(bin, "fakeagent.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(elsewhere, "fakeagent.json"), config, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			writeExecutable := func(path, content string) {
+				t.Helper()
+				if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			searchPath := bin + ":/usr/bin:/bin"
+			shell := filepath.Join(w.Dir, "login-shell")
+			writeExecutable(shell, fmt.Sprintf("#!/bin/sh\nexport PATH='%s'\nshift\nexec /bin/sh \"$@\"\n", searchPath))
+			shimFor := func(name string) string {
+				shimDir := filepath.Join(w.Dir, "shim-"+name)
+				if err := os.MkdirAll(shimDir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				shim := filepath.Join(shimDir, "nisse")
+				writeExecutable(shim, fmt.Sprintf("#!/bin/sh\nexport ATTN_TEST_EXECUTABLE=%s\nexec '%s' \"$@\"\n", name, native))
+				return shim
+			}
+			t.Setenv("SHELL", shell)
+			t.Setenv("PATH", searchPath)
+			t.Setenv("ATTN_NISSE_EXECUTABLE", shimFor("override"))
+			w.start()
+			app := w.App()
+			if mode.direct != "" {
+				setSetting(t, app, "direct_agent_launch_enabled", mode.direct)
+			}
+			session, overridden, _ := nisseSession(t, w, app)
+			if ran, _ := envEntry(overridden.Env, "ATTN_TEST_EXECUTABLE"); ran != "override" {
+				t.Fatalf("Nisse ran executable %q, want the one ATTN_NISSE_EXECUTABLE names", ran)
+			}
+			launchIntentReload(t, app, session)
+			if ran, _ := envEntry(w.Launched(session).Env, "ATTN_TEST_EXECUTABLE"); ran != "override" {
+				t.Fatalf("the reloaded Nisse session ran executable %q, want the one ATTN_NISSE_EXECUTABLE names", ran)
+			}
+			_, explicit, _ := nisseSession(t, w, app, func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr(shimFor("explicit")) })
+			if ran, _ := envEntry(explicit.Env, "ATTN_TEST_EXECUTABLE"); ran != "explicit" {
+				t.Fatalf("Nisse ran executable %q, want the session's explicit executable over the override", ran)
+			}
+		})
 	}
 }
