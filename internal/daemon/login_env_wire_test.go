@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -152,8 +153,9 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "present /login/bin:"; !strings.HasPrefix(string(got), want) {
-		t.Fatalf("the plugin started with %q, want the login environment, starting %q", got, want)
+	loginOnly, path, _ := strings.Cut(string(got), " ")
+	if loginOnly != "present" || !slices.Contains(filepath.SplitList(path), "/login/bin") {
+		t.Fatalf("the plugin started with %q, want the login environment: ATTN_TEST_LOGIN_ONLY=present and /login/bin on PATH", got)
 	}
 	shell.requireOneCapture()
 }
