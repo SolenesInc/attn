@@ -68,8 +68,13 @@ const paneIds = () => Array.from(document.querySelectorAll<HTMLElement>('.deskto
 const repliesTo = (daemon: ScriptedDaemon, id: string) => daemon.sentOf('pty_input').filter((input) => input.id === id).map(({ data }) => data);
 const layoutTraffic = (daemon: Awaited<ReturnType<typeof renderRow>>) => daemon.sent.filter((command) => LAYOUT_COMMANDS.includes(command.cmd));
 
+function movePointerOnto(element: HTMLElement) {
+  fireEvent.pointerEnter(element);
+  fireEvent.pointerMove(element);
+}
+
 async function peekAt(daemon: Awaited<ReturnType<typeof renderRow>>, id: string) {
-  fireEvent.pointerEnter(chip(id));
+  movePointerOnto(chip(id));
   await advance(180);
   await daemon.idle();
   return screen.getByTestId('shelf-peek');
@@ -81,7 +86,7 @@ describe('Shelf peek', () => {
     const layoutBefore = layoutTraffic(daemon).length;
     const shownBefore = paneIds();
 
-    fireEvent.pointerEnter(chip('s5'));
+    movePointerOnto(chip('s5'));
     await advance(179);
     expect(screen.queryByTestId('shelf-peek')).toBeNull();
     expect(daemon.sentOf('terminal_read_text')).toEqual([]);
@@ -93,6 +98,40 @@ describe('Shelf peek', () => {
     expect(daemon.sentOf('attach_session').map(({ id }) => id)).not.toContain('s5');
     expect(layoutTraffic(daemon)).toHaveLength(layoutBefore);
     expect(paneIds()).toEqual(shownBefore);
+  });
+
+  it('opens nothing for a chip that arrives under a still pointer, until the pointer moves', async () => {
+    const daemon = await renderRow(SHELF_ON);
+
+    fireEvent.pointerEnter(chip('s5'));
+    await advance(1000);
+    expect(screen.queryByTestId('shelf-peek')).toBeNull();
+    expect(daemon.sentOf('terminal_read_text')).toEqual([]);
+
+    fireEvent.pointerMove(chip('s5'));
+    await advance(180);
+    await daemon.idle();
+    expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s5');
+  });
+
+  it('counts the delay from the first move, and stays closed after Esc until the pointer comes back', async () => {
+    const daemon = await renderRow(SHELF_ON);
+
+    movePointerOnto(chip('s5'));
+    await advance(179);
+    fireEvent.pointerMove(chip('s5'));
+    await advance(1);
+    await daemon.idle();
+    expect(screen.getByTestId('shelf-peek')).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerMove(chip('s5'));
+    await advance(1000);
+    expect(screen.queryByTestId('shelf-peek')).toBeNull();
+
+    fireEvent.pointerLeave(chip('s5'));
+    await peekAt(daemon, 's5');
+    expect(screen.getByTestId('shelf-peek')).toBeInTheDocument();
   });
 
   it('refreshes the text while open and reads nothing once closed', async () => {
@@ -171,7 +210,7 @@ describe('Shelf peek', () => {
   it('shows only the title and kind for a document chip', async () => {
     const daemon = await renderRow(SHELF_ON, { tiles: [{ tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }] });
 
-    fireEvent.pointerEnter(screen.getByTestId('shelf-chip-tile-doc'));
+    movePointerOnto(screen.getByTestId('shelf-chip-tile-doc'));
     await advance(180);
     await daemon.idle();
 
@@ -184,11 +223,11 @@ describe('Shelf peek', () => {
   it('opens from the sidebar row of an off-screen tile, and not from one on screen', async () => {
     const daemon = await renderRow(SHELF_ON);
 
-    fireEvent.pointerEnter(screen.getByTestId('sidebar-session-s1'));
+    movePointerOnto(screen.getByTestId('sidebar-session-s1'));
     await advance(180);
     expect(screen.queryByTestId('shelf-peek')).toBeNull();
 
-    fireEvent.pointerEnter(screen.getByTestId('sidebar-session-s5'));
+    movePointerOnto(screen.getByTestId('sidebar-session-s5'));
     await advance(180);
     await daemon.idle();
     expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s5');
@@ -426,7 +465,7 @@ describe('Shelf peek', () => {
   it('with the setting off, sidebar rows open nothing', async () => {
     const daemon = await renderRow({});
 
-    fireEvent.pointerEnter(screen.getByTestId('sidebar-session-s5'));
+    movePointerOnto(screen.getByTestId('sidebar-session-s5'));
     await advance(1000);
     await daemon.idle();
 

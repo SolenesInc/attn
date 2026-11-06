@@ -28,7 +28,7 @@ export function leaveShelfPeek() {
   closeTimer = window.setTimeout(() => useDesktopShelfStore.getState().setPeek(null), CLOSE_DELAY_MS);
 }
 
-function enterAnchor(desktopId: string, leafId: string, element: HTMLElement) {
+function arriveAtAnchor(desktopId: string, leafId: string, element: HTMLElement) {
   clearTimers();
   const { peek, setPeek, leafDragging } = useDesktopShelfStore.getState();
   if (leafDragging || peek?.leafId === leafId) return;
@@ -43,8 +43,16 @@ export function offScreenColumns(shelf: PublishedShelf | undefined): ShelfColumn
 }
 
 function hoverHandlers(desktopId: string, leafId: string) {
+  let arrived = false;
   return {
-    onPointerEnter: (event: ReactPointerEvent<HTMLElement>) => enterAnchor(desktopId, leafId, event.currentTarget),
+    onPointerEnter: () => {
+      arrived = false;
+    },
+    onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
+      if (arrived) return;
+      arrived = true;
+      arriveAtAnchor(desktopId, leafId, event.currentTarget);
+    },
     onPointerLeave: leaveShelfPeek,
   };
 }

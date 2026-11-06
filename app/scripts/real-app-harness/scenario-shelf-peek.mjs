@@ -13,13 +13,14 @@ import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioR
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const TILES = 5;
+const PEEK_OPEN_DELAY_MS = 180;
 const execFileAsync = promisify(execFile);
 const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
 const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-PEEK',
   tier: 'tier1-local-shell',
   prefix: 'shelf-peek',
-  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, a browser tile hides and returns, and a stopped terminal keeps the reply' },
+  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, a browser tile hides and returns, a chip that reflows under a still pointer opens nothing, and a stopped terminal keeps the reply' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -166,6 +167,31 @@ try {
     await waitDom(PEEK, { absent: true });
     await waitDom(`${surface()}[data-active-leaf-id="${target}"] .desktop-pane[data-pane-id="${target}"]`);
     await waitForPaneInputFocus(client, firstSession, target);
+    row = await readRow();
+    target = row.at(-1);
+    targetSession = (await request('get_desktop', { sessionId: firstSession })).panes.find((pane) => pane.paneId === target).sessionId;
+    await focusLeaf(row[0]);
+    await waitDom(chip(target));
+  });
+
+  await runner.step('a_chip_that_reflows_under_a_still_pointer_opens_nothing', async () => {
+    await focusLeaf(row[2]);
+    await waitDom(chip(row[0]));
+    await waitDom(chip(row[3]));
+    await driver.click(chip(row[4]));
+    await waitDom(`${surface()}[data-active-leaf-id="${row[4]}"]`);
+    await waitDom(`${chip(row[3])}:hover`);
+    await request('dom_wait', { selector: PEEK, timeoutMs: PEEK_OPEN_DELAY_MS * 5 }).then(
+      () => { throw new Error('a peek opened under the still pointer'); },
+      (error) => { if (!String(error).includes('dom_wait timeoutMs')) throw error; },
+    );
+    await shot('still-pointer-after-chip-click');
+    await hoverAway();
+    await driver.hover(chip(row[3]));
+    await waitDom(`${PEEK}[data-leaf-id="${row[3]}"]`);
+    await driver.pressKey('Escape');
+    await waitDom(PEEK, { absent: true });
+    await hoverAway();
     row = await readRow();
     target = row.at(-1);
     targetSession = (await request('get_desktop', { sessionId: firstSession })).panes.find((pane) => pane.paneId === target).sessionId;
