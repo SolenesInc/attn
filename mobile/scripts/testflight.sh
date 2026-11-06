@@ -49,7 +49,7 @@ read_secret ASC_ISSUER_ID apple/asc-issuer-id "${KEY_DIR}/issuer-id"
 KEY_ID="$(tr -d '[:space:]' <"${KEY_DIR}/key-id")"
 ISSUER_ID="$(tr -d '[:space:]' <"${KEY_DIR}/issuer-id")"
 grep -q -- '-----BEGIN PRIVATE KEY-----' "${KEY_PATH}" \
-  || fail "the App Store Connect API key is not a .p8 private key: store the whole AuthKey_${KEY_ID}.p8 file as the secret apple/asc-api-key, or as ASC_API_KEY in the testflight GitHub Environment"
+  || fail "the App Store Connect API key is not a .p8 private key: store the whole AuthKey_<key id>.p8 file as the secret apple/asc-api-key, or as ASC_API_KEY in the testflight GitHub Environment"
 echo "key id ${KEY_ID}"
 
 AUTH_FLAGS=(

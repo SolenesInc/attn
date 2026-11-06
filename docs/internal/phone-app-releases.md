@@ -37,9 +37,10 @@ The workflow builds:
   quiet phone never meets TestFlight's 90-day expiry
 
 One build runs at a time, and at most one waits. A push during a build replaces
-the build that waits, so merges that land together become one follow-up build
-of the newest commit. Changes to the daemon's gateway code build nothing,
-because they do not change the app.
+the build that waits. Each build checks out the newest `main` when it starts, so
+merges that land together become one follow-up build holding all of them, in
+whichever order GitHub queued them. Changes to the daemon's gateway code build
+nothing, because they do not change the app.
 
 The workflow lists the `app/src` files by name, taken from the bundle's module
 graph, because the rest of `app/src` changes far more often and would spend
@@ -60,8 +61,9 @@ the runner's default is 16.4. When GitHub removes that version from
 [the runner image](https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md),
 the build fails and the path needs updating.
 
-A failed build posts to Discord with the reason and the run's link, because the
-sheriff watches only the CI workflow. A failed run keeps its `archive.log` and
+A failed build, or a failed decision whether to build, posts to Discord with the
+reason and the run's link, because the sheriff watches only the CI workflow. A
+scheduled run that finds a recent upload posts nothing. A failed run keeps its `archive.log` and
 `upload.log` as the `testflight-logs` artifact for 14 days. The repository is
 public, so those logs must not hold the key or its ids. Only the export step
 takes the key, and xcodebuild does not print the flags of an export. Pass the

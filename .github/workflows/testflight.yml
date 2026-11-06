@@ -73,8 +73,15 @@ jobs:
       contents: read
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    outputs:
+      commit: ${{ steps.checkout.outputs.commit }}
+      failure: ${{ steps.failure.outputs.reason }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the newest main, which holds every push this build replaced
+        id: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Set up Node.js
         uses: ./.github/actions/setup-toolchains
@@ -104,14 +111,33 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      - name: Alert Discord
+      - name: Give the alert the reason
+        id: failure
         if: failure()
         env:
-          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           FAILURE_FILE: ${{ runner.temp }}/testflight-failure
+        run: |
+          [ ! -s "$FAILURE_FILE" ] || echo "reason=$(tr '\n' ' ' <"$FAILURE_FILE")" >> "$GITHUB_OUTPUT"
+
+  alert:
+    name: Alert Discord
+    needs: [decide, upload]
+    if: failure()
+    runs-on: ubuntu-latest
+    environment: testflight
+    steps:
+      - name: Post what failed and the run's link
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DECIDE_RESULT: ${{ needs.decide.result }}
+          REASON: ${{ needs.upload.outputs.failure }}
+          COMMIT: ${{ needs.upload.outputs.commit || github.sha }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          reason="$(cat "$FAILURE_FILE" 2>/dev/null || echo 'The build stopped before the upload.')"
-          jq -n --arg reason "${reason:0:1700}" --arg sha "${GITHUB_SHA:0:9}" --arg url "$RUN_URL" \
-            '{content: "TestFlight build of \($sha) failed: \($reason)\n\($url)"}' \
+          if [ "$DECIDE_RESULT" = failure ]; then
+            what="TestFlight did not build ${COMMIT:0:9}: deciding whether to upload failed."
+          else
+            what="TestFlight build of ${COMMIT:0:9} failed: ${REASON:-The build stopped before it gave a reason.}"
+          fi
+          jq -n --arg what "${what:0:1800}" --arg url "$RUN_URL" '{content: "\($what)\n\($url)"}' \
             | curl -sS --fail-with-body -H 'Content-Type: application/json' -d @- "$DISCORD_WEBHOOK"
