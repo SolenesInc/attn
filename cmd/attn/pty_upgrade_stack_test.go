@@ -842,7 +842,7 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "pair").Qr)
-	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}

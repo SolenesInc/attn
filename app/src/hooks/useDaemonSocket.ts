@@ -3623,6 +3623,9 @@ export function useDaemonSocket({
   const sendPhonePairBegin = useCallback((profileId: string): Promise<PhonePairingOffer> =>
     sendRequest('phone_pair_begin', { profile_id: profileId }, 'Showing a pairing code timed out', PHONE_PAIR_BEGIN_TIMEOUT_MS), [sendRequest]);
 
+  const sendPhonePairCancel = useCallback((profileId: string): Promise<true> =>
+    sendRequest('phone_pair_cancel', { profile_id: profileId }, 'Cancelling the pairing code timed out'), [sendRequest]);
+
   const sendPhonePairingRevoke = useCallback((deviceId: string, profileId: string): Promise<true> =>
     sendRequest('phone_pairing_revoke', { device_id: deviceId, profile_id: profileId }, 'Revoking the phone timed out'), [sendRequest]);
 
@@ -4371,6 +4374,7 @@ export function useDaemonSocket({
     sendRestartSharedCodex,
     sendPhonesGet,
     sendPhonePairBegin,
+    sendPhonePairCancel,
     sendPhonePairingRevoke,
     sendSendersGet,
     sendSenderPairDecide,

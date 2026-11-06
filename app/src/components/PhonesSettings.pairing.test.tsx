@@ -55,6 +55,54 @@ describe('Settings → Phones', () => {
     expect(daemon.sentOf('phones_get')).toHaveLength(1);
   });
 
+  it('cancels a shown code on the Cancel button', async () => {
+    const offer = offerAt(new Date(Date.now() + 10 * 60_000));
+    const daemon = await openPhones((d) => {
+      d.on('phones_get', () => phones({ offers: [offer] }));
+      d.on('phone_pair_cancel', () => [{ event: 'phone_pair_cancel_result', success: true }, phones()]);
+    });
+    await gesture(daemon, () => fireEvent.click(within(profileSection()).getByRole('button', { name: 'Cancel' })));
+    expect(daemon.sentOf('phone_pair_cancel').map(({ profile_id }) => profile_id)).toEqual([DEFAULT_PROFILE_ID]);
+    expect(within(profileSection()).queryByRole('img', { name: 'Pairing code for Default' })).toBeNull();
+    expect(within(profileSection()).getByRole('button', { name: 'Pair a phone' })).toBeEnabled();
+  });
+
+  it('cancels a shown code when the person leaves Phones settings, and not before', async () => {
+    const offer = offerAt(new Date(Date.now() + 10 * 60_000));
+    const daemon = await openPhones((d) => {
+      d.on('phones_get', () => phones({ offers: [offer] }));
+      d.on('phone_pair_cancel', () => ({ event: 'phone_pair_cancel_result', success: true }));
+    });
+    await gesture(daemon, () => daemon.emit(phones({ offers: [offer], pairings: [phone] })));
+    expect(daemon.sentOf('phone_pair_cancel')).toHaveLength(0);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    expect(daemon.sentOf('phone_pair_cancel').map(({ profile_id }) => profile_id)).toEqual([DEFAULT_PROFILE_ID]);
+  });
+
+  it('cancels when the person closes settings while a code is shown', async () => {
+    const offer = offerAt(new Date(Date.now() + 10 * 60_000));
+    const daemon = await openPhones((d) => {
+      d.on('phones_get', () => phones({ offers: [offer] }));
+      d.on('phone_pair_cancel', () => ({ event: 'phone_pair_cancel_result', success: true }));
+    });
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' }));
+    expect(daemon.sentOf('phone_pair_cancel').map(({ profile_id }) => profile_id)).toEqual([DEFAULT_PROFILE_ID]);
+  });
+
+  it('cancels a code that arrives after the person left', async () => {
+    const offer = offerAt(new Date(Date.now() + 10 * 60_000));
+    const daemon = await openPhones((d) => {
+      d.on('phone_pair_begin', () => {});
+      d.on('phone_pair_cancel', () => ({ event: 'phone_pair_cancel_result', success: true }));
+    });
+    await gesture(daemon, () => fireEvent.click(within(profileSection()).getByRole('button', { name: 'Pair a phone' })));
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    expect(daemon.sentOf('phone_pair_cancel')).toHaveLength(0);
+    await gesture(daemon, () => daemon.replyTo(daemon.sentOf('phone_pair_begin')[0], { event: 'phone_pair_begin_result', success: true, offer }));
+    expect(daemon.sentOf('phone_pair_cancel').map(({ profile_id }) => profile_id)).toEqual([DEFAULT_PROFILE_ID]);
+  });
+
   it('says a pairing code expired after its ten minutes', async () => {
     const offer = offerAt(new Date(Date.now() + 10 * 60_000));
     const daemon = await openPhones((d) => d.on('phones_get', () => phones({ offers: [offer] })));

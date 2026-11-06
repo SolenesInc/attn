@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
+import { hkdf } from '@noble/hashes/hkdf.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { fromBase64Url, toBase32, toBase64Url } from './bytes'
 
@@ -71,3 +72,6 @@ export const signChallenge = (keys: DeviceKeys, homeId: string, nonce: Uint8Arra
   message.set(nonce, prefix.length)
   return ed25519.sign(message, keys.signSecret)
 }
+
+export const relayToken = (qrSecret: Uint8Array): Uint8Array =>
+  hkdf(sha256, qrSecret, undefined, new TextEncoder().encode('attn-cloud/v1 relay token'), 32)

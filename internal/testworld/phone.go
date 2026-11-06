@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/ecdh"
 	"crypto/ed25519"
+	"crypto/hkdf"
 	"crypto/hpke"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -61,8 +63,8 @@ func NewPhone(t *testing.T, cloud *Cloud, name string) *Phone {
 
 func (p *Phone) DeviceID() string { return keyID(p.sign.Public().(ed25519.PublicKey)) }
 
-// ErrNotAdmitted is the relay closing a device socket with 4403: not on the allowlist, and no pairing window open.
-var ErrNotAdmitted = errors.New("the relay closed the device socket with 4403: not on the allowlist and no pairing window is open")
+// ErrNotAdmitted is the relay closing a device socket with 4403. The error's text carries the relay's reason.
+var ErrNotAdmitted = errors.New("the relay closed the device socket with 4403")
 
 type PhoneSocket struct {
 	t      *testing.T
@@ -75,6 +77,18 @@ type PhoneSocket struct {
 }
 
 func (p *Phone) Dial(qr PhoneQR) (*PhoneSocket, error) {
+	return p.dial(qr, nil)
+}
+
+func (p *Phone) DialToPair(qr PhoneQR) (*PhoneSocket, error) {
+	token, err := hkdf.Key(sha256.New, mustUnb64(qr.Secret), nil, "attn-cloud/v1 relay token", sha256.Size)
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	return p.dial(qr, token)
+}
+
+func (p *Phone) dial(qr PhoneQR, relayToken []byte) (*PhoneSocket, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	pub := b64(p.sign.Public().(ed25519.PublicKey))
@@ -85,19 +99,35 @@ func (p *Phone) Dial(qr PhoneQR) (*PhoneSocket, error) {
 	s := &PhoneSocket{t: p.t, phone: p, homeID: qr.HomeID, conn: conn}
 	p.t.Cleanup(func() { conn.CloseNow() })
 	challenge, err := s.read()
-	if websocket.CloseStatus(err) == 4403 {
-		return nil, ErrNotAdmitted
-	}
-	if err != nil {
+	if err = notAdmitted(err); err != nil {
 		return nil, err
 	}
 	if challenge.kind != frameChallenge {
 		p.t.Fatalf("device socket: frame %d before the challenge", challenge.kind)
 	}
 	message := append([]byte("attn-cloud/v1 auth device\n"+qr.HomeID+"\n"), challenge.payload...)
-	s.write(encodeEnvelope(frameAuth, 0, ed25519.Sign(p.sign, message)))
-	s.connID = s.next(frameReady).connID
-	return s, nil
+	s.write(encodeEnvelope(frameAuth, 0, append(ed25519.Sign(p.sign, message), relayToken...)))
+	for {
+		f, err := s.read()
+		if err = notAdmitted(err); err != nil {
+			return nil, err
+		}
+		if f.kind == frameReady {
+			s.connID = f.connID
+			return s, nil
+		}
+		if f.kind != framePresence {
+			p.t.Fatalf("device socket: frame %d while waiting for ready: %s", f.kind, f.payload)
+		}
+	}
+}
+
+func notAdmitted(err error) error {
+	var closed websocket.CloseError
+	if errors.As(err, &closed) && closed.Code == 4403 {
+		return fmt.Errorf("%w: %s", ErrNotAdmitted, closed.Reason)
+	}
+	return err
 }
 
 func websocketURL(httpURL string) string { return "ws" + httpURL[len("http"):] }
@@ -120,22 +150,6 @@ func (s *PhoneSocket) read() (envelope, error) {
 		}
 		if kind == websocket.MessageBinary {
 			return decodeEnvelope(data)
-		}
-	}
-}
-
-func (s *PhoneSocket) next(kind byte) envelope {
-	s.t.Helper()
-	for {
-		f, err := s.read()
-		if err != nil {
-			s.t.Fatalf("device socket: waiting for frame %d: %v", kind, err)
-		}
-		if f.kind == kind {
-			return f
-		}
-		if f.kind != framePresence {
-			s.t.Fatalf("device socket: frame %d while waiting for %d: %s", f.kind, kind, f.payload)
 		}
 	}
 }

@@ -1,8 +1,9 @@
+import { concatBytes } from '@noble/hashes/utils.js'
 import { decodeGatewayEvent, type GatewayEvent } from '@attn/gateway/decode'
 import type { GatewayAsk, GatewaySeed, GatewaySession, TerminalScreen } from '@attn/types/gatewayGenerated'
 import { GATEWAY_API_VERSION } from '@attn/types/gatewayVersion'
 import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
-import { signChallenge, type DeviceKeys } from './device'
+import { relayToken, signChallenge, type DeviceKeys } from './device'
 import { HandshakeKind, startHandshake, type Transport } from './noise'
 
 export const connectTimeoutMs = 10_000
@@ -117,7 +118,15 @@ type Pending = { readonly resolve: (reply: Reply) => void; readonly reject: (err
 const deviceAddress = (home: Home): string =>
   `${home.cloud.replace(/^http/, 'ws')}/v1/homes/${home.homeId}/device`
 
-const closeReason = (home: Home, url: string, event: CloseEvent, ready: boolean): string => {
+const closeReason = (
+  home: Home,
+  url: string,
+  event: CloseEvent,
+  ready: boolean,
+  pairing: boolean,
+): string => {
+  if (pairing && event.code === 4403)
+    return `this pairing code no longer works; show a new one in Settings → Phones on ${home.homeName}`
   switch (event.code) {
     case 4000:
       return `${home.homeName} ended this pairing; to use it again, pair from Settings → Phones`
@@ -212,6 +221,11 @@ const openSocket = (
     if (!sending) return
     const sealed = await sending.send.encrypt(new TextEncoder().encode(JSON.stringify(message)))
     if (!ended) send(FrameType.data, sealed)
+  }
+
+  const authPayload = (nonce: Uint8Array): Uint8Array => {
+    const signature = signChallenge(keys, home.homeId, nonce)
+    return pairing ? concatBytes(signature, relayToken(pairing.secret)) : signature
   }
 
   const handshake = async () => {
@@ -326,7 +340,7 @@ const openSocket = (
     inOrder(() => {
       switch (frame.type) {
         case FrameType.challenge:
-          return send(FrameType.auth, signChallenge(keys, home.homeId, frame.payload))
+          return send(FrameType.auth, authPayload(frame.payload))
         case FrameType.ready:
           connId = frame.connId
           return
@@ -348,7 +362,10 @@ const openSocket = (
     })
   }
   socket.onclose = (event) =>
-    end(closeReason(home, url, event, connId !== 0), event.code === 4000 || event.code === 4403)
+    end(
+      closeReason(home, url, event, connId !== 0, pairing !== undefined),
+      event.code === 4000 || event.code === 4403,
+    )
   armDeadline()
 
   return {

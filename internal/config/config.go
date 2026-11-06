@@ -250,6 +250,7 @@ func defaultAttnDir(instance string) string {
 const (
 	AnalyticsIngestURLEnv      = "ATTN_ANALYTICS_INGEST_URL"
 	CloudURLEnv                = "ATTN_CLOUD_URL"
+	PairingLifetimeEnv         = "ATTN_PAIRING_LIFETIME"
 	defaultAnalyticsIngestURL  = "https://attn-telemetry.caketroll.cloud"
 	unreachableAnalyticsIngest = "http://127.0.0.1:1"
 )

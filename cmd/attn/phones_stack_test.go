@@ -75,7 +75,7 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 	}
 
 	phone := testworld.NewPhone(t, cloud, "Test iPhone")
-	socket, err := phone.Dial(qr)
+	socket, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,13 +114,16 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 		if _, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
 			t.Fatalf("dial with the window closed = %v, want the relay's 4403", err)
 		}
-		beginPairing(t, app, profile, "pair-2")
-		second, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr)
+		window := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair-2").Qr)
+		if _, err := testworld.NewPhone(t, cloud, "Second phone").DialToPair(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
+			t.Fatalf("dial with the used code's token = %v, want the relay's 4403", err)
+		}
+		second, err := testworld.NewPhone(t, cloud, "Second phone").DialToPair(window)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if code := closeCode(t, second.Pair(qr)); code != 4000 {
-			t.Fatalf("second use of the secret closed with %d, want the home's close (4000)", code)
+			t.Fatalf("second use of the secret through another code's window closed with %d, want the home's close (4000)", code)
 		}
 	})
 
@@ -131,15 +134,15 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 		if !result.Success {
 			t.Fatal(protocol.Deref(result.Error))
 		}
-		if code := socket.AwaitClosed(); code != 4000 {
-			t.Fatalf("revoked device's socket closed with %d, want the home's close (4000)", code)
+		if code := socket.AwaitClosed(); code != relayRefused {
+			t.Fatalf("revoked device's socket closed with %d, want the relay's %d", code, relayRefused)
 		}
 		testworld.AwaitSince(app, revoked, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
 			_, ok := pairingOf(m, phone.DeviceID())
 			return !ok
 		})
-		beginPairing(t, app, profile, "pair-3")
-		again, err := phone.Dial(qr)
+		window := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair-3").Qr)
+		again, err := phone.DialToPair(window)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -161,7 +164,7 @@ func TestARevokeReachesAPhoneBetweenItsHandshakeAndHello(t *testing.T) {
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair").Qr)
 	phone := testworld.NewPhone(t, cloud, "Test iPhone")
-	paired, err := phone.Dial(qr)
+	paired, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,8 +173,8 @@ func TestARevokeReachesAPhoneBetweenItsHandshakeAndHello(t *testing.T) {
 	}
 	paired.Hello()
 
-	beginPairing(t, app, profile, "window-open")
-	resumed, err := phone.Dial(qr)
+	window := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "window-open").Qr)
+	resumed, err := phone.DialToPair(window)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +212,7 @@ func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 	work := *created.Profile
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, work.ID, "pair-work").Qr)
 	phone := testworld.NewPhone(t, cloud, "Work phone")
-	socket, err := phone.Dial(qr)
+	socket, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +220,7 @@ func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 		t.Fatal(err)
 	}
 	socket.Hello()
-	beginPairing(t, app, app.SelectedProfile(), "window-open")
+	window := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "window-open").Qr)
 
 	forgotten := len(app.Log())
 	deleted := testworld.Request(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, ProfileID: work.ID, ExpectedRevision: int(work.Revision), RequestID: "delete-work"},
@@ -225,14 +228,14 @@ func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 	if deleted.Error != nil {
 		t.Fatalf("profile_delete: %s", *deleted.Error)
 	}
-	if code := socket.AwaitClosed(); code != 4000 {
-		t.Fatalf("the deleted profile's phone closed with %d, want the home's close (4000)", code)
+	if code := socket.AwaitClosed(); code != relayRefused {
+		t.Fatalf("the deleted profile's phone closed with %d, want the relay's %d", code, relayRefused)
 	}
 	testworld.AwaitSince(app, forgotten, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
 		_, ok := pairingOf(m, phone.DeviceID())
 		return !ok
 	})
-	again, err := phone.Dial(qr)
+	again, err := phone.DialToPair(window)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,7 +384,7 @@ func TestAPhoneThatReconnectsWhileTheHomeStartsOpensItsTerminalOnceTheHomeHasRec
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair").Qr)
-	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -445,7 +448,7 @@ func TestAPhonesOutpostTerminalComesBackWhenTheOutpostAnswersAgain(t *testing.T)
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, app.SelectedProfile(), "pair").Qr)
-	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").Dial(qr)
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}

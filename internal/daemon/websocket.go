@@ -904,6 +904,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handlePhonesGet", func() { d.handlePhonesGet(client) })
 	case protocol.CmdPhonePairBegin:
 		d.life.Go("handlePhonePairBegin", func() { d.handlePhonePairBegin(client, msg.(*protocol.PhonePairBeginMessage)) })
+	case protocol.CmdPhonePairCancel:
+		d.life.Go("handlePhonePairCancel", func() { d.handlePhonePairCancel(client, msg.(*protocol.PhonePairCancelMessage)) })
 	case protocol.CmdPhonePairingRevoke:
 		d.life.Go("handlePhonePairingRevoke", func() { d.handlePhonePairingRevoke(client, msg.(*protocol.PhonePairingRevokeMessage)) })
 	case protocol.CmdSetVentKind:

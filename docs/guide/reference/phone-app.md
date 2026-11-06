@@ -34,8 +34,9 @@ The app merges every pairing into one queue.
    **Phone access**. attn connects to Attn Cloud, and a **Phones** page
    appears under **Connectivity**.
 2. Open **Settings → Phones**. Under the profile you want, click
-   **Pair a phone**. attn shows a QR code. The code expires after 10
-   minutes. Click **Show a new pairing code** for a fresh one.
+   **Pair a phone**. attn shows a QR code. The code works once and expires
+   after 10 minutes. Click **Show a new pairing code** for a fresh one. Click
+   **Cancel**, or leave **Settings → Phones**, to end it.
 3. On the iPhone, open attn, tap **Pairings**, then **Scan a pairing code**.
    Allow the camera when iOS asks.
 4. Point the camera at the QR code. The app returns to **Queue** and lists the

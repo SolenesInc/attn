@@ -3,7 +3,9 @@ package cloudlink
 import (
 	"bytes"
 	"context"
+	"crypto/hkdf"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -65,11 +67,12 @@ type Home interface {
 }
 
 type Config struct {
-	CloudURL string
-	HomeName string
-	Identity Identity
-	Home     Home
-	HTTP     *http.Client
+	CloudURL        string
+	HomeName        string
+	Identity        Identity
+	Home            Home
+	HTTP            *http.Client
+	PairingLifetime time.Duration
 }
 
 type State string
@@ -91,6 +94,13 @@ type Offer struct {
 	ExpiresAt time.Time
 	QR        string
 	secret    []byte
+}
+
+const relayTokenLabel = "attn-cloud/v1 relay token"
+
+func relayToken(secret []byte) []byte {
+	token, _ := hkdf.Key(sha256.New, secret, nil, relayTokenLabel, sha256.Size)
+	return token
 }
 
 type QR struct {
@@ -121,6 +131,9 @@ func New(cfg Config) *Link {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		transport.DisableKeepAlives = true
 		cfg.HTTP = &http.Client{Transport: transport}
+	}
+	if cfg.PairingLifetime == 0 {
+		cfg.PairingLifetime = PairingLifetime
 	}
 	return &Link{cfg: cfg, now: time.Now, offers: map[string]*Offer{}, nextConnect: make(chan struct{}), status: Status{State: StateConnecting, HomeID: cfg.Identity.HomeID()}}
 }
@@ -160,6 +173,10 @@ func (l *Link) setStatus(state State, err error) {
 func (l *Link) Offers() []Offer {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	return l.offersLocked()
+}
+
+func (l *Link) offersLocked() []Offer {
 	l.dropExpiredLocked()
 	out := make([]Offer, 0, len(l.offers))
 	for _, offer := range l.offers {
@@ -185,7 +202,7 @@ func (l *Link) Offer(profileID, profileName string) (Offer, error) {
 		return Offer{}, fmt.Errorf("this home has not registered with Attn Cloud yet (%s); a QR code needs its home id", orWaiting(status.Error))
 	}
 	secret := randomBytes(32)
-	offer := &Offer{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(PairingLifetime), secret: secret}
+	offer := &Offer{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(l.cfg.PairingLifetime), secret: secret}
 	qr, _ := json.Marshal(QR{
 		V: 1, Cloud: l.cfg.CloudURL, HomeID: homeID, HomeName: l.cfg.HomeName,
 		HomeNoisePub: b64(l.cfg.Identity.NoiseKey.Public), ProfileID: profileID, ProfileName: profileName,
@@ -196,6 +213,7 @@ func (l *Link) Offer(profileID, profileName string) (Offer, error) {
 	l.offers[profileID] = offer
 	s := l.session
 	l.mu.Unlock()
+	time.AfterFunc(l.cfg.PairingLifetime, l.sendAllowlist)
 	l.cfg.Home.Changed()
 	if s != nil {
 		if err := s.allowlistApplied(); err != nil {
@@ -209,6 +227,21 @@ func (l *Link) Offer(profileID, profileName string) (Offer, error) {
 		}
 	}
 	return *offer, nil
+}
+
+func (l *Link) CancelOffer(profileID string) {
+	if l.dropOffer(profileID) {
+		l.cfg.Home.Changed()
+		l.sendAllowlist()
+	}
+}
+
+func (l *Link) dropOffer(profileID string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_, held := l.offers[profileID]
+	delete(l.offers, profileID)
+	return held
 }
 
 func orWaiting(err string) string {
@@ -233,20 +266,24 @@ func (l *Link) secretFor(claim firstMessage) ([]byte, error) {
 			return offer.secret, nil
 		}
 	}
-	return nil, fmt.Errorf("pairing code %s was already used or expired after %s; show a new one", claim.PairingID, PairingLifetime)
+	return nil, fmt.Errorf("pairing code %s was already used or expired after %s; show a new one", claim.PairingID, l.cfg.PairingLifetime)
 }
 
-func (l *Link) spend(pairingID string) (string, bool) {
+func (l *Link) spendOfferIntoPairing(pairingID string, pairingFor func(profileID string) Pairing) (Pairing, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.dropExpiredLocked()
 	for profile, offer := range l.offers {
 		if offer.PairingID == pairingID {
+			pairing := pairingFor(profile)
+			if err := l.cfg.Home.AddPairing(pairing); err != nil {
+				return Pairing{}, err
+			}
 			delete(l.offers, profile)
-			return profile, true
+			return pairing, nil
 		}
 	}
-	return "", false
+	return Pairing{}, fmt.Errorf("pairing code %s was used by another device first or expired; show a new one", pairingID)
 }
 
 func (l *Link) Connected() map[Device]bool {
@@ -272,6 +309,7 @@ func (l *Link) Revoked(device Device) {
 }
 
 func (l *Link) ProfileRemoved(profileID string) {
+	l.dropOffer(profileID)
 	l.closeWhere(func(d Device) bool { return d.ProfileID == profileID })
 }
 
@@ -298,19 +336,22 @@ func (l *Link) sendAllowlist() {
 }
 
 func (l *Link) allowlist() (allowlist, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	pairings, err := l.cfg.Home.Pairings()
 	if err != nil {
 		return allowlist{}, err
 	}
-	list := allowlist{Devices: []string{}}
+	list := allowlist{Devices: []string{}, Pairings: []pairingWindow{}}
 	for _, pairing := range pairings {
 		key := b64(pairing.DeviceSignPub)
 		if !slices.Contains(list.Devices, key) {
 			list.Devices = append(list.Devices, key)
 		}
 	}
-	for _, offer := range l.Offers() {
-		list.PairingOpenUntil = max(list.PairingOpenUntil, offer.ExpiresAt.UnixMilli())
+	for _, offer := range l.offersLocked() {
+		hash := sha256.Sum256(relayToken(offer.secret))
+		list.Pairings = append(list.Pairings, pairingWindow{TokenHash: b64(hash[:]), Until: offer.ExpiresAt.UnixMilli()})
 	}
 	return list, nil
 }
@@ -685,12 +726,10 @@ func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
 	link := d.session.link
 	if d.answered.pairing {
 		claim := d.answered.claim
-		profileID, live := link.spend(claim.PairingID)
-		if !live {
-			return fmt.Errorf("pairing code %s was used by another device first or expired; show a new one", claim.PairingID)
-		}
-		pairing := Pairing{DeviceID: KeyID(d.signPub), ProfileID: profileID, DeviceSignPub: d.signPub, DeviceNoisePub: d.answered.peerStatic, Name: claim.DeviceName}
-		if err := link.cfg.Home.AddPairing(pairing); err != nil {
+		pairing, err := link.spendOfferIntoPairing(claim.PairingID, func(profileID string) Pairing {
+			return Pairing{DeviceID: KeyID(d.signPub), ProfileID: profileID, DeviceSignPub: d.signPub, DeviceNoisePub: d.answered.peerStatic, Name: claim.DeviceName}
+		})
+		if err != nil {
 			return err
 		}
 		d.pairing = &pairing

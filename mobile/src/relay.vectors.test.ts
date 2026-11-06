@@ -1,11 +1,12 @@
 import { CapacitorHttp } from '@capacitor/core'
 import { readFileSync } from 'node:fs'
 import { ed25519, x25519 } from '@noble/curves/ed25519.js'
+import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toBase64Url } from './bytes'
-import type { DeviceKeys } from './device'
-import { runLink, type LinkEvent } from './link'
+import { relayToken, type DeviceKeys } from './device'
+import { pairWithHome, runLink, type LinkEvent } from './link'
 import { pushTokenMessage, registerForPush } from './push'
 import { FakeRelay, FakeSocket, frame } from './test/fakeRelay'
 
@@ -21,6 +22,7 @@ type Vectors = {
   home_id: string
   nonce: string
   push_token: string
+  relay_token: { qr_secret: string; token: string; token_hash: string }
   frames: ReadonlyArray<{ name: string; type: number; conn_id: number; payload: string; bytes: string }>
   signatures: { auth_device: Signed; push_token: Signed }
 }
@@ -115,6 +117,50 @@ describe('the phone speaks the relay contract vectors', () => {
     const signed = pushTokenMessage(vectors.home_id, vectors.sign_pub, 'sandbox', vectors.push_token)
     expect(bytesToHex(signed)).toBe(message)
     expect(bytesToHex(ed25519.sign(signed, signSecret))).toBe(signature)
+  })
+})
+
+describe('the phone pairs with the relay token the contract specifies', () => {
+  const home = {
+    cloud: 'https://cloud.example',
+    homeId: vectors.home_id,
+    homeNoisePub: toBase64Url(x25519.getPublicKey(x25519.utils.randomSecretKey())),
+    homeName: 'Mac',
+    profileId: 'p',
+  }
+  const pairing = { pairingId: 'p1', secret: hexToBytes(vectors.relay_token.qr_secret) }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
+    vi.stubGlobal('WebSocket', ScriptedSocket)
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
+  })
+
+  it('derives the token and its hash from the QR secret', () => {
+    const token = relayToken(pairing.secret)
+    expect(bytesToHex(token)).toBe(vectors.relay_token.token)
+    expect(bytesToHex(sha256(token))).toBe(vectors.relay_token.token_hash)
+  })
+
+  it('sends the token after the signature only while pairing', async () => {
+    const paired = pairWithHome(home, keys, pairing)
+    paired.catch(() => {})
+    ScriptedSocket.latest.onmessage?.({ data: wire('challenge') })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(ScriptedSocket.latest.sent.map(bytesToHex)).toEqual([
+      `010200000000${vectors.signatures.auth_device.signature}${vectors.relay_token.token}`,
+    ])
+  })
+
+  it('tells the person to show a new code when the relay refuses it', async () => {
+    const paired = pairWithHome(home, keys, pairing)
+    ScriptedSocket.latest.onclose?.({ code: 4403 })
+    await expect(paired).rejects.toThrow(
+      'this pairing code no longer works; show a new one in Settings → Phones on Mac',
+    )
   })
 })
 

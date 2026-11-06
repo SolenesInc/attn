@@ -16,7 +16,7 @@ func pairPhone(t *testing.T, app *testworld.Peer, cloud *testworld.Cloud, profil
 	t.Helper()
 	qr := testworld.ParsePhoneQR(t, beginPairing(t, app, profileID, "pair-"+name).Qr)
 	phone := testworld.NewPhone(t, cloud, name)
-	socket, err := phone.Dial(qr)
+	socket, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}

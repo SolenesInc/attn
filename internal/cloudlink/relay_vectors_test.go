@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -32,6 +33,11 @@ type relayVectors struct {
 		Payload string `json:"payload"`
 		Bytes   string `json:"bytes"`
 	} `json:"frames"`
+	RelayToken struct {
+		QRSecret  string `json:"qr_secret"`
+		Token     string `json:"token"`
+		TokenHash string `json:"token_hash"`
+	} `json:"relay_token"`
 	Signatures struct {
 		Register relaySigned `json:"register"`
 		AuthHome relaySigned `json:"auth_home"`
@@ -74,6 +80,17 @@ func TestTheHomeSpeaksTheRelayContractVectors(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("relay token", func(t *testing.T) {
+		token := relayToken(unhex(t, vectors.RelayToken.QRSecret))
+		if got := hex.EncodeToString(token); got != vectors.RelayToken.Token {
+			t.Fatalf("token %s, want %s", got, vectors.RelayToken.Token)
+		}
+		hash := sha256.Sum256(token)
+		if got := hex.EncodeToString(hash[:]); got != vectors.RelayToken.TokenHash {
+			t.Fatalf("token hash %s, want %s", got, vectors.RelayToken.TokenHash)
+		}
+	})
 
 	t.Run("registration signature", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

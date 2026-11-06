@@ -164,6 +164,11 @@ func readFrame(ctx context.Context, conn *websocket.Conn) (frame, error) {
 }
 
 type allowlist struct {
-	Devices          []string `json:"devices"`
-	PairingOpenUntil int64    `json:"pairing_open_until"`
+	Devices  []string        `json:"devices"`
+	Pairings []pairingWindow `json:"pairings"`
+}
+
+type pairingWindow struct {
+	TokenHash string `json:"token_hash"`
+	Until     int64  `json:"until"`
 }

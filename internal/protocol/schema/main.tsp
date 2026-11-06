@@ -8523,6 +8523,21 @@ model PhonePairBeginResultMessage {
   offer?: PhonePairingOffer;
 }
 
+// Ends the profile's QR code before it expires, so the relay stops admitting it.
+// Answers success when the profile has no code.
+model PhonePairCancelMessage {
+  cmd: "phone_pair_cancel";
+  request_id: string;
+  profile_id: string;
+}
+
+model PhonePairCancelResultMessage {
+  event: "phone_pair_cancel_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
 // Removes the pairing and disconnects the device from that profile.
 model PhonePairingRevokeMessage {
   cmd: "phone_pairing_revoke";
@@ -8797,6 +8812,7 @@ alias DaemonEvent =
   | VentsUpdatedMessage
   | PhonesUpdatedMessage
   | PhonePairBeginResultMessage
+  | PhonePairCancelResultMessage
   | PhonePairingRevokeResultMessage
   | SendersUpdatedMessage
   | SenderPairDecideResultMessage

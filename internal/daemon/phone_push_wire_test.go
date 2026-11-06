@@ -30,7 +30,7 @@ func TestAPushWaitingForTheLinkDoesNotHoldTheDaemonsStop(t *testing.T) {
 	}
 	qr := testworld.ParsePhoneQR(t, paired.Offer.Qr)
 	phone := testworld.NewPhone(t, cloud, "iPhone")
-	socket, err := phone.Dial(qr)
+	socket, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func phonePushWorld(t *testing.T, queue, quiet bool) (*world, *testworld.Peer, *
 	}
 	qr := testworld.ParsePhoneQR(t, offer.Offer.Qr)
 	phone := testworld.NewPhone(t, cloud, "iPhone")
-	socket, err := phone.Dial(qr)
+	socket, err := phone.DialToPair(qr)
 	if err != nil {
 		t.Fatal(err)
 	}

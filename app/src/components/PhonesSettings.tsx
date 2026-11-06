@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { encode } from 'uqr';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { usePhonesStore } from '../store/phones';
@@ -50,7 +50,7 @@ function useExpired(expiresAt: string | undefined): boolean {
   return expired;
 }
 
-function PairingCode({ offer, profileName }: { offer: PhonePairingOffer; profileName: string }) {
+function PairingCode({ offer, profileName, onCancel }: { offer: PhonePairingOffer; profileName: string; onCancel: () => void }) {
   const expired = useExpired(offer.expires_at);
   if (expired) {
     return <p className="settings-warning" role="status">Pairing code expired after {PAIRING_LIFETIME_MINUTES} min; show a new one.</p>;
@@ -61,6 +61,7 @@ function PairingCode({ offer, profileName }: { offer: PhonePairingOffer; profile
       <p className="settings-description">
         Scan with the attn app. The code works once, until {new Date(offer.expires_at).toLocaleTimeString()}.
       </p>
+      <button type="button" className="settings-action" onClick={onCancel}>Cancel</button>
     </div>
   );
 }
@@ -82,12 +83,27 @@ function PairedPhone({ pairing, onRevoke }: { pairing: PhonePairing; onRevoke: (
 }
 
 export function PhonesSettings() {
-  const { sendPhonesGet, sendPhonePairBegin, sendPhonePairingRevoke, connectionGeneration } = useDaemonApi();
+  const { sendPhonesGet, sendPhonePairBegin, sendPhonePairCancel, sendPhonePairingRevoke, connectionGeneration } = useDaemonApi();
   const phones = usePhonesStore((state) => state.phones);
   const profiles = useProfilesStore((state) => state.profiles);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const offeredProfiles = useRef<string[]>([]);
+  offeredProfiles.current = phones?.offers.map((offer) => offer.profile_id) ?? [];
+  const left = useRef(false);
+
   useEffect(() => { sendPhonesGet(); }, [sendPhonesGet, connectionGeneration]);
+
+  useEffect(() => {
+    left.current = false;
+    return () => {
+      left.current = true;
+      offeredProfiles.current.forEach(cancelQuietly);
+    };
+    function cancelQuietly(profileId: string) {
+      sendPhonePairCancel(profileId).catch((error: unknown) => console.warn('[phones] cancelling on leave:', error));
+    }
+  }, [sendPhonePairCancel]);
 
   function failed(profileId: string, error: unknown) {
     setErrors((current) => ({ ...current, [profileId]: error instanceof Error ? error.message : String(error) }));
@@ -95,7 +111,13 @@ export function PhonesSettings() {
 
   function pair(profileId: string) {
     setErrors((current) => ({ ...current, [profileId]: '' }));
-    sendPhonePairBegin(profileId).catch((error: unknown) => failed(profileId, error));
+    sendPhonePairBegin(profileId)
+      .then(() => { if (left.current) return sendPhonePairCancel(profileId); })
+      .catch((error: unknown) => failed(profileId, error));
+  }
+
+  function cancel(profileId: string) {
+    sendPhonePairCancel(profileId).catch((error: unknown) => failed(profileId, error));
   }
 
   function revoke(pairing: PhonePairing) {
@@ -130,7 +152,7 @@ export function PhonesSettings() {
                   {paired.map((pairing) => <PairedPhone key={pairing.device_id} pairing={pairing} onRevoke={() => revoke(pairing)} />)}
                 </ul>
               )}
-              {offer && <PairingCode offer={offer} profileName={profile.name} />}
+              {offer && <PairingCode offer={offer} profileName={profile.name} onCancel={() => cancel(profile.id)} />}
               {errors[profile.id] && <p className="settings-warning" role="alert">{errors[profile.id]}</p>}
               <button type="button" className="settings-action" disabled={phones.link.state === 'off'} onClick={() => pair(profile.id)}>
                 {offer ? 'Show a new pairing code' : 'Pair a phone'}

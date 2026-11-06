@@ -24,6 +24,14 @@ func cloudURL() string {
 	return defaultCloudURL
 }
 
+func pairingLifetime() time.Duration {
+	lifetime, err := time.ParseDuration(os.Getenv(config.PairingLifetimeEnv))
+	if err != nil || lifetime <= 0 {
+		return cloudlink.PairingLifetime
+	}
+	return lifetime
+}
+
 type phonesRuntime struct {
 	configuring sync.Mutex
 	mu          sync.Mutex
@@ -62,7 +70,7 @@ func (d *Daemon) startCloudLink() {
 		return
 	}
 	d.phones.whyUnlinked = ""
-	link := cloudlink.New(cloudlink.Config{CloudURL: cloudURL(), HomeName: homeDisplayName(), Identity: identity, Home: phoneHome{d}})
+	link := cloudlink.New(cloudlink.Config{CloudURL: cloudURL(), HomeName: homeDisplayName(), Identity: identity, Home: phoneHome{d}, PairingLifetime: pairingLifetime()})
 	ctx, cancel := context.WithCancel(d.life.Context())
 	done := make(chan struct{})
 	if !d.life.Go("cloudLink", func() {
@@ -234,6 +242,13 @@ func (d *Daemon) beginPhonePairing(profileID string) (protocol.PhonePairingOffer
 		return protocol.PhonePairingOffer{}, err
 	}
 	return wireOffer(offer), nil
+}
+
+func (d *Daemon) handlePhonePairCancel(client *wsClient, msg *protocol.PhonePairCancelMessage) {
+	if link := d.cloudLink(); link != nil {
+		link.CancelOffer(msg.ProfileID)
+	}
+	d.sendToClient(client, protocol.PhonePairCancelResultMessage{Event: protocol.EventPhonePairCancelResult, RequestID: msg.RequestID, Success: true})
 }
 
 func (d *Daemon) handlePhonePairingRevoke(client *wsClient, msg *protocol.PhonePairingRevokeMessage) {

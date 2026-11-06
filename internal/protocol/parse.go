@@ -69,6 +69,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSenderUnpair:                  decodeInto[SenderUnpairMessage],
 	CmdSendersGet:                    decodeInto[SendersGetMessage],
 	CmdSenderPairDecide:              decodeInto[SenderPairDecideMessage],
+	CmdPhonePairCancel:               decodeInto[PhonePairCancelMessage],
 	CmdPhonePairingRevoke:            decodeInto[PhonePairingRevokeMessage],
 	CmdPlantVentSeed:                 decodeInto[PlantVentSeedMessage],
 	CmdUnplantVentSeed:               decodeInto[UnplantVentSeedMessage],
