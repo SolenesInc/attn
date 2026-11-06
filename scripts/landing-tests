@@ -88,6 +88,9 @@ go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAns
 go ./internal/daemon TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture
 go ./internal/daemon TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose
 
+group pty-host ^pty-host/|^internal/ptyhost/
+go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal
+
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
 go ./cmd/attn TestLegacyPromptCompatibility

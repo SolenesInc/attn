@@ -129,12 +129,12 @@ impl HostState {
         true
     }
 
-    fn begin_shutdown(&mut self) -> Result<Vec<Arc<Session>>, String> {
-        if !self.spawning.is_empty() || self.shutting_down || self.handing_over {
-            return Err("host has a spawn or shutdown in progress".to_owned());
+    fn begin_shutdown(&mut self) -> Result<(), String> {
+        if self.shutting_down || self.handing_over {
+            return Err("host is already shutting down or handing over".to_owned());
         }
         self.shutting_down = true;
-        Ok(self.sessions.values().cloned().collect())
+        Ok(())
     }
 }
 
@@ -440,11 +440,7 @@ impl Host {
     }
 
     fn shutdown_sessions(&self) -> Result<(), String> {
-        let sessions = self
-            .state
-            .lock()
-            .expect("host state mutex poisoned")
-            .begin_shutdown()?;
+        let sessions = self.close_spawns_and_settle()?;
         let mut tasks = Vec::new();
         let mut failure = None;
         for session in sessions {
@@ -478,6 +474,16 @@ impl Host {
             return Err(error);
         }
         Ok(())
+    }
+
+    fn close_spawns_and_settle(&self) -> Result<Vec<Arc<Session>>, String> {
+        let mut state = self.state.lock().expect("host state mutex poisoned");
+        state.begin_shutdown()?;
+        let state = self
+            .idle_changed
+            .wait_while(state, |state| !state.spawning.is_empty())
+            .expect("host state mutex poisoned");
+        Ok(state.sessions.values().cloned().collect())
     }
 
     fn hand_over(
@@ -1466,15 +1472,15 @@ mod tests {
     }
 
     #[test]
-    fn pending_spawn_prevents_retirement_and_shutdown() {
+    fn pending_spawn_prevents_retirement_but_not_shutdown() {
         let mut state = HostState::default();
         let now = Instant::now();
         assert!(state.schedule_idle(now));
         state.begin_spawn("new-terminal").unwrap();
         assert!(!state.begin_idle_shutdown(now));
         assert!(!state.schedule_idle(now));
-        assert!(state.begin_shutdown().is_err());
-        assert!(!state.shutting_down);
+        state.begin_shutdown().unwrap();
+        assert!(state.begin_spawn("late-terminal").is_err());
     }
 
     #[test]
@@ -1495,7 +1501,7 @@ mod tests {
         let mut state = HostState::default();
         let now = Instant::now();
         assert!(state.schedule_idle(now));
-        assert!(state.begin_shutdown().unwrap().is_empty());
+        state.begin_shutdown().unwrap();
         assert!(state.begin_spawn("late-terminal").is_err());
         assert!(state.begin_shutdown().is_err());
         assert!(!state.schedule_idle(now));

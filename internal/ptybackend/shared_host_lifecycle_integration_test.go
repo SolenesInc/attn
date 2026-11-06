@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/harness"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -772,3 +773,68 @@ func TestSharedHost_CandidateWithTheWrongIdentityIsRejected(t *testing.T) {
 		t.Fatalf("reports=%+v recorded=%v, want one recorded identity rejection", reports, rejected)
 	}
 }
+
+func TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-reap-spawn-")
+	stopHostsAtCleanup(t, root)
+	const daemon = "d-reap-spawn"
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: daemon, BinaryPath: binary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	artifact, err := backend.importCandidate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := backend.ensureSharedHost(context.Background(), &artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const inProgress = "spawn already in progress"
+	spawn := func(attempts []pty.PreparedLaunchAttempt) error {
+		conn, err := backend.openSharedCall(context.Background(), incarnationOfHost(host).endpoint(), ptyhost.MethodSpawn,
+			ptyhost.SpawnParams{SessionID: "spawning", Agent: "lifecycle-probe", CWD: root, Cols: 80, Rows: 24, Attempts: attempts}, nil)
+		if err == nil {
+			_ = conn.Close()
+		}
+		return err
+	}
+	slow := slices.Repeat([]pty.PreparedLaunchAttempt{{
+		Executable: filepath.Join(root, "no-such-executable"), Args: []string{"no-such-executable"}, Env: []string{}, CWD: root,
+	}}, attemptsThatHoldASpawnOpen)
+	slow = append(slow, pty.PreparedLaunchAttempt{Executable: "/bin/cat", Args: []string{"/bin/cat"}, Env: []string{}, CWD: root})
+	spawned := make(chan error, 1)
+	go func() {
+		err := spawn(slow)
+		for err != nil && strings.Contains(err.Error(), inProgress) {
+			err = spawn(slow)
+		}
+		spawned <- err
+	}()
+	for {
+		err := spawn([]pty.PreparedLaunchAttempt{})
+		if err == nil {
+			t.Fatal("a spawn with no attempts succeeded")
+		}
+		if strings.Contains(err.Error(), inProgress) {
+			break
+		}
+		if !strings.Contains(err.Error(), "no prepared launch attempts") {
+			t.Fatalf("the slow spawn finished before the reap could overlap it: %v", err)
+		}
+	}
+
+	for _, result := range ptyhost.ReapDataDir(root) {
+		if result.Outcome != procreap.ReapTerminated {
+			t.Errorf("reap of host %s during a spawn: %s: %v", result.ID, result.Outcome, result.Err)
+		}
+	}
+	<-spawned
+	if left, _ := filepath.Glob(filepath.Join(ptyhost.RegistryDir(root, daemon), "*.json")); len(left) != 0 {
+		t.Errorf("the host left terminals behind: %v", left)
+	}
+}
+
+const attemptsThatHoldASpawnOpen = 1000
