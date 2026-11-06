@@ -12129,6 +12129,7 @@ type SessionPlaceErrorKind string
 
 const SessionPlaceErrorKindBlockedByApproval SessionPlaceErrorKind = "blocked_by_approval"
 const SessionPlaceErrorKindComposerDirty SessionPlaceErrorKind = "composer_dirty"
+const SessionPlaceErrorKindHarnessStarting SessionPlaceErrorKind = "harness_starting"
 const SessionPlaceErrorKindInitialPrompt SessionPlaceErrorKind = "initial_prompt"
 const SessionPlaceErrorKindLaneClosed SessionPlaceErrorKind = "lane_closed"
 const SessionPlaceErrorKindSessionClosing SessionPlaceErrorKind = "session_closing"

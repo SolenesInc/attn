@@ -206,6 +206,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
 	opts.DaemonEnv = d.spawnRoutingEnv()
+	d.sessionMonitor(sessionID).HarnessStarting(opts.Agent)
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)

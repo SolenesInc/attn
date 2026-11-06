@@ -221,8 +221,11 @@ that input. A ring lost to an open menu in the harness stays lost.
   types nothing while the agent needs approval or is launching. A new or woken
   agent whose harness has hooks is launching until the harness itself reports,
   because a harness that has only just started loses what is typed
-  ([Claude Code](harnesses/claude.md)). attn also types nothing within 30 seconds
-  of the user's last keystroke in the agent's terminal. Waiting costs no attempt.
+  ([Claude Code](harnesses/claude.md)). A resumed or reloaded agent keeps the
+  state it had, but attn types nothing until its harness sets its terminal title,
+  sends a program status or submits a prompt, and rings as soon as it does. attn
+  also types nothing within 30 seconds of the user's last keystroke in the agent's
+  terminal. Waiting costs no attempt.
 - A shell never gets a ring.
 - When a ring includes the 📬 line, the address has an outstanding ring until
   the agent reads the inbox or 5 minutes pass. While the address has an

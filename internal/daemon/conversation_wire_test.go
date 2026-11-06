@@ -332,9 +332,8 @@ func TestADelegateThatClearsLeavesItsSeedAndMailWithItsClosedSession(t *testing.
 		t.Fatalf("reopen %s: %v", delegate, err)
 	}
 	back := w.Launched(string(delegate))
-	app.TypeLine(string(delegate), "where were we?")
-	if prompt := back.Prompted(); prompt != "where were we?" {
-		t.Fatalf("the reopened tender was prompted with %q, want the user's words", prompt)
+	if prompt := back.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("the reopened tender was prompted with %q, want the inbox doorbell", prompt)
 	}
 	if mail := readInbox(t, cli, string(delegate), 0).Items; len(mail) != 1 || mail[0].Content != "the deployment is ready" {
 		t.Errorf("the reopened tender's inbox = %+v, want the mail that queued while it was closed", mail)

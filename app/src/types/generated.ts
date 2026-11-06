@@ -11741,6 +11741,7 @@ export interface SessionPlaceResult {
 export enum SessionPlaceErrorKind {
     BlockedByApproval = "blocked_by_approval",
     ComposerDirty = "composer_dirty",
+    HarnessStarting = "harness_starting",
     InitialPrompt = "initial_prompt",
     LaneClosed = "lane_closed",
     SessionClosing = "session_closing",
@@ -30153,6 +30154,7 @@ const typeMap: any = {
     "SessionPlaceErrorKind": [
         "blocked_by_approval",
         "composer_dirty",
+        "harness_starting",
         "initial_prompt",
         "lane_closed",
         "session_closing",

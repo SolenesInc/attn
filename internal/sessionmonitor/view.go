@@ -109,6 +109,7 @@ type View struct {
 	NotificationRun     Value[bool]                                `fact:"-"`
 	NotificationStop    Value[bool]                                `fact:"-"`
 	FirstReportAt       Value[time.Time]                           `fact:"-"`
+	AwaitingHarness     Value[bool]                                `fact:"-"`
 	Key                 Value[Key]                                 `fact:"-"`
 	Epoch               Value[string]                              `fact:"-"`
 	Revision            Value[uint64]                              `fact:"-"`
@@ -164,6 +165,7 @@ func (m *Monitor) snapshotLocked() View {
 		LastModelRequestAt:  Value[time.Time]{m.lastModelRequestAt},
 		Driver:              Value[DriverMetadata]{m.driver},
 		FirstReportAt:       Value[time.Time]{m.firstReportAt},
+		AwaitingHarness:     Value[bool]{m.awaitingHarness},
 		Run:                 Value[uint64]{m.input.epoch},
 		NotificationRun:     Value[bool]{m.input.inNotificationRunLocked()},
 		NotificationStop:    Value[bool]{m.input.stopFollowsNotificationLocked()},

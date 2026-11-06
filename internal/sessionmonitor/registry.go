@@ -88,6 +88,7 @@ type Monitor struct {
 	lastModelRequestAt   time.Time
 	userInputs           uint64
 	firstReportAt        time.Time
+	awaitingHarness      bool
 	wakeTimer            *time.Timer
 	watch                *TerminalWatch
 	conversationInput    Conversation

@@ -19,6 +19,9 @@ const (
 var SubmitDelay = 150 * time.Millisecond
 
 func (l *lane) ptySafetyLocked(delivery Delivery) error {
+	if l.monitor.awaitingHarness {
+		return errHarnessStarting
+	}
 	if delivery.RequireEmptyComposer && l.userDraft {
 		return ErrComposerDirty
 	}

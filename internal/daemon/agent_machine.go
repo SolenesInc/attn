@@ -170,6 +170,7 @@ func (d *Daemon) seedAgentMonitor(session *protocol.Session, opts ptybackend.Spa
 	monitor := d.startSessionMonitor(session.ID)
 	monitor.Restart(withSeed(seed, session), fresh)
 	monitor.Launched(launch.StartedAt)
+	monitor.HarnessStarting(opts.Agent)
 	monitor.RememberInitialPrompt(launch.InitialPrompt)
 }
 

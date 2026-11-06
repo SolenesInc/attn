@@ -67,6 +67,9 @@ func (m *Monitor) RecordPTY(obs pty.Observation) bool {
 	if !ok {
 		return false
 	}
+	if showsHarnessStarted(obs) {
+		m.harnessStarted()
+	}
 	return m.UpdateEvidence(func(e *Evidence) bool {
 		return holdsPTYEvidence(e, obs)
 	}, movedAt(at, func(e *Evidence) {
@@ -264,6 +267,40 @@ func (m *Monitor) Begin(launch Launch) {
 
 func ReportsTurnStarts(agent string) bool {
 	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
+}
+
+func (m *Monitor) HarnessStarting(agent string) {
+	if m == nil || !ReportsTurnStarts(agent) {
+		return
+	}
+	m.mu.Lock()
+	m.awaitingHarness = true
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
+}
+
+func (m *Monitor) harnessStarted() {
+	m.mu.Lock()
+	if !m.awaitingHarness {
+		m.mu.Unlock()
+		return
+	}
+	m.awaitingHarness = false
+	view := m.viewLocked()
+	m.mu.Unlock()
+	m.publish(view)
+}
+
+func showsHarnessStarted(obs pty.Observation) bool {
+	switch obs.Source {
+	case pty.SourceHeartbeat:
+		return obs.Claim != "unclassified"
+	case pty.SourceProgramStatus:
+		_, reported := ProgramStatusClaim(obs.Claim)
+		return reported
+	}
+	return false
 }
 
 func (m *Monitor) RecordBracket(state string) {

@@ -183,6 +183,7 @@ var (
 	ErrSessionClosing    = errors.New("the session is compacting before it closes; attn's input waits until it has closed")
 	ErrInputCancelsClose = errors.New("not sent: the session was compacting before it closed; the close is cancelled, so send it again once it is idle")
 	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
+	errHarnessStarting   = errors.New("session input waits for the harness to start")
 )
 
 var QuietWindow = 30 * time.Second
@@ -209,6 +210,7 @@ func DeferredError(err error) bool {
 	return errors.Is(err, ErrBlockedByApproval) ||
 		errors.Is(err, ErrComposerDirty) ||
 		errors.Is(err, errInitialPrompt) ||
+		errors.Is(err, errHarnessStarting) ||
 		errors.Is(err, ErrSessionStopped) ||
 		errors.Is(err, ErrSessionClosing)
 }
@@ -457,6 +459,7 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	if m == nil {
 		return false
 	}
+	m.harnessStarted()
 	m.mu.Lock()
 	l := m.input
 	typed = l.userSubmit

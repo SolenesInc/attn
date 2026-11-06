@@ -48,6 +48,7 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 		{ErrBlockedByApproval, protocol.SessionPlaceErrorKindBlockedByApproval},
 		{ErrComposerDirty, protocol.SessionPlaceErrorKindComposerDirty},
 		{errInitialPrompt, protocol.SessionPlaceErrorKindInitialPrompt},
+		{errHarnessStarting, protocol.SessionPlaceErrorKindHarnessStarting},
 		{ErrSessionStopped, protocol.SessionPlaceErrorKindSessionStopped},
 		{ErrSessionClosing, protocol.SessionPlaceErrorKindSessionClosing},
 	} {
@@ -84,6 +85,8 @@ func AttemptFromResult(result protocol.SessionPlaceResult) Attempt {
 		}
 	case protocol.SessionPlaceErrorKindInitialPrompt:
 		attempt.Err = errInitialPrompt
+	case protocol.SessionPlaceErrorKindHarnessStarting:
+		attempt.Err = errHarnessStarting
 	case protocol.SessionPlaceErrorKindSessionStopped:
 		attempt.Err = ErrSessionStopped
 	case protocol.SessionPlaceErrorKindSessionClosing:
