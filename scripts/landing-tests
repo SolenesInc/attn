@@ -38,6 +38,7 @@ go ./internal/codexshared TestACallKeepsTheReplyItReceivedBeforeCodexDisconnecte
 go ./internal/daemon TestALaunchedAutomationFinishesSavingAfterDatabaseCommitsRecover
 go ./internal/daemon TestReadsKeepWorkingAfterABackupWhileTheDatabaseRefusesWrites
 go ./internal/daemon TestAnAnnotationSentWhileARingIsBeingPlacedArrivesAfterIt
+go ./internal/daemon TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget
 go ./internal/daemon TestUserInputDuringTheCompactKeepsTheSharedCodexSessionOpen
 go ./internal/daemon TestAMessageSentWhileARingIsBeingPlacedIsAnsweredOnceTheRingIsPlaced
 go ./cmd/attn TestSeedNotesNarrowsToABookmarkAndAKind

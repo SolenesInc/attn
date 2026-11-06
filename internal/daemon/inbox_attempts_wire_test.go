@@ -261,6 +261,7 @@ func TestBusyAndApprovalBlockedInboxesKeepTheirFullAttemptBudget(t *testing.T) {
 				recipient := w.bubbleClaude(t, app, "shop")
 				registerSessions(t, w, cli, "sender")
 				app.TypeLine(recipient.id, "work without checking inbox")
+				synctest.Wait()
 				switch approval {
 				case "permission_prompt":
 					if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(recipient.id)), "permission_prompt", "Allow edit?"); err != nil {
