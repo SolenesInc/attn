@@ -124,6 +124,10 @@ export async function stepClock(socketPath, timeoutMs) {
         }
       });
     },
+    awaitNextArming(name) {
+      marked = revision;
+      return this.awaitTimer(name);
+    },
     awaitIdle() {
       return guarded(() => `step clock awaitIdle: processes [${busyPids().join(', ')}] stayed busy`, async () => {
         while (busyPids().length > 0) {

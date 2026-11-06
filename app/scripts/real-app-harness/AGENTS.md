@@ -102,6 +102,10 @@ repository root.
     a connecting notice, hold new requests at the fake SSH boundary and release
     them once the check is done; a paused daemon's health check rejects new
     connections.
+  - Heartbeats keep real time, and any heartbeat clears a stall. One sent just
+    before a freeze can reach the home after the clock step and clear the stall
+    while the outpost stays frozen. Call `awaitNextArming('bridge-stall')` and
+    freeze at once, so the next heartbeat is a whole interval away.
   - Schedule ticks follow the Go wire tests: `awaitIdle`, `advance('1m')`,
     `awaitIdle`, then read the result. `awaitIdle` returns once the daemon's
     job runner has finished what the tick started.
