@@ -1223,10 +1223,6 @@ fn cookie_jar_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
-    let _guard = COOKIE_JAR_IO
-        .lock()
-        .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
-    let path = cookie_jar_path(app)?;
     let cookies = webview
         .cookies()
         .map_err(|error| format!("read browser cookie jar: {error}"))?
@@ -1235,6 +1231,10 @@ fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), S
         .collect::<Vec<_>>();
     let data = serde_json::to_vec_pretty(&cookies)
         .map_err(|error| format!("encode browser cookie jar: {error}"))?;
+    let _guard = COOKIE_JAR_IO
+        .lock()
+        .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
+    let path = cookie_jar_path(app)?;
     let directory = path
         .parent()
         .ok_or_else(|| "browser cookie jar directory is unavailable".to_string())?;
@@ -1253,24 +1253,27 @@ fn persist_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), S
         .map_err(|error| format!("replace browser cookie jar: {error}"))
 }
 
-fn restore_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
+fn read_cookie_jar(app: &AppHandle) -> Result<Vec<StoredCookie>, String> {
     let _guard = COOKIE_JAR_IO
         .lock()
         .map_err(|_| "browser cookie jar lock poisoned".to_string())?;
     let path = cookie_jar_path(app)?;
     let data = match std::fs::read(&path) {
         Ok(data) => data,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(format!("read browser cookie jar: {error}")),
     };
-    let stored = match serde_json::from_slice::<Vec<StoredCookie>>(&data) {
-        Ok(stored) => stored,
+    match serde_json::from_slice::<Vec<StoredCookie>>(&data) {
+        Ok(stored) => Ok(stored),
         Err(_) => {
             let _ = std::fs::rename(&path, path.with_extension("json.corrupt"));
-            return Ok(());
+            Ok(Vec::new())
         }
-    };
-    for cookie in stored {
+    }
+}
+
+fn restore_cookie_jar(app: &AppHandle, webview: &tauri::Webview) -> Result<(), String> {
+    for cookie in read_cookie_jar(app)? {
         webview
             .set_cookie(cookie_from_stored(cookie)?)
             .map_err(|error| format!("restore browser cookie: {error}"))?;
