@@ -830,7 +830,7 @@ func TestSharedHost_TerminalQueriesUseTheHostModel(t *testing.T) {
 		CWD:   t.TempDir(),
 		Agent: "probe-query",
 		AgentArgv: []string{
-			"/bin/sh", "-c", "stty raw -echo; exec \"$1\" -test.run=TestSharedHost_TerminalQueriesUseTheHostModel", "query-helper", os.Args[0],
+			"/bin/sh", "-c", "read release; stty raw -echo; exec \"$1\" -test.run=TestSharedHost_TerminalQueriesUseTheHostModel", "query-helper", os.Args[0],
 		},
 		AgentEnv: []string{"ATTN_SHARED_QUERY_HELPER=1"},
 		Cols:     40,
@@ -848,6 +848,9 @@ func TestSharedHost_TerminalQueriesUseTheHostModel(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stream.Close()
+	if err := backend.Input(context.Background(), "shared-query", []byte("\n")); err != nil {
+		t.Fatal(err)
+	}
 	want := "__QUERY_REPLY_1b5b333b37521b5b3f313b3263__"
 	waitForStreamText(t, stream, want)
 }
