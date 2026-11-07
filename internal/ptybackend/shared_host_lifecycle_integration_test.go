@@ -588,6 +588,10 @@ func hostSessions(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistr
 	return info.SessionIDs
 }
 
+func withoutValidationProbes(sessions []string) []string {
+	return slices.DeleteFunc(sessions, func(id string) bool { return strings.HasPrefix(id, sharedHostProbePrefix) })
+}
+
 func watchHostTerminal(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry, id string) <-chan struct{} {
 	t.Helper()
 	exited, watch, err := backend.watchProbeExit(context.Background(), &workerSession{
@@ -637,7 +641,7 @@ func TestSharedHost_UncommittedTerminalLivesOnlyAsLongAsItsConnection(t *testing
 
 	abandoned := spawn("abandoned")
 	committed := spawn("committed")
-	if got := hostSessions(t, backend, host); !slices.Equal(got, []string{"abandoned", "committed", "user-terminal"}) {
+	if got := withoutValidationProbes(hostSessions(t, backend, host)); !slices.Equal(got, []string{"abandoned", "committed", "user-terminal"}) {
 		t.Fatalf("host sessions = %v", got)
 	}
 	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-pending", "abandoned")); !os.IsNotExist(err) {
