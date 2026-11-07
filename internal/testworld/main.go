@@ -33,6 +33,9 @@ func Main(m *testing.M, env ...string) int {
 	}
 	config.ScopeTestEnvironment(filepath.Join(dir, "data"))
 	toolHome := filepath.Join(dir, "toolhome")
+	if err := os.MkdirAll(toolHome, 0o700); err != nil {
+		panic("testworld.Main: " + err.Error())
+	}
 	_ = os.Setenv(toolhome.EnvVar, toolHome)
 	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHome, ".codex"))
 	_ = os.Unsetenv("CLAUDE_CONFIG_DIR")
