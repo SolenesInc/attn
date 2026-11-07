@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
@@ -415,9 +416,11 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		if err := d.saveDelegationAuthorization(msg, seedID); err != nil {
 			return nil, err
 		}
-		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (recovered.settled() || d.sessionHasLiveWorker(sessionID)) {
+		pausepoint.At(pausepoint.DelegationLaunchRecovering)
+		runtimeSurvives := d.sessionHasLiveWorker(sessionID)
+		if recovered := d.takeRecoveredLaunch(sessionID); recovered != nil && (runtimeSurvives || recovered.settled()) {
 			watch = recovered
-		} else if !d.sessionHasLiveWorker(sessionID) {
+		} else if !runtimeSurvives {
 			if operationID != "" {
 				_ = d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 					"recovering delegated runtime", existing.ProfileID, "", existing.Directory, nil, nil, time.Now())

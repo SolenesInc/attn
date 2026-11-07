@@ -1757,10 +1757,12 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		reason = "killed"
 	}
 	d.closePluginDriverSession(sessionID, reason, &info.ExitCode, info.Signal)
+	d.noteLaunchExited(sessionID, exit)
 	if err := d.removePTYSession(info.ID); err != nil {
 		d.logf("pty backend remove on exit failed for %s: %v", info.ID, err)
 	}
 	unlockEnds()
+	pausepoint.At(pausepoint.PtyExitRuntimeRemoved)
 	exit.Held, exit.Stopped = false, stopped
 	if monitor == nil || d.store.Get(sessionID) == nil {
 		if owner.copied || d.copiedSession(sessionID) {

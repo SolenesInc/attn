@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -34,10 +35,16 @@ func TestADelegateWhoseAgentOutlivesARestartStillFailsWhenItExitsBeforeItsFirstT
 	s.Terminal(string(accepted.SessionID))
 
 	s.Stop()
+	exitReported := s.PauseAt(pausepoint.PtyExitRuntimeRemoved)
+	resuming := s.PauseAt(pausepoint.DelegationLaunchRecovering)
 	s.Start()
+	resuming.Await()
 	const screen = `Error: Model "gpt-5.6-sol" is ambiguous across providers`
 	s.ExitAtNextBoot(1, screen)
 	boot.Release()
+	exitReported.Await()
+	defer exitReported.Release()
+	resuming.Release()
 	result, err := s.Client().Delegate(request)
 	for _, want := range []string{"codex exited with code 1 before its first turn", "is ambiguous across providers"} {
 		if err == nil || !strings.Contains(err.Error(), want) {
