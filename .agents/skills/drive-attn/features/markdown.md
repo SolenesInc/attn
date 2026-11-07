@@ -25,7 +25,7 @@ current while the user reads it. For review notes on a markdown tile, see
 - ⌘P (`file.open`, `app/src/shortcuts/registry.ts`) opens the opener (`app/src/components/palette/MarkdownOpener.tsx`). Inside a focused editor tile, ⌘P opens that tile's note finder instead ([notebook.md](notebook.md)).
 - Palette (`app/src/application/useAppCommands.tsx`): `open-markdown-file` ("Open a markdown file"), and `open-in-editor` ("Open in editor"), offered while an agent with a local folder is on screen (`app/src/application/useOpenInEditor.ts`).
 - In a terminal, ⌘-click on a `.md` path (`app/src/components/GhosttyTerminal.tsx`).
-- Tile header (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`): "Focus document" (also ⌘⇧↩, `terminal.toggleMaximize`), and "Close tile". The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`) has a "Close <title>" button that takes clicks while the pointer is over the row.
+- Tile header (`app/src/components/SessionTerminalDesktop/DesktopDockTile.tsx`): "Focus document" (also ⌘⇧↩, `terminal.toggleMaximize`), which a focused document replaces with "Return to row", and "Close tile". The tile's row in the sidebar (`app/src/components/SidebarRows.tsx`) has a "Close <title>" button that takes clicks while the pointer is over the row.
 - In the document (`app/src/components/MarkdownReader/index.tsx`): a fragment link scrolls the tile. Images open in a lightbox.
 - Settings: the editor command (`editor_executable`) that "Open in editor" runs. Without it, "Open in editor" runs `$EDITOR` or `$VISUAL`.
 - Where people see what agents do: the tile an agent opens docks beside the agent's tile and follows the file as the agent writes it.
