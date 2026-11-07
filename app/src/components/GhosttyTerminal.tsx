@@ -79,8 +79,9 @@ import {
 import { readClipboardText, writeClipboardText } from '../utils/clipboardBridge';
 import { isMacLikePlatform, terminalClipboardChord } from '../shortcuts/platform';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
-import { parseOsc52Writes, type Osc52State } from '../utils/terminalOsc';
+import { emptyOsc52State, parseOsc52Writes, type Osc52State } from '../utils/terminalOsc';
 import {
+  emptySynchronizedOutputState,
   parseSynchronizedOutput,
   type SynchronizedOutputState,
 } from '../utils/terminalSynchronizedOutput';
@@ -597,8 +598,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const fitRef = useRef<() => void>(() => undefined);
     const overflowRefitRafRef = useRef<number | null>(null);
     const applyFitDimensionsRef = useRef<(dimensions: TerminalDimensions) => void>(() => undefined);
-    const osc52StateRef = useRef<Osc52State>({ pending: '' });
-    const synchronizedOutputStateRef = useRef<SynchronizedOutputState>({ active: false, pending: '' });
+    const osc52StateRef = useRef<Osc52State>(emptyOsc52State());
+    const synchronizedOutputStateRef = useRef<SynchronizedOutputState>(emptySynchronizedOutputState());
     const synchronizedOutputRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const scheduledOutputRenderRef = useRef<number | null>(null);
     const scheduledOutputRenderForceRef = useRef(false);
@@ -1057,7 +1058,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       if (synchronizedOutputRenderTimerRef.current) return;
       synchronizedOutputRenderTimerRef.current = setTimeout(() => {
         synchronizedOutputRenderTimerRef.current = null;
-        synchronizedOutputStateRef.current = { active: false, pending: '' };
+        synchronizedOutputStateRef.current = emptySynchronizedOutputState();
         scheduleOutputRender(false);
       }, SYNCHRONIZED_OUTPUT_RENDER_TIMEOUT_MS);
     }, [scheduleOutputRender]);
@@ -1537,21 +1538,18 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         const terminal = terminalRef.current;
         if (!terminal) return;
         if (options?.onlyIfRestoreRejected && !restoreRejectedRef.current) return;
-        const searchableOutput = typeof data === 'string' ? data : new TextDecoder().decode(data);
-        if (searchableOutput) {
-          const parsed = parseOsc52Writes(osc52StateRef.current, searchableOutput);
-          osc52StateRef.current = parsed.state;
-          for (const payload of parsed.payloads) {
-            try {
-              const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
-              void writeClipboardText(new TextDecoder().decode(bytes));
-            } catch {
-            }
+        const chunkBytes = typeof data === 'string' ? utf8Encoder.encode(data) : data;
+        const osc52 = parseOsc52Writes(osc52StateRef.current, chunkBytes);
+        osc52StateRef.current = osc52.state;
+        for (const payload of osc52.payloads) {
+          try {
+            const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
+            void writeClipboardText(new TextDecoder().decode(bytes));
+          } catch {
           }
         }
         const scrollbackBefore = terminal.getScrollbackLength();
         const viewportOffsetBefore = viewportOffsetRef.current;
-        const chunkBytes = typeof data === 'string' ? utf8Encoder.encode(data) : data;
         modelOpRingRef.current.noteWrite(chunkBytes);
         const osc133 = parseOsc133(osc133StateRef.current, chunkBytes);
         osc133StateRef.current = osc133.state;
@@ -1613,7 +1611,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         lastWriteAtRef.current = Date.now();
         const synchronizedOutput = parseSynchronizedOutput(
           synchronizedOutputStateRef.current,
-          searchableOutput,
+          chunkBytes,
         );
         synchronizedOutputStateRef.current = synchronizedOutput.state;
         recordDiag({
@@ -1621,7 +1619,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           pane: diagKeyRef.current,
           session: runtimeMetaRef.current?.sessionId ?? undefined,
           model: modelInstanceRef.current,
-          len: searchableOutput.length,
+          len: chunkBytes.length,
           syncActive: synchronizedOutput.state.active,
           shouldRender: synchronizedOutput.shouldRender,
           cols: terminal.cols,
@@ -1671,7 +1669,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         graphemeResetCarryRef.current = false;
         ensureGraphemeClustering(terminal);
         osc133StateRef.current = emptyOsc133State();
-        osc52StateRef.current = { pending: '' };
+        osc52StateRef.current = emptyOsc52State();
         viewportOffsetRef.current = 0;
         wheelRemainderRowsRef.current = 0;
         hoverGenerationRef.current += 1;
@@ -2220,7 +2218,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         enableGraphemeClustering(terminal);
         modelOpRingRef.current.beginEpoch(initialSize.cols, initialSize.rows);
         graphemeResetCarryRef.current = false;
-        synchronizedOutputStateRef.current = { active: false, pending: '' };
+        synchronizedOutputStateRef.current = emptySynchronizedOutputState();
         clearSynchronizedOutputRenderTimer();
         modelInstanceRef.current += 1;
         osc133StateRef.current = emptyOsc133State();

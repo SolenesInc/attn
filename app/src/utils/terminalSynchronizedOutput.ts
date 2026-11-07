@@ -1,10 +1,13 @@
-const SYNC_OUTPUT_START = '\x1b[?2026h';
-const SYNC_OUTPUT_END = '\x1b[?2026l';
-const MAX_PENDING_SYNC_BYTES = Math.max(SYNC_OUTPUT_START.length, SYNC_OUTPUT_END.length) - 1;
+import { asciiBytes, indexOfBytes, partialPatternSuffixLength, withPendingBytes } from './terminalByteScan';
+
+const SYNC_OUTPUT_MARKER = asciiBytes('\x1b[?2026');
+const [SYNC_OUTPUT_START] = asciiBytes('h');
+const [SYNC_OUTPUT_END] = asciiBytes('l');
+const ESC = 0x1b;
 
 export interface SynchronizedOutputState {
   active: boolean;
-  pending: string;
+  pending: Uint8Array | null;
 }
 
 export interface SynchronizedOutputParseResult {
@@ -12,48 +15,40 @@ export interface SynchronizedOutputParseResult {
   shouldRender: boolean;
 }
 
-function pendingPrefixSuffix(text: string): string {
-  const maxLength = Math.min(text.length, MAX_PENDING_SYNC_BYTES);
-  for (let length = maxLength; length > 0; length -= 1) {
-    const suffix = text.slice(-length);
-    if (SYNC_OUTPUT_START.startsWith(suffix) || SYNC_OUTPUT_END.startsWith(suffix)) return suffix;
-  }
-  return '';
+export function emptySynchronizedOutputState(): SynchronizedOutputState {
+  return { active: false, pending: null };
 }
 
 export function parseSynchronizedOutput(
   state: SynchronizedOutputState,
-  chunk: string,
+  chunk: Uint8Array,
 ): SynchronizedOutputParseResult {
-  let active = state.active;
-  let shouldRender = !active;
-  let index = 0;
-  const buffer = state.pending + chunk;
-
-  while (index < buffer.length) {
-    const start = buffer.indexOf(SYNC_OUTPUT_START, index);
-    const end = buffer.indexOf(SYNC_OUTPUT_END, index);
-    if (start < 0 && end < 0) break;
-
-    if (end >= 0 && (start < 0 || end < start)) {
-      active = false;
-      shouldRender = true;
-      index = end + SYNC_OUTPUT_END.length;
-      continue;
-    }
-
-    active = true;
-    shouldRender = false;
-    index = start + SYNC_OUTPUT_START.length;
+  if (!state.pending && chunk.indexOf(ESC) === -1) {
+    return { state, shouldRender: !state.active };
   }
 
-  if (!active) shouldRender = true;
+  const buffer = withPendingBytes(state.pending, chunk);
+  let active = state.active;
+  let position = 0;
+  for (;;) {
+    const marker = indexOfBytes(buffer, SYNC_OUTPUT_MARKER, position);
+    if (marker < 0 || marker + SYNC_OUTPUT_MARKER.length >= buffer.length) break;
+    const final = buffer[marker + SYNC_OUTPUT_MARKER.length];
+    if (final === SYNC_OUTPUT_START) active = true;
+    if (final === SYNC_OUTPUT_END) active = false;
+    position = marker + SYNC_OUTPUT_MARKER.length;
+  }
 
+  const hold = partialOrWholeMarkerSuffixLength(buffer);
   return {
-    state: {
-      active,
-      pending: pendingPrefixSuffix(buffer),
-    },
-    shouldRender,
+    state: { active, pending: hold > 0 ? buffer.slice(buffer.length - hold) : null },
+    shouldRender: !active,
   };
+}
+
+function partialOrWholeMarkerSuffixLength(buffer: Uint8Array): number {
+  if (indexOfBytes(buffer, SYNC_OUTPUT_MARKER, buffer.length - SYNC_OUTPUT_MARKER.length) >= 0) {
+    return SYNC_OUTPUT_MARKER.length;
+  }
+  return partialPatternSuffixLength(buffer, SYNC_OUTPUT_MARKER);
 }
