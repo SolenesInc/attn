@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type MouseEvent, type RefObject } from 'react';
+import { isDomInstance } from '../utils/realm';
 
 export function useRevealSelection(
   listRef: RefObject<HTMLElement | null>,
@@ -31,7 +32,7 @@ export function useRevealSelection(
   return {
     onClick(event: MouseEvent) {
       clickedKey.current = null;
-      if (event.detail === 0 || !(event.target instanceof Element)) return;
+      if (event.detail === 0 || !isDomInstance(event.target, 'Element')) return;
       const control = event.target.closest('[data-select-key]');
       const key = control?.getAttribute('data-select-key');
       if (key && !selectionKey?.startsWith(key)) {

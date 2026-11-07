@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react';
+import { isDomInstance } from '../utils/realm';
 
 export function useWaitingFit(
   bodyRef: RefObject<HTMLDivElement | null>,
@@ -47,10 +48,10 @@ export function useWaitingFit(
     const mutations = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
       for (const record of records) {
         for (const node of record.removedNodes) {
-          if (node instanceof Element) observer?.unobserve(node);
+          if (isDomInstance(node, 'Element')) observer?.unobserve(node);
         }
         for (const node of record.addedNodes) {
-          if (node instanceof Element) observer?.observe(node);
+          if (isDomInstance(node, 'Element')) observer?.observe(node);
         }
       }
       measure();

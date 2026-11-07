@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { NormalizedPaneBounds } from '../../types/desktop';
 import { freeStillFrame } from '../../utils/stillFrame';
+import { isDomInstance } from '../../utils/realm';
 
 const STIFFNESS = 630;
 const DAMPING = 39;
@@ -185,7 +186,7 @@ function animateChange(state: MotionState, container: HTMLElement, before: RowMo
   const slidePx = rowSlidePx(before, after);
   const paneElement = (leafId: string) => {
     for (const child of container.children) {
-      if (child instanceof HTMLElement && child.dataset.paneId === leafId) return child;
+      if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId === leafId) return child;
     }
     return null;
   };
@@ -220,7 +221,7 @@ function startAwaitedEntrances(state: MotionState, layout: RowMotionLayout, cont
       continue;
     }
     for (const child of container.children) {
-      if (child instanceof HTMLElement && child.dataset.paneId === leafId) {
+      if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId === leafId) {
         state.awaitingElement.delete(leafId);
         if (!isBrowserTile(child)) startEntering(state, leafId, child);
         break;
@@ -232,7 +233,7 @@ function startAwaitedEntrances(state: MotionState, layout: RowMotionLayout, cont
 function rememberElements(state: MotionState, container: HTMLElement): void {
   state.elements.clear();
   for (const child of container.children) {
-    if (child instanceof HTMLElement && child.dataset.paneId) state.elements.set(child.dataset.paneId, child);
+    if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId) state.elements.set(child.dataset.paneId, child);
   }
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { isDomInstance } from '../utils/realm';
 
 const AGENT_FILTER_SELECTOR = '[data-testid="queue-agent-filter"]';
 const AGENT_LIST_TOGGLE_SELECTOR = '[data-testid="queue-agents-toggle"]';
@@ -10,7 +11,7 @@ function focusIsOnAgentList() {
 }
 
 function focusedElement() {
-  return document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+  return isDomInstance(document.activeElement, 'HTMLElement') && document.activeElement !== document.body
     ? document.activeElement
     : null;
 }

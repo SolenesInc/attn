@@ -44,6 +44,7 @@ import {
   nextAnimationFrame,
   settleUi,
 } from './uiAutomationSettle';
+import { isDomInstance } from '../utils/realm';
 
 
 
@@ -279,7 +280,7 @@ function parseDataFlag(value: string | null | undefined) {
 }
 
 function elementMetrics(element: Element | null) {
-  if (!(element instanceof HTMLElement)) {
+  if (!isDomInstance(element, 'HTMLElement')) {
     return null;
   }
   const style = getComputedStyle(element);
@@ -298,7 +299,7 @@ function elementMetrics(element: Element | null) {
 
 function getSessionDesktopRoot(desktopId: string) {
   const root = document.querySelector(`[data-session-terminal-desktop="${desktopId}"]`);
-  return root instanceof HTMLElement ? root : null;
+  return isDomInstance(root, 'HTMLElement') ? root : null;
 }
 
 function collectDesktopShellMetrics(sessionId: string) {
@@ -334,10 +335,10 @@ function collectSplitDomMetrics(sessionId: string) {
     return [];
   }
   return Array.from(desktopRoot.querySelectorAll('[data-split-id]'))
-    .filter((element): element is HTMLElement => element instanceof HTMLElement)
+    .filter((element): element is HTMLElement => isDomInstance(element, 'HTMLElement'))
     .map((element) => {
       const childElements = Array.from(element.children)
-        .filter((child): child is HTMLElement => child instanceof HTMLElement && child.matches('[data-split-child-index]'));
+        .filter((child): child is HTMLElement => isDomInstance(child, 'HTMLElement') && child.matches('[data-split-child-index]'));
       const firstChild = childElements.find((child) => child.dataset.splitChildIndex === '0') ?? null;
       const secondChild = childElements.find((child) => child.dataset.splitChildIndex === '1') ?? null;
       return {
@@ -347,11 +348,11 @@ function collectSplitDomMetrics(sessionId: string) {
         ratio: element.dataset.splitRatio ? Number.parseFloat(element.dataset.splitRatio) : null,
         dom: elementMetrics(element),
         firstChild: {
-          path: firstChild instanceof HTMLElement ? firstChild.dataset.splitChildPath || '' : '',
+          path: isDomInstance(firstChild, 'HTMLElement') ? firstChild.dataset.splitChildPath || '' : '',
           dom: elementMetrics(firstChild),
         },
         secondChild: {
-          path: secondChild instanceof HTMLElement ? secondChild.dataset.splitChildPath || '' : '',
+          path: isDomInstance(secondChild, 'HTMLElement') ? secondChild.dataset.splitChildPath || '' : '',
           dom: elementMetrics(secondChild),
         },
       };
@@ -359,7 +360,7 @@ function collectSplitDomMetrics(sessionId: string) {
 }
 
 function collectPaneDomMetrics(paneElement: Element | null) {
-  if (!(paneElement instanceof HTMLElement)) {
+  if (!isDomInstance(paneElement, 'HTMLElement')) {
     return null;
   }
   const paneBody = paneElement.querySelector('.desktop-pane-body');
@@ -439,7 +440,7 @@ function collectVisualSnapshot(
           dom: desktopDom,
           splits: collectSplitDomMetrics(desktopId),
         },
-        sidebarItem: sidebarItem instanceof HTMLElement
+        sidebarItem: isDomInstance(sidebarItem, 'HTMLElement')
           ? {
               text: sidebarItem.textContent || '',
               bounds: rectSnapshot(sidebarItem),
@@ -460,9 +461,9 @@ function collectVisualSnapshot(
             runtimeAttached: runtimeId ? isRuntimeAttached(runtimeId) : false,
             active: activePaneId === paneId,
             kind: 'agent',
-            path: paneElement instanceof HTMLElement ? paneElement.dataset.panePath || null : null,
+            path: isDomInstance(paneElement, 'HTMLElement') ? paneElement.dataset.panePath || null : null,
             bounds: rectSnapshot(paneElement),
-            className: paneElement instanceof HTMLElement ? paneElement.className : null,
+            className: isDomInstance(paneElement, 'HTMLElement') ? paneElement.className : null,
             dom: collectPaneDomMetrics(paneElement),
             layout: modelLayout,
             visibleContent: getPaneVisibleContent(session.id, paneId),
@@ -532,7 +533,7 @@ function collectSessionUiState(
     cwd: session.cwd,
     activePaneId: getActivePaneIdForSession(session),
     daemonActivePaneId: session.daemonActivePaneId,
-    sidebarItem: sidebarItem instanceof HTMLElement
+    sidebarItem: isDomInstance(sidebarItem, 'HTMLElement')
       ? {
           text: sidebarItem.textContent || '',
           bounds: rectSnapshot(sidebarItem),
@@ -550,11 +551,11 @@ function collectSessionUiState(
     },
     agentPaneBounds: rectSnapshot(firstAgentPane),
     paneAutomation: readProvenance(firstAgentPane),
-    settling: settlingChip instanceof HTMLElement
+    settling: isDomInstance(settlingChip, 'HTMLElement')
       ? {
           text: settlingChip.textContent?.trim() || '',
           held: settlingChip.classList.contains('settling-header--held'),
-          frozenBar: Boolean(settlingFill instanceof HTMLElement
+          frozenBar: Boolean(isDomInstance(settlingFill, 'HTMLElement')
             && settlingFill.classList.contains('settling-track-fill--held')),
         }
       : null,
@@ -792,14 +793,14 @@ function findActivePaneCanvas(): HTMLCanvasElement | null {
   }
   const paneElement = desktop.querySelector(`[data-pane-id="${activePaneId}"]`);
   const canvas = paneElement?.querySelector('canvas');
-  return canvas instanceof HTMLCanvasElement ? canvas : null;
+  return isDomInstance(canvas, 'HTMLCanvasElement') ? canvas : null;
 }
 
 function clickPaneElement(sessionId: string, paneId: string) {
   const element = document.querySelector(
     `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"]`
   );
-  if (!(element instanceof HTMLElement)) {
+  if (!isDomInstance(element, 'HTMLElement')) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
   element.dispatchEvent(new MouseEvent('mousedown', {
@@ -824,7 +825,7 @@ function wheelPaneElement(sessionId: string, paneId: string, deltaY: number, del
     `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"]`
   );
   const terminal = paneElement?.querySelector('.terminal-container');
-  if (!(terminal instanceof HTMLElement)) {
+  if (!isDomInstance(terminal, 'HTMLElement')) {
     throw new Error(`Terminal element not found for ${sessionId}:${paneId}`);
   }
   const rect = terminal.getBoundingClientRect();
@@ -844,12 +845,12 @@ function wheelPaneElement(sessionId: string, paneId: string, deltaY: number, del
 function paneTerminalGrid(sessionId: string, paneId: string) {
   const terminalSelector = `[data-pane-session-id="${sessionId}"][data-pane-id="${paneId}"] .terminal-container`;
   const terminal = document.querySelector(terminalSelector);
-  if (!(terminal instanceof HTMLElement)) {
+  if (!isDomInstance(terminal, 'HTMLElement')) {
     throw new Error(`Terminal element not found for ${sessionId}:${paneId}`);
   }
   const canvas = terminal.querySelector('canvas');
-  const gridSelector = canvas instanceof HTMLElement ? `${terminalSelector} canvas` : terminalSelector;
-  const gridRect = (canvas instanceof HTMLElement ? canvas : terminal).getBoundingClientRect();
+  const gridSelector = isDomInstance(canvas, 'HTMLElement') ? `${terminalSelector} canvas` : terminalSelector;
+  const gridRect = (isDomInstance(canvas, 'HTMLElement') ? canvas : terminal).getBoundingClientRect();
   return { terminal, gridRect, gridSelector };
 }
 
@@ -1058,11 +1059,11 @@ function dragPaneSelection(
 function dragLeafHeader(leafId: string, dropFracX: number, dropFracY: number) {
   const leaf = document.querySelector(`[data-pane-id="${leafId}"]`);
   const header = leaf?.querySelector('.desktop-pane-header, .desktop-dock-tile-header');
-  if (!(header instanceof HTMLElement)) {
+  if (!isDomInstance(header, 'HTMLElement')) {
     throw new Error(`Draggable leaf header not found for ${leafId}`);
   }
   const container = header.closest('.session-terminal-panes');
-  if (!(container instanceof HTMLElement)) {
+  if (!isDomInstance(container, 'HTMLElement')) {
     throw new Error(`Panes container not found for leaf ${leafId}`);
   }
   const headerRect = header.getBoundingClientRect();
@@ -1109,7 +1110,7 @@ async function dragSplitDivider(
   const desktopRoot = getSessionDesktopRoot(desktopId);
   const separator = Array.from(desktopRoot?.querySelectorAll('[role="separator"][data-split-id]') ?? [])
     .find((element): element is HTMLElement => (
-      element instanceof HTMLElement && element.dataset.splitId === splitId
+      isDomInstance(element, 'HTMLElement') && element.dataset.splitId === splitId
     ));
   if (!separator) {
     throw new Error(`Split divider not found for ${splitId}`);
@@ -1173,7 +1174,7 @@ function clickElement(element: HTMLElement) {
 
 function clickTestId(testid: string) {
   const element = document.querySelector(`[data-testid="${testid}"]`);
-  if (!(element instanceof HTMLElement)) {
+  if (!isDomInstance(element, 'HTMLElement')) {
     throw new Error(`Element not found: [data-testid="${testid}"]`);
   }
   for (const type of ['mousedown', 'mouseup', 'click'] as const) {
@@ -1183,7 +1184,7 @@ function clickTestId(testid: string) {
 
 async function waitForTestId(testid: string, maxFrames = 120) {
   for (let frame = 0; frame < maxFrames; frame += 1) {
-    if (document.querySelector(`[data-testid="${testid}"]`) instanceof HTMLElement) {
+    if (isDomInstance(document.querySelector(`[data-testid="${testid}"]`), 'HTMLElement')) {
       await afterFramePaints();
       return;
     }
@@ -1194,7 +1195,7 @@ async function waitForTestId(testid: string, maxFrames = 120) {
 
 function frontGardenPanel(): HTMLElement | null {
   const panel = document.querySelector('.garden-panel');
-  return panel instanceof HTMLElement ? panel : null;
+  return isDomInstance(panel, 'HTMLElement') ? panel : null;
 }
 
 const FRAME_FLIGHT_FRAME_BUDGET = 90;
@@ -1204,7 +1205,7 @@ async function gardenFrameAtRest() {
   for (let frames = 0; frames < FRAME_FLIGHT_FRAME_BUDGET; frames += 1) {
     await nextAnimationFrame();
     const frame = document.querySelector('.garden-frame');
-    const width = frame instanceof HTMLElement ? Math.round(frame.getBoundingClientRect().width) : -1;
+    const width = isDomInstance(frame, 'HTMLElement') ? Math.round(frame.getBoundingClientRect().width) : -1;
     still = width === last ? still + 1 : 0;
     last = width;
     // Three frames unchanged: an eased transition never repeats a width, so one repeat means it landed.
@@ -1221,7 +1222,7 @@ async function gardenFrameAtRest() {
 
 function collectGardenBoardUiState() {
   const board = document.querySelector('.garden-board');
-  if (!(board instanceof HTMLElement)) {
+  if (!isDomInstance(board, 'HTMLElement')) {
     return { present: false };
   }
   const trail = Array.from(board.querySelectorAll('.garden-board__trail-step')).map((step) => ({
@@ -1301,29 +1302,29 @@ function collectGardenUiState() {
     key: col.getAttribute('data-column') ?? '',
     rows: col.querySelectorAll('[data-seed-row]').length,
     selected: col.querySelector('.garden-row.is-selected [data-seed-row]')?.getAttribute('data-seed-row') ?? '',
-    scrollTop: col instanceof HTMLElement ? Math.round(col.scrollTop) : -1,
+    scrollTop: isDomInstance(col, 'HTMLElement') ? Math.round(col.scrollTop) : -1,
   }));
   const field = panel.querySelector('.garden-search__input');
   const closed = panel.querySelector('.garden-chrome__scope');
-  const activeDescendant = field instanceof HTMLInputElement ? field.getAttribute('aria-activedescendant') : null;
+  const activeDescendant = isDomInstance(field, 'HTMLInputElement') ? field.getAttribute('aria-activedescendant') : null;
   return {
     present: true,
     frame: frameBox?.classList.contains('is-full') ? 'full' : frameBox ? 'dock' : 'none',
-    frameWidth: frameBox instanceof HTMLElement ? Math.round(frameBox.clientWidth) : -1,
+    frameWidth: isDomInstance(frameBox, 'HTMLElement') ? Math.round(frameBox.clientWidth) : -1,
     layout: columnsBox ? 'columns' : 'stack',
-    panes: columnsBox instanceof HTMLElement ? Number(columnsBox.dataset.panes ?? 0) : 0,
-    boxWidth: columnsBox instanceof HTMLElement ? Math.round(columnsBox.clientWidth) : -1,
+    panes: isDomInstance(columnsBox, 'HTMLElement') ? Number(columnsBox.dataset.panes ?? 0) : 0,
+    boxWidth: isDomInstance(columnsBox, 'HTMLElement') ? Math.round(columnsBox.clientWidth) : -1,
     columns,
     trail,
     here,
     crown: panel.querySelector('.garden-head__progress')?.textContent?.trim() ?? '',
     empty: panel.querySelector('.garden-empty')?.textContent?.trim() ?? '',
-    scrollTop: viewport instanceof HTMLElement ? Math.round(viewport.scrollTop) : -1,
-    scrollHeight: viewport instanceof HTMLElement ? viewport.scrollHeight : -1,
-    focusedRow: focused instanceof HTMLElement ? focused.getAttribute('data-seed-row') ?? '' : '',
+    scrollTop: isDomInstance(viewport, 'HTMLElement') ? Math.round(viewport.scrollTop) : -1,
+    scrollHeight: isDomInstance(viewport, 'HTMLElement') ? viewport.scrollHeight : -1,
+    focusedRow: isDomInstance(focused, 'HTMLElement') ? focused.getAttribute('data-seed-row') ?? '' : '',
     seeds,
     search: {
-      query: field instanceof HTMLInputElement ? field.value : '',
+      query: isDomInstance(field, 'HTMLInputElement') ? field.value : '',
       focused: document.activeElement === field,
       scope: field?.getAttribute('aria-label') ?? '',
       hint: panel.querySelector('.garden-search__meta')?.textContent?.trim() ?? '',
@@ -1342,7 +1343,7 @@ function collectGardenUiState() {
 
 function collectGardenSeedPage() {
   const page = document.querySelector('.garden-page');
-  if (!(page instanceof HTMLElement)) return { present: false };
+  if (!isDomInstance(page, 'HTMLElement')) return { present: false };
   return {
     present: true,
     title: page.querySelector('.garden-head__title')?.textContent?.trim() ?? '',
@@ -1369,7 +1370,7 @@ function collectGardenSeedPage() {
 
 function collectNotificationsUiState() {
   const panel = document.querySelector('.notifications-panel');
-  if (!(panel instanceof HTMLElement)) return { present: false, rows: [] };
+  if (!isDomInstance(panel, 'HTMLElement')) return { present: false, rows: [] };
   return {
     present: true,
     empty: panel.querySelector('.notifications-panel-empty')?.textContent?.trim() ?? '',
@@ -1385,7 +1386,7 @@ function collectNotificationsUiState() {
 function collectSeedDocumentState(scope: string, seedId: string) {
   const named = seedId ? `[data-seed-id="${seedId}"]` : '';
   const root = document.querySelector(`${scope} .seed-document${named}`);
-  if (!(root instanceof HTMLElement)) {
+  if (!isDomInstance(root, 'HTMLElement')) {
     return { present: false };
   }
   const tile = root.closest('.desktop-dock-tile');
@@ -1400,7 +1401,7 @@ function collectSeedDocumentState(scope: string, seedId: string) {
       title: item.querySelector('.seed-document__child-title')?.textContent?.trim() ?? '',
     })),
     plotBeforeBody: Boolean(plot && body && (plot.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING)),
-    logOpen: log instanceof HTMLDetailsElement && log.open,
+    logOpen: isDomInstance(log, 'HTMLDetailsElement') && log.open,
     parent: tile?.querySelector('.desktop-dock-tile-seed-parent span:last-child')?.textContent?.trim() ?? '',
     artifacts: Array.from(root.querySelectorAll('.seed-document__artifacts li')).map(
       (item) => item.textContent?.trim() ?? '',
@@ -1422,7 +1423,7 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
 
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
   const panel = document.querySelector('.ledger-panel');
-  if (!(panel instanceof HTMLElement)) return null;
+  if (!isDomInstance(panel, 'HTMLElement')) return null;
   const selected = panel.querySelector('.ledger-tabs button.is-selected')?.textContent?.trim();
   return selected === tab ? panel : null;
 }
@@ -1434,17 +1435,17 @@ function ledgerRowVerbs(row: Element): string[] {
 function ledgerStatusLink(root: HTMLElement, startsWith: string): HTMLElement | null {
   const link = Array.from(root.querySelectorAll('.ledger-status-left .ledger-status-link'))
     .find((entry) => (entry.textContent || '').trim().startsWith(startsWith));
-  return link instanceof HTMLElement ? link : null;
+  return isDomInstance(link, 'HTMLElement') ? link : null;
 }
 
 async function runLedgerRowVerb(row: HTMLElement, label: string) {
   const primary = row.querySelector('.ledger-row-trailing .ledger-verb');
-  if (primary instanceof HTMLElement && primary.textContent?.trim() === label) {
+  if (isDomInstance(primary, 'HTMLElement') && primary.textContent?.trim() === label) {
     clickElement(primary);
     return;
   }
   const more = row.querySelector('.ledger-more');
-  if (!(more instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
+  if (!isDomInstance(more, 'HTMLElement')) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
   clickElement(more);
   await settleUi(1);
   clickLedgerMenuItem(row, label);
@@ -1454,7 +1455,7 @@ function clickLedgerMenuItem(row: HTMLElement, label: string) {
   const items = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'));
   const labelOf = (entry: Element) => (entry.textContent || '').replace(/^\d/, '').trim();
   const item = items.find((entry) => labelOf(entry) === label);
-  if (!(item instanceof HTMLElement)) {
+  if (!isDomInstance(item, 'HTMLElement')) {
     throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}; its menu holds ${items.map(labelOf).join(', ') || 'nothing'}`);
   }
   clickElement(item);
@@ -1511,13 +1512,13 @@ function worktreesRoot(): HTMLElement {
 
 function worktreeRow(path: string): HTMLElement {
   const row = worktreesRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(path)}"]`);
-  if (!(row instanceof HTMLElement)) throw new Error(`no row for worktree ${path}`);
+  if (!isDomInstance(row, 'HTMLElement')) throw new Error(`no row for worktree ${path}`);
   return row;
 }
 
 function collectAutomationsUiState() {
   const panel = document.querySelector('[data-testid="automations-panel"]');
-  if (!(panel instanceof HTMLElement)) {
+  if (!isDomInstance(panel, 'HTMLElement')) {
     return { present: false };
   }
   const definitionRows = Array.from(
@@ -1530,7 +1531,7 @@ function collectAutomationsUiState() {
       id,
       name: row.querySelector('.automations-panel__name')?.textContent?.trim() ?? '',
       trigger: row.querySelector('.automations-panel__trigger')?.textContent?.trim() ?? '',
-      enabled: toggle instanceof HTMLInputElement ? toggle.checked : false,
+      enabled: isDomInstance(toggle, 'HTMLInputElement') ? toggle.checked : false,
       selected: row.classList.contains('is-selected'),
       failed: Boolean(row.querySelector(`[data-testid="automation-failure-badge-${id}"]`)),
       canRunNow: Boolean(row.querySelector(`[data-testid="automation-run-now-${id}"]`)),
@@ -1601,19 +1602,19 @@ function collectAutomationFormUiState() {
 function getLocationPickerRoot() {
   const root = document.querySelector('[data-testid="location-picker"]')
     || document.querySelector('[data-testid="location-picker-inline"]');
-  return root instanceof HTMLElement ? root : null;
+  return isDomInstance(root, 'HTMLElement') ? root : null;
 }
 
 function getLocationPickerOverlay() {
   const overlay = document.querySelector('[data-testid="location-picker-overlay"]');
-  return overlay instanceof HTMLElement ? overlay : null;
+  return isDomInstance(overlay, 'HTMLElement') ? overlay : null;
 }
 
 const RANGE_TOKENS = new Set(['today', 'yesterday', '7d', '30d', 'week', 'month']);
 
 function queryTokens(root: HTMLElement): string[] {
   const input = root.querySelector('.ledger-query input');
-  return input instanceof HTMLInputElement ? input.value.trim().split(/\s+/).filter(Boolean) : [];
+  return isDomInstance(input, 'HTMLInputElement') ? input.value.trim().split(/\s+/).filter(Boolean) : [];
 }
 
 function collectSessionsPanelUiState() {
@@ -1670,7 +1671,7 @@ function sessionsPanelRoot(): HTMLElement {
 
 function setSessionsQuery(root: HTMLElement, edit: (tokens: string[]) => string[]) {
   const input = root.querySelector('.ledger-query input');
-  if (!(input instanceof HTMLInputElement)) throw new Error('no query input');
+  if (!isDomInstance(input, 'HTMLInputElement')) throw new Error('no query input');
   setControlValue(input, edit(queryTokens(root)).join(' '));
 }
 
@@ -1687,7 +1688,7 @@ function collectMarkdownOpenerUiState() {
   }));
   return {
     open: true,
-    query: input instanceof HTMLInputElement ? input.value : '',
+    query: isDomInstance(input, 'HTMLInputElement') ? input.value : '',
     rows,
     emptyText: root.querySelector('.markdown-opener-empty')?.textContent?.trim() || '',
   };
@@ -1716,7 +1717,7 @@ function collectLocationPickerUiState() {
   const breadcrumb = root.querySelector('[data-testid="location-picker-breadcrumb-path"]');
   const empty = root.querySelector('[data-testid="location-picker-empty"]');
   const agentButtons = Array.from(root.querySelectorAll('.agent-option'))
-    .filter((button): button is HTMLButtonElement => button instanceof HTMLButtonElement)
+    .filter((button): button is HTMLButtonElement => isDomInstance(button, 'HTMLButtonElement'))
     .map((button) => ({
       label: button.querySelector('.agent-option-name')?.textContent?.trim() || '',
       shortcut: button.querySelector('.agent-shortcut')?.textContent?.trim() || '',
@@ -1725,7 +1726,7 @@ function collectLocationPickerUiState() {
     }));
 
   const pickerItems = Array.from(root.querySelectorAll('[data-testid^="location-picker-item-"]'))
-    .filter((node): node is HTMLElement => node instanceof HTMLElement)
+    .filter((node): node is HTMLElement => isDomInstance(node, 'HTMLElement'))
     .map((item) => ({
       index: Number.parseInt(item.dataset.index || '-1', 10),
       kind: item.dataset.kind || '',
@@ -1738,10 +1739,10 @@ function collectLocationPickerUiState() {
 
   const whereList = root.querySelector('[role="listbox"][aria-label="Where"]');
   const repoOptionsRoot = root.querySelector('[data-testid="repo-options"]');
-  const repoOptions = repoOptionsRoot instanceof HTMLElement
+  const repoOptions = isDomInstance(repoOptionsRoot, 'HTMLElement')
     ? {
         items: Array.from(repoOptionsRoot.querySelectorAll('[data-testid^="repo-option-"]'))
-          .filter((node): node is HTMLElement => node instanceof HTMLElement)
+          .filter((node): node is HTMLElement => isDomInstance(node, 'HTMLElement'))
           .map((item) => ({
             index: Number.parseInt(item.dataset.optionIndex || '-1', 10),
             kind: item.dataset.optionKind || '',
@@ -1752,7 +1753,7 @@ function collectLocationPickerUiState() {
           .sort((left, right) => left.index - right.index),
         newWorktree: (() => {
           const form = repoOptionsRoot.querySelector('[data-testid="repo-new-worktree-form"]');
-          if (!(form instanceof HTMLElement)) {
+          if (!isDomInstance(form, 'HTMLElement')) {
             return null;
           }
           const currentRadio = form.querySelector('[data-testid="repo-new-worktree-start-current"]');
@@ -1760,10 +1761,10 @@ function collectLocationPickerUiState() {
           const input = form.querySelector('[data-testid="repo-new-worktree-input"]');
           return {
             visible: true,
-            name: input instanceof HTMLInputElement ? input.value : '',
-            startingBranch: currentRadio instanceof HTMLInputElement && currentRadio.checked
+            name: isDomInstance(input, 'HTMLInputElement') ? input.value : '',
+            startingBranch: isDomInstance(currentRadio, 'HTMLInputElement') && currentRadio.checked
               ? 'current'
-              : defaultRadio instanceof HTMLInputElement && defaultRadio.checked
+              : isDomInstance(defaultRadio, 'HTMLInputElement') && defaultRadio.checked
                 ? 'default'
                 : null,
           };
@@ -1775,7 +1776,7 @@ function collectLocationPickerUiState() {
     open: true,
     mode: whereList ? 'where-list' : repoOptions ? 'repo-options' : 'path-input',
     title: title?.textContent?.trim() || '',
-    pathInputValue: pathInput instanceof HTMLInputElement ? pathInput.value : '',
+    pathInputValue: isDomInstance(pathInput, 'HTMLInputElement') ? pathInput.value : '',
     currentDir: breadcrumb?.textContent?.trim() || '',
     selectedAgent: agentButtons.find((button) => button.active)?.label || null,
     agents: agentButtons,
@@ -2021,11 +2022,11 @@ export function useUiAutomationBridge({
         // A fresh instance's What's New intro swallows native HID clicks. Dismiss it and Home's
         // replay banner the way a user can (both persist), so scenario screens stay stable.
         const overlay = document.querySelector('.whats-new-overlay');
-        if (overlay instanceof HTMLElement) clickElement(overlay);
+        if (isDomInstance(overlay, 'HTMLElement')) clickElement(overlay);
         const banner = document.querySelector('[aria-label="Dismiss the intro banner"]');
-        if (banner instanceof HTMLElement) clickElement(banner);
+        if (isDomInstance(banner, 'HTMLElement')) clickElement(banner);
         await settleUi();
-        return { dismissed: overlay instanceof HTMLElement };
+        return { dismissed: isDomInstance(overlay, 'HTMLElement') };
       }
       case 'markdown_get_annotations_state': {
         return (
@@ -2054,7 +2055,7 @@ export function useUiAutomationBridge({
           throw new Error('dom_terminal_key requires selector, key, and code');
         }
         const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
+        if (!isDomInstance(element, 'HTMLElement')) {
           throw new Error(`dom_terminal_key selector not found in DOM: ${selector}`);
         }
         const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
@@ -2086,7 +2087,7 @@ export function useUiAutomationBridge({
           throw new Error('dom_terminal_paste requires selector and text or image');
         }
         const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
+        if (!isDomInstance(element, 'HTMLElement')) {
           throw new Error(`dom_terminal_paste selector not found in DOM: ${selector}`);
         }
         const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true });
@@ -2112,7 +2113,7 @@ export function useUiAutomationBridge({
           throw new Error('dom_compose_text phase must be complete, start, or end');
         }
         const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
+        if (!isDomInstance(element, 'HTMLElement')) {
           throw new Error(`dom_compose_text selector not found in DOM: ${selector}`);
         }
         element.focus();
@@ -2171,7 +2172,7 @@ export function useUiAutomationBridge({
           onScreen: Boolean(visible?.querySelector('.dashboard')),
           allSettled: Boolean(banner),
           detail: banner?.querySelector('.all-settled-detail')?.textContent?.trim() || '',
-          followNextTurn: follow instanceof HTMLInputElement ? follow.checked : null,
+          followNextTurn: isDomInstance(follow, 'HTMLInputElement') ? follow.checked : null,
           shortcutFooter: Boolean(visible?.querySelector('.dashboard-footer')),
           snoozed: {
             present: Boolean(snoozedGroup),
@@ -2307,7 +2308,7 @@ export function useUiAutomationBridge({
           throw new Error('chief_of_staff_open_actions requires sessionId');
         }
         const button = document.querySelector(`[data-testid="session-actions-${sessionId}"]`);
-        if (!(button instanceof HTMLElement)) {
+        if (!isDomInstance(button, 'HTMLElement')) {
           throw new Error(`Session actions not found for ${sessionId}`);
         }
         clickElement(button);
@@ -2316,7 +2317,7 @@ export function useUiAutomationBridge({
       }
       case 'chief_of_staff_toggle': {
         const button = document.querySelector('[data-testid="chief-of-staff-session-action"]');
-        if (!(button instanceof HTMLElement)) {
+        if (!isDomInstance(button, 'HTMLElement')) {
           throw new Error('Chief of staff action is not open');
         }
         clickElement(button);
@@ -2325,7 +2326,7 @@ export function useUiAutomationBridge({
       }
       case 'chief_of_staff_confirm_transfer': {
         const button = document.querySelector('[data-testid="chief-transfer-confirm"]');
-        if (!(button instanceof HTMLElement)) {
+        if (!isDomInstance(button, 'HTMLElement')) {
           throw new Error('Chief of staff transfer prompt is not open');
         }
         clickElement(button);
@@ -2334,7 +2335,7 @@ export function useUiAutomationBridge({
       }
       case 'chief_of_staff_cancel_transfer': {
         const button = document.querySelector('[data-testid="chief-transfer-cancel"]');
-        if (!(button instanceof HTMLElement)) {
+        if (!isDomInstance(button, 'HTMLElement')) {
           throw new Error('Chief of staff transfer prompt is not open');
         }
         clickElement(button);
@@ -2402,11 +2403,11 @@ export function useUiAutomationBridge({
         const panes = Array.from(document.querySelectorAll<HTMLElement>('.session-terminal-panes > .desktop-pane'));
         return {
           animations: document.getAnimations().filter((animation) => {
-            const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+            const target = isDomInstance(animation.effect, 'KeyframeEffect') ? animation.effect.target : null;
             return Boolean(target?.closest('.session-terminal-panes')) && animation.playState === 'running';
           }).length,
           documentAnimations: document.getAnimations().map((animation) => {
-            const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+            const target = isDomInstance(animation.effect, 'KeyframeEffect') ? animation.effect.target : null;
             return { name: 'animationName' in animation ? animation.animationName : '', target: target?.getAttribute('class') ?? target?.tagName ?? '', playState: animation.playState };
           }),
           heldPanes: panes.filter((pane) => !pane.dataset.paneId).length,
@@ -2490,7 +2491,7 @@ export function useUiAutomationBridge({
           throw new Error('session_seed_chip_get_state requires sessionId');
         }
         const chip = document.querySelector(`[data-testid="seed-chip-${sessionId}"]`);
-        if (!(chip instanceof HTMLElement)) {
+        if (!isDomInstance(chip, 'HTMLElement')) {
           return { present: false };
         }
         return {
@@ -2534,7 +2535,7 @@ export function useUiAutomationBridge({
         const activeBody = document.activeElement;
         const tileBodyFocused = Boolean(
           surface
-            && activeBody instanceof HTMLElement
+            && isDomInstance(activeBody, 'HTMLElement')
             && activeBody.classList.contains('desktop-dock-tile-body')
             && surface.contains(activeBody),
         );
@@ -2566,7 +2567,7 @@ export function useUiAutomationBridge({
         if (scope) {
           const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
             .find((entry) => entry.textContent?.trim() === scope);
-          if (!(button instanceof HTMLElement)) throw new Error(`no ${scope} scope button`);
+          if (!isDomInstance(button, 'HTMLElement')) throw new Error(`no ${scope} scope button`);
           clickElement(button);
           await settleUi(2);
         }
@@ -2598,7 +2599,7 @@ export function useUiAutomationBridge({
       case 'sessions_load_more': {
         const link = Array.from(sessionsPanelRoot().querySelectorAll('.ledger-status-left .ledger-status-link'))
           .find((entry) => /older/.test(entry.textContent || ''));
-        if (!(link instanceof HTMLElement)) throw new Error('nothing older to load');
+        if (!isDomInstance(link, 'HTMLElement')) throw new Error('nothing older to load');
         clickElement(link);
         await settleUi(4);
         return collectSessionsPanelUiState();
@@ -2606,7 +2607,7 @@ export function useUiAutomationBridge({
       case 'sessions_row_action': {
         const { sessionId, action, choice } = payload as { sessionId: string; action: string; choice?: string };
         const row = sessionsPanelRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(sessionId)}"]`);
-        if (!(row instanceof HTMLElement)) throw new Error(`no row for session ${sessionId}`);
+        if (!isDomInstance(row, 'HTMLElement')) throw new Error(`no row for session ${sessionId}`);
         await runLedgerRowVerb(row, action);
         if (choice !== undefined) {
           await settleUi(1);
@@ -2638,7 +2639,7 @@ export function useUiAutomationBridge({
       }
       case 'location_picker_set_path': {
         const input = getLocationPickerRoot()?.querySelector('[data-testid="location-picker-path-input"]');
-        if (!(input instanceof HTMLInputElement)) {
+        if (!isDomInstance(input, 'HTMLInputElement')) {
           throw new Error('Location picker path input not found');
         }
         const value = typeof payload.value === 'string' ? payload.value : '';
@@ -2649,7 +2650,7 @@ export function useUiAutomationBridge({
       }
       case 'location_picker_submit_path': {
         const input = getLocationPickerRoot()?.querySelector('[data-testid="location-picker-path-input"]');
-        if (!(input instanceof HTMLInputElement)) {
+        if (!isDomInstance(input, 'HTMLInputElement')) {
           throw new Error('Location picker path input not found');
         }
         input.focus();
@@ -2667,7 +2668,7 @@ export function useUiAutomationBridge({
           throw new Error('location_picker_select_path_item requires index');
         }
         const item = getLocationPickerRoot()?.querySelector(`[data-testid="location-picker-item-${Math.floor(index)}"]`);
-        if (!(item instanceof HTMLElement)) {
+        if (!isDomInstance(item, 'HTMLElement')) {
           throw new Error(`Location picker item ${index} not found`);
         }
         clickElement(item);
@@ -2680,7 +2681,7 @@ export function useUiAutomationBridge({
           throw new Error('location_picker_select_repo_option requires index');
         }
         const option = getLocationPickerRoot()?.querySelector(`[data-testid="repo-option-${Math.floor(index)}"]`);
-        if (!(option instanceof HTMLElement)) {
+        if (!isDomInstance(option, 'HTMLElement')) {
           throw new Error(`Repo option ${index} not found`);
         }
         clickElement(option);
@@ -2689,7 +2690,7 @@ export function useUiAutomationBridge({
       }
       case 'location_picker_set_new_worktree_name': {
         const input = getLocationPickerRoot()?.querySelector('[data-testid="repo-new-worktree-input"]');
-        if (!(input instanceof HTMLInputElement)) {
+        if (!isDomInstance(input, 'HTMLInputElement')) {
           throw new Error('New worktree input not found');
         }
         const value = typeof payload.value === 'string' ? payload.value : '';
@@ -2704,7 +2705,7 @@ export function useUiAutomationBridge({
           ? '[data-testid="repo-new-worktree-start-default"]'
           : '[data-testid="repo-new-worktree-start-current"]';
         const radio = getLocationPickerRoot()?.querySelector(selector);
-        if (!(radio instanceof HTMLInputElement)) {
+        if (!isDomInstance(radio, 'HTMLInputElement')) {
           throw new Error(`New worktree ${mode} radio not found`);
         }
         clickElement(radio);
@@ -2713,7 +2714,7 @@ export function useUiAutomationBridge({
       }
       case 'location_picker_submit_new_worktree': {
         const input = getLocationPickerRoot()?.querySelector('[data-testid="repo-new-worktree-input"]');
-        if (!(input instanceof HTMLInputElement)) {
+        if (!isDomInstance(input, 'HTMLInputElement')) {
           throw new Error('New worktree input not found');
         }
         input.focus();
@@ -3156,7 +3157,7 @@ export function useUiAutomationBridge({
         return collectGardenBoardUiState();
       case 'garden_toggle_frame': {
         const control = frontGardenPanel()?.querySelector('.garden-chrome__frame');
-        if (!(control instanceof HTMLElement)) {
+        if (!isDomInstance(control, 'HTMLElement')) {
           throw new Error('the garden is not open, so there is no frame to change');
         }
         control.click();
@@ -3169,7 +3170,7 @@ export function useUiAutomationBridge({
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         if (!seedId) throw new Error('garden_open_plot requires seedId');
         const row = frontGardenPanel()?.querySelector(`[data-seed-row="${seedId}"]`);
-        if (!(row instanceof HTMLElement)) {
+        if (!isDomInstance(row, 'HTMLElement')) {
           throw new Error(`no row for ${seedId} (the panel is not showing it)`);
         }
         row.click();
@@ -3180,7 +3181,7 @@ export function useUiAutomationBridge({
         const query = typeof payload.query === 'string' ? payload.query : null;
         if (query === null) throw new Error('garden_search requires query');
         const field = frontGardenPanel()?.querySelector('.garden-search__input');
-        if (!(field instanceof HTMLInputElement)) {
+        if (!isDomInstance(field, 'HTMLInputElement')) {
           throw new Error('the garden panel is not open, so there is nothing to search');
         }
         field.focus();
@@ -3192,7 +3193,7 @@ export function useUiAutomationBridge({
         const key = typeof payload.key === 'string' ? payload.key : null;
         if (!key) throw new Error('garden_search_key requires key');
         const field = frontGardenPanel()?.querySelector('.garden-search__input');
-        if (!(field instanceof HTMLInputElement)) {
+        if (!isDomInstance(field, 'HTMLInputElement')) {
           throw new Error('the garden panel is not open, so there is nothing to walk');
         }
         field.focus();
@@ -3211,7 +3212,7 @@ export function useUiAutomationBridge({
       case 'garden_climb_to': {
         const depth = typeof payload.depth === 'number' ? payload.depth : 0;
         const step = frontGardenPanel()?.querySelector(`[data-trail-depth="${depth}"]`);
-        if (!(step instanceof HTMLElement)) {
+        if (!isDomInstance(step, 'HTMLElement')) {
           throw new Error(`no trail step at depth ${depth}`);
         }
         step.click();
@@ -3222,13 +3223,13 @@ export function useUiAutomationBridge({
         const seedId = typeof payload.seedId === 'string' ? payload.seedId : '';
         if (!seedId) throw new Error('garden_expand_seed requires seedId');
         const row = frontGardenPanel()?.querySelector(`[data-seed-row="${seedId}"]`);
-        if (row instanceof HTMLElement) {
+        if (isDomInstance(row, 'HTMLElement')) {
           row.click();
           await settleUi(3);
         }
         if (payload.bookkeeping === true) {
           const toggle = document.querySelector('.garden-page .garden-closed-toggle[aria-expanded="false"]');
-          if (toggle instanceof HTMLElement) {
+          if (isDomInstance(toggle, 'HTMLElement')) {
             toggle.click();
             await settleUi();
           }
@@ -3241,10 +3242,10 @@ export function useUiAutomationBridge({
         const key = typeof payload.key === 'string' ? payload.key : '';
         if (!key) throw new Error('garden_press requires key');
         const times = typeof payload.times === 'number' ? Math.max(1, Math.floor(payload.times)) : 1;
-        const target = document.activeElement instanceof HTMLElement
+        const target = isDomInstance(document.activeElement, 'HTMLElement')
           ? document.activeElement
           : frontGardenPanel()?.querySelector('.garden-viewport, .garden-columns');
-        if (!(target instanceof HTMLElement)) throw new Error('the garden is not on screen');
+        if (!isDomInstance(target, 'HTMLElement')) throw new Error('the garden is not on screen');
         for (let press = 0; press < times; press += 1) {
           target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
           await settleUi(1);
@@ -3258,7 +3259,7 @@ export function useUiAutomationBridge({
         const viewport = column
           ? panel?.querySelector(`.garden-column[data-column="${column}"]`)
           : panel?.querySelector('.garden-viewport, .garden-column--reader');
-        if (!(viewport instanceof HTMLElement)) {
+        if (!isDomInstance(viewport, 'HTMLElement')) {
           throw new Error(column ? `no column ${column} on screen` : 'the garden is not on screen');
         }
         const top = typeof payload.top === 'number' ? payload.top : null;
@@ -3288,7 +3289,7 @@ export function useUiAutomationBridge({
         const form = frontGardenPanel()?.querySelector('.garden-handover');
         const field = form?.querySelector('textarea');
         const submit = form?.querySelector('button[type="submit"]');
-        if (!(field instanceof HTMLTextAreaElement) || !(submit instanceof HTMLButtonElement)) {
+        if (!isDomInstance(field, 'HTMLTextAreaElement') || !isDomInstance(submit, 'HTMLButtonElement')) {
           throw new Error(`Handover for ${seedId} needs placement or is not ready to submit`);
         }
         setControlValue(field, handoff);
@@ -3329,7 +3330,7 @@ export function useUiAutomationBridge({
         const target = current === 'Removed' ? 'Active' : 'Removed';
         const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
           .find((entry) => entry.textContent?.trim() === target);
-        if (!(button instanceof HTMLElement)) throw new Error(`no ${target} scope button`);
+        if (!isDomInstance(button, 'HTMLElement')) throw new Error(`no ${target} scope button`);
         clickElement(button);
         await settleUi(3);
         return collectWorktreesUiState();
@@ -3345,7 +3346,7 @@ export function useUiAutomationBridge({
         await runLedgerRowVerb(worktreeRow(path), 'Delete…');
         await settleUi(2);
         const confirm = worktreeRow(path).querySelector('.ledger-row-trailing .ledger-verb.is-danger');
-        if (!(confirm instanceof HTMLElement)) throw new Error(`row ${path} did not ask to confirm`);
+        if (!isDomInstance(confirm, 'HTMLElement')) throw new Error(`row ${path} did not ask to confirm`);
         clickElement(confirm);
         await settleUi(3);
         return collectWorktreesUiState();

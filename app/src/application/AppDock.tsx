@@ -14,6 +14,7 @@ import {
 } from './AppContexts';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useSessionStore } from '../store/sessions';
+import { isDomInstance } from '../utils/realm';
 
 function useTerminalFocusWhenClosed(open: boolean) {
   const wasOpen = useRef(open);
@@ -23,7 +24,7 @@ function useTerminalFocusWhenClosed(open: boolean) {
     if (!closed) return;
     const frame = window.requestAnimationFrame(() => {
       const stranded = document.activeElement;
-      if (stranded instanceof HTMLElement && stranded.closest('[inert]')) stranded.blur();
+      if (isDomInstance(stranded, 'HTMLElement') && stranded.closest('[inert]')) stranded.blur();
       if (document.activeElement === document.body) useSessionStore.getState().requestTerminalFocus();
     });
     return () => window.cancelAnimationFrame(frame);

@@ -19,6 +19,7 @@
     }
   ],
   "rules": {
+    "attn/no-dom-instanceof": "error",
     "unicorn/no-thenable": "off",
     "no-control-regex": "off",
     "anti-slop/no-chained-type-assertions": "error",

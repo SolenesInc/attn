@@ -14,6 +14,7 @@ import { UndoToastBar, useUndoToast } from './useUndoToast';
 import { useVentTriage } from './useVentTriage';
 import '../EventBusSettings.css';
 import './AnalyticsSettings.css';
+import { isDomInstance } from '../../utils/realm';
 
 interface AnalyticsSettingsProps {
   sharing: boolean;
@@ -25,7 +26,7 @@ interface AnalyticsSettingsProps {
 }
 
 function isTyping(target: EventTarget): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+  return isDomInstance(target, 'HTMLElement') && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
 export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {

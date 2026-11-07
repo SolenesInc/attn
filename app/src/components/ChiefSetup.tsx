@@ -7,6 +7,7 @@ import { useHarnesses } from '../hooks/useHarnesses';
 import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/useHarnessRoute';
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
+import { isDomInstance } from '../utils/realm';
 
 export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
@@ -127,7 +128,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   };
   const primaryLabel = chief.phase === 'configuring' ? firstRun ? 'Waking…' : 'Saving…' : firstRun ? `Wake ${chief.name}` : chief.sessionId ? 'Save for next wake' : 'Save';
   return createPortal(<div ref={root} tabIndex={-1} className="chief-pop" data-testid="chief-setup" role="dialog" aria-label={firstRun ? `Set up ${chief.name}` : `${chief.name}'s harness`} style={position ? { top: position.top, left: position.left } : { top: 0, left: 0 }} onKeyDown={moveRadio} onBlur={event => {
-    if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && !anchor?.contains(event.relatedTarget)) onClose(false);
+    if (isDomInstance(event.relatedTarget, 'Node') && !event.currentTarget.contains(event.relatedTarget) && !anchor?.contains(event.relatedTarget)) onClose(false);
   }}>
     <span className="chief-pop-notch" aria-hidden="true" style={{ top: position?.notch }} />
     <header className="chief-pop-head">

@@ -1,4 +1,5 @@
 import { recordDiag, supportTerminalDiagnosticsSnapshot } from './terminalDiagnosticsLog';
+import { isDomInstance } from './realm';
 
 export interface MotionTraceStop {
   frames: number;
@@ -52,11 +53,11 @@ function sampleAnimations() {
   const decoration = new Set<string>();
   for (const animation of document.getAnimations()) {
     const effect = animation.effect;
-    if (!(effect instanceof KeyframeEffect) || !effect.target?.closest('.session-terminal-panes')) continue;
+    if (!isDomInstance(effect, 'KeyframeEffect') || !effect.target?.closest('.session-terminal-panes')) continue;
     const isPaneMotion = effect.target.matches('.desktop-pane')
       && !effect.pseudoElement
-      && !(animation instanceof CSSAnimation)
-      && !(animation instanceof CSSTransition);
+      && !isDomInstance(animation, 'CSSAnimation')
+      && !isDomInstance(animation, 'CSSTransition');
     for (const property of keyframeProperties(effect)) {
       if (isPaneMotion) animated.add(property);
       else decoration.add(`${effect.target.className}${effect.pseudoElement ?? ''}:${property}`);
@@ -68,7 +69,7 @@ function sampleAnimations() {
 function panesAnimations(): Animation[] {
   return document.getAnimations().filter((animation) => {
     const effect = animation.effect;
-    return effect instanceof KeyframeEffect && effect.target instanceof Element && effect.target.matches('.session-terminal-panes > .desktop-pane');
+    return isDomInstance(effect, 'KeyframeEffect') && isDomInstance(effect.target, 'Element') && effect.target.matches('.session-terminal-panes > .desktop-pane');
   });
 }
 

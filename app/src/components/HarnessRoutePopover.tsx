@@ -5,6 +5,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnessRoute, tierLabel, type HarnessRoute, type HarnessRouteRules, type HarnessRouteView } from '../hooks/useHarnessRoute';
 import { TierMark } from './TierMark';
 import './HarnessRoute.css';
+import { isDomInstance } from '../utils/realm';
 
 function ModelList({ view, query, onChange }: { view: HarnessRouteView; query: string; onChange: (route: HarnessRoute) => void }) {
   const options = view.options(query);
@@ -58,7 +59,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
   const [position, setPosition] = useState(() => ({ top: anchor.getBoundingClientRect().bottom, left: anchor.getBoundingClientRect().left }));
   const close = () => {
     const focused = document.activeElement;
-    if (focused instanceof HTMLElement && dialog.current?.contains(focused)) focused.blur();
+    if (isDomInstance(focused, 'HTMLElement') && dialog.current?.contains(focused)) focused.blur();
     onClose();
   };
   useEscapeStack(() => { restoreFocus.current = true; close(); }, true);
@@ -106,7 +107,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
   };
   const move = (event: KeyboardEvent<HTMLDialogElement>) => {
     const current = document.activeElement;
-    if (!(current instanceof HTMLElement) || !dialog.current) return;
+    if (!isDomInstance(current, 'HTMLElement') || !dialog.current) return;
     const zone = current.closest<HTMLElement>('[role="listbox"], .route-effort-options');
     if (zone && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
       const items = [...zone.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
@@ -125,7 +126,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
       event.preventDefault(); dialog.current.querySelector<HTMLElement>(selector)?.focus();
     }
   };
-  return createPortal(<FocusTrap focusTrapOptions={{ escapeDeactivates: false, allowOutsideClick: true, returnFocusOnDeactivate: false, delayInitialFocus: false, initialFocus: () => firstControl() || false, fallbackFocus: () => dialog.current!, onPostDeactivate: () => { if (restoreFocus.current && anchor instanceof HTMLElement && anchor.isConnected) anchor.focus(); } }}><dialog open tabIndex={-1} ref={dialog} className={`route-popover ${rules.fixedHarness ? 'fixed-harness' : ''}`} aria-label="Choose a model" style={position} onKeyDown={move} onBlur={event => { if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget) && !anchor.contains(event.relatedTarget)) onClose(); }}>
+  return createPortal(<FocusTrap focusTrapOptions={{ escapeDeactivates: false, allowOutsideClick: true, returnFocusOnDeactivate: false, delayInitialFocus: false, initialFocus: () => firstControl() || false, fallbackFocus: () => dialog.current!, onPostDeactivate: () => { if (restoreFocus.current && isDomInstance(anchor, 'HTMLElement') && anchor.isConnected) anchor.focus(); } }}><dialog open tabIndex={-1} ref={dialog} className={`route-popover ${rules.fixedHarness ? 'fixed-harness' : ''}`} aria-label="Choose a model" style={position} onKeyDown={move} onBlur={event => { if (isDomInstance(event.relatedTarget, 'Node') && !event.currentTarget.contains(event.relatedTarget) && !anchor.contains(event.relatedTarget)) onClose(); }}>
     {!rules.fixedHarness && <div className="route-harness-list" role="listbox" aria-label="Harness">
       <div className="route-kicker">Harness</div>
       {rules.allowNone && <button type="button" role="option" aria-selected={!preview} data-harness="" onClick={() => { onChange({ harness: '', provider: '', model: '', effort: '' }); finish(); }}>{rules.noneLabel || 'None'}</button>}

@@ -1,3 +1,4 @@
+import { isDomInstance } from './realm';
 const EDITABLE_SELECTOR = 'input, textarea, [contenteditable]';
 const VERBATIM_ENTRY_ATTRIBUTES = {
   autocorrect: 'off',
@@ -6,7 +7,7 @@ const VERBATIM_ENTRY_ATTRIBUTES = {
 } as const;
 
 function isEditableElement(node: Node): node is HTMLElement {
-  return node instanceof HTMLElement && node.matches(EDITABLE_SELECTOR);
+  return isDomInstance(node, 'HTMLElement') && node.matches(EDITABLE_SELECTOR);
 }
 
 function enforceVerbatimTextEntry(element: HTMLElement): void {
@@ -30,7 +31,7 @@ function enforceInSubtree(root: ParentNode | Node): void {
 export function installVerbatimTextEntryGuard(root: Document | HTMLElement): () => void {
   enforceInSubtree(root);
 
-  const observedRoot = root instanceof Document ? root.documentElement : root;
+  const observedRoot = isDomInstance(root, 'Document') ? root.documentElement : root;
   const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       if (mutation.type === 'attributes') {

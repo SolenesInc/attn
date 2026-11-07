@@ -30,6 +30,7 @@ import { useAnnotationSend } from '../../annotations/useAnnotationSend';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import './TerminalAnnotations.css';
+import { isDomInstance } from '../../utils/realm';
 
 export interface SessionMessagesResult {
   messages: AnnotatableMessage[];
@@ -508,7 +509,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     };
 
     const focusCommentFromPopupBackground = (target: EventTarget) => {
-      if (!composer?.writing || !(target instanceof Element)) return;
+      if (!composer?.writing || !isDomInstance(target, 'Element')) return;
       if (target === commentRef.current || target.closest('button, .anno-popup-drag-handle')) return;
       commentRef.current?.focus();
     };

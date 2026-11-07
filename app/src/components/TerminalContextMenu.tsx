@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import './TerminalContextMenu.css';
+import { isDomInstance } from '../utils/realm';
 
 export interface TerminalContextMenuItem {
   id: string;
@@ -38,7 +39,7 @@ export function TerminalContextMenu({ position, items, onSelect, onClose }: Term
 
   useLayoutEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
-      if (menuRef.current && event.target instanceof Node && menuRef.current.contains(event.target)) return;
+      if (menuRef.current && isDomInstance(event.target, 'Node') && menuRef.current.contains(event.target)) return;
       onClose();
     };
     const handleKeyDown = (event: KeyboardEvent) => {

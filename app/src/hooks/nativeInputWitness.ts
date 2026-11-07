@@ -1,3 +1,4 @@
+import { isDomInstance } from '../utils/realm';
 export type InputExpectation =
   | { gesture: 'pointer' | 'move'; selector: string | null }
   | { gesture: 'keys'; strokes: number };
@@ -42,7 +43,7 @@ interface InputWitness {
 let witness: InputWitness | null = null;
 
 function describeTarget(target: EventTarget | null): string {
-  return target instanceof Element ? `${target.tagName.toLowerCase()}.${Array.from(target.classList).join('.')}` : 'none';
+  return isDomInstance(target, 'Element') ? `${target.tagName.toLowerCase()}.${Array.from(target.classList).join('.')}` : 'none';
 }
 
 function expectedEvents({ expectation }: InputWitness): number {
@@ -73,11 +74,11 @@ function receiptOf(armed: InputWitness): InputReceipt {
 function observedEvent(expectation: InputExpectation, event: Event): DeliveredEvent | null {
   if (!event.isTrusted) return null;
   const target = describeTarget(event.target);
-  if (event instanceof KeyboardEvent) {
+  if (isDomInstance(event, 'KeyboardEvent')) {
     return MODIFIER_KEYS.has(event.key) ? null : { type: event.type, key: event.key, target };
   }
-  if (!(event instanceof MouseEvent) || expectation.gesture === 'keys') return null;
-  const element = event.target instanceof Element ? event.target : null;
+  if (!isDomInstance(event, 'MouseEvent') || expectation.gesture === 'keys') return null;
+  const element = isDomInstance(event.target, 'Element') ? event.target : null;
   return {
     type: event.type, target, clientX: event.clientX, clientY: event.clientY,
     ...(expectation.selector ? { matches: Boolean(element?.closest(expectation.selector)) } : {}),

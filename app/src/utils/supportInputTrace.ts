@@ -1,3 +1,4 @@
+import { isDomInstance } from './realm';
 const TRACE_CAPACITY = 512;
 const appStartedAt = Date.now();
 let nextTraceSequence = 0;
@@ -69,7 +70,7 @@ export function observeDocumentInput(event: KeyboardEvent | ClipboardEvent | Com
     event: event.type,
     target,
     trusted: event.isTrusted,
-    ...(event instanceof KeyboardEvent ? {
+    ...(isDomInstance(event, 'KeyboardEvent') ? {
       repeat: event.repeat,
       modifiers: (event.shiftKey ? 1 : 0)
         | (event.ctrlKey ? 2 : 0)
