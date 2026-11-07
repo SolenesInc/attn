@@ -27,7 +27,7 @@ type MigratingBackend struct {
 
 	mu           sync.RWMutex
 	owners       map[harness.TerminalID]runtimeOwner
-	pendingSpawn map[harness.TerminalID]struct{}
+	pendingSpawn map[harness.TerminalID]runtimeOwner
 	useShared    bool
 }
 
@@ -42,7 +42,7 @@ func NewMigrating(legacy, shared Backend, useSharedForNewSessions bool) (*Migrat
 		legacy:       legacy,
 		shared:       shared,
 		owners:       make(map[harness.TerminalID]runtimeOwner),
-		pendingSpawn: make(map[harness.TerminalID]struct{}),
+		pendingSpawn: make(map[harness.TerminalID]runtimeOwner),
 		useShared:    useSharedForNewSessions,
 	}, nil
 }
@@ -109,13 +109,13 @@ func (b *MigratingBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		b.mu.Unlock()
 		return fmt.Errorf("session %s spawn already in progress", opts.ID)
 	}
-	b.pendingSpawn[opts.ID] = struct{}{}
 	owner := ownerLegacy
 	backend := b.legacy
 	if b.useShared {
 		owner = ownerShared
 		backend = b.shared
 	}
+	b.pendingSpawn[opts.ID] = owner
 	b.mu.Unlock()
 
 	err := backend.Spawn(ctx, opts)
@@ -358,6 +358,9 @@ func (b *MigratingBackend) WorkerPIDs(ctx context.Context) map[string]int {
 func (b *MigratingBackend) backendFor(id harness.TerminalID) (Backend, error) {
 	b.mu.RLock()
 	owner, ok := b.owners[id]
+	if !ok {
+		owner, ok = b.pendingSpawn[id]
+	}
 	b.mu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", pty.ErrSessionNotFound, id)

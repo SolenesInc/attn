@@ -62,6 +62,9 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { done <- backend.Spawn(context.Background(), SpawnOptions{ID: "pending-legacy"}) }()
 	<-started
+	if err := backend.Input(context.Background(), "pending-legacy", []byte("while-spawning")); err != nil {
+		t.Fatalf("a terminal that exits during its spawn cannot be reached for its exit screen: %v", err)
+	}
 	backend.SetSharedForNewSessions(true)
 	close(release)
 	if err := <-done; err != nil {
@@ -86,7 +89,7 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 	if !reflect.DeepEqual(legacy.spawned, []harness.TerminalID{"pending-legacy", "legacy"}) || !reflect.DeepEqual(shared.spawned, []harness.TerminalID{"shared"}) {
 		t.Fatalf("unexpected launches: legacy=%v shared=%v", legacy.spawned, shared.spawned)
 	}
-	if len(legacy.inputs["pending-legacy"]) != 1 || len(legacy.inputs["legacy"]) != 1 || len(shared.inputs["shared"]) != 1 {
+	if len(legacy.inputs["pending-legacy"]) != 2 || len(legacy.inputs["legacy"]) != 1 || len(shared.inputs["shared"]) != 1 {
 		t.Fatal("toggle moved a session to a different owner")
 	}
 }
