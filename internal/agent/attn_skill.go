@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"crypto/sha1"
+	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -8,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/prompts"
@@ -120,16 +124,72 @@ func RemoveRetiredAttnSkill() (bool, error) {
 		return true, fmt.Errorf("resolve home directory for the retired attn skill: %w", err)
 	}
 	for _, root := range []string{".claude", ".agents"} {
-		skillDir := filepath.Join(homeDir, root, "skills", "attn")
-		manifest, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
-		if err != nil || !strings.Contains(string(manifest), "\nname: attn\n") {
-			continue
-		}
-		if err := os.RemoveAll(skillDir); err != nil {
-			return true, fmt.Errorf("remove the retired attn skill at %s: %w", skillDir, err)
+		if err := removeInstalledRetiredSkillFiles(filepath.Join(homeDir, root, "skills", "attn")); err != nil {
+			return true, err
 		}
 	}
 	return true, nil
+}
+
+//go:embed retired_attn_skill_blobs.txt
+var retiredAttnSkillBlobList string
+
+var retiredAttnSkillBlobs = sync.OnceValue(func() map[string]bool {
+	blobs := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(retiredAttnSkillBlobList), "\n") {
+		blobs[line] = true
+	}
+	return blobs
+})
+
+func gitBlobID(content []byte) string {
+	sum := sha1.Sum(append([]byte(fmt.Sprintf("blob %d\x00", len(content))), content...))
+	return hex.EncodeToString(sum[:])
+}
+
+func removeInstalledRetiredSkillFiles(skillDir string) error {
+	if info, err := os.Lstat(skillDir); err != nil || !info.IsDir() {
+		return nil
+	}
+	var dirs []string
+	err := filepath.WalkDir(skillDir, func(file string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			dirs = append(dirs, file)
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		relative, err := filepath.Rel(skillDir, file)
+		if err != nil {
+			return err
+		}
+		content, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("read %s to check whether attn installed it: %w", file, err)
+		}
+		if !retiredAttnSkillBlobs()[gitBlobID(content)+" "+filepath.ToSlash(relative)] {
+			return nil
+		}
+		if err := os.Remove(file); err != nil {
+			return fmt.Errorf("remove the retired attn skill file %s: %w", file, err)
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("remove the retired attn skill at %s: %w", skillDir, err)
+	}
+	for _, dir := range slices.Backward(dirs) {
+		if entries, err := os.ReadDir(dir); err == nil && len(entries) == 0 {
+			if err := os.Remove(dir); err != nil {
+				return fmt.Errorf("remove the retired attn skill directory %s: %w", dir, err)
+			}
+		}
+	}
+	return nil
 }
 
 func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {

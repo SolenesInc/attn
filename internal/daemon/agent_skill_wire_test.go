@@ -18,55 +18,88 @@ func installedAttnSkill(toolHome string, h fakeagent.Harness) string {
 	return filepath.Join(toolHome, attnSkillRoots[h], "skills", "attn")
 }
 
-func plantInstalledSkill(t *testing.T, skill, name string) {
+func plantFiles(t *testing.T, dir string, files map[string]string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(skill, "references"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	manifest := "---\nname: " + name + "\ndescription: planted by this test\n---\n"
-	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(manifest), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(skill, "references", "delegation.md"), []byte("old guidance"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestStartingAttnRemovesTheSkillAnEarlierVersionInstalled(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
-	toolHome := os.Getenv("ATTN_TOOL_HOME")
-	for h := range attnSkillRoots {
-		plantInstalledSkill(t, installedAttnSkill(toolHome, h), "attn")
-	}
-	w.start()
-	app := w.App()
-
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		session := w.Spawn(app, h, w.Path(string(h)))
-		w.Launched(session)
-		if _, err := os.Stat(installedAttnSkill(toolHome, h)); !os.IsNotExist(err) {
-			t.Errorf("%s still has the attn skill an earlier version installed (%v)", h, err)
+	for name, contents := range files {
+		file := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(file, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
 		}
 	}
 }
 
-func TestStartingAttnLeavesASkillTheUserNamedAttnFolderAlone(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
-	toolHome := os.Getenv("ATTN_TOOL_HOME")
-	for h := range attnSkillRoots {
-		plantInstalledSkill(t, installedAttnSkill(toolHome, h), "my-attention-notes")
-	}
-	w.start()
-	app := w.App()
-
-	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		w.Launched(w.Spawn(app, h, w.Path(string(h))))
-		if _, err := os.Stat(filepath.Join(installedAttnSkill(toolHome, h), "SKILL.md")); err != nil {
-			t.Errorf("attn removed the user's %s skill: %v", h, err)
+func skillAnEarlierVersionInstalled(t *testing.T) map[string]string {
+	t.Helper()
+	files := map[string]string{}
+	for _, name := range []string{"SKILL.md", "references/delegation.md"} {
+		contents, err := os.ReadFile(filepath.Join("testdata", "retired-attn-skill", filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatal(err)
 		}
+		files[name] = string(contents)
 	}
+	return files
+}
+
+func startWithCodexUnavailable(t *testing.T, plant func(toolHome string), check func(t *testing.T, toolHome string)) {
+	t.Setenv("ATTN_INSTANCE", "")
+	prepared := prepareWorld(t, fakeagent.Claude)
+	t.Setenv("ATTN_CODEX_EXECUTABLE", filepath.Join(prepared.Dir, "codex-missing"))
+	toolHome := os.Getenv("ATTN_TOOL_HOME")
+	plant(toolHome)
+	inPreparedBubble(t, prepared, func(t *testing.T, w *world) {
+		w.advance(0)
+		if got := w.App().Initial.Settings["codex_available"]; got != "false" {
+			t.Fatalf("codex_available = %q, want false", got)
+		}
+		check(t, toolHome)
+	})
+}
+
+func TestStartingAttnRemovesOnlyTheSkillFilesAnEarlierVersionInstalled(t *testing.T) {
+	installed := skillAnEarlierVersionInstalled(t)
+	userNote := "Notes I keep next to the attn skill.\n"
+	startWithCodexUnavailable(t, func(toolHome string) {
+		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Claude), installed)
+		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Codex), installed)
+		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Codex), map[string]string{"references/my-notes.md": userNote})
+	}, func(t *testing.T, toolHome string) {
+		if _, err := os.Stat(installedAttnSkill(toolHome, fakeagent.Claude)); !os.IsNotExist(err) {
+			t.Errorf("claude still has the attn skill an earlier version installed (%v)", err)
+		}
+		codexSkill := installedAttnSkill(toolHome, fakeagent.Codex)
+		for name := range installed {
+			if _, err := os.Stat(filepath.Join(codexSkill, filepath.FromSlash(name))); !os.IsNotExist(err) {
+				t.Errorf("codex still has %s from the attn skill an earlier version installed (%v)", name, err)
+			}
+		}
+		if got, err := os.ReadFile(filepath.Join(codexSkill, "references", "my-notes.md")); err != nil || string(got) != userNote {
+			t.Errorf("attn removed or changed the user's note beside the old skill: %q, %v", got, err)
+		}
+	})
+}
+
+func TestStartingAttnKeepsASkillTheUserNamedAttn(t *testing.T) {
+	userSkill := map[string]string{
+		"SKILL.md":               "---\nname: attn\ndescription: My personal attention notes\n---\n\n# My notes\n",
+		"references/my-notes.md": "My original notes, not attn's bundled skill.\n",
+	}
+	startWithCodexUnavailable(t, func(toolHome string) {
+		for h := range attnSkillRoots {
+			plantFiles(t, installedAttnSkill(toolHome, h), userSkill)
+		}
+	}, func(t *testing.T, toolHome string) {
+		for h := range attnSkillRoots {
+			for name, contents := range userSkill {
+				if got, err := os.ReadFile(filepath.Join(installedAttnSkill(toolHome, h), filepath.FromSlash(name))); err != nil || string(got) != contents {
+					t.Errorf("attn removed or changed the user's %s skill file %s: %q, %v", h, name, got, err)
+				}
+			}
+		}
+	})
 }
 
 func TestAVerificationInstanceLeavesTheUsersSkillsAloneUnlessItsHarnessOwnsTheToolHome(t *testing.T) {
