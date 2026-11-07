@@ -10,6 +10,7 @@ import type { SessionTerminalDesktopProps } from './desktopTypes';
 import {
   lastUsedLeaf,
   columnIndexOf,
+  droppedBeside,
   firstColumnStillShows,
   readRow,
   resolveRowLayout,
@@ -140,6 +141,7 @@ export function useRowSettling(input: RowSettlingInput) {
   const { desktopId, rowPlan, measured, activeLeafId, tileLeafById: tiles } = input;
   const orderKey = rowPlan ? [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|') : '';
   const showRequestsKey = [...showRequestsOf(tiles)].join('|');
+  const dropBeside = useDesktopShelfStore((state) => state.dropBesideByDesktop[desktopId]);
 
   useLayoutEffect(() => {
     const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById } = latest.current;
@@ -191,6 +193,11 @@ export function useRowSettling(input: RowSettlingInput) {
       }
     }
 
+    if (dropBeside && droppedBeside(rowInput, dropBeside)) {
+      firstColumn = revealFirstColumn(rowInput, dropBeside.anchorId, plan.firstColumn.index) ?? firstColumn;
+      shelf.setDropBeside(desktopId, null);
+    }
+
     const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, firstColumn }).screen;
     const screen = new Set(leavesOf(settledScreen));
     if (previous && visible) {
@@ -200,7 +207,7 @@ export function useRowSettling(input: RowSettlingInput) {
     shelf.settleLeaves(desktopId, row, screen, activeLeafId);
     shelf.setFirstColumn(desktopId, firstColumn);
     shelf.settleRow(desktopId, { row, screen, activeLeafId, orderKey, showRequests });
-  }, [activeLeafId, desktopId, measured, orderKey, showRequestsKey]);
+  }, [activeLeafId, desktopId, dropBeside, measured, orderKey, showRequestsKey]);
 
   const screenKey = rowPlan ? leavesOf(rowPlan.screen).join('|') : '';
   useLayoutEffect(() => {

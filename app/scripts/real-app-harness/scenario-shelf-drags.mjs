@@ -13,7 +13,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-DRAGS',
   tier: 'tier1-local-shell',
   prefix: 'shelf-drags',
-  metadata: { agent: 'shell', focus: 'chips onto tiles, between chips and onto sidebar desktops, tiles onto the shelf, column dividers past the narrowest and back and after a window resize, a stack chip onto the top edge of a tile, and Esc, with real terminals and native pointer input' },
+  metadata: { agent: 'shell', focus: 'chips onto tiles, between chips and onto sidebar desktops, tiles beside a chip, column dividers past the narrowest and back and after a window resize, a stack chip onto the top edge of a tile, and Esc, with real terminals and native pointer input' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -164,21 +164,19 @@ try {
     runner.assert((await activeLeaf()) === active, 'Esc leaves focus alone', { active });
   });
 
-  await runner.step('tile_onto_the_shelf_moves_it_to_that_place', async () => {
-    const shownBefore = await shownLeaves();
+  await runner.step('tile_beside_a_chip_comes_on_screen_with_it', async () => {
     const active = await activeLeaf();
-    const tile = shownBefore.find((id) => id !== active);
-    const chips = await chipIds();
-    const anchor = chips[0];
+    const tile = (await shownLeaves()).find((id) => id !== active);
+    const anchor = (await chipIds())[0];
     await hold();
     await driver.drag(headerGrip(tile), { selector: chipSelector(anchor), at: { x: 0.1, y: 0.5 } }, { steps: 24, withoutReceipt: 'a tile header cancels the press, so it has no mouse events' });
-    await waitDom(chipSelector(tile));
-    await waitDom(paneSelector(tile), { absent: true });
-    const row = await readRow();
-    runner.assert(row.indexOf(tile) === row.indexOf(anchor) - 1, 'the tile lands at that place in the row', { row, tile, anchor });
-    await assertActiveHasInput(active);
+    const row = await waitForRow((current) => current.indexOf(tile) === current.indexOf(anchor) - 1, 'the tile just before the chip');
+    await assertActiveHasInput(tile);
+    await waitDom(paneSelector(anchor));
+    const shown = await shownLeaves();
+    runner.assert(shown.includes(tile) && shown.includes(anchor), 'the tile and the chip’s tile are on screen', { row, shown, tile, anchor });
     await hold();
-    await shot('tile-on-the-shelf');
+    await shot('tile-beside-the-chip');
     await moveOffTheShelf();
   });
 

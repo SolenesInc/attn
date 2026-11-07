@@ -972,20 +972,19 @@ export function useDesktopController(
   }, [onShelfLimit]);
 
   const moveTileToShelf = (leafId: string, target: ShelfDropTarget) => {
-    const input = rowInputRef.current;
-    const plan = rowPlanRef.current;
-    if (!input || !plan) return;
-    if (leafId === activeLeafIdRef.current) {
-      const send = planSendToShelf(input, plan.screen, focusOrderRef.current);
-      if (send.kind === 'alone') return;
-      focusLeaf(send.nextLeafId);
-    }
+    const tree = layoutTreeRef.current;
+    if (!tree) return;
     const shelf = useDesktopShelfStore.getState();
-    shelf.holdLeaf(desktopId, leafId);
-    void onMoveRowLeaf?.({ leafId, anchorId: target.anchorId, edge: target.edge, wholeColumn: false, activate: false })
-      ?.catch((error: unknown) => {
-        useDesktopShelfStore.getState().releaseLeaf(desktopId, leafId);
-        reportShelfMove('move that tile to the shelf')(error);
+    const row = readRow(tree);
+    for (const anchorLeafId of row[columnIndexOf(row, target.anchorId)]?.leafIds ?? []) shelf.releaseLeaf(desktopId, anchorLeafId);
+    const drop = { leafId, ...target };
+    shelf.setDropBeside(desktopId, drop);
+    focusLeaf(leafId);
+    void onMoveRowLeaf?.({ leafId, anchorId: target.anchorId, edge: target.edge, wholeColumn: false, activate: true })
+      ?.catch(reportShelfMove('move that tile'))
+      .finally(() => {
+        const current = useDesktopShelfStore.getState();
+        if (current.dropBesideByDesktop[desktopId] === drop) current.setDropBeside(desktopId, null);
       });
   };
 

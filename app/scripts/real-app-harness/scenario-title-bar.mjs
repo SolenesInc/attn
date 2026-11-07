@@ -142,7 +142,7 @@ try {
     await driver.hover({ selector: `${paneSelector(shown.at(-1))} .desktop-pane-header`, at: { x: 0.7, y: 0.25 } });
   });
 
-  await runner.step('a_tile_drops_on_the_shelf', async () => {
+  await runner.step('a_tile_drops_beside_a_chip', async () => {
     const shown = await shownLeaves();
     const active = (await request('get_state')).activeLeaf.leafId;
     const tile = shown.find((id) => id !== active);
@@ -152,11 +152,11 @@ try {
       { selector: chip(anchor), at: { x: 0.1, y: 0.5 } },
       { steps: 24, withoutReceipt: 'a tile header cancels the press, so it has no mouse events' },
     );
-    await waitDom(chip(tile));
-    await waitDom(paneSelector(tile), { absent: true });
+    await waitDom(`${surface()}[data-active-leaf-id="${tile}"] .desktop-pane[data-pane-id="${tile}"]`);
+    await waitDom(paneSelector(anchor));
     const after = await readRow();
     runner.assert(after.indexOf(tile) === after.indexOf(anchor) - 1, 'the tile lands at that place in the row', { after, tile, anchor });
-    await shot('tile-on-the-band-shelf');
+    await shot('tile-beside-the-band-chip');
   });
 
   await runner.step('the_toggle_and_flow_change_shape_in_the_band', async () => {

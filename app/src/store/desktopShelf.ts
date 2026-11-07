@@ -80,6 +80,12 @@ export interface ShelfDropMark {
   edge: 'left' | 'right';
 }
 
+export interface ShelfDropBeside {
+  leafId: string;
+  anchorId: string;
+  edge: 'left' | 'right';
+}
+
 export interface DesktopRowActions {
   beginChipDrag: (column: { key: string; leafId: string }, event: React.PointerEvent) => void;
   clearDraggedWidths: () => void;
@@ -112,6 +118,8 @@ interface DesktopShelfState {
   setLeafDragging: (dragging: boolean) => void;
   shelfDrop: ShelfDropMark | null;
   setShelfDrop: (mark: ShelfDropMark | null) => void;
+  dropBesideByDesktop: Readonly<Record<string, ShelfDropBeside>>;
+  setDropBeside: (desktopId: string, drop: ShelfDropBeside | null) => void;
   rowActionsByDesktop: Readonly<Record<string, DesktopRowActions>>;
   setRowActions: (desktopId: string, actions: DesktopRowActions | null) => void;
   setFirstColumn: (desktopId: string, firstColumn: FirstColumn) => void;
@@ -159,6 +167,11 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
       if (current?.desktopId === mark?.desktopId && current?.anchorId === mark?.anchorId && current?.edge === mark?.edge) return state;
       return { shelfDrop: mark };
     }),
+  dropBesideByDesktop: {},
+  setDropBeside: (desktopId, drop) =>
+    set((state) => (drop || desktopId in state.dropBesideByDesktop
+      ? { dropBesideByDesktop: withEntry(state.dropBesideByDesktop, desktopId, drop ?? undefined) }
+      : state)),
   rowActionsByDesktop: {},
   setRowActions: (desktopId, actions) =>
     set((state) => ({ rowActionsByDesktop: withEntry(state.rowActionsByDesktop, desktopId, actions ?? undefined) })),
@@ -185,6 +198,7 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
       unseenByDesktop: without(state.unseenByDesktop, desktopId),
       flashingByDesktop: without(state.flashingByDesktop, desktopId),
       documentReturnsByDesktop: without(state.documentReturnsByDesktop, desktopId),
+      dropBesideByDesktop: without(state.dropBesideByDesktop, desktopId),
     })),
   holdLeaf: (desktopId, leafId) =>
     set((state) => ({
@@ -242,8 +256,8 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
 useProfilesStore.subscribe((state, previous) => {
   if (state.desktops === previous.desktops) return;
   const current = new Set(state.desktops.map((desktop) => desktop.id));
-  const { settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop, forgetDesktop } = useDesktopShelfStore.getState();
-  const known = [settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop];
+  const { settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop, dropBesideByDesktop, forgetDesktop } = useDesktopShelfStore.getState();
+  const known = [settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop, dropBesideByDesktop];
   for (const desktopId of new Set(known.flatMap((record) => Object.keys(record)))) {
     if (!current.has(desktopId)) forgetDesktop(desktopId);
   }

@@ -48,6 +48,7 @@
     "real-app:scenario-shelf-peek": "node scripts/real-app-harness/scenario-shelf-peek.mjs",
     "real-app:scenario-shelf-moves": "node scripts/real-app-harness/scenario-shelf-moves.mjs",
     "real-app:scenario-shelf-drags": "node scripts/real-app-harness/scenario-shelf-drags.mjs",
+    "real-app:scenario-shelf-drop-beside": "node scripts/real-app-harness/scenario-shelf-drop-beside.mjs",
     "real-app:scenario-shelf-sidebar-resize": "node scripts/real-app-harness/scenario-shelf-sidebar-resize.mjs",
     "real-app:scenario-shelf-motion": "node scripts/real-app-harness/scenario-shelf-motion.mjs",
     "real-app:scenario-desktop-switching": "node scripts/real-app-harness/scenario-desktop-switching.mjs",

@@ -113,7 +113,7 @@ To go back to the default of 240 pixels, double-click the edge, run "Reset sideb
 - Drop a chip on a tile's center to swap the two columns.
 - Drop a chip on a tile's edge to place the chip's column there, or to stack it on the top or bottom edge.
 - Drop a chip between other chips to reorder the row. Focus stays where it is.
-- Drop a tile on the shelf to move it to that place in the row. It stays on the shelf until you bring it back.
+- Drop a tile beside a chip to bring the two together: the tile moves to that side of the chip's column, both come on screen, and the tile takes focus. On a cap, the tile goes beside the row's first or last column. A stacked tile leaves its stack and becomes a column of its own.
 - Drop a chip on a desktop in the sidebar to move its whole column there and go with it.
 
 Esc cancels any of these drags.

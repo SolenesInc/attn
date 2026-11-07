@@ -1027,29 +1027,92 @@ describe('Shelf layout', () => {
       expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s8', anchor_id: 'pane-s1', edge: 'right', whole_column: true })]);
     });
 
-    it('moves a tile dragged onto the shelf to that place in the row, and focus stays in the slot', async () => {
-      const daemon = await renderRow(NARROWEST_66);
-      await gesture(daemon, () => pressShortcut('terminal.focusRight'));
-      expect(active()).toBe('pane-s2');
+    const slideTo = async (daemon: ScriptedDaemon, ...keys: ('terminal.focusLeft' | 'terminal.focusRight')[]) => {
+      for (const key of keys) await gesture(daemon, () => pressShortcut(key));
+    };
+    const anchorPoint = (testId: string, share: number) => {
+      const at = Array.from(document.querySelectorAll('[data-shelf-anchor]')).indexOf(screen.getByTestId(testId));
+      return { clientX: at * CHIP_STEP + share * (CHIP_STEP - 4), clientY: 15 };
+    };
+    const LEFT_HALF = 0.1;
+    const RIGHT_HALF = 0.9;
 
-      await drag(daemon, header('s2'), { clientX: 700, clientY: 60 }, { clientX: chipKeys().indexOf('s6') * CHIP_STEP + 4, clientY: 15 });
+    it('brings a tile dropped beside a chip on screen next to that chip, active and focused', async () => {
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
+      await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight', 'terminal.focusRight');
+      expect(paneIds()).toEqual(onScreen('s3', 's4'));
 
-      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s2', anchor_id: 'pane-s6', edge: 'left', activate: false })]);
-      expect(moves(daemon)[0].whole_column).toBeUndefined();
-      expect(rowOf(daemon).slice(0, 6)).toEqual(['s1', 's3', 's4', 's5', 's2', 's6']);
-      expect(chipKeys().slice(0, 3)).toEqual(['s5', 's2', 's6']);
-      expect(paneIds()).toEqual(onScreen('s1', 's3', 's4'));
-      expect(active()).toBe('pane-s3');
+      await drag(daemon, header('s4'), { clientX: 1400, clientY: 60 }, anchorPoint('shelf-chip-pane-s1', RIGHT_HALF));
+
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s4', anchor_id: 'pane-s1', edge: 'right' })]);
+      expect(rowOf(daemon)).toEqual(['s1', 's4', 's2', 's3']);
+      expect(paneIds()).toEqual(onScreen('s1', 's4'));
+      expect(active()).toBe('pane-s4');
+      expect(terminalInput('s4')).toHaveFocus();
     });
 
-    it('keeps a tile on the shelf when it would have fitted', async () => {
-      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
+    it.each([
+      ['the active tile', 's1', 's3', LEFT_HALF],
+      ['the active tile', 's1', 's3', RIGHT_HALF],
+      ['the active tile', 's1', 's4', LEFT_HALF],
+      ['the active tile', 's1', 's4', RIGHT_HALF],
+      ['an inactive tile', 's2', 's3', LEFT_HALF],
+      ['an inactive tile', 's2', 's3', RIGHT_HALF],
+      ['an inactive tile', 's2', 's4', LEFT_HALF],
+      ['an inactive tile', 's2', 's4', RIGHT_HALF],
+    ])('shows %s %s dropped on %s at %s of its width beside that chip', async (_name, tile, chipId, share) => {
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
 
-      await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
+      await drag(daemon, header(tile), { clientX: 400, clientY: 60 }, anchorPoint(`shelf-chip-pane-${chipId}`, share));
+
+      const row = rowOf(daemon);
+      expect(row.indexOf(tile) - row.indexOf(chipId)).toBe(share === LEFT_HALF ? -1 : 1);
+      expect(paneIds()).toEqual(onScreen(...row.filter((id) => id === tile || id === chipId)));
+      expect(active()).toBe(`pane-${tile}`);
+    });
+
+    it('shows the pair when the drop leaves the row order as it was', async () => {
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
+
+      await drag(daemon, header('s2'), { clientX: 1400, clientY: 60 }, anchorPoint('shelf-chip-pane-s3', LEFT_HALF));
+
+      expect(rowOf(daemon)).toEqual(['s1', 's2', 's3', 's4']);
+      expect(paneIds()).toEqual(onScreen('s2', 's3'));
+      expect(active()).toBe('pane-s2');
+    });
+
+    it('shows a tile dropped on a cap beside the row’s far column', async () => {
+      const daemon = await renderRow(NARROWEST_66, { shelfWidth: 600 });
+
+      await drag(daemon, header('s2'), { clientX: 1000, clientY: 60 }, anchorPoint('shelf-cap-after', 0.5));
+
+      expect(rowOf(daemon).slice(-2)).toEqual(['s11', 's2']);
+      expect(paneIds().slice(-2)).toEqual(onScreen('s11', 's2'));
+      expect(active()).toBe('pane-s2');
+
+    });
+
+    it('shows a tile dropped on the leading cap beside the row’s first column', async () => {
+      const daemon = await renderRow(NARROWEST_66, { shelfWidth: 600 });
+      await slideTo(daemon, ...Array.from({ length: 10 }, () => 'terminal.focusRight' as const));
+      expect(paneIds()).toEqual(onScreen('s9', 's10', 's11'));
+
+      await drag(daemon, header('s10'), { clientX: 1000, clientY: 60 }, anchorPoint('shelf-cap-before', 0.5));
+
+      expect(rowOf(daemon).slice(0, 2)).toEqual(['s10', 's1']);
+      expect(paneIds().slice(0, 2)).toEqual(onScreen('s10', 's1'));
+      expect(active()).toBe('pane-s10');
+    });
+
+    it('takes a stacked tile out of its stack and shows it beside the chip', async () => {
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: rightChain([pane('s1'), split('stack', 'horizontal', [pane('s2'), pane('s3')]), pane('s4')]) });
+
+      await drag(daemon, header('s3'), { clientX: 1400, clientY: 600 }, anchorPoint('shelf-chip-pane-s4', RIGHT_HALF));
 
       expect(rowOf(daemon)).toEqual(['s1', 's2', 's4', 's3']);
-      expect(paneIds()).toEqual(onScreen('s1', 's2', 's4'));
-      expect(chipKeys()).toEqual(['s3']);
+      expect(paneIds()).toEqual(onScreen('s4', 's3'));
+      expect(active()).toBe('pane-s3');
     });
 
     it('gives the tile back and names the failure when the daemon refuses a shelf drop', async () => {
@@ -1058,7 +1121,7 @@ describe('Shelf layout', () => {
 
       await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
 
-      expect(screen.getByText(/Could not move that tile to the shelf: refused/)).toBeInTheDocument();
+      expect(screen.getByText(/Could not move that tile: refused/)).toBeInTheDocument();
       expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
     });
 

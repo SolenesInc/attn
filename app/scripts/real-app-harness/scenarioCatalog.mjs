@@ -173,6 +173,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-shelf-drags'],
   },
   {
+    id: 'shelf-drop-beside',
+    runnerId: 'SHELF-DROP-BESIDE',
+    label: 'A tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two',
+    command: ['pnpm', 'run', 'real-app:scenario-shelf-drop-beside'],
+  },
+  {
     id: 'shelf-sidebar-resize',
     runnerId: 'SHELF-SIDEBAR-RESIZE',
     label: 'Dragging the open sidebar keeps the tile area frozen, fits each terminal once on release, honors its limits, Esc, double-click and the width keys, and starts from the whole handle beside a browser page',

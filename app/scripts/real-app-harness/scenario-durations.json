@@ -81,6 +81,7 @@
     "title-bar": 30.0,
     "shelf-moves": 35.0,
     "shelf-drags": 43.0,
+    "shelf-drop-beside": 121.0,
     "shelf-motion": 37.0,
     "shelf-sidebar-resize": 61.0,
     "shell-titles": 44.5,

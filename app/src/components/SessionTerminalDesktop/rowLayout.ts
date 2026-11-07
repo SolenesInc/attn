@@ -435,6 +435,13 @@ export function revealFirstColumn(input: Omit<RowLayoutInput, 'view'>, leafId: s
   return best === null ? null : { leafId: shown[best].leafIds[0], index: best };
 }
 
+export function droppedBeside(input: Pick<RowLayoutInput, 'tree' | 'activeLeafId'>, drop: { leafId: string; anchorId: string; edge: 'left' | 'right' }): boolean {
+  const row = readRow(input.tree);
+  const anchorAt = columnIndexOf(row, drop.anchorId);
+  const beside = anchorAt < 0 ? undefined : row[anchorAt + (drop.edge === 'left' ? -1 : 1)];
+  return input.activeLeafId === drop.leafId && beside?.leafIds.length === 1 && beside.leafIds[0] === drop.leafId;
+}
+
 export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, firstColumn: FirstColumn): boolean {
   const shown = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId);
   const start = columnIndexOf(shown, firstColumn.leafId);
