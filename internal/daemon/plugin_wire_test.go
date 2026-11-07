@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -30,6 +31,10 @@ type pluginWireMessage struct {
 type pluginWireError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+func (e *pluginWireError) String() string {
+	return fmt.Sprintf("error %d: %s", e.Code, e.Message)
 }
 
 type pluginHealth struct {
@@ -185,6 +190,15 @@ func (p *pluginPeer) hangUp() {
 	_ = p.conn.Close()
 }
 
+func installPluginTheTestPlays(t *testing.T, w *world, name string) {
+	t.Helper()
+	if !w.bubbled {
+		t.Fatalf("install plugin %s inside inBubble: attn launches every manifest its discovery finds, so a plugin the test plays must be installed after discovery, and only a bubble can wait for that", name)
+	}
+	synctest.Wait()
+	writePluginManifest(t, filepath.Join(w.Dir, "plugins", strings.ReplaceAll(name, "/", "-")), name, "exit 0")
+}
+
 func writePluginManifest(t *testing.T, dir, name, script string) {
 	t.Helper()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -239,71 +253,67 @@ func pluginUpdatesShowing(app *testworld.Peer, name string) int {
 }
 
 func TestAPluginHelloConnectsItUntilItHangsUp(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	for _, name := range []string{"worktree-provider", "old-provider", "unnumbered-provider", "typo-provider"} {
-		writePluginManifest(t, filepath.Join(w.Dir, "plugins", name), name, "exit 0")
-	}
-
-	for _, row := range []struct {
-		name, refusal string
-		hello         map[string]any
-	}{
-		{name: "old-provider", refusal: "unsupported attn_api_version 6",
-			hello: pluginHelloParams("old-provider", pluginWireAPIVersion-1, 1)},
-		{name: "unnumbered-provider", refusal: "hello params.generation is required",
-			hello: pluginHelloParams("unnumbered-provider", pluginWireAPIVersion, 0)},
-		{name: "typo-provider", refusal: `unsupported plugin surface "worktree.cretae"`,
-			hello: pluginHelloParams("typo-provider", pluginWireAPIVersion, 1, "worktree.cretae")},
-	} {
-		refused := dialPlugin(t, w, row.name, true)
-		if answer := refused.hello(row.hello); answer.Error == nil || !strings.Contains(answer.Error.Message, row.refusal) {
-			t.Errorf("%s's hello was answered %+v, want a refusal saying %q", row.name, answer, row.refusal)
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		for _, name := range []string{"worktree-provider", "old-provider", "unnumbered-provider", "typo-provider"} {
+			installPluginTheTestPlays(t, w, name)
 		}
-		refused.awaitHangUp()
-	}
 
-	plugin := dialPlugin(t, w, "worktree-provider", true)
-	payload, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello",
-		"params": pluginHelloParams("worktree-provider", pluginWireAPIVersion, 1, "worktree.create")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	half := len(payload) / 2
-	plugin.write(payload[:half])
-	plugin.write(append(payload[half:], '\n'))
-	var accepted struct {
-		OK bool `json:"ok"`
-	}
-	answer := plugin.read()
-	if err := json.Unmarshal(answer.Result, &accepted); err != nil || answer.Error != nil || !accepted.OK {
-		t.Fatalf("the hello written in two halves was answered %+v, want ok", answer)
-	}
-	connected := awaitPluginShown(app, "worktree-provider", func(p protocol.PluginInfo) bool { return p.Connected })
-	if protocol.Deref(connected.RuntimePhase) != "connected" || connected.RuntimeState != "connected" {
-		t.Errorf("the app shows the connected plugin as phase %q, state %q; want connected", protocol.Deref(connected.RuntimePhase), connected.RuntimeState)
-	}
-	for _, received := range app.Received() {
-		for _, refused := range []string{"old-provider", "unnumbered-provider", "typo-provider"} {
-			if shown, ok := pluginNamed(received.Plugins, refused); ok && shown.Connected {
-				t.Errorf("the app saw the refused plugin %s connected", refused)
+		for _, row := range []struct {
+			name, refusal string
+			hello         map[string]any
+		}{
+			{name: "old-provider", refusal: "unsupported attn_api_version 6",
+				hello: pluginHelloParams("old-provider", pluginWireAPIVersion-1, 1)},
+			{name: "unnumbered-provider", refusal: "hello params.generation is required",
+				hello: pluginHelloParams("unnumbered-provider", pluginWireAPIVersion, 0)},
+			{name: "typo-provider", refusal: `unsupported plugin surface "worktree.cretae"`,
+				hello: pluginHelloParams("typo-provider", pluginWireAPIVersion, 1, "worktree.cretae")},
+		} {
+			refused := dialPlugin(t, w, row.name, true)
+			if answer := refused.hello(row.hello); answer.Error == nil || !strings.Contains(answer.Error.Message, row.refusal) {
+				t.Errorf("%s's hello was answered %+v, want a refusal saying %q", row.name, answer, row.refusal)
+			}
+			refused.awaitHangUp()
+		}
+
+		plugin := dialPlugin(t, w, "worktree-provider", true)
+		payload, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": "hello",
+			"params": pluginHelloParams("worktree-provider", pluginWireAPIVersion, 1, "worktree.create")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		half := len(payload) / 2
+		plugin.write(payload[:half])
+		plugin.write(append(payload[half:], '\n'))
+		var accepted struct {
+			OK bool `json:"ok"`
+		}
+		answer := plugin.read()
+		if err := json.Unmarshal(answer.Result, &accepted); err != nil || answer.Error != nil || !accepted.OK {
+			t.Fatalf("the hello written in two halves was answered %+v, want ok", answer)
+		}
+		connected := awaitPluginShown(app, "worktree-provider", func(p protocol.PluginInfo) bool { return p.Connected })
+		if protocol.Deref(connected.RuntimePhase) != "connected" || connected.RuntimeState != "connected" {
+			t.Errorf("the app shows the connected plugin as phase %q, state %q; want connected", protocol.Deref(connected.RuntimePhase), connected.RuntimeState)
+		}
+		for _, received := range app.Received() {
+			for _, refused := range []string{"old-provider", "unnumbered-provider", "typo-provider"} {
+				if shown, ok := pluginNamed(received.Plugins, refused); ok && shown.Connected {
+					t.Errorf("the app saw the refused plugin %s connected", refused)
+				}
 			}
 		}
-	}
 
-	plugin.hangUp()
-	awaitPluginShown(app, "worktree-provider", func(p protocol.PluginInfo) bool { return !p.Connected })
-}
-
-func awaitLoginCaptureAndPluginDiscovery() {
-	synctest.Wait()
+		plugin.hangUp()
+		awaitPluginShown(app, "worktree-provider", func(p protocol.PluginInfo) bool { return !p.Connected })
+	})
 }
 
 func TestPluginHealthReachesTheAppOnlyWhenItChanges(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
-		awaitLoginCaptureAndPluginDiscovery()
-		writePluginManifest(t, filepath.Join(w.Dir, "plugins", "health-provider"), "health-provider", "exit 0")
+		installPluginTheTestPlays(t, w, "health-provider")
 		plugin := dialPlugin(t, w, "health-provider", false)
 		if answer := plugin.hello(pluginHelloParams("health-provider", pluginWireAPIVersion, 1, "worktree.create")); answer.Error != nil {
 			t.Fatalf("the daemon refused the health provider: %s", answer.Error.Message)
@@ -359,65 +369,67 @@ func TestPluginHealthReachesTheAppOnlyWhenItChanges(t *testing.T) {
 }
 
 func TestTheAppSeesBrokenPluginManifestsBesideThePluginsItAccepts(t *testing.T) {
-	w := newWorld(t)
-	if err := os.MkdirAll(filepath.Join(w.Dir, "plugins", "bad-plugin"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	badManifest := filepath.Join(w.Dir, "plugins", "bad-plugin", "attn-plugin.toml")
-	if err := os.WriteFile(badManifest, []byte("name = \"bad-plugin\"\nversion = \"0.1.0\"\nattn_api_version = 7\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	writePluginManifest(t, filepath.Join(w.Dir, "plugins", "manual-provider"), "manual/provider", "exit 0")
-	w.restart()
-	app := w.App()
+	inBubble(t, func(t *testing.T, w *world) {
+		if err := os.MkdirAll(filepath.Join(w.Dir, "plugins", "bad-plugin"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		badManifest := filepath.Join(w.Dir, "plugins", "bad-plugin", "attn-plugin.toml")
+		if err := os.WriteFile(badManifest, []byte("name = \"bad-plugin\"\nversion = \"0.1.0\"\nattn_api_version = 7\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		w.restart()
+		app := w.App()
+		installPluginTheTestPlays(t, w, "manual/provider")
 
-	listed := listPlugins(app)
-	if len(listed.Issues) != 1 || !strings.Contains(listed.Issues[0].Path, "bad-plugin") || listed.Issues[0].Error == "" {
-		t.Errorf("the app sees manifest issues %+v, want only the one without [plugin] reported", listed.Issues)
-	}
-	if _, ok := pluginNamed(listed.Plugins, "bad-plugin"); ok {
-		t.Error("the app lists the broken manifest as a plugin")
-	}
-	if manual, ok := pluginNamed(listed.Plugins, "manual/provider"); !ok {
-		t.Errorf("the app sees manual/provider as %+v (listed %v), want it listed", manual, ok)
-	}
-	connectPlugin(t, w, "manual/provider", "worktree.create")
-	awaitPluginShown(app, "manual/provider", func(p protocol.PluginInfo) bool { return p.Connected })
+		listed := listPlugins(app)
+		if len(listed.Issues) != 1 || !strings.Contains(listed.Issues[0].Path, "bad-plugin") || listed.Issues[0].Error == "" {
+			t.Errorf("the app sees manifest issues %+v, want only the one without [plugin] reported", listed.Issues)
+		}
+		if _, ok := pluginNamed(listed.Plugins, "bad-plugin"); ok {
+			t.Error("the app lists the broken manifest as a plugin")
+		}
+		if manual, ok := pluginNamed(listed.Plugins, "manual/provider"); !ok {
+			t.Errorf("the app sees manual/provider as %+v (listed %v), want it listed", manual, ok)
+		}
+		connectPlugin(t, w, "manual/provider", "worktree.create")
+		awaitPluginShown(app, "manual/provider", func(p protocol.PluginInfo) bool { return p.Connected })
+	})
 }
 
 func TestWorktreeCreateGoesToTheHighestPriorityProvider(t *testing.T) {
-	w := newWorld(t)
-	app := w.App()
-	repo := newRepo(t, "shop")
-	writePluginManifest(t, filepath.Join(w.Dir, "plugins", "beta-provider"), "beta-provider", "exit 0")
-	alpha := connectPlugin(t, w, "alpha-provider", "worktree.create")
-	beta := connectPlugin(t, w, "beta-provider", "worktree.create")
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		repo := newRepo(t, "shop")
+		installPluginTheTestPlays(t, w, "beta-provider")
+		alpha := connectPlugin(t, w, "alpha-provider", "worktree.create")
+		beta := connectPlugin(t, w, "beta-provider", "worktree.create")
 
-	createThrough := func(provider *pluginPeer, branch string) {
-		t.Helper()
-		app.Send(protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: branch})
-		var asked pluginWorktreeCreate
-		id := provider.expect("worktree.create", &asked)
-		if asked.MainRepo != repo || asked.Branch != branch {
-			t.Errorf("%s was asked %+v, want %s on %s", provider.name, asked, repo, branch)
+		createThrough := func(provider *pluginPeer, branch string) {
+			t.Helper()
+			app.Send(protocol.CreateWorktreeMessage{Cmd: protocol.CmdCreateWorktree, MainRepo: repo, Branch: branch})
+			var asked pluginWorktreeCreate
+			id := provider.expect("worktree.create", &asked)
+			if asked.MainRepo != repo || asked.Branch != branch {
+				t.Errorf("%s was asked %+v, want %s on %s", provider.name, asked, repo, branch)
+			}
+			path := filepath.Join(filepath.Dir(repo), provider.name+"-"+branch)
+			runGit(t, repo, "worktree", "add", "-q", "-b", branch, path)
+			provider.answer(id, pluginWorktreeAnswer{Status: "handled", Path: path, Branch: branch})
+			result := testworld.Await(app, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
+			if !result.Success || protocol.Deref(result.Path) != path {
+				t.Errorf("creating %s answered %+v (%s), want %s's %s", branch, result, protocol.Deref(result.Error), provider.name, path)
+			}
 		}
-		path := filepath.Join(filepath.Dir(repo), provider.name+"-"+branch)
-		runGit(t, repo, "worktree", "add", "-q", "-b", branch, path)
-		provider.answer(id, pluginWorktreeAnswer{Status: "handled", Path: path, Branch: branch})
-		result := testworld.Await(app, protocol.EventCreateWorktreeResult, func(protocol.CreateWorktreeResultMessage) bool { return true })
-		if !result.Success || protocol.Deref(result.Path) != path {
-			t.Errorf("creating %s answered %+v (%s), want %s's %s", branch, result, protocol.Deref(result.Error), provider.name, path)
-		}
-	}
 
-	createThrough(alpha, "feat-tied")
-	ranked := testworld.Request(app, protocol.SetPluginPriorityMessage{Cmd: protocol.CmdSetPluginPriority, Name: "beta-provider", Priority: 10},
-		protocol.EventPluginActionResult, func(r protocol.PluginActionResultMessage) bool { return r.Action == "set_priority" })
-	if !ranked.Success {
-		t.Fatalf("ranking beta-provider first: %s", protocol.Deref(ranked.Error))
-	}
-	createThrough(beta, "feat-ranked")
-	beta.hangUp()
-	awaitPluginShown(app, "beta-provider", func(p protocol.PluginInfo) bool { return !p.Connected })
-	createThrough(alpha, "feat-after-hang-up")
+		createThrough(alpha, "feat-tied")
+		ranked := testworld.Request(app, protocol.SetPluginPriorityMessage{Cmd: protocol.CmdSetPluginPriority, Name: "beta-provider", Priority: 10},
+			protocol.EventPluginActionResult, func(r protocol.PluginActionResultMessage) bool { return r.Action == "set_priority" })
+		if !ranked.Success {
+			t.Fatalf("ranking beta-provider first: %s", protocol.Deref(ranked.Error))
+		}
+		createThrough(beta, "feat-ranked")
+		beta.hangUp()
+		awaitPluginShown(app, "beta-provider", func(p protocol.PluginInfo) bool { return !p.Connected })
+		createThrough(alpha, "feat-after-hang-up")
+	})
 }

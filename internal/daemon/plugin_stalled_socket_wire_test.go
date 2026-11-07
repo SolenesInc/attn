@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"bufio"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -14,7 +13,7 @@ import (
 func TestAPluginThatStopsReadingItsSocketIsDroppedAtTheWriteDeadlineWithoutStallingTheDaemon(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
-		writePluginManifest(t, filepath.Join(w.Dir, "plugins", "stalled-provider"), "stalled-provider", "exit 0")
+		installPluginTheTestPlays(t, w, "stalled-provider")
 		conn, err := w.DialUnix()
 		if err != nil {
 			t.Fatal(err)
