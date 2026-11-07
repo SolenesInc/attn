@@ -557,8 +557,7 @@ func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 	}
 	session.evictionStarted = true
 	session.mu.Unlock()
-	b.reportExit(session, 1, "worker_unreachable")
-	go b.forceSessionEviction(session)
+	b.evictLostSession(session)
 }
 
 func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) error {

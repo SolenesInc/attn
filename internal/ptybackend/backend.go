@@ -190,6 +190,12 @@ type ExitInfo struct {
 	LifecycleID string
 }
 
+const runtimeLostSignal = "worker_unreachable"
+
+func (e ExitInfo) RuntimeLost() bool {
+	return e.Signal == runtimeLostSignal
+}
+
 type RuntimeLifecycleProvider interface {
 	RuntimeLifecycle(id harness.TerminalID) (lifecycleID string, running bool)
 }

@@ -2229,6 +2229,13 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 	b.reapWorkerPID(workerPID, session.SessionID)
 }
 
+func (b *WorkerBackend) evictLostSession(session *workerSession) {
+	go func() {
+		b.forceSessionEviction(session)
+		b.reportExit(session, 1, runtimeLostSignal)
+	}()
+}
+
 func (b *WorkerBackend) removeOwnedSocket(socketPath string) {
 	if b.kind == workerRuntimeSharedHost {
 		return
@@ -2305,8 +2312,7 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 							continue
 						}
 						b.cfg.Logf("worker backend poller: session %s unreachable for %s; forcing exit", session.SessionID, pollerUnreachableAfter)
-						b.reportExit(session, 1, "worker_unreachable")
-						b.forceSessionEviction(session)
+						b.evictLostSession(session)
 						return
 					}
 					continue
@@ -3029,7 +3035,7 @@ func (b *WorkerBackend) WaitBlock(ctx context.Context, id harness.TerminalID, pa
 		session.mu.Lock()
 		exit := session.exitObserved
 		session.mu.Unlock()
-		if exit != nil && exit.Signal != "worker_unreachable" {
+		if exit != nil && exit.Signal != runtimeLostSignal {
 			return pty.WaitBlockResult{Exited: true, ExitCode: &exit.ExitCode}, nil
 		}
 	}

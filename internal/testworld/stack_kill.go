@@ -47,3 +47,18 @@ func (s *Stack) Reboot() {
 	}
 	s.kit.AwaitExited()
 }
+
+func (s *Stack) KillRuntimeOf(terminal string) {
+	s.T.Helper()
+	path, err := s.registryPath(terminal)
+	if err != nil {
+		s.T.Fatalf("finding the runtime of terminal %s: %v", terminal, err)
+	}
+	entry, err := ptyworker.ReadRegistry(path)
+	if err != nil {
+		s.T.Fatalf("reading the registry of terminal %s: %v", terminal, err)
+	}
+	if err := syscall.Kill(entry.WorkerPID, syscall.SIGKILL); err != nil {
+		s.T.Fatalf("killing runtime %d of terminal %s: %v", entry.WorkerPID, terminal, err)
+	}
+}

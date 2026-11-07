@@ -90,6 +90,17 @@ func (s *terminalSizes) claim(client terminalClient, terminal protocol.TerminalI
 	return true
 }
 
+func (s *terminalSizes) owned(terminal protocol.TerminalID) (protocol.PtyResizeMessage, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	claims := s.byTerminal[terminal]
+	if claims == nil {
+		return protocol.PtyResizeMessage{}, false
+	}
+	request, asked := claims.requestOf(claims.owner)
+	return request.size, asked
+}
+
 func (s *terminalSizes) applyIfOwner(client terminalClient, terminal protocol.TerminalID, apply func(protocol.PtyResizeMessage)) bool {
 	s.mu.Lock()
 	claims := s.byTerminal[terminal]

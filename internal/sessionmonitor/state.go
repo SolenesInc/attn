@@ -21,7 +21,7 @@ type LinkTurn struct {
 
 type StartupRecovery struct{}
 
-type HostExitRecovery struct{}
+type RuntimeLost struct{}
 
 type pluginDriverSilent struct{}
 
@@ -30,7 +30,7 @@ func (pluginDriverSilent) isSessionStateCause()  {}
 func (resolverObservation) isSessionStateCause() {}
 func (LinkTurn) isSessionStateCause()            {}
 func (StartupRecovery) isSessionStateCause()     {}
-func (HostExitRecovery) isSessionStateCause()    {}
+func (RuntimeLost) isSessionStateCause()         {}
 
 type Change struct {
 	State            string
@@ -60,7 +60,7 @@ func EffectsOf(cause Cause) (Effects, bool) {
 		return Effects{Touch: true, Broadcast: true}, true
 	case StartupRecovery:
 		return Effects{}, true
-	case HostExitRecovery:
+	case RuntimeLost:
 		return Effects{Broadcast: true}, true
 	case pluginDriverSilent:
 		return Effects{Broadcast: true}, true
@@ -79,8 +79,8 @@ func CauseName(cause Cause) string {
 		return "link_turn"
 	case StartupRecovery:
 		return "startup_recovery"
-	case HostExitRecovery:
-		return "host_exit_recovery"
+	case RuntimeLost:
+		return "runtime_lost"
 	case pluginDriverSilent:
 		return "plugin_driver_silent"
 	default:

@@ -1720,6 +1720,11 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		d.logf("terminal %s exited; session %s runs on in its other terminals", info.ID, sessionID)
 		return true
 	}
+	if info.RuntimeLost() && !stopped && d.lostRuntimeCanComeBack(sessionID) {
+		unlockEnds()
+		d.bringBackLostRuntime(sessionID, info)
+		return true
+	}
 	monitor := d.sessionMonitor(sessionID)
 	exit, held := monitor.HeldExit(info.LifecycleID)
 	if !held {
@@ -1746,6 +1751,38 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 	}
 	d.reportExit(sessionID, exit)
 	return true
+}
+
+func (d *Daemon) lostRuntimeCanComeBack(sessionID protocol.SessionID) bool {
+	session := d.store.Get(sessionID)
+	if session == nil || d.copiedSession(sessionID) || !d.canReviveSession(session) {
+		return false
+	}
+	if session.Agent != protocol.AgentShellValue && !d.agentAvailable(string(session.Agent)) {
+		return false
+	}
+	intent, _ := d.store.LaunchIntent(sessionID)
+	return intent.Command == nil
+}
+
+func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptybackend.ExitInfo) {
+	monitor := d.sessionMonitor(sessionID)
+	monitor.ResetInput()
+	monitor.StopTranscriptWatchers()
+	d.closePluginDriverSession(sessionID, "exited", &info.ExitCode, info.Signal)
+	if err := d.removePTYSession(info.ID); err != nil {
+		d.logf("pty backend remove on lost runtime failed for %s: %v", info.ID, err)
+	}
+	d.applyState(sessionID, sessionmonitor.Change{State: string(protocol.SessionStateRecoverable), Cause: sessionmonitor.RuntimeLost{}})
+	d.logf("terminal %s lost its runtime; bringing session %s back", info.ID, sessionID)
+	cols, rows := 80, 24
+	if size, sized := d.ptySizes.owned(protocol.TerminalID(info.ID)); sized {
+		cols, rows = size.Cols, size.Rows
+	}
+	if err := d.reviveSession(sessionID, cols, rows); err != nil {
+		d.logf("session %s lost its runtime and could not come back: %v", sessionID, err)
+		d.reportExit(sessionID, d.exitOf(sessionID, info))
+	}
 }
 
 func (d *Daemon) endClosedSessionsRun(sessionID protocol.SessionID, owner endingTerminal, info ptybackend.ExitInfo) {
