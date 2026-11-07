@@ -3,7 +3,7 @@ package setting
 var (
 	AsksEnabled = feature("asks_enabled", "Enable agent asks: true or false.", Info{
 		Name:    "Asks",
-		Summary: "Answer agents' questions from one drawer without opening their terminals.",
+		Summary: "Answer agents' questions from one drawer.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
@@ -12,7 +12,7 @@ var (
 	})
 	QuickCaptureEnabled = feature("quick_capture_enabled", "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", Info{
 		Name:    "Quick Capture",
-		Summary: "Send messages and files to Chief or a crew member from any app with a global shortcut.",
+		Summary: "Send messages and files to Chief or a crew member from any app.",
 		Group:   Agents,
 		Applies: Now,
 		Stage:   Experimental,
@@ -21,7 +21,7 @@ var (
 	})
 	CrewV2Enabled = feature("crew_v2_enabled", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", Info{
 		Name:    "Crew v2",
-		Summary: "Crew members use the v2 operating model with harness memory off. Letters filed while it's on record their session so attn can keep its transcript.",
+		Summary: "Crew members use the v2 operating model, with harness memory off.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
@@ -30,7 +30,7 @@ var (
 	})
 	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
 		Name:    "Nisse",
-		Summary: "Offer Nisse as a harness. attn runs the Nisse server and follows each session's state from it.",
+		Summary: "Offer Nisse as a harness.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
@@ -39,7 +39,7 @@ var (
 	})
 	ClaudeModEnabled = feature("claude_mod_enabled", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.", Info{
 		Name:    "Claude mod",
-		Summary: "Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal.",
+		Summary: "Deliver messages to Claude through a Claude Code mod instead of typing.",
 		Group:   Agents,
 		Applies: NewAgentsOnOnly,
 		Stage:   Experimental,
@@ -48,7 +48,7 @@ var (
 	})
 	CodexSharedEnabled = feature("codex_shared_enabled", "Use the shared Codex app server: true or false.", Info{
 		Name:    "Shared Codex",
-		Summary: "Use a shared Codex server for cross-session interaction, tighter integration with attn, and lower memory use.",
+		Summary: "Run one Codex server for every session, using less memory.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
@@ -57,7 +57,7 @@ var (
 	})
 	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
 		Name:    "Launcher 2.0",
-		Summary: "New dialog for launching agents and terminals. Allows you to select a path, then repository, and worktree, in a single dialog.",
+		Summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,
@@ -66,7 +66,7 @@ var (
 	})
 	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false.", Info{
 		Name:    "Agent callouts",
-		Summary: "Let agents point at parts of the app with short, guided steps.",
+		Summary: "Let agents point at parts of the app, step by step.",
 		Group:   Interface,
 		Applies: Now,
 		Stage:   Experimental,
@@ -84,7 +84,8 @@ var (
 	})
 	PhoneAccessEnabled = feature("phone_access_enabled", "Let paired phones reach this home's sessions: true or false. Off by default.", Info{
 		Name:    "Phone access",
-		Summary: "Let phones you pair see this home's agents. Turning it off disconnects every phone.",
+		Summary: "Let phones you pair see this home's agents.",
+		Note:    "Turning it off disconnects every phone.",
 		Group:   Connections,
 		Applies: Now,
 		Stage:   Experimental,
@@ -93,7 +94,8 @@ var (
 	})
 	AnalyticsEnabled = feature("analytics.enabled", "Record usage analytics on this home and its outposts: true or false. Experimental; off by default.", Info{
 		Name:    "Usage analytics",
-		Summary: "Keep a redacted record of how attn is used on this home and its outposts. Nothing is sent.",
+		Summary: "Keep a redacted record of how attn is used, here and on outposts.",
+		Note:    "Nothing is sent unless you turn on sharing.",
 		Group:   Data,
 		Applies: Now,
 		Stage:   Experimental,

@@ -10,11 +10,6 @@
 .delegation-lead { max-width: 68ch; margin: 0 0 16px; color: var(--color-text-secondary); font-size: var(--font-size-md); line-height: 1.45; }
 .delegation-lead.off { color: var(--color-text-tertiary); }
 
-.delegation-switch { display: inline-flex; align-items: center; gap: 10px; padding: 0; border: 0; background: none; color: var(--color-text-secondary); font-size: var(--font-size-sm); font-weight: 700; cursor: pointer; }
-.delegation-switch-track { position: relative; width: 36px; height: 20px; border-radius: 10px; background: var(--color-bg-button); border: 1px solid var(--color-border); transition: background .15s; }
-.delegation-switch-track::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-tertiary); transition: transform .15s, background .15s; }
-.delegation-switch[aria-checked="true"] .delegation-switch-track { background: #f59b4a; border-color: rgba(245, 155, 74, 0.8); }
-.delegation-switch[aria-checked="true"] .delegation-switch-track::after { transform: translateX(16px); background: #1c1308; }
 
 .delegation-table { overflow: hidden; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-panel); transition: opacity .15s; }
 .delegation-table.dim { opacity: .5; }
@@ -102,4 +97,4 @@
   .delegation-row-main .delegation-cell, .delegation-alt .delegation-model { grid-column: 2; }
   .delegation-details, .delegation-alt-edit { padding-left: 16px; }
 }
-@media (prefers-reduced-motion: reduce) { .delegation-table, .delegation-switch-track, .delegation-switch-track::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .delegation-table { transition: none; } }

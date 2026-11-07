@@ -7,6 +7,7 @@ import { DelegationRoleIcon } from './DelegationRoleIcon';
 import { HarnessRoutePopover } from './HarnessRoutePopover';
 type Anchor = Element;
 import { FALLBACK, adoptMaintainedRoles, adoptionConflicts, alternatives, complete, defaultChoice, emptySelection, firstLine, freshAdoption, liveRoles, missingTemplates, newID, roleLabel, roleViewer, selectionAt } from './delegationRoles';
+import { SettingsSwitch } from './SettingsSwitch';
 import './DelegationSettings.css';
 
 type PopoverTarget = { key: string; anchor: Anchor };
@@ -49,9 +50,7 @@ function LoadingState({ error, onRetry }: { error: string; onRetry: () => void }
 export function DelegationSwitch({ policy }: { policy: DelegationPreferencesPolicy }) {
   const { preferences, save } = policy;
   if (!preferences) return null;
-  return <button type="button" role="switch" aria-checked={preferences.enabled} aria-label="Delegation preferences" className="delegation-switch" onClick={() => void save({ ...preferences, enabled: !preferences.enabled })}>
-    <span className="delegation-switch-track" /><span>{preferences.enabled ? 'On' : 'Off'}</span>
-  </button>;
+  return <SettingsSwitch on={preferences.enabled} label="Delegation preferences" showState onToggle={() => void save({ ...preferences, enabled: !preferences.enabled })} />;
 }
 
 function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: DelegationSelection; harnesses: Harness[]; label: string; open: boolean; onOpen: (anchor: Anchor) => void }) {

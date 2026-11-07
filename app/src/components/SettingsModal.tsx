@@ -17,6 +17,10 @@ import {
   HygieneSettings,
   PluginSettings,
   FeaturePage,
+  FeatureNote,
+  FeatureSwitch,
+  featureDescriptionID,
+  featureSummary,
   SectionStatusPills,
   ExperimentalSettings,
   DesktopSettings,
@@ -111,9 +115,17 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
             <div className="settings-content-head">
               <div>
                 <h1>{selectedNavItem?.label}</h1>
-                {selectedNavItem?.description && <p className="settings-lead">{selectedNavItem.description}</p>}
+                {selectedNavItem?.feature ? (
+                  <div id={featureDescriptionID(selectedNavItem.feature)}>
+                    <p className="settings-lead">{featureSummary(selectedNavItem.feature)}</p>
+                    <FeatureNote featureKey={selectedNavItem.feature} />
+                  </div>
+                ) : selectedNavItem?.description && <p className="settings-lead">{selectedNavItem.description}</p>}
               </div>
               <div className="settings-status-pair">
+                {selectedNavItem?.feature && (
+                  <FeatureSwitch featureKey={selectedNavItem.feature} settings={state.settings} onSetSetting={state.onSetSetting} showState />
+                )}
                 {
                   <SectionStatusPills
                     selectedSection={state.selectedSection}
@@ -126,7 +138,6 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     mutedAuthors={state.mutedAuthors}
                     hasProjectsDirChange={state.hasProjectsDirChange}
                     openSentFilesEnabled={state.openSentFilesEnabled}
-                    analyticsEnabled={state.analyticsEnabled}
                   />
                 }
               </div>
@@ -240,13 +251,13 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       );
     case 'outposts':
       return (
-        <FeaturePage featureKey={BoolSetting.outpostsEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+        <FeaturePage featureKey={BoolSetting.outpostsEnabled} settings={state.settings}>
           <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} />
         </FeaturePage>
       );
     case 'phones':
       return (
-        <FeaturePage featureKey={BoolSetting.phoneAccessEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+        <FeaturePage featureKey={BoolSetting.phoneAccessEnabled} settings={state.settings}>
           <PhonesSettings />
         </FeaturePage>
       );
@@ -294,7 +305,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       );
     case 'analytics':
       return (
-        <FeaturePage featureKey={BoolSetting.analyticsEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+        <FeaturePage featureKey={BoolSetting.analyticsEnabled} settings={state.settings}>
           <AnalyticsSettings
             key={String(state.analyticsEnabled)}
             sharing={isOn(state.settings, BoolSetting.analyticsSharingEnabled)}

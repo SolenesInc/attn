@@ -52,6 +52,7 @@ export interface Feature {
   key: BoolSettingKey;
   name: string;
   summary: string;
+  note: string;
   group: string;
   timing: string;
   stage: string;
@@ -60,17 +61,17 @@ export interface Feature {
 }
 
 export const FEATURES: readonly Feature[] = [
-  { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer without opening their terminals.", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-18", search: "questions answer decisions drawer" },
-  { key: "quick_capture_enabled", name: "Quick Capture", summary: "Send messages and files to Chief or a crew member from any app with a global shortcut.", group: "Agents", timing: "", stage: "experimental", since: "2026-10-19", search: "global shortcut panel" },
-  { key: "crew_v2_enabled", name: "Crew v2", summary: "Crew members use the v2 operating model with harness memory off. Letters filed while it's on record their session so attn can keep its transcript.", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-27", search: "chief crew memory letters" },
-  { key: "nisse_enabled", name: "Nisse", summary: "Offer Nisse as a harness. attn runs the Nisse server and follows each session's state from it.", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-29", search: "harness server" },
-  { key: "claude_mod_enabled", name: "Claude mod", summary: "Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal.", group: "Agents", timing: "Starts with the next agent you open. Turning it off applies at once.", stage: "experimental", since: "2026-11-04", search: "delivery typing standby compact" },
-  { key: "codex_shared_enabled", name: "Shared Codex", summary: "Use a shared Codex server for cross-session interaction, tighter integration with attn, and lower memory use.", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-16", search: "app server memory" },
-  { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "New dialog for launching agents and terminals. Allows you to select a path, then repository, and worktree, in a single dialog.", group: "Interface", timing: "", stage: "experimental", since: "2026-10-16", search: "one-screen one screen new-session new session project path" },
-  { key: "callouts_enabled", name: "Agent callouts", summary: "Let agents point at parts of the app with short, guided steps.", group: "Interface", timing: "", stage: "experimental", since: "2026-10-18", search: "point guided steps tour" },
-  { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", group: "Connections", timing: "", stage: "experimental", since: "2026-10-27", search: "remote computers bridge ssh" },
-  { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents. Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", since: "2026-11-02", search: "mobile iphone pair" },
-  { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used on this home and its outposts. Nothing is sent.", group: "Data", timing: "", stage: "experimental", since: "2026-10-24", search: "telemetry vents record" },
-  { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-15", search: "memory launcher" },
-  { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
+  { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-18", search: "questions answer decisions drawer" },
+  { key: "quick_capture_enabled", name: "Quick Capture", summary: "Send messages and files to Chief or a crew member from any app.", note: "", group: "Agents", timing: "", stage: "experimental", since: "2026-10-19", search: "global shortcut panel" },
+  { key: "crew_v2_enabled", name: "Crew v2", summary: "Crew members use the v2 operating model, with harness memory off.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-27", search: "chief crew memory letters" },
+  { key: "nisse_enabled", name: "Nisse", summary: "Offer Nisse as a harness.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-29", search: "harness server" },
+  { key: "claude_mod_enabled", name: "Claude mod", summary: "Deliver messages to Claude through a Claude Code mod instead of typing.", note: "", group: "Agents", timing: "Starts with the next agent you open. Turning it off applies at once.", stage: "experimental", since: "2026-11-04", search: "delivery typing standby compact" },
+  { key: "codex_shared_enabled", name: "Shared Codex", summary: "Run one Codex server for every session, using less memory.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-16", search: "app server memory" },
+  { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-10-16", search: "one-screen one screen new-session new session project path" },
+  { key: "callouts_enabled", name: "Agent callouts", summary: "Let agents point at parts of the app, step by step.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-10-18", search: "point guided steps tour" },
+  { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", since: "2026-10-27", search: "remote computers bridge ssh" },
+  { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", since: "2026-11-02", search: "mobile iphone pair" },
+  { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used, here and on outposts.", note: "Nothing is sent unless you turn on sharing.", group: "Data", timing: "", stage: "experimental", since: "2026-10-24", search: "telemetry vents record" },
+  { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", note: "", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-15", search: "memory launcher" },
+  { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", note: "", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
 ];

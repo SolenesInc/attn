@@ -593,7 +593,7 @@ export function useSettingsModalState({
           {
             id: 'experimental',
             label: 'Experimental',
-            description: 'Opt in to features that are still being developed.',
+            description: 'Features still in development. Each applies to this home and its outposts.',
             keywords: `experimental ${EXPERIMENTAL_FEATURES.map(feature => `${feature.name} ${feature.search}`).join(' ')}`,
           },
           {

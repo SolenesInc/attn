@@ -91,6 +91,7 @@ func (a Applies) Timing() string {
 type Info struct {
 	Name    string
 	Summary string
+	Note    string
 	Group   Group
 	Applies Applies
 	Stage   Stage

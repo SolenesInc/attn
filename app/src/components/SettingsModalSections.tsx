@@ -22,6 +22,7 @@ import {
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import { SettingRefusal } from './SettingsAutosave';
+import { SettingsSwitch } from './SettingsSwitch';
 import type { SettingsModalState } from './useSettingsModalState';
 import { BoolSetting, EXPERIMENTAL_FEATURES, FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
 
@@ -43,7 +44,6 @@ export function SectionStatusPills({
   mutedAuthors,
   hasProjectsDirChange,
   openSentFilesEnabled,
-  analyticsEnabled,
 }: Pick<
   SettingsModalState,
   | 'selectedSection'
@@ -56,7 +56,6 @@ export function SectionStatusPills({
   | 'mutedAuthors'
   | 'hasProjectsDirChange'
   | 'openSentFilesEnabled'
-  | 'analyticsEnabled'
 >) {
   switch (selectedSection) {
     case 'delegation':
@@ -76,13 +75,6 @@ export function SectionStatusPills({
     case 'desktop':
       return (
         <DesktopStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
-      );
-    case 'analytics':
-      return analyticsEnabled && (
-        <>
-          <span className="settings-pill good">Recording</span>
-          <span className="settings-pill">Local only</span>
-        </>
       );
     case 'general':
     default:
@@ -654,67 +646,80 @@ export function PluginSettings({
   );
 }
 
-function featureDetail(key: BoolSettingKey): ReactNode {
+function featureShortcut(key: BoolSettingKey): ReactNode {
   if (key === BoolSetting.quickCaptureEnabled) {
     const modifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
-    return <> Default shortcut: {keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => modifiers[part] ?? part))}.</>;
+    return <>Default shortcut <kbd>{keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => modifiers[part] ?? part))}</kbd>.</>;
   }
   if (key === BoolSetting.asksEnabled) {
-    return <> Open it with {formatShortcut('dock.asks')}.</>;
+    return <>Open it with <kbd>{formatShortcut('dock.asks')}</kbd>.</>;
   }
   return null;
 }
 
-function FeatureRow({ feature, settings, onSetSetting, children }: {
-  feature: Feature;
-  settings: Record<string, string>;
-  onSetSetting: SettingsModalState['onSetSetting'];
-  children?: ReactNode;
-}) {
-  const on = isOn(settings, feature.key);
-  const descriptionID = `settings-feature-${feature.key}-description`;
-  return (
-    <>
-      <div className="settings-row-card">
-        <div>
-          <p className="settings-row-title">{feature.name}</p>
-          <div id={descriptionID}>
-            <p className="settings-row-copy">{feature.summary}{featureDetail(feature.key)}</p>
-            {feature.timing && <p className="settings-row-copy">{feature.timing}</p>}
-          </div>
-        </div>
-        <button
-          type="button"
-          role="switch"
-          aria-label={feature.name}
-          aria-checked={on}
-          aria-describedby={descriptionID}
-          className="settings-action"
-          data-testid={`settings-feature-${feature.key}`}
-          onClick={() => onSetSetting(feature.key, on ? 'false' : 'true')}
-        >
-          {on ? 'Disable' : 'Enable'}
-        </button>
-      </div>
-      {children && (
-        <div inert={!on} className={`settings-feature-content${on ? '' : ' off'}`} data-testid={`settings-feature-content-${feature.key}`}>
-          {children}
-        </div>
-      )}
-    </>
-  );
+function featureFor(key: BoolSettingKey): Feature {
+  return FEATURES.find(candidate => candidate.key === key)!;
 }
 
-export function FeaturePage({ featureKey, settings, onSetSetting, children }: {
+export const featureSummary = (key: BoolSettingKey) => featureFor(key).summary;
+
+export function FeatureNote({ featureKey }: { featureKey: BoolSettingKey }) {
+  const feature = featureFor(featureKey);
+  const shortcut = featureShortcut(feature.key);
+  const sentences = [feature.note, feature.timing].filter(Boolean).join(' ');
+  if (!shortcut && !sentences) return null;
+  return <p className="settings-flag-note">{shortcut}{shortcut && sentences && ' '}{sentences}</p>;
+}
+
+export const featureDescriptionID = (key: BoolSettingKey) => `settings-feature-${key}-description`;
+
+export function FeatureSwitch({ featureKey, settings, onSetSetting, showState = false }: {
   featureKey: BoolSettingKey;
   settings: Record<string, string>;
   onSetSetting: SettingsModalState['onSetSetting'];
+  showState?: boolean;
+}) {
+  const on = isOn(settings, featureKey);
+  return (
+    <SettingsSwitch
+      on={on}
+      label={featureFor(featureKey).name}
+      showState={showState}
+      describedBy={featureDescriptionID(featureKey)}
+      testID={`settings-feature-${featureKey}`}
+      onToggle={() => onSetSetting(featureKey, on ? 'false' : 'true')}
+    />
+  );
+}
+
+function FeatureRow({ feature, settings, onSetSetting }: {
+  feature: Feature;
+  settings: Record<string, string>;
+  onSetSetting: SettingsModalState['onSetSetting'];
+}) {
+  return (
+    <div className={`settings-flag${isOn(settings, feature.key) ? ' on' : ''}`}>
+      <div>
+        <p className="settings-flag-name">{feature.name}</p>
+        <div id={featureDescriptionID(feature.key)}>
+          <p className="settings-flag-summary">{feature.summary}</p>
+          <FeatureNote featureKey={feature.key} />
+        </div>
+      </div>
+      <FeatureSwitch featureKey={feature.key} settings={settings} onSetSetting={onSetSetting} />
+    </div>
+  );
+}
+
+export function FeaturePage({ featureKey, settings, children }: {
+  featureKey: BoolSettingKey;
+  settings: Record<string, string>;
   children: ReactNode;
 }) {
-  const feature = FEATURES.find(candidate => candidate.key === featureKey)!;
+  const on = isOn(settings, featureKey);
   return (
-    <div className="settings-feature-page">
-      <FeatureRow feature={feature} settings={settings} onSetSetting={onSetSetting}>{children}</FeatureRow>
+    <div inert={!on} className={`settings-feature-content${on ? '' : ' off'}`} data-testid={`settings-feature-content-${featureKey}`}>
+      {children}
     </div>
   );
 }
@@ -729,18 +734,24 @@ export function ExperimentalSettings({
 >) {
   const groups = [...new Set(EXPERIMENTAL_FEATURES.map(feature => feature.group))];
   return (
-    <section className="settings-block">
-      <div className="settings-block-intro">
-        <p className="settings-row-copy">Each one applies to this home and all its outposts.</p>
-      </div>
-      {groups.map(group => (
-        <div className="settings-block-body" key={group} data-testid={`settings-feature-group-${group}`}>
-          <p className="settings-label">{group}</p>
-          {EXPERIMENTAL_FEATURES.filter(feature => feature.group === group).map(feature => (
-            <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting} />
-          ))}
-        </div>
-      ))}
+    <section>
+      {groups.map(group => {
+        const features = EXPERIMENTAL_FEATURES.filter(feature => feature.group === group);
+        const onCount = features.filter(feature => isOn(settings, feature.key)).length;
+        return (
+          <div className="settings-flag-group" key={group} data-testid={`settings-feature-group-${group}`}>
+            <div className="settings-flag-gutter">
+              <p className="settings-label">{group}</p>
+              <p className="settings-flag-count"><b>{onCount}</b> of {features.length} on</p>
+            </div>
+            <div>
+              {features.map(feature => (
+                <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </section>
   );
 }
