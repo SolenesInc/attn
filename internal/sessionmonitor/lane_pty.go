@@ -42,7 +42,6 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 		pausepoint.At(pausepoint.SessionInputLaneContended)
 		m.mu.Lock()
 	}
-	defer m.mu.Unlock()
 	l := m.input
 	if l.phase == "" {
 		l.phase = m.state.State
@@ -55,6 +54,7 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 			m.userInputs++
 		}
 	}
+	m.mu.Unlock()
 	return m.registry.host.Input(ctx, terminal, data)
 }
 

@@ -774,7 +774,8 @@ func (d *Daemon) ptyInputAnswered(client *wsClient, msg *protocol.PtyInputMessag
 	elapsed := time.Since(receivedAt)
 	d.recordSupportInputTrace(msg, receivedAt, elapsed, writeErr)
 	if writeErr != nil {
-		if !errors.Is(writeErr, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(msg.ID)) != "" && sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
+		remote := !errors.Is(writeErr, bridge.ErrUnanswered) && d.sessionHost(d.terminals().owner(msg.ID)) != ""
+		if (remote || errors.Is(writeErr, pty.ErrInputQueueFull)) && sessionmonitor.IsUserKeystrokeSource(strings.TrimSpace(protocol.Deref(msg.Source))) {
 			d.sendTerminalRefusal(client, protocol.CmdPtyInput, msg.ID, writeErr)
 		}
 		if shouldLogPtyCommandError(writeErr) {

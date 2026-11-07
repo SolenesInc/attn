@@ -1945,6 +1945,8 @@ func (b *WorkerBackend) rpcError(sessionID string, rpcErr *ptyworker.RPCError) e
 		return fmt.Errorf("%w: %s", pty.ErrSessionNotFound, sessionID)
 	case ptyworker.ErrImageNotFound:
 		return fmt.Errorf("%w: %s", pty.ErrKittyImageNotFound, rpcErr.Message)
+	case ptyworker.ErrInputQueueFull:
+		return fmt.Errorf("%w: %s", pty.ErrInputQueueFull, rpcErr.Message)
 	case ptyworker.ErrSessionNotRunning:
 		return errors.New(rpcErr.Message)
 	default:

@@ -21,9 +21,9 @@ use crate::handover::{self, Fallback, HostHandoff, write_private};
 use crate::outbox::{Outbox, Refused, outbox};
 use crate::protocol::{
     AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
-    ERR_SESSION_NOT_FOUND, ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION,
-    HandoverParams, HelloParams, InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request,
-    ResizeParams, SignalParams, SpawnParams, error, is_compatible_version, response,
+    ERR_SESSION_NOT_FOUND, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION, HandoverParams, HelloParams,
+    InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams, SignalParams,
+    SpawnParams, error, is_compatible_version, response,
 };
 use crate::quiesce::{Quiesce, set_cloexec};
 use crate::session::{
@@ -1155,10 +1155,7 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             };
             match session.input(&data) {
                 Ok(()) => connection.send(&response(&request.id, json!({"ok": true}))),
-                Err(message) if message.contains("not running") => {
-                    connection.fail(&request.id, ERR_SESSION_NOT_RUNNING, message)
-                }
-                Err(message) => connection.fail(&request.id, ERR_IO, message),
+                Err((code, message)) => connection.fail(&request.id, code, message),
             }
         }
         "resize" => {

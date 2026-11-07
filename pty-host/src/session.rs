@@ -18,11 +18,13 @@ use serde_json::{Value, json};
 
 use crate::ghostty::{HandoverScreen, Terminal, Theme};
 use crate::handover::SessionHandoff;
+use crate::input_queue::{InputQueue, start_writer};
 use crate::outbox::{Line, Outbox, Refused};
 use crate::output_batch::{OUTPUT_BATCH_MAX_BYTES, OutputBatch};
 use crate::protocol::{
-    PreparedLaunchAttempt, SpawnParams, desync_event, exit_event, kitty_placements_event,
-    output_event, resize_event, rfc3339, state_event,
+    ERR_INPUT_QUEUE_FULL, ERR_IO, ERR_SESSION_NOT_RUNNING, PreparedLaunchAttempt, SpawnParams,
+    desync_event, exit_event, kitty_placements_event, output_event, resize_event, rfc3339,
+    state_event,
 };
 use crate::queries::{
     ColorScheme, TerminalQueryStream, color_scheme_report, theme_color_scheme,
@@ -240,6 +242,7 @@ pub struct Session {
     pub registry_path: String,
 
     master: Mutex<Option<File>>,
+    input_queue: Arc<InputQueue>,
     model: Mutex<Model>,
     text_changed: Condvar,
     // Admission hands an already-read chunk to delivery before resize can cross
@@ -280,6 +283,7 @@ struct Parts {
     registry_path: String,
     cleanup_dir: String,
     master: Option<File>,
+    input_queue: InputQueue,
     model: Model,
     lifecycle: Lifecycle,
     ownership: Ownership,
@@ -316,9 +320,8 @@ impl Session {
         let (master, child_pid, attempt_index) = spawn_attempts(&params.attempts, cols, rows)?;
         cleanup_unused_attempts(&params.attempts, attempt_index);
 
-        let pty_reader = master
-            .try_clone()
-            .map_err(|error| format!("clone PTY master: {error}"))?;
+        let pty_reader = clone_master(&master)?;
+        let pty_writer = clone_master(&master)?;
         let SessionRuntime {
             cleanup,
             broadcast,
@@ -336,6 +339,7 @@ impl Session {
                 registry_path,
                 cleanup_dir,
                 master: Some(master),
+                input_queue: InputQueue::new(&[])?,
                 model: Model {
                     wire: WireFeeder::new(terminal, mint_epoch()),
                     prompt_expected: integration_expected(&params.attempts[attempt_index]),
@@ -394,7 +398,10 @@ impl Session {
         *session.ownership.lock().expect("ownership mutex poisoned") =
             Ownership::Pending(Box::new(entry));
 
-        if let Err(error) = start_reader(Arc::clone(&session), pty_reader) {
+        if let Err(error) = session
+            .start_input_writer(pty_writer)
+            .and_then(|()| start_reader(Arc::clone(&session), pty_reader))
+        {
             abort_spawn(&session);
             return Err(error);
         }
@@ -417,6 +424,7 @@ impl Session {
             attempt_index: parts.attempt_index,
             registry_path: parts.registry_path,
             master: Mutex::new(parts.master),
+            input_queue: Arc::new(parts.input_queue),
             model: Mutex::new(parts.model),
             text_changed: Condvar::new(),
             delivery: DeliveryGate::new(),
@@ -507,6 +515,7 @@ impl Session {
             theme: model.theme.clone(),
             color_scheme_reports: model.color_scheme_reports,
             blocks: model.wire.snapshot_blocks(),
+            pending_input: BASE64.encode(self.input_queue.pending()),
             prompt_expected: model.prompt_expected,
             next_block_id: model.wire.next_block_id(),
             program_status_reported: model.signals.program_status_reported(),
@@ -540,6 +549,9 @@ impl Session {
         signals.restore_program_status(handoff.program_status_reported);
         signals.restore_shell_state(handoff.shell);
         signals.title = handoff.title.clone();
+        let pending_input = BASE64
+            .decode(&handoff.pending_input)
+            .map_err(|error| format!("decode pending input: {error}"))?;
         let SessionRuntime {
             cleanup,
             broadcast,
@@ -556,6 +568,7 @@ impl Session {
                 registry_path: handoff.registry_path.clone(),
                 cleanup_dir: handoff.cleanup_dir.clone(),
                 master: None,
+                input_queue: InputQueue::new(&pending_input)?,
                 model: Model {
                     wire,
                     prompt_expected: handoff.prompt_expected,
@@ -608,14 +621,13 @@ impl Session {
             self.schedule_cleanup();
             return Ok(());
         };
-        let pty_reader = {
+        let (pty_reader, pty_writer) = {
             let mut master = self.master.lock().expect("master mutex poisoned");
             let master = master.insert(unsafe { File::from_raw_fd(fd) });
             set_cloexec(fd, true)?;
-            master
-                .try_clone()
-                .map_err(|error| format!("clone adopted PTY master: {error}"))?
+            (clone_master(master)?, clone_master(master)?)
         };
+        self.start_input_writer(pty_writer)?;
         start_reader(Arc::clone(self), pty_reader)?;
         reaper.register(self);
         Ok(())
@@ -784,11 +796,16 @@ impl Session {
         events
     }
 
-    pub fn input(&self, data: &[u8]) -> Result<(), String> {
+    pub fn input(&self, data: &[u8]) -> Result<(), (&'static str, String)> {
         if !self.is_running() {
-            return Err("session not running".to_owned());
+            return Err((ERR_SESSION_NOT_RUNNING, "session not running".to_owned()));
         }
-        self.write_master(data)
+        if let Some(failure) = self.input_queue.take_failure() {
+            return Err((ERR_IO, failure));
+        }
+        self.input_queue
+            .push(data)
+            .map_err(|refusal| (ERR_INPUT_QUEUE_FULL, refusal))
     }
 
     pub fn resize(
@@ -876,7 +893,7 @@ impl Session {
             report.then(|| color_scheme_report(scheme).to_vec())
         };
         if let Some(report) = report {
-            self.write_master(&report)?;
+            self.reply_to_program(&report);
         }
         Ok(())
     }
@@ -1094,13 +1111,19 @@ impl Session {
             .running
     }
 
-    fn write_master(&self, data: &[u8]) -> Result<(), String> {
-        let mut master = self.master.lock().expect("master mutex poisoned");
-        let Some(file) = master.as_mut() else {
-            return Err("session not running".to_owned());
-        };
-        file.write_all(data)
-            .map_err(|error| format!("write PTY: {error}"))
+    fn reply_to_program(&self, data: &[u8]) {
+        if let Err(refusal) = self.input_queue.push(data) {
+            eprintln!("terminal {} dropped a terminal reply: {refusal}", self.id);
+        }
+    }
+
+    fn start_input_writer(&self, master: File) -> Result<(), String> {
+        start_writer(
+            &self.id,
+            Arc::clone(&self.input_queue),
+            master,
+            Arc::clone(&self.quiesce),
+        )
     }
 
     fn read_until_closed(&self, reader: &mut File) {
@@ -1117,7 +1140,11 @@ impl Session {
             let first = match reader.read(&mut buffer) {
                 Ok(0) => return,
                 Ok(read) => read,
-                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
+                Err(error)
+                    if matches!(error.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) =>
+                {
+                    continue;
+                }
                 Err(_) => return,
             };
             let read_at = SystemTime::now();
@@ -1144,7 +1171,8 @@ impl Session {
             match reader.read(buffer) {
                 Ok(0) => return false,
                 Ok(read) => batch.push(&buffer[..read]),
-                Err(error) if error.kind() == ErrorKind::Interrupted => {}
+                Err(error)
+                    if matches!(error.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) => {}
                 Err(_) => return false,
             }
         }
@@ -1218,7 +1246,7 @@ impl Session {
         }
         drop(signal_order);
         if !responses.is_empty() {
-            let _ = self.write_master(&responses);
+            self.reply_to_program(&responses);
         }
         let mut output_seq = first_seq;
         for chunk in wire.chunks(OUTPUT_EVENT_MAX_BYTES) {
@@ -1394,6 +1422,7 @@ impl Session {
             return;
         }
         self.master.lock().expect("master mutex poisoned").take();
+        self.input_queue.stop();
         let _ = fs::remove_file(&self.registry_path);
         if !self.cleanup_dir.is_empty() {
             let _ = fs::remove_dir_all(&self.cleanup_dir);
@@ -1459,6 +1488,12 @@ impl Session {
             self.publish_title(&title);
         }
     }
+}
+
+fn clone_master(master: &File) -> Result<File, String> {
+    master
+        .try_clone()
+        .map_err(|error| format!("clone PTY master: {error}"))
 }
 
 fn start_reader(session: Arc<Session>, mut reader: File) -> Result<(), String> {

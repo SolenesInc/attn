@@ -1143,6 +1143,10 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
 				return
 			}
+			if errors.Is(err, pty.ErrInputQueueFull) {
+				c.sendError(req.ID, ErrInputQueueFull, strings.TrimPrefix(err.Error(), pty.ErrInputQueueFull.Error()+": "))
+				return
+			}
 			if strings.Contains(strings.ToLower(err.Error()), "not running") {
 				c.sendError(req.ID, ErrSessionNotRunning, err.Error())
 				return

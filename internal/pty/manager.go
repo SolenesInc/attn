@@ -34,6 +34,8 @@ const (
 
 var ErrSessionNotFound = errors.New("session not found")
 
+var ErrInputQueueFull = errors.New("input queue full")
+
 type LogFunc func(format string, args ...interface{})
 
 type SpawnOptions struct {
@@ -275,6 +277,7 @@ func (m *Manager) Spawn(opts SpawnOptions) error {
 		cols:           opts.Cols,
 		rows:           opts.Rows,
 		ptmx:           ptmx,
+		inputs:         newInputQueue(nil),
 		child:          &childProcess{cmd: cmd, pid: cmd.Process.Pid},
 		subscribers:    make(map[string]*sessionSubscriber),
 		running:        true,
@@ -351,6 +354,7 @@ func (m *Manager) start(session *Session, lifecycleID string) {
 		go session.runShellForegroundPoller(shellForegroundPollInterval)
 	}
 
+	session.startInputWriter()
 	go session.readLoop(func(exitCode int, signal string) {
 		m.logf("pty exited: id=%s code=%d signal=%s", session.id, exitCode, signal)
 		if onExit != nil {
@@ -434,12 +438,12 @@ func (m *Manager) Detach(sessionID, subscriberID string) {
 	session.removeSubscriber(subscriberID)
 }
 
-func (m *Manager) Input(ctx context.Context, sessionID string, data []byte) error {
+func (m *Manager) Input(_ context.Context, sessionID string, data []byte) error {
 	session, err := m.getSession(sessionID)
 	if err != nil {
 		return err
 	}
-	return session.input(ctx, data)
+	return session.input(data)
 }
 
 func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {

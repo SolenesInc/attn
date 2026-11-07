@@ -124,6 +124,39 @@ impl Quiesce {
         Ok(fds[1].revents == 0 && fds[0].revents != 0)
     }
 
+    pub fn wait_input_turn(&self, wake: RawFd, writable: Option<RawFd>) -> std::io::Result<()> {
+        loop {
+            let mut fds = [
+                libc::pollfd {
+                    fd: wake,
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: writable.unwrap_or(-1),
+                    events: libc::POLLOUT,
+                    revents: 0,
+                },
+                libc::pollfd {
+                    fd: self.wake_read.as_raw_fd(),
+                    events: libc::POLLIN,
+                    revents: 0,
+                },
+            ];
+            if unsafe { libc::poll(fds.as_mut_ptr(), 3, -1) } < 0 {
+                let error = std::io::Error::last_os_error();
+                if error.kind() == ErrorKind::Interrupted {
+                    continue;
+                }
+                return Err(error);
+            }
+            if fds[2].revents != 0 {
+                self.park();
+            }
+            return Ok(());
+        }
+    }
+
     fn requested_at(&self) -> Option<Instant> {
         self.state
             .lock()

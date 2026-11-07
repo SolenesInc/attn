@@ -58,6 +58,7 @@ const (
 	ErrSessionNotFound    = "session_not_found"
 	ErrSessionNotRunning  = "session_not_running"
 	ErrIO                 = "io_error"
+	ErrInputQueueFull     = "input_queue_full"
 	ErrInternal           = "internal_error"
 	ErrImageNotFound      = "image_not_found"
 )

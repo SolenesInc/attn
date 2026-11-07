@@ -2,6 +2,7 @@ package ptybackend
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -263,4 +264,52 @@ func screenText(screen *pty.ViewportSnapshot) string {
 		return "<no screen>"
 	}
 	return screen.Text
+}
+
+func TestSharedHost_HandoverKeepsInputAProgramHasNotReadYet(t *testing.T) {
+	if os.Getenv("ATTN_TEST_PTY_HOST") == "" {
+		t.Skip("set ATTN_TEST_PTY_HOST to run the shared PTY host integration tests")
+	}
+	ctx := context.Background()
+	world := newHandoverWorld(t)
+	oldBackend := world.backend(t, "handover-old", ptyhosttest.BuildWithSnapshotFormat(t, "handover-old"))
+	gate := filepath.Join(world.root, "gate")
+	if err := syscall.Mkfifo(gate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	script := fmt.Sprintf(`read _ < %s; awk 'NR != $1 { bad++ } END { print "lines=" NR, "bad=" bad+0 }'`, gate)
+	if err := oldBackend.Spawn(ctx, SpawnOptions{ID: "stuck", CWD: world.root, Agent: "probe", AgentArgv: []string{"/bin/sh", "-c", script}, Cols: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	hostPID := oldBackend.WorkerPIDs(ctx)["stuck"]
+	t.Cleanup(func() {
+		_ = syscall.Kill(hostPID, syscall.SIGTERM)
+		_ = waitForPIDsGone(3*time.Second, hostPID)
+	})
+	const lines = 20000
+	var paste strings.Builder
+	for line := 1; line <= lines; line++ {
+		fmt.Fprintf(&paste, "%d pasted line\n", line)
+	}
+	paste.WriteString("\x04")
+	if err := oldBackend.Input(ctx, "stuck", []byte(paste.String())); err != nil {
+		t.Fatal(err)
+	}
+
+	newBackend := world.backend(t, "handover-new", ptyhosttest.BuildWithSnapshotFormat(t, "handover-new"))
+	if _, err := newBackend.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := newBackend.UpgradeWorker(ctx, "stuck"); err != nil {
+		t.Fatalf("UpgradeWorker: %v", err)
+	}
+	_, after, err := newBackend.Attach(ctx, "stuck", "after")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer after.Close()
+	if err := os.WriteFile(gate, []byte("go\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	waitForStreamText(t, after, fmt.Sprintf("lines=%d bad=0", lines))
 }

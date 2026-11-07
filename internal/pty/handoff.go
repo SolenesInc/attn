@@ -22,8 +22,9 @@ type HandoffState struct {
 	CWD            string
 	Agent          string
 
-	ChildPID int
-	PtmxFD   int
+	ChildPID     int
+	PendingInput []byte
+	PtmxFD       int
 
 	Cols   uint16
 	Rows   uint16
@@ -165,6 +166,7 @@ func (s *Session) handoff() (HandoffState, error) {
 		return HandoffState{}, fmt.Errorf("dup pty master for handoff: %w", err)
 	}
 	state.PtmxFD = fd
+	state.PendingInput = s.pauseInputForHandoff()
 	return state, nil
 }
 
@@ -209,6 +211,7 @@ func (m *Manager) Adopt(st HandoffState) error {
 		pixelW:         st.PixelW,
 		pixelH:         st.PixelH,
 		ptmx:           ptmx,
+		inputs:         newInputQueue(st.PendingInput),
 		child:          &childProcess{pid: st.ChildPID},
 		subscribers:    make(map[string]*sessionSubscriber),
 		running:        true,

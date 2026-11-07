@@ -62,6 +62,8 @@ pub struct SessionHandoff {
     pub theme: Theme,
     pub color_scheme_reports: bool,
     pub blocks: Vec<AttachBlock>,
+    #[serde(default)]
+    pub pending_input: String,
     pub next_block_id: u64,
     pub program_status_reported: bool,
     pub shell: ShellState,

@@ -20,6 +20,7 @@ pub const ERR_UNAUTHORIZED: &str = "unauthorized";
 pub const ERR_SESSION_NOT_FOUND: &str = "session_not_found";
 pub const ERR_SESSION_NOT_RUNNING: &str = "session_not_running";
 pub const ERR_IO: &str = "io_error";
+pub const ERR_INPUT_QUEUE_FULL: &str = "input_queue_full";
 pub const ERR_IMAGE_NOT_FOUND: &str = "image_not_found";
 
 #[derive(Deserialize)]

@@ -2,7 +2,6 @@ package pty
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -71,6 +70,7 @@ type Session struct {
 	resizeFailed bool
 
 	ptmx       *os.File
+	inputs     *inputQueue
 	child      *childProcess
 	cleanupDir string
 
@@ -508,9 +508,7 @@ func (s *Session) drainGhosttyResponses(logf func(string, ...interface{})) {
 	if len(gap) == 0 {
 		return
 	}
-	s.writeMu.Lock()
-	_, _ = s.ptmx.Write(gap)
-	s.writeMu.Unlock()
+	s.replyToProgram(gap)
 	if logf != nil {
 		logf("pty ghostty gap reply: session=%s bytes=%d", s.id, len(gap))
 	}
@@ -815,44 +813,17 @@ func (s *Session) screenSnapshot() ScreenSnapshotInfo {
 	return info
 }
 
-const inputWriteTimeout = 5 * time.Second
-
-func (s *Session) input(ctx context.Context, data []byte) error {
+func (s *Session) input(data []byte) error {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
 	if !running {
 		return errors.New("session not running")
 	}
-	if _, ok := ctx.Deadline(); !ok {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, inputWriteTimeout)
-		defer cancel()
+	if failure := s.inputs.takeFailure(); failure != nil {
+		return failure
 	}
-
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	if s.ptmxClosed.Load() {
-		return errors.New("session not running")
-	}
-	deadline, _ := ctx.Deadline()
-	if err := s.ptmx.SetWriteDeadline(deadline); err != nil {
-		return err
-	}
-	defer func() { _ = s.ptmx.SetWriteDeadline(time.Time{}) }()
-	expired := make(chan struct{})
-	stop := context.AfterFunc(ctx, func() {
-		defer close(expired)
-		_ = s.ptmx.SetWriteDeadline(time.Unix(1, 0))
-	})
-	_, err := s.ptmx.Write(data)
-	if !stop() {
-		<-expired
-	}
-	if errors.Is(err, os.ErrDeadlineExceeded) {
-		return fmt.Errorf("the terminal did not take input: %w", context.Cause(ctx))
-	}
-	return err
+	return s.inputs.push(data)
 }
 
 func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
@@ -937,6 +908,7 @@ func (s *Session) closePTMX() {
 	if s.ptmxClosed.Swap(true) {
 		return
 	}
+	s.inputs.stop()
 	_ = s.ptmx.Close()
 }
 
@@ -1184,18 +1156,16 @@ func (s *Session) writeOSCColorResponses(queries terminalQueries, logf func(stri
 	bg := hexColorToOSCValue(theme.Background, defaultThemeBackground)
 	cursor := hexColorToOSCValue(theme.Cursor, defaultThemeCursor)
 
-	s.writeMu.Lock()
 	for _, code := range queries.oscQueryOrder {
 		switch code {
 		case 10:
-			_, _ = fmt.Fprintf(s.ptmx, "\x1b]10;%s\x1b\\", fg)
+			s.replyToProgram(fmt.Appendf(nil, "\x1b]10;%s\x1b\\", fg))
 		case 11:
-			_, _ = fmt.Fprintf(s.ptmx, "\x1b]11;%s\x1b\\", bg)
+			s.replyToProgram(fmt.Appendf(nil, "\x1b]11;%s\x1b\\", bg))
 		case 12:
-			_, _ = fmt.Fprintf(s.ptmx, "\x1b]12;%s\x1b\\", cursor)
+			s.replyToProgram(fmt.Appendf(nil, "\x1b]12;%s\x1b\\", cursor))
 		}
 	}
-	s.writeMu.Unlock()
 
 	if logf != nil {
 		logf(
@@ -1242,11 +1212,9 @@ func (s *Session) writeColorSchemeResponses(count int, logf func(string, ...inte
 	s.reportedScheme = scheme
 	s.themeMu.Unlock()
 
-	s.writeMu.Lock()
 	for i := 0; i < count; i++ {
-		_, _ = s.ptmx.Write(colorSchemeReport(scheme))
+		s.replyToProgram(colorSchemeReport(scheme))
 	}
-	s.writeMu.Unlock()
 
 	if logf != nil {
 		logf("pty color-scheme reply: session=%s scheme=%d count=%d", s.id, scheme, count)
@@ -1254,9 +1222,7 @@ func (s *Session) writeColorSchemeResponses(count int, logf func(string, ...inte
 }
 
 func (s *Session) writeColorSchemeReport(scheme colorScheme) {
-	s.writeMu.Lock()
-	_, _ = s.ptmx.Write(colorSchemeReport(scheme))
-	s.writeMu.Unlock()
+	s.replyToProgram(colorSchemeReport(scheme))
 }
 
 func colorSchemeReport(scheme colorScheme) []byte {
@@ -1308,18 +1274,14 @@ func (s *Session) writeCursorPositionResponse(logf func(string, ...any)) {
 		row, col = y+1, x+1
 	}
 	s.replayMu.Unlock()
-	s.writeMu.Lock()
-	_, _ = fmt.Fprintf(s.ptmx, "\x1b[%d;%dR", row, col)
-	s.writeMu.Unlock()
+	s.replyToProgram(fmt.Appendf(nil, "\x1b[%d;%dR", row, col))
 	if logf != nil {
 		logf("pty cpr reply: session=%s row=%d col=%d", s.id, row, col)
 	}
 }
 
 func (s *Session) writeDeviceAttributesResponse(logf func(string, ...any)) {
-	s.writeMu.Lock()
-	_, _ = s.ptmx.Write([]byte("\x1b[?1;2c"))
-	s.writeMu.Unlock()
+	s.replyToProgram([]byte("\x1b[?1;2c"))
 	if logf != nil {
 		logf("pty da1 reply: session=%s", s.id)
 	}
