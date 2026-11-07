@@ -1781,6 +1781,7 @@ func (d *Daemon) bringBackLostRuntime(sessionID protocol.SessionID, info ptyback
 	}
 	if err := d.reviveSession(sessionID, cols, rows); err != nil {
 		d.logf("session %s lost its runtime and could not come back: %v", sessionID, err)
+		monitor.FenceInput()
 		d.reportExit(sessionID, d.exitOf(sessionID, info))
 	}
 }
