@@ -526,3 +526,25 @@ func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
 		t.Fatalf("a folder the user chose was trusted without asking: %s", resolved)
 	}
 }
+
+func TestACodexMemberInAFolderTheUserChoseStillGetsCodexsQuestion(t *testing.T) {
+	w := newCrewV2World(t, fakeagent.Codex)
+	cli, app := w.Client(), w.App()
+	setSetting(t, app, "codex_shared_enabled", "true")
+	chosen := w.Path("chosen")
+	if err := os.MkdirAll(chosen, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := filepath.EvalSymlinks(chosen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex"), Cwd: protocol.Ptr(chosen)})
+	session := string(wakeCrew(t, cli, "keel", "").SessionID)
+	app.AwaitScreen(session, "Trust this folder?")
+	if got := w.CodexFolderTrust(resolved); got != "" {
+		t.Fatalf("Codex saves the folder the user chose as %q before the user answered", got)
+	}
+	app.TypeLine(session, "y")
+	w.Launched(session).Prompted()
+}

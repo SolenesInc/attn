@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -369,11 +370,29 @@ func (p *Peer) AwaitScreen(sessionID, text string) {
 func (p *Peer) AwaitTerminalScreen(terminal, text string) {
 	p.T.Helper()
 	p.attach(terminal)
-	p.until(func() string {
-		return "the screen of terminal " + terminal + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[terminal]))
+	shown := p.within(func() string {
+		return "the screen of terminal " + terminal + " to show " + text
 	}, func() (bool, error) {
 		return bytes.Contains(p.screens[terminal], []byte(text)), nil
 	})
+	if !shown {
+		p.T.Fatalf("still awaiting the screen of terminal %s to show %s after fakeagent.HangGuard=%s; it shows:\n%s", terminal, text, fakeagent.HangGuard, p.terminalText(terminal))
+	}
+}
+
+func (p *Peer) terminalText(terminal string) string {
+	p.T.Helper()
+	requestID := uuid.NewString()
+	result := Request(p, protocol.TerminalReadTextMessage{
+		Cmd:        protocol.CmdTerminalReadText,
+		TerminalID: protocol.TerminalID(terminal),
+		Mode:       protocol.TerminalReadModeScreen,
+		RequestID:  protocol.Ptr(requestID),
+	}, protocol.EventTerminalReadTextResult, func(r protocol.TerminalReadTextResultMessage) bool { return r.RequestID == requestID })
+	if !result.Success {
+		return "(cannot read the screen: " + protocol.Deref(result.Error) + ")"
+	}
+	return protocol.Deref(result.Text)
 }
 
 func (p *Peer) Screen(sessionID string) []byte {
@@ -419,6 +438,16 @@ func (p *Peer) attach(terminal string) {
 
 func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 	p.T.Helper()
+	if !p.within(awaiting, check) {
+		p.mu.Lock()
+		described := awaiting()
+		p.mu.Unlock()
+		p.T.Fatalf("still awaiting %s after fakeagent.HangGuard=%s", described, fakeagent.HangGuard)
+	}
+}
+
+func (p *Peer) within(awaiting func() string, check func() (bool, error)) bool {
+	p.T.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
@@ -427,17 +456,14 @@ func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
 		case err != nil:
 			p.T.Fatalf("while awaiting %s: %v", described, err)
 		case done:
-			return
+			return true
 		case closeErr != nil:
 			p.T.Fatalf("connection closed (%v) while awaiting %s", closeErr, described)
 		}
 		select {
 		case <-grew:
 		case <-guard.C:
-			p.mu.Lock()
-			described = awaiting()
-			p.mu.Unlock()
-			p.T.Fatalf("still awaiting %s after fakeagent.HangGuard=%s", described, fakeagent.HangGuard)
+			return false
 		}
 	}
 }

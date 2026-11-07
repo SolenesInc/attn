@@ -155,6 +155,11 @@ It never touches the member's markdown files.
 | `--awareness-dir <dir>` | A folder the charter is about, which the member can reach. Repeat to set several. `""` clears them. |
 | `--home <dir>` | Where the member's home is now, after you moved or renamed its folder. See [Move a member's home](#move-a-members-home). |
 
+A member with no `--cwd` works in its home, so Attn saves the home as trusted in
+Claude Code's or Codex's config when the member wakes, and the harness doesn't
+ask whether to trust it. With `--cwd`, Attn saves nothing and the harness asks as
+usual. A folder you marked untrusted in Codex stays untrusted.
+
 By default a member starts on its own desktop, named after the member. Attn
 creates that desktop when you add the member.
 

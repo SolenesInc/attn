@@ -23,10 +23,6 @@ func TestCrewV2ReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
 				setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
 				setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 				day := wakeCrew(t, cli, "keel", "")
-				if shared {
-					app.AwaitScreen(string(day.SessionID), "Trust this folder?")
-					app.TypeLine(string(day.SessionID), "y")
-				}
 				t.Cleanup(func() {
 					if t.Failed() {
 						if peek, err := cli.AgentPeek(string(day.SessionID)); err == nil && peek.Screen != nil {
