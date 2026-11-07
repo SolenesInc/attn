@@ -23,7 +23,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 	for key, value := range map[string]string{
 		"NO_COLOR": "1", "TERM_PROGRAM": "vscode", "TERM_PROGRAM_VERSION": "1.0.0",
 		"ATTN_SESSION_ID": "inherited-session", "ATTN_AGENT": "inherited-agent",
-		"CLAUDE_CODE_SESSION_ID": "inherited-claude-session",
+		"CLAUDE_CODE_SESSION_ID": "inherited-claude-session", "ATTN_CLAUDE_MOD_SOCKET": "/inherited/claude-mod.sock",
 	} {
 		t.Setenv(key, value)
 	}
@@ -45,8 +45,8 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 		env  []string
 		want map[string]string
 	}{
-		"agent": {w.Launched(agent).Env, map[string]string{"ATTN_TERMINAL_ID": app.Terminal(agent), "ATTN_SESSION_ID": "", "ATTN_AGENT": "claude", "ATTN_INSIDE_APP": "1", "ATTN_SOCKET_PATH": w.Socket, "ATTN_WRAPPER_PATH": filepath.Join(active, "attn"), "CLAUDE_CODE_SESSION_ID": ""}},
-		"shell": {strings.Split(strings.TrimSpace(string(dumped)), "\n"), map[string]string{"ATTN_TERMINAL_ID": "", "ATTN_SESSION_ID": "", "ATTN_AGENT": ""}},
+		"agent": {w.Launched(agent).Env, map[string]string{"ATTN_TERMINAL_ID": app.Terminal(agent), "ATTN_SESSION_ID": "", "ATTN_AGENT": "claude", "ATTN_INSIDE_APP": "1", "ATTN_SOCKET_PATH": w.Socket, "ATTN_WRAPPER_PATH": filepath.Join(active, "attn"), "CLAUDE_CODE_SESSION_ID": "", "ATTN_CLAUDE_MOD_SOCKET": ""}},
+		"shell": {strings.Split(strings.TrimSpace(string(dumped)), "\n"), map[string]string{"ATTN_TERMINAL_ID": "", "ATTN_SESSION_ID": "", "ATTN_AGENT": "", "ATTN_CLAUDE_MOD_SOCKET": ""}},
 	} {
 		env := map[string]string{}
 		for _, pair := range launched.env {

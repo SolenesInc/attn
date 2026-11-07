@@ -550,6 +550,7 @@ func TestAReplacedModCannotTakeItsTerminalBackWithALatePoll(t *testing.T) {
 }
 
 func TestTheClaudeModSettingDecidesTheLaunchAndTheDelivery(t *testing.T) {
+	t.Setenv("ATTN_CLAUDE_MOD_SOCKET", "/inherited/claude-mod.sock")
 	for _, launch := range []struct{ name, direct string }{{"through attn -s", "false"}, {"direct", "true"}} {
 		t.Run(launch.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude)
