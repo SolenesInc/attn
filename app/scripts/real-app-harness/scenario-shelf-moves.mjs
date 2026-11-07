@@ -246,9 +246,7 @@ try {
   });
 
   await runner.step('more_tiles_reveal_an_agent_whose_document_then_shows', async () => {
-    const before = (await shownLeaves()).length;
-    await press('shelf.fewerTiles');
-    await waitForShownCount((count) => count === before - 1);
+    await narrowScreenToTwoTiles();
     await slideTo((await readRow())[0]);
     await slideTo((await shownLeaves()).at(-1));
     const active = await activeLeaf();
@@ -412,6 +410,13 @@ async function waitForShownCount(predicate) {
     if (predicate(shown.length)) return shown;
   }
   throw new Error(`the screen never reached the expected tile count: ${JSON.stringify(await shownLeaves())}`);
+}
+
+async function narrowScreenToTwoTiles() {
+  for (let shown = (await shownLeaves()).length; shown > 2; shown -= 1) {
+    await press('shelf.fewerTiles');
+    await waitForShownCount((count) => count === shown - 1);
+  }
 }
 
 async function offScreenLeaf() {
