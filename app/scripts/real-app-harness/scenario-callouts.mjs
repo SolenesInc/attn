@@ -150,6 +150,8 @@ try {
   });
 
   await runner.step('browser_tile_gives_way_and_returns', async () => {
+    const { logicalBounds } = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
     await cli('browser', 'open', 'https://example.com/');
     const desktop = observer.desktopOf(agents[0].sessionId);
     browserTileSelector = `[data-desktop-id="${desktop.id}"] [data-tile-kind="browser"]`;

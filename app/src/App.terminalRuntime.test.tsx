@@ -643,6 +643,31 @@ describe('App terminal runtime', () => {
     });
   });
 
+  it('tells the agent which desktop to ask for when a browser tile stays unloaded', async () => {
+    vi.mocked(isTauri).mockReturnValue(true);
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === 'browser_host_control') throw 'browser webview is not mounted';
+      return undefined;
+    });
+    const { daemon } = await renderApp();
+
+    daemon.emit({
+      event: 'browser_control_request',
+      request_id: 'browser-request-1',
+      desktop_id: 'desktop-3',
+      tile_id: 'tile-browser',
+      action: 'snapshot',
+    });
+    await act(() => vi.advanceTimersByTimeAsync(5_100));
+
+    expect(await daemon.received('browser_control_result')).toEqual({
+      cmd: 'browser_control_result',
+      request_id: 'browser-request-1',
+      success: false,
+      error: expect.stringContaining('browser tile on desktop desktop-3 is not loaded'),
+    });
+  });
+
   it('places the native browser over its tile and follows the tile when the window resizes', async () => {
     vi.mocked(isTauri).mockReturnValue(true);
     let hostRect = new DOMRect(10, 20, 300, 400);

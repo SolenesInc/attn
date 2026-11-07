@@ -128,6 +128,8 @@ async function main() {
   let nestedLeaf = null;
   try {
     await launchFreshAppAndConnect(client, observer);
+    const { logicalBounds } = await client.request('get_window_bounds');
+    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
     pane = await runner.step('open_session', () => openPane(client, observer, runner));
 
     await runner.step('plant_and_open_the_plot', async () => {

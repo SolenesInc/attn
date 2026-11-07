@@ -99,19 +99,20 @@ Preconditions:
 - **Linux**: `attn browser` works the same where the daemon and CLI run on Linux, but the page runs in the app: a daemon on Linux drives a browser only through an app connected to it.
 - **Outposts**: the browser tile lives on a home desktop and the page loads in the app on the user's machine, so `localhost` in a URL is that machine, not the outpost an agent runs on.
 - **Profiles**: the tile opens on a desktop of the caller's profile, and `--session` targets a session's desktop in its own profile.
+- **The shelf**: an off-screen browser tile keeps its native view, hidden, so `attn browser` verbs work and the screen stays as it is. Its page survives the trip back on screen, with no reload.
 - **Performance and idle cost**: a hidden or covered browser tile hides its native view. A callout over the tile hides the native view until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
 - **Harnesses**: every harness drives the browser with the same `attn browser` verbs and reads the same reference.
 - **Keyboard and native input**: the page is a native view. Once a click puts focus in the page, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu. ⌘Z and ⇧⌘Z undo and redo in the page's text fields through the browser runtime, as in attn's own fields, because attn's Edit menu has no Undo item.
 
 ## Tests
 
-- Packaged CLI: `browser-wait-navigation` checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
+- Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
 - Stack: `cmd/attn/agent_commands_stack_test.go`.
 - Scenario: `callouts`.
 - Kernel: the Rust tests in `app/src-tauri/core/src/browser_host.rs` and `app/src-tauri/core/src/browser_alerts.rs`.
-- App: `app/src/browser/runtime.test.ts`.
+- App: `app/src/browser/runtime.test.ts`, and `app/src/App.shelfLayout.test.tsx` for an off-screen tile.
 
 ## Gotchas
 
@@ -119,6 +120,7 @@ Preconditions:
 - Live on `drive-3` at `379a7b3f8`: clicking the visible address field focused it but did not preserve select-all. Typing the replacement URL inserted the replacement into the old URL. `dom_value` recorded the concatenated address. `BrowserAddressForm` selects the text in its `onFocus` handler, but a native click did not leave the text selected, and a click in a field that already has focus places the cursor. The recipe presses ⌘A before typing for that reason, and explicit ⌘A allowed navigation.
 - Mock browser JSON is one long line, and the terminal can wrap inside a title or an element reference. Read the logical JSON across screen rows instead of waiting for an unbroken fragment.
 - With only the daemon, `attn browser open` places the tile and exits 0, and every other verb fails with `browser_control: no in-app browser host is connected`. Launch the app first.
+- attn loads a desktop's browser tile only while that desktop is the current or the previous one. Verbs on any other desktop fail after 5 seconds with `the browser tile on desktop <id> is not loaded`, until the user opens that desktop.
 - Verbs before `open` fail with `no browser tile is open for that session`. Each desktop holds one browser tile. A second `open` navigates that tile instead of adding one.
 - `bridge dom_*` reads see the tile's header and address field but not the page. `bridge capture_screenshot` leaves the page out. Read the page with `attn browser snapshot` and capture it with `bridge capture_native_window_screenshot`.
 - Element references come from one page load. After navigation or reload, find the element again. A read-only `wait` keeps checking the requested condition across navigation within its original timeout. The `wait` does not reuse an element reference from the old document.

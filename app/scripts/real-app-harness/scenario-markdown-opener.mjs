@@ -140,6 +140,8 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      const { logicalBounds } = await client.request('get_window_bounds');
+      await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
     });
 
     // Files are named per run: the recents table persists, so a re-run against

@@ -287,6 +287,14 @@ impl Geometry {
     fn size(&self) -> LogicalSize<f64> {
         LogicalSize::new(self.width.max(1.0), self.height.max(1.0))
     }
+
+    fn size_on_creation(&self) -> LogicalSize<f64> {
+        if self.visible {
+            self.size()
+        } else {
+            LogicalSize::new(1.0, 1.0)
+        }
+    }
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -407,18 +415,17 @@ fn return_focus_to_main(webview: &tauri::Webview) -> Result<(), String> {
 }
 
 fn set_geometry(webview: &tauri::Webview, geometry: Geometry) -> Result<(), String> {
-    if !geometry.visible {
-        clear_browser_focus_for(webview.label());
-    }
-    place_webview(webview, geometry)?;
+    let visibility_error =
+        |error: tauri::Error| format!("change browser webview visibility: {error}");
     if geometry.visible {
-        webview.show()
-    } else {
-        #[cfg(target_os = "linux")]
-        return_focus_to_main(webview)?;
-        webview.hide()
+        place_webview(webview, geometry)?;
+        return webview.show().map_err(visibility_error);
     }
-    .map_err(|error| format!("change browser webview visibility: {error}"))
+    clear_browser_focus_for(webview.label());
+    #[cfg(target_os = "linux")]
+    return_focus_to_main(webview)?;
+    webview.hide().map_err(visibility_error)?;
+    place_webview(webview, geometry)
 }
 
 #[tauri::command]
@@ -475,7 +482,7 @@ pub async fn browser_host_mount(
         .add_child(
             builder,
             native_position(&window, geometry.x, geometry.y),
-            geometry.size(),
+            geometry.size_on_creation(),
         )
         .map_err(|error| format!("create browser webview: {error}"))?;
     #[cfg(target_os = "linux")]
@@ -1057,7 +1064,7 @@ async fn screenshot(
             .map_err(|error| format!("decode browser screenshot: {error}"))?;
         if image.width() <= 1 || image.height() <= 1 {
             return Err(
-                "browser screenshot is unavailable while the browser panel is hidden; select its desktop and retry"
+                "browser screenshot is unavailable while the browser tile is off screen; ask the user to bring it on screen with its chip on the shelf or by selecting its desktop, then retry"
                     .to_string(),
             );
         }

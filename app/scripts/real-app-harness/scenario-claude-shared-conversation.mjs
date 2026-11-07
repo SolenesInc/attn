@@ -58,6 +58,8 @@ async function main() {
         turns: [{ includes: 'PLAN_THE_RELEASE', actions: [{ type: 'reply', text: 'Release planned', state: 'waiting_input' }] }],
       });
       await launchFreshAppAndConnect(client, observer);
+      const { logicalBounds } = await client.request('get_window_bounds');
+      await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
       run.first = await createSessionAndWaitForInitialPane({
         client, observer, cwd, label: `release-${runner.runId}`, agent: 'claude', promptReadyFn: ensureClaudePromptReadyViaPty,
       });

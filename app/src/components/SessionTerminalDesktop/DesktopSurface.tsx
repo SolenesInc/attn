@@ -23,6 +23,7 @@ export function DesktopSurface() {
     effectiveZoomedPaneId,
     renderedLayoutTree,
     renderedPaneIds,
+    offScreenBrowserIds,
     sessionVisible,
     effectiveDraggingLeafId,
     effectiveGhostPos,
@@ -65,7 +66,7 @@ export function DesktopSurface() {
       <ShelfPeekPanel />
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}
-        paneIds={renderedPaneIds}
+        paneIds={[...renderedPaneIds, ...offScreenBrowserIds]}
         renderPane={renderPaneSurface}
         containerRef={panesContainerRef}
         dividers={splitDividers}

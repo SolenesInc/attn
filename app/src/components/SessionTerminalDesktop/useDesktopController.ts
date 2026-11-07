@@ -452,6 +452,12 @@ export function useDesktopController(
   }, [panePaths, renderedPaneBounds]);
   const renderedPaneIds = useMemo(() => Array.from(panePaths.keys()), [panePaths]);
   const renderedPaneIdsKey = renderedPaneIds.join('|');
+  const offScreenBrowserIds = useMemo(
+    () => [...tileLeafById.values()]
+      .filter((tile) => tile.tileKind === 'browser' && !panePaths.has(tile.tileId))
+      .map((tile) => tile.tileId),
+    [panePaths, tileLeafById],
+  );
   const terminalPaneIds = useMemo(() => new Set(renderedPaneIds), [renderedPaneIds]);
   const desktopDrawn = isActiveSession && isSessionViewVisible;
   const runtimePanes = useMemo(() => {
@@ -1363,6 +1369,7 @@ export function useDesktopController(
     effectiveZoomedPaneId,
     renderedLayoutTree,
     renderedPaneIds,
+    offScreenBrowserIds,
     sessionVisible,
     focusDocument,
     effectiveDraggingLeafId,

@@ -133,8 +133,13 @@ export async function controlBrowserHost(
     try {
       return await invoke<string>('browser_host_control', { label, action, params, selector, text });
     } catch (error) {
-      if (!String(error).includes('not mounted') || Date.now() >= deadline) {
+      if (!String(error).includes('not mounted')) {
         throw error;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `the browser tile on desktop ${containerId} is not loaded: attn loads it only while its desktop is the current or the previous one. Ask the user to open that desktop, then retry.`,
+        );
       }
       await delay(100);
     }

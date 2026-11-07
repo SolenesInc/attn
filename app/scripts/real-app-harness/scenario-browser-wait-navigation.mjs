@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -15,11 +15,14 @@ const runner = createScenarioRunner(options, { scenarioId: 'BROWSER-WAIT-NAVIGAT
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const exec = promisify(execFile);
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const receipts = [];
+const pageRequests = new Map();
 const server = http.createServer((request, response) => {
   const id = request.url.slice(1);
+  pageRequests.set(id, (pageRequests.get(id) ?? 0) + 1);
   response.setHeader('content-type', 'text/html');
-  response.end(`<title>${id}</title><h1 id="${id}">${id}</h1>`);
+  response.end(`<title>${id}</title><h1 id="${id}">${id}</h1><input id="field" aria-label="Field">`);
 });
 const observePendingWait = selector => {
   const logPath = client.launch.logPath;
@@ -99,11 +102,61 @@ try {
     await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);
     await assertPage(id, await waitForPage(id));
   };
+  const browserTile = `[data-session-terminal-desktop="${desktop.id}"] [data-tile-kind="browser"]`;
+  const closeBrowserTile = async () => {
+    await client.request('dom_click', { selector: `${browserTile} [aria-label="Close tile"]` });
+    await client.request('dom_wait', { selector: browserTile, absent: true, timeoutMs: observer.connectTimeoutMs });
+  };
+  const script = (source) => cli('browser', 'command', 'execute_script', '--params', JSON.stringify({ script: source, args: [] }), '--session', sessionId);
+  const { logicalBounds } = await client.request('get_window_bounds');
+  await runner.step('commands_reach_a_tile_on_the_shelf_and_leave_the_screen_alone', async () => {
+    await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1000, height: 800 } });
+    const screenState = async () => {
+      const { shownLeafIds } = await client.request('get_desktop_ui_state', { desktopId: desktop.id });
+      const activeLeaf = (await client.request('get_session_ui_state', { sessionId })).desktop?.view?.activeLeafId;
+      const { tag: focusedTag, className: focusedClass } = await client.request('dom_active_element');
+      const { label: browserFocus } = await client.request('get_browser_focus_state');
+      return JSON.stringify({ shownLeafIds, activeLeaf, focusedTag, focusedClass, browserFocus });
+    };
+    const before = await screenState();
+    const screenStaysTheSame = async (doing) => {
+      const now = await screenState();
+      runner.assert(now === before, `the screen and focus stay the same after ${doing}`, { before, now });
+    };
+    await openAndWait('shelved-first');
+    const chip = '[data-testid="shelf-chip-tile-browser"]';
+    await client.request('dom_wait', { selector: chip, timeoutMs: observer.connectTimeoutMs });
+    await screenStaysTheSame('an open that puts the tile on the shelf');
+    await openAndWait('shelved');
+    await screenStaysTheSame('an open that navigates the tile on the shelf');
+    const inPage = (...args) => cli('browser', ...args, '--session', sessionId);
+    const heading = JSON.parse(await inPage('find', '--using', 'css', '--value', '#shelved'));
+    runner.assert(Boolean(heading['element-6066-11e4-a52e-4f735466cecf']), 'find answers from the shelf', { heading });
+    await inPage('click', '--selector', 'h1');
+    await inPage('type', '--selector', '#field', '--text', 'typed');
+    runner.assert(JSON.parse(await script('return document.querySelector("#field").value;')) === 'typed', 'type reaches the page on the shelf');
+    await inPage('press', '--text', 'Tab');
+    await inPage('scroll', '--y', '10');
+    await inPage('reload');
+    await waitForPage('shelved');
+    await inPage('back');
+    await waitForPage('shelved-first');
+    await inPage('forward');
+    await waitForPage('shelved');
+    await inPage('cookies');
+    await screenStaysTheSame('every control command on the tile on the shelf');
+    const loads = pageRequests.get('shelved');
+    await script('window.attnKept = "kept"; return null;');
+    await driver.click(chip);
+    await client.request('dom_wait', { selector: browserTile, timeoutMs: observer.connectTimeoutMs });
+    const kept = JSON.parse(await script('return window.attnKept;'));
+    runner.assert(kept === 'kept' && pageRequests.get('shelved') === loads, 'the tile comes on screen with the page the agent left, not a reload', { kept, loads, requests: pageRequests.get('shelved') });
+    await closeBrowserTile();
+  });
+  await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
   await runner.step('initial_open_then_wait', () => openAndWait('initial'));
   await runner.step('reopen_then_wait', async () => {
-    const selector = `[data-session-terminal-desktop="${desktop.id}"] [data-tile-kind="browser"]`;
-    await client.request('dom_click', { selector: `${selector} [aria-label="Close tile"]` });
-    await client.request('dom_wait', { selector, absent: true, timeoutMs: observer.connectTimeoutMs });
+    await closeBrowserTile();
     await openAndWait('reopened');
   });
   await runner.step('command_wait_after_navigation', async () => {

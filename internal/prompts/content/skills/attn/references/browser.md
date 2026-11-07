@@ -26,6 +26,11 @@ attn browser screenshot ./attn-browser.png
 Use `browser snapshot` for state and locators. Use screenshots when visual
 layout matters. Do not request both by default.
 
+When the window has no room, the tile opens off screen, as a chip on the shelf
+in the title bar. The commands keep working there and the user's screen stays as
+it is. If a screenshot reports that the tile is off screen, use `browser
+snapshot`, or ask the user to bring the tile on screen.
+
 For lower-level WebDriver-shaped actions:
 
 ```sh

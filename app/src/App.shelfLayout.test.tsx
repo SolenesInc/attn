@@ -1,3 +1,4 @@
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
@@ -98,6 +99,68 @@ describe('Shelf layout', () => {
     expect(screen.getByTestId('shelf-live-dots').querySelectorAll('.desktop-shelf-dot')).toHaveLength(3);
     expect(document.querySelector<HTMLElement>('[data-pane-id="pane-s1"]')!.style.width).toBe('33.33333333333333%');
     await daemon.idle();
+  });
+
+  describe('with a browser tile off screen', () => {
+    const LABEL = 'browser-ws-tile-browser';
+    const hostCalls = (command: string) => vi.mocked(invoke).mock.calls
+      .filter(([name]) => name === command)
+      .map(([, args]) => args as { label: string; url?: string; geometry?: { visible: boolean } });
+    const lastVisible = () => vi.mocked(invoke).mock.calls
+        .filter(([name]) => name === 'browser_host_mount' || name === 'browser_host_update')
+        .map(([, args]) => (args as { geometry: { visible: boolean } }).geometry.visible)
+        .slice(-1)[0];
+    const browserRow = (url: string) => rightChain([...IDS.slice(0, 3).map(pane), { type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: url }]);
+
+    it('keeps its page loaded and hidden, and shows the same page when it comes back', async () => {
+      vi.mocked(isTauri).mockReturnValue(true);
+      const daemon = await renderRow(NARROWEST_66, { root: browserRow('https://example.com/') });
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(hostCalls('browser_host_mount')).toEqual([expect.objectContaining({ label: LABEL, url: 'https://example.com/' })]);
+      expect(lastVisible()).toBe(false);
+
+      for (let step = 0; step < 3; step += 1) await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+
+      expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'tile-browser']);
+      expect(lastVisible()).toBe(true);
+
+      await gesture(daemon, () => pressShortcut('terminal.focusLeft'));
+      await gesture(daemon, () => pressShortcut('terminal.focusLeft'));
+      await gesture(daemon, () => pressShortcut('terminal.focusLeft'));
+
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(lastVisible()).toBe(false);
+      expect(hostCalls('browser_host_mount')).toHaveLength(1);
+      expect(hostCalls('browser_host_unmount')).toEqual([]);
+    });
+
+    it('keeps its page loaded and hidden while another tile fills the screen in focus mode', async () => {
+      vi.mocked(isTauri).mockReturnValue(true);
+      const daemon = await renderRow(NARROWEST_66, { root: split('split-a', 'vertical', [pane('s1'), { type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: 'https://example.com/' }]) });
+      expect(lastVisible()).toBe(true);
+
+      await gesture(daemon, () => pressShortcut('terminal.toggleMaximize'));
+
+      expect(surface()).toHaveAttribute('data-maximized-pane-id', 'pane-s1');
+      expect(lastVisible()).toBe(false);
+
+      await gesture(daemon, () => pressShortcut('terminal.toggleMaximize'));
+
+      expect(lastVisible()).toBe(true);
+      expect(hostCalls('browser_host_mount')).toHaveLength(1);
+      expect(hostCalls('browser_host_unmount')).toEqual([]);
+    });
+
+    it('closes its page with the tile', async () => {
+      vi.mocked(isTauri).mockReturnValue(true);
+      const daemon = await renderRow(NARROWEST_66, { root: browserRow('https://example.com/') });
+
+      relayOut(daemon, rightChain(IDS.slice(0, 3).map(pane)), IDS);
+      await daemon.idle();
+
+      expect(hostCalls('browser_host_unmount')).toEqual([{ label: LABEL }]);
+    });
   });
 
   it('shows no shelf when every column fits', async () => {

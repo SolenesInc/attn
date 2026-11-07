@@ -6,16 +6,14 @@ import { DesktopDockTile } from './DesktopDockTile';
 
 const noRequestContent = () => {};
 
+const OFF_SCREEN_STYLE: CSSProperties = { position: 'absolute', inset: 0, visibility: 'hidden' };
+
 export function DesktopTilePane({
   tileLeaf,
-  bounds,
-  path,
-  frameStyle,
+  placement,
 }: {
   tileLeaf: TileLeaf;
-  bounds: NormalizedPaneBounds;
-  path: string;
-  frameStyle: CSSProperties;
+  placement?: { bounds: NormalizedPaneBounds; path: string; frameStyle: CSSProperties };
 }) {
   const {
     desktopId,
@@ -43,18 +41,23 @@ export function DesktopTilePane({
     paneGeometry,
   } = useDesktopContext();
 
+  const paneAttributes = placement
+    ? {
+        className: `desktop-pane desktop-pane--tile${placement.bounds.left === 0 ? ' desktop-pane--flush-left' : ''}${activeLeafId === tileLeaf.tileId ? ' active' : ''}`,
+        onMouseDown: () => focusLeaf(tileLeaf.tileId),
+        'data-pane-id': tileLeaf.tileId,
+        'data-pane-kind': 'tile',
+        'data-tile-kind': tileLeaf.tileKind,
+        'data-pane-path': placement.path,
+        style: placement.frameStyle,
+      }
+    : { className: 'desktop-tile-off-screen', inert: true, style: OFF_SCREEN_STYLE };
   return (
     <div
       key={`tile:${tileLeaf.tileId}`}
-      className={`desktop-pane desktop-pane--tile${bounds.left === 0 ? ' desktop-pane--flush-left' : ''}${activeLeafId === tileLeaf.tileId ? ' active' : ''}`}
       role="group"
       aria-label={`Desktop ${tileLeaf.tileKind}`}
-      onMouseDown={() => focusLeaf(tileLeaf.tileId)}
-      data-pane-id={tileLeaf.tileId}
-      data-pane-kind="tile"
-      data-tile-kind={tileLeaf.tileKind}
-      data-pane-path={path}
-      style={frameStyle}
+      {...paneAttributes}
     >
       <DesktopDockTile
         tile={tileLeaf}
@@ -63,6 +66,7 @@ export function DesktopTilePane({
         dragging={effectiveDraggingLeafId === tileLeaf.tileId}
         paneGeometry={paneGeometry.get(tileLeaf.tileId)}
         visible={
+          placement !== undefined &&
           isActiveSession &&
           isSessionViewVisible &&
           enabled &&
