@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"golang.org/x/crypto/ssh"
 )
@@ -46,6 +47,7 @@ func (c *Conn) Open(ctx context.Context, kind string, payload []byte) (ssh.Chann
 	}
 	result := make(chan opened, 1)
 	go func() {
+		pausepoint.At(pausepoint.BridgeChannelOpening)
 		channel, requests, err := c.transport.OpenChannel(kind, payload)
 		result <- opened{channel, requests, err}
 	}()

@@ -93,6 +93,7 @@ const (
 	NotebookStreamError        = "notebook-stream-error"
 	NotebookStreamErrorHandled = "notebook-stream-error-handled"
 	BridgeConnectionClosed     = "bridge-connection-closed"
+	BridgeChannelOpening       = "bridge-channel-opening"
 	RemoteInputAnswered        = "remote-input-answered"
 	BridgeSendQueued           = "bridge-send-queued"
 	OutpostMachineRead         = "outpost-machine-read"

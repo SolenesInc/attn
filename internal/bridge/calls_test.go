@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bridge"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -218,6 +219,46 @@ func TestBridgeChannelsEndWithTheTransport(t *testing.T) {
 		}
 		if _, _, err := client.Open(context.Background(), "stream", nil); err == nil {
 			t.Fatal("opened a channel on an ended bridge")
+		}
+	})
+}
+
+type heldChannelOpens struct {
+	reached chan struct{}
+	release chan struct{}
+}
+
+func (h *heldChannelOpens) Armed() []string { return []string{pausepoint.BridgeChannelOpening} }
+func (h *heldChannelOpens) Hold(name string, _ error) {
+	if name == pausepoint.BridgeChannelOpening {
+		close(h.reached)
+		<-h.release
+	}
+}
+
+func TestBridgeCallEndsWithTheTransportWhileItsChannelOpenHasNotReturned(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w := pair(t)
+		w.cfg.Handlers = answering("outpost")
+		w.start()
+		client, server := bridged(t, w, nil)
+		opening := &heldChannelOpens{reached: make(chan struct{}), release: make(chan struct{})}
+		restore, err := pausepoint.InProcess(opening)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer restore()
+		defer close(opening.release)
+		pending := make(chan error, 1)
+		go func() { pending <- client.Call(context.Background(), "echo", echo{}, nil) }()
+		<-opening.reached
+		w.network.Cut(true)
+		time.Sleep(bridge.LostAfter)
+		synctest.Wait()
+		<-client.Done()
+		<-server.Done()
+		if err := <-pending; err == nil {
+			t.Fatal("a call whose channel open had not returned survived the transport")
 		}
 	})
 }
