@@ -42,7 +42,7 @@ and signatures of both clients by `internal/cloudlink/testdata/cloud_relay_vecto
 
 ### People
 
-- **Settings → Experimental** and the top of **Settings → Phones**, "Phone access" (`app/src/components/SettingsModalSections.tsx`), the home setting `phone_access_enabled`.
+- **Settings → Experimental** and the head of **Settings → Phones**, "Phone access" (`app/src/components/SettingsModalSections.tsx`), the home setting `phone_access_enabled`.
 - **Settings → Phones** (`app/src/components/PhonesSettings.tsx`), listed under Connectivity, dimmed and marked off until phone access is on: the link, "Pair a phone" per profile with Cancel beside a shown code, the paired phones with Revoke.
 - Their own shell: `attn settings set phone_access_enabled true`.
 

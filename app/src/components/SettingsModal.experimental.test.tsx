@@ -1,5 +1,5 @@
 import { EXPERIMENTAL_FEATURES } from '../utils/settings';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSection, savedSettings } from '../test/settings';
 import { gesture } from '../test/renderApp';
@@ -104,6 +104,22 @@ describe('Experimental settings come from the declarations', () => {
     expect(screen.getByRole('switch', { name: 'Asks' })).toHaveAccessibleDescription(expect.stringContaining('Starts with the next agent you open.'));
     expect(screen.getByRole('switch', { name: 'Launcher 2.0' })).not.toHaveAccessibleDescription(expect.stringContaining('Starts'));
     expect(screen.queryByText('Now')).toBeNull();
+  });
+
+  it('counts the features that are on in each group', async () => {
+    const daemon = await openSection('experimental');
+    const count = (group: string) => within(screen.getByTestId(`settings-feature-group-${group}`)).getByText((_, element) => element?.tagName === 'P' && / of \d+ on$/.test(element.textContent ?? ''));
+    const agents = EXPERIMENTAL_FEATURES.filter(feature => feature.group === 'Agents').length;
+    const interfaceCount = EXPERIMENTAL_FEATURES.filter(feature => feature.group === 'Interface').length;
+    expect(count('Agents')).toHaveTextContent(`0 of ${agents} on`);
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Nisse' })));
+    expect(count('Agents')).toHaveTextContent(`1 of ${agents} on`);
+    expect(count('Interface')).toHaveTextContent(`0 of ${interfaceCount} on`);
+  });
+
+  it('says on the Phones page that turning phone access off disconnects every phone', async () => {
+    await openSection('phones');
+    expect(screen.getByRole('switch', { name: 'Phone access' })).toHaveAccessibleDescription(expect.stringContaining('Turning it off disconnects every phone.'));
   });
 
   it('finds a feature page with its flag off', async () => {

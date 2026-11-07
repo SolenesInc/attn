@@ -48,7 +48,7 @@ var (
 	})
 	CodexSharedEnabled = feature("codex_shared_enabled", "Use the shared Codex app server: true or false.", Info{
 		Name:    "Shared Codex",
-		Summary: "Run one Codex server for every session, using less memory.",
+		Summary: "Codex terminals share one Codex server per profile, using less memory.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
