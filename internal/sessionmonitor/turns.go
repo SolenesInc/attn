@@ -33,6 +33,10 @@ func (m *Monitor) openTurnLocked(now time.Time, quietStop bool) bool {
 	return opened
 }
 
+func (m *Monitor) notificationStopLocked() bool {
+	return m.input.stopFollowsNotificationLocked() && !attention.RunFailed(m.reason)
+}
+
 func (m *Monitor) grantTurnRequestLocked() {
 	if m.turn.RequestedAt.IsZero() || !m.turnOwedLocked() {
 		return

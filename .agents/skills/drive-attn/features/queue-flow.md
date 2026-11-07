@@ -58,7 +58,7 @@ queue, but the user settles a run's turn the same way in either flow.
 
 ### Triggers
 
-- A turn opens when an agent's state becomes one of waiting, idle, needs approval or unknown. Shells and a chief with crew v2 off are never owed one (`internal/attention/turn.go`). With quiet notifications on, a stop after a notification run opens a turn only for approval, an unknown state, or an agent that ran `attn turn open`.
+- A turn opens when an agent's state becomes one of waiting, idle, needs approval or unknown. Shells and a chief with crew v2 off are never owed one (`internal/attention/turn.go`). With quiet notifications on, a stop after a notification run opens a turn only for approval, an unknown state, a run that ended on an error, or an agent that ran `attn turn open`.
 - A snooze ends at its deadline and the turn opens again if the agent is stopped. An agent that exits or turns unknown ends its own snooze (`internal/sessionmonitor/turns.go`).
 - attn arms auto-settle after the arm delay once the user's prompt set the agent working, counts down, and settles the turn. Typing or moving the pointer holds the countdown until five quiet seconds pass (`internal/sessionmonitor/autosettle.go`).
 - When the turn of the agent on screen closes and no navigation of the user's own is under way, the app moves them to the head of the queue if it is a priority turn, otherwise to the next owed turn, or home with "Take me to the next agent that needs you" checked when none is owed. The app does not move them when the agent closed the turn itself (`turn_by_agent`) or the agent is offline (`app/src/navigation/sessionNavigation.ts`, `advanceAfterTurnClosed` in `app/src/utils/queueBands.ts`).

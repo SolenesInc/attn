@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/inbox"
@@ -231,6 +232,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 			Lead:             lead,
 			Reachable:        crewSessionReachable(session),
 			MidTurn:          crewSessionMidTurn(session),
+			RunFailed:        attention.RunFailed(d.stateReason(session.ID)),
 			HeartbeatEnabled: heartbeat,
 			AutoSleepEnabled: autoSleep,
 		})

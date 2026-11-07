@@ -196,6 +196,19 @@ func TestANotificationRunThatNeedsApprovalPushesInEitherFlow(t *testing.T) {
 	}
 }
 
+func TestANotificationRunThatDiesOnAnErrorPushesInEitherFlow(t *testing.T) {
+	for _, flow := range phonePushFlows {
+		t.Run(flow.name, func(t *testing.T) {
+			w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
+			session, agent, owed := owingIdleAgent(t, w, app, cli)
+			working, _ := notificationRunStarts(t, app, cli, agent, session, settleFromApp(app, owed), "rebase onto main")
+			agent.ProgramStatus("state=error:app=claude-code")
+			testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+			phone.expect("waiting", "Waiting.")
+		})
+	}
+}
+
 func TestAStopAfterAttnTurnOpenPushesThoughANotificationStartedTheRun(t *testing.T) {
 	for _, flow := range phonePushFlows {
 		t.Run(flow.name, func(t *testing.T) {

@@ -164,7 +164,8 @@ update, the answer to an ask. Those wake-ups don't send you to agents that do
 not need you. In queue flow:
 
 - An agent a notification woke stays out of your queue when it stops, unless it
-  needs an approval or Attn can't tell what it's doing.
+  needs an approval, Claude Code reports that its run failed, such as on a usage
+  limit, or Attn can't tell what it's doing.
 - An agent waiting for you leaves the queue when a notification sets it working
   again. If the agent is on screen, you stay there, and settle moves you on as usual.
 - An agent that needs you runs `attn turn open`. That command puts the agent in
@@ -179,4 +180,5 @@ while it works on a notification.
 Quiet notifications are on by default. To have every notification run open a
 turn when it stops, turn off **Settings → Attention queue → Quiet notifications
 in the queue**. That setting changes only the queue: the
-[phone](phone-app.md#notifications) stays silent for those stops either way.
+[phone](phone-app.md#notifications) stays silent for those stops either way,
+unless the run failed.

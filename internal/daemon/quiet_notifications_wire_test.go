@@ -181,6 +181,28 @@ func TestANotificationRunThatNeedsApprovalStillOpensATurn(t *testing.T) {
 	}
 }
 
+func TestANotificationRunThatDiesOnAnErrorOpensATurn(t *testing.T) {
+	w, app, cli := quietNotificationsWorld(t, true)
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+
+	waking := owed
+	for i := range 2 {
+		working, _ := notificationRunStarts(t, app, cli, agent, session, waking, fmt.Sprintf("review round %d is in", i+1))
+		if protocol.Deref(working.TurnOwed) {
+			t.Fatal("the ring's run did not settle the agent's open turn")
+		}
+		agent.ProgramStatus("state=error:app=claude-code")
+		died := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+		if !protocol.Deref(died.TurnOwed) {
+			t.Fatalf("round %d: the agent died before it could open its turn, and the user was not told: %+v", i+1, died)
+		}
+		if protocol.Deref(died.TurnByAgent) {
+			t.Fatalf("round %d: a failed run's turn counts as the agent's, so only the agent could settle it: %+v", i+1, died)
+		}
+		waking = settleFromApp(app, died)
+	}
+}
+
 func TestWithoutQuietNotificationsOrTheQueueANotificationRunOpensATurnAsBefore(t *testing.T) {
 	for _, tc := range []struct {
 		name  string

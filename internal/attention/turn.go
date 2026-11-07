@@ -23,6 +23,15 @@ func OpensTurnAfterNotification(state protocol.SessionState) bool {
 	return state == protocol.SessionStatePendingApproval || state == protocol.SessionStateUnknown
 }
 
+func RunFailed(reason string) bool {
+	switch sessionstate.Reason(reason) {
+	case sessionstate.ReasonProgramError, sessionstate.ReasonStopFailed:
+		return true
+	default:
+		return false
+	}
+}
+
 func TurnByAgent(opened, settled, agentAt time.Time) bool {
 	latest := settled
 	if opened.After(settled) {

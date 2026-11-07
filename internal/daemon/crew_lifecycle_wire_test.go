@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -181,6 +182,41 @@ func TestACrewDayMidTurnOrAwaitingApprovalIsLeftAlone(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestACrewDayWhoseRunFailedIsLeftAloneUntilItRunsAgain(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, day := crewDayInBubble(t, w, nil)
+		day.term.ProgramStatus(pty.ProgramWorking)
+		w.advance(0)
+		day.term.ProgramStatus(pty.ProgramError)
+		w.advance(0)
+		if got := queriedSession(t, day.cli, day.id); got.State != protocol.SessionStateWaitingInput {
+			t.Fatalf("the day whose run failed is %s, want waiting_input", got.State)
+		}
+
+		w.advance(56 * time.Minute)
+		if got := day.term.Pasted(); len(got) != 0 {
+			t.Fatalf("a day whose run failed was sent a heartbeat, which can only fail again: %q", got)
+		}
+		setSetting(t, app, "crew.away_seconds", "60")
+		w.advance(2 * time.Minute)
+		if got := day.term.Pasted(); len(got) != 0 {
+			t.Fatalf("a day whose run failed was asked to sleep, which it cannot answer: %q", got)
+		}
+		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_seconds", "86400")
+
+		app.TypeLine(day.id, "try again")
+		day.term.ProgramStatus(pty.ProgramWorking)
+		w.advance(0)
+		day.term.ProgramStatus(pty.ProgramDone)
+		day.reply("Back. <!-- attn:state=idle -->")
+		w.advance(56 * time.Minute)
+		if got := pastedContaining(day.term, crewHeartbeat); got != 1 {
+			t.Fatalf("a day that recovered was sent %q, want one heartbeat", day.term.Pasted())
+		}
+	})
 }
 
 func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {

@@ -300,8 +300,9 @@ to a seed's authorization do not change whose run it is.
 With quiet notifications on (`queue_quiet_notifications`, the default) and the
 queue flow on, attn does not bring the agent to the user for a notification run:
 
-- When the run stops, attn opens no turn, unless the agent needs approval or
-  attn cannot tell the agent's state.
+- When the run stops, attn opens no turn, unless the agent needs approval, the
+  run ended on an error, or attn cannot tell the agent's state. An agent whose
+  run failed may never get the response it needs to run `attn turn open`.
 - When the run starts, attn settles a turn that opened when the agent stopped,
   not with `attn turn open`. The agent started working because of attn's own
   input, so the app leaves the user where they are.

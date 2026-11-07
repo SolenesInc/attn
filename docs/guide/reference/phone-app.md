@@ -53,7 +53,8 @@ A stop that one of attn's own notifications started, such as a delegate's
 message or a pull request update, sends nothing to the phone in any flow. In
 queue flow with quiet notifications off, the agent still goes into your queue,
 and the phone stays silent. If the agent opened its turn, such stops notify you
-once for that turn.
+once for that turn. A run that Claude Code reports as failed, such as on a usage
+limit, notifies you in any flow.
 
 ## Read and tend the Garden
 

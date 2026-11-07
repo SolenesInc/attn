@@ -198,7 +198,7 @@ An item arrived in the member's mailbox: another agent messaged the member, a se
 <details>
 <summary>What is the heartbeat I see in a member's terminal?</summary>
 
-A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and sleep. `crew.heartbeat_enabled`, `crew.autosleep_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the automatic sleep.
+A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and sleep. Attn sends neither to a member whose run failed, such as on a usage limit, until the member runs again. `crew.heartbeat_enabled`, `crew.autosleep_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the automatic sleep.
 </details>
 
 <details>

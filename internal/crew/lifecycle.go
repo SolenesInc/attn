@@ -19,6 +19,7 @@ type Signals struct {
 	Lead             time.Duration
 	Reachable        bool
 	MidTurn          bool
+	RunFailed        bool
 	HeartbeatEnabled bool
 	AutoSleepEnabled bool
 }
@@ -46,7 +47,7 @@ func Decide(s Signals) Action {
 	if !s.Reachable {
 		return ActionNone
 	}
-	if s.MidTurn {
+	if s.MidTurn || s.RunFailed {
 		return ActionNone
 	}
 	if s.Cache.Remaining() > s.Lead {
