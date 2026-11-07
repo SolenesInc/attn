@@ -21,6 +21,7 @@ type linkRuntime interface {
 	admit(profile, conversation string) error
 	prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error
 	relaunch(opts *ptybackend.SpawnOptions) error
+	launchStarted(sessionID protocol.SessionID)
 
 	resolveCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool)
 	runsLink(t harness.TerminalID) bool

@@ -190,6 +190,9 @@ func (d *Daemon) agentStarted(sessionID protocol.SessionID, launch *AgentLaunch)
 	if pending, ok := d.consumeQueuedAgentConversation(sessionID); ok {
 		d.observeAgentConversation(pending)
 	}
+	if l := d.linkNamed(launch.Link); l != nil && strings.TrimSpace(launch.InitialPrompt) == "" {
+		l.launchStarted(sessionID)
+	}
 }
 
 func (d *Daemon) commitAgentLaunch(_ context.Context, msg protocol.LaunchCommittedMessage) (struct{}, error) {

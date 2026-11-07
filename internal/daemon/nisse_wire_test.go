@@ -54,7 +54,10 @@ func TestANisseSessionRunsItsTUIOnTheConversationAttnNamedAndFollowsTheServersSt
 	if got := server.Prompted(conversation).Text; got != "find the flaky checkout test" {
 		t.Fatalf("the conversation took %q, want the initial prompt", got)
 	}
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	started := testworld.AwaitSessionSince(app, 0, session, func(s protocol.Session) bool { return s.State != protocol.SessionStateLaunching })
+	if started.State != protocol.SessionStateWorking {
+		t.Fatalf("a session launched with a prompt first left launching for %s, want working", started.State)
+	}
 
 	server.AskApproval(conversation)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })

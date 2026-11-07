@@ -67,3 +67,69 @@ func lostRuntimeAgentAtRest(s *testworld.Stack, app *testworld.Peer, session str
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 	return run
 }
+
+func TestANisseSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testing.T) {
+	t.Parallel()
+	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	server.AskApproval(conversation)
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
+
+	mark := len(app.Log())
+	s.KillRuntimeOf(app.Terminal(session))
+
+	if revived := s.Launched(session); revived.ConversationID != conversation {
+		t.Fatalf("the TUI came back on conversation %s, want %s", revived.ConversationID, conversation)
+	}
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
+	if servers := s.NisseServers(); servers != 1 {
+		t.Errorf("Nisse servers launched = %d, want the one still waiting on the approval", servers)
+	}
+
+	mark = len(app.Log())
+	server.Work(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "Renamed. Keep the old view? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+}
+
+func TestANisseSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testing.T) {
+	t.Parallel()
+	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	server.Reply(conversation, "Renamed. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+
+	mark := len(app.Log())
+	s.KillRuntimeOf(app.Terminal(session))
+
+	revived := s.Launched(session)
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+
+	mark = len(app.Log())
+	app.TypeLine(session, "and the view?")
+	revived.Prompted()
+	server.Prompted(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "Gone too. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+}
+
+func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.NisseServer, string) {
+	t.Helper()
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Nisse), testworld.OnPTYBackend(testworld.SharedHostPTY))
+	s.Start()
+	app := s.App()
+	setSetting(t, app, "nisse_enabled", "true")
+	setSetting(t, app, "pty_shared_host_enabled", "false")
+	s.Spawn(app, fakeagent.Nisse, s.Path("server-on-a-worker"))
+	s.EnableSharedHost(app)
+	session := s.Spawn(app, fakeagent.Nisse, s.Path("shop"))
+	tui := s.Launched(session)
+	server := s.NisseServer()
+	conversation := tui.ConversationID
+	app.TypeLine(session, "rename the orders table")
+	tui.Prompted()
+	server.Prompted(conversation)
+	return s, app, session, server, conversation
+}

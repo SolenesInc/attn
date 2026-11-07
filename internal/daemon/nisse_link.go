@@ -40,6 +40,7 @@ type nisseLink struct {
 	mu       sync.Mutex
 	control  *nisse.Client
 	ended    map[string]nisseEnded
+	busy     map[string]string
 	events   linkEvents
 }
 
@@ -343,15 +344,15 @@ func (l *nisseLink) watch(c *nisse.Client) {
 
 func (l *nisseLink) apply(c *nisse.Client, tree nisseTree) {
 	if tree.Tag == "trees" {
-		busy := make(map[string]nisseTree, len(tree.Trees))
+		l.busy = make(map[string]string, len(tree.Trees))
 		for _, t := range tree.Trees {
-			busy[t.Conversation] = t
+			l.busy[t.Conversation] = t.Status
 		}
 		var lastRuns map[string]*nisseEnded
 		for _, sessionID := range l.sessions() {
 			conversation := l.d.linkConversation(sessionID)
-			if t, ok := busy[conversation]; ok {
-				l.observe(sessionID, t.Status, nil)
+			if status, ok := l.busy[conversation]; ok {
+				l.observe(sessionID, status, nil)
 				continue
 			}
 			if !l.settlesOnServer(sessionID) {
@@ -375,7 +376,25 @@ func (l *nisseLink) apply(c *nisse.Client, tree nisseTree) {
 		}
 		delete(l.ended, tree.Conversation)
 	}
+	if tree.Status == "idle" {
+		delete(l.busy, tree.Conversation)
+	} else {
+		if l.busy == nil {
+			l.busy = make(map[string]string)
+		}
+		l.busy[tree.Conversation] = tree.Status
+	}
 	l.observe(l.holder(tree.Conversation), tree.Status, ended)
+}
+
+func (l *nisseLink) launchStarted(sessionID protocol.SessionID) {
+	l.events.run(l.d, func() {
+		status, busy := l.busy[l.d.linkConversation(sessionID)]
+		if !busy {
+			status = "idle"
+		}
+		l.observe(sessionID, status, nil)
+	})
 }
 
 func (l *nisseLink) settlesOnServer(sessionID protocol.SessionID) bool {
