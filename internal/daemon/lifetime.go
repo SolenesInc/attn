@@ -32,7 +32,8 @@ func (l *lifetime) init() {
 }
 
 // Context is canceled when stop begins. Stop waits for admitted work instead of cancelling it, so pass Context
-// only to a call that could block forever and whose result is never saved; everything else needs its own timeout.
+// only to a call that could block forever and whose result is never saved, or to end a wait before any work starts,
+// such as a GitHub request waiting for budget; everything else needs its own timeout.
 func (l *lifetime) Context() context.Context {
 	l.init()
 	return l.ctx

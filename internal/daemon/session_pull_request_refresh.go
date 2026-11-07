@@ -177,6 +177,9 @@ func (d *Daemon) refreshSessionPullRequestsContext(ctx context.Context, now time
 
 		status, observation, feedbackErr, err := d.fetchSessionPullRequestStatus(ctx, host, group)
 		if err != nil {
+			if errors.Is(err, github.ErrStopping) {
+				break
+			}
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
 				d.logf("session pull requests: %s rate limited mid-refresh, stopping there: %v", group.host, err)
 				limitedRequests[limitKey] = resetAt
@@ -309,6 +312,9 @@ func (d *Daemon) fetchSessionPullRequestStatus(ctx context.Context, host session
 			return store.SessionPullRequestStatus{}, nil, nil, err
 		}
 		feedback, threads, feedbackErr := readinessHost.FetchPullRequestFeedback(ctx, group.repo, group.number)
+		if errors.Is(feedbackErr, github.ErrStopping) {
+			return store.SessionPullRequestStatus{}, nil, nil, feedbackErr
+		}
 		if feedbackErr == nil {
 			observation.Feedback = feedback
 			observation.Threads = threads

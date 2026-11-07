@@ -2474,7 +2474,7 @@ func (d *Daemon) refreshGitHubHosts() error {
 			d.logf("GitHub token fetch failed for %s: %v", hostInfo.Host, err)
 			continue
 		}
-		client, err := github.NewClientForHost(hostInfo.Host, hostInfo.APIURL, token)
+		client, err := github.NewClientForHost(d.life.Context(), hostInfo.Host, hostInfo.APIURL, token)
 		if err != nil {
 			d.logf("GitHub client create failed for %s: %v", hostInfo.Host, err)
 			continue
@@ -2566,7 +2566,7 @@ func (d *Daemon) registerMockClient(mockURL string) error {
 		host = "mock.github.local"
 	}
 
-	client, err := github.NewClientForHost(host, mockURL, token)
+	client, err := github.NewClientForHost(d.life.Context(), host, mockURL, token)
 	if err != nil {
 		return err
 	}

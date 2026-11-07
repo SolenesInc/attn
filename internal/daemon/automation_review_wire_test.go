@@ -542,6 +542,8 @@ func (g *automationGitHub) serve(rw http.ResponseWriter, r *http.Request) {
 		g.search(rw, g.approved)
 	case r.URL.Path == "/search/issues":
 		g.search(rw, nil)
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/reviews"):
+		_ = json.NewEncoder(rw).Encode([]any{})
 	case r.Method == http.MethodGet && sscanfAutomationPull(r.URL.Path, &number):
 		pull, ok := g.requested[number]
 		if !ok {

@@ -418,6 +418,32 @@ func TestACodexWatchIsReadyAtItsSettlingDeadlineNotTheNextPoll(t *testing.T) {
 	})
 }
 
+func TestStoppingWhileAWatchWaitsForGitHubBudgetIsNotAnOutage(t *testing.T) {
+	serveRefreshedPullRequest(t)
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		member := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		member.reply("Ready. <!-- attn:state=idle -->")
+		w.finishStartupWork()
+		for range 35 {
+			app.Send(protocol.FetchPRDetailsMessage{Cmd: protocol.CmdFetchPRDetails, ID: protocol.FormatPRID("github.com", "acme/shop", 71)})
+		}
+		w.advance(0)
+		watchPullRequestOn(t, cli, member.id, protocol.PullRequestWatchModeGreen)
+		w.advance(0)
+
+		finish := w.beginStop(t)
+		finish()
+		w.start()
+		cli = w.Client()
+		if inbox := inboxContents(readInbox(t, cli, member.id, 0).Items); strings.Contains(inbox, "monitoring is delayed") {
+			t.Errorf("after a stop the member's inbox = %q, want no note: GitHub had no outage", inbox)
+		}
+	})
+}
+
 func TestAWatchOutageTellsTheAgentOnceAndRecoveryTellsItTheNews(t *testing.T) {
 	gh := serveRefreshedPullRequest(t)
 	gh.set(func(gh *refreshedPullRequest) { gh.readinessFails = true })

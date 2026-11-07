@@ -37,6 +37,8 @@ var ErrRateLimited = errors.New("GitHub rate limit exceeded")
 
 var ErrNoToken = errors.New("no GitHub token available")
 
+var ErrStopping = errors.New("attn is stopping, so this GitHub request was not sent")
+
 type RateLimitInfo struct {
 	Resource  string
 	Remaining int
@@ -53,9 +55,10 @@ type Client struct {
 	rateLimits   map[string]*RateLimitInfo
 
 	selfLimiter *rate.Limiter
+	stopPacing  context.Context
 }
 
-func newClientWithToken(host, baseURL, token string) (*Client, error) {
+func newClientWithToken(stopPacing context.Context, host, baseURL, token string) (*Client, error) {
 	if token == "" {
 		return nil, ErrNoToken
 	}
@@ -72,6 +75,7 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 		},
 		rateLimits:  make(map[string]*RateLimitInfo),
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
+		stopPacing:  stopPacing,
 	}, nil
 }
 
@@ -88,11 +92,8 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 }
 
 func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Client, method, path string, body interface{}) ([]byte, error) {
-	if err := c.selfLimiter.Wait(ctx); err != nil {
-		if cause := context.Cause(ctx); cause != nil {
-			return nil, cause
-		}
-		return nil, fmt.Errorf("waiting for attn's budget of %v GitHub requests per second, burst %d: %w", c.selfLimiter.Limit(), c.selfLimiter.Burst(), err)
+	if err := c.awaitBudget(ctx); err != nil {
+		return nil, err
 	}
 
 	requestURL := path
@@ -149,6 +150,22 @@ func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Clien
 	}
 
 	return respBody, nil
+}
+
+func (c *Client) awaitBudget(ctx context.Context) error {
+	if c.selfLimiter.Allow() {
+		return nil
+	}
+	waiting, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	defer context.AfterFunc(c.stopPacing, func() { cancel(ErrStopping) })()
+	if err := c.selfLimiter.Wait(waiting); err != nil {
+		if cause := context.Cause(waiting); cause != nil {
+			return cause
+		}
+		return fmt.Errorf("waiting for attn's budget of %v GitHub requests per second, burst %d: %w", c.selfLimiter.Limit(), c.selfLimiter.Burst(), err)
+	}
+	return nil
 }
 
 func (c *Client) parseRateLimitHeaders(resp *http.Response) {
@@ -554,7 +571,10 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	}
 
 	details.CIStatus = CIStatusFromMergeableState(prData.MergeableState)
-	details.ReviewStatus, _ = c.FetchPullRequestReviewStatus(repo, number)
+	details.ReviewStatus, err = c.FetchPullRequestReviewStatus(repo, number)
+	if err != nil {
+		return nil, fmt.Errorf("fetch reviews: %w", err)
+	}
 
 	return details, nil
 }

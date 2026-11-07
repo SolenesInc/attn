@@ -42,6 +42,7 @@ type MockPR struct {
 	MergeableState    string
 	HeadSHA           string
 	DetailsHTTPStatus int
+	ReviewState       string
 }
 
 func New() *Server {
@@ -123,9 +124,13 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reviewsPattern := regexp.MustCompile(`^/repos/([^/]+/[^/]+)/pulls/(\d+)/reviews$`)
-	if reviewsPattern.MatchString(r.URL.Path) && r.Method == "GET" {
+	if m := reviewsPattern.FindStringSubmatch(r.URL.Path); m != nil && r.Method == "GET" {
 		s.awaitReleaseOfHeld(r.URL.Path)
-		json.NewEncoder(w).Encode([]map[string]interface{}{})
+		reviews := []map[string]interface{}{}
+		if state := s.detailsOf(m[1], m[2]).ReviewState; state != "" {
+			reviews = append(reviews, map[string]interface{}{"state": state})
+		}
+		json.NewEncoder(w).Encode(reviews)
 		return
 	}
 
@@ -175,6 +180,7 @@ func (s *Server) detailsOf(repo, number string) MockPR {
 			details.HeadSHA = pr.HeadSHA
 		}
 		details.DetailsHTTPStatus = pr.DetailsHTTPStatus
+		details.ReviewState = pr.ReviewState
 		break
 	}
 	return details

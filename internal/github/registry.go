@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -71,14 +72,14 @@ func (r *ClientRegistry) FetchAllPRs() ([]*protocol.PR, error) {
 	return allPRs, errOut
 }
 
-func NewClientForHost(host, apiURL, token string) (*Client, error) {
+func NewClientForHost(stopPacing context.Context, host, apiURL, token string) (*Client, error) {
 	if apiURL == "" {
 		apiURL = mapHostToAPIURL(host)
 	}
 	if token == "" {
 		return nil, ErrNoToken
 	}
-	return newClientWithToken(host, apiURL, token)
+	return newClientWithToken(stopPacing, host, apiURL, token)
 }
 
 func (r *ClientRegistry) snapshotClients() map[string]*Client {

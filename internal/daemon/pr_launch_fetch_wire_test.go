@@ -155,3 +155,51 @@ func TestARealGitHubLimitReachesEveryClientThatConnects(t *testing.T) {
 		}
 	})
 }
+
+func TestStoppingWhileAttnPacesGitHubRequestsNeitherWaitsNorErasesReviews(t *testing.T) {
+	const prs = 13
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	gh.Config.SetKeepAlivesEnabled(false)
+	for number := 1; number <= prs; number++ {
+		gh.AddPR(mockserver.MockPR{Repo: launchFetchRepo, Number: number, Title: fmt.Sprintf("Change %d", number), Role: "reviewer", MergeableState: "clean", HeadSHA: "abc123", ReviewState: "APPROVED"})
+	}
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+	inBubble(t, func(t *testing.T, w *world) {
+		w.App()
+		w.finishStartupWork()
+		w.advance(3 * time.Minute)
+		w.restart()
+		app := w.ConnectApp()
+		w.finishStartupWork()
+		listed := queryPRs(t, w.Client(), "")
+		if len(listed) != prs {
+			t.Fatalf("GitHub returned %d pull requests, want %d", len(listed), prs)
+		}
+		for _, pr := range listed[:3] {
+			app.Send(protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: pr.ID})
+		}
+		w.finishStartupWork()
+
+		sentBeforeStop := len(gh.Requests())
+		stopping := time.Now()
+		finish := w.beginStop(t)
+		finish()
+		if drained := time.Since(stopping); drained > 5*time.Second {
+			t.Errorf("the daemon drained in %s, past the five seconds the CLI gives it before killing it", drained)
+		}
+		if sent := len(gh.Requests()) - sentBeforeStop; sent != 0 {
+			t.Errorf("stopping sent %d more GitHub requests, want none once attn had run out of budget", sent)
+		}
+
+		gh.RateLimitUntil(time.Now().Add(30 * time.Minute))
+		w.start()
+		w.finishStartupWork()
+		for _, pr := range queryPRs(t, w.Client(), "") {
+			if review := protocol.Deref(pr.ReviewStatus); review != "approved" {
+				t.Errorf("after the stop pull request %d shows review %q, want the approved it had", pr.Number, review)
+			}
+		}
+	})
+}
