@@ -28,11 +28,12 @@ func (p Pin) Fingerprint() string {
 }
 
 type DialConfig struct {
-	Conn         net.Conn
-	Pin          *Pin
-	Self         Identity
-	CheckHostKey func(string) *Refusal
-	Handlers     Handlers
+	Conn          net.Conn
+	Pin           *Pin
+	Self          Identity
+	CheckHostKey  func(string) *Refusal
+	Handlers      Handlers
+	HandlersAfter <-chan struct{}
 }
 
 func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
@@ -48,7 +49,7 @@ func Dial(ctx context.Context, cfg DialConfig) (*Conn, *Pin, error) {
 	if err != nil {
 		return nil, seen, err
 	}
-	return newConn(ctx, ready.transport, ready.channels, cfg.Handlers, ready.control, ready.decoder, ready.peer, ready.drained), seen, nil
+	return newConn(ctx, ready.transport, ready.channels, cfg.Handlers, cfg.HandlersAfter, ready.control, ready.decoder, ready.peer, ready.drained), seen, nil
 }
 
 type authenticatedPeer struct {

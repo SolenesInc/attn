@@ -88,6 +88,7 @@ func (w *WireDaemon) UseOutpostSSH(remote outpostRemote) {
 	w.d.outposts.remote = func(store.Outpost) outpostRemote { return remote }
 }
 
+const BridgeCall = bridgeCall
 const BridgeCallRecovery = bridgeCallRecovery
 const BridgeCallCopy = bridgeCallCopy
 

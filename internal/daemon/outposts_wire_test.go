@@ -24,6 +24,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -481,5 +482,34 @@ func TestAnOutpostUpdateShowsAtOnceAndARepeatedRequestJoinsIt(t *testing.T) {
 		updateThriceWhileProbing("during the Add's first probe", 1)
 		ssh.probing = make(chan struct{})
 		updateThriceWhileProbing("after the Add's install failed", 2)
+	})
+}
+
+func TestACallAnOutpostSendsAsItsBridgeOpensWaitsForTheHomeToRecordTheBridge(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		opened := make(chan *bridge.Conn, 1)
+		startFarOutpost(t, w, func(conn *bridge.Conn) { opened <- conn })
+		dialed := w.PauseAt(pausepoint.OutpostBridgeDialed)
+		app := w.App()
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
+		dialed.Await()
+		conn := <-opened
+
+		answered := make(chan error, 1)
+		go func() {
+			answered <- conn.Call(context.Background(), daemon.BridgeCall, protocol.AgentCatalogMessage{Cmd: protocol.CmdAgentCatalog}, nil)
+		}()
+		w.advance(0)
+		select {
+		case err := <-answered:
+			t.Fatalf("the home answered before it recorded the bridge: %v", err)
+		default:
+		}
+
+		dialed.Release()
+		if err := <-answered; err != nil {
+			t.Errorf("a call sent as the bridge opened = %v, want it answered", err)
+		}
 	})
 }

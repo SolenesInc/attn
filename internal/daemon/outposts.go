@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/outpostssh"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
@@ -247,8 +248,9 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		pipe, err := d.openOutpostPipe(ctx, row, push)
 		var conn *bridge.Conn
 		var seen *bridge.Pin
+		recorded := make(chan struct{})
 		if err == nil {
-			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: d.bridgeIdentity(), Handlers: d.homeHandlers(row.ID), CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
+			conn, seen, err = bridge.Dial(ctx, bridge.DialConfig{Conn: pipe, Pin: pin, Self: d.bridgeIdentity(), Handlers: d.homeHandlers(row.ID), HandlersAfter: recorded, CheckHostKey: func(key string) *bridge.Refusal { return d.outpostConflict(row.ID, key, "") }})
 		}
 
 		if ctx.Err() != nil {
@@ -314,7 +316,7 @@ func (d *Daemon) dialOutpost(ctx context.Context, row store.Outpost, run *outpos
 		}
 		retryDelay = bridge.ReconnectInterval
 		d.learnOutpostHome(&row, conn.Peer().Home)
-		d.bridgeOutpost(ctx, row.ID, run, conn, push)
+		d.bridgeOutpost(ctx, row.ID, run, conn, push, recorded)
 	}
 }
 
@@ -330,7 +332,7 @@ func (d *Daemon) learnOutpostHome(row *store.Outpost, home string) {
 	d.publishFact(FactOutpostChanged, row.ID, nil)
 }
 
-func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn, push *outpostPush) {
+func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial, conn *bridge.Conn, push *outpostPush, recorded chan<- struct{}) {
 	defer func() {
 		if push != nil {
 			err := conn.Err()
@@ -342,9 +344,11 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 	}()
 	defer func() { d.logf("outpost %s bridge closed: largest heartbeat gap %s", id, conn.MaxHeartbeatGap()) }()
 	defer conn.Close()
+	pausepoint.At(pausepoint.OutpostBridgeDialed)
 	if !d.setOutpostConn(id, run, conn) {
 		return
 	}
+	close(recorded)
 	defer d.setOutpostConn(id, run, nil)
 	d.life.Go("notebookFolders:"+id, func() {
 		d.pushNotebookFolders(conn, func() { d.life.Go("notebookStream:"+id, func() { d.keepNotebookStream(conn) }) })

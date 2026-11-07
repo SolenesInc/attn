@@ -114,7 +114,7 @@ func serveConn(ctx context.Context, raw net.Conn, key ssh.Signer, cfg ServerConf
 	if err := raw.SetDeadline(time.Time{}); err != nil {
 		return err
 	}
-	conn := newConn(ctx, transport, channels, cfg.Handlers, control, decoder, home.Identity)
+	conn := newConn(ctx, transport, channels, cfg.Handlers, nil, control, decoder, home.Identity)
 	onConn(conn)
 	<-conn.Done()
 	return nil

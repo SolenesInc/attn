@@ -29,7 +29,13 @@ func (e *CallRejected) Error() string {
 	return fmt.Sprintf("bridge call %s rejected: %s", e.Kind, e.Reason)
 }
 
-func (c *Conn) dispatch(channels <-chan ssh.NewChannel, handlers Handlers) {
+func (c *Conn) dispatch(channels <-chan ssh.NewChannel, handlers Handlers, handlersAfter <-chan struct{}) {
+	if handlersAfter != nil {
+		select {
+		case <-handlersAfter:
+		case <-c.ctx.Done():
+		}
+	}
 	for incoming := range channels {
 		if handle := handlers[incoming.ChannelType()]; handle != nil {
 			handle(c, incoming)
