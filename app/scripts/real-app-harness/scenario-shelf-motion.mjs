@@ -304,6 +304,7 @@ try {
 
   if (measure) {
     await runner.step('mid_flight_screenshots', async () => {
+      await request('select_session', { sessionId: firstSession });
       const row = await readRow();
       const midFlight = async (name, act) => {
         await delay(SETTLE_WINDOW_MS);
