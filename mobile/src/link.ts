@@ -3,6 +3,7 @@ import { decodeHomeGatewayEvent, type HomeGatewayEvent } from '@attn/homeGateway
 import type {
   HomeGatewayAsk,
   HomeGatewaySeed,
+  HomeGatewayAsleepCrewMember,
   HomeGatewaySession,
   TerminalScreen,
 } from '@attn/types/homeGatewayGenerated'
@@ -62,7 +63,11 @@ export type LinkEvent =
       readonly homeName: string
       readonly profileName: string
     }
-  | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<HomeGatewaySession> }
+  | {
+      readonly _tag: 'Sessions'
+      readonly sessions: ReadonlyArray<HomeGatewaySession>
+      readonly asleepCrew: ReadonlyArray<HomeGatewayAsleepCrewMember>
+    }
   | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<HomeGatewayAsk> }
   | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<HomeGatewaySeed> }
   | { readonly _tag: 'SeedChanged'; readonly seedId: string }
@@ -286,7 +291,7 @@ const openSocket = (
       case 'terminal_error':
         return onTerminal({ _tag: 'Failed', terminalId: event.terminal_id, message: event.message })
       case 'sessions':
-        return onEvent({ _tag: 'Sessions', sessions: event.sessions })
+        return onEvent({ _tag: 'Sessions', sessions: event.sessions, asleepCrew: event.asleep_crew ?? [] })
       case 'refused':
         refusal = `${home.homeName} refused this phone: ${event.message}`
         return

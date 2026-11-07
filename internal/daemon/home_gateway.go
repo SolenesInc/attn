@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/setting"
@@ -26,6 +28,8 @@ type HomeGatewayStream interface {
 	Send([]byte) error
 	Close() error
 }
+
+const homeGatewayCrewAPI = 8
 
 var phoneAccessOff = setting.PhoneAccessEnabled.Refusal().Error()
 
@@ -45,6 +49,11 @@ var homeGatewayFacts = bus.Filter{
 	FactSettingChanged,
 	FactAskOpened,
 	FactAskClosed,
+	FactCrewRegistered,
+	FactCrewBound,
+	FactCrewReleased,
+	FactCrewUpdated,
+	FactSessionChiefRoleChanged,
 }
 
 var homeGatewayStates = map[protocol.SessionState]homegateway.HomeGatewaySessionState{
@@ -77,7 +86,7 @@ type homeGatewayConn struct {
 	gardenChanged chan struct{}
 	pinged        chan struct{}
 	api           int
-	sent          []homegateway.HomeGatewaySession
+	sent          *homegateway.HomeGatewaySessions
 
 	sentAskIDs []string
 	sentAsks   map[string][]byte
@@ -287,6 +296,16 @@ func (d *Daemon) homeGatewayReceive(conn *homeGatewayConn) error {
 				return err
 			}
 			continue
+		case "crew_wake":
+			if conn.api < homeGatewayCrewAPI {
+				break
+			}
+			var command homegateway.HomeGatewayCrewWake
+			if err := json.Unmarshal(frame, &command); err != nil {
+				return fmt.Errorf("phone %s sent a malformed crew_wake: %w", conn.phone.PhoneID, err)
+			}
+			d.life.Go("homeGatewayCrewWake", func() { d.homeGatewayCrewWake(conn, command) })
+			continue
 		case "ask_image":
 			var command homegateway.HomeGatewayAskImage
 			if err := json.Unmarshal(frame, &command); err != nil {
@@ -313,17 +332,19 @@ func (d *Daemon) homeGatewayRefuse(conn *homeGatewayConn, message string) error 
 
 func (d *Daemon) homeGatewaySendSessions(conn *homeGatewayConn) error {
 	sessions := d.homeGatewaySessions(conn.phone.ProfileID)
-	if conn.sent != nil && wireEqual(conn.sent, sessions) {
+	if conn.sent != nil && wireEqual(*conn.sent, sessions) {
 		return nil
 	}
-	if err := homeGatewaySend(conn, homegateway.HomeGatewaySessions{Event: "sessions", Sessions: sessions}); err != nil {
+	if err := homeGatewaySend(conn, sessions); err != nil {
 		return err
 	}
-	conn.sent = sessions
+	conn.sent = &sessions
 	return nil
 }
 
-func (d *Daemon) homeGatewaySessions(profileID string) []homegateway.HomeGatewaySession {
+func (d *Daemon) homeGatewaySessions(profileID string) homegateway.HomeGatewaySessions {
+	roster := d.homeGatewayRoster(profileID)
+	chief := d.chiefOfProfile(profileID)
 	sessions := []homegateway.HomeGatewaySession{}
 	for _, session := range d.store.List("") {
 		if session.ProfileID != profileID {
@@ -344,9 +365,57 @@ func (d *Daemon) homeGatewaySessions(profileID string) []homegateway.HomeGateway
 			out.Host = protocol.Ptr(name)
 			out.Offline = err != nil
 		}
+		if member, bound := roster.bySession[session.ID]; bound {
+			out.CrewMember, out.CrewMemberName = protocol.Ptr(member.ID), protocol.Ptr(member.Name)
+		}
+		if session.ID == chief {
+			out.Chief = protocol.Ptr(true)
+		}
 		sessions = append(sessions, out)
 	}
-	return sessions
+	return homegateway.HomeGatewaySessions{Event: "sessions", Sessions: sessions, AsleepCrew: roster.asleep}
+}
+
+type homeGatewayRoster struct {
+	bySession map[protocol.SessionID]crew.Member
+	asleep    []homegateway.HomeGatewayAsleepCrewMember
+}
+
+func (d *Daemon) homeGatewayRoster(profileID string) homeGatewayRoster {
+	roster := homeGatewayRoster{bySession: map[protocol.SessionID]crew.Member{}}
+	members, _, err := d.readCrewMembers()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("Home Gateway: reading the crew of profile %s: %v", profileID, err)
+		}
+		return roster
+	}
+	for _, member := range members {
+		if member.ProfileID != profileID {
+			continue
+		}
+		if d.crewBindingLive(member) {
+			roster.bySession[member.BindingSession] = member
+			continue
+		}
+		if member.Retired {
+			continue
+		}
+		asleep := homegateway.HomeGatewayAsleepCrewMember{CrewMember: member.ID, CrewMemberName: member.Name}
+		if member.Chief {
+			asleep.Chief = protocol.Ptr(true)
+		}
+		roster.asleep = append(roster.asleep, asleep)
+	}
+	return roster
+}
+
+func (d *Daemon) homeGatewayCrewWake(conn *homeGatewayConn, command homegateway.HomeGatewayCrewWake) {
+	result := homegateway.HomeGatewayCrewWakeResult{Event: "crew_wake_result", RequestID: command.RequestID, CrewMember: command.CrewMember}
+	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: crew.KeyRefPrefix + command.CrewMember, ProfileID: protocol.Ptr(conn.phone.ProfileID)}); err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	}
+	_ = homeGatewaySend(conn, result)
 }
 
 func homeGatewaySend(conn *homeGatewayConn, message any) error {

@@ -1,8 +1,8 @@
 # The phone app
 
-The attn phone app shows your agents on an iPhone: the queue of agents waiting
-for you and the ones working, and the Garden, where you read seeds, add notes
-and move them. The phone reaches your computer through Attn Cloud, which relays
+The attn phone app shows your agents on an iPhone: your crew, the queue of agents
+waiting for you and the ones working, and the Garden, where you read seeds, add
+notes and move them. The phone reaches your computer through Attn Cloud, which relays
 end-to-end encrypted traffic it cannot read. Phone access is experimental and
 off by default.
 
@@ -39,6 +39,23 @@ The app merges every pairing into one queue.
    Allow the camera when iOS asks.
 4. Point the camera at the QR code. The app returns to **Queue** and lists the
    profile's agents.
+
+## Talk to your crew
+
+The **Crew** section comes first in the **Queue** tab, above your asks and every
+other agent, with the Chief first. A member keeps its row whatever it is doing:
+the row shows its state, and a member that is waiting for you still counts in the
+waiting number at the top. With several profiles paired, each row names its home
+and profile.
+
+A member with a session opens like any other agent. A member that is asleep shows
+**asleep**: tap the row to wake it. The row shows **waking…** until the member's
+session arrives, and then opens like any other. If the computer refuses the wake,
+the row says why, and you can tap it again. A member on a computer or outpost the
+phone cannot reach stays in the section and shows **offline**.
+
+A computer that runs an older attn sends no crew data, so the phone lists its
+members with its other agents and shows no asleep members.
 
 ## Notifications
 

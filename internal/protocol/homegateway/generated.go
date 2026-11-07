@@ -205,6 +205,17 @@ type HomeGatewayAsks struct {
 	Ids []string `json:"ids"`
 }
 
+type HomeGatewayAsleepCrewMember struct {
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember string `json:"crew_member"`
+
+	// CrewMemberName corresponds to the JSON schema field "crew_member_name".
+	CrewMemberName string `json:"crew_member_name"`
+}
+
 type HomeGatewayCheckState string
 
 const HomeGatewayCheckStateConfirmed HomeGatewayCheckState = "confirmed"
@@ -219,6 +230,31 @@ type HomeGatewayCheckTally struct {
 
 	// Total corresponds to the JSON schema field "total".
 	Total int `json:"total"`
+}
+
+type HomeGatewayCrewWake struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember string `json:"crew_member"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HomeGatewayCrewWakeResult struct {
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember string `json:"crew_member"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type HomeGatewayGarden struct {
@@ -497,6 +533,15 @@ type HomeGatewaySession struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
 
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember *string `json:"crew_member,omitempty,omitzero"`
+
+	// CrewMemberName corresponds to the JSON schema field "crew_member_name".
+	CrewMemberName *string `json:"crew_member_name,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
 
@@ -531,6 +576,9 @@ const HomeGatewaySessionStateWaiting HomeGatewaySessionState = "waiting"
 const HomeGatewaySessionStateWorking HomeGatewaySessionState = "working"
 
 type HomeGatewaySessions struct {
+	// AsleepCrew corresponds to the JSON schema field "asleep_crew".
+	AsleepCrew []HomeGatewayAsleepCrewMember `json:"asleep_crew,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 

@@ -2,4 +2,4 @@
 
 package homegateway
 
-const APIVersion = 7
+const APIVersion = 8

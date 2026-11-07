@@ -59,6 +59,7 @@ var oldPhoneSteps = []oldPhoneStep{
 	{6, `{"cmd":"seed_note","seed_id":"$seed","body":"from the phone","request_id":"note"}`, []string{"seed_result"}},
 	{7, ``, []string{"seed_changed"}},
 	{6, `{"cmd":"seed_move","seed_id":"$seed","verb":"park","text":"later","request_id":"move"}`, []string{"seed_result"}},
+	{8, `{"cmd":"crew_wake","crew_member":"keel","request_id":"wake"}`, []string{"crew_wake_result"}},
 }
 
 type oldPhoneConversation struct {
@@ -70,7 +71,7 @@ type oldPhoneConversation struct {
 
 func startOldPhoneConversation(t *testing.T) *oldPhoneConversation {
 	t.Helper()
-	w := newWorld(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
 	setSetting(t, app, "asks_enabled", "true")

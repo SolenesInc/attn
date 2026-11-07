@@ -49,6 +49,7 @@ marks. With crew v2 on, the chief is a crew member that every profile has.
 - A seed's page in the garden: "Send to Chief", with "What should Chief know?" (`app/src/components/GardenPanel.tsx`).
 - **Settings → Background agents**: the chief's model, effort and context budget. Crew v2 has no switch in the app: `attn settings set crew_v2_enabled true`.
 - Where people see what members do: a member's session is an ordinary agent tile named after the member. The member's letters are in the panel's "Handoffs" tab and in the member home.
+- The phone app's Crew section: tap an asleep member to wake it ([phones.md](phones.md)).
 - Their own shell: `attn crew` and `attn seed send-to-chief`, below.
 
 ### Agents

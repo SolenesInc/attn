@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace HomeGateway;
 
-const HOME_GATEWAY_API_VERSION = 7;
+const HOME_GATEWAY_API_VERSION = 8;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model HomeGatewayHello {
@@ -70,12 +70,46 @@ model HomeGatewaySession {
   offline: boolean;
   // Since api 4: the session's main terminal, for terminal_attach; absent while it has none.
   terminal_id?: string;
+  // Since api 8: the crew member this session belongs to, as an ask names it,
+  // and that member's name.
+  crew_member?: string;
+  crew_member_name?: string;
+  // Since api 8: true on the profile's Chief.
+  chief?: boolean;
+}
+
+// Since api 8: a crew member of the pairing's profile that has no session.
+model HomeGatewayAsleepCrewMember {
+  crew_member: string;
+  crew_member_name: string;
+  chief?: boolean;
 }
 
 // Every session of the pairing's profile: after welcome, then on each change.
+// Since api 8, asleep_crew holds the profile's crew members with no session.
 model HomeGatewaySessions {
   event: "sessions";
   sessions: HomeGatewaySession[];
+  asleep_crew?: HomeGatewayAsleepCrewMember[];
+}
+
+// Since api 8: starts a session for a crew member of the pairing's profile,
+// through the same wake as attn crew wake. crew_member is the name a session or
+// an asleep_crew entry gives it. Waking a member that is awake or waking starts
+// no second session. The home answers crew_wake_result.
+model HomeGatewayCrewWake {
+  cmd: "crew_wake";
+  request_id: string;
+  crew_member: string;
+}
+
+// error is the home's reason and is absent on success; the member's session
+// reaches the phone as sessions frames.
+model HomeGatewayCrewWakeResult {
+  event: "crew_wake_result";
+  request_id: string;
+  crew_member: string;
+  error?: string;
 }
 
 // Since api 3: the profile's asks, one ask per frame, because an ask's markdown

@@ -9,6 +9,7 @@ import {
   HideKeyboard,
   SendPrompt,
   TerminalMount,
+  WakeCrewMember,
   subscriptions,
   update,
   view,
@@ -55,6 +56,9 @@ const session = (
   host: null,
   offline: false,
   terminalId: null,
+  crewMember: null,
+  crewMemberName: null,
+  chief: false,
 })
 
 const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
@@ -66,6 +70,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
   openAsk: null,
   drafts: {},
   answering: {},
+  crewWakes: {},
   images: {},
   diagrams: {},
   zoom: null,
@@ -83,6 +88,7 @@ const paired = (...pairings: ReadonlyArray<Pairing>): Model => ({
     status: 'connecting',
     reason: '',
     sessions: [],
+    asleepCrew: [],
     listed: false,
     asks: [],
     garden: [],
@@ -327,6 +333,249 @@ describe('the queue merges every pairing into one list', () => {
   })
 })
 
+const member = (
+  sessionId: string,
+  crewMember: string,
+  name: string,
+  state: QueueSession['state'],
+  waitingSince: number | null = null,
+  chief = false,
+): QueueSession => ({
+  ...session(sessionId, `${name} day`, state, waitingSince),
+  crewMember,
+  crewMemberName: name,
+  chief,
+})
+
+const asleep = (crewMember: string, name: string, chief = false) => ({ crewMember, name, chief })
+
+const expectSectionHeadings = (headings: ReadonlyArray<string>) =>
+  Scene.tap<Model, Message>((simulation) => {
+    const shown = Scene.getAllByRole('heading')(simulation.html).map(Scene.textContent)
+    expect(shown).toEqual(['Queue', ...headings])
+  })
+
+describe('the crew stays anchored at the top', () => {
+  it('lists the Crew above Asks, the Chief first, and keeps a member in its row as its state changes', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [
+            session('s-plain', 'plain agent', 'waiting', minutesAgo(20)),
+            member('s-keel', 'keel', 'Keel', 'working'),
+            member('s-chief', 'z-chief', 'Tendril', 'idle', null, true),
+          ],
+          asleepCrew: [asleep('alder', 'Alder')],
+        }),
+      ),
+      expectSectionHeadings(['Crew · 3', 'Waiting · 1']),
+      expectEntries([
+        ['Tendril', 'Chief', 'idle'],
+        ['Alder', 'asleep'],
+        ['Keel', 'working'],
+        ['plain agent'],
+      ]),
+      Scene.expect(Scene.text('1 waiting')).toExist(),
+
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [
+            session('s-plain', 'plain agent', 'waiting', minutesAgo(20)),
+            member('s-keel', 'keel', 'Keel', 'waiting', minutesAgo(5)),
+            member('s-chief', 'z-chief', 'Tendril', 'idle', null, true),
+          ],
+          asleepCrew: [asleep('alder', 'Alder')],
+        }),
+      ),
+      expectSectionHeadings(['Crew · 3', 'Waiting · 1']),
+      expectEntries([['Tendril'], ['Alder'], ['Keel', 'waiting', '5m'], ['plain agent']]),
+      Scene.expect(Scene.text('2 waiting')).toExist(),
+    )
+  })
+
+  it('shows a member on an unreachable outpost, or on a home that went offline, offline in its row', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [
+            { ...member('s-keel', 'keel', 'Keel', 'waiting', minutesAgo(5)), host: 'gpu', offline: true },
+          ],
+          asleepCrew: [asleep('alder', 'Alder')],
+        }),
+      ),
+      expectSectionHeadings(['Crew · 2']),
+      expectEntries([
+        ['Alder', 'asleep'],
+        ['Keel', 'gpu', 'offline'],
+      ]),
+      Scene.expect(Scene.text('1 waiting')).not.toExist(),
+
+      Scene.Subscription.emit(Message.WentOffline({ pairingId: personal.id })),
+      expectSectionHeadings(['Crew · 2', 'Offline · 1']),
+      expectEntries([
+        ['Alder', 'offline'],
+        ['Keel', 'offline'],
+        ['Mac', 'offline'],
+      ]),
+    )
+  })
+
+  it('names the home of each member when several homes are paired', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal, linux)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: linux.id,
+          sessions: [],
+          asleepCrew: [asleep('chief-box', 'Moss', true)],
+        }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [member('s-keel', 'keel', 'Keel', 'idle')],
+          asleepCrew: [asleep('chief-mac', 'Tendril', true)],
+        }),
+      ),
+      expectEntries([
+        ['Moss', 'Box'],
+        ['Tendril', 'Mac'],
+        ['Keel', 'Mac'],
+      ]),
+    )
+  })
+
+  it('counts an asleep crew as something to show instead of saying there are no agents', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [],
+          asleepCrew: [asleep('alder', 'Alder')],
+        }),
+      ),
+      Scene.expect(Scene.text('No agents yet.')).not.toExist(),
+    )
+  })
+
+  it('shows a home on api 7 as before, with no Crew section and nothing to wake', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.WelcomedByHome({ pairingId: personal.id, api: 7, homeName: 'Mac', profileName: 'personal' }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [
+            session('s-waits', 'waits', 'waiting', minutesAgo(5)),
+            session('s-works', 'works', 'working'),
+            session('s-rests', 'rests', 'idle'),
+          ],
+        }),
+      ),
+      expectSectionHeadings(['Waiting · 1', 'Working · 1', 'Other agents · 1']),
+      Scene.expect(Scene.text('asleep')).not.toExist(),
+    )
+  })
+})
+
+describe('waking an asleep member from the phone', () => {
+  const wakeKeel = WakeCrewMember({
+    key: `${personal.id}/crew/keel`,
+    pairingId: personal.id,
+    crewMember: 'keel',
+  })
+  const asleepHome = Message.ReceivedSessions({
+    pairingId: personal.id,
+    sessions: [],
+    asleepCrew: [asleep('keel', 'Keel')],
+  })
+
+  it('sends the wake on a tap, shows it is waking, and the same row becomes the live session', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(asleepHome),
+      expectEntries([['Keel', 'asleep']]),
+
+      Scene.click(Scene.text('Keel')),
+      Scene.Command.expectExact(wakeKeel),
+      expectEntries([['Keel', 'waking…']]),
+
+      Scene.Command.resolve(wakeKeel, Message.CompletedCommand()),
+      expectEntries([['Keel', 'waking…']]),
+
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [{ ...member('s-keel', 'keel', 'Keel', 'launching'), terminalId: 't-keel' }],
+          asleepCrew: [],
+        }),
+      ),
+      expectEntries([['Keel', 'launching']]),
+
+      ...openSession('Keel', 't-keel'),
+      Scene.expect(composer).toExist(),
+    )
+  })
+
+  it('sends one wake however many times the waking row is tapped', () => {
+    const tapped = update(paired(personal), asleepHome).model
+    const waking = update(tapped, Message.ClickedAsleepMember({ pairingId: personal.id, crewMember: 'keel' }))
+    expect(waking.commands?.length).toBe(1)
+    const again = update(
+      waking.model,
+      Message.ClickedAsleepMember({ pairingId: personal.id, crewMember: 'keel' }),
+    )
+    expect(again.commands ?? []).toEqual([])
+  })
+
+  it('shows the reason the home refused the wake, and lets the person try again', () => {
+    const reason = 'Keel launches in /gone, which is not there'
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(asleepHome),
+      Scene.click(Scene.text('Keel')),
+      Scene.Command.resolve(
+        wakeKeel,
+        Message.RefusedWake({ key: `${personal.id}/crew/keel`, message: reason }),
+      ),
+      expectEntries([['Keel', 'asleep', reason]]),
+
+      Scene.click(Scene.text('Keel')),
+      Scene.Command.expectExact(wakeKeel),
+      expectEntries([['Keel', 'waking…']]),
+      Scene.Command.resolve(wakeKeel, Message.CompletedCommand()),
+    )
+  })
+
+  it('offers no wake on a home that is offline', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(asleepHome),
+      Scene.Subscription.emit(Message.WentOffline({ pairingId: personal.id })),
+      expectEntries([
+        ['Keel', 'offline'],
+        ['Mac', 'offline'],
+      ]),
+    )
+  })
+})
+
 describe('an empty queue', () => {
   it('says there are no agents only once the welcomed home has listed its sessions', () => {
     Scene.scene(
@@ -354,6 +603,7 @@ describe('pairing again', () => {
           status: 'closed' as const,
           reason: 'Mac ended this pairing',
           sessions: [],
+          asleepCrew: [],
           listed: false,
           asks: [],
           garden: [],
@@ -395,6 +645,7 @@ const withSession = (api: number): Model => ({
       link: 1,
       status: 'online',
       reason: '',
+      asleepCrew: [],
       sessions: [
         { ...session('a', 'Land the fix', 'waiting', minutesAgo(2)), terminalId: 't-a' },
         { ...session('b', 'Write docs', 'waiting', minutesAgo(1)), terminalId: 't-b' },
