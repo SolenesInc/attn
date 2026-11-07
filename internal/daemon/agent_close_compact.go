@@ -166,10 +166,14 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 			}
 		case sessionmonitor.Placed:
 			if p.busy {
+				betweenTurns := p.again
 				p.busy, p.again, p.placing = false, false, false
 				p.busyTimes++
 				l.mu.Unlock()
 				d.reopenCompactingCloseInput(p)
+				if betweenTurns {
+					d.kickCompactingClose(p.session)
+				}
 				return
 			}
 			p.placed = true

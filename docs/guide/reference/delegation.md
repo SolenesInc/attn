@@ -323,7 +323,9 @@ members need no setting to go on standby or to wake.
 To shrink its conversation before the session closes, an agent can add
 `--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
 agent's turn to end, has the harness compact the conversation, then closes the
-session, so the woken session resumes the compacted conversation. Mail the
+session, so the woken session resumes the compacted conversation. Work the agent
+leaves running in the background, such as a shell or a monitor, does not hold
+the close. Mail the
 agent reads before the compact ends the standby, and the session stays open.
 Mail the agent hasn't read doesn't cancel the close: the session compacts and
 closes, and the unread mail wakes it again. Mail that arrives during the compact

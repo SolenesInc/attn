@@ -22,10 +22,32 @@ func moddedClaudeInATurn(t *testing.T, w *world, app *testworld.Peer) (string, *
 func awaitCompactReport(t *testing.T, run *fakeagent.Run, outcome string) fakeagent.ModCompactReport {
 	t.Helper()
 	report := run.ModNextCompactReport()
+	for report.Outcome == fakeagent.ModCompactBusy && outcome != fakeagent.ModCompactBusy {
+		report = run.ModNextCompactReport()
+	}
 	if report.Outcome != outcome {
 		t.Fatalf("the mod reported the compact as %+v, want %s", report, outcome)
 	}
 	return report
+}
+
+func closeCompactingDuringTheTurn(t *testing.T, cli *client.Client, run *fakeagent.Run, session string) {
+	t.Helper()
+	closeCompacting(t, cli, session)
+	awaitCompactReport(t, run, fakeagent.ModCompactBusy)
+}
+
+func awaitNewerTurnRefusal(t *testing.T, run *fakeagent.Run) {
+	t.Helper()
+	for {
+		report := run.ModNextCompactReport()
+		if report.Outcome != fakeagent.ModCompactBusy {
+			t.Fatalf("the mod reported the compact as %+v, want it refused for a newer turn", report)
+		}
+		if report.Reason == fakeagent.ModNewerTurnBegan {
+			return
+		}
+	}
 }
 
 func mailBehindTheCompact(t *testing.T, cli *client.Client, session string) {
@@ -56,10 +78,7 @@ func TestAModdedClaudeSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenC
 	app, cli := w.App(), w.Client()
 	session, run := moddedClaudeInATurn(t, w, app)
 
-	closeCompacting(t, cli, session)
-	if got := run.ModCompactRequests(); got != 0 {
-		t.Fatalf("the mod received %d compact requests during the turn that ran the close", got)
-	}
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	stillOpen(t, cli, session, "during the turn that ran the close")
 
 	run.Reply(compactingClaudeReply)
@@ -68,8 +87,20 @@ func TestAModdedClaudeSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenC
 	if protocol.Deref(closed.CloseReason) != compactReason || protocol.Deref(closed.ClosedBy) != session {
 		t.Errorf("ledger entry = %+v, want it closed by itself for %q", closed, compactReason)
 	}
-	if got := run.ModCompactRequests(); got != 1 {
-		t.Errorf("the mod received %d compact requests before the close, want one", got)
+}
+
+func TestAModdedClaudeSessionThatClosesCompactingWhileBackgroundWorkRunsCompactsWhenItsTurnEnds(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	session, run := moddedClaudeInATurn(t, w, app)
+
+	closeCompactingDuringTheTurn(t, cli, run, session)
+	run.ReplyLeavingBackgroundWork(compactingClaudeReply, "./deploy.sh staging")
+
+	awaitCompactReport(t, run, fakeagent.ModCompactCompacted)
+	closed := awaitClosed(app, session)
+	if protocol.Deref(closed.CloseReason) != compactReason {
+		t.Errorf("the session closed for %q, want %q", protocol.Deref(closed.CloseReason), compactReason)
 	}
 }
 
@@ -79,7 +110,7 @@ func TestACompactThatClaudeSkipsStillClosesTheModdedSessionSayingSo(t *testing.T
 	session, run := moddedClaudeInATurn(t, w, app)
 	run.ModSkipNextCompact("nothing to compact yet")
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
 	awaitCompactReport(t, run, fakeagent.ModCompactSkipped)
 	compactDidNotRun(t, awaitClosed(app, session), "nothing to compact yet")
@@ -91,7 +122,7 @@ func TestACompactThatFailsStillClosesTheModdedClaudeSessionSayingSo(t *testing.T
 	session, run := moddedClaudeInATurn(t, w, app)
 	run.ModFailNextCompact("context window unavailable")
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
 	awaitCompactReport(t, run, fakeagent.ModCompactFailed)
 	compactDidNotRun(t, awaitClosed(app, session), "context window unavailable")
@@ -102,26 +133,25 @@ func TestACompactThatMeetsARunningTurnCompactsAtTheNextIdleAndThenCloses(t *test
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
 	session, run := moddedClaudeInATurn(t, w, app)
-	run.ModBusyNextCompact("a turn is running")
+	run.ModBusyNextCompact(fakeagent.ModNewerTurnBegan)
 	arrived, release := run.ModHoldNextCompact()
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
 	arrived()
 	mailBehindTheCompact(t, cli, session)
 	release()
-	awaitCompactReport(t, run, fakeagent.ModCompactBusy)
+	awaitNewerTurnRefusal(t, run)
 
 	ringOfTheMailBehindTheCompact(t, run)
 	stillOpen(t, cli, session, "while the turn the compact met runs")
 	run.Reply("Read the review. <!-- attn:state=idle -->")
-	awaitCompactReport(t, run, fakeagent.ModCompactCompacted)
 	closed := awaitClosed(app, session)
 	if protocol.Deref(closed.CloseReason) != compactReason {
 		t.Errorf("the session closed for %q, want %q", protocol.Deref(closed.CloseReason), compactReason)
 	}
-	if got := run.ModCompactRequests(); got != 2 {
-		t.Errorf("the mod received %d compact requests, want the busy one and the one at the next idle", got)
+	if got := run.ModCompactions(); got != 1 {
+		t.Errorf("the mod compacted the conversation %d times, want once, at the next idle", got)
 	}
 }
 
@@ -129,11 +159,11 @@ func TestUserInputAfterABusyCompactKeepsTheModdedClaudeSessionOpen(t *testing.T)
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	session, run := moddedClaudeInATurn(t, w, app)
-	run.ModBusyNextCompact("a turn is running")
+	run.ModBusyNextCompact(fakeagent.ModNewerTurnBegan)
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
-	awaitCompactReport(t, run, fakeagent.ModCompactBusy)
+	awaitNewerTurnRefusal(t, run)
 	app.TypeLine(session, "wait, one more thing")
 	if got := run.Prompted(); got != "wait, one more thing" {
 		t.Fatalf("the agent took %q, want what the user typed", got)
@@ -145,8 +175,8 @@ func TestUserInputAfterABusyCompactKeepsTheModdedClaudeSessionOpen(t *testing.T)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	stillOpen(t, cli, session, "after the user typed past the busy compact")
-	if got := run.ModCompactRequests(); got != 1 {
-		t.Errorf("the mod received %d compact requests, want only the busy one", got)
+	if got := run.ModCompactions(); got != 0 {
+		t.Errorf("the mod compacted the conversation %d times, want never", got)
 	}
 }
 
@@ -156,7 +186,7 @@ func TestAModReloadDuringTheCompactClosesTheClaudeSessionSayingTheCompactDidNotR
 	session, run := moddedClaudeInATurn(t, w, app)
 	arrived, _ := run.ModHoldNextCompact()
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
 	arrived()
 	run.ModReload()
@@ -171,7 +201,7 @@ func TestUserInputDuringTheCompactKeepsTheModdedClaudeSessionOpen(t *testing.T) 
 	session, run := moddedClaudeInATurn(t, w, app)
 	arrived, release := run.ModHoldNextCompact()
 
-	closeCompacting(t, cli, session)
+	closeCompactingDuringTheTurn(t, cli, run, session)
 	run.Reply(compactingClaudeReply)
 	arrived()
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool {

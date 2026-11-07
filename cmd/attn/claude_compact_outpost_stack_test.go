@@ -213,6 +213,9 @@ func (m *outpostMod) closeCompacting(t *testing.T) {
 	if asked.Code != 0 {
 		t.Fatalf("agent close --self --compact on the outpost exited %d: %s%s", asked.Code, asked.Stdout, asked.Stderr)
 	}
+	if report := m.run.ModNextCompactReport(); report.Outcome != fakeagent.ModCompactBusy {
+		t.Fatalf("the mod reported the compact asked during the turn as %+v, want busy", report)
+	}
 }
 
 func (m *outpostMod) closeReason(app *testworld.Peer) string {
@@ -239,11 +242,13 @@ func TestACompactThatFailsOnAnOutpostStillClosesTheSessionSayingSo(t *testing.T)
 func TestACompactOnAnOutpostThatMeetsARunningTurnLetsMailThroughAndRetriesAtTheNextIdle(t *testing.T) {
 	m := newOutpostMod(t)
 	m.workingOn(t, m.app, "write the essay")
-	m.run.ModBusyNextCompact("a turn is running")
+	m.run.ModBusyNextCompact(fakeagent.ModNewerTurnBegan)
 	m.closeCompacting(t)
 	m.run.Reply(outpostCompactReply)
-	if report := m.run.ModNextCompactReport(); report.Outcome != fakeagent.ModCompactBusy {
-		t.Fatalf("the mod reported the compact as %+v, want busy", report)
+	for report := m.run.ModNextCompactReport(); report.Reason != fakeagent.ModNewerTurnBegan; report = m.run.ModNextCompactReport() {
+		if report.Outcome != fakeagent.ModCompactBusy {
+			t.Fatalf("the mod reported the compact as %+v, want it refused for a newer turn", report)
+		}
 	}
 
 	m.sendMail(t, m.session, "the review is in")
@@ -315,8 +320,8 @@ func TestADraftTypedWhileAnOutpostsCompactWaitsToStartKeepsTheSessionUncompacted
 
 	m.outpost.FirePending(daemon.ClaudeModReportRetryTimer)
 	m.keepsItsDraftAndTakesMail(t, draft)
-	if got := m.run.ModCompactRequests(); got != 0 {
-		t.Errorf("the mod received %d compact requests, want none", got)
+	if got := m.run.ModCompactions(); got != 0 {
+		t.Errorf("the mod compacted the conversation %d times, want never", got)
 	}
 }
 
@@ -359,8 +364,8 @@ func TestAnOutpostSessionWhoseSeedLeftStandbyStaysOpenInsteadOfCompacting(t *tes
 	if got := m.run.Prompted(); !m.run.ThroughMod || !strings.Contains(got, outpostCompactRing) {
 		t.Fatalf("the agent took %q (through the mod: %t), want the ring of the mail", got, m.run.ThroughMod)
 	}
-	if got := m.run.ModCompactRequests(); got != 0 {
-		t.Errorf("the mod received %d compact requests, want none", got)
+	if got := m.run.ModCompactions(); got != 0 {
+		t.Errorf("the mod compacted the conversation %d times, want never", got)
 	}
 }
 
@@ -374,8 +379,8 @@ func TestACompactWhoseTurnEndsWhileTheHomeLinkIsDownWaitsForTheHomeAndThenCloses
 	mark := len(m.app.Log())
 	m.run.Reply(outpostCompactReply)
 	m.outpost.AwaitTimer(daemon.ClaudeModReportRetryTimer)
-	if got := m.run.ModCompactRequests(); got != 0 {
-		t.Fatalf("the mod received %d compact requests before the home could check the close", got)
+	if got := m.run.ModCompactions(); got != 0 {
+		t.Fatalf("the mod compacted the conversation %d times before the home could check the close", got)
 	}
 
 	m.pair.Reconnect()
@@ -422,7 +427,11 @@ func TestAnOutpostSessionStaysOpenAndTakesMailWhenTheOutpostRestartsDuringItsCom
 	outpostStateOnConnect(m.app, "outpost", protocol.OutpostStateConnected)
 	m.outpost.AwaitTimer(daemon.ClaudeModPollHoldTimer)
 	release()
-	if report := m.run.ModNextCompactReport(); report.Outcome != fakeagent.ModCompactCompacted {
+	report := m.run.ModNextCompactReport()
+	for report.Outcome == fakeagent.ModCompactBusy {
+		report = m.run.ModNextCompactReport()
+	}
+	if report.Outcome != fakeagent.ModCompactCompacted {
 		t.Fatalf("the mod reported the compact as %+v, want compacted", report)
 	}
 

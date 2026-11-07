@@ -31,25 +31,27 @@ const (
 	fakeModOutcomeSubmit = "submitted"
 	fakeModKindCompact   = "compact"
 	fakeModTurnRunning   = "a turn is running"
+	ModNewerTurnBegan    = "a newer turn began before the compaction could be applied"
 	fakeModPollRetry     = time.Second
 )
 
 const (
-	methodModCompactOutcome  = "mod_compact_outcome"
-	methodModCompactHold     = "mod_compact_hold"
-	methodModCompactArrived  = "mod_compact_arrived"
-	methodModCompactRelease  = "mod_compact_release"
-	methodModCompactRequests = "mod_compact_requests"
-	methodModCompactReport   = "mod_compact_report"
-	methodModPause           = "mod_pause"
-	methodModResume          = "mod_resume"
-	methodModGiveBack        = "mod_give_back"
+	methodModCompactOutcome = "mod_compact_outcome"
+	methodModCompactHold    = "mod_compact_hold"
+	methodModCompactArrived = "mod_compact_arrived"
+	methodModCompactRelease = "mod_compact_release"
+	methodModCompactions    = "mod_compactions"
+	methodModCompactReport  = "mod_compact_report"
+	methodModPause          = "mod_pause"
+	methodModResume         = "mod_resume"
+	methodModGiveBack       = "mod_give_back"
 )
 
 const (
 	ModCompactCompacted = "compacted"
 	ModCompactSkipped   = "skipped"
 	ModCompactBusy      = "busy"
+	modCompactReady     = "ready"
 	ModCompactFailed    = "failed"
 )
 
@@ -97,7 +99,10 @@ type fakeMod struct {
 
 	nextCompact ModCompactReport
 	compactHold *fakeModCompactHold
-	compactAsks int
+	compactions int
+	refused     bool
+	turnsEnded  int
+	newerTurn   bool
 
 	paused chan struct{}
 }
@@ -132,7 +137,7 @@ func (m *fakeMod) load() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
-	m.instance, m.cancel = uuid.NewString(), cancel
+	m.instance, m.cancel, m.refused, m.newerTurn = uuid.NewString(), cancel, false, false
 	instance := m.instance
 	m.mu.Unlock()
 	go m.pollLoop(ctx, instance)
@@ -278,10 +283,17 @@ func (m *fakeMod) turnCompleted() {
 	m.working = false
 	held, instance := m.held, m.instance
 	m.held = nil
+	refused := false
 	if len(held) > 0 {
 		m.working = true
+	} else {
+		m.turnsEnded++
+		refused, m.refused, m.newerTurn = m.refused, false, false
 	}
 	m.mu.Unlock()
+	if refused {
+		m.reportBetweenTurns(instance)
+	}
 	if len(held) == 0 {
 		return
 	}
@@ -360,10 +372,10 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 			close(hold.release)
 		}
 		return struct{}{}, nil
-	case methodModCompactRequests:
+	case methodModCompactions:
 		m.mu.Lock()
 		defer m.mu.Unlock()
-		return m.compactAsks, nil
+		return m.compactions, nil
 	case methodModCompactReport:
 		return <-m.reports, nil
 	}
@@ -371,14 +383,23 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 }
 
 func (m *fakeMod) compact(instance, id string) {
+	m.mu.Lock()
+	running, turnsEndedWhenAsked := m.working || m.newerTurn, m.turnsEnded
+	m.mu.Unlock()
+	if running {
+		m.refuseCompact(instance, id, fakeModTurnRunning, turnsEndedWhenAsked)
+		return
+	}
 	m.agent.turn.Lock()
 	m.mu.Lock()
-	m.compactAsks++
-	running := m.working
+	running = m.working || m.newerTurn
 	var next ModCompactReport
 	var hold *fakeModCompactHold
 	if !running {
 		next, m.nextCompact = m.nextCompact, ModCompactReport{}
+		if next.Outcome != ModCompactBusy {
+			m.compactions++
+		}
 		if m.compactHold != nil && !m.compactHold.taken {
 			hold = m.compactHold
 			hold.taken = true
@@ -387,7 +408,7 @@ func (m *fakeMod) compact(instance, id string) {
 	m.mu.Unlock()
 	m.agent.turn.Unlock()
 	if running {
-		m.reportCompact(instance, id, ModCompactBusy, fakeModTurnRunning)
+		m.refuseCompact(instance, id, fakeModTurnRunning, turnsEndedWhenAsked)
 		return
 	}
 	outcome := next.Outcome
@@ -411,7 +432,29 @@ func (m *fakeMod) compact(instance, id string) {
 			return
 		}
 	}
+	if outcome == ModCompactBusy {
+		m.mu.Lock()
+		m.newerTurn = true
+		m.mu.Unlock()
+		m.refuseCompact(instance, id, next.Reason, turnsEndedWhenAsked)
+		return
+	}
 	m.reportCompact(instance, id, outcome, next.Reason)
+}
+
+func (m *fakeMod) refuseCompact(instance, id, reason string, turnsEndedWhenAsked int) {
+	m.reportCompact(instance, id, ModCompactBusy, reason)
+	m.mu.Lock()
+	turnEnded := m.turnsEnded != turnsEndedWhenAsked
+	m.refused = !turnEnded
+	m.mu.Unlock()
+	if turnEnded {
+		m.reportBetweenTurns(instance)
+	}
+}
+
+func (m *fakeMod) reportBetweenTurns(instance string) {
+	m.post("/claude/compacted", map[string]string{"terminal": m.terminal, "instance": instance, "outcome": modCompactReady})
 }
 
 func (m *fakeMod) compactHooks(event string) error {

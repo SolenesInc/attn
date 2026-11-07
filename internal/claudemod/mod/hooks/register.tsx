@@ -5,7 +5,7 @@ import type { Message, Request } from '../types'
 
 type Link = { terminal: string; socketPath: string }
 type Outcome = 'submitted' | 'held' | 'appended' | 'refused'
-type Compacted = 'compacted' | 'skipped' | 'busy' | 'failed'
+type Compacted = 'compacted' | 'skipped' | 'busy' | 'ready' | 'failed'
 
 const POLL_RETRY_MS = 1000
 const RING_ID_PREFIX = 'inbox-ring/'
@@ -25,6 +25,8 @@ let isStopped = false
 let held: Message[] = []
 let givenBack: Message[] = []
 let lastRequest: Promise<void> = Promise.resolve()
+let turnsEnded = 0
+let compactRefused = false
 
 function firstLine(text: string): string {
   return text.split('\n', 1)[0] ?? ''
@@ -77,7 +79,20 @@ function giveBack($: EngineInterface, messages: Message[]): Promise<void> {
 
 function setTurnRunning($: EngineInterface, value: boolean): Promise<unknown> {
   isTurnRunning = value
-  return update($, persistedTurnRunning, () => value)
+  const stored = update($, persistedTurnRunning, () => value)
+  if (value) {
+    return stored
+  }
+  turnsEnded++
+  return Promise.all([stored, reportBetweenTurns($)])
+}
+
+function reportBetweenTurns($: EngineInterface): Promise<void> {
+  if (!compactRefused) {
+    return Promise.resolve()
+  }
+  compactRefused = false
+  return post($, '/claude/compacted', { outcome: 'ready' })
 }
 
 function setHeld($: EngineInterface, messages: Message[]): Promise<unknown> {
@@ -126,11 +141,19 @@ async function place($: EngineInterface, message: Message): Promise<void> {
 
 function compact($: EngineInterface, id: string): void {
   const report = (outcome: Compacted, reason?: string) => post($, '/claude/compacted', { id, outcome, reason })
+  const turnsEndedWhenAsked = turnsEnded
   void $.session.compact().then(
     result => ('skip' in result ? report('skipped', String(result.skip)) : report('compacted')),
-    (err: unknown) => {
+    async (err: unknown) => {
       const reason = String(err)
-      return report(BETWEEN_TURNS_ONLY.some(busy => reason.includes(busy)) ? 'busy' : 'failed', reason)
+      if (!BETWEEN_TURNS_ONLY.some(busy => reason.includes(busy))) {
+        return report('failed', reason)
+      }
+      await report('busy', reason)
+      compactRefused = true
+      if (turnsEnded !== turnsEndedWhenAsked) {
+        await reportBetweenTurns($)
+      }
     },
   )
 }

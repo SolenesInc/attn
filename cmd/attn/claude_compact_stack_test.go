@@ -31,7 +31,7 @@ func realModdedClaude(t *testing.T, vars ...string) (*testworld.Stack, *testworl
 	work := s.Path("shop")
 	configDir := filepath.Join(s.Dir, "toolhome", ".claude")
 	writeClaudeConfig(t, claude, configDir, work)
-	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{"permissions":{"allow":["Bash(attn agent inbox)","Bash(attn agent close:*)"]}}`), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "settings.json"), []byte(`{"permissions":{"allow":["Bash(attn agent inbox)","Bash(attn agent close:*)","Bash(sleep:*)"]}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	s.Vars = append(s.Vars,
@@ -106,6 +106,30 @@ func TestARealClaudeSessionThatClosesCompactingCompactsItsConversationThroughThe
 	}
 	if opening := model.AwaitPromptSince(t, mark, ring); !strings.Contains(opening, fakeclaudeapi.CompactSummary) {
 		t.Fatalf("the reopened conversation's first request opens with %q, want Claude's compact summary", opening)
+	}
+}
+
+func TestARealClaudeSessionThatClosesCompactingWhileAShellRunsInTheBackgroundCompactsAndCloses(t *testing.T) {
+	t.Parallel()
+	s, app, worker, model, _ := realModdedClaude(t)
+
+	const reason = "the deploy is running"
+	const ring = "attn agent inbox"
+	const asked = "start the deploy and wrap up"
+	model.RunBashAfter(ring, ring)
+	model.RunBackgroundBashAfter(asked, "sleep 600")
+	model.RunBashAfter("running in background", `attn agent close --self --compact -m "`+reason+`"`)
+	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, asked}, Session: closingReviewer}); sent.Code != 0 {
+		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+	}
+	closed := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == worker
+	})
+	if got := protocol.Deref(closed.SessionLedgerEntry.CloseReason); got != reason {
+		t.Errorf("the session closed with reason %q, want %q, compacted", got, reason)
+	}
+	if got := model.CompactCount(); got != 1 {
+		t.Errorf("the model was asked for %d compact summaries, want one", got)
 	}
 }
 

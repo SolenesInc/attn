@@ -57,6 +57,16 @@ func (r *Run) ReplyAfterStop(text string) {
 	r.call(methodReplyLate, textParams{Text: text}, nil)
 }
 
+type backgroundReplyParams struct {
+	Text string `json:"text"`
+	Task string `json:"task"`
+}
+
+func (r *Run) ReplyLeavingBackgroundWork(text, task string) {
+	r.t.Helper()
+	r.call(methodReplyBg, backgroundReplyParams{Text: text, Task: task}, nil)
+}
+
 func (r *Run) Stream(text string) {
 	r.t.Helper()
 	r.call(methodStream, textParams{Text: text}, nil)
@@ -152,11 +162,11 @@ func (r *Run) ModHoldNextCompact() (arrived, release func()) {
 	return arrived, release
 }
 
-func (r *Run) ModCompactRequests() int {
+func (r *Run) ModCompactions() int {
 	r.t.Helper()
-	var asked int
-	r.call(methodModCompactRequests, struct{}{}, &asked)
-	return asked
+	var ran int
+	r.call(methodModCompactions, struct{}{}, &ran)
+	return ran
 }
 
 func (r *Run) ModNextCompactReport() ModCompactReport {

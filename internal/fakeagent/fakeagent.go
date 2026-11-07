@@ -45,6 +45,7 @@ const (
 	methodReply      = "reply"
 	methodInput      = "input"
 	methodReplyLate  = "reply_after_stop"
+	methodReplyBg    = "reply_leaving_background_work"
 	methodStream     = "stream"
 	methodSubagent   = "subagent"
 	methodDropSubs   = "delete_subagent_transcripts"
@@ -200,6 +201,10 @@ type conversation interface {
 	reply(text string, afterStop bool) error
 }
 
+type backgroundReplier interface {
+	replyLeavingBackgroundWork(text, task string) error
+}
+
 type halter interface {
 	halt() error
 }
@@ -314,6 +319,18 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, a.conv.reply(p.Text, method == methodReplyLate)
+	case methodReplyBg:
+		var p backgroundReplyParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		replier, ok := a.conv.(backgroundReplier)
+		if !ok {
+			return nil, fmt.Errorf("%T does not script %s", a.conv, method)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		return struct{}{}, replier.replyLeavingBackgroundWork(p.Text, p.Task)
 	case methodStream, methodSubagent, methodDropSubs:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {
@@ -348,7 +365,7 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		defer a.turn.Unlock()
 		return struct{}{}, halting.halt()
 	case methodModNext, methodModTool, methodModEsc, methodModReload, methodModStop, methodModPause, methodModResume, methodModGiveBack,
-		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactRequests, methodModCompactReport:
+		methodModCompactOutcome, methodModCompactHold, methodModCompactArrived, methodModCompactRelease, methodModCompactions, methodModCompactReport:
 		modded, ok := a.conv.(*claude)
 		if !ok || modded.mod == nil {
 			return nil, fmt.Errorf("%T has no mod to script %s", a.conv, method)

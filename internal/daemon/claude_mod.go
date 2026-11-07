@@ -46,6 +46,7 @@ const (
 	claudeModCompactCompacted                 = "compacted"
 	claudeModCompactSkipped                   = "skipped"
 	claudeModCompactBusy                      = "busy"
+	claudeModCompactReady                     = "ready"
 	claudeModCompactFailed                    = "failed"
 )
 
@@ -72,6 +73,7 @@ type claudeModTerminal struct {
 	handed            map[string]*claudeModDelivery
 	held              map[string]*claudeModHeld
 	compacting        map[string]protocol.SessionID
+	refusedCompact    protocol.SessionID
 	accepted          uint64
 }
 
@@ -318,6 +320,10 @@ func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) 
 			}
 			m.returnHeldLocked(t, heldIDs(t))
 			m.failCompactingLocked(t, "the Claude mod reloaded before it reported the compact")
+			if session := t.refusedCompact; session != "" {
+				t.refusedCompact = ""
+				m.d.life.Go("claudeModCompactRetry", func() { m.d.kickCompactingClose(session) })
+			}
 		}
 		t.instance = instance
 		for session := range m.returned {
@@ -725,21 +731,30 @@ func (m *claudeMod) serveCompacted(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outcome, ok := compacted.outcome()
-	if !ok && compacted.Outcome != claudeModCompactBusy {
+	if !ok && compacted.Outcome != claudeModCompactBusy && compacted.Outcome != claudeModCompactReady {
 		http.Error(w, "unknown outcome "+compacted.Outcome, http.StatusBadRequest)
 		return
 	}
 	m.mu.Lock()
 	var session protocol.SessionID
 	if t := m.terminals[compacted.Terminal]; t != nil && t.instance == compacted.Instance {
-		session = t.compacting[compacted.ID]
-		delete(t.compacting, compacted.ID)
+		if compacted.Outcome == claudeModCompactReady {
+			session, t.refusedCompact = t.refusedCompact, ""
+		} else {
+			session = t.compacting[compacted.ID]
+			delete(t.compacting, compacted.ID)
+		}
+		if session != "" && compacted.Outcome == claudeModCompactBusy {
+			t.refusedCompact = session
+		}
 	}
 	m.mu.Unlock()
 	switch {
 	case session == "":
 	case compacted.Outcome == claudeModCompactBusy:
 		m.d.compactions.retryAfterBusy(m.d, session, compacted.ID, compacted.Reason)
+	case compacted.Outcome == claudeModCompactReady:
+		m.d.kickCompactingClose(session)
 	default:
 		m.d.compactions.report(m.d, session, compacted.ID, outcome)
 	}

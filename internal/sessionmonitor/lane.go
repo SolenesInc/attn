@@ -95,7 +95,7 @@ func MaintenanceInput(domain Maintenance, key string, text string, placement Pla
 }
 
 func CompactInput(key string) Delivery {
-	delivery := MaintenanceInput(CompactingClose, key, "", WhenPromptReady)
+	delivery := MaintenanceInput(CompactingClose, key, "", AtTurnBoundary)
 	delivery.Compact = true
 	return delivery
 }

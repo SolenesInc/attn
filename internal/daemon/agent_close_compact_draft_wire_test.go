@@ -47,7 +47,7 @@ func compactingHarnesses() []compactingHarness {
 			holdNext: func(_ *world, run *fakeagent.Run) (func(), func()) {
 				return run.ModHoldNextCompact()
 			},
-			compacted: func(_ *world, run *fakeagent.Run) int { return run.ModCompactRequests() },
+			compacted: func(_ *world, run *fakeagent.Run) int { return run.ModCompactions() },
 			mailRang: func(t *testing.T, _ *world, run *fakeagent.Run) {
 				t.Helper()
 				ringOfTheMailBehindTheCompact(t, run)

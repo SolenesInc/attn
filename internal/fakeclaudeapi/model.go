@@ -42,7 +42,10 @@ type Model struct {
 	suggestionAt  chan struct{}
 }
 
-type bashStep struct{ after, command string }
+type bashStep struct {
+	after, command string
+	background     bool
+}
 
 type tool struct {
 	Name string `json:"name"`
@@ -64,6 +67,12 @@ func (m *Model) RunBashAfter(prompt, command string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.bash = append(m.bash, bashStep{after: prompt, command: command})
+}
+
+func (m *Model) RunBackgroundBashAfter(prompt, command string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.bash = append(m.bash, bashStep{after: prompt, command: command, background: true})
 }
 
 func (m *Model) HoldCompacts() (release func()) {
@@ -211,7 +220,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	callsTool, compacts, suggests := false, false, false
 	bash := slices.Contains(body.Tools, tool{Name: "Bash"})
-	command := ""
+	var step bashStep
 	for i := len(body.Messages) - 1; i >= 0; i-- {
 		if body.Messages[i].Role != "user" {
 			continue
@@ -222,7 +231,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 		suggests = strings.Contains(prompt, SuggestionPrompt)
 		m.mu.Lock()
 		if bash && len(m.bash) > 0 && strings.Contains(prompt, m.bash[0].after) {
-			command, m.bash = m.bash[0].command, m.bash[1:]
+			step, m.bash = m.bash[0], m.bash[1:]
 		}
 		m.mu.Unlock()
 		m.record(prompt, ContentText(body.Messages[0].Content))
@@ -252,8 +261,8 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 			say = "<analysis>The user asked for the checkout fix.</analysis>\n<summary>" + CompactSummary + "</summary>"
 		}
 	}
-	if command != "" && body.Stream {
-		writeBashToolUse(w, body.Model, command, usage)
+	if step.command != "" && body.Stream {
+		writeBashToolUse(w, body.Model, step, usage)
 		return
 	}
 	if !body.Stream {
@@ -291,7 +300,7 @@ func (m *Model) answer(w http.ResponseWriter, r *http.Request) {
 	send("message_stop", map[string]any{})
 }
 
-func writeBashToolUse(w http.ResponseWriter, model, command string, usage map[string]any) {
+func writeBashToolUse(w http.ResponseWriter, model string, step bashStep, usage map[string]any) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	send := func(event string, payload map[string]any) {
@@ -299,7 +308,7 @@ func writeBashToolUse(w http.ResponseWriter, model, command string, usage map[st
 		encoded, _ := json.Marshal(payload)
 		_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, encoded)
 	}
-	input, _ := json.Marshal(map[string]string{"command": command, "description": "Run attn"})
+	input, _ := json.Marshal(map[string]any{"command": step.command, "description": "Run attn", "run_in_background": step.background})
 	send("message_start", map[string]any{"message": map[string]any{
 		"id": "msg_mock_bash", "type": "message", "role": "assistant", "model": model, "content": []any{},
 		"stop_reason": nil, "stop_sequence": nil, "usage": usage,

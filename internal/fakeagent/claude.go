@@ -330,9 +330,23 @@ func claudeMessageID() string {
 }
 
 func (c *claude) stop() error {
+	return c.stopWith(map[string]any{"stop_hook_active": false})
+}
+
+func (c *claude) replyLeavingBackgroundWork(text, task string) error {
+	if err := c.answer(text); err != nil {
+		return err
+	}
+	return c.stopWith(map[string]any{
+		"stop_hook_active": false,
+		"background_tasks": []map[string]string{{"type": "shell", "status": "running", "description": task}},
+	})
+}
+
+func (c *claude) stopWith(input map[string]any) error {
 	c.term.title(claudeRestingTitle)
 	c.reportStatus("state=done")
-	err := c.hooks.run("Stop", "", c.hookInput("Stop", map[string]any{"stop_hook_active": false}))
+	err := c.hooks.run("Stop", "", c.hookInput("Stop", input))
 	c.mod.turnCompleted()
 	return err
 }

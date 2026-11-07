@@ -421,13 +421,19 @@ after any of them.
 the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
-With `--compact`, the close waits for the turn to end and then places the
-compact in the session's input lane, through the Claude mod or the shared Codex
-app server. A ring placed before the compact makes the compact wait for the next
-idle. Once the compact is placed, the lane holds every later item until the
-session has closed, and seed mail that arrives then wakes the closed tender as
-above. A compact that meets a running turn opens the lane again and retries at
-the next idle. User input before the close cancels it and opens the lane again.
+With `--compact`, the close places the compact in the session's input lane,
+through the Claude mod or the shared Codex app server, as soon as it is asked.
+The harness alone decides whether the conversation is between turns: Claude
+refuses the compact while a turn runs and the mod answers `busy`, and shared
+Codex reports its thread active. A refused compact opens the lane again and is
+placed again when the harness reports the end of the turn: the mod sends
+`ready` when its next turn completes, and shared Codex reports its thread idle.
+Apart from a pending approval, attn's own reading of the session's state plays
+no part, so background work the agent leaves running does not hold the close. A ring placed before the compact
+starts a turn, and the compact waits for that turn's end. Once the compact is
+placed and taken, the lane holds every later item until the session has closed,
+and seed mail that arrives then wakes the closed tender as above. User input
+before the close cancels it and opens the lane again.
 If no outcome arrives within `compact_outcome_tripwire`, the session closes with
 a reason that says so.
 

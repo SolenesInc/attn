@@ -449,6 +449,13 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
   `trigger: "manual"`.
 - A prompt typed during that compact waits, and Claude runs it on top of the
   summary once the compact ends.
+- The Stop hook runs while Claude still counts the turn as running. A compact
+  that attn placed as the Stop hook arrived was refused with
+  `a turn is running (<id>)`, naming the turn that had just stopped, in 3 of 10
+  runs on 2.1.319, so the end of the turn is the mod's `turn.complete`, not the
+  Stop hook. A turn that ends with a shell left running in the background sends
+  `background_tasks` in the Stop hook input, and `$.session.compact()` then
+  compacts as it does at an idle prompt.
 - The compact's `system`/`compact_boundary` and `isCompactSummary` entries reach
   the transcript file only when Claude exits, which attn's close does with
   SIGTERM. `claude --resume` loads from them.
