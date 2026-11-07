@@ -107,6 +107,7 @@ import {
   recoveryDelayMs,
   scaledToFitTransform,
 } from './ghosttyGeometry';
+import { TerminalSeedMarks, type TerminalSeedMarksHandle } from './TerminalSeedMarks';
 import { recordTerminalLinkHitTestEvent } from '../utils/terminalLinkHitTestLog';
 import {
   recordDiag,
@@ -171,7 +172,6 @@ import {
   SEED_ID_PREFIX_CODEPOINTS,
   seedOccurrencesInLine,
   type TerminalSeedOccurrence,
-  type TerminalSeedSegment,
 } from '../utils/terminalSeedLinks';
 import {
   TerminalSeedPreview,
@@ -348,15 +348,6 @@ interface VisibleSeedOccurrences {
   generation: number;
   seeds: readonly Seed[];
   occurrences: TerminalSeedOccurrence[];
-}
-
-interface SeedMarkLayout {
-  signature: string;
-  canvasLeft: number;
-  canvasTop: number;
-  cellWidth: number;
-  cellHeight: number;
-  segments: TerminalSeedSegment[];
 }
 
 interface SeedPreviewState {
@@ -659,7 +650,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const modelRecoveryPendingRef = useRef(false);
     const [error, setError] = useState<string | null>(null);
     const [linkCursorActive, setLinkCursorActive] = useState(false);
-    const [seedMarkLayout, setSeedMarkLayout] = useState<SeedMarkLayout | null>(null);
+    const seedMarksRef = useRef<TerminalSeedMarksHandle | null>(null);
     const [seedPreview, setSeedPreview] = useState<SeedPreviewState | null>(null);
     const [annotationCursorActive, setAnnotationCursorActive] = useState(false);
     const [findUi, setFindUi] = useState({ open: false, matchCount: 0, focusedIndex: -1, scanning: false, caseSensitive: false });
@@ -2729,7 +2720,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
       const segments = occurrences.flatMap(seedOccurrenceSegments);
       if (segments.length === 0) {
-        setSeedMarkLayout((layout) => layout === null ? layout : null);
+        seedMarksRef.current?.setLayout(null);
         syncSeedPreviewAfterRefreshRef.current?.();
         return;
       }
@@ -2749,7 +2740,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           `${segment.seedId}:${segment.row}:${segment.startCol}:${segment.endCol}`
         )),
       ].join('|');
-      setSeedMarkLayout((layout) => layout?.signature === signature ? layout : {
+      seedMarksRef.current?.setLayout({
         signature,
         canvasLeft,
         canvasTop,
@@ -3777,23 +3768,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         <canvas ref={canvasRef} key={rendererEpoch} />
         {error && <div className="ghostty-terminal-error">{error}</div>}
       </div>
-      {seedMarkLayout ? (
-        <div className="ghostty-terminal-seed-marks" aria-hidden="true">
-          {seedMarkLayout.segments.map((segment, index) => (
-            <span
-              key={`${segment.seedId}:${segment.row}:${segment.startCol}:${index}`}
-              className={`ghostty-terminal-seed-mark${seedPreview?.seedId === segment.seedId ? ' is-previewing' : ''}`}
-              data-terminal-seed-id={segment.seedId}
-              style={{
-                left: seedMarkLayout.canvasLeft + segment.startCol * seedMarkLayout.cellWidth,
-                top: seedMarkLayout.canvasTop + segment.row * seedMarkLayout.cellHeight,
-                width: (segment.endCol - segment.startCol) * seedMarkLayout.cellWidth,
-                height: seedMarkLayout.cellHeight,
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
+      <TerminalSeedMarks ref={seedMarksRef} previewingSeedId={seedPreview?.seedId ?? null} />
       {previewSeed && seedPreview ? (
         <TerminalSeedPreview
           seed={previewSeed}
