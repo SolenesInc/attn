@@ -115,6 +115,25 @@ func TestANisseSessionAtRestComesBackAtRestAfterItsTUIRuntimeDies(t *testing.T) 
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 }
 
+func TestANisseSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *testing.T) {
+	t.Parallel()
+	s, app, session, server, conversation := nisseAtWorkApartFromItsServer(t)
+	server.Reply(conversation, "By date or by customer? <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
+
+	mark := len(app.Log())
+	s.KillRuntimeOf(app.Terminal(session))
+
+	s.Launched(session)
+	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
+	settled := testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput || x.State == protocol.SessionStateIdle
+	})
+	if settled.State != protocol.SessionStateWaitingInput {
+		t.Fatalf("the revived session settled %s, want it still waiting on its question", settled.State)
+	}
+}
+
 func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.NisseServer, string) {
 	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Nisse), testworld.OnPTYBackend(testworld.SharedHostPTY))

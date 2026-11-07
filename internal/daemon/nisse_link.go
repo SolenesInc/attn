@@ -389,12 +389,25 @@ func (l *nisseLink) apply(c *nisse.Client, tree nisseTree) {
 
 func (l *nisseLink) launchStarted(sessionID protocol.SessionID) {
 	l.events.run(l.d, func() {
-		status, busy := l.busy[l.d.linkConversation(sessionID)]
-		if !busy {
-			status = "idle"
+		conversation := l.d.linkConversation(sessionID)
+		if status, busy := l.busy[conversation]; busy {
+			l.observe(sessionID, status, nil)
+			return
 		}
-		l.observe(sessionID, status, nil)
+		if l.remembersItsLastRun(sessionID) {
+			return
+		}
+		var ended *nisseEnded
+		if c := l.client(); c != nil {
+			ended = l.lastRuns(c)[conversation]
+		}
+		l.observe(sessionID, "idle", ended)
 	})
+}
+
+func (l *nisseLink) remembersItsLastRun(sessionID protocol.SessionID) bool {
+	session := l.d.store.Get(sessionID)
+	return session != nil && (session.State == protocol.SessionStateIdle || session.State == protocol.SessionStateWaitingInput)
 }
 
 func (l *nisseLink) settlesOnServer(sessionID protocol.SessionID) bool {

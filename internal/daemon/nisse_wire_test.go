@@ -163,6 +163,50 @@ func TestAResumedNisseSessionOpensTheConversationItLaunchedWith(t *testing.T) {
 	}
 }
 
+func TestAReopenedNisseSessionStillWaitsOnTheQuestionItAsked(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	session, nisse, server := nisseSession(t, w, app)
+	neighbour := w.Spawn(app, fakeagent.Nisse, w.Path("neighbour"))
+	neighbourTUI := w.Launched(neighbour)
+	conversation := nisse.ConversationID
+	app.TypeLine(session, "which index should the report use?")
+	nisse.Prompted()
+	server.Prompted(conversation)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "By date or by customer? <!-- attn:state=waiting_input -->")
+	asked := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+	})
+
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close: %s", protocol.Deref(closed.Error))
+	}
+	nisse.AwaitGone()
+	if reopened := reopenOverTheWebSocket(app, session); !reopened.Success {
+		t.Fatalf("reopen: %s", protocol.Deref(reopened.Error))
+	}
+	again := w.Launched(session)
+
+	mark := len(app.Log())
+	app.TypeLine(neighbour, "keep the server connected")
+	neighbourTUI.Prompted()
+	server.Prompted(neighbourTUI.ConversationID)
+	testworld.AwaitSessionSince(app, mark, neighbour, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	reopened := queriedSession(t, w.Client(), session)
+	if reopened.State != protocol.SessionStateWaitingInput || protocol.Deref(reopened.TurnOpenedAt) != protocol.Deref(asked.TurnOpenedAt) {
+		t.Fatalf("after reopening the session is %s with its turn opened at %s, want it still waiting on the turn opened at %s", reopened.State, protocol.Deref(reopened.TurnOpenedAt), protocol.Deref(asked.TurnOpenedAt))
+	}
+
+	mark = len(app.Log())
+	app.TypeLine(session, "by date")
+	again.Prompted()
+	server.Prompted(conversation)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	server.Reply(conversation, "Indexed by date. <!-- attn:state=idle -->")
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
 func TestANisseSessionWorkingThroughADaemonRestartSettlesFromTheServerAfterIt(t *testing.T) {
 	t.Setenv("ATTN_PTY_BACKEND", "worker")
 	t.Setenv("ATTN_PTY_WORKER_BINARY", testworld.AttnBinary(t))
