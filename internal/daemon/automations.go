@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -67,10 +69,11 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 	if err != nil {
 		return nil, err
 	}
-	run, _, err := d.store.ClaimManualAutomationRun(definitionID, requestID, subjectKey, canonicalInput, def.Revision, string(snapshotJSON), time.Now(), ids)
+	run, created, err := d.store.ClaimManualAutomationRun(definitionID, requestID, subjectKey, canonicalInput, def.Revision, string(snapshotJSON), time.Now(), ids)
 	if err != nil {
 		return nil, err
 	}
+	pausepoint.At(pausepoint.AutomationRunReserved)
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	run, err = d.store.GetAutomationRun(run.ID)
@@ -78,6 +81,9 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 		return nil, err
 	}
 	d.broadcastAutomationsChanged(definitionID)
+	if created && run.State == store.AutomationRunStateFailed {
+		return nil, errors.New(run.LastError)
+	}
 	if run.State != store.AutomationRunStatePending {
 		return run, nil
 	}

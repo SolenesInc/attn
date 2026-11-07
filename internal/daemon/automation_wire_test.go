@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -424,6 +425,67 @@ location:
 
 func automationReviewInput(number int, head string) string {
 	return fmt.Sprintf(`{"provider":"github","host":"github.test","owner":"acme","repository":"shop","number":%d,"url":"https://github.test/acme/shop/pull/%d","state":"open","draft":false,"head_sha":%q}`, number, number, head)
+}
+
+func TestAFirstRunThatStartupRecoveryFailsStillAnswersWithTheFailure(t *testing.T) {
+	w := &world{World: prepareWorld(t)}
+	recovering := w.PauseAt(pausepoint.DaemonStartupRecovery)
+	reserved := w.PauseAt(pausepoint.AutomationRunReserved)
+	w.start()
+	cli := w.Client()
+	if err := os.MkdirAll(w.Path("gone"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Vanished
+trigger: {type: manual}
+prompt: Check the folder.
+launch: {driver: claude}
+location: {type: directory, path: %q}
+`, w.Path("gone")))
+	if err := os.Remove(w.Path("gone")); err != nil {
+		t.Fatal(err)
+	}
+	recovering.Await()
+
+	answered := make(chan error, 1)
+	go func() {
+		_, err := cli.AutomationRun(1, "first", "")
+		answered <- err
+	}()
+	reserved.Await()
+	recovering.Release()
+	w.App()
+	if recovered := automationRuns(t, cli, 1); len(recovered) != 1 || recovered[0].State != "failed" {
+		t.Fatalf("runs once recovery finished = %+v, want recovery to have failed the held run", recovered)
+	}
+	reserved.Release()
+
+	if err := <-answered; err == nil || !strings.Contains(err.Error(), "no such file or directory") {
+		t.Fatalf("the request answered %v, want an error naming the missing folder", err)
+	}
+	failed := automationRuns(t, cli, 1)
+	if len(failed) != 1 || failed[0].State != "failed" || !strings.Contains(protocol.Deref(failed[0].LastError), "no such file or directory") {
+		t.Fatalf("runs = %+v, want one run failed for the missing folder", failed)
+	}
+	seed, err := cli.SeedShow("", protocol.Deref(failed[0].SeedID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seed.Seed.Status != "withered" || len(seed.Notes) != 1 || !strings.Contains(seed.Notes[0].Body, "no such file or directory") {
+		t.Errorf("the run's seed is %s with notes %+v, want it withered with one entry naming the failure", seed.Seed.Status, seed.Notes)
+	}
+
+	retried, err := cli.AutomationRun(1, "first", "")
+	if err != nil {
+		t.Fatalf("retrying the same request = %v, want the stored run", err)
+	}
+	if retried.Run == nil || retried.Run.ID != failed[0].ID || retried.Run.State != "failed" {
+		t.Errorf("retrying the same request answered %+v, want the failed run %s", retried.Run, failed[0].ID)
+	}
+	if runs := automationRuns(t, cli, 1); len(runs) != 1 {
+		t.Errorf("runs after the retry = %+v, want the one failed run", runs)
+	}
 }
 
 func automationRuns(t *testing.T, cli *client.Client, id int) []protocol.AutomationRunSummary {
