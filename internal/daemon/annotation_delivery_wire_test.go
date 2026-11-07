@@ -16,12 +16,17 @@ import (
 
 const sessionAnnotationFeedback = "Feedback on your last message.\n\n## 1. 🔍 Verify this\n\n> the parser already handles this"
 
+func awaitClaudeAtItsPrompt(app *testworld.Peer, session string) {
+	app.T.Helper()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+}
+
 func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 	plan := fileAnnotatedDocument("/notes/plan.md")
 	hello := []protocol.MarkdownAnnotation{{ID: "c1", Type: "comment", Text: protocol.Ptr("hi"), CreatedAt: 1,
 		Anchor: &protocol.MarkdownAnnotationAnchor{BlockID: "b", StartLine: 3, EndLine: 3, Start: 0, End: 5, Exact: "hello"}}}
@@ -104,7 +109,7 @@ func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
 			app := w.App()
 			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 			agent := w.Launched(session)
-			app.AwaitScreen(session, "? for shortcuts")
+			awaitClaudeAtItsPrompt(app, session)
 			doc := fileAnnotatedDocument("/notes/plan.md")
 			saver := app
 			if tc.saver != nil {
@@ -150,7 +155,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 	doc := fileAnnotatedDocument("/doc.md")
 	anchor := func(startLine, endLine, start int, exact string) *protocol.MarkdownAnnotationAnchor {
 		return &protocol.MarkdownAnnotationAnchor{BlockID: "b", StartLine: startLine, EndLine: endLine, Start: start, End: start + len(exact), Exact: exact}
@@ -237,7 +242,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	setSetting(t, app, "auto_approve_enabled", "false")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 	plan, blank := fileAnnotatedDocument("/notes/plan.md"), fileAnnotatedDocument("/notes/blank.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("tighten the intro"), CreatedAt: 1}}
 	saveDocumentAnnotations(app, plan, 2, marks)
@@ -299,7 +304,7 @@ func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 	plan := fileAnnotatedDocument("/notes/plan.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr(strings.Repeat("tighten the intro ", 16<<10)), CreatedAt: 1}}
 	saveDocumentAnnotations(app, plan, 3, marks)

@@ -76,7 +76,7 @@ func startOldPhoneConversation(t *testing.T) *oldPhoneConversation {
 	setSetting(t, app, "asks_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 	shell := w.Spawn(app, shellHarness, w.Path("shell"))
 	asked, err := cli.AskOpen(protocol.SessionID(session), "", cacheAsk, "", w.Path("shop"))
 	if err != nil {

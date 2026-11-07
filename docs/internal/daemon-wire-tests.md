@@ -40,6 +40,10 @@ The one way to reach inside is a pause point, below.
   agent, once the agent's terminal is raw and reads input. Call it before typing
   at a new agent: a line typed earlier does not submit to Claude, as
   `docs/internal/harnesses/claude.md` says.
+  Before delivering to a new agent, await its session's `idle` state, not text
+  on its screen. attn holds deliveries until the harness reports, and on the
+  shared host that report can reach the daemon a frame after the screen. A
+  delivery in that gap returns `skipped_pending_approval`.
 - `w.RequestSpawn` sends the same requests and returns the spawn result with
   the desktop and tile it added, so the test can close a refused spawn's
   tile the way the app does.

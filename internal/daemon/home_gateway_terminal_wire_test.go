@@ -214,7 +214,7 @@ func TestAPhonePromptReachesTheAgentThroughTheSessionMonitor(t *testing.T) {
 	setSetting(t, app, "phone_access_enabled", "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
-	app.AwaitScreen(session, "? for shortcuts")
+	awaitClaudeAtItsPrompt(app, session)
 
 	phone, _ := welcomedPhone(t, w, app.SelectedProfile())
 	phone.send(homegateway.SubmitPrompt{Cmd: "submit_prompt", RequestID: "r1", SessionID: session, Text: "Yes, land it."})
