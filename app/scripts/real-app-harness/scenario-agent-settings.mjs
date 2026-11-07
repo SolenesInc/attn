@@ -107,7 +107,7 @@ try {
     await client.request('dom_key', { selector: '#settings-default-context-cap-codex', key: 'Enter' });
     await section('general');
     runner.assert((await client.request('settings_get_state')).activeSection === 'agents', 'invalid draft prevents silent loss on navigation');
-    runner.assert((await text('.settings-autosave-status')).includes('context window cap must be between'), 'validation error remains visible');
+    runner.assert((await text('[data-testid="settings-refusal-default_context_window_cap_codex"]')).includes('context window cap must be between'), 'validation error remains visible');
     await screenshot('02-validation.png');
     await type('#settings-default-context-cap-codex', '192000');
     await saved('default_context_window_cap_codex', '192000', () => client.request('dom_key', { selector: '#settings-default-context-cap-codex', key: 'Enter' }));

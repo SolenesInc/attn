@@ -40,6 +40,12 @@ import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
 import { BoolSetting, EXPERIMENTAL_FEATURES, isOn } from '../utils/settings';
 
+function openEnclosingDetails(element: Element) {
+  for (let details = element.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
+    details.open = true;
+  }
+}
+
 export function useSettingsModalState({
   closeRef,
   isOpen,
@@ -91,14 +97,21 @@ export function useSettingsModalState({
     },
     [autosave, settings],
   );
+  const flushOrShowRefusal = useCallback(async () => {
+    if (await autosave.flush()) return true;
+    const refusals = document.querySelectorAll('[data-testid="settings-body"] [role="alert"]');
+    refusals.forEach(openEnclosingDetails);
+    refusals[0]?.scrollIntoView({ block: 'nearest' });
+    return false;
+  }, [autosave]);
   const closeSettings = useCallback(async () => {
     if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
     if (!autosave.needsFlush()) {
       onClose();
       return;
     }
-    if (await autosave.flush()) onClose();
-  }, [autosave, onClose]);
+    if (await flushOrShowRefusal()) onClose();
+  }, [autosave, flushOrShowRefusal, onClose]);
   const selectSection = useCallback(
     async (section: SettingsSectionID) => {
       if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
@@ -106,9 +119,9 @@ export function useSettingsModalState({
         setSelectedSection(section);
         return;
       }
-      if (await autosave.flush()) setSelectedSection(section);
+      if (await flushOrShowRefusal()) setSelectedSection(section);
     },
-    [autosave],
+    [autosave, flushOrShowRefusal],
   );
   useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');

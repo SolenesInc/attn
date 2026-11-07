@@ -347,6 +347,22 @@ describe('SettingsModal chief settings', () => {
     expect(screen.getByTestId('settings-default-context-cap-codex')).toHaveValue(null);
   });
 
+  it('opens a collapsed group to show the refusal that keeps settings open', async () => {
+    const reason = 'context window cap must be between 10000 and 2000000';
+    const daemon = await agentSection('agents', {});
+    daemon.on('set_setting', () => ({ event: 'settings_updated', success: false, error: reason }));
+    await commitField(daemon, 'settings-default-context-cap-claude', '1');
+    const refusal = screen.getByTestId('settings-refusal-default_context_window_cap_claude');
+    const group = refusal.closest('details')!;
+    group.open = false;
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+
+    expect(screen.getByTestId('settings-modal')).toBeInTheDocument();
+    expect(group.open).toBe(true);
+    expect(refusal).toHaveTextContent(reason);
+  });
+
   it('commits a changed per-agent context-window cap on blur', async () => {
     const daemon = await agentSection('agents', {});
 

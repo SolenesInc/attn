@@ -296,6 +296,17 @@ describe('The sidebar width in Settings', () => {
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
   });
 
+  it('raises the refusal as a notification when a width is refused outside Settings', async () => {
+    const refusal = 'sidebar_width must be a whole number from 200 to 600';
+    const daemon = await renderSidebar(SHELF_ON);
+    daemon.on('set_setting', () => ({ event: 'settings_updated', success: false, error: refusal }));
+
+    await gesture(daemon, () => pressShortcut('sidebar.wider'));
+
+    expect(widthSaves(daemon)).toHaveLength(1);
+    expect(screen.getByRole('alert')).toHaveTextContent(refusal);
+  });
+
   it('follows a width set elsewhere while Settings is open', async () => {
     const daemon = await openSection('experimental', { settings: SHELF_ON });
     await act(async () => {

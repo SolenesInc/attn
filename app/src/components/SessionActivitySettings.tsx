@@ -1,4 +1,4 @@
-import { useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
+import { SettingRefusal, useAutosaveSetting, type SaveSetting } from './SettingsAutosave';
 import { useCallback, useMemo } from 'react';
 import type { SessionAgent } from '../types/sessionAgent';
 import { useHeadlessHarnesses } from '../hooks/useHarnesses';
@@ -134,6 +134,7 @@ export function SessionActivitySettings({
           </div>
         </div>
 
+        <SettingRefusal settingKey={ACTIVITY_INTERVALS_SETTING} />
         <div className="settings-hint">
           A session that has written nothing since its last line is skipped, so blocked and
           finished agents cost nothing however long home stays open.

@@ -2022,8 +2022,8 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'settings_updated':
-            settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
+          case 'settings_updated': {
+            const requesterShowsTheFailure = settlePendingRequest(pendingActionsRef.current, 'set_setting', data, () => true, 'Could not save setting');
             if (data.settings) {
               if (harnessRegistrySignature(settingsRef.current) !== harnessRegistrySignature(data.settings)) {
                 refreshHarnesses();
@@ -2032,10 +2032,11 @@ export function useDaemonSocket({
               settingsRef.current = data.settings;
               callbacksRef.current.onSettingsUpdate?.(data.settings);
             }
-            if (data.success === false && data.error) {
+            if (data.success === false && data.error && !requesterShowsTheFailure) {
               callbacksRef.current.onSettingError?.(data.error);
             }
             break;
+          }
 
           case 'github_hosts_updated':
             callbacksRef.current.onGitHubHostsUpdate?.(data.github_hosts || [], data.github_polling_off_reason || null);

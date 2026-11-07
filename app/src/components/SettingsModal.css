@@ -1006,7 +1006,8 @@
 .settings-agent summary:focus-visible, .settings-agent-advanced summary:focus-visible { outline: 2px solid var(--color-text-secondary); outline-offset: 2px; }
 .settings-autosave-status { color: var(--color-text-secondary); font-size: var(--font-size-sm); }
 .settings-autosave-status:empty { display: none; }
-.settings-autosave-status .settings-warning { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.settings-refusal { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 8px; }
+.settings-autosave-status .settings-refusal { margin-top: 0; }
 .settings-pricing { margin-top: 24px; }
 .settings-autosave-status:not(:empty) { position: sticky; top: 0; z-index: 2; padding: 8px 0; background: var(--color-bg-panel); }
 .settings-default-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 8px 0; }

@@ -16,6 +16,7 @@ type Field = {
 function createSettingsAutosave(save: SaveSetting) {
   const fields = new Map<string, Field>();
   const listeners = new Set<() => void>();
+  const anchored = new Set<string>();
   let revision = 0;
   const notify = () => { revision++; listeners.forEach((listener) => listener()); };
   const ensure = (key: string, actual: string) => {
@@ -55,6 +56,17 @@ function createSettingsAutosave(save: SaveSetting) {
   };
   return {
     fields, ensure, commit,
+    commitOnLeave: async (key: string) => {
+      const field = fields.get(key)!;
+      if (field.error && field.value === field.attempting) return false;
+      return commit(key);
+    },
+    anchored,
+    anchor(key: string) {
+      anchored.add(key);
+      notify();
+      return () => { anchored.delete(key); notify(); };
+    },
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     snapshot: () => revision,
     sync(key: string, actual: string) {
@@ -102,13 +114,28 @@ export function useAutosaveSetting(key: string, actual: string, save: SaveSettin
     commit: () => store.commit(key),
     apply: (value: string) => { store.set(key, value); return store.commit(key); },
     onChange: (event: { target: { value: string } }) => store.set(key, event.target.value),
-    onBlur: () => { void store.commit(key); },
+    onBlur: () => { void store.commitOnLeave(key); },
+    commitOnLeave: () => store.commitOnLeave(key),
     onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') void store.commit(key); },
     dirty: field.value !== field.saved || Boolean(field.pending) || Boolean(field.error),
     error: field.error,
     saving: Boolean(field.pending),
     saved: field.confirmed && field.value === field.saved,
   };
+}
+
+function Refusal({ settingKey, reason, retry }: { settingKey: string; reason: string; retry: () => void }) {
+  return <div role="alert" className="settings-warning settings-refusal" data-testid={`settings-refusal-${settingKey}`}>
+    {reason} <button type="button" className="settings-action" onClick={retry}>Retry</button>
+  </div>;
+}
+
+export function SettingRefusal({ settingKey }: { settingKey: string }) {
+  const store = useSettingsAutosave()!;
+  useSyncExternalStore(store.subscribe, store.snapshot);
+  useEffect(() => store.anchor(settingKey), [store, settingKey]);
+  const reason = store.fields.get(settingKey)?.error;
+  return reason ? <Refusal settingKey={settingKey} reason={reason} retry={() => void store.commit(settingKey)} /> : null;
 }
 
 export function SettingsAutosaveStatus() {
@@ -118,9 +145,7 @@ export function SettingsAutosaveStatus() {
   const saving = [...store.fields.values()].some((field) => field.pending);
   return <div className="settings-autosave-status" aria-live="polite">
     {saving && <span>Saving…</span>}
-    {failed.map(([key, field]) => <div key={key} role="alert" className="settings-warning">
-      {field.error} <button type="button" className="settings-action" onClick={() => void store.commit(key)}>Retry</button>
-    </div>)}
+    {failed.filter(([key]) => !store.anchored.has(key)).map(([key, field]) => <Refusal key={key} settingKey={key} reason={field.error!} retry={() => void store.commit(key)} />)}
     {!saving && failed.length === 0 && [...store.fields.values()].some((field) => field.confirmed) && [...store.fields.values()].every((field) => field.value === field.saved) && <span>Saved</span>}
   </div>;
 }

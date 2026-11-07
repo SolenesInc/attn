@@ -21,6 +21,7 @@ import {
   DEFAULT_CONTEXT_WINDOW_CAP,
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
+import { SettingRefusal } from './SettingsAutosave';
 import type { SettingsModalState } from './useSettingsModalState';
 import { BoolSetting, EXPERIMENTAL_FEATURES, FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
 
@@ -279,7 +280,7 @@ export function DesktopSettings({
               type="text"
               value={editorDraft.value}
               onChange={editorDraft.onChange}
-              onBlur={editorDraft.commit}
+              onBlur={editorDraft.onBlur}
               onKeyDown={editorDraft.onKeyDown}
               placeholder="$EDITOR"
               className="settings-input"
@@ -288,6 +289,7 @@ export function DesktopSettings({
               spellCheck={false}
             />
             <SavedMark shown={savedFlash.saved('editor_executable')} testID="settings-editor-saved" />
+            <SettingRefusal settingKey="editor_executable" />
           </div>
         </div>
       </section>
@@ -307,7 +309,7 @@ export function DesktopSettings({
               type="text"
               value={projectsDirDraft.value}
               onChange={projectsDirDraft.onChange}
-              onBlur={projectsDirDraft.commit}
+              onBlur={projectsDirDraft.onBlur}
               onKeyDown={projectsDirDraft.onKeyDown}
               placeholder="/Users/you/projects"
               className="settings-input"
@@ -320,6 +322,7 @@ export function DesktopSettings({
               Browse
             </button>
           </div>
+          <SettingRefusal settingKey="projects_directory" />
         </div>
       </section>
 
@@ -380,7 +383,7 @@ export function DesktopSettings({
                 type="text"
                 value={notebookRootDraft.value}
                 onChange={notebookRootDraft.onChange}
-                onBlur={notebookRootDraft.commit}
+                onBlur={notebookRootDraft.onBlur}
                 onKeyDown={notebookRootDraft.onKeyDown}
                 placeholder="~/attn-notebook"
                 className="settings-input"
@@ -393,6 +396,7 @@ export function DesktopSettings({
                 Browse
               </button>
             </div>
+            <SettingRefusal settingKey="notebook.root" />
           </div>
           {effectiveNotebookRoot && (
             <p className="settings-description" data-testid="settings-notebook-root-effective">
@@ -687,11 +691,12 @@ export function ExperimentalSettings({
                       min={1}
                       value={narrowestTileColsDraft.value}
                       onChange={narrowestTileColsDraft.onChange}
-                      onBlur={narrowestTileColsDraft.commit}
+                      onBlur={narrowestTileColsDraft.onBlur}
                       onKeyDown={narrowestTileColsDraft.onKeyDown}
                       className="settings-input"
                     />
                     <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+                    <SettingRefusal settingKey="narrowest_tile_cols" />
                   </div>
                 </div>
             <div className="settings-row-card">
@@ -709,7 +714,7 @@ export function ExperimentalSettings({
                   placeholder={String(SIDEBAR_WIDTH.default)}
                   value={sidebarWidthDraft.value}
                   onChange={sidebarWidthDraft.onChange}
-                  onBlur={sidebarWidthDraft.commit}
+                  onBlur={sidebarWidthDraft.onBlur}
                   onKeyDown={sidebarWidthDraft.onKeyDown}
                   className="settings-input"
                 />
@@ -726,6 +731,7 @@ export function ExperimentalSettings({
                 <SavedMark shown={savedFlash.saved('sidebar_width')} testID="settings-sidebar-width-saved" />
               </div>
             </div>
+            <SettingRefusal settingKey="sidebar_width" />
                 </>
               ) : null}
             </FeatureRow>
@@ -812,7 +818,7 @@ export function BackgroundAgentSettings({
               step={1000}
               value={chiefContextCapDraft.value}
               onChange={chiefContextCapDraft.onChange}
-              onBlur={chiefContextCapDraft.commit}
+              onBlur={chiefContextCapDraft.onBlur}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   chiefContextCapDraft.commit();
@@ -821,6 +827,7 @@ export function BackgroundAgentSettings({
               className="settings-input"
             />
             <SavedMark shown={savedFlash.saved('chief_context_window_cap')} testID="settings-chief-context-cap-saved" />
+            <SettingRefusal settingKey="chief_context_window_cap" />
           </div>
           <div className="settings-field">
             <label className="settings-label" htmlFor="settings-headless-context-cap">
@@ -835,7 +842,7 @@ export function BackgroundAgentSettings({
               step={1000}
               value={headlessContextCapDraft.value}
               onChange={headlessContextCapDraft.onChange}
-              onBlur={headlessContextCapDraft.commit}
+              onBlur={headlessContextCapDraft.onBlur}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   headlessContextCapDraft.commit();
@@ -847,6 +854,7 @@ export function BackgroundAgentSettings({
               shown={savedFlash.saved('headless_context_window_cap')}
               testID="settings-headless-context-cap-saved"
             />
+            <SettingRefusal settingKey="headless_context_window_cap" />
           </div>
         </div>
       </section>
@@ -1051,12 +1059,13 @@ export function AgentSettings({
                           autoCorrect="off"
                           spellCheck={false}
                           onChange={(e) => executableDrafts.set(agent, e.target.value)}
-                          onBlur={() => void executableDrafts.commit(agent)}
+                          onBlur={() => void executableDrafts.onBlur(agent)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') void executableDrafts.commit(agent);
                           }}
                         />
                         <span className="settings-hint">Empty uses the executable on PATH.</span>
+                        <SettingRefusal settingKey={`${agent}_executable`} />
                       </div>
                     )}
                     {overrides && (
@@ -1075,12 +1084,13 @@ export function AgentSettings({
                           placeholder="Agent default"
                           value={defaultContextCapDrafts.value(agent)}
                           onChange={(e) => defaultContextCapDrafts.set(agent, e.target.value)}
-                          onBlur={() => void defaultContextCapDrafts.commit(agent)}
+                          onBlur={() => void defaultContextCapDrafts.onBlur(agent)}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') void defaultContextCapDrafts.commit(agent);
                           }}
                         />
                         <span className="settings-hint">Empty uses the agent's own compaction behavior.</span>
+                        <SettingRefusal settingKey={`default_context_window_cap_${agent}`} />
                       </div>
                     )}
                   </div>
@@ -1182,7 +1192,7 @@ export function HygieneSettings({
                 step={5}
                 value={autoSettleArmDraft.value}
                 onChange={autoSettleArmDraft.onChange}
-                onBlur={autoSettleArmDraft.commit}
+                onBlur={autoSettleArmDraft.onBlur}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     autoSettleArmDraft.commit();
@@ -1191,6 +1201,7 @@ export function HygieneSettings({
                 className="settings-input"
               />
               <SavedMark shown={savedFlash.saved(AUTO_SETTLE_ARM_SETTING)} testID="settings-auto-settle-arm-saved" />
+              <SettingRefusal settingKey={AUTO_SETTLE_ARM_SETTING} />
               <p className="settings-hint">
                 How long the agent must keep working before anything starts. Nothing is shown during this window.
               </p>
@@ -1208,7 +1219,7 @@ export function HygieneSettings({
                 step={1}
                 value={autoSettleCountdownDraft.value}
                 onChange={autoSettleCountdownDraft.onChange}
-                onBlur={autoSettleCountdownDraft.commit}
+                onBlur={autoSettleCountdownDraft.onBlur}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     autoSettleCountdownDraft.commit();
@@ -1220,6 +1231,7 @@ export function HygieneSettings({
                 shown={savedFlash.saved(AUTO_SETTLE_COUNTDOWN_SETTING)}
                 testID="settings-auto-settle-countdown-saved"
               />
+              <SettingRefusal settingKey={AUTO_SETTLE_COUNTDOWN_SETTING} />
               <p className="settings-hint">
                 How long the countdown runs on the tile — your window to press{' '}
                 {formatShortcut('session.cancelCountdown')} and keep the turn.

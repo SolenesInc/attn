@@ -1,4 +1,4 @@
-import { useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
+import { SettingRefusal, useAutosaveSetting, useSettingsAutosave, type SaveSetting } from './SettingsAutosave';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 export const SESSION_COST_PRICE_PREFIX = 'session_cost.price.';
@@ -160,6 +160,7 @@ function ExistingPriceOverride({ modelId, raw, onSetSetting }: ExistingPriceOver
         onChange={(key, value) => field.set(JSON.stringify({ ...draft, [key]: value }))}
         onCommit={field.onBlur}
       />
+      <SettingRefusal settingKey={settingKey} />
     </div>
   );
 }

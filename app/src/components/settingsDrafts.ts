@@ -17,11 +17,12 @@ export interface SettingDraftOptions extends DraftDeps {
 
 export function useSettingDraft({ actual, settingKey, trim = false, onSetSetting, savedFlash }: SettingDraftOptions) {
   const draft = useAutosaveSetting(settingKey, actual, onSetSetting, (value) => trim ? value.trim() : value);
-  const commit = async () => {
+  const saveThenFlash = async (save: () => Promise<boolean>) => {
     if (!draft.dirty) return;
-    if (await draft.commit()) savedFlash.flash(settingKey);
+    if (await save()) savedFlash.flash(settingKey);
   };
-  return { ...draft, commit, onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') void commit(); } };
+  const commit = () => saveThenFlash(draft.commit);
+  return { ...draft, commit, onBlur: () => saveThenFlash(draft.commitOnLeave), onKeyDown: (event: { key: string }) => { if (event.key === 'Enter') void commit(); } };
 }
 
 type AgentValues = Partial<Record<SessionAgent, string>>;
@@ -41,15 +42,17 @@ export function useAgentSettingDrafts({ actual, settingKey, flashKey = settingKe
   useEffect(() => {
     for (const [agent, value] of Object.entries(actual)) store.sync(settingKey(agent), value ?? '');
   }, [actual, settingKey, store]);
-  const commit = async (agent: SessionAgent) => {
+  const saveThenFlash = async (agent: SessionAgent, save: (key: string) => Promise<boolean>) => {
     const field = store.ensure(settingKey(agent), actual[agent] ?? '');
     if (field.value === field.saved && !field.pending) return;
-    if (await store.commit(settingKey(agent))) savedFlash.flash(flashKey(agent));
+    if (await save(settingKey(agent))) savedFlash.flash(flashKey(agent));
   };
+  const commit = (agent: SessionAgent) => saveThenFlash(agent, store.commit);
   return {
     value: (agent: SessionAgent) => store.ensure(settingKey(agent), actual[agent] ?? '').value,
     set: (agent: SessionAgent, next: string) => store.set(settingKey(agent), next),
     commit,
+    onBlur: (agent: SessionAgent) => saveThenFlash(agent, store.commitOnLeave),
     apply: (agent: SessionAgent, next: string) => { store.set(settingKey(agent), next); void commit(agent); },
   };
 }

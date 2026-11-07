@@ -94,6 +94,44 @@ describe('SettingsModal drafts', () => {
     expect(savedSettings(daemon)).toEqual([['projects_directory', 'sonnet'], ['projects_directory', 'sonnet']]);
   });
 
+  it('sends a refused value once for one Enter, shows the reason once beside its field, and Retry resends', async () => {
+    const reason = 'notebook.root must be an absolute path';
+    const daemon = await openSection('desktop', {}, (scripted) => {
+      scripted.on('set_setting', () => ({ event: 'settings_updated', success: false, error: reason }));
+    });
+    const field = screen.getByTestId('settings-notebook-root-input');
+    const elsewhere = screen.getByTestId('settings-projects-directory-input');
+    field.focus();
+    fireEvent.change(field, { target: { value: 'relative/dir' } });
+
+    await gesture(daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
+    await gesture(daemon, () => elsewhere.focus());
+
+    expect(savedSettings(daemon)).toEqual([['notebook.root', 'relative/dir']]);
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+    const beside = within(field.closest<HTMLElement>('.settings-field')!).getByRole('alert');
+    expect(beside).toHaveTextContent(reason);
+
+    await gesture(daemon, () => fireEvent.click(within(beside).getByRole('button', { name: 'Retry' })));
+    expect(savedSettings(daemon)).toEqual([['notebook.root', 'relative/dir'], ['notebook.root', 'relative/dir']]);
+    expect(screen.getAllByText(reason)).toHaveLength(1);
+  });
+
+  it('sends a new draft when focus leaves a field after a refusal', async () => {
+    const daemon = await openSection('desktop', {}, (scripted) => {
+      scripted.on('set_setting', () => ({ event: 'settings_updated', success: false, error: 'refused' }));
+    });
+    const field = screen.getByTestId('settings-projects-directory-input');
+    field.focus();
+    fireEvent.change(field, { target: { value: 'first' } });
+    await gesture(daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
+    fireEvent.change(field, { target: { value: 'second' } });
+
+    await gesture(daemon, () => field.blur());
+
+    expect(savedSettings(daemon)).toEqual([['projects_directory', 'first'], ['projects_directory', 'second']]);
+  });
+
   it('flushes a focused draft when the settings shortcut closes it', async () => {
     const daemon = await openSection('desktop');
     const field = screen.getByTestId('settings-projects-directory-input');
