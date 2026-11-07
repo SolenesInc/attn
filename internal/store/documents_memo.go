@@ -79,40 +79,46 @@ func (w *documentWrites) writtenSince(gen documentsGeneration) ([]string, bool) 
 }
 
 // DocumentsMemo keeps a value derived from one document collection until the collection's next write. Every document
-// write holds s.mu exclusively until it commits, and RememberDocuments holds it shared from reading the generation to
-// keeping the value, so a kept value is never older than the last committed write.
+// write holds s.mu exclusively until it commits, and RememberDocuments returns only a value whose generation is current
+// under s.mu, so a returned value is never older than the last committed write.
 type DocumentsMemo[T any] struct {
-	mu    sync.Mutex
-	gen   documentsGeneration
-	kept  bool
-	value T
+	reading sync.Mutex
+	mu      sync.Mutex
+	gen     documentsGeneration
+	kept    bool
+	value   T
 }
 
 // RememberDocuments returns the kept value while the collection is unchanged. After writes it hands the kept value and
-// the written ids to refresh, or calls read when it kept nothing or the writes outran what the table remembers.
+// the written ids to refresh, or calls read when it kept nothing or the writes outran what the table remembers. Both run
+// outside s.mu, one caller at a time, because a cold read of a large collection takes longer than any writer can wait.
 func RememberDocuments[T any](
 	s *Store, memo *DocumentsMemo[T], schema docstore.CollectionSchema,
 	read func() (T, error), refresh func(previous T, written []string) (T, error),
 ) (T, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	gen := s.writes.documents.generation(schema.Table)
-	previous, previousGen, kept := memo.lookup()
-	if kept && previousGen == gen {
-		return previous, nil
+	memo.reading.Lock()
+	defer memo.reading.Unlock()
+	for {
+		s.mu.RLock()
+		gen := s.writes.documents.generation(schema.Table)
+		previous, previousGen, kept := memo.lookup()
+		written, known := s.writes.documents.writtenSince(previousGen)
+		s.mu.RUnlock()
+		if kept && previousGen == gen {
+			return previous, nil
+		}
+		var value T
+		var err error
+		if kept && known && previousGen.table == gen.table {
+			value, err = refresh(previous, written)
+		} else {
+			value, err = read()
+		}
+		if err != nil {
+			return value, err
+		}
+		memo.keep(gen, value)
 	}
-	var value T
-	var err error
-	if written, known := s.writes.documents.writtenSince(previousGen); kept && known && previousGen.table == gen.table {
-		value, err = refresh(previous, written)
-	} else {
-		value, err = read()
-	}
-	if err != nil {
-		return value, err
-	}
-	memo.keep(gen, value)
-	return value, nil
 }
 
 func (m *DocumentsMemo[T]) lookup() (T, documentsGeneration, bool) {

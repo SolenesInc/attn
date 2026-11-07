@@ -7,8 +7,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/fakeagent"
 )
 
 var statusNow = time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC)
@@ -193,39 +191,6 @@ func TestReportLoudProducersNamesTheFactRateAndWindow(t *testing.T) {
 		if !strings.Contains(lines[0], want) {
 			t.Errorf("line %q is missing %q", lines[0], want)
 		}
-	}
-}
-
-func TestStartReportsLoudProducersBeforeTheFirstTick(t *testing.T) {
-	s := newMemStore()
-	said := make(chan string, 8)
-	b := New(Options{
-		Store:        s,
-		Now:          func() time.Time { return statusNow },
-		TrimInterval: time.Hour,
-		Log: func(format string, args ...interface{}) {
-			select {
-			case said <- fmt.Sprintf(format, args...):
-			default:
-			}
-		},
-	})
-	for i := 0; i < 7000; i++ {
-		publishAt(t, s, "session.state.changed", 2, 1, time.Duration(i%360)*time.Minute)
-	}
-
-	if err := b.Start(); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer b.Stop()
-
-	select {
-	case line := <-said:
-		if !strings.Contains(line, "session.state.changed") || !strings.Contains(line, "1000/hour") {
-			t.Fatalf("first line does not report the loud producer: %q", line)
-		}
-	case <-time.After(fakeagent.HangGuard):
-		t.Fatal("Start never reported the loud producer; it waited for the retention tick")
 	}
 }
 

@@ -37,6 +37,7 @@ func (d *Daemon) every(name stepclock.Name, interval time.Duration, tick func())
 
 func (d *Daemon) startPermanentMaintenance() {
 	d.life.Go("runDatabaseBackupLoop", d.runDatabaseBackupLoop)
+	d.life.Go("reportLoudProducersAtStart", d.eventBus.ReportLoudProducers)
 }
 
 func (d *Daemon) performDatabaseBackup() {

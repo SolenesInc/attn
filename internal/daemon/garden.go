@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -244,6 +245,7 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 }
 
 func (d *Daemon) readGardenSeeds() (gardenSeeds, error) {
+	pausepoint.At(pausepoint.GardenSeedsReading)
 	out := gardenSeeds{docs: map[string]docstore.Document{}}
 	after := ""
 	for {

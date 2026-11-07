@@ -803,7 +803,6 @@ func (d *Daemon) Start() error {
 	if err := <-queueStarted; err != nil {
 		return err
 	}
-	d.startPermanentMaintenance()
 	if d.claudeModEnabled() {
 		if err := d.claudeMod().serve(); err != nil {
 			d.logf("claude mod: live sessions are typed into: %v", err)
@@ -851,6 +850,7 @@ func (d *Daemon) Start() error {
 			return
 		}
 		d.setRecovering(false)
+		d.startPermanentMaintenance()
 		d.resumePendingDelegations()
 		d.reviveRecoverableAgents("")
 	})

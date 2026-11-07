@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -567,13 +569,13 @@ func (s *Store) ReadDocument(namespace, collection, id string) (DocumentRead, bo
 	if s.db == nil {
 		return DocumentRead{}, false, fmt.Errorf("store: no database")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginReadSnapshot()
 	if err != nil {
 		return DocumentRead{}, false, fmt.Errorf("store: reading %s/%s/%s: %w", namespace, collection, id, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.end()
 
-	schema, table, found, err := readCollectionTx(tx, namespace, collection)
+	schema, table, found, err := readCollection(tx, namespace, collection)
 	if err != nil || !found {
 		return DocumentRead{}, false, err
 	}
@@ -598,13 +600,13 @@ func (s *Store) CountQuery(q docstore.Query) (CountRead, bool, error) {
 	if s.db == nil {
 		return CountRead{}, false, fmt.Errorf("store: no database")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginReadSnapshot()
 	if err != nil {
 		return CountRead{}, false, fmt.Errorf("store: counting %s/%s: %w", q.Namespace, q.Collection, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.end()
 
-	schema, table, found, err := readCollectionTx(tx, q.Namespace, q.Collection)
+	schema, table, found, err := readCollection(tx, q.Namespace, q.Collection)
 	if err != nil || !found {
 		return CountRead{}, false, err
 	}
@@ -644,13 +646,13 @@ func (s *Store) ReadQuery(q docstore.Query) (QueryRead, bool, error) {
 	if s.db == nil {
 		return QueryRead{}, false, fmt.Errorf("store: no database")
 	}
-	tx, err := s.db.Begin()
+	tx, err := s.beginReadSnapshot()
 	if err != nil {
 		return QueryRead{}, false, fmt.Errorf("store: reading %s/%s: %w", q.Namespace, q.Collection, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer tx.end()
 
-	schema, table, found, err := readCollectionTx(tx, q.Namespace, q.Collection)
+	schema, table, found, err := readCollection(tx, q.Namespace, q.Collection)
 	if err != nil || !found {
 		return QueryRead{}, false, err
 	}
@@ -678,6 +680,7 @@ func (s *Store) ReadQuery(q docstore.Query) (QueryRead, bool, error) {
 	if err != nil {
 		return QueryRead{}, false, err
 	}
+	pausepoint.At(pausepoint.DocumentQueryReading)
 	return QueryRead{Schema: schema, Documents: docs, AsOfSeq: asOf}, true, nil
 }
 
@@ -830,6 +833,36 @@ func fieldIndexName(table, column string) string {
 
 func quoteIdent(name string) string {
 	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
+}
+
+type readSnapshot struct {
+	conn *sql.Conn
+}
+
+func (s *Store) beginReadSnapshot() (*readSnapshot, error) {
+	ctx := context.Background()
+	conn, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := conn.ExecContext(ctx, `BEGIN DEFERRED`); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return &readSnapshot{conn: conn}, nil
+}
+
+func (r *readSnapshot) end() {
+	_, _ = r.conn.ExecContext(context.Background(), `ROLLBACK`)
+	_ = r.conn.Close()
+}
+
+func (r *readSnapshot) Query(query string, args ...any) (*sql.Rows, error) {
+	return r.conn.QueryContext(context.Background(), query, args...)
+}
+
+func (r *readSnapshot) QueryRow(query string, args ...any) *sql.Row {
+	return r.conn.QueryRowContext(context.Background(), query, args...)
 }
 
 type rowQuerier interface {

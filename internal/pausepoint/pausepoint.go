@@ -37,6 +37,8 @@ const (
 	BusAnnounce               = "bus-announce"
 	BusEventHandled           = "bus-event-handled"
 	BusProducersReading       = "bus-producers-reading"
+	DocumentQueryReading      = "document-query-reading"
+	GardenSeedsReading        = "garden-seeds-reading"
 	SeedRollbackRead          = "seed-rollback-read"
 	SeedReminderDue           = "seed-reminder-due"
 	SeedReminderRead          = "seed-reminder-read"

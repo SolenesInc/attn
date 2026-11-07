@@ -773,7 +773,6 @@ func (b *Bus) advance(d *durable, seq int64) error {
 func (b *Bus) retain() {
 	ticker := time.NewTicker(b.trimInterval)
 	defer ticker.Stop()
-	b.ReportLoudProducers()
 	for {
 		select {
 		case <-b.ctx.Done():
