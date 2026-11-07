@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { StoredDraftFile } from '../quickCapture/client';
+import { isDomInstance } from '../utils/realm';
 
 export type AttachmentOrigin = { kind: 'drop'; x: number; y: number } | { kind: 'paste' };
 export type QuickCaptureAttachment = { id: string; name: string; stored?: StoredDraftFile; ready: boolean; imagePreview?: boolean; arriving: boolean; origin: AttachmentOrigin };
@@ -48,7 +49,7 @@ export function QuickCaptureAttachmentPreview({ file, onSettled, onMotion, onRem
       left: `${target.x}px`, top: `${target.y}px`, width: `${target.width}px`, height: `${target.height}px`,
     });
     const preview = document.createElement(isImage ? 'img' : 'span');
-    if (preview instanceof HTMLImageElement) { preview.src = src; preview.alt = ''; }
+    if (isDomInstance(preview, 'HTMLImageElement')) { preview.src = src; preview.alt = ''; }
     else { preview.textContent = file.name; Object.assign(preview.style, { display: 'grid', placeItems: 'center', height: '100%', padding: '8px', fontSize: '12px', color: '#fff', overflowWrap: 'anywhere' }); }
     ghost.append(preview);
     document.body.append(ghost);

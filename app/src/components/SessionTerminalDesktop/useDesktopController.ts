@@ -65,6 +65,7 @@ import { useDesktopShelfStore } from '../../store/desktopShelf';
 import { useSessionStore } from '../../store/sessions';
 import { FONT_FAMILY, measureCellWidth } from '../../utils/terminalSizing';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
+import { isDomInstance } from '../../utils/realm';
 
 const COLUMN_DRAG_ACTIVATION_PX = 4;
 
@@ -525,7 +526,7 @@ export function useDesktopController(
   const sessionVisible = enabled && isActiveSession && isSessionViewVisible;
   useLayoutEffect(() => {
     const focused = document.activeElement;
-    if (!sessionVisible && focused instanceof HTMLElement && panesContainerRef.current?.contains(focused)) focused.blur();
+    if (!sessionVisible && isDomInstance(focused, 'HTMLElement') && panesContainerRef.current?.contains(focused)) focused.blur();
   }, [sessionVisible]);
 
   useImperativeHandle(
@@ -645,7 +646,7 @@ export function useDesktopController(
     if (!container) return;
     const onAnimationEnd = (event: AnimationEvent) => {
       if ((event.animationName === 'leaf-arrival-pulse' || event.animationName === 'leaf-arrival-outline')
-        && event.target instanceof HTMLElement) event.target.classList.remove('leaf-arrival');
+        && isDomInstance(event.target, 'HTMLElement')) event.target.classList.remove('leaf-arrival');
     };
     container.addEventListener('animationend', onAnimationEnd);
     return () => {

@@ -29,6 +29,7 @@ import {
 import { annotationFromWire, type Annotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
+import { isDomInstance } from '../../../utils/realm';
 
 const ANNOTATION_SAVE_DEBOUNCE_MS = 500;
 const ANNOTATION_HYDRATE_RETRY_MS = 2000;
@@ -613,7 +614,7 @@ export function useAnnotations({
 
     const onRootMouseUp = (event: MouseEvent) => {
       const target = event.target;
-      if (target instanceof Element && target.closest('.md-selection-toolbar, .md-annotation-popover, .md-quick-label-picker, .md-annotations-sidebar')) {
+      if (isDomInstance(target, 'Element') && target.closest('.md-selection-toolbar, .md-annotation-popover, .md-quick-label-picker, .md-annotations-sidebar')) {
         return;
       }
       if (popoverOpenRef.current) {
@@ -638,7 +639,7 @@ export function useAnnotations({
       // Mark-fallback mode: the paint split the text nodes and collapsed the
       // Ranges cached below, but the wrapper spans carry the annotation id.
       const markEl =
-        event.target instanceof Element ? event.target.closest('[data-md-mark]') : null;
+        isDomInstance(event.target, 'Element') ? event.target.closest('[data-md-mark]') : null;
       const markId = markEl?.getAttribute('data-md-mark');
       if (markId && annotationsRef.current.some((a) => a.id === markId)) {
         selectedIdRef.current = markId;
@@ -841,7 +842,7 @@ export function useAnnotations({
         return;
       }
       const container = range.startContainer;
-      const el = container instanceof Element ? container : container.parentElement;
+      const el = isDomInstance(container, 'Element') ? container : container.parentElement;
       el?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
     },
     [selectAnnotation],

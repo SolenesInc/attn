@@ -7,6 +7,7 @@ import { parseNativeTarget, settledNativePoint } from '../hooks/uiAutomationSett
 import { armNativeInputWitness, disarmNativeInputWitness, parseInputExpectation, waitForNativeInputWitness } from '../hooks/nativeInputWitness';
 import { settleUi } from '../hooks/uiAutomationSettle';
 import type { QuickCaptureAttachment, AttachmentMotion } from '../components/QuickCaptureAttachmentPreview';
+import { isDomInstance } from '../utils/realm';
 type QuickCaptureExpectation = { frame?: boolean; visible?: boolean; settled?: boolean; imageCount?: number; attachmentCount?: number; view?: 'compose' | 'recent'; recentText?: string; selectedText?: string; composing?: boolean; mailbox?: string; fontScale?: number };
 
 interface QuickCaptureAutomationOptions {
@@ -21,8 +22,8 @@ interface QuickCaptureAutomationOptions {
 export function installQuickCaptureAutomationBridge(options: QuickCaptureAutomationOptions): () => void {
     const inputTrace: object[] = [];
     const traceInput = (event: Event) => inputTrace.push({ at: Date.now(), type: event.type,
-      key: event instanceof KeyboardEvent ? event.key : undefined,
-      data: event instanceof InputEvent ? event.data : undefined, focused: document.activeElement === options.editor.current,
+      key: isDomInstance(event, 'KeyboardEvent') ? event.key : undefined,
+      data: isDomInstance(event, 'InputEvent') ? event.data : undefined, focused: document.activeElement === options.editor.current,
       readOnly: options.editor.current?.readOnly, value: options.editor.current?.value });
     ['keydown', 'beforeinput', 'input'].forEach(type => document.addEventListener(type, traceInput, true));
     const automation = listen<{ request_id: string; action: string; payload: { binding?: string; staged?: boolean } & QuickCaptureExpectation }>('attn://capture/automation', async ({ payload }) => {

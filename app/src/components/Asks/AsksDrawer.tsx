@@ -13,6 +13,7 @@ import { SessionLead } from '../SessionLead';
 import { AskQuestionCard } from './AskQuestionCard';
 import { AskRowSummary } from './AskRowSummary';
 import './Asks.css';
+import { isDomInstance } from '../../utils/realm';
 
 export interface AskDrawerSession extends AskHolderSession {
   label: string;
@@ -37,8 +38,8 @@ function takeKeyboardFromTerminal(input: HTMLElement) {
 }
 
 function isTyping(target: EventTarget): boolean {
-  if (target instanceof HTMLInputElement) return !['radio', 'checkbox', 'button'].includes(target.type);
-  return target instanceof HTMLElement && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
+  if (isDomInstance(target, 'HTMLInputElement')) return !['radio', 'checkbox', 'button'].includes(target.type);
+  return isDomInstance(target, 'HTMLElement') && (target.isContentEditable || ['TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
 function drawerKey(event: KeyboardEvent): string | null {
@@ -76,7 +77,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     if (!onTop) return;
     const frame = window.requestAnimationFrame(() => {
       const focused = document.activeElement;
-      if (focused === document.body || (focused instanceof HTMLElement && focused.closest('[inert]'))) drawerRef.current?.focus();
+      if (focused === document.body || (isDomInstance(focused, 'HTMLElement') && focused.closest('[inert]'))) drawerRef.current?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [onTop]);

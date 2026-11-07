@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { recordUiDiag } from '../utils/uiDiagnosticsLog';
+import { isDomInstance } from '../utils/realm';
 
 const MAX_BROWSER_CONTROL_RESULT_BYTES = 24 * 1024 * 1024;
 
@@ -112,7 +113,7 @@ export function claimBrowserHostFocus(label: string): void {
 }
 
 export function isBrowserHostOwnedTarget(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest('[data-browser-host-owner]') !== null;
+  return isDomInstance(target, 'Element') && target.closest('[data-browser-host-owner]') !== null;
 }
 
 function delay(ms: number): Promise<void> {

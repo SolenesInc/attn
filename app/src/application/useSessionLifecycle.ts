@@ -11,6 +11,7 @@ import { useAppSessions } from './useAppSessions';
 import { collectLayoutLeaves, parseLayoutJSON } from '../types/desktop';
 import { desktopLabel } from '../utils/desktops';
 import type { Desktop } from '../types/generated';
+import { isDomInstance } from '../utils/realm';
 
 function tilesShowing(sessionId: string) {
   return useProfilesStore.getState().desktops.flatMap((desktop) => desktop.panes.filter((pane) => pane.session_id === sessionId));
@@ -180,7 +181,7 @@ export function useSessionLifecycle({
 
   const handleCloseCurrentSessionShortcut = useCallback(() => {
     // The packaged app's native "Close Pane" item claims Cmd+W and dispatches session.close, so a focused docked tile must be closed here, not the session.
-    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focused = isDomInstance(document.activeElement, 'HTMLElement') ? document.activeElement : null;
     const tileId =
       focused?.closest('[data-pane-kind="tile"]')?.getAttribute('data-pane-id') ??
       focused?.closest('.session-terminal-desktop')?.getAttribute('data-active-leaf-id') ??

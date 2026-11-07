@@ -39,6 +39,7 @@ import {
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
 import { BoolSetting, EXPERIMENTAL_FEATURES, isOn } from '../utils/settings';
+import { isDomInstance } from '../utils/realm';
 
 function openEnclosingDetails(element: Element) {
   for (let details = element.closest('details'); details; details = details.parentElement?.closest('details') ?? null) {
@@ -105,7 +106,7 @@ export function useSettingsModalState({
     return false;
   }, [autosave]);
   const closeSettings = useCallback(async () => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (isDomInstance(document.activeElement, 'HTMLElement')) document.activeElement.blur();
     if (!autosave.needsFlush()) {
       onClose();
       return;
@@ -114,7 +115,7 @@ export function useSettingsModalState({
   }, [autosave, flushOrShowRefusal, onClose]);
   const selectSection = useCallback(
     async (section: SettingsSectionID) => {
-      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      if (isDomInstance(document.activeElement, 'HTMLElement')) document.activeElement.blur();
       if (!autosave.needsFlush()) {
         setSelectedSection(section);
         return;

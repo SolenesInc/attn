@@ -9,6 +9,7 @@ import type { PendingSelection } from './selection';
 import type { QuickLabel } from './quickLabels';
 import type { UseAnnotationsApi } from './useAnnotations';
 import type { MarkdownDocumentSource } from '../documentSource';
+import { isDomInstance } from '../../../utils/realm';
 
 const HOVER_HIDE_GRACE_MS = 200;
 
@@ -83,7 +84,7 @@ export const AnnotationLayer = forwardRef<AnnotationLayerHandle, AnnotationLayer
     }
     const onPointerOver = (event: Event) => {
       const target = event.target;
-      if (!(target instanceof Element)) {
+      if (!isDomInstance(target, 'Element')) {
         return;
       }
       const wrapper = target.closest('.md-codeblock');
@@ -103,10 +104,10 @@ export const AnnotationLayer = forwardRef<AnnotationLayerHandle, AnnotationLayer
     const onPointerOut = (event: Event) => {
       const target = event.target;
       const related = (event as PointerEvent).relatedTarget;
-      if (!(target instanceof Element) || !target.closest('.md-codeblock')) {
+      if (!isDomInstance(target, 'Element') || !target.closest('.md-codeblock')) {
         return;
       }
-      if (related instanceof Element && related.closest('.md-codeblock')) {
+      if (isDomInstance(related, 'Element') && related.closest('.md-codeblock')) {
         return;
       }
       scheduleHoverHide();

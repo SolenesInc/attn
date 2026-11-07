@@ -22,6 +22,7 @@ import { filterCommands, type PaletteCommand } from './paletteCommands';
 import { AgentRowView } from './AgentRows';
 import { COMMAND_PREFIX, type PaletteState } from './paletteState';
 import './UnifiedPalette.css';
+import { isDomInstance } from '../../utils/realm';
 
 type Item<S extends PaletteSession> =
   | { mode: 'agents'; row: AgentPaletteRow<S> }
@@ -169,7 +170,7 @@ function PaletteFooter({ mode, actions }: { mode: 'agents' | 'commands' | 'snooz
 
 function focusedElement(): HTMLElement | null {
   const active = document.activeElement;
-  return active instanceof HTMLElement && active !== document.body ? active : null;
+  return isDomInstance(active, 'HTMLElement') && active !== document.body ? active : null;
 }
 
 export function UnifiedPalette<S extends PaletteSession>({

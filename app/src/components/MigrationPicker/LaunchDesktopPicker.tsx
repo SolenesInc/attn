@@ -7,6 +7,7 @@ import { DesktopNameDialog, launchChoiceLabel, newDesktopChoice, type DesktopNam
 import { useMigrationActions } from './useMigrationActions';
 import './LaunchDesktopPicker.css';
 import { Intro, StepNav } from './MigrationIntro';
+import { isDomInstance } from '../../utils/realm';
 
 const key = (item: LaunchDesktopItem) => `${item.kind}:${item.item_id}`;
 const draftKey = (draft: LaunchDesktopSetting) => `${draft.desktop_id ?? ''}|${draft.desktop_name}`;
@@ -267,7 +268,7 @@ export function LaunchDesktopPicker() {
     <main
       className="mp-shell mp-launch-shell"
       onKeyDown={(event) => {
-        if (busy || naming || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement)
+        if (busy || naming || isDomInstance(event.target, 'HTMLInputElement') || isDomInstance(event.target, 'HTMLSelectElement'))
           return;
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
           event.preventDefault();

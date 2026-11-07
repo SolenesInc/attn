@@ -12,6 +12,7 @@ import {
 import { settleBeforeBridgeRequest, settleUi } from './uiAutomationSettle';
 import { parseNativeTarget, settledNativePoint, waitForFiniteAnimations } from './uiAutomationSettledTarget';
 import { recordUiDiagToFileOnly, supportUiDiagnosticsSnapshot } from '../utils/uiDiagnosticsLog';
+import { isDomInstance } from '../utils/realm';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -52,7 +53,7 @@ let observingNativePointer = false;
 
 function observeNativePointer(event: MouseEvent) {
   if (!event.isTrusted) return;
-  const target = event.target instanceof Element ? event.target : null;
+  const target = isDomInstance(event.target, 'Element') ? event.target : null;
   nativePointerEvents.push({
     type: event.type, trusted: event.isTrusted, buttons: event.buttons, button: event.button,
     x: event.clientX, y: event.clientY, alt: event.altKey, meta: event.metaKey,
@@ -68,7 +69,7 @@ function observeNativePointer(event: MouseEvent) {
 }
 
 export function rectSnapshot(element: Element | null) {
-  if (!(element instanceof HTMLElement)) {
+  if (!isDomInstance(element, 'HTMLElement')) {
     return null;
   }
   const rect = element.getBoundingClientRect();
@@ -87,13 +88,13 @@ export async function captureDomScreenshotData(selector?: string) {
   let target: HTMLElement;
   if (selector) {
     const selected = document.querySelector(selector);
-    if (!(selected instanceof HTMLElement)) {
+    if (!isDomInstance(selected, 'HTMLElement')) {
       throw new Error(`Screenshot selector not found in DOM: ${selector}`);
     }
     target = selected;
   } else {
     const root = document.getElementById('root') || document.body;
-    if (!(root instanceof HTMLElement)) {
+    if (!isDomInstance(root, 'HTMLElement')) {
       throw new Error('Screenshot target not found');
     }
     target = root;
@@ -134,7 +135,7 @@ export async function captureDomScreenshotData(selector?: string) {
 }
 
 export function isScreenshotNode(node: HTMLElement): boolean {
-  return !(node instanceof HTMLImageElement && !node.getAttribute('src'));
+  return !(isDomInstance(node, 'HTMLImageElement') && !node.getAttribute('src'));
 }
 
 export async function describeScreenshotFailure(
@@ -172,7 +173,7 @@ export async function describeScreenshotFailure(
 
 function describeEmbeddedImages(target: HTMLElement): string {
   const images = Array.from(target.querySelectorAll('img, image')).map((element) => {
-    if (element instanceof HTMLImageElement) {
+    if (isDomInstance(element, 'HTMLImageElement')) {
       const state = element.complete ? `${element.naturalWidth}x${element.naturalHeight}` : 'loading';
       const source = element.currentSrc || element.src || `(no src) ${element.outerHTML.slice(0, 160)}`;
       return `img ${source} ${state} in ${ancestorPath(element)}`;
@@ -202,7 +203,7 @@ function imageLoads(src: string): Promise<boolean> {
 
 function failureText(error: unknown): string {
   if (error instanceof Error) return error.message;
-  if (error instanceof Event) return `${error.type} event`;
+  if (isDomInstance(error, 'Event')) return `${error.type} event`;
   return String(error);
 }
 
@@ -283,7 +284,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_click requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_click selector not found in DOM: ${selector}`);
       }
       const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
@@ -295,7 +296,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_focus requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_focus selector not found in DOM: ${selector}`);
       }
       element.focus();
@@ -307,8 +308,8 @@ export async function runDomAutomationAction(
     }
     case 'dom_active_element': {
       const active = document.activeElement;
-      if (!(active instanceof HTMLElement)) return { tag: null };
-      const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+      if (!isDomInstance(active, 'HTMLElement')) return { tag: null };
+      const field = isDomInstance(active, 'HTMLInputElement') || isDomInstance(active, 'HTMLTextAreaElement') ? active : null;
       return {
         tag: active.tagName,
         ...(typeof payload.selector === 'string' ? { matches: active.matches(payload.selector) } : {}),
@@ -325,7 +326,7 @@ export async function runDomAutomationAction(
         documentHasFocus: document.hasFocus(),
         visibilityState: document.visibilityState,
         viewport: { innerWidth: window.innerWidth, innerHeight: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
-        activeElement: active instanceof HTMLElement ? {
+        activeElement: isDomInstance(active, 'HTMLElement') ? {
           tag: active.tagName,
           className: active.className,
           testId: active.getAttribute('data-testid'),
@@ -371,7 +372,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_wait_finite_animations requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_wait_finite_animations selector not found in DOM: ${selector}`);
       }
       return { finished: await waitForFiniteAnimations(selector, element.getAnimations({ subtree: true })) };
@@ -384,7 +385,7 @@ export async function runDomAutomationAction(
       const element = typeof payload.textIncludes === 'string'
         ? Array.from(document.querySelectorAll(selector)).find(element => element.textContent?.includes(payload.textIncludes as string))
         : document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_bounds selector not found in DOM: ${selector}`);
       }
       const panel = element.closest<HTMLElement>('.side-panel');
@@ -408,7 +409,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_text requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_text selector not found in DOM: ${selector}`);
       }
       return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
@@ -417,7 +418,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_value requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+      if (!(isDomInstance(element, 'HTMLInputElement') || isDomInstance(element, 'HTMLTextAreaElement') || isDomInstance(element, 'HTMLSelectElement'))) {
         throw new Error(`dom_value target is not a form control: ${selector}`);
       }
       return { value: element.value };
@@ -426,7 +427,7 @@ export async function runDomAutomationAction(
       const selector = typeof payload.selector === 'string' ? payload.selector : null;
       if (!selector) throw new Error('dom_scroll_into_view requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_scroll_into_view selector not found in DOM: ${selector}`);
       }
       element.scrollIntoView({ block: 'center', behavior: 'auto' });
@@ -439,7 +440,7 @@ export async function runDomAutomationAction(
       if (!selector) throw new Error('dom_key requires selector');
       if (!key) throw new Error('dom_key requires key');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_key selector not found in DOM: ${selector}`);
       }
       const modifiers = (payload.modifiers ?? {}) as ClickModifiers;
@@ -465,7 +466,7 @@ export async function runDomAutomationAction(
       if (!selector) throw new Error('dom_hover requires selector');
       const leave = payload.leave === true;
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`dom_hover selector not found in DOM: ${selector}`);
       }
       const rect = element.getBoundingClientRect();
@@ -496,7 +497,7 @@ export async function runDomAutomationAction(
       const dy = typeof payload.dy === 'number' ? payload.dy : 0;
       if (!selector) throw new Error('drag_dom requires selector');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLElement)) {
+      if (!isDomInstance(element, 'HTMLElement')) {
         throw new Error(`drag_dom selector not found in DOM: ${selector}`);
       }
       const rect = element.getBoundingClientRect();
@@ -530,9 +531,9 @@ export async function runDomAutomationAction(
       if (!element) {
         throw new Error(`dom_type selector not found in DOM: ${selector}`);
       }
-      if (element instanceof HTMLInputElement) {
+      if (isDomInstance(element, 'HTMLInputElement')) {
         setInputValue(element, text);
-      } else if (element instanceof HTMLTextAreaElement) {
+      } else if (isDomInstance(element, 'HTMLTextAreaElement')) {
         setControlValue(element, text);
       } else {
         throw new Error(`dom_type target is not an input or textarea: ${selector}`);
@@ -547,7 +548,7 @@ export async function runDomAutomationAction(
       if (!selector) throw new Error('dom_select requires selector');
       if (value === null) throw new Error('dom_select requires value');
       const element = document.querySelector(selector);
-      if (!(element instanceof HTMLSelectElement)) {
+      if (!isDomInstance(element, 'HTMLSelectElement')) {
         throw new Error(`dom_select target is not a select: ${selector}`);
       }
       const offered = Array.from(element.options).map((option) => option.value);

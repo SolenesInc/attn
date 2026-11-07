@@ -6,6 +6,7 @@ import {
   recordTerminalInputTrace,
   recordTransportInputTrace,
 } from './supportInputTrace';
+import { isDomInstance } from './realm';
 
 const RECENT_LIMIT = 32;
 const SAMPLE_INTERVAL_MS = 30_000;
@@ -56,7 +57,7 @@ function focusKind(element: Element | null): string {
 function installDocumentListener(doc: Document): void {
   if (documentListeners.has(doc)) return;
   const keydown = (event: KeyboardEvent) => {
-    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
+    observeDocumentInput(event, focusKind(isDomInstance(event.target, 'Element') ? event.target : null));
     const path = new Set(event.composedPath());
     for (const trace of traces) {
       if (trace.element.ownerDocument !== doc) continue;
@@ -64,16 +65,16 @@ function installDocumentListener(doc: Document): void {
       if (!inTerminal && !trace.state().active) continue;
       trace.note({
         event: 'document_keydown', inTerminal,
-        target: focusKind(event.target instanceof Element ? event.target : null),
+        target: focusKind(isDomInstance(event.target, 'Element') ? event.target : null),
         trusted: event.isTrusted,
       }, inTerminal ? undefined : 'key_elsewhere');
     }
   };
   const paste = (event: ClipboardEvent) => {
-    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
+    observeDocumentInput(event, focusKind(isDomInstance(event.target, 'Element') ? event.target : null));
   };
   const compositionend = (event: CompositionEvent) => {
-    observeDocumentInput(event, focusKind(event.target instanceof Element ? event.target : null));
+    observeDocumentInput(event, focusKind(isDomInstance(event.target, 'Element') ? event.target : null));
   };
   doc.addEventListener('keydown', keydown, true);
   doc.addEventListener('paste', paste, true);

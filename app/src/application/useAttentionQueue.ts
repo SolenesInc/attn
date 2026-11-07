@@ -23,6 +23,7 @@ import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
 import type { DesktopWithSessions } from '../utils/desktopViewModels';
+import { isDomInstance } from '../utils/realm';
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
 interface Options {
@@ -120,7 +121,7 @@ export function useAttentionQueue({
   );
 
   const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement, opener?: HTMLElement | null) => {
-    const origin = opener ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    const origin = opener ?? (isDomInstance(document.activeElement, 'HTMLElement') ? document.activeElement : null);
     const rect = row?.getBoundingClientRect();
     const pane = document.querySelector<HTMLElement>(`.terminal-wrapper.active [data-pane-session-id="${session.id}"]`);
     setSnoozeMenu({

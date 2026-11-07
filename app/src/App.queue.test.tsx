@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { soloDesktop, daemonSession, crewMember, type DaemonSession, type DaemonDesktop } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { isDomInstance } from './utils/realm';
 
 const HOUR = 60 * 60 * 1000;
 const QUEUE = { queue_mode_enabled: 'true' };
@@ -185,7 +186,7 @@ describe('App queue', () => {
       }
       observe(target: Node, options?: MutationObserverInit) {
         this.native.observe(target, options);
-        if (target instanceof HTMLElement && target.classList.contains('queue-sidebar-body')) {
+        if (isDomInstance(target, 'HTMLElement') && target.classList.contains('queue-sidebar-body')) {
           this.body = true;
           mutations.push(this);
         }

@@ -8,11 +8,12 @@ import {
   QUICK_LABEL_PICKER_LABELS,
   type QuickLabel,
 } from './quickLabels';
+import { isDomInstance } from '../../../utils/realm';
 
 export type ToolbarPositionMode = 'center-above' | 'top-right';
 
 const isEditableElement = (node: EventTarget | Element | null): boolean => {
-  if (!(node instanceof Element)) {
+  if (!isDomInstance(node, 'Element')) {
     return false;
   }
   if (node.matches('input, textarea, select, [role="textbox"]')) {

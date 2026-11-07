@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { isDomInstance } from '../utils/realm';
 
 const retainedEvents = new WeakSet<Event>();
 export const isRetainedTerminalEvent = (event: Event): boolean => retainedEvents.has(event);
@@ -53,13 +54,13 @@ export const usePendingTerminalInput = create<PendingTerminalInput>((set, get) =
 }));
 
 export function retainTerminalEvent(event: Event): Event {
-  if (event instanceof KeyboardEvent) {
+  if (isDomInstance(event, 'KeyboardEvent')) {
     const copy = new KeyboardEvent(event.type, event);
     Object.defineProperty(copy, 'getModifierState', { value: event.getModifierState.bind(event) });
     retainedEvents.add(copy);
     return copy;
   }
-  if (event instanceof ClipboardEvent) {
+  if (isDomInstance(event, 'ClipboardEvent')) {
     const clipboardData = new DataTransfer();
     clipboardData.setData('text/plain', event.clipboardData?.getData('text/plain') ?? '');
     for (const file of Array.from(event.clipboardData?.files ?? [])) clipboardData.items.add(file);

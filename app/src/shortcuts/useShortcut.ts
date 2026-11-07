@@ -6,6 +6,7 @@ import { enterLeader, resolvePendingThen } from './chordState';
 import { matchChordLeader } from './chordDispatch';
 import { isRetainedTerminalEvent } from '../store/pendingTerminalInput';
 import { recordAppAction } from '../analytics/appActions';
+import { isDomInstance } from '../utils/realm';
 
 type Handler = () => void;
 const NATIVE_SHORTCUT_EVENT = 'attn:native-shortcut';
@@ -114,12 +115,12 @@ function installGlobalListener() {
 }
 
 function isTerminalTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+  if (!isDomInstance(target, 'HTMLElement')) return false;
   return target.closest('.terminal-container, .session-terminal-desktop') !== null;
 }
 
 function isNonTerminalEditableTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement) || target.closest('.terminal-container')) {
+  if (!isDomInstance(target, 'HTMLElement') || target.closest('.terminal-container')) {
     return false;
   }
   return target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])') !== null;

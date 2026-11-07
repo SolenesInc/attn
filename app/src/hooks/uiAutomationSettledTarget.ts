@@ -1,6 +1,7 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { waitForAutomationDom } from './uiAutomationDom';
 import { nextAnimationFrame } from './uiAutomationSettle';
+import { isDomInstance } from '../utils/realm';
 
 // The app's longest finite animation is 1400ms (SeedStateIcon.css); only a stuck target reaches this.
 export const SETTLE_LIMIT_MS = 5_000;
@@ -38,7 +39,7 @@ export function parseNativeTarget(payload: Record<string, unknown>): NativeTarge
 
 function findTarget(selector: string): HTMLElement {
   const element = document.querySelector(selector);
-  if (!(element instanceof HTMLElement)) {
+  if (!isDomInstance(element, 'HTMLElement')) {
     throw new Error(`dom_native_point selector not found in DOM: ${selector}`);
   }
   return element;
@@ -66,10 +67,10 @@ function endedButNotRendered(animation: Animation): boolean {
 }
 
 function describeAnimation(animation: Animation) {
-  const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null;
+  const target = isDomInstance(animation.effect, 'KeyframeEffect') ? animation.effect.target : null;
   return {
-    name: animation instanceof CSSTransition ? `transition ${animation.transitionProperty}`
-      : animation instanceof CSSAnimation ? `animation ${animation.animationName}`
+    name: isDomInstance(animation, 'CSSTransition') ? `transition ${animation.transitionProperty}`
+      : isDomInstance(animation, 'CSSAnimation') ? `animation ${animation.animationName}`
         : animation.id || 'script animation',
     target: target ? describeElement(target) : null,
     currentTime: animation.currentTime,
