@@ -6,10 +6,14 @@ import (
 )
 
 func (d *Daemon) ensureAvailableAgentSkills() {
-	if synced, err := agentdriver.RemoveRetiredAttnSkill(); err != nil {
+	if synced, kept, err := agentdriver.RemoveRetiredAttnSkill(); err != nil {
 		d.logf("failed to remove the retired attn skill: %v", err)
 	} else if !synced {
 		d.logf("skipping the retired attn skill's removal for instance %q", config.InstanceLabel())
+	} else {
+		for _, skillDir := range kept {
+			d.logf("kept the skill at %s: it holds files attn did not install", skillDir)
+		}
 	}
 	d.ensureEnabledWorkflowSkills()
 }

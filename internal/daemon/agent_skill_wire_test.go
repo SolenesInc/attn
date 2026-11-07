@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -59,26 +60,50 @@ func startWithCodexUnavailable(t *testing.T, plant func(toolHome string), check 
 	})
 }
 
-func TestStartingAttnRemovesOnlyTheSkillFilesAnEarlierVersionInstalled(t *testing.T) {
-	installed := skillAnEarlierVersionInstalled(t)
-	userNote := "Notes I keep next to the attn skill.\n"
-	startWithCodexUnavailable(t, func(toolHome string) {
-		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Claude), installed)
-		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Codex), installed)
-		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Codex), map[string]string{"references/my-notes.md": userNote})
-	}, func(t *testing.T, toolHome string) {
-		if _, err := os.Stat(installedAttnSkill(toolHome, fakeagent.Claude)); !os.IsNotExist(err) {
-			t.Errorf("claude still has the attn skill an earlier version installed (%v)", err)
+func checkSkillUnchanged(t *testing.T, skillDir string, files map[string]string) {
+	t.Helper()
+	for name, contents := range files {
+		if got, err := os.ReadFile(filepath.Join(skillDir, filepath.FromSlash(name))); err != nil || string(got) != contents {
+			t.Errorf("attn removed or changed %s in the user's skill at %s: %q, %v", name, skillDir, got, err)
 		}
-		codexSkill := installedAttnSkill(toolHome, fakeagent.Codex)
-		for name := range installed {
-			if _, err := os.Stat(filepath.Join(codexSkill, filepath.FromSlash(name))); !os.IsNotExist(err) {
-				t.Errorf("codex still has %s from the attn skill an earlier version installed (%v)", name, err)
+	}
+}
+
+func TestStartingAttnRemovesTheSkillAnEarlierVersionInstalled(t *testing.T) {
+	installed := skillAnEarlierVersionInstalled(t)
+	startWithCodexUnavailable(t, func(toolHome string) {
+		for h := range attnSkillRoots {
+			plantFiles(t, installedAttnSkill(toolHome, h), installed)
+		}
+	}, func(t *testing.T, toolHome string) {
+		for h := range attnSkillRoots {
+			if _, err := os.Stat(installedAttnSkill(toolHome, h)); !os.IsNotExist(err) {
+				t.Errorf("%s still has the attn skill an earlier version installed (%v)", h, err)
 			}
 		}
-		if got, err := os.ReadFile(filepath.Join(codexSkill, "references", "my-notes.md")); err != nil || string(got) != userNote {
-			t.Errorf("attn removed or changed the user's note beside the old skill: %q, %v", got, err)
-		}
+	})
+}
+
+func TestStartingAttnKeepsAUserChangedCopyOfTheOldSkillWhole(t *testing.T) {
+	installed := skillAnEarlierVersionInstalled(t)
+	customized := map[string]string{
+		"SKILL.md":                 strings.Replace(installed["SKILL.md"], "name: attn\n", "name: \"attn\"\n", 1),
+		"references/delegation.md": installed["references/delegation.md"],
+	}
+	withNote := map[string]string{
+		"SKILL.md":                 installed["SKILL.md"],
+		"references/delegation.md": installed["references/delegation.md"],
+		"references/my-notes.md":   "Notes I keep next to the attn skill.\n",
+	}
+	if customized["SKILL.md"] == installed["SKILL.md"] {
+		t.Fatal("the old SKILL.md no longer says name: attn; pick another edit")
+	}
+	startWithCodexUnavailable(t, func(toolHome string) {
+		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Claude), customized)
+		plantFiles(t, installedAttnSkill(toolHome, fakeagent.Codex), withNote)
+	}, func(t *testing.T, toolHome string) {
+		checkSkillUnchanged(t, installedAttnSkill(toolHome, fakeagent.Claude), customized)
+		checkSkillUnchanged(t, installedAttnSkill(toolHome, fakeagent.Codex), withNote)
 	})
 }
 
@@ -93,11 +118,7 @@ func TestStartingAttnKeepsASkillTheUserNamedAttn(t *testing.T) {
 		}
 	}, func(t *testing.T, toolHome string) {
 		for h := range attnSkillRoots {
-			for name, contents := range userSkill {
-				if got, err := os.ReadFile(filepath.Join(installedAttnSkill(toolHome, h), filepath.FromSlash(name))); err != nil || string(got) != contents {
-					t.Errorf("attn removed or changed the user's %s skill file %s: %q, %v", h, name, got, err)
-				}
-			}
+			checkSkillUnchanged(t, installedAttnSkill(toolHome, h), userSkill)
 		}
 	})
 }
