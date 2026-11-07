@@ -2,11 +2,11 @@ package main_test
 
 import (
 	"regexp"
-
-	"github.com/victorarias/attn/internal/agent"
 	"strings"
 	"testing"
 
+	attn "github.com/victorarias/attn/cmd/attn"
+	"github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -46,19 +46,24 @@ func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testin
 	s := testworld.NewStack(t)
 	help := s.Attn("--help").Stdout
 
-	commands := map[string]bool{}
+	named := map[string]bool{}
 	for _, match := range regexp.MustCompile("`attn ([a-z][a-z-]*)").FindAllStringSubmatch(help, -1) {
-		commands[match[1]] = true
+		named[match[1]] = true
 	}
 	for _, match := range regexp.MustCompile(`(?m)^  ([a-z][a-z-]*)`).FindAllStringSubmatch(help[strings.Index(help, "Other commands:"):], -1) {
-		commands[match[1]] = true
+		named[match[1]] = true
 	}
+	commands := attn.ListedCommands()
 	if len(commands) < 30 {
-		t.Fatalf("attn --help names only %d commands:\n%s", len(commands), help)
+		t.Fatalf("attn dispatches only %d listed commands: %v", len(commands), commands)
 	}
-	delete(commands, "instance")
-	delete(commands, "version")
-	for command := range commands {
+	for _, command := range commands {
+		if !named[command] {
+			t.Errorf("attn dispatches %q, but attn --help does not name it:\n%s", command, help)
+		}
+		if command == "instance" || command == "version" {
+			continue
+		}
 		out := s.Attn(command, "--help")
 		text := strings.ToLower(out.Stdout + out.Stderr)
 		if out.Code != 0 || !strings.Contains(text, "usage") || !regexp.MustCompile(`attn `+regexp.QuoteMeta(command)+`\b`).MatchString(text) {

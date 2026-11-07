@@ -31,7 +31,6 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
-	"github.com/victorarias/attn/internal/store"
 	"golang.org/x/sys/unix"
 )
 
@@ -72,226 +71,6 @@ func main() {
 	exit(0)
 }
 
-func run() {
-	if len(os.Args) == 3 && os.Args[1] == "--check-schema" {
-		leaveInvocationUnrecorded()
-		if err := store.CheckSchema(os.Args[2]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit(1)
-		}
-		return
-	}
-	if isProtocolVersionCommand(os.Args) {
-		leaveInvocationUnrecorded()
-		runProtocolVersion()
-		return
-	}
-
-	if isBuildInfoJSONCommand(os.Args) {
-		leaveInvocationUnrecorded()
-		runBuildInfoJSON()
-		return
-	}
-
-	if isVersionCommand(os.Args) {
-		setCommandPath("version")
-		runVersion(os.Args[1:])
-		return
-	}
-
-	if len(os.Args) >= 2 && (os.Args[1] == "profile" || os.Args[1] == "profile-env") {
-		fmt.Fprintln(os.Stderr, renamedProfileCommandMessage(os.Args[1:]))
-		exit(2)
-	}
-
-	if len(os.Args) >= 2 && os.Args[1] == "instance-env" {
-		setCommandPath("instance-env")
-		runInstanceEnv()
-		return
-	}
-
-	daemonStart := len(os.Args) == 2 && os.Args[1] == "daemon"
-	if !daemonStart {
-		if err := config.ValidateInstance(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			exit(1)
-		}
-		if !isInstanceGroupCommand(os.Args) {
-			if err := config.ValidateInstanceRouting(); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				exit(1)
-			}
-		}
-	}
-
-	if len(os.Args) < 2 {
-		maybePrintInstanceBanner()
-		runWrapper()
-		return
-	}
-
-	setCommandPath(os.Args[1])
-	if printed := printCommandHelp(os.Args[1:], os.Stdout); printed {
-		return
-	}
-	switch os.Args[1] {
-	case "daemon":
-		if daemonStart {
-			leaveInvocationUnrecorded()
-		}
-		maybePrintInstanceBanner()
-		runDaemonCommand()
-	case "pty-worker":
-		leaveInvocationUnrecorded()
-		runPTYWorker()
-	case "automation":
-		maybePrintInstanceBanner()
-		runAutomationCommand()
-	case "preflight":
-		maybePrintInstanceBanner()
-		runPreflight()
-	case "pr":
-		runPRCommand()
-	case "plugin":
-		maybePrintInstanceBanner()
-		runPluginCommand()
-	case "list":
-		maybePrintInstanceBanner()
-		runList()
-	case "presence":
-		runPresence()
-	case "skill":
-		runSkill()
-	case "prompts":
-		runPrompts()
-	case "activity":
-		maybePrintInstanceBanner()
-		runActivity()
-	case "delegate":
-		maybePrintInstanceBanner()
-		runDelegate()
-	case "ticket":
-		maybePrintInstanceBanner()
-		runTicket()
-	case "session":
-		maybePrintInstanceBanner()
-		runSession()
-	case "terminal":
-		maybePrintInstanceBanner()
-		runTerminal()
-	case "codex":
-		maybePrintInstanceBanner()
-		runCodex()
-	case "agent":
-		maybePrintInstanceBanner()
-		runAgent()
-	case "send":
-		maybePrintInstanceBanner()
-		runSend()
-	case "settings":
-		runSettings()
-	case "state":
-		maybePrintInstanceBanner()
-		runState()
-	case "debug":
-		maybePrintInstanceBanner()
-		runDebug()
-	case "db":
-		maybePrintInstanceBanner()
-		runDB()
-	case "bus":
-		maybePrintInstanceBanner()
-		runBus()
-	case "enrollment":
-		maybePrintInstanceBanner()
-		runEnrollment()
-	case "seed":
-		maybePrintInstanceBanner()
-		runSeed()
-	case "crew":
-		maybePrintInstanceBanner()
-		runCrew()
-	case "handoff":
-		maybePrintInstanceBanner()
-		runHandoff(os.Args[2:])
-	case "onboarding":
-		maybePrintInstanceBanner()
-		runOnboarding()
-	case "doc":
-		maybePrintInstanceBanner()
-		runDoc()
-	case "journal":
-		maybePrintInstanceBanner()
-		runJournal()
-	case "vision-check":
-		runVisionCheck()
-	case "ask":
-		maybePrintInstanceBanner()
-		runAsk()
-	case "vent":
-		maybePrintInstanceBanner()
-		runVent()
-	case "turn":
-		maybePrintInstanceBanner()
-		runTurn()
-	case "conversation":
-		maybePrintInstanceBanner()
-		runConversation()
-	case "worktree":
-		maybePrintInstanceBanner()
-		runWorktree()
-	case "instance":
-		runInstance()
-	case "open":
-		maybePrintInstanceBanner()
-		runOpen()
-	case "callout":
-		runCallout()
-	case "browser":
-		maybePrintInstanceBanner()
-		runBrowser()
-	case "help", "-h", "--help":
-		runHelp()
-	case "guide":
-		runGuide()
-	case "_outpost-install":
-		runOutpostInstall()
-	case "_bridge":
-		leaveInvocationUnrecorded()
-		runBridge()
-	case "_hook-stop":
-		runHookStop()
-	case "_hook-session-start":
-		runHookSessionStart()
-	case "_hook-notification":
-		runHookNotification()
-	case "_hook-stop-failure":
-		runHookStopFailure()
-	case "_hook-compact":
-		runHookCompact()
-	case "_hook-state":
-		runHookState()
-	case "_hook-todo":
-		// Claude sessions launched before todo tracking was removed still call
-		// this hook until they restart; exiting 0 keeps it from showing an error.
-	case "_hook-tool-use":
-		runHookToolUse()
-	case "_probe-tui":
-		runProbeTUI()
-	default:
-		if len(os.Args[1]) > 0 && os.Args[1][0] == '-' {
-			setCommandPath("attn")
-			maybePrintInstanceBanner()
-			runWrapper()
-		} else {
-			recordUsageError("attn", usageErrorUnknownCommand)
-			fmt.Fprintf(os.Stderr, "attn %s: unknown command %q\n\n", buildinfo.Version, os.Args[1])
-			writeHelp(os.Stderr)
-			exit(1)
-		}
-	}
-}
-
 func maybePrintInstanceBanner() {
 	config.PrintInstanceBanner(os.Stderr)
 }
@@ -306,36 +85,6 @@ func renamedProfileCommandMessage(args []string) string {
 		replacement = append(replacement, arg)
 	}
 	return fmt.Sprintf("attn %s was renamed to attn %s. Run: attn %s", args[0], command, strings.Join(replacement, " "))
-}
-
-func isInstanceGroupCommand(args []string) bool {
-	return len(args) >= 2 && args[1] == "instance"
-}
-
-func isVersionCommand(args []string) bool {
-	if len(args) < 2 {
-		return false
-	}
-	switch args[1] {
-	case "--version", "version":
-		return true
-	default:
-		return false
-	}
-}
-
-func isProtocolVersionCommand(args []string) bool {
-	if len(args) < 2 {
-		return false
-	}
-	return args[1] == "--protocol-version"
-}
-
-func isBuildInfoJSONCommand(args []string) bool {
-	if len(args) < 2 {
-		return false
-	}
-	return args[1] == "--build-info-json"
 }
 
 func runVersion(args []string) {
@@ -485,9 +234,11 @@ func runPTYWorker() {
 
 func runDaemonCommand() {
 	if len(os.Args) < 3 {
+		leaveInvocationUnrecorded()
 		runDaemon()
 		return
 	}
+	checkInstance(checkInstanceAndRouting)
 	switch os.Args[2] {
 	case "ensure":
 		setCommandPath("daemon ensure")
@@ -725,68 +476,6 @@ func seedsOfSession(c *client.Client, sessionID protocol.SessionID) ([]string, e
 		}
 	}
 	return seedIDs, nil
-}
-
-func runHelp() {
-	writeHelp(os.Stdout)
-}
-
-func printCommandHelp(args []string, w io.Writer) bool {
-	if len(args) != 2 || !isHelpArg(args[1]) {
-		return false
-	}
-	help, ok := commandHelp[args[0]]
-	if ok {
-		help(w)
-	}
-	return ok
-}
-
-var commandHelp = map[string]func(io.Writer){
-	"activity":     func(w io.Writer) { fmt.Fprint(w, activityUsage) },
-	"automation":   func(w io.Writer) { fmt.Fprint(w, automationUsageText) },
-	"browser":      printBrowserUsage,
-	"handoff":      writeHandoffHelp,
-	"list":         func(w io.Writer) { fmt.Fprintln(w, "usage: attn list\n\nPrint sessions and profiles as JSON.") },
-	"open":         func(w io.Writer) { fmt.Fprintln(w, "usage: attn open <file.md|seed-id> [--session <id>]") },
-	"presence":     func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") },
-	"vision-check": func(w io.Writer) { fmt.Fprintln(w, visionCheckUsage) },
-}
-
-func writeHelp(w io.Writer) {
-	fmt.Fprintln(w, "usage: attn <command>")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, prompts.RenderText("session", "attn-map", prompts.Values{}))
-	fmt.Fprint(w, `
-Other commands:
-  presence [--session-id|--seed-ids] check whether the shell runs inside attn, or print only its session or seeds
-  ask [list|close]                  ask the user something they answer from attn
-  turn open|settle                  put yourself in the user's queue, or take yourself out
-  vent [withdraw]                   report what got in your way
-  handoff -m "<letter>"             file this crew member's letter; the day turns over
-  onboarding [done|again]           show, finish or restart the Chief's onboarding
-  skill [--reference <name>|--list] print the map above, or a capability's rules
-  guide [<topic>]                   read the user guide
-  send <command>                    send files and a message to a session as the user; pair, senders, unpair
-  list                              list sessions and profiles
-  activity [clear <id>]             what each agent is doing right now
-  state explain <id>                replay why a session's state is what it is
-  conversation <command>            list, keep forever or forget attn's conversation copies
-  worktree <command>                every tracked worktree, the sweep and the keep pin
-  preflight                         diagnose tools, paths, routing, and launch settings
-  codex status|update|restart       shared Codex versions, its update and restart
-  debug <command>                   probe debug artifacts (incidents, logs)
-  db <command>                      database maintenance (restore from backup)
-  bus <command>                     event bus: consumer cursors, lag, kill switch
-  enrollment <command>              this data folder's enrollment: status, leave
-  doc <command>                     document store: collections, documents, live queries
-  vision-check <image> <question>   answer a question about an image (single LLM call)
-  daemon [ensure|stop]              run the daemon, ensure it is running, or stop it
-  instance <status|resolve|list>    show / resolve the active instance's resources
-  instance-env <instance|--unset>   print shell commands for selecting an instance
-  prompts <command>                 inspect prompt sources and scenario composition
-  version [--json]                  print version, channel and commit
-`)
 }
 
 func runDelegate() {
