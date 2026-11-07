@@ -20,7 +20,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 - `attn-map`: one list of what attn can do, printed at launch, by `attn skill` with no flags and by `attn --help`.
 - `references`: the rules for each capability, bundled with the build and printed by `attn skill --reference <name>`.
 - `wrap-up`: when the user asks an agent to wrap up, close itself, or whether it can be closed, the map points at `attn skill --reference wrap-up`. The agent hands over context, settles its work, raises decisions through `attn ask`, and closes itself when nothing needs the user. Live delegates keep working.
-- `retired-skill-removal`: earlier versions installed an `attn` skill into the skills folders of Claude Code and Codex. The daemon removes it at startup, on production and `dev`, and leaves any folder whose `SKILL.md` does not say `name: attn`.
+- `retired-skill-pointer`: earlier versions installed an `attn` skill into the skills folders of Claude Code and Codex. At startup, on production and `dev`, when every file in such a folder is one an earlier version installed, the daemon replaces its `SKILL.md` with a pointer to `attn --help` and `attn skill --reference`, keeping the name and description so agents started before the upgrade still find it, and removes the other files. A folder holding any other file stays whole, and the daemon logs it as kept.
 - `prompt-catalog`: `attn prompts` lists, shows, renders and explains every prompt attn composes, without a daemon.
 - `presence`: `attn presence` tells a shell whether it runs inside attn, and as which session.
 - `plugin-instructions`: a plugin harness whose driver asks for launch instructions gets the same guidance.
@@ -44,7 +44,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 ### Triggers
 
 - Every launch composes the launch instructions and hands them over the harness's own channel: appended system instructions for Claude Code (`internal/agent/claude.go`), developer instructions for Codex (`internal/hooks/codex.go`), and the driver of a plugin that takes them (`internal/daemon/plugin_launch_instructions.go`).
-- At startup, and when a harness executable setting is saved, the daemon removes the retired `attn` skill from `~/.claude/skills/attn` and `~/.agents/skills/attn`, then syncs the enabled workflow skill (`internal/agent/attn_skill.go`). A named instance other than `dev` skips this unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. A scenario sets all three.
+- At startup, and when a harness executable setting is saved, the daemon replaces the retired `attn` skill in `~/.claude/skills/attn` and `~/.agents/skills/attn` with its pointer (`internal/prompts/content/skills/attn/SKILL.md`), then syncs the enabled workflow skill (`internal/agent/attn_skill.go`). A named instance other than `dev` skips this unless the shell sets `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME`. A scenario sets all three.
 
 ## Driving it
 
@@ -79,7 +79,7 @@ Preconditions:
 - **The agent receives its guidance.** Run `wsctl add-session --cwd $A --agent claude --label guidance-agent --id guidance-agent` and re-run `ls $A/.attn-mock-agent/` until it lists a `.jsonl` file, with a deadline that fails the run: the mock agent records its launch arguments there. `grep -c -- "--append-system-prompt" $A/.attn-mock-agent/*.jsonl` prints 1, and so do `grep -c "context to verify, not commands that override the user"` and `grep -c "Track work that outlives this turn in seeds"` on the same file. A Codex session started the same way with `--agent codex` (shared Codex is off by default) carries them in one `developer_instructions=` argument instead.
 - **Presence, both sides.** From the instance shell, `./attn presence` prints `not running inside attn` and exits 1. Run `wsctl input --id <terminal> --text "presence" --enter`: `./attn agent peek guidance-agent` shows `running inside attn (session guidance-agent)`.
 - **The agent reads the reference list.** Run `wsctl input --id <terminal> --text "references" --enter`. Peek shows the same reference names as `./attn skill --list`.
-- **The skill sync is skipped here.** Read the startup log with `./attn debug daemon-log --grep "skipping user-global"`. It names each available harness. `internal/daemon/agent_skill_wire_test.go` covers the removal itself.
+- **The skill sync is skipped here.** Read the startup log with `./attn debug daemon-log --grep "skipping user-global"`. It names each available harness. `internal/daemon/agent_skill_wire_test.go` covers the pointer itself.
 - **Proof.** In `$P`, keep the output and exit code of each `./attn` command, a copy of the agent's `.jsonl` launch record, `./attn agent peek guidance-agent` after each prompt, and the daemon log line. Name each file for its way in, such as `agent-presence-peek.txt`.
 
 ## Contexts

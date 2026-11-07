@@ -3293,6 +3293,18 @@
       "description": "References printed by attn skill --reference. Availability does not establish that the agent read them.",
       "events": [
         {
+          "id": "retired-pointer",
+          "delivery": "available_skill",
+          "description": "Written over the retired attn skill that an earlier attn installed, so agents that started before the upgrade find the attn map.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill",
+            "source": "content/skills/attn/SKILL.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "browser",
           "delivery": "reference",
           "description": "Printed on demand by attn skill --reference.",
@@ -5714,5 +5726,5 @@
       ]
     }
   ],
-  "definitions_hash": "09ad75ee8121868aebc0bce37d9a0bc9cbec3ffa2e2b6beb3248c634a72e6a3d"
+  "definitions_hash": "ff92ea7c4151cff96b4e67af0ac37ce0ebaf42bddf2645f614a44fdd348f2950"
 }
