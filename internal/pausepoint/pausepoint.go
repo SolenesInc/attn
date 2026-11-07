@@ -36,6 +36,7 @@ const (
 	PtyWorkerStopped          = "pty-worker-stopped"
 	BusAnnounce               = "bus-announce"
 	BusEventHandled           = "bus-event-handled"
+	BusProducersReading       = "bus-producers-reading"
 	SeedRollbackRead          = "seed-rollback-read"
 	SeedReminderDue           = "seed-reminder-due"
 	SeedReminderRead          = "seed-reminder-read"

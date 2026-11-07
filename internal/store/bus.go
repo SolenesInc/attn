@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/pausepoint"
 )
 
 type BusEvent struct {
@@ -550,9 +552,6 @@ type BusProducer struct {
 }
 
 func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	if s.db == nil {
 		return nil, nil
 	}
@@ -577,6 +576,7 @@ func (s *Store) BusProducers(cutoffs []time.Time) ([]BusProducer, error) {
 		return nil, err
 	}
 	defer rows.Close()
+	pausepoint.At(pausepoint.BusProducersReading)
 
 	var out []BusProducer
 	for rows.Next() {
