@@ -295,9 +295,14 @@ func TestAPluginHelloConnectsItUntilItHangsUp(t *testing.T) {
 	awaitPluginShown(app, "worktree-provider", func(p protocol.PluginInfo) bool { return !p.Connected })
 }
 
+func awaitLoginCaptureAndPluginDiscovery() {
+	synctest.Wait()
+}
+
 func TestPluginHealthReachesTheAppOnlyWhenItChanges(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
+		awaitLoginCaptureAndPluginDiscovery()
 		writePluginManifest(t, filepath.Join(w.Dir, "plugins", "health-provider"), "health-provider", "exit 0")
 		plugin := dialPlugin(t, w, "health-provider", false)
 		if answer := plugin.hello(pluginHelloParams("health-provider", pluginWireAPIVersion, 1, "worktree.create")); answer.Error != nil {
