@@ -126,7 +126,7 @@ func enableAnalytics(app *testworld.Peer) {
 func sampleOnce(s *testworld.Stack, app *testworld.Peer) {
 	s.T.Helper()
 	defer app.Close()
-	s.Advance(5*time.Minute + time.Second)
+	s.Advance(20*time.Minute + time.Second)
 	s.AwaitJobsSettled()
 }
 
