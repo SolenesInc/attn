@@ -79,6 +79,10 @@ const paneIds = () => Array.from(document.querySelectorAll<HTMLElement>('.deskto
 const onScreen = (...ids: string[]) => ids.map((id) => `pane-${id}`);
 const chipKeys = () =>
   Array.from(document.querySelectorAll<HTMLElement>('[data-testid^="shelf-chip-"]')).map((element) => element.dataset.testid!.replace('shelf-chip-pane-', ''));
+const widthLabelCounts = () => {
+  const counts = Array.from(screen.getByTestId('shelf-width-label').querySelectorAll<HTMLElement>('.desktop-shelf-width-steps i'));
+  return { all: counts.map((count) => Number(count.textContent)), current: Number(counts.find((count) => count.classList.contains('is-on'))?.textContent) };
+};
 const terminalInput = (id: string) => document.querySelector<HTMLElement>(`[data-pane-id="pane-${id}"] [aria-label="Terminal input"]`);
 const surface = () => document.querySelector<HTMLElement>('[data-session-terminal-desktop="ws"]')!;
 const mountedTerminals = () =>
@@ -170,6 +174,8 @@ describe('Shelf layout', () => {
     await gesture(daemon, () => pressShortcut('shelf.fewerTiles'));
     expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'narrowest_tile_cols', value: '86' });
     expect(screen.getByTestId('shelf-width-label')).toHaveTextContent('2 tiles');
+    expect(widthLabelCounts()).toEqual({ all: [1, 2, 3, 4], current: 2 });
+    expect(screen.getByTestId('shelf-width-label')).not.toHaveTextContent('57');
     expect(paneIds()).toEqual(onScreen('s1', 's2'));
 
     await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
@@ -187,8 +193,23 @@ describe('Shelf layout', () => {
 
     await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
 
-    expect(screen.getByText('5 tiles at the narrowest step (57 cols, 480px) need 2400px. Tiles have 2000px here.')).toBeInTheDocument();
+    expect(screen.getByText('5 tiles at the narrowest width (57 cols, 480px) need 2400px. Tiles have 2000px here.')).toBeInTheDocument();
     expect(daemon.sentOf('set_setting')).toEqual([]);
+  });
+
+  it('states the width in force when the setting is not a step', async () => {
+    const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '40' });
+    await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
+    expect(screen.getByText('5 tiles at the narrowest width (40 cols, 480px) need 2400px. Tiles have 2000px here.')).toBeInTheDocument();
+    expect(daemon.sentOf('set_setting')).toEqual([]);
+  });
+
+  it('steps down from a setting between steps, and keeps the highlighted count true', async () => {
+    const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '70' });
+
+    await gesture(daemon, () => pressShortcut('shelf.fewerTiles'));
+    expect(widthLabelCounts().current).toBe(paneIds().length);
+    expect(screen.getByTestId('shelf-width-label')).toHaveTextContent(`at least ${daemon.sentOf('set_setting').slice(-1)[0].value} cols each`);
   });
 
   const wanted = (id: string, cols: number) => ({ ...(pane(id) as object), wanted_cols: cols });

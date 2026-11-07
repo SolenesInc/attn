@@ -62,7 +62,7 @@ export function DesktopSurface() {
       data-zoomed-pane-id={effectiveZoomedPaneId || ''}
     >
       <DesktopFocusBar />
-      {shelfWidthLabel && <ShelfWidthLabel desktopId={desktopId} clearedWidths={shelfWidthLabel.clearedWidths} />}
+      {shelfWidthLabel && <ShelfWidthLabel desktopId={desktopId} clearedWidths={shelfWidthLabel.clearedWidths} tileCounts={shelfWidthLabel.tileCounts} />}
       {shelfOn && <ShelfPeekPanel />}
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}

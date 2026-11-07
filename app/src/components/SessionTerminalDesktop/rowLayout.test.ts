@@ -6,6 +6,7 @@ import {
   planSlotSwap,
   readRow,
   resolveRowLayout,
+  reachableTileCounts,
   stepNarrowestCols,
   type FirstColumn,
   type RowLayoutInput,
@@ -320,7 +321,7 @@ describe('stepNarrowestCols', () => {
     const tree = rightChain([{ id: 'a', wanted: 100 }, 'b']);
     expect(stepNarrowestCols({ ...base, tree, areaPx: 1000 }, 66, 'more', 1000)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest step (57 cols, 570px) need 1140px. Tiles have 1000px here.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Experimental.',
     });
   });
 
@@ -333,20 +334,63 @@ describe('stepNarrowestCols', () => {
   it('says the numbers when no step shows another tile', () => {
     expect(stepNarrowestCols({ ...base, areaPx: 1000 }, 57, 'more', 1100)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest step (57 cols, 570px) need 1140px. Tiles have 1000px here.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Experimental.',
     });
     expect(stepNarrowestCols({ ...base, areaPx: 1000 }, 57, 'more', 1240)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest step (57 cols, 570px) need 1140px. Tiles have 1000px here. Closing the sidebar would make room.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. Closing the sidebar would make room. A narrower width can be set in Settings → Experimental.',
     });
     expect(stepNarrowestCols({ ...base, areaPx: 500 }, 66, 'fewer', 500)).toEqual({ kind: 'limit', message: 'Already showing one tile.' });
     expect(stepNarrowestCols({ ...base, areaPx: 3100 }, 150, 'fewer', 3100)).toEqual({
       kind: 'limit',
-      message: '2 tiles still fit at the widest step (150 cols, 1500px). Tiles have 3100px here.',
+      message: '2 tiles still fit at the widest width (150 cols, 1500px). Tiles have 3100px here.',
     });
     expect(stepNarrowestCols({ ...base, tree: rightChain(['a', 'b']), areaPx: 2000 }, 66, 'more', 2000)).toEqual({
       kind: 'limit',
       message: 'Every tile on this desktop is already on screen.',
     });
+  });
+});
+
+describe('limit messages', () => {
+  const base = { tree: rightChain(ROW), activeLeafId: 'a', firstColumn: null, pxPerCol: PX_PER_COL };
+  const messageOf = (areaPx: number, cols: number, direction: 'fewer' | 'more') => {
+    const result = stepNarrowestCols({ ...base, areaPx }, cols, direction, areaPx);
+    return result.kind === 'limit' ? result.message : result;
+  };
+
+  it('points to Settings → Experimental when a narrower width than the step floor could fit another tile', () => {
+    expect(messageOf(1700, 57, 'more')).toBe(
+      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Experimental.',
+    );
+  });
+
+  it('states the width in force when the setting is below the step floor', () => {
+    expect(messageOf(1700, 52, 'more')).toBe('4 tiles at the narrowest width (52 cols, 520px) need 2080px. Tiles have 1700px here.');
+    expect(messageOf(1700, 40, 'more')).toBe('4 tiles at the narrowest width (40 cols, 480px) need 1920px. Tiles have 1700px here.');
+  });
+
+  it('states the step floor, not the setting, when the setting is between steps', () => {
+    expect(messageOf(1700, 70, 'more')).toBe(
+      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Experimental.',
+    );
+  });
+
+  it('states the width in force when the setting is above the widest step', () => {
+    expect(messageOf(5000, 200, 'fewer')).toBe('2 tiles still fit at the widest width (200 cols, 2000px). Tiles have 5000px here.');
+  });
+});
+
+describe('reachableTileCounts', () => {
+  const base = { tree: rightChain(ROW), activeLeafId: 'a', firstColumn: null, pxPerCol: PX_PER_COL };
+
+  it('lists only the tile counts some width can show', () => {
+    expect(reachableTileCounts({ ...base, areaPx: 1451 }, 66)).toEqual([1, 2]);
+    expect(reachableTileCounts({ ...base, areaPx: 2100 }, 66)).toEqual([1, 2, 3]);
+  });
+
+  it('keeps the current count when the setting is not a step', () => {
+    expect(reachableTileCounts({ ...base, areaPx: 2100 }, 40)).toEqual([1, 2, 3, 4]);
+    expect(reachableTileCounts({ ...base, areaPx: 1451 }, 70)).toEqual([1, 2]);
   });
 });

@@ -8,7 +8,6 @@ import { useSessionStore } from '../../store/sessions';
 import type { AskHolderSession } from '../../utils/asks';
 import { StateIndicator } from '../StateIndicator';
 import { DRAG_ACTIVATION_PX } from './leafDrag';
-import { NARROWEST_STEPS } from './rowLayout';
 import { closeShelfPeek, useShelfPeekHover } from './useShelfPeekHover';
 import './DesktopShelf.css';
 
@@ -226,7 +225,7 @@ export function DesktopShelf({ desktopId }: { desktopId: string }) {
   );
 }
 
-export function ShelfWidthLabel({ desktopId, clearedWidths }: { desktopId: string; clearedWidths: number }) {
+export function ShelfWidthLabel({ desktopId, clearedWidths, tileCounts }: { desktopId: string; clearedWidths: number; tileCounts: readonly number[] }) {
   const shelf = useDesktopShelfStore((state) => state.shelfByDesktop[desktopId]);
   if (!shelf) return null;
   const shown = shelf.screen.length;
@@ -236,8 +235,8 @@ export function ShelfWidthLabel({ desktopId, clearedWidths }: { desktopId: strin
       <span>at least {shelf.narrowestCols} cols each</span>
       {clearedWidths > 0 && <span>{clearedWidths === 1 ? 'Cleared the dragged width' : `Cleared ${clearedWidths} dragged widths`}</span>}
       <span className="desktop-shelf-width-steps">
-        {NARROWEST_STEPS.map((cols) => (
-          <i key={cols} className={cols === shelf.narrowestCols ? 'is-on' : undefined}>{cols}</i>
+        {tileCounts.map((count) => (
+          <i key={count} className={count === shown ? 'is-on' : undefined}>{count}</i>
         ))}
       </span>
     </div>

@@ -15,6 +15,7 @@ import {
   readRow,
   resolveRowLayout,
   revealFirstColumn,
+  reachableTileCounts,
   stepNarrowestCols,
   type RowColumn,
   type RowLayoutInput,
@@ -220,6 +221,7 @@ interface ShelfControlsInput {
 
 export interface ShelfWidthLabelState {
   clearedWidths: number;
+  tileCounts: number[];
 }
 
 export function useShelfControls({
@@ -230,7 +232,7 @@ export function useShelfControls({
   onClearWantedCols,
   onShelfLimit,
 }: ShelfControlsInput): ShelfWidthLabelState | null {
-  const [label, setLabel] = useState<ShelfWidthLabelState | null>(null);
+  const [clearedWidths, setClearedWidths] = useState<number | null>(null);
   const labelTimer = useRef<number | null>(null);
   useEffect(() => () => {
     if (labelTimer.current !== null) window.clearTimeout(labelTimer.current);
@@ -247,12 +249,14 @@ export function useShelfControls({
     const cleared = result.kind === 'clear-then-step' ? result.columns : [];
     onClearWantedCols(cleared);
     if (result.cols !== narrowestCols) onSetNarrowestCols?.(result.cols);
-    setLabel({ clearedWidths: cleared.length });
+    setClearedWidths(cleared.length);
     if (labelTimer.current !== null) window.clearTimeout(labelTimer.current);
-    labelTimer.current = window.setTimeout(() => setLabel(null), WIDTH_LABEL_MS);
+    labelTimer.current = window.setTimeout(() => setClearedWidths(null), WIDTH_LABEL_MS);
   };
 
   useShortcut('shelf.fewerTiles', () => step('fewer'), active);
   useShortcut('shelf.moreTiles', () => step('more'), active);
-  return label;
+  if (clearedWidths === null || !rowInput || narrowestCols === undefined) return null;
+  const { narrowestPx: _narrowestPx, ...input } = rowInput;
+  return { clearedWidths, tileCounts: reachableTileCounts(input, narrowestCols) };
 }

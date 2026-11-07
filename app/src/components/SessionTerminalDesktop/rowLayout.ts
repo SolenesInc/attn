@@ -299,17 +299,29 @@ export function planSlotSwap(tree: TerminalLayoutNode, chipLeafId: string, slotL
 
 export type NarrowestStep =
   | { kind: 'step'; cols: number }
-  | { kind: 'clear-then-step'; cols: number; columns: RowColumn[] }
+  | { kind: 'clear-then-step'; cols: number; columns: RowColumn[]; shown: number }
   | { kind: 'limit'; message: string };
 
+type StepInput = Omit<RowLayoutInput, 'narrowestPx' | 'view'>;
+
+function tilesShownAt(input: StepInput, cols: number): number {
+  return resolveRowLayout({ ...input, narrowestPx: narrowestWidthPx(cols, input.pxPerCol) }).screen.length;
+}
+
+export function reachableTileCounts(input: StepInput, currentCols: number): number[] {
+  const counts = new Set([currentCols, ...NARROWEST_STEPS].map((cols) => tilesShownAt(input, cols)));
+  const more = stepNarrowestCols(input, currentCols, 'more', 0);
+  if (more.kind === 'clear-then-step') counts.add(more.shown);
+  return [...counts].sort((a, b) => a - b);
+}
+
 export function stepNarrowestCols(
-  input: Omit<RowLayoutInput, 'narrowestPx' | 'view'>,
+  input: StepInput,
   currentCols: number,
   direction: 'fewer' | 'more',
   windowPx: number,
 ): NarrowestStep {
-  const shownAt = (cols: number) =>
-    resolveRowLayout({ ...input, narrowestPx: narrowestWidthPx(cols, input.pxPerCol) }).screen.length;
+  const shownAt = (cols: number) => tilesShownAt(input, cols);
   const shown = shownAt(currentCols);
   const total = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId).length;
   const candidates = direction === 'fewer'
@@ -328,27 +340,30 @@ export function stepNarrowestCols(
       return {
         kind: 'clear-then-step',
         cols: unblocked,
+        shown: screenLeaves.size,
         columns: row.filter((column) => wantedPxWithRoom(column, input) !== null && screenLeaves.has(column.leafIds[0])),
       };
     }
   }
-  const extreme = direction === 'fewer' ? NARROWEST_STEPS[NARROWEST_STEPS.length - 1] : NARROWEST_STEPS[0];
-  const extremePx = narrowestWidthPx(extreme, input.pxPerCol);
   if (direction === 'fewer') {
+    const widest = Math.max(NARROWEST_STEPS[NARROWEST_STEPS.length - 1], currentCols);
     return {
       kind: 'limit',
       message: shown <= 1
         ? 'Already showing one tile.'
-        : `${shown} tiles still fit at the widest step (${extreme} cols, ${extremePx}px). Tiles have ${input.areaPx}px here.`,
+        : `${shown} tiles still fit at the widest width (${widest} cols, ${narrowestWidthPx(widest, input.pxPerCol)}px). Tiles have ${input.areaPx}px here.`,
     };
   }
   if (shown >= total) return { kind: 'limit', message: 'Every tile on this desktop is already on screen.' };
+  const narrowest = Math.min(NARROWEST_STEPS[0], currentCols);
+  const narrowestPx = narrowestWidthPx(narrowest, input.pxPerCol);
   const asked = shown + 1;
-  const askedPx = asked * extremePx;
+  const askedPx = asked * narrowestPx;
   const sidebarWouldHelp = input.areaPx < windowPx && askedPx <= windowPx;
+  const narrowerWouldHelp = narrowestPx > ATTENTION_MIN_WIDTH && asked * ATTENTION_MIN_WIDTH <= input.areaPx;
   return {
     kind: 'limit',
-    message: `${asked} tiles at the narrowest step (${extreme} cols, ${extremePx}px) need ${askedPx}px. Tiles have ${input.areaPx}px here.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}`,
+    message: `${asked} tiles at the narrowest width (${narrowest} cols, ${narrowestPx}px) need ${askedPx}px. Tiles have ${input.areaPx}px here.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}${narrowerWouldHelp ? ' A narrower width can be set in Settings → Experimental.' : ''}`,
   };
 }
 

@@ -153,6 +153,11 @@ async function stepTheWidth(label) {
   const labelSelector = '[data-testid="shelf-width-label"]';
   await press('shelf.fewerTiles');
   await waitDom(labelSelector, { textIncludes: `${shown - 1} tile` });
+  const steps = (await request('dom_text', { selector: `${labelSelector} .desktop-shelf-width-steps` })).text;
+  const counts = Array.from(steps.trim(), Number);
+  const current = (await request('dom_text', { selector: `${labelSelector} .desktop-shelf-width-steps .is-on` })).text.trim();
+  runner.assert(counts.every((count) => count >= 1) && counts.includes(shown) && counts.includes(shown - 1), `${label}: the label lists tile counts, not column widths`, { steps });
+  runner.assert(current === String(shown - 1), `${label}: the label highlights the current tile count`, { current, shown });
   await shot(`${label}-width-label`);
   await press('shelf.moreTiles');
   await waitDom(labelSelector, { textIncludes: `${shown} tile` });
