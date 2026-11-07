@@ -114,12 +114,12 @@ describe('Settings → Phones', () => {
   });
 
   it('shows why the link is down and why a pairing code could not be shown', async () => {
-    const down = { ...link, state: PhoneLinkState.Connecting, error: 'dialing the relay at wss://cloud.attn.codes/v1/homes/x/home: connection refused' };
+    const down = { ...link, state: PhoneLinkState.Connecting, error: 'dialing the Cloud Relay at wss://cloud.attn.codes/v1/homes/x/home: connection refused' };
     const daemon = await openPhones((d) => {
       d.on('phones_get', () => phones({ link: down }));
       d.on('phone_pair_begin', () => ({ event: 'phone_pair_begin_result', success: false, error: 'this home has not registered with Attn Cloud yet (connection refused); a QR code needs its home id' }));
     });
-    expect(screen.getByTestId('phones-link-state')).toHaveTextContent('Last error: dialing the relay at wss://cloud.attn.codes/v1/homes/x/home: connection refused');
+    expect(screen.getByTestId('phones-link-state')).toHaveTextContent('Last error: dialing the Cloud Relay at wss://cloud.attn.codes/v1/homes/x/home: connection refused');
     await gesture(daemon, () => fireEvent.click(within(profileSection()).getByRole('button', { name: 'Pair a phone' })));
     expect(within(profileSection()).getByRole('alert')).toHaveTextContent('this home has not registered with Attn Cloud yet');
   });

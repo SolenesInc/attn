@@ -10,10 +10,10 @@ import {
   type Link,
   type LinkEvent,
 } from './link'
-import { FakeRelay, socketsOf } from './test/fakeRelay'
+import { FakeCloudRelay, socketsOf } from './test/fakeCloudRelay'
 import { holdDecryption } from './test/nobleCrypto'
 
-let relay: FakeRelay
+let cloudRelay: FakeCloudRelay
 let events: Array<LinkEvent>
 let close: () => void
 let link: Link
@@ -32,7 +32,7 @@ const connect = async () => {
     {
       cloud: 'https://cloud.example',
       homeId: 'home',
-      homeNoisePub: toBase64Url(relay.homeNoisePub),
+      homeNoisePub: toBase64Url(cloudRelay.homeNoisePub),
       homeName: 'Mac',
       profileId: 'p',
     },
@@ -47,9 +47,9 @@ const tags = () => events.map((event) => event._tag)
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] })
-  relay = new FakeRelay()
+  cloudRelay = new FakeCloudRelay()
   events = []
-  vi.stubGlobal('WebSocket', socketsOf(relay))
+  vi.stubGlobal('WebSocket', socketsOf(cloudRelay))
 })
 
 afterEach(() => {
@@ -65,36 +65,36 @@ describe('a phone keeps checking that its home still answers', () => {
 
     await vi.advanceTimersByTimeAsync(10 * pingIntervalMs)
 
-    expect(relay.homePings).toBe(10)
+    expect(cloudRelay.homePings).toBe(10)
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
-    expect(relay.sockets).toHaveLength(1)
+    expect(cloudRelay.sockets).toHaveLength(1)
   })
 
-  it('reconnects when a home stops answering although its relay still does', async () => {
+  it('reconnects when a home stops answering although its Cloud Relay still does', async () => {
     await connect()
-    relay.homeAnswersPings = false
+    cloudRelay.homeAnswersPings = false
 
     await vi.advanceTimersByTimeAsync(pingIntervalMs + pongDeadlineMs - 1000)
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
 
     await vi.advanceTimersByTimeAsync(1000)
     expect(events.at(-1)).toEqual({ _tag: 'Lost', reason: 'Mac: no answer for 10 s; reconnecting' })
-    expect(relay.sockets[0]!.closed).toBe(true)
+    expect(cloudRelay.sockets[0]!.closed).toBe(true)
 
-    relay.homeAnswersPings = true
+    cloudRelay.homeAnswersPings = true
     await vi.advanceTimersByTimeAsync(100)
-    expect(relay.sockets).toHaveLength(2)
+    expect(cloudRelay.sockets).toHaveLength(2)
     expect(tags().slice(-2)).toEqual(['Welcomed', 'Sessions'])
   })
 
-  it('pings only the relay when the home serves api 1, which has no ping', async () => {
-    relay.welcomeApi = 1
-    relay.homeAnswersPings = false
+  it('pings only the Cloud Relay when the home serves api 1, which has no ping', async () => {
+    cloudRelay.welcomeApi = 1
+    cloudRelay.homeAnswersPings = false
     await connect()
 
     await vi.advanceTimersByTimeAsync(10 * pingIntervalMs)
 
-    expect(relay.homePings).toBe(0)
+    expect(cloudRelay.homePings).toBe(0)
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
   })
 })
@@ -104,7 +104,7 @@ describe('a phone that closes its link', () => {
     await connect()
     expect(tags()).toEqual(['Welcomed', 'Sessions'])
     const release = holdDecryption()
-    relay.sessions(relay.sockets[0]!, [])
+    cloudRelay.sessions(cloudRelay.sockets[0]!, [])
     await vi.advanceTimersByTimeAsync(1)
 
     close()
@@ -130,7 +130,9 @@ describe('a terminal the phone opened', () => {
     }
   }
   const attachCommands = () =>
-    relay.commands.filter((command) => command.cmd === 'terminal_attach' || command.cmd === 'terminal_focus')
+    cloudRelay.commands.filter(
+      (command) => command.cmd === 'terminal_attach' || command.cmd === 'terminal_focus',
+    )
 
   it('attaches with its size and credit, shows what the home sends, and attaches again after a reconnect', async () => {
     await connect()
@@ -142,7 +144,7 @@ describe('a terminal the phone opened', () => {
       { cmd: 'terminal_focus', terminal_id: 't1' },
     ])
 
-    const socket = relay.sockets[0]!
+    const socket = cloudRelay.sockets[0]!
     socket.toPhone({
       event: 'terminal_screen',
       terminal_id: 't1',
@@ -157,11 +159,11 @@ describe('a terminal the phone opened', () => {
     await vi.advanceTimersByTimeAsync(1)
     expect(shown).toEqual(['screen:$ ', 'ls\r\n', 'resized:120x36'])
 
-    relay.homeAnswersPings = false
+    cloudRelay.homeAnswersPings = false
     await vi.advanceTimersByTimeAsync(pingIntervalMs + pongDeadlineMs)
-    relay.homeAnswersPings = true
+    cloudRelay.homeAnswersPings = true
     await vi.advanceTimersByTimeAsync(100)
-    expect(relay.sockets).toHaveLength(2)
+    expect(cloudRelay.sockets).toHaveLength(2)
     expect(attachCommands()).toHaveLength(4)
     expect(attachCommands().at(-2)).toMatchObject({
       cmd: 'terminal_attach',
@@ -172,7 +174,7 @@ describe('a terminal the phone opened', () => {
   })
 
   it('tells the terminal why when the home is too old to open it', async () => {
-    relay.welcomeApi = 3
+    cloudRelay.welcomeApi = 3
     await connect()
     const { shown, sink: terminal } = sink()
     link.openTerminal('t1', { cols: 49, rows: 35 }, terminal)
@@ -202,7 +204,7 @@ describe('a phone keeps its home’s garden', () => {
 
   it('shows the open seeds in the order the home lists them, keeping the ones a change leaves alone', async () => {
     await connect()
-    const socket = relay.sockets[0]!
+    const socket = cloudRelay.sockets[0]!
     socket.toPhone({ event: 'garden_seeds', seeds: [seed('s-1', 'Read seeds'), seed('s-2', 'Move seeds')] })
     socket.toPhone({ event: 'garden_seeds', seeds: [seed('s-3', 'Ship it')] })
     socket.toPhone({ event: 'garden', ids: ['s-3', 's-2', 's-1'] })

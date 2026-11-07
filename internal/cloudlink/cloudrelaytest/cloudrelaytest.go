@@ -1,7 +1,7 @@
-// Package relaytest checks a relay against docs/internal/relay-contract.md through its public HTTP and WebSocket
+// Package cloudrelaytest checks a Cloud Relay against docs/internal/cloud-relay-contract.md through its public HTTP and WebSocket
 // boundary. It keeps its own copy of the contract's numbers and strings, so a change to attn's clients or stand-in
-// relay fails here instead of moving the contract with it.
-package relaytest
+// Cloud Relay fails here instead of moving the contract with it.
+package cloudrelaytest
 
 import (
 	"bytes"
@@ -51,12 +51,12 @@ const (
 	pushToken      = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
 )
 
-// replyWait is a tripwire for a relay that never answers. A local relay answers in milliseconds.
+// replyWait is a tripwire for a Cloud Relay that never answers. A local Cloud Relay answers in milliseconds.
 const replyWait = 30 * time.Second
 
-// Run drives the relay at baseURL through the contract. Run it against a fresh relay of your own, because it uses up the day's new homes.
+// Run drives the Cloud Relay at baseURL through the contract. Run it against a fresh Cloud Relay of your own, because it uses up the day's new homes.
 func Run(t *testing.T, baseURL string) {
-	r := relay{base: strings.TrimRight(baseURL, "/")}
+	r := cloudRelay{base: strings.TrimRight(baseURL, "/")}
 	t.Run("version", r.version)
 	t.Run("routes", r.routes)
 	t.Run("registration", r.registration)
@@ -76,7 +76,7 @@ func Run(t *testing.T, baseURL string) {
 	t.Run("new homes past the limit", r.newHomeLimit)
 }
 
-type relay struct{ base string }
+type cloudRelay struct{ base string }
 
 type key struct {
 	private ed25519.PrivateKey
@@ -221,7 +221,7 @@ func (s *socket) expectClosed(code int, reason string) {
 	}
 }
 
-func (r relay) dial(t *testing.T, name, path string) *socket {
+func (r cloudRelay) dial(t *testing.T, name, path string) *socket {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), replyWait)
 	defer cancel()
@@ -243,7 +243,7 @@ type answer struct {
 	body   []byte
 }
 
-func (r relay) request(t *testing.T, method, path string, headers map[string]string, body any) answer {
+func (r cloudRelay) request(t *testing.T, method, path string, headers map[string]string, body any) answer {
 	t.Helper()
 	var reader io.Reader
 	switch value := body.(type) {
@@ -298,7 +298,7 @@ func registration(k key, name string) map[string]string {
 	return map[string]string{"home_sign_pub": k.pub, "name": name, "sig": k.sign([]byte("attn-cloud/v1 register\n" + k.pub + "\n" + name))}
 }
 
-func (r relay) register(t *testing.T, k key, name string) string {
+func (r cloudRelay) register(t *testing.T, k key, name string) string {
 	t.Helper()
 	got := r.request(t, http.MethodPost, "/v1/homes", nil, registration(k, name))
 	if got.status != http.StatusOK {
@@ -319,14 +319,14 @@ type home struct {
 	key key
 }
 
-func (r relay) newHome(t *testing.T) *home {
+func (r cloudRelay) newHome(t *testing.T) *home {
 	t.Helper()
 	k := newKey(t)
 	id := r.register(t, k, "Mac")
 	return r.connectHome(t, k, id)
 }
 
-func (r relay) connectHome(t *testing.T, k key, id string) *home {
+func (r cloudRelay) connectHome(t *testing.T, k key, id string) *home {
 	t.Helper()
 	s := r.dial(t, "home", "/v1/homes/"+id+"/home")
 	nonce := s.expect(challenge)
@@ -350,7 +350,7 @@ type pairing struct {
 	Until     int64  `json:"until"`
 }
 
-// newToken returns a relay token, which is 32 opaque bytes to a relay, and the pairing that accepts it until the given time.
+// newToken returns a relay token, which is 32 opaque bytes to a Cloud Relay, and the pairing that accepts it until the given time.
 func newToken(t *testing.T, until int64) ([]byte, pairing) {
 	t.Helper()
 	token := make([]byte, 32)
@@ -389,7 +389,7 @@ func (h *home) expectClose(connID uint32) {
 	}
 }
 
-func (r relay) dialDevice(t *testing.T, h *home, k key) *socket {
+func (r cloudRelay) dialDevice(t *testing.T, h *home, k key) *socket {
 	t.Helper()
 	return r.dial(t, "device", "/v1/homes/"+h.id+"/device?device_sign_pub="+k.pub)
 }
@@ -405,12 +405,12 @@ func (s *socket) answerChallenge(h *home, k key, token []byte) {
 }
 
 // connectDevice leaves the socket after ready, with the presence frame that follows it unread.
-func (r relay) connectDevice(t *testing.T, h *home, k key) (*socket, uint32) {
+func (r cloudRelay) connectDevice(t *testing.T, h *home, k key) (*socket, uint32) {
 	t.Helper()
 	return r.connectWithToken(t, h, k, nil)
 }
 
-func (r relay) connectWithToken(t *testing.T, h *home, k key, token []byte) (*socket, uint32) {
+func (r cloudRelay) connectWithToken(t *testing.T, h *home, k key, token []byte) (*socket, uint32) {
 	t.Helper()
 	s := r.dialDevice(t, h, k)
 	s.answerChallenge(h, k, token)
@@ -422,7 +422,7 @@ func (r relay) connectWithToken(t *testing.T, h *home, k key, token []byte) (*so
 }
 
 // pairedDevice connects an allowed device to a connected home, with both sockets' opening frames read.
-func (r relay) pairedDevice(t *testing.T, h *home) (*socket, key, uint32) {
+func (r cloudRelay) pairedDevice(t *testing.T, h *home) (*socket, key, uint32) {
 	t.Helper()
 	k := newKey(t)
 	h.applyList(k)
@@ -434,7 +434,7 @@ func (r relay) pairedDevice(t *testing.T, h *home) (*socket, key, uint32) {
 	return s, k, connID
 }
 
-func (r relay) version(t *testing.T) {
+func (r cloudRelay) version(t *testing.T) {
 	got := r.request(t, http.MethodGet, "/v1/version", nil, nil)
 	var body struct {
 		Commit          string `json:"commit"`
@@ -446,7 +446,7 @@ func (r relay) version(t *testing.T) {
 	r.request(t, http.MethodPost, "/v1/version", nil, "{}").refusedWith(t, http.StatusMethodNotAllowed, "method_not_allowed")
 }
 
-func (r relay) routes(t *testing.T) {
+func (r cloudRelay) routes(t *testing.T) {
 	r.request(t, http.MethodGet, "/v1/nothing", nil, nil).refusedWith(t, http.StatusNotFound, "not_found")
 	r.request(t, http.MethodGet, "/v1/homes", nil, nil).refusedWith(t, http.StatusMethodNotAllowed, "method_not_allowed")
 
@@ -461,7 +461,7 @@ func (r relay) routes(t *testing.T) {
 	r.request(t, http.MethodGet, "/v1/homes/"+id+"/device?device_sign_pub="+newKey(t).pub, nil, nil).refusedWith(t, http.StatusUpgradeRequired, "upgrade_required")
 }
 
-func (r relay) registration(t *testing.T) {
+func (r cloudRelay) registration(t *testing.T) {
 	k := newKey(t)
 	id := r.register(t, k, "Mac")
 	pub, err := base64.RawURLEncoding.DecodeString(k.pub)
@@ -493,7 +493,7 @@ func (r relay) registration(t *testing.T) {
 	}
 }
 
-func (r relay) homeAuthentication(t *testing.T) {
+func (r cloudRelay) homeAuthentication(t *testing.T) {
 	t.Run("a signature from another key closes the socket", func(t *testing.T) {
 		k := newKey(t)
 		id := r.register(t, k, "Mac")
@@ -530,7 +530,7 @@ func (h *home) dropsWithList(connID uint32, devices ...key) {
 	h.expect(allowlist)
 }
 
-func (r relay) deviceAdmission(t *testing.T) {
+func (r cloudRelay) deviceAdmission(t *testing.T) {
 	far := time.Now().Add(time.Hour).UnixMilli()
 	past := time.Now().Add(-time.Hour).UnixMilli()
 
@@ -599,7 +599,7 @@ func (r relay) deviceAdmission(t *testing.T) {
 	})
 }
 
-func (r relay) deviceAuthentication(t *testing.T) {
+func (r cloudRelay) deviceAuthentication(t *testing.T) {
 	t.Run("a signature from another key closes the socket", func(t *testing.T) {
 		h := r.newHome(t)
 		k := newKey(t)
@@ -620,7 +620,7 @@ func (r relay) deviceAuthentication(t *testing.T) {
 	})
 }
 
-func (r relay) relayToken(t *testing.T) {
+func (r cloudRelay) relayToken(t *testing.T) {
 	far := time.Now().Add(time.Hour).UnixMilli()
 	past := time.Now().Add(-time.Hour).UnixMilli()
 
@@ -817,7 +817,7 @@ func (r relay) relayToken(t *testing.T) {
 	})
 }
 
-func (r relay) routing(t *testing.T) {
+func (r cloudRelay) routing(t *testing.T) {
 	h := r.newHome(t)
 	device, _, connID := r.pairedDevice(t, h)
 	opaque := []byte{0, 1, 2, 0xfe, 0xff}
@@ -844,7 +844,7 @@ func (r relay) routing(t *testing.T) {
 	h.expectClose(connID)
 }
 
-func (r relay) closing(t *testing.T) {
+func (r cloudRelay) closing(t *testing.T) {
 	t.Run("the home closes a device with 4000", func(t *testing.T) {
 		h := r.newHome(t)
 		device, _, connID := r.pairedDevice(t, h)
@@ -859,7 +859,7 @@ func (r relay) closing(t *testing.T) {
 	})
 }
 
-func (r relay) presenceChanges(t *testing.T) {
+func (r cloudRelay) presenceChanges(t *testing.T) {
 	k := newKey(t)
 	id := r.register(t, k, "Mac")
 	h := r.connectHome(t, k, id)
@@ -883,7 +883,7 @@ func (r relay) presenceChanges(t *testing.T) {
 	second.expectPresence(secondID, 0)
 }
 
-func (r relay) replacement(t *testing.T) {
+func (r cloudRelay) replacement(t *testing.T) {
 	k := newKey(t)
 	id := r.register(t, k, "Mac")
 	older := r.connectHome(t, k, id)
@@ -901,7 +901,7 @@ func (r relay) replacement(t *testing.T) {
 	}
 }
 
-func (r relay) frames(t *testing.T) {
+func (r cloudRelay) frames(t *testing.T) {
 	t.Run("a frame shorter than the header closes the socket", func(t *testing.T) {
 		h := r.newHome(t)
 		h.sendBytes([]byte{1, data})
@@ -912,7 +912,7 @@ func (r relay) frames(t *testing.T) {
 		h.sendBytes([]byte{2, data, 0, 0, 0, 1})
 		h.expectClosed(badFrame, "envelope version 2 unsupported; relay speaks 1")
 	})
-	t.Run("a frame type the relay does not take from a home is an error, and the socket stays", func(t *testing.T) {
+	t.Run("a frame type the Cloud Relay does not take from a home is an error, and the socket stays", func(t *testing.T) {
 		h := r.newHome(t)
 		h.send(presence, 0, []byte{1})
 		h.expectError("unsupported_type")
@@ -928,7 +928,7 @@ func (r relay) frames(t *testing.T) {
 	})
 }
 
-func (r relay) heartbeat(t *testing.T) {
+func (r cloudRelay) heartbeat(t *testing.T) {
 	h := r.newHome(t)
 	device, _, _ := r.pairedDevice(t, h)
 	for name, s := range map[string]*socket{"home": h.socket, "device": device} {
@@ -942,7 +942,7 @@ func (r relay) heartbeat(t *testing.T) {
 	h.expectError("text_frame")
 }
 
-func (r relay) allowlists(t *testing.T) {
+func (r cloudRelay) allowlists(t *testing.T) {
 	h := r.newHome(t)
 	send := func(body string) { h.send(allowlist, 0, []byte(body)) }
 
@@ -1011,7 +1011,7 @@ func tokenBody(homeID string, device key, environment, token string) map[string]
 	}
 }
 
-func (r relay) pushTokens(t *testing.T) {
+func (r cloudRelay) pushTokens(t *testing.T) {
 	h := r.newHome(t)
 	path := "/v1/homes/" + h.id + "/push-token"
 	phone := newKey(t)
@@ -1045,7 +1045,7 @@ func (r relay) pushTokens(t *testing.T) {
 	r.request(t, http.MethodGet, path, nil, nil).refusedWith(t, http.StatusMethodNotAllowed, "method_not_allowed")
 }
 
-func (r relay) pushFrames(t *testing.T) {
+func (r cloudRelay) pushFrames(t *testing.T) {
 	h := r.newHome(t)
 	phone := newKey(t)
 	h.applyList(phone)
@@ -1079,7 +1079,7 @@ func (r relay) pushFrames(t *testing.T) {
 	h.expectError("push_no_token")
 }
 
-func (r relay) newHomeLimit(t *testing.T) {
+func (r cloudRelay) newHomeLimit(t *testing.T) {
 	known := newKey(t)
 	id := r.register(t, known, "Mac")
 	for range newHomesLimit {
@@ -1092,7 +1092,7 @@ func (r relay) newHomeLimit(t *testing.T) {
 			t.Fatalf("the refusal says %s, want it to name %q", got.body, want)
 		}
 		if again := r.register(t, known, "Mac"); again != id {
-			t.Fatalf("a key that has a relay registered as %q, want %q", again, id)
+			t.Fatalf("a key that has a Cloud Relay registered as %q, want %q", again, id)
 		}
 		return
 	}

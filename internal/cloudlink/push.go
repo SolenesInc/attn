@@ -34,7 +34,7 @@ func SealPush(deviceNoisePub, plaintext []byte) ([]byte, error) {
 }
 
 // Push asks Attn Cloud to deliver plaintext, sealed to the paired device, as a notification. It returns ErrLinkDown
-// when the frame did not reach the socket; the caller decides whether to wait for NextConnect. The relay reports its
+// when the frame did not reach the socket; the caller decides whether to wait for NextConnect. The Cloud Relay reports its
 // own refusals as error frames.
 func (l *Link) Push(p Pairing, plaintext []byte, collapseID string) error {
 	sealed, err := SealPush(p.DeviceNoisePub, plaintext)

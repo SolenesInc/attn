@@ -15,12 +15,12 @@ import (
 	"nhooyr.io/websocket"
 )
 
-type relaySigned struct {
+type cloudRelaySigned struct {
 	Message   string `json:"message"`
 	Signature string `json:"signature"`
 }
 
-type relayVectors struct {
+type cloudRelayVectors struct {
 	SignSeed string `json:"sign_seed"`
 	SignPub  string `json:"sign_pub"`
 	HomeID   string `json:"home_id"`
@@ -39,26 +39,26 @@ type relayVectors struct {
 		TokenHash string `json:"token_hash"`
 	} `json:"relay_token"`
 	Signatures struct {
-		Register relaySigned `json:"register"`
-		AuthHome relaySigned `json:"auth_home"`
+		Register cloudRelaySigned `json:"register"`
+		AuthHome cloudRelaySigned `json:"auth_home"`
 	} `json:"signatures"`
 }
 
-func loadRelayVectors(t *testing.T) (relayVectors, Identity) {
+func loadCloudRelayVectors(t *testing.T) (cloudRelayVectors, Identity) {
 	t.Helper()
-	raw, err := os.ReadFile("testdata/relay_vectors.json")
+	raw, err := os.ReadFile("testdata/cloud_relay_vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	var vectors relayVectors
+	var vectors cloudRelayVectors
 	if err := json.Unmarshal(raw, &vectors); err != nil {
 		t.Fatal(err)
 	}
 	return vectors, Identity{SignKey: ed25519.NewKeyFromSeed(unhex(t, vectors.SignSeed))}
 }
 
-func TestTheHomeSpeaksTheRelayContractVectors(t *testing.T) {
-	vectors, identity := loadRelayVectors(t)
+func TestTheHomeSpeaksTheCloudRelayContractVectors(t *testing.T) {
+	vectors, identity := loadCloudRelayVectors(t)
 	kinds := map[string]frameType{
 		"challenge": frameChallenge, "auth": frameAuth, "ready_home": frameReady, "ready_device": frameReady,
 		"open": frameOpen, "data": frameData, "close": frameClose, "allowlist": frameAllowlist, "allowlist_applied": frameAllowlist,

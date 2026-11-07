@@ -27,7 +27,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// A stand-in Cloud Relay, as docs/internal/relay-contract.md specifies it; internal/cloudlink/relaytest holds it to that.
+// A stand-in Cloud Relay, as docs/internal/cloud-relay-contract.md specifies it; internal/cloudlink/cloudrelaytest holds it to that.
 
 const (
 	frameChallenge = 1
@@ -50,14 +50,14 @@ const (
 )
 
 type Cloud struct {
-	t       *testing.T
-	URL     string
-	HomeURL string
-	proxy   *cutProxy
-	relay   *fakeRelay
+	t          *testing.T
+	URL        string
+	HomeURL    string
+	proxy      *cutProxy
+	cloudRelay *fakeCloudRelay
 }
 
-// Push is a push frame the home sent the relay, which the real Cloud would hand to APNs.
+// Push is a push frame the home sent the Cloud Relay, which the real Cloud would hand to APNs.
 type Push struct {
 	Device     string `json:"device"`
 	Ciphertext string `json:"ciphertext"`
@@ -66,29 +66,29 @@ type Push struct {
 
 func StartCloud(t *testing.T) *Cloud {
 	t.Helper()
-	relay := strings.TrimRight(os.Getenv("ATTN_TEST_CLOUD_URL"), "/")
-	var fake *fakeRelay
-	if relay == "" {
-		fake = newFakeRelay()
+	cloudRelay := strings.TrimRight(os.Getenv("ATTN_TEST_CLOUD_URL"), "/")
+	var fake *fakeCloudRelay
+	if cloudRelay == "" {
+		fake = newFakeCloudRelay()
 		server := httptest.NewServer(fake.handler())
 		t.Cleanup(server.Close)
-		relay = server.URL
+		cloudRelay = server.URL
 	}
-	target, err := url.Parse(relay)
+	target, err := url.Parse(cloudRelay)
 	if err != nil {
 		t.Fatal(err)
 	}
 	proxy := startCutProxy(t, target.Host)
-	return &Cloud{t: t, URL: relay, HomeURL: "http://" + proxy.addr, proxy: proxy, relay: fake}
+	return &Cloud{t: t, URL: cloudRelay, HomeURL: "http://" + proxy.addr, proxy: proxy, cloudRelay: fake}
 }
 
-// Pushes yields the push frames the relay accepted, in order. A push needs a registered token: see PhoneSocket.RegisterForPush. A real Cloud hands them to APNs instead, so a test
+// Pushes yields the push frames the Cloud Relay accepted, in order. A push needs a registered token: see PhoneSocket.RegisterForPush. A real Cloud hands them to APNs instead, so a test
 // that reads them skips under ATTN_TEST_CLOUD_URL.
 func (c *Cloud) Pushes() <-chan Push {
-	if c.relay == nil {
-		c.t.Skip("pushes are visible only through the fake relay; this run uses ATTN_TEST_CLOUD_URL")
+	if c.cloudRelay == nil {
+		c.t.Skip("pushes are visible only through the fake Cloud Relay; this run uses ATTN_TEST_CLOUD_URL")
 	}
-	return c.relay.pushes
+	return c.cloudRelay.pushes
 }
 
 func (c *Cloud) Dials() <-chan struct{} { return c.proxy.dials }
@@ -224,7 +224,7 @@ func decodeEnvelope(data []byte) (envelope, error) {
 	return envelope{kind: data[1], connID: binary.BigEndian.Uint32(data[2:6]), payload: data[6:]}, nil
 }
 
-type fakeRelay struct {
+type fakeCloudRelay struct {
 	mu     sync.Mutex
 	homes  map[string]*fakeHome
 	pushes chan Push
@@ -253,11 +253,11 @@ type fakeDevice struct {
 	tokenHash string
 }
 
-func newFakeRelay() *fakeRelay {
-	return &fakeRelay{homes: map[string]*fakeHome{}, pushes: make(chan Push, 64)}
+func newFakeCloudRelay() *fakeCloudRelay {
+	return &fakeCloudRelay{homes: map[string]*fakeHome{}, pushes: make(chan Push, 64)}
 }
 
-func (r *fakeRelay) handler() http.Handler {
+func (r *fakeCloudRelay) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/version", r.version)
 	mux.HandleFunc("/v1/homes", r.register)
@@ -281,7 +281,7 @@ func decodeKey(text string) (ed25519.PublicKey, bool) {
 	return raw, err == nil && len(raw) == ed25519.PublicKeySize
 }
 
-func (r *fakeRelay) version(w http.ResponseWriter, req *http.Request) {
+func (r *fakeCloudRelay) version(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
 		cloudRefusal(w, 405, "method_not_allowed", "use GET /v1/version")
 		return
@@ -289,7 +289,7 @@ func (r *fakeRelay) version(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"commit": "stand-in", "envelope_version": 1})
 }
 
-func (r *fakeRelay) register(w http.ResponseWriter, req *http.Request) {
+func (r *fakeCloudRelay) register(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		cloudRefusal(w, 405, "method_not_allowed", "use POST /v1/homes")
 		return
@@ -331,7 +331,7 @@ func (r *fakeRelay) register(w http.ResponseWriter, req *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"home_id": id})
 }
 
-func (r *fakeRelay) lookup(id string) *fakeHome {
+func (r *fakeCloudRelay) lookup(id string) *fakeHome {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.homes[id]
@@ -360,7 +360,7 @@ func isUpgrade(req *http.Request) bool {
 	return strings.EqualFold(req.Header.Get("Upgrade"), "websocket")
 }
 
-func (r *fakeRelay) serveHome(w http.ResponseWriter, req *http.Request) {
+func (r *fakeCloudRelay) serveHome(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	h := r.lookup(id)
 	if h == nil {
@@ -418,7 +418,7 @@ func (r *fakeRelay) serveHome(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-// closeWithoutWaiting closes a socket whose peer may not read for a while, because Close waits for the peer's answer and the relay's lock must not.
+// closeWithoutWaiting closes a socket whose peer may not read for a while, because Close waits for the peer's answer and the Cloud Relay's lock must not.
 func closeWithoutWaiting(conn *websocket.Conn, code websocket.StatusCode, reason string) {
 	go conn.Close(code, reason)
 }
@@ -428,7 +428,7 @@ func respondToText(ctx context.Context, conn *websocket.Conn, data []byte) {
 		conn.Write(ctx, websocket.MessageText, []byte("pong"))
 		return
 	}
-	writeRelayError(ctx, conn, "text_frame", `text frames carry only "ping"; send binary frames`)
+	writeCloudRelayError(ctx, conn, "text_frame", `text frames carry only "ping"; send binary frames`)
 }
 
 func readEnvelope(conn *websocket.Conn, data []byte) (envelope, bool) {
@@ -444,7 +444,7 @@ func readEnvelope(conn *websocket.Conn, data []byte) (envelope, bool) {
 	return f, true
 }
 
-func writeRelayError(ctx context.Context, conn *websocket.Conn, code, message string) {
+func writeCloudRelayError(ctx context.Context, conn *websocket.Conn, code, message string) {
 	body, _ := json.Marshal(map[string]string{"code": code, "message": message})
 	conn.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameError, 0, body))
 }
@@ -454,7 +454,7 @@ func mustUnb64(s string) []byte {
 	return out
 }
 
-func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
+func (r *fakeCloudRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	switch f.kind {
@@ -474,40 +474,40 @@ func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 	case framePush:
 		r.pushFromHome(ctx, h, f.payload)
 	default:
-		writeRelayError(ctx, h.home, "unsupported_type", fmt.Sprintf("the relay takes no frame type %d from a home", f.kind))
+		writeCloudRelayError(ctx, h.home, "unsupported_type", fmt.Sprintf("the relay takes no frame type %d from a home", f.kind))
 	}
 }
 
-func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []byte) {
+func (r *fakeCloudRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []byte) {
 	var list struct {
 		Devices  *[]string     `json:"devices"`
 		Pairings []fakePairing `json:"pairings"`
 	}
 	if json.Unmarshal(payload, &list) != nil || list.Devices == nil {
-		writeRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairings}")
+		writeCloudRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairings}")
 		return
 	}
 	if count := len(*list.Devices); count > maxAllowlist {
-		writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d devices; the limit is %d", count, maxAllowlist))
+		writeCloudRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d devices; the limit is %d", count, maxAllowlist))
 		return
 	}
 	for _, device := range *list.Devices {
 		if _, ok := decodeKey(device); !ok {
-			writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("%q is not a 32-byte key in base64url", device))
+			writeCloudRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("%q is not a 32-byte key in base64url", device))
 			return
 		}
 	}
 	if count := len(list.Pairings); count > maxPairings {
-		writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d pairings; the limit is %d", count, maxPairings))
+		writeCloudRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("allowlist has %d pairings; the limit is %d", count, maxPairings))
 		return
 	}
 	for _, pairing := range list.Pairings {
 		if pairing.TokenHash == nil || pairing.Until == nil {
-			writeRelayError(ctx, h.home, "bad_allowlist", "each pairing needs a token_hash and an until")
+			writeCloudRelayError(ctx, h.home, "bad_allowlist", "each pairing needs a token_hash and an until")
 			return
 		}
 		if _, ok := decodeKey(*pairing.TokenHash); !ok {
-			writeRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("token_hash %q is not 32 bytes in base64url", *pairing.TokenHash))
+			writeCloudRelayError(ctx, h.home, "bad_allowlist", fmt.Sprintf("token_hash %q is not 32 bytes in base64url", *pairing.TokenHash))
 			return
 		}
 	}
@@ -535,32 +535,32 @@ func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []b
 	h.home.Write(ctx, websocket.MessageBinary, encodeEnvelope(frameAllowlist, 0, nil))
 }
 
-func (r *fakeRelay) pushFromHome(ctx context.Context, h *fakeHome, payload []byte) {
+func (r *fakeCloudRelay) pushFromHome(ctx context.Context, h *fakeHome, payload []byte) {
 	var push Push
 	if json.Unmarshal(payload, &push) != nil {
-		writeRelayError(ctx, h.home, "bad_push", "push payload must be JSON: {device, ciphertext, collapse_id}")
+		writeCloudRelayError(ctx, h.home, "bad_push", "push payload must be JSON: {device, ciphertext, collapse_id}")
 		return
 	}
 	if _, err := base64.RawURLEncoding.DecodeString(push.Ciphertext); err != nil || push.Ciphertext == "" {
-		writeRelayError(ctx, h.home, "bad_push", "ciphertext must be non-empty base64url")
+		writeCloudRelayError(ctx, h.home, "bad_push", "ciphertext must be non-empty base64url")
 		return
 	}
 	if length := len(push.CollapseID); length < 1 || length > 64 {
-		writeRelayError(ctx, h.home, "bad_push", fmt.Sprintf("collapse_id must be 1 to 64 bytes; got %d", length))
+		writeCloudRelayError(ctx, h.home, "bad_push", fmt.Sprintf("collapse_id must be 1 to 64 bytes; got %d", length))
 		return
 	}
 	if !slices.Contains(h.allowed, push.Device) {
-		writeRelayError(ctx, h.home, "push_refused", "device "+push.Device+" is not on the home's allowlist")
+		writeCloudRelayError(ctx, h.home, "push_refused", "device "+push.Device+" is not on the home's allowlist")
 		return
 	}
 	if !h.tokens[push.Device] {
-		writeRelayError(ctx, h.home, "push_no_token", "device "+push.Device+" has not registered a push token")
+		writeCloudRelayError(ctx, h.home, "push_no_token", "device "+push.Device+" has not registered a push token")
 		return
 	}
 	r.pushes <- push
 }
 
-func (r *fakeRelay) registerPushToken(w http.ResponseWriter, req *http.Request) {
+func (r *fakeCloudRelay) registerPushToken(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	if req.Method != http.MethodPost {
 		cloudRefusal(w, 405, "method_not_allowed", "use POST /v1/homes/"+id+"/push-token")
@@ -622,7 +622,7 @@ func (r *fakeRelay) registerPushToken(w http.ResponseWriter, req *http.Request) 
 }
 
 // awaitAllowed returns once the home's allowlist holds the device, which is when a real phone's retried token registration succeeds.
-func (r *fakeRelay) awaitAllowed(ctx context.Context, homeID, signPub string) error {
+func (r *fakeCloudRelay) awaitAllowed(ctx context.Context, homeID, signPub string) error {
 	h := r.lookup(homeID)
 	for {
 		r.mu.Lock()
@@ -671,7 +671,7 @@ func (h *fakeHome) tokenRefusalLocked(signPub, tokenHash string) string {
 	return ""
 }
 
-func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
+func (r *fakeCloudRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
 	id := req.PathValue("id")
 	h := r.lookup(id)
 	if h == nil {
@@ -757,7 +757,7 @@ func (r *fakeRelay) serveDevice(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 		if f.kind != frameData {
-			writeRelayError(ctx, conn, "unsupported_type", fmt.Sprintf("devices send only data frames; got type %d", f.kind))
+			writeCloudRelayError(ctx, conn, "unsupported_type", fmt.Sprintf("devices send only data frames; got type %d", f.kind))
 			continue
 		}
 		if f.connID != connID {

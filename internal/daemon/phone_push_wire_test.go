@@ -77,7 +77,7 @@ func (p *pushedPhone) next() testworld.PushNote {
 		}
 		return note
 	case <-time.After(fakeagent.HangGuard):
-		p.t.Fatalf("no push reached the relay within fakeagent.HangGuard=%s", fakeagent.HangGuard)
+		p.t.Fatalf("no push reached the Cloud Relay within fakeagent.HangGuard=%s", fakeagent.HangGuard)
 		return testworld.PushNote{}
 	}
 }

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-check="$root/scripts/check-relay-privacy"
-work="$(mktemp -d "${TMPDIR:-/tmp}/attn-relay-privacy-test.XXXXXX")"
+check="$root/scripts/check-cloud-relay-privacy"
+work="$(mktemp -d "${TMPDIR:-/tmp}/attn-cloud-relay-privacy-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
-fail() { echo "check-relay-privacy test: $1" >&2; exit 1; }
+fail() { echo "check-cloud-relay-privacy test: $1" >&2; exit 1; }
 
 cd "$work"
 git init -q
@@ -20,4 +20,4 @@ for line in 'see the attn-cloud repository' 'attn-cloud/v1 noise in attn-cloud' 
   if "$check" 2>err.txt; then fail "accepted: $line"; fi
   grep -qF 'doc.md:1:' err.txt || fail "does not name the file for: $line: $(cat err.txt)"
 done
-echo "check-relay-privacy: all cases passed"
+echo "check-cloud-relay-privacy: all cases passed"

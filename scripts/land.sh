@@ -174,7 +174,7 @@ run_checks() {
   local changed file dir group pattern script_tests packages="" targets=() go_checks=() landing_groups=()
   changed="$(git diff --name-only origin/main...HEAD)"
   touches() { grep -qE "$1" <<<"$changed"; }
-  scripts/check-relay-privacy
+  scripts/check-cloud-relay-privacy
   if touches '\.go$|^go\.(mod|sum)$'; then
     packages='./...'
     if ! touches '^go\.(mod|sum)$'; then

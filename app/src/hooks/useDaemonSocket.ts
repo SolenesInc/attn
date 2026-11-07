@@ -570,7 +570,7 @@ const harnessRegistrySignature = (settings: DaemonSettings) => JSON.stringify(Ob
 const BRIDGE_LOST_AFTER_MS = 60_000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const CONFIRMED_INPUT_TIMEOUT_MS = BRIDGE_LOST_AFTER_MS + 30_000;
-// The home answers once its relay applied the pairing window, which it waits up to 15 s for (cloudlink connectWithin).
+// The home answers once its Cloud Relay applied the pairing window, which it waits up to 15 s for (cloudlink connectWithin).
 const PHONE_PAIR_BEGIN_TIMEOUT_MS = 20_000;
 const SELECTION_COMMANDS = ['desktop_show_session', 'desktop_show_leaf', 'desktop_set_current'];
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;

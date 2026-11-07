@@ -16,8 +16,8 @@ const pskPlacement = 2
 
 const noiseTagSize = 16
 
-// MaxMessageBytes is the largest Home Gateway message that fits one relay frame once sealed.
-const MaxMessageBytes = maxRelayFrame - envelopeHeader - noiseTagSize
+// MaxMessageBytes is the largest Home Gateway message that fits one Cloud Relay frame once sealed.
+const MaxMessageBytes = maxCloudRelayFrame - envelopeHeader - noiseTagSize
 
 func prologue(deviceSignPub []byte) []byte {
 	return append([]byte("attn-cloud/v1 noise\n"), deviceSignPub...)
@@ -30,7 +30,7 @@ type transport struct {
 
 func (t transport) seal(plaintext []byte) ([]byte, error) {
 	if len(plaintext) > MaxMessageBytes {
-		return nil, fmt.Errorf("a Home Gateway message of %d bytes does not fit the relay's %d-byte frame; at most %d bytes fit after the envelope and the Noise tag", len(plaintext), maxRelayFrame, MaxMessageBytes)
+		return nil, fmt.Errorf("a Home Gateway message of %d bytes does not fit the Cloud Relay's %d-byte frame; at most %d bytes fit after the envelope and the Noise tag", len(plaintext), maxCloudRelayFrame, MaxMessageBytes)
 	}
 	return t.send.Encrypt(nil, nil, plaintext)
 }

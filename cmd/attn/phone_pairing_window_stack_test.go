@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const relayRefused = 4403
+const cloudRelayRefused = 4403
 
 func startPairingStack(t *testing.T, vars ...string) (*testworld.Cloud, *testworld.Stack, *testworld.Peer) {
 	t.Helper()
@@ -65,15 +65,15 @@ func holdSocket(t *testing.T, cloud *testworld.Cloud, qr testworld.PhoneQR) *tes
 
 func expectLapsed(t *testing.T, cloud *testworld.Cloud, socket *testworld.PhoneSocket, qr testworld.PhoneQR) {
 	t.Helper()
-	if code := socket.AwaitClosed(); code != relayRefused {
-		t.Fatalf("the lapsed window's socket closed with %d, want the relay's %d", code, relayRefused)
+	if code := socket.AwaitClosed(); code != cloudRelayRefused {
+		t.Fatalf("the lapsed window's socket closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 	}
 	if _, err := testworld.NewPhone(t, cloud, "Latecomer").DialToPair(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
-		t.Fatalf("dial after the window lapsed = %v, want the relay's 4403", err)
+		t.Fatalf("dial after the window lapsed = %v, want the Cloud Relay's 4403", err)
 	}
 }
 
-func TestCancellingAPairingCodeClosesItsWindowAtTheRelay(t *testing.T) {
+func TestCancellingAPairingCodeClosesItsWindowAtTheCloudRelay(t *testing.T) {
 	t.Parallel()
 	cloud, app := startPairingHome(t)
 	profile := app.SelectedProfile()
@@ -99,7 +99,7 @@ func TestCancellingAPairingCodeClosesItsWindowAtTheRelay(t *testing.T) {
 	paired.Hello()
 }
 
-func TestAnExpiredPairingCodeClosesItsWindowAtTheRelay(t *testing.T) {
+func TestAnExpiredPairingCodeClosesItsWindowAtTheCloudRelay(t *testing.T) {
 	t.Parallel()
 	cloud, app := startPairingHome(t, config.PairingLifetimeEnv+"=5s")
 	qr := openWindow(t, app, app.SelectedProfile(), "pair")
@@ -115,8 +115,8 @@ func TestShowingANewPairingCodeClosesTheOldWindow(t *testing.T) {
 
 	fresh := openWindow(t, app, profile, "pair-new")
 
-	if code := socket.AwaitClosed(); code != relayRefused {
-		t.Fatalf("the replaced code's socket closed with %d, want the relay's %d", code, relayRefused)
+	if code := socket.AwaitClosed(); code != cloudRelayRefused {
+		t.Fatalf("the replaced code's socket closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 	}
 	holdSocket(t, cloud, fresh)
 }
@@ -173,7 +173,7 @@ func TestEachProfileHasItsOwnPairingWindow(t *testing.T) {
 		t.Fatalf("welcome = %+v, want profile %s", welcome, work.ID)
 	}
 	if _, err := testworld.NewPhone(t, cloud, "Latecomer").DialToPair(workQR); !errors.Is(err, testworld.ErrNotAdmitted) {
-		t.Fatalf("dial with the used code = %v, want the relay's 4403", err)
+		t.Fatalf("dial with the used code = %v, want the Cloud Relay's 4403", err)
 	}
 
 	otherHolder := holdSocket(t, cloud, homeQR)
@@ -188,8 +188,8 @@ func TestEachProfileHasItsOwnPairingWindow(t *testing.T) {
 	}
 	cancelPairing(t, app, home, "cancel-home")
 	expectLapsed(t, cloud, homeHolder, homeQR)
-	if code := otherHolder.AwaitClosed(); code != relayRefused {
-		t.Fatalf("the second holder closed with %d, want the relay's %d", code, relayRefused)
+	if code := otherHolder.AwaitClosed(); code != cloudRelayRefused {
+		t.Fatalf("the second holder closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 	}
 }
 
@@ -250,8 +250,8 @@ func TestAClientLeavingEndsOnlyThePairingCodesItStillHolds(t *testing.T) {
 	workQR := openWindow(t, leaving, work.ID, "pair-work")
 	workHolder := holdSocket(t, cloud, workQR)
 	kept := openWindow(t, staying, profile, "pair-kept")
-	if code := replacedHolder.AwaitClosed(); code != relayRefused {
-		t.Fatalf("the replaced code's socket closed with %d, want the relay's %d", code, relayRefused)
+	if code := replacedHolder.AwaitClosed(); code != cloudRelayRefused {
+		t.Fatalf("the replaced code's socket closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 	}
 
 	leaving.Close()
@@ -278,7 +278,7 @@ func TestAPhoneWithoutARelayTokenIsToldToUpdate(t *testing.T) {
 	qr := openWindow(t, app, app.SelectedProfile(), "pair")
 	_, err := testworld.NewPhone(t, cloud, "Old phone").Dial(qr)
 	if !errors.Is(err, testworld.ErrNotAdmitted) || !strings.Contains(err.Error(), "update the attn app") {
-		t.Fatalf("dial with no token = %v, want the relay's 4403 naming the update", err)
+		t.Fatalf("dial with no token = %v, want the Cloud Relay's 4403 naming the update", err)
 	}
 }
 

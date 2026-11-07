@@ -308,7 +308,7 @@ func (d *Daemon) homeGatewayRefuse(conn *homeGatewayConn, message string) error 
 	if err := homeGatewaySend(conn, homegateway.HomeGatewayRefused{Event: "refused", Message: message}); err != nil {
 		return err
 	}
-	return errors.New("Home Gateway refused device " + conn.device.DeviceID + ": " + message)
+	return errors.New("the Home Gateway refused device " + conn.device.DeviceID + ": " + message)
 }
 
 func (d *Daemon) homeGatewaySendSessions(conn *homeGatewayConn) error {

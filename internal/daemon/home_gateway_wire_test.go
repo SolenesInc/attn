@@ -125,7 +125,7 @@ func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
 			p.t.Fatalf("the home sent %s, which is not a Home Gateway event", frame)
 		}
 		if len(frame) > cloudlink.MaxMessageBytes {
-			p.t.Fatalf("the home sent a %s event of %d bytes; a relay frame carries at most cloudlink.MaxMessageBytes=%d", head.Event, len(frame), cloudlink.MaxMessageBytes)
+			p.t.Fatalf("the home sent a %s event of %d bytes; a Cloud Relay frame carries at most cloudlink.MaxMessageBytes=%d", head.Event, len(frame), cloudlink.MaxMessageBytes)
 		}
 		switch head.Event {
 		case "ask":

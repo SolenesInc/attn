@@ -42,7 +42,7 @@ func awaitPushesUntil(t *testing.T, cloud *testworld.Cloud, phones []*testworld.
 		select {
 		case push = <-cloud.Pushes():
 		case <-guard:
-			t.Fatalf("the awaited push did not reach the relay within fakeagent.HangGuard=%s; pushes so far %+v", fakeagent.HangGuard, opened)
+			t.Fatalf("the awaited push did not reach the Cloud Relay within fakeagent.HangGuard=%s; pushes so far %+v", fakeagent.HangGuard, opened)
 		}
 		i := slices.IndexFunc(phones, func(p *testworld.Phone) bool { return p.SignPub() == push.Device })
 		if i < 0 {

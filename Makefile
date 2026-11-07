@@ -476,9 +476,9 @@ check-types: generate-types
 check-home-gateway-compat:
 	scripts/check-home-gateway-compat
 
-.PHONY: check-relay-privacy
-check-relay-privacy:
-	scripts/check-relay-privacy
+.PHONY: check-cloud-relay-privacy
+check-cloud-relay-privacy:
+	scripts/check-cloud-relay-privacy
 
 MIGRATION_BASE ?= origin/main
 

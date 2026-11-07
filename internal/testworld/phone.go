@@ -63,8 +63,8 @@ func NewPhone(t *testing.T, cloud *Cloud, name string) *Phone {
 
 func (p *Phone) DeviceID() string { return keyID(p.sign.Public().(ed25519.PublicKey)) }
 
-// ErrNotAdmitted is the relay closing a device socket with 4403. The error's text carries the relay's reason.
-var ErrNotAdmitted = errors.New("the relay closed the device socket with 4403")
+// ErrNotAdmitted is the Cloud Relay closing a device socket with 4403. The error's text carries the Cloud Relay's reason.
+var ErrNotAdmitted = errors.New("the Cloud Relay closed the device socket with 4403")
 
 type PhoneSocket struct {
 	t      *testing.T
@@ -293,17 +293,17 @@ type PushNote struct {
 func (p *Phone) SignPub() string { return b64(p.sign.Public().(ed25519.PublicKey)) }
 
 // RegisterForPush registers an APNs token as the phone does once the home has allowed it. Pushes are visible only
-// through the stand-in relay, so a test that reads them skips under ATTN_TEST_CLOUD_URL.
+// through the stand-in Cloud Relay, so a test that reads them skips under ATTN_TEST_CLOUD_URL.
 func (s *PhoneSocket) RegisterForPush() {
 	s.t.Helper()
 	cloud := s.phone.cloud
-	if cloud.relay == nil {
-		s.t.Skip("pushes are visible only through the fake relay; this run uses ATTN_TEST_CLOUD_URL")
+	if cloud.cloudRelay == nil {
+		s.t.Skip("pushes are visible only through the fake Cloud Relay; this run uses ATTN_TEST_CLOUD_URL")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	pub := s.phone.SignPub()
-	if err := cloud.relay.awaitAllowed(ctx, s.homeID, pub); err != nil {
+	if err := cloud.cloudRelay.awaitAllowed(ctx, s.homeID, pub); err != nil {
 		s.t.Fatal(err)
 	}
 	const environment, token = "sandbox", "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff"
@@ -319,7 +319,7 @@ func (s *PhoneSocket) RegisterForPush() {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
-		s.t.Fatalf("registering a push token: the relay answered %d", res.StatusCode)
+		s.t.Fatalf("registering a push token: the Cloud Relay answered %d", res.StatusCode)
 	}
 }
 

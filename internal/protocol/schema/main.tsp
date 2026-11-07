@@ -8529,7 +8529,7 @@ model PhonePairBeginResultMessage {
   pairing_code?: PhonePairingCode;
 }
 
-// Ends the profile's QR code before it expires, so the relay stops admitting it.
+// Ends the profile's QR code before it expires, so the Cloud Relay stops admitting it.
 // Answers success when the profile has no code.
 model PhonePairCancelMessage {
   cmd: "phone_pair_cancel";

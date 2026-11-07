@@ -115,7 +115,7 @@ export type Link = Omit<Socket, 'send'> & {
   readonly openTerminal: (terminalId: string, request: TerminalRequest, sink: TerminalSink) => OpenTerminal
 }
 
-// The credit a phone grants each terminal: four relay messages in flight, and always room for a whole screen.
+// The credit a phone grants each terminal: four Cloud Relay messages in flight, and always room for a whole screen.
 export const terminalCreditBytes = 256 << 10
 
 type Pending = { readonly resolve: (reply: Reply) => void; readonly reject: (error: Error) => void }
@@ -138,9 +138,9 @@ const closeReason = (
     case 4403:
       return `${home.homeName} no longer allows this phone; pair it again from Settings → Phones`
     case 4400:
-      return `the relay refused a malformed frame: ${event.reason}`
+      return `the Cloud Relay refused a malformed frame: ${event.reason}`
     case 4401:
-      return 'the relay refused this phone’s signature'
+      return 'the Cloud Relay refused this phone’s signature'
     default:
       return ready
         ? `the connection to ${home.homeName} dropped (close code ${event.code})`
@@ -181,7 +181,7 @@ const openSocket = (
   }
   const heartbeat = setInterval(() => {
     if (pongDeadline !== undefined) return
-    const pinged = transport && homeAnswersPing ? home.homeName : `the relay for ${home.homeName}`
+    const pinged = transport && homeAnswersPing ? home.homeName : `the Cloud Relay for ${home.homeName}`
     pongDeadline = setTimeout(
       () => end(`${pinged}: no answer for ${pongDeadlineMs / 1000} s; reconnecting`),
       pongDeadlineMs,

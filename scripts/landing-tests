@@ -130,12 +130,12 @@ playwright e2e/notebook-tile.spec.ts
 group production-copy ^scripts/gardenpushperf/copy-production\.sh$
 go ./internal/daemon TestACopyOfProductionNeverRunsACopiedAgent
 
-group relay-contract ^internal/cloudlink/|^internal/testworld/(cloud|phone)\.go$
-go ./internal/testworld TestTheStandInRelayHonorsTheContract
-go ./internal/cloudlink TestTheHomeSpeaksTheRelayContractVectors
+group cloud-relay-contract ^internal/cloudlink/|^internal/testworld/(cloud|phone)\.go$
+go ./internal/testworld TestTheStandInCloudRelayHonorsTheContract
+go ./internal/cloudlink TestTheHomeSpeaksTheCloudRelayContractVectors
 go ./cmd/attn TestAPhonePairsReconnectsAndIsRevoked
-go ./cmd/attn TestCancellingAPairingCodeClosesItsWindowAtTheRelay
-go ./cmd/attn TestAnExpiredPairingCodeClosesItsWindowAtTheRelay
+go ./cmd/attn TestCancellingAPairingCodeClosesItsWindowAtTheCloudRelay
+go ./cmd/attn TestAnExpiredPairingCodeClosesItsWindowAtTheCloudRelay
 go ./cmd/attn TestUsingAPairingCodeKeepsThePhoneAndDropsOtherHoldersOfIt
 go ./cmd/attn TestEachProfileHasItsOwnPairingWindow
 go ./cmd/attn TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly

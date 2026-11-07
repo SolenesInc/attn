@@ -21,11 +21,11 @@ import (
 const (
 	PairingLifetime = 10 * time.Minute
 	// pingEvery stays under the contract's 20 s; a ping still unanswered at the next tick means the path is gone.
-	// The deployed relay echoed at p99 44.7 ms (s-9ywtg5).
+	// The deployed Cloud Relay echoed at p99 44.7 ms (s-9ywtg5).
 	pingEvery = 15 * time.Second
-	// connectWithin bounds dial, challenge and ready; the relay round trip measured 42 ms at p50.
+	// connectWithin bounds dial, challenge and ready; the Cloud Relay round trip measured 42 ms at p50.
 	connectWithin = 15 * time.Second
-	// A reconnect through the same relay took about 100 ms (s-9ywtg5), so the first retry waits that long.
+	// A reconnect through the same Cloud Relay took about 100 ms (s-9ywtg5), so the first retry waits that long.
 	firstRetry = 100 * time.Millisecond
 	lastRetry  = 10 * time.Second
 )
@@ -224,7 +224,7 @@ func (l *Link) NewPairingCode(profileID, profileName string, holder any) (Pairin
 			}
 			l.mu.Unlock()
 			l.cfg.Home.Changed()
-			return PairingCode{}, fmt.Errorf("the relay did not open the pairing window: %w", err)
+			return PairingCode{}, fmt.Errorf("the Cloud Relay did not open the pairing window: %w", err)
 		}
 	}
 	return *pairingCode, nil
@@ -383,7 +383,7 @@ func (l *Link) Run(ctx context.Context) {
 		if connected >= lastRetry {
 			wait = firstRetry
 		}
-		l.cfg.Home.Logf("cloudlink: lost the relay (%v); reconnecting in %s", err, wait)
+		l.cfg.Home.Logf("cloudlink: lost the Cloud Relay (%v); reconnecting in %s", err, wait)
 		l.setStatus(StateConnecting, err)
 		select {
 		case <-time.After(wait):
@@ -423,7 +423,7 @@ func (l *Link) dial(ctx context.Context) (*websocket.Conn, error) {
 		conn, err = dialHome(ctx, l.cfg.HTTP, l.cfg.CloudURL, l.cfg.Identity, homeID)
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return nil, fmt.Errorf("the relay at %s did not answer within %s", l.cfg.CloudURL, connectWithin)
+		return nil, fmt.Errorf("the Cloud Relay at %s did not answer within %s", l.cfg.CloudURL, connectWithin)
 	}
 	return conn, err
 }
@@ -520,7 +520,7 @@ func (s *session) allowlistApplied() error {
 		select {
 		case <-changed:
 		case <-s.ctx.Done():
-			return fmt.Errorf("lost the relay before it answered: %w", context.Cause(s.ctx))
+			return fmt.Errorf("lost the Cloud Relay before it answered: %w", context.Cause(s.ctx))
 		case <-timeout.C:
 			return fmt.Errorf("no answer within %s", connectWithin)
 		}
@@ -550,7 +550,7 @@ func (s *session) heartbeat() {
 		s.pingUnseen = true
 		s.pongMu.Unlock()
 		if unanswered {
-			s.lost(fmt.Errorf("the relay did not answer a ping within %s", pingEvery))
+			s.lost(fmt.Errorf("the Cloud Relay did not answer a ping within %s", pingEvery))
 			return
 		}
 		if err := s.conn.Write(s.ctx, websocket.MessageText, []byte("ping")); err != nil {
@@ -568,7 +568,7 @@ func (s *session) read() error {
 				return cause
 			}
 			if websocket.CloseStatus(err) == closeReplaced {
-				return errors.New("another attn daemon with this home's identity connected to the relay; two daemons share one data directory's cloud keys")
+				return errors.New("another attn daemon with this home's identity connected to the Cloud Relay; two daemons share one data directory's cloud keys")
 			}
 			return err
 		}
@@ -616,7 +616,7 @@ func (s *session) handle(f frame) {
 	case frameAllowlist:
 		s.allowlistAnswered(nil)
 	case frameError:
-		logf("cloudlink: the relay reported %s", f.payload)
+		logf("cloudlink: the Cloud Relay reported %s", f.payload)
 		var reported struct {
 			Code    string `json:"code"`
 			Message string `json:"message"`
@@ -626,7 +626,7 @@ func (s *session) handle(f frame) {
 		}
 	case framePresence:
 	default:
-		logf("cloudlink: the relay sent frame type %d, which this home does not know", f.kind)
+		logf("cloudlink: the Cloud Relay sent frame type %d, which this home does not know", f.kind)
 	}
 }
 

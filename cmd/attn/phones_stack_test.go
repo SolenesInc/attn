@@ -94,7 +94,7 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 		t.Fatalf("after pairing: pairing %+v, pairing codes %+v", pairing, listed.PairingCodes)
 	}
 
-	t.Run("reconnects after the relay socket is cut", func(t *testing.T) {
+	t.Run("reconnects after the Cloud Relay socket is cut", func(t *testing.T) {
 		reconnected := len(app.Log())
 		if cut := cloud.Cut(); cut != 1 {
 			t.Fatalf("cut %d home connections, want 1", cut)
@@ -112,11 +112,11 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 
 	t.Run("refuses a second use of the pairing secret", func(t *testing.T) {
 		if _, err := testworld.NewPhone(t, cloud, "Second phone").Dial(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
-			t.Fatalf("dial with the window closed = %v, want the relay's 4403", err)
+			t.Fatalf("dial with the window closed = %v, want the Cloud Relay's 4403", err)
 		}
 		window := testworld.ParsePhoneQR(t, beginPairing(t, app, profile, "pair-2").Qr)
 		if _, err := testworld.NewPhone(t, cloud, "Second phone").DialToPair(qr); !errors.Is(err, testworld.ErrNotAdmitted) {
-			t.Fatalf("dial with the used code's token = %v, want the relay's 4403", err)
+			t.Fatalf("dial with the used code's token = %v, want the Cloud Relay's 4403", err)
 		}
 		second, err := testworld.NewPhone(t, cloud, "Second phone").DialToPair(window)
 		if err != nil {
@@ -134,8 +134,8 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 		if !result.Success {
 			t.Fatal(protocol.Deref(result.Error))
 		}
-		if code := socket.AwaitClosed(); code != relayRefused {
-			t.Fatalf("revoked device's socket closed with %d, want the relay's %d", code, relayRefused)
+		if code := socket.AwaitClosed(); code != cloudRelayRefused {
+			t.Fatalf("revoked device's socket closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 		}
 		testworld.AwaitSince(app, revoked, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
 			_, ok := pairingOf(m, phone.DeviceID())
@@ -228,8 +228,8 @@ func TestDeletingAProfileForgetsItsPhones(t *testing.T) {
 	if deleted.Error != nil {
 		t.Fatalf("profile_delete: %s", *deleted.Error)
 	}
-	if code := socket.AwaitClosed(); code != relayRefused {
-		t.Fatalf("the deleted profile's phone closed with %d, want the relay's %d", code, relayRefused)
+	if code := socket.AwaitClosed(); code != cloudRelayRefused {
+		t.Fatalf("the deleted profile's phone closed with %d, want the Cloud Relay's %d", code, cloudRelayRefused)
 	}
 	testworld.AwaitSince(app, forgotten, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
 		_, ok := pairingOf(m, phone.DeviceID())

@@ -18,7 +18,7 @@ model HomeGatewayHello {
 }
 
 // Since api 2: a device sends ping to learn that its home still answers
-// through the relay; the home answers pong.
+// through the Cloud Relay; the home answers pong.
 model HomeGatewayPing {
   cmd: "ping";
 }

@@ -8,7 +8,7 @@ import { toBase64Url } from './bytes'
 import { relayToken, type DeviceKeys } from './device'
 import { pairWithHome, runLink, type LinkEvent } from './link'
 import { pushTokenMessage, registerForPush } from './push'
-import { FakeRelay, FakeSocket, frame } from './test/fakeRelay'
+import { FakeCloudRelay, FakeSocket, frame } from './test/fakeCloudRelay'
 
 vi.mock('@capacitor/core', async (actual) => ({
   ...(await actual<typeof import('@capacitor/core')>()),
@@ -28,7 +28,10 @@ type Vectors = {
 }
 
 const vectors: Vectors = JSON.parse(
-  readFileSync(new URL('../../internal/cloudlink/testdata/relay_vectors.json', import.meta.url), 'utf8'),
+  readFileSync(
+    new URL('../../internal/cloudlink/testdata/cloud_relay_vectors.json', import.meta.url),
+    'utf8',
+  ),
 )
 const named = (name: string) => vectors.frames.find((each) => each.name === name)!
 const wire = (name: string) => hexToBytes(named(name).bytes).buffer as ArrayBuffer
@@ -57,7 +60,7 @@ class ScriptedSocket {
   close() {}
 }
 
-describe('the phone speaks the relay contract vectors', () => {
+describe('the phone speaks the Cloud Relay contract vectors', () => {
   const events: Array<LinkEvent> = []
   let closeLink = () => {}
 
@@ -155,7 +158,7 @@ describe('the phone pairs with the relay token the contract specifies', () => {
     ])
   })
 
-  it('tells the person to show a new code when the relay refuses it', async () => {
+  it('tells the person to show a new code when the Cloud Relay refuses it', async () => {
     const paired = pairWithHome(home, keys, pairing)
     ScriptedSocket.latest.onclose?.({ code: 4403 })
     await expect(paired).rejects.toThrow(
@@ -191,7 +194,7 @@ describe('the phone registers its push token as the contract specifies', () => {
   })
 })
 
-describe('the phone tests stand-in relay speaks the relay contract', () => {
+describe('the phone tests stand-in Cloud Relay speaks the Cloud Relay contract', () => {
   it.each(vectors.frames.map((each) => [each.name, each] as const))('%s', (_, vector) => {
     const bytes = new Uint8Array(frame(vector.type, vector.conn_id, hexToBytes(vector.payload)))
     expect(bytesToHex(bytes)).toBe(vector.bytes)
@@ -199,7 +202,7 @@ describe('the phone tests stand-in relay speaks the relay contract', () => {
 
   it('opens a device socket with challenge, then ready and presence online', async () => {
     const seen: Array<number> = []
-    const socket = new FakeSocket(`wss://x/?device_sign_pub=${vectors.sign_pub}`, new FakeRelay())
+    const socket = new FakeSocket(`wss://x/?device_sign_pub=${vectors.sign_pub}`, new FakeCloudRelay())
     socket.onmessage = ({ data }) => seen.push(new Uint8Array(data as ArrayBuffer)[1]!)
     await Promise.resolve()
     socket.send(hexToBytes(named('auth').bytes))

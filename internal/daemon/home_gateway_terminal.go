@@ -21,7 +21,7 @@ import (
 const homeGatewayTerminalAPI = 4
 
 // homeGatewayOutputCoalesce batches PTY output so a streaming terminal sends about 60 frames a second, inside the
-// relay's measured 4,000 messages a second for a whole home (plan F2).
+// Cloud Relay's measured 4,000 messages a second for a whole home (plan F2).
 const homeGatewayOutputCoalesce = 16 * time.Millisecond
 
 // homeGatewayPendingTripwire bounds output held for a device that stopped granting credit. Past it, a fresh screen

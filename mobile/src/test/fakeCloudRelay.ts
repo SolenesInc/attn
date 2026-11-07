@@ -91,7 +91,7 @@ type Listener = {
   onclose?: (event: { code: number }) => void
 }
 
-export class FakeRelay {
+export class FakeCloudRelay {
   readonly homeStatic = x25519.utils.randomSecretKey()
   readonly sockets: Array<FakeSocket> = []
   homeAnswersPings = true
@@ -122,7 +122,7 @@ export class FakeSocket implements Listener {
 
   constructor(
     readonly url: string,
-    private readonly relay: FakeRelay,
+    private readonly cloudRelay: FakeCloudRelay,
   ) {
     const key = new URL(url).searchParams.get('device_sign_pub')!
     this.signPub = Uint8Array.from(atob(key.replaceAll('-', '+').replaceAll('_', '/')), (c) =>
@@ -164,7 +164,7 @@ export class FakeSocket implements Listener {
     }
     if (!this.transport) {
       this.transport = homeAnswersPairedHandshake(
-        this.relay.homeStatic,
+        this.cloudRelay.homeStatic,
         join(text.encode('attn-cloud/v1 noise\n'), this.signPub),
         payload.subarray(1),
       )
@@ -172,29 +172,29 @@ export class FakeSocket implements Listener {
       return
     }
     const message = JSON.parse(new TextDecoder().decode(this.transport.recv.open(payload)))
-    this.relay.commands.push(message)
+    this.cloudRelay.commands.push(message)
     if (message.cmd === 'hello') {
       this.toPhone({
         event: 'welcome',
-        api: this.relay.welcomeApi ?? message.api,
+        api: this.cloudRelay.welcomeApi ?? message.api,
         home_name: 'Mac',
         profile: { id: 'p', name: 'personal' },
       })
-      this.relay.sessions(this, [])
+      this.cloudRelay.sessions(this, [])
     }
     if (message.cmd === 'ask_image') {
       const reply = () => this.answerImage(message)
-      if (this.relay.holdImageReplies) this.relay.heldImageRequests.push(reply)
+      if (this.cloudRelay.holdImageReplies) this.cloudRelay.heldImageRequests.push(reply)
       else reply()
     }
     if (message.cmd === 'ping') {
-      this.relay.homePings++
-      if (this.relay.homeAnswersPings) this.toPhone({ event: 'pong' })
+      this.cloudRelay.homePings++
+      if (this.cloudRelay.homeAnswersPings) this.toPhone({ event: 'pong' })
     }
   }
 
   private answerImage(message: { request_id: string; ask_id: string; src: string; offset: number }) {
-    const image = this.relay.images.get(`${message.ask_id}\n${message.src}`)
+    const image = this.cloudRelay.images.get(`${message.ask_id}\n${message.src}`)
     if (!image) {
       this.toPhone({
         event: 'ask_image_error',
@@ -221,10 +221,10 @@ export class FakeSocket implements Listener {
   }
 }
 
-export const socketsOf = (relay: FakeRelay) =>
+export const socketsOf = (cloudRelay: FakeCloudRelay) =>
   class extends FakeSocket {
     constructor(url: string) {
-      super(url, relay)
-      relay.sockets.push(this)
+      super(url, cloudRelay)
+      cloudRelay.sockets.push(this)
     }
   }

@@ -15,7 +15,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// The wire contract: docs/internal/relay-contract.md.
+// The wire contract: docs/internal/cloud-relay-contract.md.
 
 const envelopeVersion = 1
 
@@ -37,7 +37,7 @@ const (
 const envelopeHeader = 6
 
 // maxRelayFrame is the home's cap on one frame, from the wire contract. It keeps a frame inside one Noise message (65,535 bytes).
-const maxRelayFrame = 64 << 10
+const maxCloudRelayFrame = 64 << 10
 
 type frame struct {
 	kind    frameType
@@ -56,10 +56,10 @@ func encodeFrame(kind frameType, connID uint32, payload []byte) []byte {
 
 func decodeFrame(data []byte) (frame, error) {
 	if len(data) < envelopeHeader {
-		return frame{}, fmt.Errorf("relay sent a %d-byte frame; an envelope is at least %d bytes", len(data), envelopeHeader)
+		return frame{}, fmt.Errorf("the Cloud Relay sent a %d-byte frame; an envelope is at least %d bytes", len(data), envelopeHeader)
 	}
 	if data[0] != envelopeVersion {
-		return frame{}, fmt.Errorf("relay sent envelope version %d; this home speaks %d", data[0], envelopeVersion)
+		return frame{}, fmt.Errorf("the Cloud Relay sent envelope version %d; this home speaks %d", data[0], envelopeVersion)
 	}
 	return frame{kind: frameType(data[1]), connID: binary.BigEndian.Uint32(data[2:6]), payload: data[envelopeHeader:]}, nil
 }
@@ -121,9 +121,9 @@ func dialHome(ctx context.Context, client *http.Client, cloudURL string, id Iden
 		if res != nil && res.StatusCode == http.StatusNotFound {
 			return nil, errUnknownHome
 		}
-		return nil, fmt.Errorf("dialing the relay at %s: %w", url, err)
+		return nil, fmt.Errorf("dialing the Cloud Relay at %s: %w", url, err)
 	}
-	conn.SetReadLimit(maxRelayFrame)
+	conn.SetReadLimit(maxCloudRelayFrame)
 	challenge, err := readFrame(ctx, conn)
 	if err != nil {
 		conn.CloseNow()
@@ -131,7 +131,7 @@ func dialHome(ctx context.Context, client *http.Client, cloudURL string, id Iden
 	}
 	if challenge.kind != frameChallenge {
 		conn.CloseNow()
-		return nil, fmt.Errorf("relay sent frame type %d before its challenge", challenge.kind)
+		return nil, fmt.Errorf("the Cloud Relay sent frame type %d before its challenge", challenge.kind)
 	}
 	message := append([]byte("attn-cloud/v1 auth home\n"+homeID+"\n"), challenge.payload...)
 	if err := conn.Write(ctx, websocket.MessageBinary, encodeFrame(frameAuth, 0, ed25519.Sign(id.SignKey, message))); err != nil {
@@ -145,7 +145,7 @@ func dialHome(ctx context.Context, client *http.Client, cloudURL string, id Iden
 	}
 	if ready.kind != frameReady {
 		conn.CloseNow()
-		return nil, fmt.Errorf("relay answered auth with frame type %d, want ready", ready.kind)
+		return nil, fmt.Errorf("the Cloud Relay answered auth with frame type %d, want ready", ready.kind)
 	}
 	return conn, nil
 }
