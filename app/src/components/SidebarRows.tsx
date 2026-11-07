@@ -19,7 +19,6 @@ import { describeUnknownReason } from './stateReason';
 import './Sidebar.css';
 import './SidebarRow.css';
 import type { LocalSession } from './sidebarTypes';
-import { useSessionShelfPeekHover, useShelfPeekHover } from './SessionTerminalDesktop/useShelfPeekHover';
 
 export function SidebarSessionPullRequest({
   pullRequests,
@@ -87,7 +86,6 @@ export function TileSidebarRow({
   const seeds = useDaemonStore((state) => state.seeds);
   const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
   const kind = tileKindLabel(tile.tileKind);
-  const peekHover = useShelfPeekHover(desktopId, tile.tileId);
   const tileIdentifier = tile.tileKind === 'notebook'
     ? parseNotebookTileParams(tile.tileParams).path
     : tile.tileParams;
@@ -98,7 +96,6 @@ export function TileSidebarRow({
       data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
       title={tileIdentifier || tile.tileId}
-      {...peekHover}
     >
       <button
         type="button"
@@ -209,7 +206,6 @@ export function SidebarSessionRow({
     ? 'Session will be recovered when opened'
     : session.state === 'unknown' ? describeUnknownReason(session.state_reason) : undefined;
   const hoverTitle = stateTitle ? `${harnessTitle} · ${stateTitle}` : harnessTitle;
-  const peekHover = useSessionShelfPeekHover(session.id);
   return (
     <div
       className={`session-item sidebar-leaf-row ${grouped ? 'grouped' : ''} ${selected ? 'selected' : ''} ${session.state === 'recoverable' ? 'recoverable' : ''} ${draggable ? 'session-item--draggable' : ''} ${dragging ? 'session-item--dragging' : ''}`
@@ -221,7 +217,6 @@ export function SidebarSessionRow({
       data-state={session.state}
       data-offline={session.offline || undefined}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
-      {...peekHover}
     >
       <button
         type="button"

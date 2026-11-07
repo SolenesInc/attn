@@ -33,8 +33,8 @@ function arriveAtAnchor(desktopId: string, leafId: string, element: HTMLElement)
   const { peek, setPeek, leafDragging } = useDesktopShelfStore.getState();
   if (leafDragging || peek?.leafId === leafId) return;
   openTimer = window.setTimeout(() => {
-    const { left, right, top, bottom } = element.getBoundingClientRect();
-    setPeek({ desktopId, leafId, anchor: { left, right, top, bottom } });
+    const { left, bottom } = element.getBoundingClientRect();
+    setPeek({ desktopId, leafId, anchor: { left, bottom } });
   }, peek ? SWITCH_DELAY_MS : OPEN_DELAY_MS);
 }
 
@@ -61,23 +61,4 @@ export function useShelfPeekHover(desktopId: string, leafId: string) {
   const offScreen = useDesktopShelfStore((state) =>
     offScreenColumns(state.shelfByDesktop[desktopId]).some((column) => column.tiles.some((tile) => tile.leafId === leafId)));
   return useMemo(() => (offScreen ? hoverHandlers(desktopId, leafId) : undefined), [desktopId, leafId, offScreen]);
-}
-
-function offScreenLeafOfSession(shelves: Readonly<Record<string, PublishedShelf>>, sessionId: string) {
-  for (const [desktopId, shelf] of Object.entries(shelves)) {
-    for (const column of offScreenColumns(shelf)) {
-      const tile = column.tiles.find((candidate) => candidate.askHolder?.id === sessionId);
-      if (tile) return `${desktopId}\n${tile.leafId}`;
-    }
-  }
-  return null;
-}
-
-export function useSessionShelfPeekHover(sessionId: string) {
-  const target = useDesktopShelfStore((state) => offScreenLeafOfSession(state.shelfByDesktop, sessionId));
-  return useMemo(() => {
-    if (!target) return undefined;
-    const [desktopId, leafId] = target.split('\n');
-    return hoverHandlers(desktopId, leafId);
-  }, [target]);
 }

@@ -1,4 +1,3 @@
-import { useSessionShelfPeekHover } from './SessionTerminalDesktop/useShelfPeekHover';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { SessionLabel } from './SessionLabel';
@@ -157,7 +156,6 @@ export function QueueRowView({
   testIdPrefix: string;
 }) {
   const { session } = row;
-  const peekHover = useSessionShelfPeekHover(session.id);
   return (
     <div
       className={`session-item sidebar-leaf-row queue-row ${selected ? 'selected' : ''}`.trim()}
@@ -167,7 +165,6 @@ export function QueueRowView({
       data-offline={session.offline || undefined}
       data-desktop-id={row.desktopId}
       title={session.chiefOfStaff ? sessionDisplayName(session) : undefined}
-      {...peekHover}
     >
       <QueueSessionSelection
         label={session.chiefOfStaff ? 'Chief' : sessionDisplayName(session)}

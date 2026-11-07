@@ -169,7 +169,6 @@ try {
     await waitForPaneInputFocus(client, firstSession, target);
     row = await readRow();
     target = row.at(-1);
-    targetSession = (await request('get_desktop', { sessionId: firstSession })).panes.find((pane) => pane.paneId === target).sessionId;
     await focusLeaf(row[0]);
     await waitDom(chip(target));
   });
@@ -194,18 +193,8 @@ try {
     await hoverAway();
     row = await readRow();
     target = row.at(-1);
-    targetSession = (await request('get_desktop', { sessionId: firstSession })).panes.find((pane) => pane.paneId === target).sessionId;
     await focusLeaf(row[0]);
     await waitDom(chip(target));
-  });
-
-  await runner.step('a_sidebar_row_of_an_off_screen_tile_peeks', async () => {
-    await driver.hover(`[data-testid="sidebar-session-${targetSession}"]`);
-    await waitDom(`${PEEK}[data-leaf-id="${target}"]`);
-    await shot('peek-from-sidebar');
-    await driver.pressKey('Escape');
-    await waitDom(PEEK, { absent: true });
-    await hoverAway();
   });
 
   await runner.step('a_chip_in_the_queue_bar_peeks', async () => {
