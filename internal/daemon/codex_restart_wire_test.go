@@ -360,3 +360,79 @@ func TestReloadingDuringASlashNewWriteKeepsTheTerminalOnTheConversationItShows(t
 		t.Fatalf("the prompt reached conversation %s, want the original %s", reloaded.ConversationID, original)
 	}
 }
+
+func sharedCodexAutomation(t *testing.T) (*world, *testworld.Peer) {
+	t.Helper()
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w.SetCodexFolderTrust(w.Path("check"), "trusted")
+	applyAutomation(t, w.Client(), manualAutomation(w, "Check the code."))
+	awaitAutomationChanged(app, 1)
+	return w, app
+}
+
+func TestRestartNowRelaunchesAnAutomationStillBootingAndItsCodexTakesThePrompt(t *testing.T) {
+	w, app := sharedCodexAutomation(t)
+	boot := w.HoldNextBoot()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "booting"})
+	boot.Await()
+	defer boot.Release()
+	answered := awaitAutomationRunResult(app, "booting")
+	if answered.Run == nil || answered.Run.State != "pending" {
+		t.Fatalf("while its Codex boots the run answered %s, want pending", describeRunAnswer(answered))
+	}
+
+	w.SetCodexVersion("0.163.0")
+	if result := restartSharedCodex(t, app, true); !result.Success {
+		t.Fatalf("restart now: %s", protocol.Deref(result.Error))
+	}
+	relaunched := w.Launched(string(protocol.Deref(answered.Run.SessionID)))
+	if prompt := relaunched.Prompted(); !strings.Contains(prompt, "Check the code.") {
+		t.Fatalf("the relaunched Codex took %q, want the automation's prompt", prompt)
+	}
+	run := awaitOnlyRunSettled(t, w, app)
+	if run.State != "delivered" {
+		t.Fatalf("the relaunched automation is %s with %q, want delivered", run.State, protocol.Deref(run.LastError))
+	}
+}
+
+func TestRestartNowDuringAnAutomationsOpeningWriteNeverLeavesItPending(t *testing.T) {
+	w, app := sharedCodexAutomation(t)
+	arrived, _ := w.CodexServer().HoldNextInjectReply()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "writing"})
+	arrived()
+	awaitAutomationRunResult(app, "writing")
+
+	w.SetCodexVersion("0.163.0")
+	if result := restartSharedCodex(t, app, true); !result.Success {
+		t.Fatalf("restart now: %s", protocol.Deref(result.Error))
+	}
+	run := awaitOnlyRunSettled(t, w, app)
+	if run.State == "failed" && protocol.Deref(run.LastError) == "" {
+		t.Fatalf("the run failed with no reason shown: %+v", run)
+	}
+}
+
+func TestRestartNowFailsAnAutomationItCouldNotRelaunchAndSaysWhy(t *testing.T) {
+	w, app := sharedCodexAutomation(t)
+	boot := w.HoldNextBoot()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "booting"})
+	boot.Await()
+	defer boot.Release()
+	awaitAutomationRunResult(app, "booting")
+	if err := os.RemoveAll(w.Path("check")); err != nil {
+		t.Fatal(err)
+	}
+
+	w.SetCodexVersion("0.163.0")
+	if result := restartSharedCodex(t, app, true); !result.Success {
+		t.Fatalf("restart now: %s", protocol.Deref(result.Error))
+	}
+	run := awaitOnlyRunSettled(t, w, app)
+	t.Logf("settled %s: %s", run.State, protocol.Deref(run.LastError))
+	if failure := protocol.Deref(run.LastError); run.State != "failed" || !strings.Contains(failure, "could not relaunch") {
+		t.Fatalf("the run is %s with %q, want failed naming the relaunch", run.State, failure)
+	}
+}

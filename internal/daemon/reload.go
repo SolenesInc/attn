@@ -223,13 +223,17 @@ func (d *Daemon) reloadSessionAgent(sessionID protocol.SessionID) {
 		d.logf("reload: cannot reconstruct launch params for %s: %v; aborting (live worker preserved)", sessionID, err)
 		return
 	}
-	complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+	complete, err = d.executePreparedSessionReload(sessionID, opts, nil, "")
 	if err != nil {
 		d.logf("reload: %v", err)
 	}
 }
 
 func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows int) error {
+	return d.reloadSessionOwing(sessionID, cols, rows, "")
+}
+
+func (d *Daemon) reloadSessionOwing(sessionID protocol.SessionID, cols, rows int, owedPrompt string) error {
 	sessionID = protocol.TrimID(sessionID)
 	if sessionID == "" {
 		return errors.New("session not found")
@@ -237,7 +241,7 @@ func (d *Daemon) reloadSessionForClient(sessionID protocol.SessionID, cols, rows
 	if session := d.store.Get(sessionID); session != nil {
 		d.awaitPluginHarness(session.Agent)
 	}
-	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows)
+	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows, owedPrompt)
 	if err != nil || resume == nil {
 		return err
 	}
@@ -249,7 +253,7 @@ type storedIntentResume struct {
 	policy internalSpawnPolicy
 }
 
-func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows int) (*storedIntentResume, error) {
+func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows int, owedPrompt string) (*storedIntentResume, error) {
 	var complete launchCompletion
 	defer func() { complete.finish() }()
 	lock := d.sessionLifecycleLockFor(sessionID)
@@ -271,7 +275,7 @@ func (d *Daemon) reloadLiveOrPlanResume(sessionID protocol.SessionID, cols, rows
 		if err != nil {
 			return nil, err
 		}
-		complete, err = d.executePreparedSessionReload(sessionID, opts, nil)
+		complete, err = d.executePreparedSessionReload(sessionID, opts, nil, owedPrompt)
 		return nil, err
 	}
 
@@ -321,7 +325,7 @@ func (d *Daemon) handleReloadSession(client *wsClient, msg *protocol.ReloadSessi
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload) (launchCompletion, error) {
+func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions, pluginReload *preparedPluginReload, owedPrompt string) (launchCompletion, error) {
 	var name *string
 	if host := d.sessionHost(sessionID); host != "" {
 		_, hostName, err := d.outpostConn(host)
@@ -341,6 +345,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 			if err != nil {
 				return nil, err
 			}
+			agent.InitialPrompt = owedPrompt
 		}
 	}
 	launch, err := encodeLaunch(opts)
@@ -644,7 +649,7 @@ func (p *preparedPluginRoleReload) execute() error {
 		return nil
 	}
 	p.completed = true
-	complete, err := p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
+	complete, err := p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin, "")
 	p.lock.Unlock()
 	complete.finish()
 	return err

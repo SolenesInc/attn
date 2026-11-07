@@ -95,7 +95,10 @@ the sessions Attn waits on, and you can jump to each one.
 - **Restart now** doesn't wait. It first lists what each session would lose,
   then stops turns waiting on an approval or a question, gives running turns a
   minute to finish and stops the turns that still run. Terminals still starting
-  relaunch.
+  relaunch, and a Codex that hasn't taken the prompt it was started with, such
+  as an automation's, gets that prompt again. A Codex that exits when the
+  app-server stops doesn't relaunch: its automation run fails and shows what
+  Codex printed.
 - The terminals lose their connection during the restart and reconnect to the
   new app-server on their own. What you typed and haven't sent stays where it
   was. The old app-server first shuts down the MCP servers its conversations

@@ -302,6 +302,9 @@ func (d *Daemon) settleAutomationLaunch(run *store.AutomationRun, agent string, 
 		exit.Text = exitScreenTail(exit.Text)
 		return launchExitError(agent, result.SessionID, &exit)
 	}
+	if outcome.unconfirmed != "" {
+		return errors.New(outcome.unconfirmed)
+	}
 	crashpoint.At(crashAfterAutomationLaunchConfirmed)
 	d.automationLaunchResults.Store(run.ID, result)
 	return d.finalizeAutomationRun(run, result)

@@ -133,6 +133,7 @@ type Monitor struct {
 	pendingDirty         bool
 	titleAttempted       bool
 	titleInitialPrompt   *[sha256.Size]byte
+	owedInitialPrompt    string
 	driverLaunch         *driverLaunch
 	touchedAt            time.Time
 	views                atomic.Pointer[terminalViews]

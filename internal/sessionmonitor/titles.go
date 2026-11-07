@@ -62,10 +62,23 @@ func (m *Monitor) RememberInitialPrompt(prompt string) {
 	defer m.mu.Unlock()
 	prompt = strings.TrimSpace(prompt)
 	m.titleInitialPrompt = nil
+	m.owedInitialPrompt = ""
 	if prompt != "" {
 		fingerprint := sha256.Sum256([]byte(prompt))
 		m.titleInitialPrompt = &fingerprint
+		if m.evidence.InitialPromptOwed {
+			m.owedInitialPrompt = prompt
+		}
 	}
+}
+
+func (m *Monitor) OwedInitialPrompt() string {
+	if m == nil {
+		return ""
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.owedInitialPrompt
 }
 
 func (m *Monitor) ForgetInitialPrompt() {
@@ -74,6 +87,7 @@ func (m *Monitor) ForgetInitialPrompt() {
 	}
 	m.mu.Lock()
 	m.titleInitialPrompt = nil
+	m.owedInitialPrompt = ""
 	m.mu.Unlock()
 }
 

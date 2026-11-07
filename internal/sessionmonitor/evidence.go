@@ -317,6 +317,7 @@ func (m *Monitor) RecordBracket(state string) {
 				m.input.launchPromptTakenLocked()
 			}
 			e.InitialPromptOwed = false
+			m.owedInitialPrompt = ""
 			e.LastClassifier = nil
 			if e.LastHarnessEvent != nil {
 				switch e.LastHarnessEvent.Claim {

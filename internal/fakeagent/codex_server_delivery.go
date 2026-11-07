@@ -1,6 +1,9 @@
 package fakeagent
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 const (
 	methodHoldReply    = "hold_reply"
@@ -44,7 +47,13 @@ func (s *CodexServer) holdNextReply(reply string) (arrived func(), release func(
 		s.t.Helper()
 		once.Do(func() { s.call(methodReleaseReply, heldReplyParams{Reply: reply, Refusal: refusal}, nil) })
 	}
-	s.t.Cleanup(func() { release("") })
+	s.t.Cleanup(func() {
+		once.Do(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
+			defer cancel()
+			_ = s.fake.peer.call(ctx, methodReleaseReply, heldReplyParams{Reply: reply}, nil)
+		})
+	})
 	return func() {
 		s.t.Helper()
 		s.call(methodAwaitReply, heldReplyParams{Reply: reply}, nil)
