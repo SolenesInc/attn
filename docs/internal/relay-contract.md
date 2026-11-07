@@ -168,7 +168,7 @@ On a device socket the payload may be 96 bytes: the signature, then a 32-byte re
 
 A bad signature, a payload of any other length, or any frame other than `auth` before `ready`, closes the socket with `4401`.
 
-A device that is not on the allowlist goes live only when, at the moment of its `auth` frame, a window sent as `pairing_open_until` is open, or the SHA-256 of its token equals the `token_hash` of a pairing whose `until` is still ahead. Otherwise the relay closes the socket with `4403`, with one of these reasons, and the home hears nothing of that socket:
+A device that is not on the allowlist goes live only when, at the moment of its `auth` frame, the SHA-256 of its token equals the `token_hash` of a pairing whose `until` is still ahead. Otherwise the relay closes the socket with `4403`, with one of these reasons, and the home hears nothing of that socket:
 
 | Reason                                                                | When                                                |
 | --------------------------------------------------------------------- | --------------------------------------------------- |
@@ -243,9 +243,9 @@ The home sends the full list of devices allowed to connect, replacing the previo
 
 `pairings` holds one entry per open pairing window. `token_hash` is the SHA-256 of the window's relay token, 32 bytes in base64url. `until` is Unix time in milliseconds. While `now < until` for any entry, devices not on the list get their upgrade, so a new phone can reach its `auth` frame, and a device whose token matches a live entry goes live. The home sends the list again on every connect and after every pairing or revoke, and takes a window off the list as soon as its pairing completes.
 
-`pairing_open_until` is the older way to open a window: Unix time in milliseconds, and while `now < pairing_open_until`, any device not on the list goes live with no token. `0` means no window is open. `pairings` and `pairing_open_until` are each optional, and when absent or `null` mean no window of that kind.
+`pairings` is optional, and when absent or `null` means no window is open.
 
-The relay stores the list, closes every device socket that the new list no longer admits with `4403` (sending the home `close` for each; a socket that is live stays only while its device is on the list, a window sent as `pairing_open_until` is open, or the pairing of its token is live), deletes the push tokens of devices no longer on the list, and answers with an empty `allowlist` frame once the list is in effect.
+The relay stores the list, closes every device socket that the new list no longer admits with `4403` (sending the home `close` for each; a socket that is live stays only while its device is on the list or the pairing of its token is live), deletes the push tokens of devices no longer on the list, and answers with an empty `allowlist` frame once the list is in effect.
 
 The allowlist holds at most 1000 devices and 100 pairings. A list that is malformed or too long is not applied; the relay answers with `error` `bad_allowlist`, and the message names the problem (for example `allowlist has 1200 devices; the limit is 1000`).
 
@@ -349,7 +349,7 @@ A relay update drops busy sockets without a close frame. Both sides treat EOF wi
 
 ## Changes
 
-The contract changes by addition. A new frame type or field is added to this document with the version that introduced it; existing frames keep their meaning. A breaking change raises the envelope version, and the relay then serves both versions until no client speaks the old one.
+The contract changes by addition. A new frame type or field is added to this document with the version that introduced it; existing frames keep their meaning. A breaking change raises the envelope version, and the relay then serves both versions until no client speaks the old one. The one exception is `pairing_open_until`, the allowlist field that opened a window admitting any device with no token. It was removed from version 1 once every home sent `pairings`. A relay ignores the field, so a home that still sends it can't pair a new phone until it updates.
 
 Version 1 history, before the first deploy:
 
@@ -361,4 +361,4 @@ Additions to version 1:
 - Push notifications: `POST /v1/homes/{home_id}/push-token`, the `push` frame (type 10), the `push_*` and `bad_push` error codes, and HTTP `403 device_not_allowed` for push token registration.
 - HTTP `429 registration_limited` on `POST /v1/homes`.
 - A relay deletes itself after 180 days with no home connection, closing its sockets with `4410`.
-- Relay tokens: `pairings` in the allowlist, and a 96-byte `auth` payload on a device socket. `pairing_open_until` becomes optional.
+- Relay tokens: `pairings` in the allowlist, and a 96-byte `auth` payload on a device socket.

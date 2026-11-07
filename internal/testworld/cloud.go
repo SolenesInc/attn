@@ -236,7 +236,6 @@ type fakeHome struct {
 	devices     map[uint32]*fakeDevice
 	challenged  map[*websocket.Conn]string
 	allowed     []string
-	openUntil   int64
 	pairings    []fakePairing
 	nextConn    uint32
 	tokens      map[string]bool
@@ -481,9 +480,8 @@ func (r *fakeRelay) fromHome(ctx context.Context, h *fakeHome, f envelope) {
 
 func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []byte) {
 	var list struct {
-		Devices          *[]string     `json:"devices"`
-		PairingOpenUntil int64         `json:"pairing_open_until"`
-		Pairings         []fakePairing `json:"pairings"`
+		Devices  *[]string     `json:"devices"`
+		Pairings []fakePairing `json:"pairings"`
 	}
 	if json.Unmarshal(payload, &list) != nil || list.Devices == nil {
 		writeRelayError(ctx, h.home, "bad_allowlist", "allowlist payload must be JSON: {devices, pairings}")
@@ -513,7 +511,7 @@ func (r *fakeRelay) applyAllowlist(ctx context.Context, h *fakeHome, payload []b
 			return
 		}
 	}
-	h.allowed, h.openUntil, h.pairings = *list.Devices, list.PairingOpenUntil, list.Pairings
+	h.allowed, h.pairings = *list.Devices, list.Pairings
 	for device := range h.tokens {
 		if !slices.Contains(h.allowed, device) {
 			delete(h.tokens, device)
@@ -642,7 +640,7 @@ func (r *fakeRelay) awaitAllowed(ctx context.Context, homeID, signPub string) er
 }
 
 func (h *fakeHome) admitsLocked(signPub string) bool {
-	return slices.Contains(h.allowed, signPub) || time.Now().UnixMilli() < h.openUntil || len(h.livePairingsLocked()) > 0
+	return slices.Contains(h.allowed, signPub) || len(h.livePairingsLocked()) > 0
 }
 
 func (h *fakeHome) livePairingsLocked() []string {
@@ -657,7 +655,7 @@ func (h *fakeHome) livePairingsLocked() []string {
 
 // tokenRefusalLocked says why an authenticated device can't be live, or returns "" when it can.
 func (h *fakeHome) tokenRefusalLocked(signPub, tokenHash string) string {
-	if slices.Contains(h.allowed, signPub) || time.Now().UnixMilli() < h.openUntil {
+	if slices.Contains(h.allowed, signPub) {
 		return ""
 	}
 	live := h.livePairingsLocked()

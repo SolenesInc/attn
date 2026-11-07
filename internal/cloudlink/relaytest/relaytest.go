@@ -340,16 +340,9 @@ func (r relay) connectHome(t *testing.T, k key, id string) *home {
 	return &home{s, id, k}
 }
 
-func (h *home) applyList(pairingOpenUntil int64, devices ...key) {
+func (h *home) applyList(devices ...key) {
 	h.t.Helper()
-	pubs := []string{}
-	for _, device := range devices {
-		pubs = append(pubs, device.pub)
-	}
-	h.sendJSON(allowlist, map[string]any{"devices": pubs, "pairing_open_until": pairingOpenUntil})
-	if got := h.expect(allowlist); got.connID != 0 || len(got.payload) != 0 {
-		h.t.Fatalf("allowlist answered on conn %d with %q, want conn 0 and empty", got.connID, got.payload)
-	}
+	h.applyPairings(nil, devices...)
 }
 
 type pairing struct {
@@ -432,7 +425,7 @@ func (r relay) connectWithToken(t *testing.T, h *home, k key, token []byte) (*so
 func (r relay) pairedDevice(t *testing.T, h *home) (*socket, key, uint32) {
 	t.Helper()
 	k := newKey(t)
-	h.applyList(0, k)
+	h.applyList(k)
 	s, connID := r.connectDevice(t, h, k)
 	s.expectPresence(connID, 1)
 	if got := h.expectOpen(k); got != connID {
@@ -526,13 +519,13 @@ func (r relay) homeAuthentication(t *testing.T) {
 	})
 }
 
-func (h *home) dropsWithList(connID uint32, pairingOpenUntil int64, devices ...key) {
+func (h *home) dropsWithList(connID uint32, devices ...key) {
 	h.t.Helper()
 	pubs := []string{}
 	for _, device := range devices {
 		pubs = append(pubs, device.pub)
 	}
-	h.sendJSON(allowlist, map[string]any{"devices": pubs, "pairing_open_until": pairingOpenUntil})
+	h.sendJSON(allowlist, map[string]any{"devices": pubs})
 	h.expectClose(connID)
 	h.expect(allowlist)
 }
@@ -543,43 +536,52 @@ func (r relay) deviceAdmission(t *testing.T) {
 
 	t.Run("an unknown device gets its upgrade and then 4403, before any frame", func(t *testing.T) {
 		h := r.newHome(t)
-		h.applyList(0)
+		h.applyList()
 		r.dialDevice(t, h, newKey(t)).expectClosed(notAdmitted, notAdmittedWhy)
 	})
 	t.Run("a pairing window that has ended admits nobody", func(t *testing.T) {
 		h := r.newHome(t)
-		h.applyList(past)
+		_, ended := newToken(t, past)
+		h.applyPairings([]pairing{ended})
+		r.dialDevice(t, h, newKey(t)).expectClosed(notAdmitted, notAdmittedWhy)
+	})
+	t.Run("an older home's pairing_open_until admits nobody", func(t *testing.T) {
+		h := r.newHome(t)
+		h.sendJSON(allowlist, map[string]any{"devices": []string{}, "pairing_open_until": far})
+		h.expect(allowlist)
 		r.dialDevice(t, h, newKey(t)).expectClosed(notAdmitted, notAdmittedWhy)
 	})
 	t.Run("an open pairing window admits an unknown device, until a list closes the window", func(t *testing.T) {
 		h := r.newHome(t)
-		h.applyList(far)
+		token, live := newToken(t, far)
+		h.applyPairings([]pairing{live})
 		k := newKey(t)
-		s, connID := r.connectDevice(t, h, k)
+		s, connID := r.connectWithToken(t, h, k, token)
 		s.expectPresence(connID, 1)
 		h.expectOpen(k)
-		h.dropsWithList(connID, 0)
+		h.dropsWithList(connID)
 		s.expectClosed(notAdmitted, notAdmittedWhy)
 	})
 	t.Run("a device on the list stays when the window closes, and goes when the list drops it", func(t *testing.T) {
 		h := r.newHome(t)
 		k := newKey(t)
-		h.applyList(far, k)
+		_, live := newToken(t, far)
+		h.applyPairings([]pairing{live}, k)
 		s, connID := r.connectDevice(t, h, k)
 		s.expectPresence(connID, 1)
 		h.expectOpen(k)
-		h.applyList(0, k)
+		h.applyList(k)
 		s.send(data, connID, []byte("still here"))
 		if got := h.expect(data); string(got.payload) != "still here" {
 			t.Fatalf("the home got %q", got.payload)
 		}
-		h.dropsWithList(connID, 0)
+		h.dropsWithList(connID)
 		s.expectClosed(notAdmitted, notAdmittedWhy)
 	})
 	t.Run("one device holds several sockets", func(t *testing.T) {
 		h := r.newHome(t)
 		k := newKey(t)
-		h.applyList(0, k)
+		h.applyList(k)
 		first, firstID := r.connectDevice(t, h, k)
 		first.expectPresence(firstID, 1)
 		h.expectOpen(k)
@@ -601,7 +603,7 @@ func (r relay) deviceAuthentication(t *testing.T) {
 	t.Run("a signature from another key closes the socket", func(t *testing.T) {
 		h := r.newHome(t)
 		k := newKey(t)
-		h.applyList(0, k)
+		h.applyList(k)
 		s := r.dialDevice(t, h, k)
 		nonce := s.expect(challenge)
 		s.send(auth, 0, ed25519.Sign(newKey(t).private, append([]byte("attn-cloud/v1 auth device\n"+h.id+"\n"), nonce.payload...)))
@@ -610,7 +612,7 @@ func (r relay) deviceAuthentication(t *testing.T) {
 	t.Run("any other frame before ready closes the socket", func(t *testing.T) {
 		h := r.newHome(t)
 		k := newKey(t)
-		h.applyList(0, k)
+		h.applyList(k)
 		s := r.dialDevice(t, h, k)
 		s.expect(challenge)
 		s.send(data, 1, []byte("early"))
@@ -794,26 +796,15 @@ func (r relay) relayToken(t *testing.T) {
 		h.applyPairings(nil)
 		s.expectClosed(notAdmitted, notAdmittedWhy)
 	})
-	t.Run("a socket that dialled under a tokenless window needs a token once only pairings are open", func(t *testing.T) {
-		h := r.newHome(t)
-		h.applyList(far)
-		k := newKey(t)
-		s := r.dialDevice(t, h, k)
-		nonce := s.expect(challenge)
-		_, live := newToken(t, far)
-		h.applyPairings([]pairing{live})
-		s.send(auth, 0, ed25519.Sign(k.private, append([]byte("attn-cloud/v1 auth device\n"+h.id+"\n"), nonce.payload...)))
-		expectRefused(t, h, s, notAdmitted, noTokenWhy)
-	})
-	t.Run("a window sent the old way needs no token, even beside pairings", func(t *testing.T) {
+	t.Run("an older home's pairing_open_until beside a live pairing excuses no device from its token", func(t *testing.T) {
 		h := r.newHome(t)
 		_, live := newToken(t, far)
 		h.sendJSON(allowlist, map[string]any{"devices": []string{}, "pairing_open_until": far, "pairings": []pairing{live}})
 		h.expect(allowlist)
 		k := newKey(t)
-		s, connID := r.connectDevice(t, h, k)
-		s.expectPresence(connID, 1)
-		h.expectOpen(k)
+		s := r.dialDevice(t, h, k)
+		s.answerChallenge(h, k, nil)
+		expectRefused(t, h, s, notAdmitted, noTokenWhy)
 	})
 	t.Run("a home's auth frame carries no token", func(t *testing.T) {
 		k := newKey(t)
@@ -925,7 +916,7 @@ func (r relay) frames(t *testing.T) {
 		h := r.newHome(t)
 		h.send(presence, 0, []byte{1})
 		h.expectError("unsupported_type")
-		h.applyList(0)
+		h.applyList()
 	})
 	t.Run("a device sends only data frames", func(t *testing.T) {
 		h := r.newHome(t)
@@ -957,11 +948,9 @@ func (r relay) allowlists(t *testing.T) {
 
 	send("not json")
 	h.expectError("bad_allowlist")
-	send(`{"devices":"nobody","pairing_open_until":0}`)
+	send(`{"devices":"nobody"}`)
 	h.expectError("bad_allowlist")
-	send(`{"devices":["short"],"pairing_open_until":0}`)
-	h.expectError("bad_allowlist")
-	send(`{"devices":[],"pairing_open_until":"soon"}`)
+	send(`{"devices":["short"]}`)
 	h.expectError("bad_allowlist")
 	send(`{"devices":[],"pairings":"none"}`)
 	h.expectError("bad_allowlist")
@@ -982,7 +971,7 @@ func (r relay) allowlists(t *testing.T) {
 	}
 	h.applyPairings(tooMany[:pairingsLimit])
 
-	for _, noWindows := range []string{`{"devices":[]}`, `{"devices":[],"pairings":null,"pairing_open_until":null}`} {
+	for _, noWindows := range []string{`{"devices":[]}`, `{"devices":[],"pairings":null}`} {
 		send(noWindows)
 		h.expect(allowlist)
 		r.dialDevice(t, h, newKey(t)).expectClosed(notAdmitted, notAdmittedWhy)
@@ -994,16 +983,16 @@ func (r relay) allowlists(t *testing.T) {
 		binary.BigEndian.PutUint32(raw, uint32(i))
 		pubs[i] = b64(raw)
 	}
-	h.sendJSON(allowlist, map[string]any{"devices": pubs, "pairing_open_until": 0})
+	h.sendJSON(allowlist, map[string]any{"devices": pubs})
 	want := fmt.Sprintf("allowlist has %d devices; the limit is %d", allowlistLimit+1, allowlistLimit)
 	if message := h.expectError("bad_allowlist"); !strings.Contains(message, want) {
 		t.Fatalf("the refusal says %q, want it to name %q", message, want)
 	}
-	h.sendJSON(allowlist, map[string]any{"devices": pubs[:allowlistLimit], "pairing_open_until": 0})
+	h.sendJSON(allowlist, map[string]any{"devices": pubs[:allowlistLimit]})
 	h.expect(allowlist)
 
 	k := newKey(t)
-	h.applyList(0, k)
+	h.applyList(k)
 	again, connID := r.connectDevice(t, h, k)
 	again.expectPresence(connID, 1)
 	h.expectOpen(k)
@@ -1027,10 +1016,11 @@ func (r relay) pushTokens(t *testing.T) {
 	path := "/v1/homes/" + h.id + "/push-token"
 	phone := newKey(t)
 
-	h.applyList(time.Now().Add(time.Hour).UnixMilli())
+	_, live := newToken(t, time.Now().Add(time.Hour).UnixMilli())
+	h.applyPairings([]pairing{live})
 	r.request(t, http.MethodPost, path, nil, tokenBody(h.id, phone, "sandbox", pushToken)).refusedWith(t, http.StatusForbidden, "device_not_allowed")
 
-	h.applyList(0, phone)
+	h.applyList(phone)
 	for _, environment := range []string{"sandbox", "production"} {
 		got := r.request(t, http.MethodPost, path, nil, tokenBody(h.id, phone, environment, pushToken))
 		if got.status != http.StatusOK || strings.TrimSpace(string(got.body)) != "{}" {
@@ -1058,7 +1048,7 @@ func (r relay) pushTokens(t *testing.T) {
 func (r relay) pushFrames(t *testing.T) {
 	h := r.newHome(t)
 	phone := newKey(t)
-	h.applyList(0, phone)
+	h.applyList(phone)
 	send := func(device key, ciphertext, collapseID string) {
 		h.sendJSON(push, map[string]string{"device": device.pub, "ciphertext": ciphertext, "collapse_id": collapseID})
 	}
@@ -1083,8 +1073,8 @@ func (r relay) pushFrames(t *testing.T) {
 	if got.status != http.StatusOK {
 		t.Fatalf("registering a token: %d %s", got.status, got.body)
 	}
-	h.applyList(0)
-	h.applyList(0, phone)
+	h.applyList()
+	h.applyList(phone)
 	send(phone, "AQ", "c")
 	h.expectError("push_no_token")
 }
