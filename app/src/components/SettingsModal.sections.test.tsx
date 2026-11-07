@@ -26,7 +26,7 @@ describe('SettingsModal sections', () => {
     await renderSettings();
 
     const navigation = screen.getByRole('navigation', { name: 'Settings sections' });
-    expect(within(navigation).getAllByRole('button').map(button => button.textContent)).toEqual([
+    expect(within(navigation).getAllByRole('button').map(button => button.firstElementChild?.textContent)).toEqual([
       'Appearance',
       'Files and locations',
       'Attention queue',
@@ -35,11 +35,14 @@ describe('SettingsModal sections', () => {
       'Background agents',
       'Delegation',
       'GitHub hosts',
+      'Outposts',
+      'Phones',
       'Paired senders',
       'Plugins',
       'Experimental',
       'Task runner',
       'Event bus',
+      'Analytics',
     ]);
   });
 

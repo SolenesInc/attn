@@ -24,7 +24,7 @@ Agents run on the outpost. Their tiles sit beside your local terminals, with the
 An outpost is a Linux amd64 or arm64 machine that you can reach with your own `ssh` command.
 
 1. Run `ssh <destination>` in your terminal and answer any authentication or host-key prompts.
-2. Open **Settings → Outposts**, enter the **ssh destination**, and click **Add outpost**.
+2. Open **Settings → Outposts**, turn on **Outposts**, enter the **ssh destination**, and click **Add outpost**.
 3. Install and log in to Claude Code or Codex on the outpost.
 
 Attn installs your home's Linux build, starts the daemon over ssh, and pairs the two. No systemd service or root access is needed.

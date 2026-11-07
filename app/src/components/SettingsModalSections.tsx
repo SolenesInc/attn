@@ -22,7 +22,7 @@ import {
 } from './settingsModalShared';
 import { SavedMark } from './useSavedFlash';
 import type { SettingsModalState } from './useSettingsModalState';
-import { BoolSetting, EXPERIMENTAL_FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
+import { BoolSetting, EXPERIMENTAL_FEATURES, FEATURES, isOn, type BoolSettingKey, type Feature } from '../utils/settings';
 
 const AVAILABILITY_SUMMARY: Record<HarnessAvailability, string> = {
   available: 'Available',
@@ -42,6 +42,7 @@ export function SectionStatusPills({
   mutedAuthors,
   hasProjectsDirChange,
   openSentFilesEnabled,
+  analyticsEnabled,
 }: Pick<
   SettingsModalState,
   | 'selectedSection'
@@ -54,6 +55,7 @@ export function SectionStatusPills({
   | 'mutedAuthors'
   | 'hasProjectsDirChange'
   | 'openSentFilesEnabled'
+  | 'analyticsEnabled'
 >) {
   switch (selectedSection) {
     case 'delegation':
@@ -75,7 +77,7 @@ export function SectionStatusPills({
         <DesktopStatusPills hasProjectsDirChange={hasProjectsDirChange} openSentFilesEnabled={openSentFilesEnabled} />
       );
     case 'analytics':
-      return (
+      return analyticsEnabled && (
         <>
           <span className="settings-pill good">Recording</span>
           <span className="settings-pill">Local only</span>
@@ -603,13 +605,11 @@ function FeatureRow({ feature, settings, onSetSetting, children }: {
     <>
       <div className="settings-row-card">
         <div>
-          <p className="settings-row-title">
-            {feature.name}
-            <span className="settings-feature-applies">
-              {feature.applies}
-            </span>
-          </p>
-          <p className="settings-row-copy" id={descriptionID}>{feature.summary}{featureDetail(feature.key)}</p>
+          <p className="settings-row-title">{feature.name}</p>
+          <div id={descriptionID}>
+            <p className="settings-row-copy">{feature.summary}{featureDetail(feature.key)}</p>
+            {feature.timing && <p className="settings-row-copy">{feature.timing}</p>}
+          </div>
         </div>
         <button
           type="button"
@@ -624,8 +624,26 @@ function FeatureRow({ feature, settings, onSetSetting, children }: {
           {on ? 'Disable' : 'Enable'}
         </button>
       </div>
-      {on && children}
+      {children && (
+        <div inert={!on} className={`settings-feature-content${on ? '' : ' off'}`} data-testid={`settings-feature-content-${feature.key}`}>
+          {children}
+        </div>
+      )}
     </>
+  );
+}
+
+export function FeaturePage({ featureKey, settings, onSetSetting, children }: {
+  featureKey: BoolSettingKey;
+  settings: Record<string, string>;
+  onSetSetting: SettingsModalState['onSetSetting'];
+  children: ReactNode;
+}) {
+  const feature = FEATURES.find(candidate => candidate.key === featureKey)!;
+  return (
+    <div className="settings-feature-page">
+      <FeatureRow feature={feature} settings={settings} onSetSetting={onSetSetting}>{children}</FeatureRow>
+    </div>
   );
 }
 
@@ -654,7 +672,7 @@ export function ExperimentalSettings({
           <p className="settings-label">{group}</p>
           {EXPERIMENTAL_FEATURES.filter(feature => feature.group === group).map(feature => (
             <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting}>
-              {feature.key === BoolSetting.shelfLayoutEnabled && (
+              {feature.key === BoolSetting.shelfLayoutEnabled ? (
                 <>
                 <div className="settings-row-card">
                   <div>
@@ -709,7 +727,7 @@ export function ExperimentalSettings({
               </div>
             </div>
                 </>
-              )}
+              ) : null}
             </FeatureRow>
           ))}
         </div>

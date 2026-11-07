@@ -20,7 +20,6 @@ interface AnalyticsSettingsProps {
   sendVents: boolean;
   toolVents: boolean;
   onSetSetting: (key: string, value: string) => void;
-  onDisableRecording: () => void;
   onOpenSession: (sessionId: string) => void;
   onOpenSeed: (seedId: string) => void;
 }
@@ -29,7 +28,7 @@ function isTyping(target: EventTarget): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting, onDisableRecording, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
+export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting, onOpenSession, onOpenSeed }: AnalyticsSettingsProps) {
   const { outposts, sendClearAnalyticsRecords, sendForgetAnalyticsInstall } = useDaemonApi();
   const vents = useVentsStore((state) => state.vents);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -129,7 +128,6 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
   return (
     <section ref={rootRef} className="settings-block analytics" data-testid="settings-analytics" aria-label="Analytics" tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="analytics-strip">
-        <Stat label="Recording" value="On" />
         <Stat label="Sharing" value={sharingStat(sharing, status.status)} dim={!sharing} bad={sharing && Boolean(status.status?.lastRefusal)} />
         <Stat label="Vents" value={sharing ? `${sentVents} sent · ${vents.length - sentVents} kept here` : `${vents.length} kept here`} dim={vents.length === 0} />
         <Stat label="Kept here" value={status.status ? `7 days · ${formatBytes(status.status.bytes)}` : '7 days'} />
@@ -156,7 +154,6 @@ export function AnalyticsSettings({ sharing, sendVents, toolVents, onSetSetting,
           sendVents={sendVents}
           toolVents={toolVents}
           onSetSetting={setSetting}
-          onDisableRecording={onDisableRecording}
           onClear={clear}
           onForget={forget}
         />

@@ -132,7 +132,7 @@ try {
   });
   await runner.step('conflicting_offline_edits_keep_both_versions', async () => {
     await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
-    await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_wait', { selector: '[data-testid="settings-nav-off-outposts"]', timeoutMs: observer.connectTimeoutMs });
 
     fs.writeFileSync(path.join(homeRoot, 'conflict.md'), 'home edit');
     fs.writeFileSync(path.join(outpostCopy, 'conflict.md'), 'outpost edit');
@@ -156,7 +156,7 @@ try {
     await wait({ textIncludes: 'Notebook: in sync' });
 
     await run(binary, ['settings', 'set', 'outposts_enabled', 'false']);
-    await client.request('dom_wait', { selector: '[data-testid="settings-nav-outposts"]', absent: true, timeoutMs: observer.connectTimeoutMs });
+    await client.request('dom_wait', { selector: '[data-testid="settings-nav-off-outposts"]', timeoutMs: observer.connectTimeoutMs });
     fs.unlinkSync(path.join(outpostCopy, '.attn', 'notebook-sync'));
     const failed = receive(notebook => notebook?.state === 'error' && notebook.error?.includes('folder marker missing'));
 

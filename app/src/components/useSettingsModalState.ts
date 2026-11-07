@@ -112,14 +112,6 @@ export function useSettingsModalState({
   );
   useImperativeHandle(closeRef, () => ({ close: closeSettings, selectSection }), [closeSettings, selectSection]);
   const [selectedSection, setSelectedSection] = useState<SettingsSectionID>('connectivity');
-  const outpostsEnabled = isOn(settings, BoolSetting.outpostsEnabled);
-  useEffect(() => {
-    if (selectedSection === 'outposts' && !outpostsEnabled) setSelectedSection('connectivity');
-  }, [selectedSection, outpostsEnabled]);
-  const phonesEnabled = isOn(settings, BoolSetting.phoneAccessEnabled);
-  useEffect(() => {
-    if (selectedSection === 'phones' && !phonesEnabled) setSelectedSection('connectivity');
-  }, [selectedSection, phonesEnabled]);
   useEffect(() => {
     if (isOpen) recordAppAction('settings_section', { section: selectedSection });
   }, [isOpen, selectedSection]);
@@ -550,20 +542,20 @@ export function useSettingsModalState({
             description: 'The GitHub hosts attn detected.',
             keywords: 'github hosts',
           },
-          ...(outpostsEnabled ? [{
-            id: 'outposts' as const,
+          {
+            id: 'outposts',
             label: 'Outposts',
-            title: 'Outposts',
-            description: 'Connect this home to attn on other computers.',
-            count: 1,
-            keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint',
-          }] : []),
-          ...(phonesEnabled ? [{
-            id: 'phones' as const,
+            description: '',
+            feature: BoolSetting.outpostsEnabled,
+            keywords: 'outposts bridge host machine address pair re-pair remove connection build fingerprint connect other computers',
+          },
+          {
+            id: 'phones',
             label: 'Phones',
-            description: 'Pair phones with this home and revoke them.',
+            description: '',
+            feature: BoolSetting.phoneAccessEnabled,
             keywords: 'phones phone mobile iphone pair pairing qr code revoke attn cloud relay',
-          }] : []),
+          },
           {
             id: 'senders',
             label: 'Paired senders',
@@ -606,16 +598,17 @@ export function useSettingsModalState({
             keywords:
               'event bus log durable facts producers consumers cursor lag retention compaction trim stalled disabled kill switch seq',
           },
-          ...(analyticsEnabled ? [{
-            id: 'analytics' as const,
+          {
+            id: 'analytics',
             label: 'Analytics',
             description: '',
+            feature: BoolSetting.analyticsEnabled,
             keywords: 'analytics usage telemetry vents vent agents outbox records recorded bus app cli sample run runs retention',
-          }] : []),
+          },
         ],
       },
     ],
-    [outpostsEnabled, phonesEnabled, analyticsEnabled],
+    [],
   );
 
   const filteredNavGroups = useMemo(() => {
@@ -636,7 +629,6 @@ export function useSettingsModalState({
   const selectedNavItem = flatNavItems.find((item) => item.id === selectedSection) || flatNavItems[0];
   return {
     selectedSection,
-    outpostsEnabled,
     delegationPolicy,
     pluginProblemCount,
     activePluginCount,

@@ -16,6 +16,7 @@ import {
   EventBusSection,
   HygieneSettings,
   PluginSettings,
+  FeaturePage,
   SectionStatusPills,
   ExperimentalSettings,
   DesktopSettings,
@@ -96,6 +97,9 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                       onClick={() => void selectSection(item.id)}
                     >
                       <span>{item.label}</span>
+                      {item.feature && !isOn(state.settings, item.feature) && (
+                        <span className="settings-nav-off" data-testid={`settings-nav-off-${item.id}`}>off</span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -122,6 +126,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
                     mutedAuthors={state.mutedAuthors}
                     hasProjectsDirChange={state.hasProjectsDirChange}
                     openSentFilesEnabled={state.openSentFilesEnabled}
+                    analyticsEnabled={state.analyticsEnabled}
                   />
                 }
               </div>
@@ -231,9 +236,17 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         />
       );
     case 'outposts':
-      return state.outpostsEnabled ? <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} /> : null;
+      return (
+        <FeaturePage featureKey={BoolSetting.outpostsEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+          <OutpostsSettings onOpenTerminal={() => void state.closeSettings()} />
+        </FeaturePage>
+      );
     case 'phones':
-      return <PhonesSettings />;
+      return (
+        <FeaturePage featureKey={BoolSetting.phoneAccessEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+          <PhonesSettings />
+        </FeaturePage>
+      );
     case 'senders':
       return <SendersSettings />;
     case 'experimental':
@@ -280,20 +293,19 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
         />
       );
     case 'analytics':
-      return state.analyticsEnabled ? (
-        <AnalyticsSettings
-          sharing={isOn(state.settings, BoolSetting.analyticsSharingEnabled)}
-          sendVents={isOn(state.settings, BoolSetting.analyticsShareVents)}
-          toolVents={isOn(state.settings, BoolSetting.analyticsToolVents)}
-          onSetSetting={state.onSetSetting}
-          onDisableRecording={() => {
-            state.onSetSetting('analytics.enabled', 'false');
-            void state.selectSection('experimental');
-          }}
-          onOpenSession={(sessionId) => void state.closeSettings().then(() => state.onOpenSession?.(sessionId))}
-          onOpenSeed={(seedId) => void state.closeSettings().then(() => state.onOpenSeed?.(seedId))}
-        />
-      ) : null;
+      return (
+        <FeaturePage featureKey={BoolSetting.analyticsEnabled} settings={state.settings} onSetSetting={state.onSetSetting}>
+          <AnalyticsSettings
+            key={String(state.analyticsEnabled)}
+            sharing={isOn(state.settings, BoolSetting.analyticsSharingEnabled)}
+            sendVents={isOn(state.settings, BoolSetting.analyticsShareVents)}
+            toolVents={isOn(state.settings, BoolSetting.analyticsToolVents)}
+            onSetSetting={state.onSetSetting}
+            onOpenSession={(sessionId) => void state.closeSettings().then(() => state.onOpenSession?.(sessionId))}
+            onOpenSeed={(seedId) => void state.closeSettings().then(() => state.onOpenSeed?.(seedId))}
+          />
+        </FeaturePage>
+      );
     case 'delegation':
       return <DelegationSettings policy={delegationPolicy} loadModels={sendHarnessModels} />;
     case 'connectivity':

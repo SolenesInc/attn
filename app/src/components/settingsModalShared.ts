@@ -1,3 +1,4 @@
+import type { BoolSettingKey } from '../utils/settings';
 import {
   DaemonPlugin,
   DaemonPluginIssue,
@@ -69,6 +70,7 @@ export interface SettingsNavItem {
   label: string;
   description: string;
   keywords: string;
+  feature?: BoolSettingKey;
 }
 
 export interface SettingsNavGroup {

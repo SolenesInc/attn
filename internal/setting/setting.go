@@ -74,6 +74,20 @@ const (
 	NextDaemonStart Applies = "Next daemon start"
 )
 
+func (a Applies) Timing() string {
+	switch a {
+	case NewAgents:
+		return "Starts with the next agent you open."
+	case NewAgentsOnOnly:
+		return "Starts with the next agent you open. Turning it off applies at once."
+	case NewTerminals:
+		return "Starts with the next terminal you open."
+	case NextDaemonStart:
+		return "Starts the next time attn's daemon restarts."
+	}
+	return ""
+}
+
 type Info struct {
 	Name    string
 	Summary string

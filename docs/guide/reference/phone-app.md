@@ -30,11 +30,9 @@ A pairing connects the phone to one profile of one computer. The phone sees
 that profile's agents and nothing else. Pair once per profile you want to see.
 The app merges every pairing into one queue.
 
-1. In attn on your computer, open **Settings → Experimental** and turn on
-   **Phone access**. attn connects to Attn Cloud, and a **Phones** page
-   appears under **Connectivity**.
-2. Open **Settings → Phones**. Under the profile you want, click
-   **Pair a phone**. attn shows a QR code. The code works once and expires
+1. In attn on your computer, open **Settings → Phones** and turn on
+   **Phone access**. attn connects to Attn Cloud.
+2. Under the profile you want, click **Pair a phone**. attn shows a QR code. The code works once and expires
    after 10 minutes. Click **Show a new pairing code** for a fresh one. Click
    **Cancel**, or leave **Settings → Phones**, to end it.
 3. On the iPhone, open attn, tap **Pairings**, then **Scan a pairing code**.
@@ -87,4 +85,4 @@ unreachable or connecting, until the home sends its Garden again.
 - To remove a pairing from the phone only, tap **Forget** on the pairing in the
   app's **Pairings** tab.
 - To disconnect every phone at once, turn off **Phone access** in
-  **Settings → Experimental**.
+  **Settings → Phones**.

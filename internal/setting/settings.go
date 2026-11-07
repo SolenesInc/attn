@@ -21,7 +21,7 @@ var (
 	})
 	CrewV2Enabled = feature("crew_v2_enabled", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", Info{
 		Name:    "Crew v2",
-		Summary: "Crew members use the v2 operating model with harness memory off, starting at their next launch. Letters filed while it's on record their session so attn can keep its transcript.",
+		Summary: "Crew members use the v2 operating model with harness memory off. Letters filed while it's on record their session so attn can keep its transcript.",
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   Experimental,
@@ -39,7 +39,7 @@ var (
 	})
 	ClaudeModEnabled = feature("claude_mod_enabled", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.", Info{
 		Name:    "Claude mod",
-		Summary: "Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal. A session loads the mod when it next launches.",
+		Summary: "Deliver messages to Claude sessions through a Claude Code mod instead of typing into the terminal.",
 		Group:   Agents,
 		Applies: NewAgentsOnOnly,
 		Stage:   Experimental,
@@ -84,7 +84,7 @@ var (
 	})
 	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
 		Name:    "Outposts",
-		Summary: "Connect this home to attn on other computers. Add them in Settings → Outposts.",
+		Summary: "Connect this home to attn on other computers.",
 		Group:   Connections,
 		Applies: Now,
 		Stage:   Experimental,

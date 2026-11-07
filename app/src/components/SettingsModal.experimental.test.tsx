@@ -1,5 +1,5 @@
 import { EXPERIMENTAL_FEATURES } from '../utils/settings';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { openSection, savedSettings } from '../test/settings';
 import { gesture } from '../test/renderApp';
@@ -97,18 +97,20 @@ describe('Experimental settings for the shelf layout', () => {
   const shelfLayout = () => screen.getByRole('switch', { name: 'Shelf layout' });
   const narrowestWidth = () => screen.queryByLabelText('Narrowest tile width (columns)');
 
-  it('starts off with no width control, and turning it on saves the setting and shows the control', async () => {
+  it('starts off with the width control unusable, and turning it on saves the setting and opens the control', async () => {
     const daemon = await openSection('experimental', { settings: { narrowest_tile_cols: '66' } });
+    const widths = () => screen.getByTestId('settings-feature-content-shelf_layout_enabled');
     expect(shelfLayout()).toHaveAttribute('aria-checked', 'false');
-    expect(narrowestWidth()).not.toBeInTheDocument();
+    expect(widths()).toHaveAttribute('inert');
 
     await gesture(daemon, () => fireEvent.click(shelfLayout()));
     expect(savedSettings(daemon)).toEqual([['shelf_layout_enabled', 'true']]);
     expect(shelfLayout()).toHaveAttribute('aria-checked', 'true');
     expect(narrowestWidth()).toHaveValue(66);
+    expect(widths()).not.toHaveAttribute('inert');
 
     await gesture(daemon, () => fireEvent.click(shelfLayout()));
-    expect(narrowestWidth()).not.toBeInTheDocument();
+    expect(widths()).toHaveAttribute('inert');
   });
 
   it('saves the narrowest width when focus leaves the field', async () => {
@@ -122,19 +124,21 @@ describe('Experimental settings for the shelf layout', () => {
 });
 
 describe('Experimental settings come from the declarations', () => {
-  it('offers a switch for every feature and says when a change applies', async () => {
+  it('offers a switch for every feature and mentions timing only when a change does not apply at once', async () => {
     await openSection('experimental');
     for (const feature of EXPERIMENTAL_FEATURES) {
       const toggle = screen.getByRole('switch', { name: feature.name });
       expect(toggle).toHaveAttribute('aria-checked', 'false');
       expect(screen.getByTestId(`settings-feature-${feature.key}`)).toBe(toggle);
     }
-    expect(within(screen.getByTestId('settings-feature-group-Agents')).getByText('Asks').textContent).toContain('New agents');
+    expect(screen.getByRole('switch', { name: 'Asks' })).toHaveAccessibleDescription(expect.stringContaining('Starts with the next agent you open.'));
+    expect(screen.getByRole('switch', { name: 'Launcher 2.0' })).not.toHaveAccessibleDescription(expect.stringContaining('Starts'));
+    expect(screen.queryByText('Now')).toBeNull();
   });
 
-  it('keeps the shelf layout widths under its switch while it is on', async () => {
-    await openSection('experimental', { settings: { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' } });
-    expect(screen.getByTestId('settings-narrowest-tile-cols')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-sidebar-width')).toBeInTheDocument();
+  it('finds a feature page with its flag off', async () => {
+    await openSection('experimental');
+    fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'iphone' } });
+    expect(screen.getByTestId('settings-nav-phones')).toBeInTheDocument();
   });
 });

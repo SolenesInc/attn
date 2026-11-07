@@ -165,6 +165,15 @@
   cursor: pointer;
 }
 
+.settings-nav-item:has(.settings-nav-off) {
+  grid-template-columns: 1fr auto;
+}
+
+.settings-nav-off {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
+}
+
 .settings-nav-item:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
@@ -578,11 +587,24 @@
   font-weight: 750;
 }
 
-.settings-feature-applies {
-  margin-left: 8px;
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--color-text-secondary);
+.settings-feature-content {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.settings-feature-content.off {
+  opacity: 0.45;
+}
+
+.settings-block-body .settings-feature-content {
+  margin-left: 16px;
+}
+
+.settings-feature-page {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
 }
 
 .settings-row-copy {

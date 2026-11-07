@@ -11,7 +11,7 @@ outpost it can't reach.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `analytics.enabled` | off | Records usage on the home and each outpost, gives new sessions `attn vent`, and shows **Settings → Analytics**. The home decides it. Experimental. |
+| `analytics.enabled` | off | Records usage on the home and each outpost, and gives new sessions `attn vent`. Turn it on in **Settings → Analytics**. The home decides it. Experimental. |
 | `analytics.sharing_enabled` | off | Uploads the outbox to Attn's maintainers. Needs `analytics.enabled`. |
 | `analytics.share_vents` | off | While sharing is on, queues each new Attn vent, with its text, for the next upload. While the setting is off, a vent leaves only when you press `x` on the vent. |
 | `analytics.tool_vents` | off | Lets new sessions also file tool vents, about the agent's other tools. Tool vents never leave the machine. |

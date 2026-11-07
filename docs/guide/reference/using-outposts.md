@@ -32,9 +32,8 @@ To add an outpost:
 
 1. Run `ssh <destination>` in your terminal and answer any authentication or
    host-key prompts. Attn's background commands never prompt.
-2. On the home, turn on **Outposts** in **Settings → Experimental**.
-3. Open **Settings → Outposts**, enter the **ssh destination**, and click **Add
-   outpost**. Name is optional and defaults to the destination. The name `home`
+2. On the home, open **Settings → Outposts** and turn on **Outposts**.
+3. Enter the **ssh destination** and click **Add outpost**. Name is optional and defaults to the destination. The name `home`
    is reserved.
 
 Attn starts the daemon over ssh and keeps it running when ssh disconnects.

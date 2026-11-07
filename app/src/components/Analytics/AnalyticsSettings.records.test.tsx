@@ -2,7 +2,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { gesture } from '../../test/renderApp';
 import type { ScriptedDaemon } from '../../test/scriptedDaemon';
-import { openSection } from '../../test/settings';
+import { openSection, savedSettings } from '../../test/settings';
 
 const record = (id: number, stream: string, name: string, at: string, extra: Record<string, unknown> = {}) =>
   ({ id, record: JSON.stringify({ stream, seq: id, name, at, ...extra }) });
@@ -93,8 +93,14 @@ describe('Settings › Analytics records', () => {
     expect(daemon.sentOf('get_analytics_status')).toHaveLength(2);
   });
 
-  it('is absent from the nav while analytics is off', async () => {
-    await openSection('connectivity', { settings: { 'analytics.enabled': 'false' } });
-    expect(screen.queryByTestId('settings-nav-analytics')).toBeNull();
+  it('stays open on its page when analytics turns off, marked off and unusable', async () => {
+    const daemon = await openSection('analytics', { settings: { 'analytics.enabled': 'true' } });
+    expect(screen.queryByTestId('settings-nav-off-analytics')).toBeNull();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Usage analytics' })));
+    expect(savedSettings(daemon)).toContainEqual(['analytics.enabled', 'false']);
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { 'analytics.enabled': 'false' } }));
+    expect(page()).toBeInTheDocument();
+    expect(screen.getByTestId('settings-nav-off-analytics')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-feature-content-analytics.enabled')).toHaveAttribute('inert');
   });
 });

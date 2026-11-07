@@ -23,18 +23,19 @@ function fill(nextName: string, nextAddress: string) {
 }
 
 describe('Outposts settings', () => {
-  it('keeps the section hidden until opt-in, and hides an open section when disabled elsewhere', async () => {
-    const daemon = await openSection('experimental');
-    expect(screen.queryByTestId('settings-nav-outposts')).toBeNull();
-    expect(screen.getByRole('switch', { name: 'Outposts' })).toHaveAttribute('aria-checked', 'false');
+  it('stays in the sidebar with its switch, marked off and unusable until opted in', async () => {
+    const daemon = await openSection('outposts');
+    expect(screen.getByTestId('settings-nav-off-outposts')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-feature-content-outposts_enabled')).toHaveAttribute('inert');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('switch', { name: 'Outposts' })));
     expect(savedSettings(daemon)).toEqual([['outposts_enabled', 'true']]);
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { outposts_enabled: 'true' } }));
+    expect(screen.queryByTestId('settings-nav-off-outposts')).toBeNull();
+    expect(screen.getByTestId('settings-feature-content-outposts_enabled')).not.toHaveAttribute('inert');
     expect(screen.getByText('No outposts added.')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { outposts_enabled: 'false' } }));
-    expect(screen.queryByTestId('settings-nav-outposts')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Add outpost' })).toBeNull();
-    expect(screen.getByTestId('settings-section-connectivity')).toBeInTheDocument();
+    expect(screen.getByTestId('settings-nav-off-outposts')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Outposts' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('adds by name and ssh destination, retaining the draft until a snapshot confirms it', async () => {
@@ -209,9 +210,8 @@ describe('Outposts settings', () => {
     daemon.on('client_hello', () => initialState({ settings: { outposts_enabled: 'false' } }));
     await daemon.reconnect();
     await daemon.idle();
-    expect(screen.queryByTestId('settings-nav-outposts')).toBeNull();
+    expect(screen.getByTestId('settings-nav-off-outposts')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: enabled }));
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-outposts')));
     expect(screen.getByText('No outposts added.')).toBeInTheDocument();
     await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [{ ...connected, name: 'New studio' }] }));
     expect(screen.getByRole('listitem', { name: 'New studio' })).toBeInTheDocument();

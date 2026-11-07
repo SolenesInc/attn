@@ -1,0 +1,3 @@
+kind: changed
+area: settings
+change: Outposts, Phones and Analytics now stay in Settings with their switch at the top, dimmed and marked off until you turn them on, and the shelf layout's width fields stay under its switch. A flag's description says when a change doesn't apply at once, in place of the New agents and Now tags.

@@ -311,8 +311,8 @@ describe('The sidebar width in Settings', () => {
     expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
   });
 
-  it('has no row with the shelf off', async () => {
+  it('is unusable with the shelf off', async () => {
     await openSection('experimental', { settings: { sidebar_width: '300' } });
-    expect(screen.queryByTestId('settings-sidebar-width')).toBeNull();
+    expect(screen.getByTestId('settings-sidebar-width').closest('[inert]')).not.toBeNull();
   });
 });

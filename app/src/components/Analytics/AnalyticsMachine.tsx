@@ -54,13 +54,12 @@ function shareCopy(sharing: boolean, status: AnalyticsStatus | null, offeringDel
 
 const toggled = (on: boolean) => (on ? 'false' : 'true');
 
-export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetSetting, onDisableRecording, onClear, onForget }: {
+export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetSetting, onClear, onForget }: {
   status: AnalyticsStatus | null;
   sharing: boolean;
   sendVents: boolean;
   toolVents: boolean;
   onSetSetting: (key: string, value: string) => void;
-  onDisableRecording: () => void;
   onClear: () => void;
   onForget: () => void;
 }) {
@@ -72,9 +71,6 @@ export function AnalyticsMachine({ status, sharing, sendVents, toolVents, onSetS
   };
   return (
     <div className="analytics-machine" data-testid="analytics-machine">
-      <Row title="Record on this home and its outposts" copy={<>Redacted bus facts, app actions, CLI outcomes, agent runs and resource samples. New sessions get <code>attn vent</code>.</>}>
-        <button type="button" className="settings-action" onClick={onDisableRecording}>Disable</button>
-      </Row>
       <Row title="Share with attn's maintainers" copy={shareCopy(sharing, status, confirm === 'deleteServerCopy')}>
         <Confirmable asking={confirm === 'deleteServerCopy'} label="Delete from server" onYes={onForget} onDone={done}>
           <button type="button" className="settings-action" onClick={toggleSharing}>{sharing ? 'Disable' : 'Enable'}</button>
