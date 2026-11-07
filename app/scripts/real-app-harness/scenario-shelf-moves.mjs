@@ -75,6 +75,12 @@ async function slideTo(leafId) {
 }
 
 runner.registerCleanup('close_observer', () => observer.close());
+runner.registerCleanup('close_row_desktop', async () => {
+  if (!observer.desktop(desktop) || observer.desktops.length === 1) return;
+  await observer.waitFor(() => observer.desktop(desktop).panes.length === 0, 'no terminals left on the row');
+  const { revision } = observer.desktop(desktop);
+  await observer.profileCommand('desktop_close', { desktop_id: desktop, expected_revision: revision });
+});
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});

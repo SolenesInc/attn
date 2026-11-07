@@ -24,7 +24,7 @@ const LAUNCHER_INPUT = '[data-testid="location-picker-path-input"]';
 const STEPS = { Left: -1, Up: -1, Right: 1, Down: 1 };
 const sessions = [];
 const walk = [];
-let keptEmpty;
+const keptEmpty = [];
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
@@ -34,9 +34,11 @@ runner.registerCleanup('restore_settings', async () => {
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
-runner.registerCleanup('close_empty_desktop', async () => {
-  const desktop = observer.desktop(keptEmpty);
-  if (desktop) await observer.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: desktop.revision });
+runner.registerCleanup('close_empty_desktops', async () => {
+  for (const id of keptEmpty) {
+    const desktop = observer.desktop(id);
+    if (desktop) await observer.profileCommand('desktop_close', { desktop_id: desktop.id, expected_revision: desktop.revision });
+  }
 });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ launcher: LAUNCHER }) });
 
@@ -69,6 +71,14 @@ async function settledOn(desktopId, activeTile) {
   if (!holdsOnlyTiles) await waitForPaneInputFocus(client, pane.session_id, pane.pane_id);
 }
 
+async function createKeptEmptyDesktop(name) {
+  const created = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, name, shortcut_slot: 0 });
+  const { id } = created.desktops[0];
+  keptEmpty.push(id);
+  await observer.waitFor(() => observer.desktop(id), `${name} in the arrangement`);
+  return id;
+}
+
 async function press(key, expected) {
   const before = await screenState();
   await pressShortcutKeys(client, driver, `terminal.focus${key}`);
@@ -82,6 +92,7 @@ async function press(key, expected) {
 try {
   let home;
   let empty;
+  let beyond;
   let firstTile;
   let lastTile;
 
@@ -100,14 +111,12 @@ try {
     sessions.push(observer.desktop(home).panes.find((pane) => pane.session_id !== first).session_id);
     firstTile = observer.desktop(home).panes.find((pane) => pane.session_id === first).pane_id;
     lastTile = observer.desktop(home).panes.find((pane) => pane.session_id !== first).pane_id;
-    const created = await observer.profileCommand('desktop_create', { profile_id: observer.profileId, name: 'Empty neighbour', shortcut_slot: 0 });
-    keptEmpty = created.desktops[0].id;
-    await observer.waitFor(() => observer.desktop(keptEmpty), 'empty neighbour in the arrangement');
-    const others = desktopIdsInOrder().filter((id) => id !== keptEmpty);
-    others.splice(others.indexOf(home) + 1, 0, keptEmpty);
+    empty = await createKeptEmptyDesktop('Empty neighbour');
+    beyond = await createKeptEmptyDesktop('Far neighbour');
+    const others = desktopIdsInOrder().filter((id) => id !== empty && id !== beyond);
+    others.splice(others.indexOf(home) + 1, 0, empty, beyond);
     await observer.profileCommand('desktop_set_order', { profile_id: observer.profileId, desktop_ids: others });
-    await observer.waitFor(() => desktopAfter(home, 'Right') === keptEmpty, 'empty neighbour right after the row');
-    empty = keptEmpty;
+    await observer.waitFor(() => desktopAfter(home, 'Right') === empty && desktopAfter(empty, 'Right') === beyond, 'the empty neighbours right after the row');
   });
 
   await runner.step('walk', async () => {
@@ -117,16 +126,15 @@ try {
     if ((await screenState()).activeTile === firstTile) await press('Right', { desktopId: home, activeTile: lastTile });
 
     await press('Right', { desktopId: empty });
-    const beyond = desktopAfter(empty, 'Right');
     await press('Right', { desktopId: beyond });
     await press('Left', { desktopId: empty });
     await press('Left', { desktopId: home, activeTile: lastTile });
 
     await press('Right', { desktopId: empty });
-    await press('Up', { desktopId: desktopAfter(empty, 'Up') });
+    await press('Up', { desktopId: home, activeTile: lastTile });
     await request('select_desktop', { desktopId: empty });
     await settledOn(empty);
-    await press('Down', { desktopId: desktopAfter(empty, 'Down') });
+    await press('Down', { desktopId: beyond });
   });
 
   runner.writeJson('walk.json', walk);

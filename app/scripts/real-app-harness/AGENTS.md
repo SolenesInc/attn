@@ -38,6 +38,9 @@ repository root.
 
 - New scenario files get a `scenarioCatalog.mjs` entry. After a shape change,
   update its weight in `scenario-durations.json` from a green run.
+- A scenario shares its instance with the scenarios before it in the shard, and
+  which ones those are changes with the recorded durations. Leave no tile behind,
+  and do not drive onto a desktop the scenario did not make.
 - `runShellCommandInPane` requires a shell. For a mock agent, submit a prompt
   matched by its fixture and wait for the resulting reply.
 - `profileCommand` awaits `profile_action_result`; CLI commands such as
