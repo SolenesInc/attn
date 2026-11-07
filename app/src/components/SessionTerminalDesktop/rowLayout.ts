@@ -25,6 +25,7 @@ const NOTHING_SUSPENDED: ReadonlySet<string> = new Set();
 export interface RowColumn {
   leafIds: string[];
   wantedCols?: number;
+  wantedAreaCols?: number;
   node: TerminalLayoutNode;
 }
 
@@ -62,14 +63,14 @@ export function readRow(tree: TerminalLayoutNode): RowColumn[] {
     return [...readRow(tree.children[0]), ...readRow(tree.children[1])];
   }
   const leaves = collectLayoutLeaves(tree);
-  return [{ leafIds: leaves.map(leafSlotId), wantedCols: leaves[0]?.wantedCols, node: tree }];
+  return [{ leafIds: leaves.map(leafSlotId), wantedCols: leaves[0]?.wantedCols, wantedAreaCols: leaves[0]?.wantedAreaCols, node: tree }];
 }
 
 function withPendingWantedCols(row: readonly RowColumn[], pending: ReadonlyMap<string, number> | undefined): RowColumn[] {
   if (!pending?.size) return [...row];
   return row.map((column) => {
     const cols = pending.get(column.leafIds[0]);
-    return cols === undefined ? column : { ...column, wantedCols: cols || undefined };
+    return cols === undefined ? column : { ...column, wantedCols: cols || undefined, wantedAreaCols: undefined };
   });
 }
 
@@ -88,9 +89,14 @@ function fitsArea(px: number, measures: Pick<RowMeasures, 'areaPx'>): boolean {
   return px <= measures.areaPx + FIT_TOLERANCE_PX;
 }
 
+export function areaInCols({ areaPx, pxPerCol }: Pick<RowMeasures, 'areaPx' | 'pxPerCol'>): number {
+  return Math.floor(areaPx / pxPerCol);
+}
+
 function wantedPxWithRoom(column: RowColumn, measures: Pick<RowMeasures, 'areaPx' | 'pxPerCol'>): number | null {
   const px = (column.wantedCols ?? 0) * measures.pxPerCol;
-  return px > 0 && fitsArea(px, measures) ? px : null;
+  const areaHoldsIt = areaInCols(measures) >= (column.wantedAreaCols ?? 0);
+  return px > 0 && areaHoldsIt && fitsArea(px, measures) ? px : null;
 }
 
 function columnNeedPx(column: RowColumn, measures: RowMeasures): number {

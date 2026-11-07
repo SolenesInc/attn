@@ -4019,6 +4019,9 @@ type DesktopSetSplitRatioMessage struct {
 }
 
 type DesktopSetWantedColsMessage struct {
+	// AreaCols corresponds to the JSON schema field "area_cols".
+	AreaCols int `json:"area_cols"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

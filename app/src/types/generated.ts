@@ -4274,6 +4274,7 @@ export enum DesktopSetSplitRatioMessageCmd {
 }
 
 export interface DesktopSetWantedColsMessage {
+    area_cols:  number;
     cmd:        DesktopSetWantedColsMessageCmd;
     cols:       number;
     desktop_id: string;
@@ -22723,6 +22724,7 @@ const typeMap: any = {
         { json: "split_id", js: "split_id", typ: "" },
     ], "any"),
     "DesktopSetWantedColsMessage": o([
+        { json: "area_cols", js: "area_cols", typ: 0 },
         { json: "cmd", js: "cmd", typ: r("DesktopSetWantedColsMessageCmd") },
         { json: "cols", js: "cols", typ: 0 },
         { json: "desktop_id", js: "desktop_id", typ: "" },

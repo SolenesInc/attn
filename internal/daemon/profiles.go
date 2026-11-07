@@ -767,7 +767,7 @@ func (d *Daemon) handleDesktopSetSplitRatio(client *wsClient, msg *protocol.Desk
 
 func (d *Daemon) handleDesktopSetWantedCols(client *wsClient, msg *protocol.DesktopSetWantedColsMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		desktop, err := d.store.SetDesktopWantedCols(msg.DesktopID, msg.LeafID, msg.Cols)
+		desktop, err := d.store.SetDesktopWantedWidth(msg.DesktopID, msg.LeafID, layouttree.WantedWidth{WantedCols: int(msg.Cols), WantedAreaCols: int(msg.AreaCols)})
 		return d.desktopChanged(desktop), err
 	})
 }

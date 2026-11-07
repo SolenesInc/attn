@@ -21,6 +21,13 @@ func columnsOf(node layoutNode) []layoutNode {
 	return []layoutNode{node}
 }
 
+func (n layoutNode) firstLeafWantedAreaCols() int {
+	if len(n.Children) > 0 {
+		return n.Children[0].firstLeafWantedAreaCols()
+	}
+	return n.WantedAreaCols
+}
+
 func (n layoutNode) firstLeafWantedCols() int {
 	if n.Type == "split" {
 		return n.Children[0].firstLeafWantedCols()
@@ -532,11 +539,18 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 			t.Helper()
 			return columnsOf(desktopTree(t, desktop.desktop()))[column].firstLeafWantedCols()
 		}
-		if result := wanted("c", 100); !result.Success {
+		firstTileAreaCols := func(column int) int {
+			t.Helper()
+			return columnsOf(desktopTree(t, desktop.desktop()))[column].firstLeafWantedAreaCols()
+		}
+		if result := desktop.wantedAt("c", 100, 300); !result.Success {
 			t.Fatal(protocol.Deref(result.Error))
 		}
 		if got := firstTileCols(1); got != 100 {
 			t.Fatalf("the stack's first tile wants %d cols, want 100", got)
+		}
+		if got := firstTileAreaCols(1); got != 300 {
+			t.Fatalf("the stack's first tile keeps an area of %d cols, want 300", got)
 		}
 		if refused := wanted("a", -1); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "-1") {
 			t.Fatalf("a negative width answered %+v", refused)
@@ -559,6 +573,9 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 		if got := firstTileCols(0); got != 100 {
 			t.Fatalf("after a restart the stack wants %d cols, want 100", got)
 		}
+		if got := firstTileAreaCols(0); got != 300 {
+			t.Fatalf("after a restart the stack keeps an area of %d cols, want 300", got)
+		}
 
 		other := createDesktop(desktop.app, profileID)
 		moved := desktop.move(protocol.DesktopMoveLeafMessage{LeafID: "b", TargetDesktopID: protocol.Ptr(other.ID), Edge: protocol.Ptr(protocol.LayoutDockEdgeRight), WholeColumn: protocol.Ptr(true)})
@@ -570,6 +587,9 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 		desktop.requireRow("b/c")
 		if got := firstTileCols(0); got != 100 {
 			t.Fatalf("after moving desktops the stack wants %d cols, want 100", got)
+		}
+		if got := firstTileAreaCols(0); got != 300 {
+			t.Fatalf("after moving desktops the stack keeps an area of %d cols, want 300", got)
 		}
 		above := dockOnDesktop(desktop.app, desktop.desktop(), protocol.DesktopDockTileMessage{AnchorID: protocol.Ptr("b"), TileID: "above", TileKind: "browser", TileParams: protocol.Ptr("https://example.com"), Edge: protocol.LayoutDockEdgeTop})
 		if !above.Success {
@@ -587,13 +607,21 @@ func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testin
 		if got := firstTileCols(0); got != 0 {
 			t.Fatalf("a cleared width came back as %d cols when the tile above left", got)
 		}
+		if got := firstTileAreaCols(0); got != 0 {
+			t.Fatalf("a cleared width left an area of %d cols", got)
+		}
 	})
 }
 
 func (r rowDesktop) wanted(leaf string, cols int) protocol.ProfileActionResultMessage {
 	r.t.Helper()
+	return r.wantedAt(leaf, cols, 0)
+}
+
+func (r rowDesktop) wantedAt(leaf string, cols, areaCols int) protocol.ProfileActionResultMessage {
+	r.t.Helper()
 	id := uuid.NewString()
-	return profileRequest(r.app, protocol.DesktopSetWantedColsMessage{Cmd: protocol.CmdDesktopSetWantedCols, RequestID: id, DesktopID: r.desktopID, LeafID: leaf, Cols: cols}, id)
+	return profileRequest(r.app, protocol.DesktopSetWantedColsMessage{Cmd: protocol.CmdDesktopSetWantedCols, RequestID: id, DesktopID: r.desktopID, LeafID: leaf, Cols: cols, AreaCols: areaCols}, id)
 }
 
 func (r rowDesktop) dockBrowser(id, anchor string, edge protocol.LayoutDockEdge) {

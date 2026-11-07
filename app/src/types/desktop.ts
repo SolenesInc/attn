@@ -10,6 +10,7 @@ export interface TerminalPaneLeaf {
   type: 'pane';
   paneId: string;
   wantedCols?: number;
+  wantedAreaCols?: number;
 }
 
 export interface TileLeaf {
@@ -19,6 +20,7 @@ export interface TileLeaf {
   tileParams?: string;
   tileSessionId?: string;
   wantedCols?: number;
+  wantedAreaCols?: number;
 }
 
 export type TerminalLeaf = TerminalPaneLeaf | TileLeaf;
@@ -297,8 +299,12 @@ export function findLeafInDirection(
   return candidates[0]?.leafId ?? null;
 }
 
-function parseWantedCols(value: { wanted_cols?: unknown }): { wantedCols?: number } {
-  return typeof value.wanted_cols === 'number' && value.wanted_cols > 0 ? { wantedCols: value.wanted_cols } : {};
+function parseWantedWidth(value: { wanted_cols?: unknown; wanted_area_cols?: unknown }): { wantedCols?: number; wantedAreaCols?: number } {
+  if (typeof value.wanted_cols !== 'number' || value.wanted_cols <= 0) return {};
+  return {
+    wantedCols: value.wanted_cols,
+    ...(typeof value.wanted_area_cols === 'number' && value.wanted_area_cols > 0 ? { wantedAreaCols: value.wanted_area_cols } : {}),
+  };
 }
 
 function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
@@ -310,7 +316,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
     return {
       type: 'pane',
       paneId: value.pane_id,
-      ...parseWantedCols(value),
+      ...parseWantedWidth(value),
     };
   }
   if (
@@ -328,7 +334,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
       tileSessionId: typeof value.tile_session_id === 'string' && value.tile_session_id.length > 0
         ? value.tile_session_id
         : undefined,
-      ...parseWantedCols(value),
+      ...parseWantedWidth(value),
     };
   }
   if (

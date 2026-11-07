@@ -89,36 +89,36 @@ func mostRecentlyUsedLeaf(column Node, live map[string]bool, history []string) s
 	return ""
 }
 
-func SetWantedCols(tree Node, leafID string, cols int) (Node, bool) {
+func SetWantedWidth(tree Node, leafID string, width WantedWidth) (Node, bool) {
 	at, ok := ColumnOf(tree, leafID)
 	if !ok {
 		return tree, false
 	}
 	stack := LeafIDs(Columns(tree)[at])
 	for _, id := range stack {
-		wanted := 0
+		var wanted WantedWidth
 		if id == stack[0] {
-			wanted = cols
+			wanted = width
 		}
 		target := isLeafWithID(id)
 		tree, _ = rewriteFirst(tree, func(candidate Node) (Node, bool) {
 			if !target(candidate) {
 				return candidate, false
 			}
-			candidate.WantedCols = wanted
+			candidate.WantedWidth = wanted
 			return candidate, true
 		})
 	}
 	return tree, true
 }
 
-func columnWantedCols(tree Node, leafID string) int {
+func columnWantedWidth(tree Node, leafID string) WantedWidth {
 	at, ok := ColumnOf(tree, leafID)
 	if !ok {
-		return 0
+		return WantedWidth{}
 	}
 	first, _ := findLeaf(tree, LeafIDs(Columns(tree)[at])[0])
-	return first.WantedCols
+	return first.WantedWidth
 }
 
 func takeLeafFromColumn(tree Node, leafID string) (rest, leaf Node, ok bool) {
@@ -126,15 +126,15 @@ func takeLeafFromColumn(tree Node, leafID string) (rest, leaf Node, ok bool) {
 	if !ok {
 		return tree, Node{}, false
 	}
-	wantedCols := columnWantedCols(tree, leafID)
+	wanted := columnWantedWidth(tree, leafID)
 	at, _ := ColumnOf(tree, leafID)
 	stayers := slices.DeleteFunc(LeafIDs(Columns(tree)[at]), func(id string) bool { return id == leafID })
 	rest, _ = Remove(tree, leafID)
 	if len(stayers) == 0 {
 		return rest, leaf, true
 	}
-	leaf.WantedCols = 0
-	rest, _ = SetWantedCols(rest, stayers[0], wantedCols)
+	leaf.WantedWidth = WantedWidth{}
+	rest, _ = SetWantedWidth(rest, stayers[0], wanted)
 	return rest, leaf, true
 }
 

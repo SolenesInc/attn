@@ -3580,13 +3580,16 @@ model DesktopSetSplitRatioMessage {
   ratio: float64;
 }
 
-// Sets the wanted width of leaf_id's column. Needs shelf_layout_enabled.
+// Sets the wanted width of leaf_id's column. The width applies only while the
+// tile area is at least area_cols wide, the area it was set at. An area_cols of
+// 0 applies it wherever it fits the area. Needs shelf_layout_enabled.
 model DesktopSetWantedColsMessage {
   cmd: "desktop_set_wanted_cols";
   request_id: string;
   desktop_id: string;
   leaf_id: string;
   cols: int32;                  // 0 clears
+  area_cols: int32;
 }
 
 // Docks a tile beside anchor_id or, absent, beside the active leaf. The tile

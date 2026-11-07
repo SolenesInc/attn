@@ -44,6 +44,7 @@ import {
   applyColumnDrag,
   columnDividerIndex,
   columnStackNeedPx,
+  areaInCols,
   columnIndexOf,
   lastUsedLeaf,
   narrowestWidthPx,
@@ -1352,7 +1353,9 @@ export function useDesktopController(
       const kept = new Map([...pending].filter(([leafId, cols]) => wanted.get(leafId) !== cols));
       return kept.size === pending.size ? pending : kept;
     });
-    void Promise.all([...wanted].map(([leafId, cols]) => onSetWantedCols?.(leafId, cols)))
+    const input = rowInputRef.current;
+    const areaCols = input ? areaInCols(input) : 0;
+    void Promise.all([...wanted].map(([leafId, cols]) => onSetWantedCols?.(leafId, cols, cols ? areaCols : 0)))
       .catch(reportShelfMove('save that width'))
       .finally(dropPending);
   }, [onSetWantedCols, reportShelfMove]);

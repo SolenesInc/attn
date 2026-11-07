@@ -4164,8 +4164,8 @@ export function useDaemonSocket({
   );
 
   const sendDesktopSetWantedCols = useCallback(
-    (desktopId: string, leafId: string, cols: number) =>
-      sendProfileCommand('desktop_set_wanted_cols', { desktop_id: desktopId, leaf_id: leafId, cols }),
+    (desktopId: string, leafId: string, cols: number, areaCols: number) =>
+      sendProfileCommand('desktop_set_wanted_cols', { desktop_id: desktopId, leaf_id: leafId, cols, area_cols: areaCols }),
     [sendProfileCommand],
   );
 

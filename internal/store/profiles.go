@@ -1431,9 +1431,9 @@ func (s *Store) RemoveLeaf(desktopID, leafID string) (profiles.Desktop, error) {
 	})
 }
 
-func (s *Store) SetDesktopWantedCols(desktopID, leafID string, cols int) (profiles.Desktop, error) {
-	if cols < 0 {
-		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "wanted width %d for leaf %q is negative; send a width in cols, or 0 to clear it", cols, leafID)
+func (s *Store) SetDesktopWantedWidth(desktopID, leafID string, width layouttree.WantedWidth) (profiles.Desktop, error) {
+	if width.WantedCols < 0 {
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "wanted width %d for leaf %q is negative; send a width in cols, or 0 to clear it", width.WantedCols, leafID)
 	}
 	return s.editDesktopInTx(desktopID, func(tx *sql.Tx, desktop profiles.Desktop) (profiles.Desktop, error) {
 		shelf, err := shelfLayoutOn(tx)
@@ -1443,7 +1443,7 @@ func (s *Store) SetDesktopWantedCols(desktopID, leafID string, cols int) (profil
 		if !shelf {
 			return desktop, profiles.Errorf(profiles.CodeInvalid, "a wanted width needs %s, which is off", setting.ShelfLayoutEnabled)
 		}
-		next, ok := layouttree.SetWantedCols(desktop.Tree, leafID, cols)
+		next, ok := layouttree.SetWantedWidth(desktop.Tree, leafID, width)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
 		}

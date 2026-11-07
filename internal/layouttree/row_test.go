@@ -21,7 +21,7 @@ func generatedTree(t *rapid.T) Node {
 			if rapid.Bool().Draw(t, "pane") {
 				return Node{Type: "pane", PaneID: mint("pane-")}
 			}
-			return Node{Type: "tile", TileID: mint("tile-"), TileKind: "browser", WantedCols: rapid.IntRange(0, 200).Draw(t, "wanted")}
+			return Node{Type: "tile", TileID: mint("tile-"), TileKind: "browser", WantedWidth: WantedWidth{WantedCols: rapid.IntRange(0, 200).Draw(t, "wanted"), WantedAreaCols: rapid.IntRange(0, 400).Draw(t, "wanted area")}}
 		}
 		return Node{
 			Type:        "split",

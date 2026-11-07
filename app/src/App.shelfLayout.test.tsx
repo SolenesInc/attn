@@ -68,6 +68,10 @@ async function renderRow(settings: Record<string, string>, { root = ELEVEN_TILES
 const FILLS_THE_AREA = 240;
 const WIDER_THAN_THE_AREA = 300;
 const ROOM_FOR_THAT_WIDTH = 2500;
+const SAVED_AREA = 2300;
+const SAVED_AREA_COLS = 280;
+const SMALLER_AREA = 1800;
+const FITS_ALONE_AT_THE_SMALLER_AREA = 180;
 
 const SHELF_ON = { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' };
 
@@ -203,6 +207,40 @@ describe('Shelf layout', () => {
 
     await resizeTiles(ROOM_FOR_THAT_WIDTH);
     expect(paneIds()).toEqual(onScreen('s1'));
+  });
+
+  const wantedAt = (id: string, cols: number, areaCols: number) => ({ ...wanted(id, cols), wanted_area_cols: areaCols });
+  const wantedColsOf = (daemon: ScriptedDaemon, id: string) => {
+    const find = (node: { pane_id?: string; wanted_cols?: number; children?: never[] }): number | undefined =>
+      node.pane_id === `pane-${id}` ? node.wanted_cols : node.children?.map(find).find((cols) => cols !== undefined);
+    return find(JSON.parse(daemon.arrangement.desktop('ws')!.tree_json));
+  };
+
+  it('lets a saved width hide neighbours only at the area it was saved at or larger', async () => {
+    const resize = observedResizes();
+    const daemon = await renderRow(SHELF_ON, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, SAVED_AREA_COLS), pane('s2'), pane('s3')]) });
+    const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
+
+    await resizeTiles(PANES_WIDTH);
+    expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+
+    await resizeTiles(SAVED_AREA);
+    expect(paneIds()).toEqual(onScreen('s1'));
+
+    await resizeTiles(PANES_WIDTH);
+    expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+    expect(wantedColsOf(daemon, 's1')).toBe(FILLS_THE_AREA);
+    expect(daemon.sentOf('desktop_set_wanted_cols')).toEqual([]);
+  });
+
+  it('keeps a saved width with no stored area hiding neighbours wherever it fits the area', async () => {
+    const resize = observedResizes();
+    const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FITS_ALONE_AT_THE_SMALLER_AREA), pane('s2'), pane('s3')]) });
+
+    await gesture(daemon, () => resize('.session-terminal-panes', { width: SMALLER_AREA, height: PANES_HEIGHT }));
+
+    expect(paneIds()).toEqual(onScreen('s1'));
+    expect(wantedColsOf(daemon, 's1')).toBe(FITS_ALONE_AT_THE_SMALLER_AREA);
   });
 
   describe('when a dragged width blocks more tiles', () => {
@@ -1086,6 +1124,44 @@ describe('Shelf layout', () => {
 
       expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
       expect(active()).toBe('pane-s3');
+    });
+
+    it('saves the area with a drag past the narrowest, which holds there and gives way below it', async () => {
+      const resize = observedResizes();
+      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 2).map(pane)) });
+      const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
+      await resizeTiles(PANES_WIDTH);
+
+      await dragDivider(daemon, 's1', 1500);
+
+      expect(paneIds()).toEqual(onScreen('s1'));
+      const [saved] = widths(daemon);
+      expect(saved).toEqual(expect.objectContaining({ leaf_id: 'pane-s1', area_cols: saved.cols }));
+
+      const oneColumnLess = Math.floor((PANES_WIDTH * (saved.area_cols - 1)) / saved.area_cols);
+      await resizeTiles(oneColumnLess);
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+      expect(widths(daemon)).toHaveLength(1);
+
+      await resizeTiles(PANES_WIDTH);
+      expect(paneIds()).toEqual(onScreen('s1'));
+    });
+
+    it('still shelves the far column on a drag past the narrowest at a smaller area', async () => {
+      const resize = observedResizes();
+      const daemon = await renderRow(SHELF_ON, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, WIDER_THAN_THE_AREA), pane('s2')]) });
+      const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
+      await resizeTiles(PANES_WIDTH);
+      expect(paneIds()).toEqual(onScreen('s1', 's2'));
+
+      await dragDivider(daemon, 's1', 1500);
+
+      expect(paneIds()).toEqual(onScreen('s1'));
+      expect(widths(daemon)[0].area_cols).toBeLessThan(WIDER_THAN_THE_AREA);
+
+      await resizeTiles(ROOM_FOR_THAT_WIDTH);
+      await resizeTiles(PANES_WIDTH);
+      expect(paneIds()).toEqual(onScreen('s1'));
     });
 
     it('cancels a divider drag with Esc and restores the screen', async () => {

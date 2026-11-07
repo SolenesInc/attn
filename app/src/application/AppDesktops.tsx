@@ -190,7 +190,7 @@ export function AppDesktops() {
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}
           onMoveRowLeaf={(move) => sendDesktopMoveLeaf({ sourceDesktopId: desktop.id, targetDesktopId: desktop.id, ...move })}
-          onSetWantedCols={(leafId, cols) => sendDesktopSetWantedCols(desktop.id, leafId, cols)}
+          onSetWantedCols={(leafId, cols, areaCols) => sendDesktopSetWantedCols(desktop.id, leafId, cols, areaCols)}
           connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {

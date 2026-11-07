@@ -35,6 +35,11 @@ const (
 	TileKindNotebook TileKind = "notebook"
 )
 
+type WantedWidth struct {
+	WantedCols     int `json:"wanted_cols,omitempty"`
+	WantedAreaCols int `json:"wanted_area_cols,omitempty"`
+}
+
 type Node struct {
 	Type          string             `json:"type"`
 	PaneID        string             `json:"pane_id,omitempty"`
@@ -42,13 +47,13 @@ type Node struct {
 	TileKind      string             `json:"tile_kind,omitempty"`
 	TileParams    string             `json:"tile_params,omitempty"`
 	TileSessionID protocol.SessionID `json:"tile_session_id,omitempty"`
-	WantedCols    int                `json:"wanted_cols,omitempty"`
-	SplitID       string             `json:"split_id,omitempty"`
-	Direction     Direction          `json:"direction,omitempty"`
-	Ratio         float64            `json:"ratio,omitempty"`
-	RatioLocked   bool               `json:"ratio_locked,omitempty"`
-	RatioMode     RatioMode          `json:"ratio_mode,omitempty"`
-	Children      []Node             `json:"children,omitempty"`
+	WantedWidth
+	SplitID     string    `json:"split_id,omitempty"`
+	Direction   Direction `json:"direction,omitempty"`
+	Ratio       float64   `json:"ratio,omitempty"`
+	RatioLocked bool      `json:"ratio_locked,omitempty"`
+	RatioMode   RatioMode `json:"ratio_mode,omitempty"`
+	Children    []Node    `json:"children,omitempty"`
 }
 
 func DefaultLayout(paneID string) Node {
@@ -422,16 +427,16 @@ func tileToDock(node Node, anchorID, tileID, tileKind, tileParams string, tileSe
 	if tileID == "" || tileKind == "" || anchorID == "" || anchorID == tileID || HasPane(node, tileID) {
 		return node, Node{}, false
 	}
-	wantedCols := 0
+	var wanted WantedWidth
 	cleaned = node
 	if rest, existing, found := takeLeafFromColumn(node, tileID); found {
 		cleaned = rest
-		wantedCols = existing.WantedCols
+		wanted = existing.WantedWidth
 		if tileSessionID == "" {
 			tileSessionID = existing.TileSessionID
 		}
 	}
-	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, WantedCols: wantedCols}, true
+	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, WantedWidth: wanted}, true
 }
 
 type placement struct {
@@ -451,7 +456,7 @@ func newPlacement(direction Direction, before bool, splitID string, ratio float6
 }
 
 func insertBesideLeaf(node Node, anchorID string, at placement, incoming Node) (Node, bool) {
-	wantedCols := columnWantedCols(node, anchorID)
+	wanted := columnWantedWidth(node, anchorID)
 	anchor := isLeafWithID(anchorID)
 	next, ok := rewriteFirst(node, func(candidate Node) (Node, bool) {
 		if !anchor(candidate) {
@@ -462,7 +467,7 @@ func insertBesideLeaf(node Node, anchorID string, at placement, incoming Node) (
 	if !ok || at.direction != DirectionHorizontal {
 		return next, ok
 	}
-	return SetWantedCols(next, anchorID, wantedCols)
+	return SetWantedWidth(next, anchorID, wanted)
 }
 
 func placeLeaf(layout Node, anchorID string, at placement, incoming Node) (Node, bool) {

@@ -13,6 +13,7 @@ interface Node {
   direction?: string;
   ratio?: number;
   wanted_cols?: number;
+  wanted_area_cols?: number;
   children?: Node[];
 }
 
@@ -230,8 +231,9 @@ export function serveArrangement(daemon: ScriptedDaemon, arrangement: Arrangemen
     const first = leafIds(column)[0];
     const withCols = (node: Node): Node => {
       if (leafId(node) === first) {
-        const { wanted_cols: _previous, ...rest } = node;
-        return command.cols ? { ...rest, wanted_cols: command.cols } : rest;
+        const { wanted_cols: _previous, wanted_area_cols: _previousArea, ...rest } = node;
+        if (!command.cols) return rest;
+        return { ...rest, wanted_cols: command.cols, ...(command.area_cols ? { wanted_area_cols: command.area_cols } : {}) };
       }
       return node.children ? { ...node, children: node.children.map(withCols) } : node;
     };
