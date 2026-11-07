@@ -36,7 +36,7 @@ const (
 
 const envelopeHeader = 6
 
-// maxRelayFrame is the home's cap on one frame, from the wire contract. It keeps a frame inside one Noise message (65,535 bytes).
+// maxCloudRelayFrame is the home's cap on one frame, from the wire contract. It keeps a frame inside one Noise message (65,535 bytes).
 const maxCloudRelayFrame = 64 << 10
 
 type frame struct {

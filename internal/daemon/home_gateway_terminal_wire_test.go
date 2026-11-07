@@ -73,7 +73,7 @@ func (pt *phoneTerminal) read() string {
 				t.Fatalf("an output frame has seq %d after a screen at seq %d and a frame at seq %d; want above the screen and never lower than the frame before", seq, pt.screenAt, pt.lastSeq)
 			}
 			if len(frame) > cloudlink.MaxMessageBytes {
-				t.Fatalf("an output frame of %d bytes is past the relay's %d-byte message", len(frame), cloudlink.MaxMessageBytes)
+				t.Fatalf("an output frame of %d bytes is past the Cloud Relay's %d-byte message", len(frame), cloudlink.MaxMessageBytes)
 			}
 			pt.lastSeq = int(seq)
 			pt.shown = append(pt.shown, data...)
