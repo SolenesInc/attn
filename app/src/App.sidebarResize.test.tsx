@@ -71,6 +71,30 @@ describe('Dragging the sidebar', () => {
     expect(shownWidth()).toBe(widthOf(300));
   });
 
+  it('restores the width and saves nothing when the window loses focus', async () => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    press(300);
+    moveTo(400);
+    expect(shownWidth()).toBe(widthOf(400));
+    await gesture(daemon, () => fireEvent.blur(window));
+    expect(shownWidth()).toBe(widthOf(300));
+    await gesture(daemon, () => release(400));
+    expect(widthSaves(daemon)).toEqual([]);
+    expect(shownWidth()).toBe(widthOf(300));
+  });
+
+  it('starts a new drag after one was cancelled', async () => {
+    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    press(300);
+    moveTo(400);
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    press(300);
+    moveTo(340);
+    expect(shownWidth()).toBe(widthOf(340));
+    await gesture(daemon, () => release(340));
+    expect(widthSaves(daemon).map((command) => command.value)).toEqual(['340']);
+  });
+
   it('keeps a stored width the window cannot show when the handle is only clicked', async () => {
     const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '600' });
     vi.stubGlobal('innerWidth', 800);
