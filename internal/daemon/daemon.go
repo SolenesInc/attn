@@ -241,6 +241,7 @@ type Daemon struct {
 	fsWatchMu           sync.Mutex
 	fsWatchRefs         map[string]map[*wsClient]int
 	pendingInitialWS    map[*wsClient]struct{}
+	gitHubHostsKnown    chan struct{}
 	startedOnce         sync.Once
 	startedCh           chan struct{}
 	plugins             *pluginRegistry
@@ -500,6 +501,7 @@ func New(socketPath string) *Daemon {
 		ghRegistry:          github.NewClientRegistry(),
 
 		pendingInitialWS: make(map[*wsClient]struct{}),
+		gitHubHostsKnown: make(chan struct{}),
 		startedCh:        make(chan struct{}),
 
 		plugins:             newPluginRegistry(),
@@ -620,6 +622,9 @@ func (d *Daemon) Start() error {
 	}
 	if d.pendingInitialWS == nil {
 		d.pendingInitialWS = make(map[*wsClient]struct{})
+	}
+	if d.gitHubHostsKnown == nil {
+		d.gitHubHostsKnown = make(chan struct{})
 	}
 	if d.startedCh == nil {
 		d.startedCh = make(chan struct{})
@@ -746,11 +751,21 @@ func (d *Daemon) Start() error {
 	d.life.Go("runHTTPServer", func() { d.runHTTPServer(httpListener) })
 	d.maybeStartDiagServer()
 
-	githubHostsReady := make(chan struct{})
+	gitHubCLIChecked := make(chan struct{})
 	d.life.Go("refreshGitHubHosts", func() {
-		defer close(githubHostsReady)
-		if err := d.refreshGitHubHosts(); err != nil {
-			d.logf("Initial GitHub host discovery failed: %v", err)
+		defer close(d.gitHubHostsKnown)
+		cliUsable := d.checkGitHubCLI()
+		discover := func() {
+			if err := d.discoverGitHubHosts(cliUsable); err != nil {
+				d.logf("Initial GitHub host discovery failed: %v", err)
+			}
+		}
+		if mockGitHubURL() != "" {
+			discover()
+			close(gitHubCLIChecked)
+		} else {
+			close(gitHubCLIChecked)
+			discover()
 		}
 		d.life.Go("pollPRs", d.pollPRs)
 		d.life.Go("refreshGitHubHostsLoop", d.refreshGitHubHostsLoop)
@@ -827,7 +842,12 @@ func (d *Daemon) Start() error {
 		} else {
 			d.recoverInbox()
 		}
-		if !recoverAutomationsAfterGitHubReady(githubHostsReady, d.life.Done(), d.recoverAutomations) {
+		select {
+		case <-gitHubCLIChecked:
+		case <-d.life.Done():
+			return
+		}
+		if !d.recoverAutomationsAtStart() {
 			return
 		}
 		d.setRecovering(false)
@@ -2452,7 +2472,24 @@ func ghVersionWarning(err error) (string, string) {
 	return warnGHVersionTooOld, "GitHub CLI needs upgrade to v2.81.0+ for PR monitoring. " + github.UpgradeHint()
 }
 
+func (d *Daemon) checkGitHubCLI() bool {
+	if mockGitHubURL() != "" || gitHubPollingOffReason() != "" {
+		return true
+	}
+	if err := github.RequireGHVersion("2.81.0"); err != nil {
+		code, message := ghVersionWarning(err)
+		d.logf("gh CLI unavailable (need 2.81.0+): %v", err)
+		d.addWarning(code, message)
+		return false
+	}
+	return true
+}
+
 func (d *Daemon) refreshGitHubHosts() error {
+	return d.discoverGitHubHosts(d.checkGitHubCLI())
+}
+
+func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 	if d.ghRegistry == nil {
 		d.ghRegistry = github.NewClientRegistry()
 	}
@@ -2478,12 +2515,10 @@ func (d *Daemon) refreshGitHubHosts() error {
 		return nil
 	}
 
-	if err := github.RequireGHVersion("2.81.0"); err != nil {
-		code, message := ghVersionWarning(err)
-		d.logf("gh CLI unavailable (need 2.81.0+): %v", err)
-		d.addWarning(code, message)
+	if !cliUsable {
 		return nil
 	}
+	pausepoint.At(pausepoint.DaemonGitHubHostDiscovery)
 
 	hosts, err := github.DiscoverHosts(d.life.Context())
 	if err != nil {

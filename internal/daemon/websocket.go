@@ -595,6 +595,9 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	if reportsChecking && !d.capturingLoginEnv() {
 		d.publishHarnessAvailability()
 	}
+	if !slices.Equal(state.GithubHosts, d.gitHubHosts()) {
+		d.sendToClient(client, d.gitHubHostsUpdatedMessage())
+	}
 	d.nudgeDesktopTileContent()
 
 	d.life.Go("fetchPRDetailsOnConnect", d.fetchPRDetailsOnConnect)

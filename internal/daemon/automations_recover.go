@@ -2,7 +2,10 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 
+	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -40,17 +43,41 @@ func automationRunRecovers(run *store.AutomationRun, occurrence *store.Automatio
 	return run.LaunchedAt != nil || occurrence == nil || occurrence.Provider != "github"
 }
 
-func recoverAutomationsAfterGitHubReady(ready, stopping <-chan struct{}, recover func()) bool {
-	select {
-	case <-ready:
-	case <-stopping:
+func (d *Daemon) recoverAutomationsAtStart() bool {
+	if d.pendingRunNeedsGitHub() {
+		pausepoint.At(pausepoint.AutomationRecoveryAwaitsGitHub)
+		select {
+		case <-d.gitHubHostsKnown:
+		case <-d.life.Done():
+			return false
+		}
+	}
+	if d.stopping() {
 		return false
 	}
-	select {
-	case <-stopping:
-		return false
-	default:
-	}
-	recover()
+	d.recoverAutomations()
 	return true
+}
+
+func (d *Daemon) pendingRunNeedsGitHub() bool {
+	runs, err := d.store.ListPendingAutomationRuns()
+	if err != nil {
+		d.logf("automation recovery list: %v", err)
+		return false
+	}
+	for i := range runs {
+		occurrence, err := d.store.GetAutomationOccurrence(runs[i].OccurrenceID)
+		if err != nil {
+			d.logf("automation recovery occurrence %s: %v", runs[i].OccurrenceID, err)
+			continue
+		}
+		var snapshot automation.Snapshot
+		if err := json.Unmarshal([]byte(runs[i].SnapshotJSON), &snapshot); err != nil {
+			continue
+		}
+		if automationRunRecovers(&runs[i], occurrence) && snapshot.Location.Type == "repository_worktree" {
+			return true
+		}
+	}
+	return false
 }

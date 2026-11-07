@@ -100,6 +100,11 @@ func (f *launchFetch) end(askedEveryPR bool, now time.Time) {
 }
 
 func (d *Daemon) fetchPRDetailsOnConnect() {
+	select {
+	case <-d.gitHubHostsKnown:
+	case <-d.life.Done():
+		return
+	}
 	if !d.launchFetch.begin(time.Now()) {
 		return
 	}
