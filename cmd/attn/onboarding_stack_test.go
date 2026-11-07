@@ -11,10 +11,6 @@ func TestOnboardingCommandsReportAndPersistTheChiefsPendingPath(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 	s.Start()
-	if off := s.Attn("onboarding"); off.Code != 1 {
-		t.Fatalf("onboarding with crew v2 off exited %d: %s", off.Code, off.Stderr)
-	}
-	requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"), "true")
 	requireStdout(t, s.Attn("onboarding"), "takes the full path", "attn crew set chief")
 	requireStdout(t, s.Attn("onboarding", "done"), "onboarding is done", "attn onboarding again")
 	requireStdout(t, s.Attn("onboarding"), "has no onboarding pending")

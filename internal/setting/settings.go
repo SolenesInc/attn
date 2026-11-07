@@ -19,15 +19,6 @@ var (
 		Since:   "2026-10-19",
 		Search:  "global shortcut panel",
 	})
-	CrewV2Enabled = feature("crew_v2_enabled", "Enable experimental crew v2: true or false. Crew guidance and harness memory settings apply at the next launch.", Info{
-		Name:    "Crew v2",
-		Summary: "Crew members use the v2 operating model, with harness memory off.",
-		Group:   Agents,
-		Applies: NewAgents,
-		Stage:   Experimental,
-		Since:   "2026-10-27",
-		Search:  "chief crew memory letters",
-	})
 	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
 		Name:    "Nisse",
 		Summary: "Offer Nisse as a harness.",

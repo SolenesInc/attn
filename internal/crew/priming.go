@@ -39,7 +39,6 @@ type Priming struct {
 	CharterPath   string
 	CWD           string
 	AwarenessDirs []string
-	V2Enabled     bool
 	Chief         bool
 	NotebookRoot  string
 	PreviousChief string
@@ -70,11 +69,9 @@ func (p Priming) Block() string {
 	}
 	handoffsDir := filepath.Join(p.HomeDir, HandoffsDirName)
 	return prompts.RenderText("crew", "priming", prompts.Values{
-		"crew_v2_enabled":  fmt.Sprint(p.V2Enabled),
 		"display_name":     p.Name,
 		"home_dir":         p.HomeDir,
 		"has_charter":      fmt.Sprint(CharterWritten(p.Charter)),
-		"charter_file":     CharterFileName,
 		"charter_path":     filepath.Join(p.HomeDir, CharterFileName),
 		"cwd":              strings.TrimSpace(p.CWD),
 		"awareness_dirs":   quotedList(trimmed(p.AwarenessDirs)),
@@ -101,12 +98,11 @@ func (p Priming) GardenSection() string {
 		total = fmt.Sprint(p.HeldTotal)
 	}
 	return prompts.RenderText("crew", "garden", prompts.Values{
-		"crew_v2_enabled": fmt.Sprint(p.V2Enabled),
-		"garden_read":     fmt.Sprint(p.GardenRead),
-		"held_seeds":      heldSeedEntries(p.Held),
-		"held_total":      total,
-		"held_limit":      fmt.Sprint(len(p.Held)),
-		"plot_ready":      plotReadyLines(p.Plots),
+		"garden_read": fmt.Sprint(p.GardenRead),
+		"held_seeds":  heldSeedEntries(p.Held),
+		"held_total":  total,
+		"held_limit":  fmt.Sprint(len(p.Held)),
+		"plot_ready":  plotReadyLines(p.Plots),
 	})
 }
 

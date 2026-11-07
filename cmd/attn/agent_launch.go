@@ -130,6 +130,7 @@ func runAgentDirectly(requestedAgent string) {
 		exit(1)
 	}
 
+	crewMember := consumeOneShotBoolEnv("ATTN_CREW_MEMBER")
 	opts := agentdriver.SpawnOpts{
 		TerminalID:      terminalID,
 		CWD:             cwd,
@@ -145,7 +146,6 @@ func runAgentDirectly(requestedAgent string) {
 		QuickCapture:    consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
 		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
 		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
-		CrewV2Enabled:   consumeOneShotBoolEnv("ATTN_CREW_V2_ENABLED"),
 		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
 	}
 
@@ -170,9 +170,8 @@ func runAgentDirectly(requestedAgent string) {
 	opts.SelfReportPullRequests = !caps.HasHooks
 	if prime, err := c.CrewPrime(sessionID); err == nil {
 		opts.CrewPriming = protocol.Deref(prime.Guidance)
-		opts.CrewV2Enabled = protocol.Deref(prime.V2Enabled)
 		opts.AwarenessDirs = prime.AwarenessDirs
-	} else if opts.CrewV2Enabled {
+	} else if crewMember {
 		fmt.Fprintf(os.Stderr, "attn: crew priming: %v\n", err)
 		exit(1)
 	}

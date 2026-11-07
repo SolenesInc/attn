@@ -3,7 +3,6 @@
 export const BoolSetting = {
   asksEnabled: "asks_enabled",
   quickCaptureEnabled: "quick_capture_enabled",
-  crewV2Enabled: "crew_v2_enabled",
   nisseEnabled: "nisse_enabled",
   claudeModEnabled: "claude_mod_enabled",
   codexSharedEnabled: "codex_shared_enabled",
@@ -64,7 +63,6 @@ export interface Feature {
 export const FEATURES: readonly Feature[] = [
   { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-18", search: "questions answer decisions drawer" },
   { key: "quick_capture_enabled", name: "Quick Capture", summary: "Send messages and files to Chief or a crew member from any app.", note: "", group: "Agents", timing: "", stage: "experimental", since: "2026-10-19", search: "global shortcut panel" },
-  { key: "crew_v2_enabled", name: "Crew v2", summary: "Crew members use the v2 operating model, with harness memory off.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-27", search: "chief crew memory letters" },
   { key: "nisse_enabled", name: "Nisse", summary: "Offer Nisse as a harness.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-29", search: "harness server" },
   { key: "claude_mod_enabled", name: "Claude mod", summary: "Deliver messages to Claude through a Claude Code mod instead of typing.", note: "", group: "Agents", timing: "Starts with the next agent you open. Turning it off applies at once.", stage: "experimental", since: "2026-11-04", search: "delivery typing standby compact" },
   { key: "codex_shared_enabled", name: "Shared Codex", summary: "Codex terminals share one Codex server per profile, using less memory.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-16", search: "app server memory" },

@@ -17,7 +17,7 @@ import (
 var errChiefHasNoHarness = errors.New("the Chief has no harness yet; pick one with `attn crew set chief --agent <harness> --model <model>`")
 
 func (d *Daemon) ensureChiefs() {
-	if d.store == nil || !d.crewV2Enabled() || !d.enrollmentStatus().IsHome() {
+	if d.store == nil || !d.enrollmentStatus().IsHome() {
 		return
 	}
 	chiefs, err := d.store.ProfileChiefMembers()
@@ -156,40 +156,15 @@ func (d *Daemon) chiefMemberSessions() map[string]protocol.SessionID {
 }
 
 func (d *Daemon) chiefParty(profileID string) (who.Party, bool) {
-	if !d.crewV2Enabled() {
-		session := d.legacyProfileChiefs()[profileID]
-		return d.partyOfSession(session), session != "" && d.store.Get(session) != nil
-	}
 	member, ok := d.chiefMember(profileID)
 	return who.Member(member.Key), ok && !member.Retired
 }
 
 func (d *Daemon) chiefMailbox(profileID string) who.Address {
-	if d.crewV2Enabled() {
-		if member, ok := d.chiefMember(profileID); ok {
-			return who.Member(member.Key).Address()
-		}
+	if member, ok := d.chiefMember(profileID); ok {
+		return who.Member(member.Key).Address()
 	}
 	return who.ToChief(profileID)
-}
-
-func (d *Daemon) chiefRolesChanged() {
-	changed := map[protocol.SessionID]bool{}
-	for _, session := range d.legacyProfileChiefs() {
-		changed[session] = true
-	}
-	for _, session := range d.chiefMemberSessions() {
-		changed[session] = true
-	}
-	d.pushMonitorPolicies()
-	for session := range changed {
-		d.publishFact(FactSessionChiefRoleChanged, string(session), nil)
-	}
-}
-
-func (d *Daemon) crewV2EnabledChanged() {
-	d.ensureChiefs()
-	d.chiefRolesChanged()
 }
 
 func chiefRefusesRetire(member crew.Member) error {

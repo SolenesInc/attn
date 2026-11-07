@@ -133,7 +133,7 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	if opts.ClaudeMod.Socket != "" {
 		env = append(env, ClaudeModSocketEnv+"="+opts.ClaudeMod.Socket)
 	}
-	if opts.CrewV2Enabled {
+	if opts.CrewPriming != "" {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}
 	if strings.TrimSpace(opts.NotebookRoot) != "" {

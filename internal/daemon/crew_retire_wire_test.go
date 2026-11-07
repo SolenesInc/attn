@@ -70,7 +70,6 @@ func TestANewMembersKeyStaysClearOfAnotherMembersHome(t *testing.T) {
 	writeCrewHomeFile(t, w, "fern", crew.CharterFileName, "")
 	w.restart()
 	cli := w.Client()
-	setSetting(t, w.App(), "crew_v2_enabled", "true")
 	if _, err := cli.CrewRename("fern", "Ivy"); err != nil {
 		t.Fatal(err)
 	}

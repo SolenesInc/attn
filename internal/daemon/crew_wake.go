@@ -108,7 +108,6 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 		CharterPath:   member.CharterPath(d.dataRoot),
 		CWD:           member.CWD,
 		AwarenessDirs: member.AwarenessDirs,
-		V2Enabled:     d.crewV2Enabled(),
 		Chief:         member.Chief,
 	}
 	if member.Chief {
@@ -363,7 +362,6 @@ func (d *Daemon) crewCharterText(member crew.Member) string {
 func (d *Daemon) crewWakePrompt(member crew.Member, cause string) string {
 	_, onboarding := member.PendingOnboarding()
 	return prompts.RenderText("crew", "wake", prompts.Values{
-		"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled()),
 		"wake_cause":      cause,
 		"charter_decides": fmt.Sprint(crew.CharterWritten(d.crewCharterText(member)) && !onboarding && !member.Chief),
 	})
@@ -400,9 +398,7 @@ func (d *Daemon) handleCrewPrime(conn net.Conn, msg *protocol.CrewPrimeMessage) 
 		result.Guidance = protocol.Ptr(block)
 		result.AwarenessDirs = append(result.AwarenessDirs, member.AwarenessDirs...)
 		result.PrimingBytes = len(block)
-		if d.crewV2Enabled() {
-			result.V2Enabled = protocol.Ptr(true)
-		}
+		result.V2Enabled = protocol.Ptr(true)
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewPrimeResult: result})
 }

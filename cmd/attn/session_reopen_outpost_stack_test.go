@@ -303,7 +303,6 @@ func TestLedgerResumesAnOutpostSessionInItsOwnFolderAfterALocalCrewHomeAtThatPat
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	requireStdout(t, home.Attn("settings", "set", "crew_v2_enabled", "true"), "true")
 	created, err := home.Client().CrewCreate("Keel")
 	if err != nil {
 		t.Fatal(err)

@@ -132,7 +132,7 @@ func (r *codexShared) withResumed(ctx context.Context, client *codexshared.Clien
 		} `json:"thread"`
 	}
 	config := make(map[string]any)
-	r.capContext(config, sessionID, r.d.isLegacyChiefSession(sessionID))
+	r.capContext(config, sessionID)
 	resume := map[string]any{"threadId": conversation, "excludeTurns": true, "config": config}
 	r.grantApprovals(resume, sessionID)
 	if err := call("thread/resume", resume, &resumed); err != nil {

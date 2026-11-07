@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -13,12 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-var errCrewRenameNeedsV2 = errors.New("renaming crew members is part of crew v2, which is off; `attn settings set crew_v2_enabled true` turns it on")
-
 func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRenameResult, error) {
-	if !d.crewV2Enabled() {
-		return nil, errCrewRenameNeedsV2
-	}
 	member, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		return nil, err

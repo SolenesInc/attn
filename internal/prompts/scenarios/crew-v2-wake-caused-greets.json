@@ -1,11 +1,10 @@
 {
   "version": 1,
   "id": "crew-v2-wake-caused-greets",
-  "description": "Crew v2: updates woke a member without a charter, the Chief, or one onboarding; it still greets.",
+  "description": "Updates woke a member without a charter, the Chief, or one onboarding; it still greets.",
   "recipient": "crew",
   "event": "wake",
   "values": {
-    "crew_v2_enabled": "true",
     "wake_cause": "- s-x9n6qd moved: note.added. Read what changed with `attn seed show s-x9n6qd --since 2059870`.\n- A message from Keel."
   }
 }

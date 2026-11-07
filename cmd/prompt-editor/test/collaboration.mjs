@@ -12,7 +12,7 @@ const { chromium, expect } = require("@playwright/test");
 const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "prompt-editor-collaboration-"));
 const artifacts = process.env.PROMPT_EDITOR_ARTIFACTS;
 const root = path.join(fixture, "internal/prompts");
-const source = "content/crew/wake.md";
+const source = "content/crew/v2/wake.md";
 const wake = path.join(root, source);
 const git = (...args) => execFileSync("git", ["-C", fixture, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1" } }).trim();
 const binary = process.env.PROMPT_EDITOR_BIN || path.join(fixture, "prompt-editor");

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
+import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
@@ -106,8 +106,6 @@ async function main() {
       runner.writeJson('daemon-copies.json', result);
     });
     await runner.step('prepare_a_copy_kept_by_a_crew_letter', async () => {
-      queueDaemonSettingRestore(observer, 'crew_v2_enabled');
-      cli('settings', 'set', 'crew_v2_enabled', 'true');
       cli('crew', 'set', member, '--cwd', memberHome, '--agent', 'claude');
       const replied = observer.waitForMessage((event) => event.event === 'session_state_changed'
         && event.session?.directory === memberHome && event.session?.state === 'idle', 'crew mock turn ends');

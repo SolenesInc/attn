@@ -68,9 +68,9 @@ func decodeAgentLaunch(raw *string) (*AgentLaunch, error) {
 	return &launch, nil
 }
 
-func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string, chief bool) (*AgentLaunch, error) {
+func (d *Daemon) agentLaunchContext(sessionID protocol.SessionID, agent string) (*AgentLaunch, error) {
 	caps := agentdriver.EffectiveCapabilities(agentdriver.Get(agent))
-	launch, awareness, err := d.prepareLaunchContext(sessionID, chief && caps.HasLaunchInstructions, !caps.HasHooks)
+	launch, awareness, err := d.prepareLaunchContext(sessionID, !caps.HasHooks)
 	if err != nil {
 		return nil, err
 	}

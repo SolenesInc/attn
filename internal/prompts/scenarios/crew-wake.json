@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "id": "crew-wake",
-  "description": "First message after waking a crew member.",
-  "recipient": "crew",
-  "event": "wake",
-  "values": {}
-}

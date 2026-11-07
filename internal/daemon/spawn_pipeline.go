@@ -63,13 +63,10 @@ type spawnRequest struct {
 }
 
 type spawnPlan struct {
-	spawnOpts                ptybackend.SpawnOptions
-	launchSession            *protocol.Session
-	chiefAssigned            bool
-	isChief                  bool
-	chiefAssignmentCommitted bool
-	launchedConversation     string
-	agent                    *AgentLaunch
+	spawnOpts            ptybackend.SpawnOptions
+	launchSession        *protocol.Session
+	launchedConversation string
+	agent                *AgentLaunch
 }
 
 type spawnRejection struct {
@@ -102,17 +99,10 @@ func (plan *spawnPlan) rollback(d *Daemon, sessionID protocol.SessionID) {
 	if d.store.Get(sessionID) == nil {
 		d.forgetMonitor(sessionID)
 	}
-	if plan.chiefAssigned && !plan.chiefAssignmentCommitted {
-		d.clearChiefOfStaffIfSession(sessionID)
-	}
 	if plan.spawnOpts.ID != "" {
 		d.terminals().unexpect(plan.spawnOpts.ID)
 		d.kickMonitorTerminals()
 	}
-}
-
-func (plan *spawnPlan) commit() {
-	plan.chiefAssignmentCommitted = true
 }
 
 func (d *Daemon) agentAvailable(agent string) bool {
@@ -325,23 +315,15 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	if req.policy.command != nil {
 		plan.spawnOpts.AgentArgv = append([]string(nil), req.policy.command.Argv...)
 	}
-	requestedChief := protocol.Deref(msg.ChiefOfStaff)
-	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["launch_instructions"] {
-		plan.rollback(d, msg.ID)
-		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without launch_instructions capability", req.agent)}
+	if protocol.Deref(msg.ChiefOfStaff) {
+		d.logf("create-as-chief: the Chief is a crew member; session %s starts as an ordinary agent", msg.ID)
 	}
-	if req.hasPluginDriver && requestedChief && !req.pluginDriver.Capabilities["resume"] {
-		plan.rollback(d, msg.ID)
-		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without resume capability", req.agent)}
-	}
-	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
-	plan.isChief = !d.crewV2Enabled() && d.legacyProfileChiefs()[req.profile.ID] == msg.ID
-	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.isChief, plan.spawnOpts.Model)
+	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.spawnOpts.Model)
 	if err := ctx.Err(); err != nil {
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}
 	}
-	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
+	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.spawnOpts.Effort)
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
 		if err := launch.Validate(); err != nil {
 			plan.rollback(d, msg.ID)
@@ -373,7 +355,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	} else {
 		plan.spawnOpts.ApprovalRoute = launchcontract.ResolveApprovalRoute(plan.spawnOpts.YoloMode, plan.spawnOpts.AutoApprove, plan.spawnOpts.UnattendedLaunch)
 	}
-	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent, plan.isChief)
+	plan.spawnOpts.ContextWindowCap = d.launchContextWindowCap(msg.ID, req.agent)
 	req.link = d.launchLink(req)
 
 	return plan, nil
@@ -394,13 +376,10 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	session := plan.launchSession
 	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
-		}
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
-	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
+	intent := launchIntentFromSpawnOptions(plan.spawnOpts)
 	intent.Asks = d.launchedWithAsks(session.ID)
 	d.launchVentIntent(session.ID).applyTo(&intent)
 	intent.Command = req.policy.command
@@ -434,9 +413,6 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		if req.existingSession == nil {
 			d.discardSpawnSession(msg.ID)
-		}
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		return &spawnOutcome{err: err}
 	}
@@ -549,9 +525,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
 	current := d.store.Get(session.ID)
 	if current == nil {
-		if plan.chiefAssigned {
-			d.clearChiefOfStaffIfSession(msg.ID)
-		}
 		killErr := d.killSessionRuntime(plan.spawnOpts.ID)
 		removeErr := d.removeSessionRuntime(plan.spawnOpts.ID)
 		persistErr := fmt.Errorf("spawned session %s is no longer open", session.ID)
@@ -585,7 +558,6 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	}
 	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	d.publishFact(fact, string(session.ID), nil)
-	plan.commit()
 	if req.existingSession != nil {
 		d.publishFact(FactSessionRespawned, string(session.ID), ptyRespawn{Terminal: string(plan.spawnOpts.ID)})
 	}
@@ -624,7 +596,6 @@ func (d *Daemon) commitAddedTerminal(req *spawnRequest, plan *spawnPlan, session
 		plan.rollback(d, session.ID)
 		return &spawnOutcome{err: errors.Join(req.placed.err, cleanupErr)}
 	}
-	plan.commit()
 	d.publishFact(FactSessionReregistered, string(session.ID), nil)
 	return &spawnOutcome{}
 }
@@ -723,8 +694,8 @@ func (d *Daemon) showHolderProtected(protection foregroundCleanupProtection, hol
 }
 
 func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*AgentLaunch, error) {
-	opts, msg, chief, terminal := plan.spawnOpts, req.msg, plan.isChief, plan.spawnOpts.ID
-	launch, err := d.agentLaunchContext(msg.ID, req.agent, chief)
+	opts, msg, terminal := plan.spawnOpts, req.msg, plan.spawnOpts.ID
+	launch, err := d.agentLaunchContext(msg.ID, req.agent)
 	if err != nil {
 		return nil, err
 	}
@@ -751,7 +722,7 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID, chief,
+			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID,
 				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				return nil, err

@@ -82,7 +82,7 @@ Commands:
   add-session --cwd D [--host OUTPOST] [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
-  set-chief --id I   (gives a session the Chief of Staff role crew v2 replaces)
+  set-chief --id I   (refused: the Chief is a crew member)
   screen --id I
   input --id I --text T [--enter]
   attach --id I --cols C --rows R [--text T] [--enter]   (a second client, such as a phone: asks for that size, types, and stays attached until interrupted)

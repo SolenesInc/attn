@@ -17,14 +17,9 @@ import (
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
-
-func (d *Daemon) crewV2Enabled() bool {
-	return d.on(setting.CrewV2Enabled)
-}
 
 func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
@@ -148,11 +143,7 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	if _, err := d.validateCrewHandoffsDir(member); err != nil {
 		return "", err
 	}
-	var filingSession protocol.SessionID
-	if d.crewV2Enabled() {
-		filingSession = sessionID
-	}
-	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now(), filingSession)
+	path, err := crew.FileHandoff(member.HomeDir(d.dataRoot), member.ID, note, time.Now(), sessionID)
 	if err != nil {
 		return "", err
 	}
@@ -258,7 +249,7 @@ func (d *Daemon) crewSuccessorSpawn(member crew.Member, session *protocol.Sessio
 	spawnMsg.Priority = session.Priority
 	spawnMsg.ID = protocol.SessionID(uuid.NewString())
 	spawnMsg.Label = protocol.Ptr(member.Name)
-	spawnMsg.InitialPrompt = protocol.Ptr(prompts.RenderText("crew", "successor", prompts.Values{"crew_v2_enabled": fmt.Sprint(d.crewV2Enabled())}))
+	spawnMsg.InitialPrompt = protocol.Ptr(prompts.RenderText("crew", "successor", nil))
 	previousAgent := spawnMsg.Agent
 	spawnMsg.Agent = member.LaunchAgent()
 	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)

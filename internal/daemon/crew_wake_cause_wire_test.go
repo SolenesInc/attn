@@ -10,9 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const crewWakeGreeting = "You have been woken for today. Orient from your charter and your predecessor's letter, verify anything they left you that you will act on, then greet the user in a few lines: who you are, what you were left with, what you believe the current state is, and what you would do next."
-
-const crewV2WakeGreeting = "You have been woken. Get up to speed, confirming what your letter says against its sources, then greet the user in a few lines: who you are, where things stand now, and what you would do next."
+const crewWakeGreeting = "You have been woken. Get up to speed, confirming what your letter says against its sources, then greet the user in a few lines: who you are, where things stand now, and what you would do next."
 
 const updateWakeLead = "Updates woke you; the user did not open this session"
 
@@ -142,12 +140,6 @@ func TestAWakeForTheUsersQuickCaptureKeepsTheGreeting(t *testing.T) {
 
 func TestAPeerMessageWakeFollowsTheMembersCharterOnlyWhenItHasWrittenOne(t *testing.T) {
 	const charterDirected = "Greet the user only if your charter says to."
-	modes := []struct {
-		name, v2, greeting string
-	}{
-		{"crew v1", "false", crewWakeGreeting},
-		{"crew v2", "true", crewV2WakeGreeting},
-	}
 	charters := []struct {
 		name    string
 		content *string
@@ -157,49 +149,46 @@ func TestAPeerMessageWakeFollowsTheMembersCharterOnlyWhenItHasWrittenOne(t *test
 		{"whitespace charter", protocol.Ptr(" \n\t\n"), false},
 		{"written charter", protocol.Ptr("# Keel\nI keep the build green.\n"), true},
 	}
-	for _, mode := range modes {
-		for _, charter := range charters {
-			t.Run(mode.name+"/"+charter.name, func(t *testing.T) {
-				inBubbleWithAgents(t, func(t *testing.T, w *world) {
-					cli := w.Client()
-					setSetting(t, w.App(), "crew_v2_enabled", mode.v2)
-					keel := createCrew(t, cli, "Keel")
-					if charter.content != nil {
-						if err := os.WriteFile(keel.CharterPath, []byte(*charter.content), 0o644); err != nil {
-							t.Fatal(err)
-						}
-					}
-					registerSessions(t, w, cli, "sender")
-					sendAgentMessage(t, cli, "sender", "keel", "please look")
-					w.advance(0)
-					day := crewRosterMember(t, cli, "keel").BindingSession
-					if day == nil {
-						t.Fatal("the message did not wake keel")
-					}
-
-					prompt := wakePrompt(t, w, string(*day))
-					for _, want := range []string{updateWakeLead, "A message from sender.", "attn agent inbox"} {
-						if !strings.Contains(prompt, want) {
-							t.Errorf("the first prompt lacks %q:\n%s", want, prompt)
-						}
-					}
-					if got := strings.Contains(prompt, charterDirected); got != charter.written {
-						t.Errorf("the first prompt defers to the charter = %v, want %v:\n%s", got, charter.written, prompt)
-					}
-					if got := strings.Contains(prompt, mode.greeting); got == charter.written {
-						t.Errorf("the first prompt carries the greeting = %v, want %v:\n%s", got, !charter.written, prompt)
-					}
-
-					primed, err := cli.CrewPrime(*day)
-					if err != nil {
+	for _, charter := range charters {
+		t.Run(charter.name, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				cli := w.Client()
+				keel := createCrew(t, cli, "Keel")
+				if charter.content != nil {
+					if err := os.WriteFile(keel.CharterPath, []byte(*charter.content), 0o644); err != nil {
 						t.Fatal(err)
 					}
-					if got := strings.Contains(protocol.Deref(primed.Guidance), "There is no charter"); got == charter.written {
-						t.Errorf("priming calls this the first day = %v, want %v:\n%s", got, !charter.written, protocol.Deref(primed.Guidance))
+				}
+				registerSessions(t, w, cli, "sender")
+				sendAgentMessage(t, cli, "sender", "keel", "please look")
+				w.advance(0)
+				day := crewRosterMember(t, cli, "keel").BindingSession
+				if day == nil {
+					t.Fatal("the message did not wake keel")
+				}
+
+				prompt := wakePrompt(t, w, string(*day))
+				for _, want := range []string{updateWakeLead, "A message from sender.", "attn agent inbox"} {
+					if !strings.Contains(prompt, want) {
+						t.Errorf("the first prompt lacks %q:\n%s", want, prompt)
 					}
-				})
+				}
+				if got := strings.Contains(prompt, charterDirected); got != charter.written {
+					t.Errorf("the first prompt defers to the charter = %v, want %v:\n%s", got, charter.written, prompt)
+				}
+				if got := strings.Contains(prompt, crewWakeGreeting); got == charter.written {
+					t.Errorf("the first prompt carries the greeting = %v, want %v:\n%s", got, !charter.written, prompt)
+				}
+
+				primed, err := cli.CrewPrime(*day)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := strings.Contains(protocol.Deref(primed.Guidance), "There is no charter"); got == charter.written {
+					t.Errorf("priming calls this the first day = %v, want %v:\n%s", got, !charter.written, protocol.Deref(primed.Guidance))
+				}
 			})
-		}
+		})
 	}
 }
 
@@ -223,7 +212,7 @@ func TestAPeerMessageWakeOfTheChiefKeepsTheGreetingDespiteAWrittenCharter(t *tes
 		t.Run(name, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
 				cli := w.Client()
-				chief := turnOnCrewV2(t, w)
+				chief := profileChief(t, w)
 				setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 				if !onboarding {
 					onboardingPending(t, cli, protocol.OnboardingActionDone, "")
@@ -239,7 +228,7 @@ func TestAPeerMessageWakeOfTheChiefKeepsTheGreetingDespiteAWrittenCharter(t *tes
 					t.Fatal("the message did not wake the Chief")
 				}
 				prompt := wakePrompt(t, w, string(*day))
-				for _, want := range []string{updateWakeLead, "A message from sender.", crewV2WakeGreeting} {
+				for _, want := range []string{updateWakeLead, "A message from sender.", crewWakeGreeting} {
 					if !strings.Contains(prompt, want) {
 						t.Errorf("the Chief's first prompt lacks %q:\n%s", want, prompt)
 					}

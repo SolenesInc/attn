@@ -52,10 +52,9 @@ func BreaksSnooze(state protocol.SessionState, reason string) bool {
 }
 
 type Input struct {
-	IsShell     bool
-	LegacyChief bool
+	IsShell bool
 }
 
 func Excluded(in Input) bool {
-	return in.IsShell || in.LegacyChief
+	return in.IsShell
 }

@@ -10,10 +10,7 @@ import { useGardenPresentation } from '../hooks/useGardenPresentation';
 import { useWhatsNew } from '../hooks/useWhatsNew';
 import { useAsksStore } from '../store/asks';
 
-interface Options {
-  sidebarEmpty: boolean;
-}
-export function useAppPanels({ sidebarEmpty: empty }: Options) {
+export function useAppPanels() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -40,15 +37,10 @@ export function useAppPanels({ sidebarEmpty: empty }: Options) {
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 
-  const [sidebarState, setSidebarState] = useState({ empty, collapsed: empty });
-  if (sidebarState.empty !== empty) setSidebarState({ empty, collapsed: empty });
-  const sidebarCollapsed = sidebarState.collapsed;
-  const setSidebarCollapsed = useCallback((collapsed: boolean) => {
-    setSidebarState((state) => ({ ...state, collapsed }));
-  }, []);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const toggleSidebarCollapse = useCallback(() => {
     delegationChainRef.current?.dismiss('sidebar-collapse');
-    setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
+    setSidebarCollapsed((collapsed) => !collapsed);
   }, []);
 
   const { agentListOpen, toggleAgentList, closeAgentList } = useAgentList();

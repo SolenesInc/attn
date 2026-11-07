@@ -22,7 +22,6 @@ func TestForgetCrewLetterTranscriptRequiresConsent(t *testing.T) {
 			s.Start()
 			app := s.App()
 			awaitAgentAvailable(app, fakeagent.Claude)
-			requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"), "crew_v2_enabled")
 			var day protocol.CrewWakeResult
 			s.Attn("crew", "wake", "trellis", "--json").JSON(t, &day)
 			run := s.Launched(string(day.SessionID))
@@ -138,7 +137,6 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			s.Start()
 			app := s.App()
 			awaitAgentAvailable(app, agent)
-			requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"), "crew_v2_enabled")
 			requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", string(agent)), string(agent))
 			var day protocol.CrewWakeResult
 			s.Attn("crew", "wake", "trellis", "--json").JSON(t, &day)
@@ -172,13 +170,12 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 				if err := os.Remove(paths[0]); err != nil {
 					t.Fatal(err)
 				}
-				requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "false"), "crew_v2_enabled")
-				for _, pass := range []string{"v2-off", "past-grace"} {
+				for _, pass := range []string{"source-removed", "past-grace"} {
 					keepPassAfterAnotherSessionCloses(t, s, pass)
 				}
 				list = s.Attn("conversation", "list")
 				requireStdout(t, list, "1 kept", "crew letter trellis "+letter)
-				fmt.Printf("$ attn conversation list (v2 disabled, source removed, two keep passes)\n%s", list.Stdout)
+				fmt.Printf("$ attn conversation list (source removed, two keep passes)\n%s", list.Stdout)
 				refused := s.Attn("conversation", "forget", target)
 				if refused.Code == 0 || !strings.Contains(refused.Stderr, "trellis "+letter) {
 					t.Fatalf("forget a crew day's transcript: %+v", refused)
@@ -191,27 +188,6 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			s.Start()
 			read = s.Attn("session", "transcript", target)
 			requireStdout(t, read, "Keep the reasons beside the decision.")
-			requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "false"), "crew_v2_enabled")
-			app = s.App()
-			awaitAgentAvailable(app, agent)
-			var withoutV2 protocol.CrewWakeResult
-			s.Attn("crew", "wake", "trellis", "--json").JSON(t, &withoutV2)
-			next := s.Launched(string(withoutV2.SessionID))
-			next.Prompted()
-			converse(app, next, string(withoutV2.SessionID), "Another session with v2 off.", "This transcript has no letter reference.")
-			closed = s.Run(testworld.Invocation{Session: string(withoutV2.SessionID), Args: []string{"handoff", "-m", "Filed with v2 off.", "--json"}})
-			closed.JSON(t, &handoff)
-			testworld.AwaitTaskDone(app, "conversation_keep")
-			var kept protocol.KeptConversationListResult
-			s.Attn("conversation", "list", "--json").JSON(t, &kept)
-			for _, row := range kept.Rows {
-				for _, session := range row.SessionIds {
-					if session == withoutV2.SessionID {
-						t.Fatalf("v2-off letter kept its transcript: %+v", row)
-					}
-				}
-			}
-			fmt.Println("PASS: letter filed with crew_v2_enabled=false records no transcript reference")
 		})
 	}
 }

@@ -70,10 +70,9 @@ try {
   await runner.step('fresh_profile_opens_setup', async () => {
     await launchFreshAppAndConnect(client, observer);
     runner.writeJson('window-bounds.json', await client.request('get_window_bounds'));
-    for (const key of ['crew_v2_enabled', 'queue_mode_enabled', 'model_tier_overrides']) queueDaemonSettingRestore(observer, key);
+    for (const key of ['queue_mode_enabled', 'model_tier_overrides']) queueDaemonSettingRestore(observer, key);
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await client.request('set_setting', { key: 'model_tier_overrides', value: JSON.stringify([{ harness: 'claude', provider: '', model: MOCK_AGENT_MODEL, tier: 'deep' }]) });
-    await client.request('set_setting', { key: 'crew_v2_enabled', value: 'true' });
     previousProfile = (await client.request('get_state')).arrangement.selectedProfileId;
     profile = (await observer.profileCommand('profile_create', { name: `Chief slot ${runner.runId}` })).profile;
     await pressShortcutKeys(client, driver, 'ui.commandPalette');

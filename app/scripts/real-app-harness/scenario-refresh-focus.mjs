@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
@@ -117,8 +117,6 @@ try {
   attn(['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer, { agentExecutables: { claude: wrapper } });
   await client.request('dismiss_whats_new');
-  queueDaemonSettingRestore(observer, 'crew_v2_enabled');
-  attn(['settings', 'set', 'crew_v2_enabled', 'true']);
   attn(['crew', 'set', member, '--cwd', home, '--agent', 'claude', '--model', 'crew-claude']);
 
   await runner.step('crew_launch_route_keeps_focus_through_a_reconnect', async () => {

@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -34,9 +35,8 @@ func chiefOfProfileRoster(t *testing.T, members []protocol.CrewMember, profileID
 	return chiefs[0]
 }
 
-func turnOnCrewV2(t *testing.T, w *world) protocol.CrewMember {
+func profileChief(t *testing.T, w *world) protocol.CrewMember {
 	t.Helper()
-	setSetting(t, w.App(), "crew_v2_enabled", "true")
 	return chiefOfRoster(t, crewRoster(t, w.Client()))
 }
 
@@ -69,14 +69,9 @@ func sessionsMarkedChief(app *testworld.Peer) []protocol.SessionID {
 	return marked
 }
 
-func TestWithCrewV2EveryProfileHasItsOwnChiefMember(t *testing.T) {
+func TestEveryProfileHasItsOwnChiefMember(t *testing.T) {
 	w := newWorld(t)
-	for _, member := range w.App().Initial.Crew {
-		if protocol.Deref(member.Chief) {
-			t.Fatalf("a Chief member exists with Crew v2 off: %+v", member)
-		}
-	}
-	chief := turnOnCrewV2(t, w)
+	chief := profileChief(t, w)
 	defaultProfile := w.App().SelectedProfile()
 	if chief.Name != "Chief" || chief.Agent != nil || chief.BindingSession != nil || chief.ProfileID != defaultProfile {
 		t.Fatalf("a fresh Chief = %+v, want an asleep Chief without a harness", chief)
@@ -101,7 +96,7 @@ func TestWithCrewV2EveryProfileHasItsOwnChiefMember(t *testing.T) {
 func TestAChiefWithoutAHarnessKeepsItsMailUntilItIsConfigured(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	registerSessions(t, w, cli, "sender")
 	mail, err := cli.AgentMsg("chief", "sender", "keep this until configured")
 	if err != nil || mail.Status == protocol.AgentMsgStatusRefused || !strings.Contains(mail.Detail, "no harness") {
@@ -142,7 +137,7 @@ func TestAChiefWithoutAHarnessKeepsItsMailUntilItIsConfigured(t *testing.T) {
 func TestChiefMailReachesItAfterSleepAndRename(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	registerSessions(t, w, cli, "sender")
 	wakeConfiguredChief(t, w, cli)
 	first := chiefSession(t, cli)
@@ -186,7 +181,7 @@ func TestChiefMailReachesItAfterSleepAndRename(t *testing.T) {
 func TestAnOnboardingChiefTakesTheNameItAgreesOnAndItsHomeFollowsAtItsNextWake(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	fresh := turnOnCrewV2(t, w)
+	fresh := profileChief(t, w)
 	wakeConfiguredChief(t, w, cli)
 	day := chiefSession(t, cli)
 
@@ -225,7 +220,7 @@ func TestAnOnboardingChiefTakesTheNameItAgreesOnAndItsHomeFollowsAtItsNextWake(t
 func TestTheChiefKeepsItsRoleAndAuthorityAcrossClear(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	run := wakeConfiguredChief(t, w, cli)
 	id := chiefSession(t, cli)
 	worker := spawnPanes(w, app, w.Path("worker"))[0].session
@@ -247,8 +242,7 @@ func TestTheChiefKeepsItsRoleAndAuthorityAcrossClear(t *testing.T) {
 
 func TestTheChiefIsNeverWarmedOrAskedToSleepWhileTheUserIsAway(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, member := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
-		setSetting(t, app, "crew_v2_enabled", "true")
+		_, member := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
 		setCrew(t, member.cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		chief := w.bootBubbleClaude(t, string(wakeCrew(t, member.cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")
@@ -264,29 +258,48 @@ func TestTheChiefIsNeverWarmedOrAskedToSleepWhileTheUserIsAway(t *testing.T) {
 	})
 }
 
-func TestTurningCrewV2OnHandsTodaysChiefRoleToAPrefilledChiefMember(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	directory := w.Path("chief-work")
-	old := w.Spawn(app, fakeagent.Claude, directory, func(m *protocol.SpawnSessionMessage) {
-		m.Model, m.Effort = protocol.Ptr("opus"), protocol.Ptr("high")
-	})
-	w.Launched(old)
-	if made := setChiefOfStaff(app, old, true); !made.Success {
-		t.Fatalf("making today's Chief = %+v", made)
+func upgradedFromTodaysChief(t *testing.T, directory string, intent store.LaunchIntent) (*world, string) {
+	t.Helper()
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	before, err := store.NewWithDB(filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	w.Launched(old)
+	profiles, err := before.ListProfiles(false)
+	if err != nil || len(profiles) != 1 {
+		t.Fatalf("profiles before the upgrade = %+v, %v", profiles, err)
+	}
+	old := "todays-chief"
+	if err := before.AddChecked(&protocol.Session{ID: protocol.SessionID(old), Label: "Chief", Agent: protocol.SessionAgentClaude, Directory: directory, ProfileID: profiles[0].ID, State: protocol.SessionStateIdle}); err != nil {
+		t.Fatal(err)
+	}
+	if err := before.SetLaunchIntent(protocol.SessionID(old), intent); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := before.SetProfileChief(protocol.SessionID(old)); err != nil {
+		t.Fatal(err)
+	}
+	if err := before.Close(); err != nil {
+		t.Fatal(err)
+	}
+	w.start()
+	return w, old
+}
 
-	chief := turnOnCrewV2(t, w)
+func TestAnUpgradeHandsTodaysChiefRoleToAPrefilledChiefMember(t *testing.T) {
+	directory := filepath.Join(t.TempDir(), "chief-work")
+	if err := os.MkdirAll(directory, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	w, old := upgradedFromTodaysChief(t, directory, store.LaunchIntent{Model: "opus", Effort: "high"})
+	app, cli := w.App(), w.Client()
+
+	chief := profileChief(t, w)
 	if protocol.Deref(chief.Agent) != "claude" || protocol.Deref(chief.Model) != "opus" || protocol.Deref(chief.Effort) != "high" || protocol.Deref(chief.Cwd) != directory || chief.BindingSession != nil {
 		t.Fatalf("the new Chief = %+v, want today's Chief's harness, model, effort and directory", chief)
 	}
-	if marked := sessionsMarkedChief(w.App()); len(marked) != 0 {
-		t.Fatalf("sessions %v keep the Chief role with Crew v2 on, want none until the member wakes", marked)
-	}
-	worker := spawnPanes(w, app, w.Path("worker"))[0].session
-	if _, err := cli.AgentClose(worker, protocol.SessionID(old), "tidy up"); err == nil {
-		t.Fatal("the old Chief session still closes other agents")
+	if marked := sessionsMarkedChief(app); len(marked) != 0 {
+		t.Fatalf("sessions %v keep the Chief role after the upgrade, want none until the member wakes", marked)
 	}
 
 	woken := wakeCrew(t, cli, "chief", "")
@@ -302,39 +315,17 @@ func TestTurningCrewV2OnHandsTodaysChiefRoleToAPrefilledChiefMember(t *testing.T
 	if marked := sessionsMarkedChief(w.App()); !slices.Equal(marked, []protocol.SessionID{woken.SessionID}) {
 		t.Fatalf("the Chief role is on %v, want the member's session %s", marked, woken.SessionID)
 	}
-	if _, err := cli.AgentClose(worker, woken.SessionID, "tidy up"); err != nil {
-		t.Fatalf("the Chief member closing a worker: %v", err)
-	}
-	if msg, err := cli.AgentMsg(old, woken.SessionID, "What were you working on?"); err != nil || msg.Status == protocol.AgentMsgStatusRefused {
-		t.Fatalf("the Chief messaging the old session = %+v, %v", msg, err)
-	}
 
 	crewHandoff(t, cli, string(woken.SessionID), "Met the old session.", false)
 	next := w.Launched(string(wakeCrew(t, cli, "chief", "").SessionID))
 	if guidance := launchGuidance(t, next); strings.Contains(guidance, old) {
 		t.Fatalf("the Chief's second day still points at the old session: %s", guidance)
 	}
-
-	setSetting(t, app, "crew_v2_enabled", "false")
-	if marked := sessionsMarkedChief(w.App()); !slices.Equal(marked, []protocol.SessionID{protocol.SessionID(old)}) {
-		t.Fatalf("with Crew v2 off the Chief role is on %v, want today's Chief %s back", marked, old)
-	}
 }
 
-func TestTheNewChiefStartsWhereItCanWhenTodaysChiefLeftNoDirectoryOrModel(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	directory := w.Path("gone")
-	old := w.Spawn(app, fakeagent.Claude, directory)
-	w.Launched(old)
-	if made := setChiefOfStaff(app, old, true); !made.Success {
-		t.Fatalf("making today's Chief = %+v", made)
-	}
-	w.Launched(old)
-	if err := os.RemoveAll(directory); err != nil {
-		t.Fatal(err)
-	}
-	chief := turnOnCrewV2(t, w)
+func TestAnUpgradedChiefStartsInItsHomeWhenTodaysChiefsDirectoryIsGone(t *testing.T) {
+	w, _ := upgradedFromTodaysChief(t, filepath.Join(t.TempDir(), "gone"), store.LaunchIntent{})
+	chief := profileChief(t, w)
 	if chief.Cwd != nil || protocol.Deref(chief.Agent) != "claude" {
 		t.Fatalf("the new Chief = %+v, want claude in its home", chief)
 	}
@@ -348,7 +339,7 @@ func TestTheNewChiefStartsWhereItCanWhenTodaysChiefLeftNoDirectoryOrModel(t *tes
 func TestDeletingAProfileRetiresItsChiefOnlyOnceItSleeps(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	work := createProfile(app, "Work")
 	selectProfile(app, work.ID)
 	chief := chiefOfProfileRoster(t, w.AppOn(work.ID).Initial.Crew, work.ID)
@@ -392,7 +383,7 @@ func TestDeletingAProfileRetiresItsChiefOnlyOnceItSleeps(t *testing.T) {
 func TestSendingASeedToASleepingChiefMemberWakesIt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		turnOnCrewV2(t, w)
+		profileChief(t, w)
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		planted, err := cli.SeedPlant("", "Choose where this runs", "Pick the working context.", "", "")
 		if err != nil {
@@ -411,7 +402,7 @@ func TestSendingASeedToASleepingChiefMemberWakesIt(t *testing.T) {
 			t.Fatalf("the seed went to %+v and the Chief is %+v; want the Chief member to tend it and wake", sent.Seed.Tender, chief)
 		}
 		day := string(*chief.BindingSession)
-		if prompt := wakePrompt(t, w, day); prompt != crewV2WakeGreeting {
+		if prompt := wakePrompt(t, w, day); prompt != crewWakeGreeting {
 			t.Errorf("a Chief woken by its seed assignment opened with %q, want today's greeting", prompt)
 		}
 		w.advance(0)
@@ -432,7 +423,7 @@ func chiefSetupFromApp(app *testworld.Peer, requestID string, change protocol.Cr
 func TestChiefSetupPicksTheProfilesNotebookFolderAndMovesTheChiefsHomeThere(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	chief := turnOnCrewV2(t, w)
+	chief := profileChief(t, w)
 	if got := app.Initial.Settings["claude_cap_launch_instructions"]; got != "true" {
 		t.Fatalf("claude_cap_launch_instructions = %v, want true so setup offers Claude Code", got)
 	}
@@ -468,7 +459,7 @@ func TestChiefSetupThatCannotMoveTheHomeLeavesTheNotebookFolderAndTheChiefAsThey
 	app, cli := w.App(), w.Client()
 	own, defaultFolder := w.Path("own-notebook"), fsNotebookRoot(t, w)
 	setSetting(t, app, "notebook.root", own)
-	chief := turnOnCrewV2(t, w)
+	chief := profileChief(t, w)
 	for _, c := range []struct{ requestID, root, refusal string }{
 		{"inside-home", filepath.Join(chief.HomeDir, "nested"), "inside it"},
 		{"inside-default", filepath.Join(defaultFolder, "nested"), "the default Notebook folder " + defaultFolder},

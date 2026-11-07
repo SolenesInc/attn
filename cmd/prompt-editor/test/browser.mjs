@@ -14,7 +14,7 @@ const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "prompt-editor-browser-"
 const artifacts = process.env.PROMPT_EDITOR_ARTIFACTS;
 const git = (...args) => execFileSync("git", ["-C", fixture, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1" } }).trim();
 const root = path.join(fixture, "internal/prompts");
-const wake = path.join(root, "content/crew/wake.md");
+const wake = path.join(root, "content/crew/v2/wake.md");
 let server, browser, context;
 const consoleErrors = [];
 try {
@@ -31,7 +31,7 @@ try {
   delete manifest.definitions_hash;
   const crew = manifest.recipients.find((r) => r.id === "crew");
   const wakeEvent = crew.events.find((e) => e.id === "wake");
-  wakeEvent.body = { kind: "text", id: "crew.wake", source: "content/crew/wake.md" };
+  wakeEvent.body = { kind: "text", id: "crew.wake", source: "content/crew/v2/wake.md" };
   const currentManifest = JSON.stringify(manifest);
   wakeEvent.delivery = "launch_instructions";
   wakeEvent.body = { kind: "compose", children: [wakeEvent.body, { kind: "input", field: { name: "old_note", kind: "text", description: "A base-only input" } }] };

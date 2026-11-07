@@ -10,10 +10,8 @@ of staff** in its ••• menu, or turn **Chief of Staff** on when you start o
 **Remove chief role** takes the role away. The home screen's Chief of Staff
 card shows the Chief.
 
-Attn refuses to close the Chief's session, or a desktop that holds it, until you
-run **Remove chief role** from the Chief's ••• menu. With
-[Crew v2](#the-chief-as-a-crew-member-experimental) on, put the Chief to sleep
-instead.
+Attn refuses to close the Chief's session. Put the
+[Chief](#the-chief-as-a-crew-member) to sleep instead.
 
 ## Give the Chief a folder
 
@@ -79,11 +77,10 @@ such as: "We need to ship the new import flow this week. Help me understand
 what's already in flight, suggest how to break it down, and prepare delegation
 options."
 
-## The Chief as a crew member (experimental)
+## The Chief as a crew member
 
-With **Settings → Experimental → Crew v2** (`crew_v2_enabled`) on, the Chief is
-a [crew member](crew.md) instead of a session you mark, and every profile has
-one, named Chief:
+The Chief is a [crew member](crew.md) instead of a session you mark, and every
+profile has one, named Chief:
 
 - `chief` always names the Chief in `attn agent msg`, `attn crew` and the other commands that take a member, even after you rename the Chief. You can rename the Chief like any member.
 - The Chief can sleep, but it can't be closed or retired, and Attn never sends
@@ -108,13 +105,12 @@ one, named Chief:
   with one click. The command palette has the same actions.
 - The Chief runs on its own launch settings (`attn crew set chief`). The Chief's
   model, effort and context budget in **Settings → Background agents**, and
-  the Chief of Staff card on the home screen, apply only to a Chief session with Crew v2
-  off.
+  the Chief of Staff card on the home screen, belonged to the Chief session that
+  came before the Chief member, and no longer apply.
 - If a session was your Chief, the new Chief starts with that session's
   harness, model, effort and folder, and the session becomes an ordinary session.
   On its first day the new Chief can message that session for its open work
   and context.
-- Turning Crew v2 off gives the Chief role back to the session that had it.
 
 ### The Chief's first day
 

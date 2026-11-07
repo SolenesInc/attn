@@ -62,10 +62,9 @@ Preconditions:
 ]}
 ```
 
-- For the crew-letter steps, set up three things:
+- For the crew-letter steps, set up two things:
   1. Make a member home before the daemon starts, as [crew.md](crew.md)'s preconditions describe. Here, run `Q="$(./attn instance resolve --field dataDir)/crew/quill" && echo "export Q=$Q" >> $DRIVE_ENV`, then `mkdir -p "$Q"`, then `printf '# Quill\n\nFile a letter when asked.\n' > "$Q/CHARTER.md"`.
-  2. Turn crew v2 on with `./attn settings set crew_v2_enabled true`, so that attn keeps the transcript of the session behind each letter.
-  3. Make a member folder with `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX) && echo "export K=$K" >> $DRIVE_ENV`, and save this fixture as `$K/.attn-mock-agent.json`:
+  2. Make a member folder with `K=$(mktemp -d /tmp/drive-attn-ledger-crew.XXXX) && echo "export K=$K" >> $DRIVE_ENV`, and save this fixture as `$K/.attn-mock-agent.json`:
 
 ```json
 {"version": 1, "resumable": true, "turns": [

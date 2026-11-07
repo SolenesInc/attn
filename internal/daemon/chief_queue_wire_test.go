@@ -18,7 +18,7 @@ func chiefMemberInQueue(t *testing.T, settings ...string) (*testworld.Peer, *cli
 	for _, key := range settings {
 		setSetting(t, app, key, "true")
 	}
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	registerSessions(t, w, cli, "reviewer")
 	run := wakeConfiguredChief(t, w, cli)
 	session := string(chiefSession(t, cli))

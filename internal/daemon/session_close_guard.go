@@ -8,15 +8,9 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-var (
-	errChiefOfStaffProtected = errors.New("chief of staff is protected from closing; unset the chief role first")
-	errCrewRosterUnavailable = errors.New("crew roster is unavailable; try again before closing this session")
-)
+var errCrewRosterUnavailable = errors.New("crew roster is unavailable; try again before closing this session")
 
 func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
-	if d.isLegacyChiefSession(sessionID) {
-		return errChiefOfStaffProtected
-	}
 	members, _, err := d.readCrewMembers()
 	if docstore.IsUndeclaredCollection(err) {
 		return nil

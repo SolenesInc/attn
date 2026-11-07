@@ -767,19 +767,19 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
 		return nil, nil
 	}
-	sessionID, launchAs, chief := r.launching(v, method, params)
+	sessionID, launchAs := r.launching(v, method, params)
 	config, _ := params["config"].(map[string]any)
 	if config == nil {
 		config = make(map[string]any)
 	}
-	r.capContext(config, sessionID, chief)
-	if _, bound := r.d.crewMemberForSession(sessionID); bound && r.d.crewV2Enabled() {
+	r.capContext(config, sessionID)
+	if _, bound := r.d.crewMemberForSession(sessionID); bound {
 		config["features.memories"] = false
 		config["memories.generate_memories"] = false
 	}
 	r.grantApprovals(params, sessionID)
 	if method != "thread/resume" {
-		if instructions := r.instructions(launchAs, v.profile, chief); instructions != "" {
+		if instructions := r.instructions(launchAs, v.profile); instructions != "" {
 			prior, _ := params["developerInstructions"].(string)
 			params["developerInstructions"] = strings.TrimSpace(prior + "\n\n" + instructions)
 		}
@@ -911,7 +911,7 @@ func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
 	}
 }
 
-func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID, chief bool) {
+func (r *codexShared) launching(v *codexView, method string, params map[string]any) (session, launchAs protocol.SessionID) {
 	session = r.d.sessionInTerminal(v.terminal)
 	if conversation, _ := params["threadId"].(string); method == "thread/resume" && conversation != "" {
 		if holder := r.holder(v.profile, conversation); holder != "" {
@@ -921,13 +921,13 @@ func (r *codexShared) launching(v *codexView, method string, params map[string]a
 		}
 	}
 	if method != "thread/resume" && r.conversation(session) != "" {
-		return session, "", false
+		return session, ""
 	}
-	return session, session, r.d.isLegacyChiefSession(session)
+	return session, session
 }
 
-func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID, chief bool) {
-	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex), chief); limit > 0 {
+func (r *codexShared) capContext(config map[string]any, sessionID protocol.SessionID) {
+	if limit := r.d.launchContextWindowCap(sessionID, string(protocol.SessionAgentCodex)); limit > 0 {
 		config["model_auto_compact_token_limit"] = limit
 	}
 }
@@ -942,8 +942,8 @@ func (r *codexShared) grantApprovals(params map[string]any, sessionID protocol.S
 	}
 }
 
-func (r *codexShared) instructions(sessionID protocol.SessionID, profile string, chief bool) string {
-	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, chief, false)
+func (r *codexShared) instructions(sessionID protocol.SessionID, profile string) string {
+	launch, err := r.d.preparePluginLaunchInstructions(sessionID, profile, false)
 	if err != nil {
 		r.d.logf("shared Codex: no attn instructions for session %s: %v", sessionID, err)
 		return ""

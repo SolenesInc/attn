@@ -23,8 +23,8 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		if claudeMod != (agentdriver.ClaudeMod{}) {
 			opts.AgentEnv = append(opts.AgentEnv, agentdriver.ClaudeModDirEnv+"="+claudeMod.Dir, agentdriver.ClaudeModSocketEnv+"="+claudeMod.Socket)
 		}
-		if launch.CrewV2Enabled {
-			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_V2_ENABLED=1")
+		if launch.Crew != "" {
+			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMBER=1")
 		}
 		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents))
 		return nil
@@ -45,7 +45,6 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		WrapperPath:  launchenv.ActiveAttnExecutable(),
 		NotebookRoot: launch.NotebookRoot, Garden: launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
-		CrewV2Enabled:          launch.CrewV2Enabled,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
 		QuickCapture:           launch.QuickCapture,
 		CodexRemote:            opts.CodexRemote,

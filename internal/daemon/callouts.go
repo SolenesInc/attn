@@ -47,9 +47,6 @@ func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
 }
 
 func (d *Daemon) onboardingChief(session protocol.SessionID) bool {
-	if !d.crewV2Enabled() {
-		return false
-	}
 	member, ok := d.crewMemberBoundToSession(session)
 	if !ok || !member.Chief {
 		return false

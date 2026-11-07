@@ -227,8 +227,8 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     expect(panel().getByText('Saved')).toBeInTheDocument();
   });
 
-  it('renames a member from its heading with crew v2 on, keeping its key', async () => {
-    const { daemon, pushMembers } = await renderPanel({ members: [member('keel', 4)], settings: { crew_v2_enabled: 'true' } });
+  it('renames a member from its heading, keeping its key', async () => {
+    const { daemon, pushMembers } = await renderPanel({ members: [member('keel', 4)] });
     daemon.on('crew_rename', () => ({ event: 'crew_rename_result', success: false, error: 'the name "Trellis" is already taken by Trellis in this profile' }));
     await click(daemon, 'Rename');
     const input = panel().getByTestId('crew-rename-input');
@@ -245,17 +245,12 @@ it('keeps a failed member edit through roster navigation and retries it', async 
   });
 
   it('cancels a rename on Escape and keeps Crew open', async () => {
-    const { daemon, closeWithEscape } = await renderPanel({ members: [member('keel', 4)], settings: { crew_v2_enabled: 'true' } });
+    const { daemon, closeWithEscape } = await renderPanel({ members: [member('keel', 4)] });
     await click(daemon, 'Rename');
     await closeWithEscape();
     expect(panel().queryByTestId('crew-rename-input')).toBeNull();
     expect(panel().getByRole('heading', { level: 2 })).toHaveTextContent('Keel');
     expect(daemon.sentOf('crew_rename')).toEqual([]);
-  });
-
-  it('offers no rename while crew v2 is off', async () => {
-    await renderPanel({ members: [member('keel', 4)] });
-    expect(panel().queryByTestId('crew-rename')).toBeNull();
   });
 
   it('asks an awake member to sleep through the ordinary crew action', async () => {

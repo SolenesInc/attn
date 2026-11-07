@@ -242,7 +242,6 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	if parse := s.Attn("crew", "move-home"); parse.Code != 2 || !strings.Contains(parse.Stderr, "takes one member name") || !strings.Contains(parse.Stderr, "move-home <member>") {
 		t.Fatalf("move-home without a member: %+v", parse)
 	}
-	requireStdout(t, s.Attn("settings", "set", "crew_v2_enabled", "true"))
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
 	var wake protocol.CrewWakeResult
 	s.Attn("crew", "wake", "Anchor", "--json").JSON(t, &wake)

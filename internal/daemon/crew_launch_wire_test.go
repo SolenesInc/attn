@@ -12,13 +12,12 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestCrewV2ReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
+func TestCrewReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
 	for _, shared := range []bool{false, true} {
 		for _, direct := range []bool{false, true} {
 			t.Run(fmt.Sprintf("shared=%t/direct=%t", shared, direct), func(t *testing.T) {
 				w := newCrewWorld(t, fakeagent.Codex)
 				cli, app := w.Client(), w.App()
-				setSetting(t, app, "crew_v2_enabled", "true")
 				setSetting(t, app, "codex_shared_enabled", fmt.Sprint(shared))
 				setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
 				setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
@@ -31,8 +30,8 @@ func TestCrewV2ReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
 					}
 				})
 				run := w.Launched(string(day.SessionID))
-				if got, want := run.Prompted(), prompts.RenderText("crew", "wake", prompts.Values{"crew_v2_enabled": "true"}); got != want {
-					t.Fatalf("v2 wake prompt = %q, want %q", got, want)
+				if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
+					t.Fatalf("wake prompt = %q, want %q", got, want)
 				}
 				if shared {
 					testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
@@ -56,42 +55,44 @@ func TestCrewV2ReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
 	}
 }
 
-func TestCrewV2DisablesClaudeMemoryAtEachLaunch(t *testing.T) {
+func TestCrewDisablesClaudeMemoryAtEachLaunch(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(fmt.Sprint(direct), func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
-			for _, enabled := range []bool{false, true} {
-				setSetting(t, app, "crew_v2_enabled", fmt.Sprint(enabled))
-				day := wakeCrew(t, cli, "trellis", "")
-				run := w.Launched(string(day.SessionID))
-				if got, want := run.Prompted(), prompts.RenderText("crew", "wake", prompts.Values{"crew_v2_enabled": fmt.Sprint(enabled)}); got != want {
-					t.Fatalf("v2=%t wake prompt = %q, want %q", enabled, got, want)
+			for day := range 2 {
+				woken := wakeCrew(t, cli, "trellis", "")
+				run := w.Launched(string(woken.SessionID))
+				if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
+					t.Fatalf("day %d wake prompt = %q, want %q", day, got, want)
 				}
-				if got := strings.Contains(strings.Join(run.Argv, "\n"), "## How you work"); got != enabled {
-					t.Fatalf("v2=%t Claude received operating model=%t", enabled, got)
+				if !strings.Contains(strings.Join(run.Argv, "\n"), "## How you work") {
+					t.Fatalf("day %d Claude missed the operating model", day)
 				}
-				if got := slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1"); got != enabled {
-					t.Fatalf("v2=%t Claude memory disabled=%t", enabled, got)
+				if !slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1") {
+					t.Fatalf("day %d Claude launched with memory on: %q", day, run.Env)
 				}
-				crewHandoff(t, cli, string(day.SessionID), "The next launch reads the setting again.", false)
+				crewHandoff(t, cli, string(woken.SessionID), "The next launch turns memory off again.", false)
+			}
+			agent := w.Spawn(app, fakeagent.Claude, w.Path("work"))
+			if slices.Contains(w.Launched(agent).Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1") {
+				t.Fatal("an ordinary agent launched with memory off")
 			}
 		})
 	}
 }
 
-func TestCrewV2SuccessorGetsTheOperatingModelAndDiscoveryPrompt(t *testing.T) {
+func TestCrewSuccessorGetsTheOperatingModelAndDiscoveryPrompt(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	setSetting(t, w.App(), "crew_v2_enabled", "true")
 	day := wakeCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID)).Prompted()
 	switchCrewHarness(t, cli, "trellis", "codex")
 	handed := crewHandoff(t, cli, string(day.SessionID), "Follow s-example to the current work.", false)
 	next := w.Launched(string(protocol.Deref(handed.SessionID)))
-	if got, want := next.Prompted(), prompts.RenderText("crew", "successor", prompts.Values{"crew_v2_enabled": "true"}); got != want {
-		t.Fatalf("v2 successor prompt = %q, want %q", got, want)
+	if got, want := next.Prompted(), prompts.RenderText("crew", "successor", nil); got != want {
+		t.Fatalf("successor prompt = %q, want %q", got, want)
 	}
 	for _, want := range []string{"## How you work", "Follow s-example to the current work."} {
 		if !strings.Contains(strings.Join(next.Argv, "\n"), want) {

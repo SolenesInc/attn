@@ -2,15 +2,12 @@ package daemon
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-var errOnboardingNeedsV2 = errors.New("onboarding belongs to the Chief, which is a crew member only with crew v2 on; `attn settings set crew_v2_enabled true` turns it on")
 
 func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage) {
 	result, err := d.onboarding(msg)
@@ -22,9 +19,6 @@ func (d *Daemon) handleOnboarding(conn net.Conn, msg *protocol.OnboardingMessage
 }
 
 func (d *Daemon) onboarding(msg *protocol.OnboardingMessage) (*protocol.OnboardingResult, error) {
-	if !d.crewV2Enabled() {
-		return nil, errOnboardingNeedsV2
-	}
 	var mutate func(*crew.Member)
 	switch msg.Action {
 	case protocol.OnboardingActionShow:

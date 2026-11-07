@@ -54,7 +54,6 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		}
 		w.bootBubbleClaude(t, string(delegated.SessionID))
 		synctest.Wait()
-		setSetting(t, app, "crew_v2_enabled", "true")
 		member := string(wakeCrew(t, cli, "chief", "").SessionID)
 		w.bootBubbleClaude(t, member)
 		synctest.Wait()

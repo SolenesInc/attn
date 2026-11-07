@@ -73,11 +73,9 @@ Read in the source at openai/codex 4aa94dce and checked against the
 - `memories.use_memories=false` makes Codex skip memory instructions and leaves
   the feature and its startup pipeline enabled.
 
-With `crew_v2_enabled`, attn sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for
-a crew member's Claude and sets both `features.memories=false` and
-`memories.generate_memories=false` for their Codex. Existing harness memory
-files stay in place. Changing the setting takes effect at the member's next
-launch.
+attn sets `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` for a crew member's Claude and
+sets both `features.memories=false` and `memories.generate_memories=false` for
+their Codex. Existing harness memory files stay in place.
 
 
 ## Codex updates

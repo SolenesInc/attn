@@ -4,7 +4,6 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { storedRouteModel, type HarnessRoute } from '../hooks/useHarnessRoute';
 import type { CrewMember } from '../types/generated';
-import { BoolSetting, isOn } from '../utils/settings';
 
 export type ChiefPhase = 'unconfigured' | 'configuring' | 'waking' | 'awake' | 'sleeping' | 'asleep';
 export interface ChiefView {
@@ -38,10 +37,8 @@ function chiefPhase(member: CrewMember, live: ReadonlySet<string>, pending: Pend
 export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSession(id: string): void; showError(message: string): void }) {
   const crew = useDaemonStore(state => state.crew);
   const profileId = useProfilesStore(state => state.selectedProfileId);
-  const { settings, sendCrewSet, sendCrewWake, sendCrewSleep } = useDaemonApi();
-  const member = isOn(settings, BoolSetting.crewV2Enabled)
-    ? crew.find(candidate => candidate.chief && candidate.profile_id === profileId)
-    : undefined;
+  const { sendCrewSet, sendCrewWake, sendCrewSleep } = useDaemonApi();
+  const member = crew.find(candidate => candidate.chief && candidate.profile_id === profileId);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
   const [editor, setEditor] = useState<{ key: string; open: boolean } | null>(null);

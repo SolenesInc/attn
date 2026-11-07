@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs, queueDaemonSettingRestore, shownAgentId } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, shownAgentId } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -260,8 +260,6 @@ try {
     agentExecutables: { codex: wrapper, claude: wrapper },
   });
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-  queueDaemonSettingRestore(observer, 'crew_v2_enabled');
-  runAttn(['settings', 'set', 'crew_v2_enabled', 'true']);
   runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'codex']);
   membersRegistered = true;
   runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);

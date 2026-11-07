@@ -71,7 +71,7 @@ func request(t *testing.T, e *editor, route string, body editRequest) *httptest.
 
 func TestPreviewDraftSaveAndConflict(t *testing.T) {
 	e := testEditor(t)
-	path := "content/crew/wake.md"
+	path := "content/crew/v2/wake.md"
 	original, _ := e.root.ReadFile(path)
 	draft := string(original) + "\nA maintainer edit.\n"
 	w := request(t, e, "preview", editRequest{Recipient: "crew", Event: "wake", Drafts: map[string]string{path: draft}})
@@ -102,7 +102,7 @@ func TestPreviewDraftSaveAndConflict(t *testing.T) {
 
 func TestInvalidAndUnregisteredWritesLeaveFilesAlone(t *testing.T) {
 	e := testEditor(t)
-	path := "content/crew/wake.md"
+	path := "content/crew/v2/wake.md"
 	original, _ := e.root.ReadFile(path)
 	for _, test := range []struct {
 		body   editRequest
@@ -153,7 +153,7 @@ func TestEditorRejectsOtherOriginsAndHosts(t *testing.T) {
 
 func TestCatalogAllowsRepairingInvalidMarkdown(t *testing.T) {
 	e := testEditor(t)
-	if err := e.root.WriteFile("content/crew/wake.md", []byte("{{oops}}"), 0644); err != nil {
+	if err := e.root.WriteFile("content/crew/v2/wake.md", []byte("{{oops}}"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()

@@ -202,18 +202,11 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 		d.sendError(conn, "notebook: "+err.Error())
 		return
 	}
-	sessionIsChief := d.isLegacyChiefSession(sessionID)
-	if sessionIsChief {
-		if _, _, serr := d.ensureNotebookScaffold(profileID); serr != nil {
-			d.logf("notebook guide: ensure scaffold failed: %v", serr)
-		}
-	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
 		NotebookGuide: &protocol.NotebookGuideResult{
-			Guidance:       hooks.ChiefGuidance(root),
-			Root:           root,
-			SessionIsChief: sessionIsChief,
+			Guidance: hooks.ChiefGuidance(root),
+			Root:     root,
 		},
 	})
 }

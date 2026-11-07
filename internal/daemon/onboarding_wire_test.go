@@ -26,7 +26,7 @@ func TestANewUsersChiefRunsTheFullPathUntilItSaysDoneOnBothHarnesses(t *testing.
 		t.Run(string(harness), func(t *testing.T) {
 			w := newWorld(t, harness)
 			cli := w.Client()
-			turnOnCrewV2(t, w)
+			profileChief(t, w)
 			if onboardingPending(t, cli, protocol.OnboardingActionShow, protocol.OnboardingPathFull).Configured {
 				t.Fatal("a fresh Chief reports a harness")
 			}
@@ -74,7 +74,7 @@ func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
 		t.Fatalf("making today's Chief = %+v", made)
 	}
 	w.Launched(old)
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	onboardingPending(t, cli, protocol.OnboardingActionShow, protocol.OnboardingPathTour)
 	woken := wakeCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))
@@ -102,20 +102,12 @@ func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
 	}
 }
 
-func TestOnboardingNeedsCrewV2(t *testing.T) {
-	w := newWorld(t)
-	_, err := w.Client().Onboarding(protocol.OnboardingActionShow)
-	if err == nil || !strings.Contains(err.Error(), "crew_v2_enabled") {
-		t.Fatalf("onboarding with crew v2 off = %v, want the setting named", err)
-	}
-}
-
 func TestOnlyTheOnboardingChiefPointsWithCalloutsOff(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "callouts_enabled", "false")
-	turnOnCrewV2(t, w)
+	profileChief(t, w)
 	wakeConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
 	registerSessions(t, w, cli, "other")

@@ -14,7 +14,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/headless"
-	"github.com/victorarias/attn/internal/modeltiers"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/setting"
@@ -139,9 +138,6 @@ func (d *Daemon) settingChanged(key, value string) {
 	}
 	if monitorPolicySetting(key) {
 		d.pushMonitorPolicies()
-	}
-	if key == setting.CrewV2Enabled.Key {
-		d.crewV2EnabledChanged()
 	}
 	if key == setting.AutoSettleEnabled.Key {
 		if parseBooleanSetting(value) {
@@ -361,30 +357,6 @@ func (d *Daemon) harnessAvailability(driver agentdriver.Driver) harnessAvailabil
 	return harnessAvailable
 }
 
-func (d *Daemon) chiefLaunchModel(ctx context.Context, agent, executable string, chief bool) string {
-	if !chief {
-		return ""
-	}
-	explicit := strings.TrimSpace(d.setting(setting.ChiefModel.For(strings.ToLower(strings.TrimSpace(agent)))))
-	if agent != "claude" && agent != "codex" {
-		return explicit
-	}
-	return d.resolveTierModel(ctx, agent, executable, modeltiers.Deep, explicit, "")
-}
-
-func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
-	if !chief {
-		return ""
-	}
-	if effort := strings.TrimSpace(d.setting(setting.ChiefEffort.For(strings.ToLower(strings.TrimSpace(agent))))); effort != "" {
-		return effort
-	}
-	if agent == "claude" || agent == "codex" {
-		return "low"
-	}
-	return ""
-}
-
 func settingShapesCrewLaunch(key string) bool {
 	return setting.DefaultModel.Matches(key) || setting.DefaultEffort.Matches(key)
 }
@@ -397,34 +369,25 @@ func (d *Daemon) defaultLaunchEffort(agent string) string {
 	return strings.TrimSpace(d.setting(setting.DefaultEffort.For(strings.ToLower(strings.TrimSpace(agent)))))
 }
 
-func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, requested string) string {
 	if requested != "" {
 		return requested
-	}
-	if model := d.chiefLaunchModel(ctx, agent, executable, chief); model != "" {
-		return model
 	}
 	return d.defaultLaunchModel(agent)
 }
 
-func (d *Daemon) resolveLaunchEffort(agent string, chief bool, requested string) string {
+func (d *Daemon) resolveLaunchEffort(agent string, requested string) string {
 	if requested != "" {
 		return requested
-	}
-	if effort := d.chiefLaunchEffort(agent, chief); effort != "" {
-		return effort
 	}
 	return d.defaultLaunchEffort(agent)
 }
 
-func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent string, chief bool) int {
+func (d *Daemon) launchContextWindowCap(sessionID protocol.SessionID, agent string) int {
 	if session := d.store.Get(protocol.TrimID(sessionID)); session != nil {
 		if cap := protocol.Deref(session.ContextWindowCap); cap > 0 {
 			return cap
 		}
-	}
-	if chief {
-		return resolveContextWindowCap(d.setting(setting.ChiefContextWindowCap))
 	}
 	if v := strings.TrimSpace(d.setting(setting.DefaultContextWindowCap.For(strings.ToLower(strings.TrimSpace(agent))))); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {

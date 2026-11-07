@@ -42,34 +42,29 @@ func crewLetters(t *testing.T, w *world, member string) []string {
 }
 
 func TestPlainHandoffSleepsWhileTheUserIsPresent(t *testing.T) {
-	for _, v2 := range []string{"false", "true"} {
-		t.Run("crew_v2_enabled="+v2, func(t *testing.T) {
-			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				writeCrewCharter(t, w, "trellis")
-				w.restart()
-				app, cli := w.App(), w.Client()
-				setSetting(t, app, "crew_v2_enabled", v2)
-				presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
-				presenceTierIs(t, cli, "before plain handoff", "present")
-				day := wakeCrew(t, cli, "trellis", "")
-				w.bootBubbleClaude(t, string(day.SessionID))
-				before := crewSessionCount(t, cli)
-				ended := crewHandoff(t, cli, string(day.SessionID), "The work is settled.", false)
-				if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.SessionID != nil || ended.SuccessorError != nil {
-					t.Fatalf("plain handoff = %+v, want sleep with no successor", ended)
-				}
-				testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-					return e.Session != nil && e.Session.ID == day.SessionID
-				})
-				if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
-					t.Fatalf("plain handoff left trellis bound to %s", *binding)
-				}
-				if got := crewSessionCount(t, cli); got != before-1 {
-					t.Fatalf("plain handoff left %d sessions, want %d", got, before-1)
-				}
-			})
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		writeCrewCharter(t, w, "trellis")
+		w.restart()
+		app, cli := w.App(), w.Client()
+		presenceReport(app, protocol.SetClientPresenceMessage{Visible: true, IdleSeconds: protocol.Ptr(0.0)})
+		presenceTierIs(t, cli, "before plain handoff", "present")
+		day := wakeCrew(t, cli, "trellis", "")
+		w.bootBubbleClaude(t, string(day.SessionID))
+		before := crewSessionCount(t, cli)
+		ended := crewHandoff(t, cli, string(day.SessionID), "The work is settled.", false)
+		if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.SessionID != nil || ended.SuccessorError != nil {
+			t.Fatalf("plain handoff = %+v, want sleep with no successor", ended)
+		}
+		testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
+			return e.Session != nil && e.Session.ID == day.SessionID
 		})
-	}
+		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
+			t.Fatalf("plain handoff left trellis bound to %s", *binding)
+		}
+		if got := crewSessionCount(t, cli); got != before-1 {
+			t.Fatalf("plain handoff left %d sessions, want %d", got, before-1)
+		}
+	})
 }
 
 func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
@@ -112,7 +107,6 @@ func TestCrewCanFileTwoLettersWithinTheSameMinute(t *testing.T) {
 
 func TestAFailedSwitchKeepsTheLetterAndTheDayAndARetryTurnsItOver(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
-	setSetting(t, w.App(), "crew_v2_enabled", "true")
 	cli := w.Client()
 	wakeInDirectoryThatThenMoves := func(member string) (*protocol.CrewWakeResult, string) {
 		t.Helper()

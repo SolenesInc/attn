@@ -22,7 +22,6 @@ type CrewLaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
 
 interface CrewPanelProps {
   isOpen: boolean;
-  canRename: boolean;
   visit: number;
   initialMember?: string;
   initialTab?: CrewTab;
@@ -44,7 +43,7 @@ const tabs: { id: CrewTab; label: string }[] = [
 ];
 
 
-function MemberHeading({ member, canRename }: { member: CrewMember; canRename: boolean }) {
+function MemberHeading({ member }: { member: CrewMember }) {
   const [renaming, setRenaming] = useState(false);
   const awake = Boolean(member.binding_session);
   return (
@@ -55,12 +54,10 @@ function MemberHeading({ member, canRename }: { member: CrewMember; canRename: b
           {renaming ? (
             <MemberRename key={member.id} member={member} onDone={() => setRenaming(false)} />
           ) : (
-            <h2>
-              {member.name}
-              {canRename && (
-                <button type="button" className="crew-rename" data-testid="crew-rename" onClick={() => setRenaming(true)}>Rename</button>
-              )}
-            </h2>
+            <div className="crew-member-name">
+              <h2>{member.name}</h2>
+              <button type="button" className="crew-rename" data-testid="crew-rename" onClick={() => setRenaming(true)}>Rename</button>
+            </div>
           )}
           <span>{awake ? 'Awake' : 'Asleep'}</span>
         </div>
@@ -183,7 +180,6 @@ export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
 
 function CrewPanelSurface({
   isOpen,
-  canRename,
   initialMember,
   initialTab,
   members,
@@ -265,7 +261,7 @@ function CrewPanelSurface({
                 <div className="crew-empty">No crew members.</div>
               ) : (
                 <>
-                  <MemberHeading key={member.id} member={member} canRename={canRename} />
+                  <MemberHeading key={member.id} member={member} />
                   <MemberTabs tab={tab} onSelect={(next) => navigate({ kind: 'tab', tab: next })} />
 
                   <MemberTabPanel

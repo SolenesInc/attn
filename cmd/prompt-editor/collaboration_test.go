@@ -89,7 +89,7 @@ func TestHeadlessDiscoveryUsesCheckoutDeclarations(t *testing.T) {
 func TestConcurrentDraftWritersAndIndependentFiles(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/wake.md"
+	name := "content/crew/v2/wake.md"
 	original := sourceTest(t, e, name)
 	start := make(chan struct{})
 	results := make(chan error, 2)
@@ -135,7 +135,7 @@ func TestConcurrentDraftWritersAndIndependentFiles(t *testing.T) {
 func TestReviewSurvivesEditsAndRestartWithAnchoredFeedback(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/wake.md"
+	name := "content/crew/v2/wake.md"
 	d = putTest(t, e, d, name, "Review this exact sentence.\n")
 	reviewed := operate(t, e, operationRequest{Op: "review-create", DraftID: d.ID, Revision: d.Revision}).(review)
 	d = operate(t, e, operationRequest{Op: "draft-get", ID: d.ID}).(sharedDraft)
@@ -169,7 +169,7 @@ func TestReviewSurvivesEditsAndRestartWithAnchoredFeedback(t *testing.T) {
 func TestDraftApplyValidatesWholeChangeAndRejectsDiskConflicts(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	a, b := "content/crew/wake.md", "content/crew/heartbeat.md"
+	a, b := "content/crew/v2/wake.md", "content/crew/heartbeat.md"
 	before := sourceTest(t, e, a)
 	d = putTest(t, e, d, a, "Valid new wake.")
 	d = putTest(t, e, d, b, "{{undeclared}}")
@@ -205,7 +205,7 @@ func TestInterruptedApplyRecovery(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			e := testEditor(t)
 			d := newDraft(t, e)
-			a, b := "content/crew/wake.md", "content/crew/heartbeat.md"
+			a, b := "content/crew/v2/wake.md", "content/crew/heartbeat.md"
 			d = putTest(t, e, d, a, "After A")
 			d = putTest(t, e, d, b, "After B")
 			tx := applyTransaction{Files: map[string]fileWrite{a: {sourceTest(t, e, a).Text, "After A", 0644}, b: {sourceTest(t, e, b).Text, "After B", 0644}}, Draft: d}
@@ -432,7 +432,7 @@ func TestRefreshReloadsChangedGoDeclarationsWithoutRestart(t *testing.T) {
 func TestDraftSyncAfterCompositionChangesAndSourceRemoval(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/wake.md"
+	name := "content/crew/v2/wake.md"
 	d = putTest(t, e, d, name, "Keep this edited source.")
 	snapshot, err := e.snapshot()
 	if err != nil {

@@ -147,7 +147,7 @@ func TestAStopANotificationStartedSendsThePhoneNothing(t *testing.T) {
 			})
 			t.Run("the Chief member", func(t *testing.T) {
 				w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
-				turnOnCrewV2(t, w)
+				profileChief(t, w)
 				run := wakeConfiguredChief(t, w, cli)
 				session := string(chiefSession(t, cli))
 				greeted := testworld.AwaitSession(app, session, func(s protocol.Session) bool {

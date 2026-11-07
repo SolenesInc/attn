@@ -317,7 +317,7 @@ func codexToolFreeHeadlessArgs(request HeadlessTaskRequest, window int) []string
 
 func (c *Codex) GenerateConfigOverrides(opts SpawnOpts) []string {
 	var overrides []string
-	if opts.CrewV2Enabled && opts.CodexRemote == "" {
+	if opts.CrewPriming != "" && opts.CodexRemote == "" {
 		overrides = append(overrides, "features.memories=false", "memories.generate_memories=false")
 	}
 	if opts.CodexRemote == "" {

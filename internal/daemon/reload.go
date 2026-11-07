@@ -340,7 +340,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		} else {
 			session := d.store.Get(sessionID)
 			var err error
-			agent, err = d.buildAgentReloadLaunch(session, &opts, d.isLegacyChiefSession(sessionID))
+			agent, err = d.buildAgentReloadLaunch(session, &opts)
 			if err != nil {
 				return nil, err
 			}
@@ -380,7 +380,7 @@ func (d *Daemon) announceReload(sessionID protocol.SessionID, opts ptybackend.Sp
 }
 
 func (d *Daemon) recordReload(sessionID protocol.SessionID, opts ptybackend.SpawnOptions) {
-	intent := launchIntentFromSpawnOptions(opts, d.isLegacyChiefSession(sessionID))
+	intent := launchIntentFromSpawnOptions(opts)
 	intent.Asks = d.launchedWithAsks(sessionID)
 	d.launchVentIntent(sessionID).applyTo(&intent)
 	if prior, ok := d.store.LaunchIntent(sessionID); ok {
@@ -496,7 +496,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		Model:            params.Model,
 		Effort:           params.Effort,
 		AutoApprove:      false,
-		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent, d.isLegacyChiefSession(sessionID)),
+		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent),
 	}
 	if intent, ok := d.store.LaunchIntent(sessionID); ok && intent.Command != nil {
 		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)
@@ -563,18 +563,15 @@ func (p *preparedPluginReload) commit() error {
 	return nil
 }
 
-func pluginReloadCapabilityError(reg pluginDriverRegistration, isChief bool) error {
+func pluginReloadCapabilityError(reg pluginDriverRegistration) error {
 	if !reg.Capabilities["resume"] {
 		return fmt.Errorf("agent %q requires the resume capability to reload", reg.Agent)
-	}
-	if isChief && !reg.Capabilities["launch_instructions"] {
-		return fmt.Errorf("agent %q cannot reload as chief of staff without the launch_instructions capability", reg.Agent)
 	}
 	return nil
 }
 
-func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*AgentLaunch, error) {
-	launch, err := d.agentLaunchContext(session.ID, opts.Agent, isChief)
+func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptybackend.SpawnOptions) (*AgentLaunch, error) {
+	launch, err := d.agentLaunchContext(session.ID, opts.Agent)
 	if err != nil {
 		return nil, err
 	}
@@ -584,7 +581,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	if !ok {
 		return launch, nil
 	}
-	if err := pluginReloadCapabilityError(reg, isChief); err != nil {
+	if err := pluginReloadCapabilityError(reg); err != nil {
 		return nil, err
 	}
 	runID := uuid.NewString()
@@ -601,7 +598,7 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 		InitialPrompt: launch.InitialPrompt,
 	}
 	if reg.Capabilities["launch_instructions"] {
-		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.ProfileID, isChief,
+		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.ProfileID,
 			!reg.Capabilities["pull_request_reporting"])
 		if err != nil {
 			return nil, err
@@ -613,97 +610,4 @@ func (d *Daemon) buildAgentReloadLaunch(session *protocol.Session, opts *ptyback
 	}
 	launch.Plugin = &AgentPluginLaunch{Plugin: reg.PluginName, Resume: true, Params: params}
 	return launch, nil
-}
-
-func (d *Daemon) prepareSessionReload(session *protocol.Session, opts *ptybackend.SpawnOptions, isChief bool) (*preparedPluginReload, error) {
-	launch, err := d.buildAgentReloadLaunch(session, opts, isChief)
-	if err != nil {
-		return nil, err
-	}
-	prepared, err := d.prepareMachineAgent(session.ID, opts, launch, true)
-	if prepared != nil {
-		prepared.launch = launch
-	}
-	return prepared, err
-}
-
-type preparedPluginRoleReload struct {
-	d         *Daemon
-	sessionID protocol.SessionID
-	opts      ptybackend.SpawnOptions
-	plugin    *preparedPluginReload
-	lock      *sessionLockLease
-	completed bool
-}
-
-func (p *preparedPluginRoleReload) abort() {
-	if p == nil || p.completed {
-		return
-	}
-	p.completed = true
-	p.plugin.abort()
-	p.lock.Unlock()
-}
-
-func (p *preparedPluginRoleReload) execute() error {
-	if p == nil || p.completed {
-		return nil
-	}
-	p.completed = true
-	complete, err := p.d.executePreparedSessionReload(p.sessionID, p.opts, p.plugin)
-	p.lock.Unlock()
-	complete.finish()
-	return err
-}
-
-func (d *Daemon) preparePluginRoleReload(sessionID protocol.SessionID, desiredChief bool) (*preparedPluginRoleReload, bool, error) {
-	session := d.store.Get(sessionID)
-	if session == nil {
-		return nil, false, nil
-	}
-	reg, registered := d.ensurePluginRegistry().driver(session.Agent)
-	activeRun := d.store.GetAgentDriverRun(sessionID)
-	pluginSession := registered || activeRun.RunID != ""
-	if !pluginSession {
-		return nil, false, nil
-	}
-	if !d.sessionHasLiveWorker(sessionID) {
-		return nil, true, nil
-	}
-	if !registered {
-		return nil, true, fmt.Errorf("agent %q plugin driver is unavailable", session.Agent)
-	}
-	if err := pluginReloadCapabilityError(reg, desiredChief); err != nil {
-		return nil, true, err
-	}
-
-	lock := d.sessionLifecycleLockFor(sessionID)
-	lock.Lock()
-	if !d.sessionHasLiveWorker(sessionID) {
-		lock.Unlock()
-		return nil, true, nil
-	}
-	session = d.store.Get(sessionID)
-	if session == nil {
-		lock.Unlock()
-		return nil, true, nil
-	}
-	opts, err := d.buildReloadSpawnOptions(session)
-	if err != nil {
-		lock.Unlock()
-		return nil, true, err
-	}
-	opts.ContextWindowCap = d.launchContextWindowCap(sessionID, session.Agent, desiredChief)
-	pluginReload, err := d.prepareSessionReload(session, &opts, desiredChief)
-	if err != nil {
-		lock.Unlock()
-		return nil, true, err
-	}
-	if pluginReload == nil {
-		lock.Unlock()
-		return nil, true, fmt.Errorf("agent %q plugin driver became unavailable", session.Agent)
-	}
-	return &preparedPluginRoleReload{
-		d: d, sessionID: sessionID, opts: opts, plugin: pluginReload, lock: lock,
-	}, true, nil
 }

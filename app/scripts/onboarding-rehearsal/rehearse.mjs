@@ -269,7 +269,6 @@ async function runScenario(scenario, { rebuild, rebuildApp, freshWorld }) {
   const { attn, wsctl } = runner(env);
   attn('daemon', 'ensure');
   attn('settings', 'set', 'notebook.root', NOTEBOOK);
-  attn('settings', 'set', 'crew_v2_enabled', 'true');
   await scenario.prepare?.(attn, wsctl);
 
   const launchEnv = Object.entries(env).filter(([key]) => HARNESS_ENV.test(key)).flatMap(([key, value]) => ['--env', `${key}=${value}`]);

@@ -10,6 +10,11 @@ Use a crew member for work that outlives one conversation: a project you come
 back to every week, an area you want one agent to own, a role you want to talk
 to by name.
 
+A member carries over only through its charter, its letters and the seeds it
+tends. Attn turns the harness's own memory off for crew sessions (Claude Code's
+auto memory, Codex memories). Every profile has one member from the start: the
+[Chief](chief.md), which onboards you on its first day.
+
 ## Add a member
 
 `attn crew create <name>` adds a member to your profile. A name is letters,
@@ -138,6 +143,9 @@ wakes the member. The exception is the letter Attn asks for when you
 apply a harness change. Filing that letter ends the session and starts the next
 session on the new harness. See [Applying changed settings](#applying-changed-settings).
 
+Each letter records the session that wrote it, so Attn keeps that session's
+transcript for the member to read later.
+
 If the session cannot end or the next one cannot start, the letter stays filed
 and the session keeps running. `attn handoff --retry` tries again with that letter. To give up on a harness switch instead, ask the member to sleep first. The retry then ends the session and leaves the member asleep.
 
@@ -191,7 +199,7 @@ running harness again, or ask the member to sleep, Attn cancels the switch.
 <details>
 <summary>Do crew members wait in my queue?</summary>
 
-Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. In queue flow, the Chief, if you have one, has its own row at the top of the Crew section. With Crew v2 on, the Chief is a crew member (see [the Chief](chief.md)), so the same switch puts it in the queue, and it keeps that row. With Crew v2 off, the Chief never waits in the queue.
+Not by default. Members keep their rows in the Crew section and stay out of the queue's waiting list. Turn on "Put the crew in the queue" in Settings → Attention queue, or run it from the command palette, to make a member that is owed a turn wait in the queue too. The member's row stays in the Crew section. Turning the switch off, or running "Take the crew out of the queue", turns the setting off. The setting applies to every profile. In queue flow, the [Chief](chief.md) has its own row at the top of the Crew section. The Chief is a crew member, so the same switch puts it in the queue, and it keeps that row.
 </details>
 
 <details>
@@ -228,7 +236,7 @@ The member is asleep. Its next session starts from the last letter it filed, so 
 <details>
 <summary>Can I rename or retire a member?</summary>
 
-With Crew v2 on, rename a member with `attn crew rename <member> <name>` or
+Rename a member with `attn crew rename <member> <name>` or
 **Rename** next to its name in Manage crew. Its key, letters, mail and seeds
 stay, and an awake member's agent takes the new name. Attn moves a home in the
 Notebook to a folder named after the new name, and updates the member's past
@@ -254,20 +262,3 @@ and unread mail can wake the member.
 
 64,000 bytes. Attn refuses a longer one and says so.
 </details>
-
-## Crew v2 (experimental)
-
-Turn on **Settings → Experimental → Crew v2** (`crew_v2_enabled`) to try the
-next version of the crew. Crew v2 is off by default and applies from each member's
-next session. With Crew v2 on:
-
-- Members get shorter guidance. It points them to the work itself, to their
-  letter, and to the seeds the letter names, before they act.
-- The harness's own memory is off for crew sessions (Claude Code's auto memory,
-  Codex memories), so a member carries over only through its charter, letters
-  and seeds.
-- Each letter records the session that wrote it, so Attn can keep that
-  session's transcript for the member to read later.
-- You can rename members.
-- Every profile has a Chief, a crew member named Chief, which onboards you on
-  its first day. See [the Chief](chief.md).

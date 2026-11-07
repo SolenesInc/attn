@@ -9,7 +9,7 @@ import (
 	"github.com/victorarias/attn/internal/prompttest"
 )
 
-func TestLegacyPromptCompatibility(t *testing.T) {
+func TestPrimingPromptCompatibility(t *testing.T) {
 	out := map[string]string{"unbound": (Priming{}).Block()}
 	for mask := 0; mask < 32; mask++ {
 		p := Priming{Member: "keeper", Name: "Keeper", HomeDir: "/tmp/home", HandoffName: "letter.md"}
@@ -38,7 +38,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 }
 
 func TestCrewV2PromptCompatibility(t *testing.T) {
-	firstDay := Priming{Member: "keeper", Name: "Keeper", HomeDir: "/tmp/home", V2Enabled: true, GardenRead: true}
+	firstDay := Priming{Member: "keeper", Name: "Keeper", HomeDir: "/tmp/home", GardenRead: true}
 	existing := firstDay
 	existing.Charter = "Charter."
 	existing.CWD = "/tmp/work {{literal}}"
@@ -52,7 +52,7 @@ func TestCrewV2PromptCompatibility(t *testing.T) {
 		"existing":  existing.Block(),
 	}
 	for _, event := range []string{"wake", "successor"} {
-		out[event] = prompts.RenderText("crew", event, prompts.Values{"crew_v2_enabled": "true"})
+		out[event] = prompts.RenderText("crew", event, nil)
 	}
 	prompttest.Equal(t, "crew-v2", out)
 }

@@ -144,7 +144,7 @@ describe('SettingsModal sections', () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Crew v2', 'Outposts', 'Asks', 'Agent callouts', 'Phone access', 'Shared Codex', 'Usage analytics']) {
+    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Outposts', 'Asks', 'Agent callouts', 'Phone access', 'Shared Codex', 'Usage analytics']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
       expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
     }

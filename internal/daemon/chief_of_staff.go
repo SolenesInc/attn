@@ -1,21 +1,19 @@
 package daemon
 
 import (
-	"fmt"
-	"sort"
+	"errors"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/who"
 )
 
+var errChiefIsCrewMember = errors.New("the Chief is a crew member, so no session can be marked Chief; wake it with `attn crew wake chief`")
+
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
 	if d.store == nil {
 		return map[string]protocol.SessionID{}
 	}
-	if d.crewV2Enabled() {
-		return d.chiefMemberSessions()
-	}
-	return d.legacyProfileChiefs()
+	return d.chiefMemberSessions()
 }
 
 func (d *Daemon) legacyProfileChiefs() map[string]protocol.SessionID {
@@ -43,15 +41,6 @@ func (d *Daemon) isChiefOfStaffSession(sessionID protocol.SessionID) bool {
 	}
 	profileID, err := d.store.SessionProfileID(sessionID)
 	return err == nil && d.chiefOfProfile(profileID) == sessionID
-}
-
-func (d *Daemon) isLegacyChiefSession(sessionID protocol.SessionID) bool {
-	sessionID = protocol.TrimID(sessionID)
-	if sessionID == "" || d.store == nil || d.crewV2Enabled() {
-		return false
-	}
-	profileID, err := d.store.SessionProfileID(sessionID)
-	return err == nil && profileID != "" && d.legacyProfileChiefs()[profileID] == sessionID
 }
 
 func (d *Daemon) profileForClient(client *wsClient) string {
@@ -118,161 +107,8 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID protocol.SessionID) {
 	}
 }
 
-func (d *Daemon) maybeAssignChiefOnSpawn(sessionID protocol.SessionID, agent string, profileID string, requested bool, existingSession *protocol.Session) bool {
-	if !requested || existingSession != nil || d.store == nil {
-		return false
-	}
-	if d.crewV2Enabled() {
-		d.logf("create-as-chief: with Crew v2 on the Chief is a crew member; session %s starts as an ordinary agent", sessionID)
-		return false
-	}
-	if !d.agentSupportsChiefGuidance(agent) {
-		d.logf("create-as-chief: agent %q for session %s has no chief-guidance launch path; ignoring", agent, sessionID)
-		return false
-	}
-	claimed, err := d.store.ClaimProfileChief(profileID, sessionID)
-	if err != nil {
-		d.logf("create-as-chief: claiming the chief of profile %s for session %s failed: %v", profileID, sessionID, err)
-		return false
-	}
-	if !claimed {
-		d.logf("create-as-chief: profile %s already has a chief (%s); ignoring request for session %s", profileID, d.chiefOfProfile(profileID), sessionID)
-		return false
-	}
-	d.logf("create-as-chief: session %s is the chief of profile %s", sessionID, profileID)
-	return true
-}
-
 func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefOfStaffMessage) {
-	sessionID := protocol.TrimID(msg.SessionID)
-	if sessionID == "" {
-		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("missing session_id"))
-		return
-	}
-	if d.crewV2Enabled() {
-		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("with Crew v2 on, the Chief is a crew member and no session can be marked Chief; wake it with `attn crew wake chief`"))
-		return
-	}
-	if host := d.sessionHost(sessionID); msg.ChiefOfStaff && host != "" {
-		d.sendChiefOfStaffResult(client, sessionID, true, "", fmt.Errorf("outpost limit: the chief runs only at the home, not on %s", d.outpostName(host)))
-		return
-	}
-
-	profileID, err := d.store.SessionProfileID(sessionID)
-	if err != nil || profileID == "" {
-		d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, "", fmt.Errorf("session %s is not an agent of any profile, so it cannot hold a profile's chief role", sessionID))
-		return
-	}
-	previousSessionID := d.chiefOfProfile(profileID)
-	roleChanged := previousSessionID != sessionID
-	if !msg.ChiefOfStaff {
-		roleChanged = previousSessionID == sessionID
-	}
-	if msg.ChiefOfStaff {
-		if !d.sessionExists(sessionID) {
-			d.sendChiefOfStaffResult(
-				client,
-				sessionID,
-				true,
-				previousSessionID,
-				fmt.Errorf("session not found: %s", sessionID),
-			)
-			return
-		}
-		if session := d.store.Get(sessionID); session != nil {
-			if driver, ok := d.ensurePluginRegistry().driver(session.Agent); ok {
-				switch {
-				case !driver.Capabilities["launch_instructions"]:
-					d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, fmt.Errorf("agent %q cannot be chief of staff without launch_instructions capability", session.Agent))
-					return
-				case !driver.Capabilities["resume"]:
-					d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, fmt.Errorf("agent %q cannot apply chief guidance without resume capability", session.Agent))
-					return
-				}
-			}
-		}
-	}
-
-	prepared := make([]*preparedPluginRoleReload, 0, 2)
-	preparedSessions := make(map[protocol.SessionID]bool)
-	if roleChanged {
-		desiredRoles := map[protocol.SessionID]bool{sessionID: msg.ChiefOfStaff}
-		if msg.ChiefOfStaff && previousSessionID != "" && previousSessionID != sessionID {
-			desiredRoles[previousSessionID] = false
-		}
-		ids := make([]string, 0, len(desiredRoles))
-		for id := range desiredRoles {
-			ids = append(ids, string(id))
-		}
-		sort.Strings(ids)
-		for _, id := range ids {
-			reload, pluginSession, err := d.preparePluginRoleReload(protocol.SessionID(id), desiredRoles[protocol.SessionID(id)])
-			if err != nil {
-				for i := len(prepared) - 1; i >= 0; i-- {
-					prepared[i].abort()
-				}
-				d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, fmt.Errorf("prepare chief guidance reload for %s: %w", id, err))
-				return
-			}
-			if pluginSession {
-				preparedSessions[protocol.SessionID(id)] = true
-			}
-			if reload != nil {
-				prepared = append(prepared, reload)
-			}
-		}
-	}
-	abortPrepared := true
-	defer func() {
-		if !abortPrepared {
-			return
-		}
-		for i := len(prepared) - 1; i >= 0; i-- {
-			prepared[i].abort()
-		}
-	}()
-
-	if msg.ChiefOfStaff {
-		if _, _, err := d.store.SetProfileChief(sessionID); err != nil {
-			d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, err)
-			return
-		}
-	} else if _, err := d.store.ClearProfileChief(sessionID); err != nil {
-		d.sendChiefOfStaffResult(client, sessionID, false, previousSessionID, err)
-		return
-	}
-	d.pushMonitorPolicies()
-
-	var reloadErr error
-	for _, reload := range prepared {
-		if err := reload.execute(); err != nil && reloadErr == nil {
-			reloadErr = err
-		}
-	}
-	abortPrepared = false
-
-	var reloadIDs []string
-	if roleChanged {
-		if !preparedSessions[sessionID] {
-			reloadIDs = append(reloadIDs, string(sessionID))
-		}
-		if msg.ChiefOfStaff && previousSessionID != "" && !preparedSessions[previousSessionID] {
-			reloadIDs = append(reloadIDs, string(previousSessionID))
-		}
-	}
-	if len(reloadIDs) == 0 {
-		d.publishFact(FactSessionChiefRoleChanged, string(sessionID), nil)
-	} else {
-		d.life.Go("reloadChiefGuidance", func() {
-			for _, id := range reloadIDs {
-				d.reloadSessionAgent(protocol.SessionID(id))
-			}
-			// The completed role change kicks the new holder’s inbox.
-			d.publishFact(FactSessionChiefRoleChanged, string(sessionID), nil)
-		})
-	}
-
-	d.sendChiefOfStaffResult(client, sessionID, msg.ChiefOfStaff, previousSessionID, reloadErr)
+	d.sendChiefOfStaffResult(client, protocol.TrimID(msg.SessionID), msg.ChiefOfStaff, "", errChiefIsCrewMember)
 }
 
 func (d *Daemon) sendChiefOfStaffResult(

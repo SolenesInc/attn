@@ -2,7 +2,6 @@ package prompts
 
 func crewRecipient() Recipient {
 	name := TextField("display_name", "Display name")
-	v2 := FlagField("crew_v2_enabled", "Use the crew v2 operating model.")
 	home := TextField("home_dir", "Home dir")
 	charter := FlagField("has_charter", "A charter exists")
 	cwd := TextField("cwd", "Cwd")
@@ -19,7 +18,7 @@ func crewRecipient() Recipient {
 	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
 	chief := FlagField("chief", "The member is its profile's Chief.")
 	chiefNotebook := TextField("notebook_root", "The Chief's profile Notebook directory.")
-	previousChief := TextField("previous_chief", "On the Chief's first day, the session that was the profile's Chief before Crew v2.")
+	previousChief := TextField("previous_chief", "On the Chief's first day, the session that was the profile's Chief of Staff before the Chief was a crew member.")
 	onboarding := FlagField("onboarding", "The Chief's onboarding is pending.")
 	onboardingTour := FlagField("onboarding_tour", "The pending onboarding is the tour, for a user who used attn before the Chief.")
 	chiefOnboarding := Use("crew.v2.chief-onboarding", "content/crew/v2/chief-onboarding.md",
@@ -31,50 +30,31 @@ func crewRecipient() Recipient {
 		When(Present(previousChief), template("crew.v2.chief-switchover", "content/crew/v2/chief-switchover.md", previousChief)),
 		When(Enabled(onboarding), chiefOnboarding)))
 
-	identity := Use("crew.identity", "content/crew/identity.md", Bind("display_name", Input(name)), Bind("home_dir", Input(home)),
-		Bind("home_ownership", Use("crew.home-files", "content/crew/home-files.md")))
-	v2Identity := template("crew.v2.identity", "content/crew/v2/identity.md", name, home)
-	charterFile := TextField("charter_file", "Charter file")
-	existingCharter := template("crew.charter", "content/crew/charter.md", charterFile)
+	identity := template("crew.v2.identity", "content/crew/v2/identity.md", name, home)
 	charterPath := TextField("charter_path", "Charter path")
-	v2Charter := template("crew.v2.charter", "content/crew/v2/charter.md", charterPath)
-	firstDay := template("crew.first-day", "content/crew/first-day.md", charterPath)
-	v2FirstDay := template("crew.v2.first-day", "content/crew/v2/first-day.md", charterPath)
+	existingCharter := template("crew.v2.charter", "content/crew/v2/charter.md", charterPath)
+	firstDay := template("crew.v2.first-day", "content/crew/v2/first-day.md", charterPath)
 	launchDirectory := template("crew.cwd", "content/crew/cwd.md", cwd)
 	awarenessDirectories := template("crew.awareness", "content/crew/awareness.md", awareness)
 	launchContext := Compose(
-		Choose(Enabled(v2),
-			Join("", v2Identity, Choose(Enabled(charter), v2Charter, v2FirstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories)),
-			Join("", identity, Choose(Enabled(charter), existingCharter, firstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories))),
-		When(Enabled(v2), Use("crew.v2.compaction", "content/crew/v2/compaction.md")))
+		Join("", identity, Choose(Enabled(charter), existingCharter, firstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories)),
+		Use("crew.v2.compaction", "content/crew/v2/compaction.md"))
 	handoffName := TextField("handoff_name", "Handoff name")
-	letter := Choose(Enabled(v2),
-		template("crew.v2.letter", "content/crew/v2/letter.md", handoffName),
-		template("crew.letter", "content/crew/letter.md", handoffName))
-	olderLetters := Choose(Enabled(v2),
-		template("crew.v2.older-letters", "content/crew/v2/older-letters.md", handoffsDirname),
-		template("crew.older-letters", "content/crew/older-letters.md", handoffsDirname, older))
+	letter := template("crew.v2.letter", "content/crew/v2/letter.md", handoffName)
+	olderLetters := template("crew.v2.older-letters", "content/crew/v2/older-letters.md", handoffsDirname)
 	handoffsDir := TextField("handoffs_dir", "Handoffs dir")
-	noLetter := Choose(Enabled(v2),
-		template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir),
-		template("crew.no-letter", "content/crew/no-letter.md", handoffsDir))
-	closure := Choose(Enabled(v2),
-		template("crew.v2.closure", "content/crew/v2/closure.md", handoffsDirname),
-		template("crew.closure", "content/crew/closure.md", handoffsDirname, name))
+	noLetter := template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir)
+	closure := template("crew.v2.closure", "content/crew/v2/closure.md", handoffsDirname)
 
-	heldList := Choose(Enabled(v2),
-		template("crew.v2.garden", "content/crew/v2/garden.md", heldSeeds),
-		template("crew.garden", "content/crew/garden.md", heldSeeds))
+	heldList := template("crew.v2.garden", "content/crew/v2/garden.md", heldSeeds)
 	heldMore := template("crew.garden-more", "content/crew/garden-more.md", heldTotal, heldLimit)
 	plots := template("crew.garden-plots", "content/crew/garden-plots.md", plotReady)
 	noHoldings := Use("crew.garden-empty", "content/crew/garden-empty.md")
 
-	greeting := Choose(Enabled(v2), Use("crew.v2.wake", "content/crew/v2/wake.md"), Use("crew.wake", "content/crew/wake.md"))
+	greeting := Use("crew.v2.wake", "content/crew/v2/wake.md")
 	wakeCause := TextField("wake_cause", "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it.")
 	charterDecides := FlagField("charter_decides", "The member has a charter and is not the Chief or onboarding, so its charter decides what an update wake does.")
-	wokenByCharter := Choose(Enabled(v2),
-		Use("crew.v2.woken-by-charter", "content/crew/v2/woken-by-charter.md"),
-		Use("crew.woken-by-charter", "content/crew/woken-by-charter.md"))
+	wokenByCharter := Use("crew.v2.woken-by-charter", "content/crew/v2/woken-by-charter.md")
 
 	return Recipient{ID: "crew", Description: "Permanent crew member: launch identity and lifecycle messages.", Events: []Event{
 		On("truncated-handoff", "message_fragment", "The adapter cuts the letter at a UTF-8 boundary; the catalog adds its full-file location.", template("crew.truncated-handoff", "content/crew/truncated-handoff.md", TextField("text", "Bounded letter."), TextField("limit", "Filing limit in bytes."), TextField("total", "Original bytes."), TextField("path", "Full letter path."))),
@@ -87,8 +67,8 @@ func crewRecipient() Recipient {
 		On("priming", "launch_instructions", "internal/crew.Priming.Block: appended to launch instructions. The adapter prepares paths, display name and bounded handoff text.",
 			Compose(
 				launchContext,
-				When(Enabled(v2), Use("crew.v2.operating-model", "content/crew/v2/operating-model.md")),
-				When(Enabled(v2), chiefGuidance),
+				Use("crew.v2.operating-model", "content/crew/v2/operating-model.md"),
+				chiefGuidance,
 				Choose(Present(handoff),
 					Compose(Join("", letter, When(Present(older), olderLetters)), Input(handoff)),
 					noLetter),
@@ -97,7 +77,7 @@ func crewRecipient() Recipient {
 		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Present(wakeCause),
 			Compose(template("crew.woken-by", "content/crew/woken-by.md", wakeCause), Choose(Enabled(charterDecides), wokenByCharter, greeting)),
 			greeting)),
-		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Choose(Enabled(v2), Use("crew.v2.successor", "content/crew/v2/successor.md"), Use("crew.successor", "content/crew/successor.md"))),
+		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Use("crew.v2.successor", "content/crew/v2/successor.md")),
 		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
 		On("settings-applied", "user_message", "crew_apply.go: the member's session reloaded in place with its saved settings.", Use("crew.settings-applied", "content/crew/settings-applied.md", Bind("charter_path", Input(TextField("charter_path", "Charter path."))))),
 		On("switch-requested", "user_message", "crew_apply.go: the member's saved harness differs from its running session.", Use("crew.switch-requested", "content/crew/switch-requested.md", Bind("agent", Input(TextField("agent", "Saved harness."))))),

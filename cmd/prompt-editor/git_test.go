@@ -49,7 +49,7 @@ func manifestTest(t *testing.T, e *editor, recipients ...prompts.Recipient) {
 func TestComparisonUsesEachRevisionsCompositionAndDrafts(t *testing.T) {
 	e := testEditor(t)
 	gitTest(t, e, "init", "-b", "next")
-	path := "content/crew/wake.md"
+	path := "content/crew/v2/wake.md"
 	writeTest(t, e, path, "Wake from the base.\n")
 	writeTest(t, e, "content/removed.md", "A retired event.\n")
 	flag := prompts.FlagField("old_flag", "Only the base has this input")
@@ -115,10 +115,10 @@ func TestBaseModesPinCommitsAndReportMissingManifests(t *testing.T) {
 	}
 	ancestor := commitTest(t, e)
 	gitTest(t, e, "checkout", "-b", "feature")
-	writeTest(t, e, "content/crew/wake.md", "Feature\n")
+	writeTest(t, e, "content/crew/v2/wake.md", "Feature\n")
 	head := commitTest(t, e)
 	gitTest(t, e, "checkout", "next")
-	writeTest(t, e, "content/crew/wake.md", "New base tip\n")
+	writeTest(t, e, "content/crew/v2/wake.md", "New base tip\n")
 	tip := commitTest(t, e)
 	gitTest(t, e, "checkout", "feature")
 	for mode, want := range map[string]string{"merge-base": ancestor, "tip": tip} {
@@ -130,10 +130,10 @@ func TestBaseModesPinCommitsAndReportMissingManifests(t *testing.T) {
 	gitTest(t, e, "branch", "-f", "next", head)
 	manifestTest(t, e, prompts.Builtin().Recipients()...)
 	base, err := e.readBase(context.Background(), tip)
-	if err != nil || base.Sources["content/crew/wake.md"].Text != "New base tip\n" {
+	if err != nil || base.Sources["content/crew/v2/wake.md"].Text != "New base tip\n" {
 		t.Fatalf("moving ref changed pinned revision: %+v / %v", base, err)
 	}
-	w := request(t, e, "compare", editRequest{BaseCommit: ancestor, Recipient: "crew", Event: "wake", Path: "content/crew/wake.md"})
+	w := request(t, e, "compare", editRequest{BaseCommit: ancestor, Recipient: "crew", Event: "wake", Path: "content/crew/v2/wake.md"})
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"unavailable"`) || !strings.Contains(w.Body.String(), "+Feature") {
 		t.Fatalf("legacy source comparison: %d %s", w.Code, w.Body)
 	}

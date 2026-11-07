@@ -1,1 +1,0 @@
-Then orient from your charter and your predecessor's letter as far as these updates need, and do what your charter says about them: act on them, record them, or go back to sleep with `attn handoff`. Greet the user only if your charter says to.

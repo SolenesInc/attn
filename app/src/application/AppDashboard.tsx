@@ -11,7 +11,6 @@ import {
   usePRLauncherContext,
   useSessionLaunchContext,
 } from './AppContexts';
-import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppDashboard() {
   const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
@@ -50,7 +49,7 @@ export function AppDashboard() {
           onOpenSettings={() => setSettingsOpen(true)}
           asks={asks}
           onOpenAsk={openAsk}
-          chiefOfStaffCard={!isOn(settings, BoolSetting.crewV2Enabled)}
+          chiefOfStaffCard={false}
           introBanner={whatsNew.bannerVisible ? { onReplay: whatsNew.open, onDismiss: whatsNew.dismissBanner } : undefined}
         />
       </div>

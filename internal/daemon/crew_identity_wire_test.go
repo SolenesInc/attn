@@ -15,15 +15,8 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func newCrewV2World(t *testing.T, agents ...fakeagent.Harness) *world {
-	t.Helper()
-	w := newCrewWorld(t, agents...)
-	setSetting(t, w.App(), "crew_v2_enabled", "true")
-	return w
-}
-
 func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	home := crewRosterMember(t, w.Client(), "keel").ProfileID
 	side := createProfile(app, "Side")
@@ -92,7 +85,7 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 }
 
 func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	app := w.App()
 	day := wakeCrew(t, cli, "Keel", "")
@@ -141,17 +134,8 @@ func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
 	}
 }
 
-func TestRenamingNeedsCrewV2(t *testing.T) {
-	w := newCrewWorld(t)
-	_, err := w.Client().CrewRename("Keel", "Alfred")
-	crewErrorContains(t, err, "crew_v2_enabled")
-	if member := crewRosterMember(t, w.Client(), "keel"); member.Name != "Keel" {
-		t.Fatalf("refused rename changed the name: %+v", member)
-	}
-}
-
 func TestCrewNamesFollowTheNameRules(t *testing.T) {
-	w := newCrewV2World(t)
+	w := newCrewWorld(t)
 	cli := w.Client()
 	cases := []struct{ name, rule string }{
 		{"chief", "reserved"}, {"Chief", "reserved"}, {"attn", "reserved"}, {"user", "reserved"}, {"you", "reserved"},
@@ -283,7 +267,7 @@ func TestACrewRequesterRefusesAConflictingProfile(t *testing.T) {
 }
 
 func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	if _, err := cli.CrewRename("Keel", "Alfred"); err != nil {
 		t.Fatal(err)
@@ -308,7 +292,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 }
 
 func TestHomeImportAllocatesAValidUnusedName(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	key := strings.Repeat("a", 40)
 	base := "A" + key[1:]

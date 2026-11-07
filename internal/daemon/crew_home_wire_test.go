@@ -29,7 +29,7 @@ func moveCrewHome(t *testing.T, w *world, member string) *protocol.CrewMoveHomeR
 }
 
 func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	before := crewRosterMember(t, cli, "keel")
 	nested := writeCrewHomeFile(t, w, "keel", "notes/private.txt", "Everything travels.\n")
@@ -166,7 +166,7 @@ func TestAMovedHomeTakesTheNextFreeFolderInTheProfilesNotebook(t *testing.T) {
 }
 
 func TestCrewRenameFailureKeepsTheOriginalHomeAndRecord(t *testing.T) {
-	w := newCrewV2World(t)
+	w := newCrewWorld(t)
 	cli := w.Client()
 	before := moveCrewHome(t, w, "Keel").Member
 	moveCrewHome(t, w, "Trellis")
@@ -285,7 +285,7 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 	for _, relocation := range []string{"move", "rename", "rename while awake"} {
 		t.Run(relocation, func(t *testing.T) {
-			w := newCrewV2World(t, fakeagent.Claude)
+			w := newCrewWorld(t, fakeagent.Claude)
 			cli := w.Client()
 			if relocation != "move" {
 				moveCrewHome(t, w, "Keel")
@@ -352,7 +352,7 @@ func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewSet
 }
 
 func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude)
+	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	home := moveCrewHome(t, w, "Keel").Member.HomeDir
 	notes := filepath.Join(home, "notes")
@@ -470,7 +470,7 @@ func TestARepointOverlappingAnotherProfilesMemberDoesNotNameIt(t *testing.T) {
 }
 
 func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Claude, fakeagent.Codex)
+	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
 	config := filepath.Join(os.Getenv(toolhome.EnvVar), ".claude.json")
 	original := `{"numStartups":3,"oauthAccount":{"email":"kept"},"projects":{"/elsewhere":{"allowedTools":["Read"]}}}`
@@ -528,7 +528,7 @@ func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
 }
 
 func TestACodexMemberInAFolderTheUserChoseStillGetsCodexsQuestion(t *testing.T) {
-	w := newCrewV2World(t, fakeagent.Codex)
+	w := newCrewWorld(t, fakeagent.Codex)
 	cli, app := w.Client(), w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
 	chosen := w.Path("chosen")

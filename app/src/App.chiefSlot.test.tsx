@@ -8,7 +8,7 @@ import { harnesses, reportedModel } from './test/harnessCatalogs';
 
 const member = (values = {}) => crewMember('chief-key', { chief: true, name: 'Captain', ...values });
 const available = { claude_available: 'true', codex_available: 'true', plug_available: 'true', claude_cap_launch_instructions: 'true', codex_cap_launch_instructions: 'true', plug_cap_launch_instructions: 'false', new_session_agent: 'claude' };
-const desktopSettings = { ...available, queue_mode_enabled: 'false', 'notebook.root.effective': '~/attn-notebook-work', crew_v2_enabled: 'true' };
+const desktopSettings = { ...available, queue_mode_enabled: 'false', 'notebook.root.effective': '~/attn-notebook-work' };
 const slot = () => within(screen.getByTestId('chief-slot'));
 const setup = () => within(screen.getByTestId('chief-setup'));
 const phase = () => screen.getByTestId('chief-slot').getAttribute('data-chief-phase');
@@ -479,15 +479,9 @@ describe('Chief slot in desktop flow', () => {
   });
 });
 
-describe('Chief slot with crew v2 off', () => {
-  it("shows no slot or setup for a Chief member and keeps today's Chief of Staff card on Home", async () => {
+describe('Chief slot on Home', () => {
+  it("shows the Chief slot on Home instead of today's Chief of Staff card", async () => {
     await renderApp({ initialState: { settings: { ...available, queue_mode_enabled: 'true' }, crew: [member()] } });
-    expect(screen.queryByTestId('chief-slot')).toBeNull();
-    expect(screen.queryByTestId('chief-setup')).toBeNull();
-    expect(screen.getByTestId('chief-of-staff-card')).toBeInTheDocument();
-  });
-  it("replaces today's Chief of Staff card on Home once crew v2 is on", async () => {
-    await renderApp({ initialState: { settings: { ...available, queue_mode_enabled: 'true', crew_v2_enabled: 'true' }, crew: [member()] } });
     expect(screen.getByTestId('chief-slot')).toBeInTheDocument();
     expect(screen.queryByTestId('chief-of-staff-card')).toBeNull();
   });

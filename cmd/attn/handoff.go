@@ -24,8 +24,7 @@ whether or not the user is at the machine. When attn crew apply asked this
 session for its letter because the member's harness changed, filing instead
 starts the next session on the new harness from the letter.
 
-With crew_v2_enabled on, the letter also records this session so attn can keep
-its transcript.
+The letter also records this session so attn can keep its transcript.
 
 If the session cannot end or the next one cannot start, the letter stays filed
 and this session keeps running. --retry tries again with that letter.

@@ -3,10 +3,9 @@ import { CrewPanel } from '../components/CrewPanel';
 import { useProfilesStore } from '../store/profiles';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useAppGardenActionsContext, useAppInputs, useCrewPanelContext } from './AppContexts';
-import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppCrewPanel() {
-  const { daemonSessions, settings } = useAppInputs();
+  const { daemonSessions } = useAppInputs();
   const allCrew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const crew = useMemo(
@@ -24,7 +23,6 @@ export function AppCrewPanel() {
       initialMember={crewPanel.member}
       initialTab={crewPanel.tab}
       members={crew}
-      canRename={isOn(settings, BoolSetting.crewV2Enabled)}
       sessions={daemonSessions}
       seeds={seeds}
       seedsTotal={seedsTotal}

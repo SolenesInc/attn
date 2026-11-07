@@ -28,15 +28,14 @@ interface Launch {
   sessions?: DaemonSession[];
   queue?: boolean;
   crewInQueue?: boolean;
-  crewV2?: boolean;
   desktop?: (session: DaemonSession) => Partial<DaemonDesktop>;
   crew?: ReturnType<typeof crewMember>[];
 }
 
-function launch({ sessions = team(), queue = true, crewInQueue = false, crewV2 = false, desktop = () => ({}), crew = [] }: Launch = {}) {
+function launch({ sessions = team(), queue = true, crewInQueue = false, desktop = () => ({}), crew = [] }: Launch = {}) {
   return renderApp({
     initialState: {
-      settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}), ...(crewV2 ? { crew_v2_enabled: 'true' } : {}) } : {},
+      settings: queue ? { ...QUEUE, ...(crewInQueue ? { queue_crew_enabled: 'true' } : {}) } : {},
       sessions,
       crew,
       desktops: sessions.map((session) => ({ ...soloDesktop(session.id), ...desktop(session) })),
@@ -79,7 +78,6 @@ function launchChiefMember(chief: DaemonSession, crewInQueue: boolean) {
   return launch({
     sessions: [chief, agent('working')],
     crewInQueue,
-    crewV2: true,
     crew: [crewMember(CHIEF_MEMBER, { chief: true, name: 'Captain', agent: 'claude', binding_session: 'chief' })],
   });
 }
@@ -139,7 +137,7 @@ describe('the Chief member in the queue', () => {
     const { daemon } = await launchChiefMember(chiefMember(OWED), true);
     expect(screen.getByTestId('queue-turn-chief')).toBeInTheDocument();
 
-    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...QUEUE, crew_v2_enabled: 'true', queue_crew_enabled: 'false' } }));
+    await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { ...QUEUE, queue_crew_enabled: 'false' } }));
 
     expect(screen.queryByTestId('queue-turn-chief')).toBeNull();
     expect(queue().getByText('Nothing owed')).toBeInTheDocument();

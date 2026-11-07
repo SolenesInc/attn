@@ -82,8 +82,9 @@ export function sessionParticipatesInQueue(
   return !session.commandTerminal && !session.automation && (!session.crewMember || crewInQueue);
 }
 
-/** The chief with crew v2 off: it has no crew member, so the crew setting cannot
- * bring it into the queue. A chief that is a crew member follows the crew's rule. */
+/** A chief of staff session from before the Chief was a crew member: the crew
+ * setting cannot bring it into the queue. A chief that is a crew member follows
+ * the crew's rule. */
 function isLegacyChief(session: Pick<QueueBandSession, 'chiefOfStaff' | 'crewMember'>): boolean {
   return Boolean(session.chiefOfStaff) && !session.crewMember;
 }

@@ -75,11 +75,8 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID protocol.SessionID, s
 
 func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, profileID string) (*protocol.SeedSendToChiefResult, error) {
 	chief, ok := d.chiefParty(profileID)
-	if !ok && d.crewV2Enabled() {
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief yet; attn creates it at the next daemon start")
-	}
 	if !ok {
-		return nil, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief; make one of its agents the Chief first")
+		return nil, protocol.Refuse(protocol.RefusalWrongState, "this profile has no Chief yet; attn creates it at the next daemon start")
 	}
 	chiefSessionID, _ := d.liveSessionOf(chief)
 	seedID := strings.TrimSpace(msg.SeedID)

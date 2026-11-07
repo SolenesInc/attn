@@ -50,7 +50,7 @@ func TestHomeGatewayNamesACrewSessionAndTheChiefAndNoOrdinarySession(t *testing.
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
-	chiefMember := turnOnCrewV2(t, w)
+	chiefMember := profileChief(t, w)
 	ordinary := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	w.Launched(ordinary)
 	wakeConfiguredChief(t, w, cli)
@@ -90,7 +90,7 @@ func TestHomeGatewayListsAnAsleepChiefAndKeepsTheOtherProfilesCrewOut(t *testing
 	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "phone_access_enabled", "true")
-	chiefMember := turnOnCrewV2(t, w)
+	chiefMember := profileChief(t, w)
 	work := createProfile(app, "Work")
 
 	workPhone := connectPhone(t, w, "work-phone", work.ID)
