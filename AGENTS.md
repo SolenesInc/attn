@@ -251,26 +251,39 @@ Follow [Testing](docs/internal/testing.md). In short:
 
 ## Ownership
 
-- Production PTYs run in the shared host (`pty-host`). On a machine with no host
-  they run in `internal/ptyworker`, using `internal/pty`.
+- New terminals run in the shared host (`pty-host`). With
+  `pty_shared_host_enabled` off, or on a machine with no usable host, they run in
+  `internal/ptyworker`, using `internal/pty`. A running terminal stays with the
+  runtime that started it.
 - `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
   Derive `turn_owed` from persisted opened/settled timestamps.
-- `internal/jobs` owns background duties and periodic ticks;
-  `internal/supervise` owns long-lived daemon children.
+- `internal/jobs` owns background duties and most periodic ticks. The PR poll,
+  the GitHub hosts refresh, the branch monitor, and the database backup run in
+  `d.every` loops instead. `internal/supervise` owns long-lived daemon children.
 - Goroutines and timers in `internal/daemon` start through `d.life`
-  (`lifetime.go`); `Daemon.stop` waits for them without cancelling.
-  `goTransport` is only for peer I/O.
+  (`lifetime.go`). `goTransport` is only for peer I/O.
 - Recent-file stat probes are the exception: filesystem calls cannot be
   cancelled, so their workers may outlive requests and shutdown. Workers receive
   copied inputs and only send to a buffered answer channel; the lifetime-owned
   handler alone changes daemon state and forgets paths unanswered after 500ms.
-- Stop drains running jobs and lifetime work before closing Git or shutting down
-  PTYs. Handler and Git deadlines still apply; shutdown itself does not fence or
-  cancel their results.
+- A production stop does not drain. `attn daemon` has no signal handler, so the
+  SIGTERM from `attn daemon stop` ends the process at once, and a process still
+  alive after 5 s gets SIGKILL. Do not rely on work finishing at a stop: a write
+  that follows an outside effect can be lost. Seed `s-26nm2z` decides whether
+  production stops should drain.
+- `Daemon.stop` runs only in in-process tests and after a failed start. It waits
+  for running jobs and lifetime work, without cancelling them, before closing Git
+  or shutting down PTYs. Handler and Git deadlines still apply. Shutdown does not
+  fence or cancel their results.
 - Everything belongs to one profile for life. attn treats anything in another
   profile as if it doesn't exist: for example, /resume of that profile's
   conversation opens a new session here.
-- Crew files are authoritative and live under this instance's crew root. Each
+- Crew state has three owners. Files in the member home own the charter and the
+  letters. The `core/crew` document owns launch settings, the home's path, and
+  the session binding. The `crew_members` table owns name, profile, retired, and
+  chief. At start, the daemon imports only homes it does not know, so editing a
+  known member's files changes neither record. A home sits under this instance's
+  crew root until `attn crew move-home` or `attn crew set --home` moves it. Each
   member has at most one active session binding (`internal/daemon/crew.go`).
 - `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
   SQL identifiers come from integers or validated field names, never caller
