@@ -43,7 +43,9 @@ func crewRecipient() Recipient {
 	letter := template("crew.v2.letter", "content/crew/v2/letter.md", handoffName)
 	olderLetters := template("crew.v2.older-letters", "content/crew/v2/older-letters.md", handoffsDirname)
 	handoffsDir := TextField("handoffs_dir", "Handoffs dir")
-	noLetter := template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir)
+	noLetter := Choose(Enabled(onboarding),
+		template("crew.v2.no-letter-onboarding", "content/crew/v2/no-letter-onboarding.md", handoffsDir),
+		template("crew.v2.no-letter", "content/crew/v2/no-letter.md", handoffsDir))
 	closure := template("crew.v2.closure", "content/crew/v2/closure.md", handoffsDirname)
 
 	heldList := template("crew.v2.garden", "content/crew/v2/garden.md", heldSeeds)

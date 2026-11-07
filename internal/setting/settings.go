@@ -1,12 +1,12 @@
 package setting
 
 var (
-	AsksEnabled = feature("asks_enabled", "Enable agent asks: true or false.", Info{
+	AsksEnabled = feature("asks_enabled", "Enable agent asks: true or false. On by default; applies to new agents.", Info{
 		Name:    "Asks",
 		Summary: "Answer agents' questions from one drawer.",
 		Group:   Agents,
 		Applies: NewAgents,
-		Stage:   Experimental,
+		Stage:   OnByDefault,
 		Since:   "2026-10-18",
 		Search:  "questions answer decisions drawer",
 	})

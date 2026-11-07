@@ -985,6 +985,14 @@ export function AgentSettings({
           </button>
         </div>
         <div className="settings-default-row">
+          <div id={featureDescriptionID(BoolSetting.asksEnabled)}>
+            <p className="settings-row-title">{featureFor(BoolSetting.asksEnabled).name}</p>
+            <p className="settings-row-copy">{featureSummary(BoolSetting.asksEnabled)}</p>
+            <FeatureNote featureKey={BoolSetting.asksEnabled} />
+          </div>
+          <FeatureSwitch featureKey={BoolSetting.asksEnabled} settings={settings} onSetSetting={onSetSetting} />
+        </div>
+        <div className="settings-default-row">
           <div>
             <p className="settings-row-title">Direct agent launches</p>
             <p className="settings-row-copy" id="direct-agent-launch-description">

@@ -128,9 +128,9 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 		session string
 		set     []string
 	}{
-		{name: "chief", session: string(chief), set: []string{"--set", "crew_priming=" + chiefPriming, "--set", "garden_available=true"}},
-		{name: "crew member", session: string(keel), set: []string{"--set", "crew_priming=  \n" + keelPriming + "\n  ", "--set", "garden_available=true"}},
-		{name: "ordinary", session: ordinary, set: []string{"--set", "garden_available=true"}},
+		{name: "chief", session: string(chief), set: []string{"--set", "crew_priming=" + chiefPriming, "--set", "garden_available=true", "--set", "asks_enabled=true"}},
+		{name: "crew member", session: string(keel), set: []string{"--set", "crew_priming=  \n" + keelPriming + "\n  ", "--set", "garden_available=true", "--set", "asks_enabled=true"}},
+		{name: "ordinary", session: ordinary, set: []string{"--set", "garden_available=true", "--set", "asks_enabled=true"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rendered := s.Attn(append([]string{"prompts", "render", "session", "launch"}, tc.set...)...)

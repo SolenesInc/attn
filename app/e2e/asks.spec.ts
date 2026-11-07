@@ -95,19 +95,6 @@ test.describe('Asks', () => {
       await page.waitForSelector('.dashboard');
       await pause(page, 1000);
 
-      await page.keyboard.press('Meta+,');
-      await page
-        .getByRole('navigation', { name: 'Settings sections' })
-        .getByRole('button', { name: /^Experimental/ })
-        .click();
-      const asksSwitch = page.getByRole('switch', { name: 'Asks' });
-      await pause(page, 600);
-      await asksSwitch.click();
-      await expect(asksSwitch).toHaveAttribute('aria-checked', 'true');
-      await pause(page, 800);
-      await page.keyboard.press('Escape');
-      await expect(asksSwitch).toHaveCount(0);
-
       await spawnClaude(wsUrl, { id: sessionId, cwd, label });
       spawned = true;
       const row = page.getByTestId(`sidebar-session-${sessionId}`);
@@ -168,7 +155,6 @@ test.describe('Asks', () => {
       const shot = path.join(cwd, 'shots', 'banner.png');
       fs.mkdirSync(path.dirname(shot), { recursive: true });
       fs.writeFileSync(shot, Buffer.from(ONE_PIXEL_PNG, 'base64'));
-      attnCli(socketPath, ['settings', 'set', 'asks_enabled', 'true']);
       await page.goto('/');
       await page.waitForSelector('.dashboard');
       await spawnClaude(wsUrl, { id: sessionId, cwd, label: 'image-agent' });

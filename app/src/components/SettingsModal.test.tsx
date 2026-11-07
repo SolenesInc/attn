@@ -551,14 +551,20 @@ describe('SettingsModal phone access', () => {
 });
 
 describe('SettingsModal asks', () => {
-  it('finds asks on the Experimental page, off by default, and turns them on', async () => {
+  it('finds asks under Agents and models, on by default, and turns them off', async () => {
     const { daemon } = await renderSettings();
     fireEvent.change(screen.getByLabelText('Search settings'), { target: { value: 'asks' } });
-    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-agents')));
     const toggle = screen.getByRole('switch', { name: 'Asks' });
 
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
+    expect(toggle).toHaveAttribute('aria-checked', 'true');
     await gesture(daemon, () => fireEvent.click(toggle));
-    expect(savedSettings(daemon)).toEqual([['asks_enabled', 'true']]);
+    expect(savedSettings(daemon)).toEqual([['asks_enabled', 'false']]);
+  });
+
+  it('leaves asks out of Experimental', async () => {
+    const { daemon } = await renderSettings();
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
+    expect(screen.queryByRole('switch', { name: 'Asks' })).toBeNull();
   });
 });

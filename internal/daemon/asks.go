@@ -175,7 +175,7 @@ func (d *Daemon) askingSession(sessionID protocol.SessionID) (*protocol.Session,
 		return nil, errSessionNotLive(sessionID)
 	}
 	if !d.launchedWithAsks(sessionID) {
-		return nil, errors.New("asks are off for this session because it launched without them; ask in the conversation instead")
+		return nil, errors.New("asks are off for this session because it launched without them; ask in the conversation instead, and run `attn turn open` if a notification started your run")
 	}
 	return session, nil
 }

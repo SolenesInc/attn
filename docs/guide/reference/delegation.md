@@ -105,11 +105,11 @@ previous agent keeps running until you close it or it closes itself.
 Handovers are how a Pathfinder passes an agreed plan to an Orchestrator or a
 Builder: the plan stays in the seed, and the new agent reads it from there.
 
-### Asks (experimental)
+### Asks
 
-Asks are off by default. Turn them on in **Settings → Experimental → Asks**
-(`asks_enabled`). Agents launched after that can send you questions with
-`attn ask` instead of stopping to wait for you.
+Agents send you questions with `attn ask` instead of stopping to wait for you.
+Asks are on by default. Turn them off in **Settings → Agents and models → Asks**
+(`asks_enabled`); agents keep the setting they launched with.
 
 Cmd+Shift+R (Ctrl+Alt+R on Linux) opens the Asks drawer, where you answer them
 without opening the agent's terminal. Attn types your answer into the

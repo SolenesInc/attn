@@ -85,7 +85,7 @@ describe('Experimental settings come from the declarations', () => {
       expect(toggle).toHaveAttribute('aria-checked', 'false');
       expect(screen.getByTestId(`settings-feature-${feature.key}`)).toBe(toggle);
     }
-    expect(screen.getByRole('switch', { name: 'Asks' })).toHaveAccessibleDescription(expect.stringContaining('Starts with the next agent you open.'));
+    expect(screen.getByRole('switch', { name: 'Nisse' })).toHaveAccessibleDescription(expect.stringContaining('Starts with the next agent you open.'));
     expect(screen.getByRole('switch', { name: 'Launcher 2.0' })).not.toHaveAccessibleDescription(expect.stringContaining('Starts'));
     expect(screen.queryByText('Now')).toBeNull();
   });

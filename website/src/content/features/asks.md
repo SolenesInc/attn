@@ -3,7 +3,7 @@ title: Asks
 summary: An agent asks you a question and carries on with its other work until you answer.
 order: 1
 guide:
-  - link: delegation#asks-experimental
+  - link: delegation#asks
     label: Asks, in the delegation guide
   - link: delegation#the-garden
     label: The garden and its seeds

@@ -33,6 +33,7 @@ const probes = [
   { id: 'list-agents', ask: 'Which other agents are running right now?', want: /^agent list\b/ },
   { id: 'read-agent', ask: 'What is the agent called fern doing? Read its screen.', want: /^agent peek fern\b/ },
   { id: 'close-self', ask: 'Close yourself. There is nothing left to do.', want: /^agent close --self\b/, reads: 'wrap-up' },
+  { id: 'can-close', ask: 'Can I close you?', want: /^skill --reference wrap-up\b/ },
   { id: 'open-shell', ask: 'Open me a shell in /tmp.', want: /^terminal open\b.*\/tmp/ },
   { id: 'move-terminal', ask: 'Move this terminal to desktop 3.', want: /^terminal move\b.*\b3\b/ },
   { id: 'show-markdown', ask: 'Show me plan.md in the app.', want: /^open\b.*plan\.md/ },

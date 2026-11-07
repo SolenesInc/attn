@@ -67,7 +67,6 @@ Preconditions:
 - **Wrap up with real harnesses.** This checks model judgment, so the baseline mock cannot prove it.
   - On a named instance set `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME` to an isolated home, with Claude and Codex configured to keep their transcripts in that home.
   - Use authorized authentication and real harness executables.
-  - Before launching, run `./attn settings set asks_enabled true`. Asks are off by default, and a session keeps its launch setting ([asks.md](asks.md)).
   - For each harness, ask a fresh session "close yourself" and read the self-close in its transcript and closed ledger row.
   - Give another session a seed whose outcome it can finish, wait for its completion report, then say "wrap up": the seed becomes harvested and the session closes.
   - Give a third session an unresolved decision, then ask "can I close you?": it opens an `attn ask` and stays open. Answer the ask and check that the agent acts on the answer and closes without another wrap-up request.

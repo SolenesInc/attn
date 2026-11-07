@@ -356,6 +356,7 @@ func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
 		}
 		return w.Launched(session)
 	}
+	setSetting(t, app, "asks_enabled", "false")
 	without := w.Spawn(app, fakeagent.Claude, w.Path("before"))
 	if taught(w.Launched(without)) {
 		t.Fatal("an agent launched with asks off was taught them")

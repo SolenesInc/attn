@@ -35,6 +35,7 @@ export const BoolSetting = {
 export type BoolSettingKey = (typeof BoolSetting)[keyof typeof BoolSetting];
 
 export const DEFAULT_ON_SETTINGS: ReadonlySet<string> = new Set([
+  "asks_enabled",
   "direct_agent_launch_enabled",
   "pty_shared_host_enabled",
   "queue_show_hidden_sessions",
@@ -61,7 +62,7 @@ export interface Feature {
 }
 
 export const FEATURES: readonly Feature[] = [
-  { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-18", search: "questions answer decisions drawer" },
+  { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-18", search: "questions answer decisions drawer" },
   { key: "quick_capture_enabled", name: "Quick Capture", summary: "Send messages and files to Chief or a crew member from any app.", note: "", group: "Agents", timing: "", stage: "experimental", since: "2026-10-19", search: "global shortcut panel" },
   { key: "nisse_enabled", name: "Nisse", summary: "Offer Nisse as a harness.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-29", search: "harness server" },
   { key: "claude_mod_enabled", name: "Claude mod", summary: "Deliver messages to Claude through a Claude Code mod instead of typing.", note: "", group: "Agents", timing: "Starts with the next agent you open. Turning it off applies at once.", stage: "experimental", since: "2026-11-04", search: "delivery typing standby compact" },

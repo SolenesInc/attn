@@ -7,7 +7,7 @@ answer every agent's asks from one drawer, one after another, without opening
 the agents' terminals. attn types the answer into the asking agent's
 conversation as the user's message. An ask about a seed goes to whoever tends
 the seed by the time the user answers, and attn saves the answer as a note on
-the seed. Asks are an experimental setting, off by default.
+the seed. Asks are on by default, and an agent keeps the setting it launched with.
 
 ## Sub-features
 
@@ -32,7 +32,7 @@ the seed. Asks are an experimental setting, off by default.
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). A narrow tile cuts the subject, then shows only the `?` mark; the chip never leaves the header. The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
-- **Settings → Experimental**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
+- **Settings → Agents and models → Session defaults**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do: the title bar's asks button counts open asks, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 
@@ -75,16 +75,15 @@ Preconditions:
 ]}
 ```
 
-- While asks are still off, launch an agent with `wsctl add-session --cwd $A --agent claude --label ask-early --id ask-early`.
+- Turn asks off with `./attn settings set asks_enabled false`, then launch an agent with `wsctl add-session --cwd $A --agent claude --label ask-early --id ask-early`.
 
 `<early>` and `<terminal>` are the terminal ids of ask-early and ask-agent from `wsctl list`. `<ask>` is the id an `Asked` reply prints.
 
 - **Turn asks on.**
-  - Press ⌘, (`ui.openSettings`) and click `[data-testid="settings-nav-experimental"]` natively.
-  - At the baseline window size the Asks switch is below the viewport. Click `[aria-label="Search settings"]` natively to anchor keyboard focus, then repeat `bridge native_key '{"key":"Tab"}'` until `bridge dom_focus_state` names `activeElement.testId: "settings-feature-asks_enabled"`. Tab scrolls the switch into view.
-  - Click `[data-testid="settings-feature-asks_enabled"]` natively, resolving its point after the scroll. Its `aria-checked` turns `true`, and `./attn settings get asks_enabled` prints `true`. Close Settings with Escape.
+  - Press ⌘, (`ui.openSettings`) and click `[data-testid="settings-nav-agents"]` natively.
+  - Click `[data-testid="settings-feature-asks_enabled"]` natively. Its `aria-checked` turns `true`, and `./attn settings get asks_enabled` prints `true`. Close Settings with Escape.
   - From a shell, `./attn settings set asks_enabled true` does the same and prints `asks_enabled = true`.
-- **An agent launched before is refused.** Run `wsctl input --id <early> --text "open an ask" --enter`. `./attn agent peek ask-early` shows `mock agent error:` with `asks are off for this session because it launched without them; ask in the conversation instead`.
+- **An agent launched before is refused.** Run `wsctl input --id <early> --text "open an ask" --enter`. `./attn agent peek ask-early` shows `mock agent error:` with `asks are off for this session because it launched without them; ask in the conversation instead, and run `attn turn open` if a notification started your run`.
 - **An agent asks.** Run `wsctl add-session --cwd $A --agent claude --label ask-agent --id ask-agent --place`, then `wsctl input --id <terminal> --text "open an ask" --enter`. Peek shows `Asked <ask>: "Cache store". attn types the answer into this conversation as the user's message.` The sidebar icon's label starts with `1 open ask`: `bridge dom_wait '{"selector":"[aria-label^=\"1 open ask\"]","timeoutMs":5000}'` matches.
 - **Open the drawer with the shortcut.** Run `bridge native_key '{"key":"r","modifiers":["command","shift"]}'`. `bridge dom_wait '{"selector":"[role=\"region\"][aria-label=\"Asks\"]","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":"[data-testid=\"ask-<ask>\"]"}'` reads `Cache store`, the question, `Postgres`, `recommended` and `Redis`.
 - **Answer from the keyboard.** `bridge dom_wait '{"selector":"[data-testid=\"ask-<ask>\"] input","focused":true,"timeoutMs":5000}'` matches: the first choice has focus. Run `bridge native_key '{"key":"space"}'`, then `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. The drawer shows its empty state, `.asks-empty`. Thirty seconds after the last `wsctl input` to ask-agent, re-read `./attn agent peek ask-agent` until the agent's screen shows the typed answer and `got the answer` after it. The `last assistant message:` line shows the mock's hidden `<!-- attn:state=waiting_input -->` instead. The typed answer contains `🙋 The user answered the ask "Cache store" (<ask>).`
@@ -133,11 +132,10 @@ Preconditions:
 
 ## Gotchas
 
-- The Asks switch is below the visible Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
 - The bridge keeps the app in the background, where CSS `:focus` can match nothing even when `document.activeElement` is the answer input. Use `dom_wait` with `"focused":true`.
 - An answer is user input, so attn types it only after 30 seconds of quiet in the agent's terminal. `wsctl input` to the asking agent restarts that wait.
 - `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
 - The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
-- The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. A fresh instance with asks off shows none of them. Their absence there is not a missing way in.
+- The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. An instance with asks turned off and no asks shows none of them. Their absence there is not a missing way in.
 - Working but wrong: after sending, the drawer moves to the next open ask, or to its empty state, with no confirmation that the answer reached the agent. The proof is the agent's screen, not the drawer.

@@ -1586,20 +1586,51 @@
                     ]
                   },
                   {
-                    "kind": "text",
-                    "id": "crew.v2.no-letter",
-                    "source": "content/crew/v2/no-letter.md",
-                    "bindings": [
+                    "kind": "choose",
+                    "condition": {
+                      "field": {
+                        "name": "onboarding",
+                        "kind": "flag",
+                        "description": "The Chief's onboarding is pending."
+                      },
+                      "test": "enabled"
+                    },
+                    "children": [
                       {
-                        "name": "handoffs_dir",
-                        "node": {
-                          "kind": "input",
-                          "field": {
+                        "kind": "text",
+                        "id": "crew.v2.no-letter-onboarding",
+                        "source": "content/crew/v2/no-letter-onboarding.md",
+                        "bindings": [
+                          {
                             "name": "handoffs_dir",
-                            "kind": "text",
-                            "description": "Handoffs dir"
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "handoffs_dir",
+                                "kind": "text",
+                                "description": "Handoffs dir"
+                              }
+                            }
                           }
-                        }
+                        ]
+                      },
+                      {
+                        "kind": "text",
+                        "id": "crew.v2.no-letter",
+                        "source": "content/crew/v2/no-letter.md",
+                        "bindings": [
+                          {
+                            "name": "handoffs_dir",
+                            "node": {
+                              "kind": "input",
+                              "field": {
+                                "name": "handoffs_dir",
+                                "kind": "text",
+                                "description": "Handoffs dir"
+                              }
+                            }
+                          }
+                        ]
                       }
                     ]
                   }
@@ -5683,5 +5714,5 @@
       ]
     }
   ],
-  "definitions_hash": "d29da9a75faada0f991f9a7a5e7967271df459bc015455d633c410d750f85251"
+  "definitions_hash": "08a0d22cba93256b65d10bae0418d17264e759f9bf3fcbdf2c1d876f2e60e225"
 }
