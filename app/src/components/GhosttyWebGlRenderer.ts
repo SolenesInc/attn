@@ -431,13 +431,16 @@ export class WebGlTerminalRenderer {
     this.onSurfaceEvent('canvas_resized', this.surface());
   }
 
-  // A hidden pane keeps its drawing buffer, ~45MB per pane at 2x DPR. Shrinking the canvas
-  // to 1×1 frees it; the caller must restore before the pane is painted again.
+  // A hidden pane keeps its drawing buffer, ~45MB per pane at 2x DPR. Shrinking the canvas to
+  // 1×1 frees two of its three surfaces. The compositor holds the last presented frame, the
+  // third, until the canvas presents again, so the clear presents the 1×1 buffer.
+  // The caller must restore before the pane is painted again.
   releaseDrawingBuffer(): void {
     if (this.bufferReleased) return;
     this.bufferReleased = true;
     this.canvas.width = 1;
     this.canvas.height = 1;
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT);
     // CSS size is layout: the pane's container measures itself, not the canvas.
     this.resetRowCache(this.rows);
     this.onSurfaceEvent('buffer_released', this.surface());
