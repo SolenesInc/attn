@@ -3,6 +3,7 @@ package transcript
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -414,4 +415,41 @@ func TestCodexTurnAborted(t *testing.T) {
 			line: `{"type":"user","message":{"role":"user","content":"[Request interrupted by user]"},"interruptedMessageId":"msg_01"}`,
 		},
 	})
+}
+
+func TestExtractLastAssistantMessageBetweenKeepsToTheRun(t *testing.T) {
+	claude := func(at, text string) string {
+		return `{"type":"assistant","timestamp":"` + at + `","message":{"role":"assistant","content":[{"type":"text","text":"` + text + `"}]}}`
+	}
+	codex := func(at, text string) string {
+		return `{"timestamp":"` + at + `","type":"event_msg","payload":{"type":"agent_message","message":"` + text + `"}}`
+	}
+	user := `{"type":"user","timestamp":"2026-11-07T10:00:30Z","message":{"role":"user","content":"📬 You have unread items"}}`
+	from, _ := time.Parse(time.RFC3339, "2026-11-07T10:00:00Z")
+	to, _ := time.Parse(time.RFC3339, "2026-11-07T10:01:00Z")
+	cases := map[string]struct {
+		lines []string
+		want  string
+	}{
+		"the run's last message":         {[]string{claude("2026-11-07T09:59:00Z", "before"), claude("2026-11-07T10:00:10Z", "first"), claude("2026-11-07T10:00:50Z", "last")}, "last"},
+		"a run that wrote nothing":       {[]string{claude("2026-11-07T09:59:00Z", "before"), user}, ""},
+		"a later run wrote the newest":   {[]string{claude("2026-11-07T10:00:50Z", "mine"), user, claude("2026-11-07T10:02:00Z", "the next run's")}, "mine"},
+		"only a later run wrote":         {[]string{claude("2026-11-07T09:59:00Z", "before"), claude("2026-11-07T10:02:00Z", "the next run's")}, ""},
+		"a codex run":                    {[]string{codex("2026-11-07T09:59:00Z", "before"), codex("2026-11-07T10:00:50Z", "last")}, "last"},
+		"a codex run that wrote nothing": {[]string{codex("2026-11-07T09:59:00Z", "before")}, ""},
+		"a message without a timestamp":  {[]string{`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"undated"}]}}`}, ""},
+		"at the moment the run ended":    {[]string{claude("2026-11-07T10:01:00Z", "at the end")}, "at the end"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "transcript.jsonl")
+			if err := os.WriteFile(path, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			got, err := ExtractLastAssistantMessageBetween(path, 4000, from, to)
+			if err != nil || got != tc.want {
+				t.Errorf("got %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
 }

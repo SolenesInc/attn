@@ -5,6 +5,8 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessioncost"
+	"github.com/victorarias/attn/internal/statemarker"
+	"github.com/victorarias/attn/internal/transcript"
 )
 
 type RunStart string
@@ -26,14 +28,17 @@ const (
 )
 
 type Run struct {
-	StartedBy  RunStart
-	StartedAt  time.Time
-	EndedAt    time.Time
-	Ended      protocol.SessionState
-	OpenedTurn bool
-	Approvals  int
-	Usage      RunUsage
-	Tokens     sessioncost.Ledger
+	StartedBy     RunStart
+	StartedAt     time.Time
+	EndedAt       time.Time
+	Ended         protocol.SessionState
+	OpenedTurn    bool
+	QuietStop     bool
+	TurnRequested bool
+	UserInputAt   time.Time
+	Approvals     int
+	Usage         RunUsage
+	Tokens        sessioncost.Ledger
 }
 
 type trackedRun struct {
@@ -41,6 +46,12 @@ type trackedRun struct {
 	startKnown     bool
 	costAtStart    map[string]*sessioncost.Source
 	awaitsBaseline bool
+}
+
+type runStop struct {
+	openedTurn    bool
+	quiet         bool
+	turnRequested bool
 }
 
 type runRecorder struct {
@@ -64,7 +75,7 @@ func (r *runState) start() RunStart {
 	}
 }
 
-func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, opened bool, now time.Time) []Run {
+func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, stop runStop, now time.Time) []Run {
 	phase, open := m.state.State, m.runs.open
 	if runsIn(previous) && !runsIn(phase) {
 		m.runs.unreadStop = now
@@ -82,7 +93,8 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 			open.Approvals++
 		}
 	default:
-		open.EndedAt, open.Ended, open.OpenedTurn = now, phase, opened
+		open.EndedAt, open.Ended, open.OpenedTurn = now, phase, stop.openedTurn
+		open.QuietStop, open.TurnRequested = stop.quiet, stop.turnRequested
 		m.runs.open = nil
 		m.runs.ended = append(m.runs.ended, *open)
 		if watcher := m.transcriptWatch; watcher == nil || watcherStopped(watcher) {
@@ -109,6 +121,12 @@ func (m *Monitor) runSteeredLocked() {
 func (m *Monitor) runStartedDuringPlacementLocked() {
 	if open := m.runs.open; open != nil && m.input.run != nil {
 		open.StartedBy, open.startKnown = m.input.run.start(), true
+	}
+}
+
+func (m *Monitor) runHeardUserLocked(now time.Time) {
+	if open := m.runs.open; open != nil && open.UserInputAt.IsZero() {
+		open.UserInputAt = now
 	}
 }
 
@@ -169,6 +187,17 @@ func (run trackedRun) measured(costAtEnd map[string]*sessioncost.Source) Run {
 	}
 	measured.Tokens = tokens
 	return measured
+}
+
+func (m *Monitor) Agent() protocol.SessionAgent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.agent
+}
+
+func (m *Monitor) RunLastMessage(run Run, maxChars int) (string, error) {
+	message, err := transcript.ExtractLastAssistantMessageBetween(m.transcriptPathFor(""), maxChars, run.StartedAt, run.EndedAt)
+	return statemarker.Strip(message), err
 }
 
 func (m *Monitor) handOverEndedRuns(measuredFrom time.Time, unmeasured bool) {

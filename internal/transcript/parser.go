@@ -166,6 +166,32 @@ func ExtractLastAssistantMessage(path string, maxChars int) (string, error) {
 	return lastAssistantContent, nil
 }
 
+// ExtractLastAssistantMessageBetween returns the newest assistant message written from from through to,
+// or nothing when the newest message at or before to is older than from or carries no timestamp.
+func ExtractLastAssistantMessageBetween(path string, maxChars int, from, to time.Time) (string, error) {
+	var message string
+	if err := readJSONLFileReverse(path, func(line []byte) bool {
+		content := ExtractAssistantContent(line)
+		if content == "" {
+			return false
+		}
+		at := extractLineTimestamp(line)
+		if at.After(to) {
+			return false
+		}
+		if !at.Before(from) {
+			message = content
+		}
+		return true
+	}); err != nil {
+		return "", err
+	}
+	if len(message) > maxChars {
+		message = message[len(message)-maxChars:]
+	}
+	return message, nil
+}
+
 // ExtractLastAssistantTurnAfterLastUserSince reads back from the end to the last user or assistant
 // entry: a user entry there means the latest turn has no reply yet.
 func ExtractLastAssistantTurnAfterLastUserSince(path string, maxChars int, minAssistantTimestamp time.Time) (AssistantTurn, error) {

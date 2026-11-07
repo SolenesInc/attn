@@ -56,6 +56,7 @@ func (m *Monitor) WriteInput(ctx context.Context, terminal harness.TerminalID, d
 			m.runSteeredLocked()
 			l.userSubmit = true
 			m.userInputs++
+			m.runHeardUserLocked(time.Now())
 		}
 	}
 	m.mu.Unlock()

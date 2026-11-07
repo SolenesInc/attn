@@ -337,6 +337,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	}
 	if delivery.origin.kind == originUserConversation {
 		m.userInputs++
+		m.runHeardUserLocked(time.Now())
 	}
 	if steering {
 		m.runSteeredLocked()

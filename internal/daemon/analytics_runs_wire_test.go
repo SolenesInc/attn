@@ -22,13 +22,16 @@ import (
 )
 
 type runRecord struct {
-	StartedBy  string `json:"started_by"`
-	DurationMs *int64 `json:"duration_ms"`
-	Ended      string `json:"ended"`
-	OpenedTurn bool   `json:"opened_turn"`
-	Approvals  int    `json:"approvals"`
-	Usage      string `json:"usage"`
-	Tokens     *struct {
+	StartedBy     string `json:"started_by"`
+	DurationMs    *int64 `json:"duration_ms"`
+	Ended         string `json:"ended"`
+	OpenedTurn    bool   `json:"opened_turn"`
+	QuietStop     bool   `json:"quiet_stop"`
+	TurnRequested bool   `json:"turn_requested"`
+	UserInputMs   *int64 `json:"user_input_ms"`
+	Approvals     int    `json:"approvals"`
+	Usage         string `json:"usage"`
+	Tokens        *struct {
 		Input      int `json:"input"`
 		Output     int `json:"output"`
 		CacheRead  int `json:"cache_read"`

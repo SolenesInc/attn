@@ -62,6 +62,38 @@ func BuildPrompt(text string) string {
 	return prompts.RenderText("turn-classifier", "classify", prompts.Values{"message": text})
 }
 
+const QuietStopVerdictSchema = `{"type":"object","properties":{"verdict":{"type":"string","enum":["READ","NOTHING"]}},"required":["verdict"],"additionalProperties":false}`
+
+const (
+	QuietStopRead    = "read"
+	QuietStopNothing = "nothing"
+)
+
+func BuildQuietStopPrompt(text string) string {
+	return prompts.RenderText("turn-classifier", "quiet-stop", prompts.Values{"message": text})
+}
+
+func ParseQuietStopVerdict(structuredOutput json.RawMessage, text string) (string, bool) {
+	answer := []byte(structuredOutput)
+	if len(answer) == 0 {
+		answer = []byte(strings.TrimSpace(text))
+	}
+	var parsed struct {
+		Verdict string `json:"verdict"`
+	}
+	if err := json.Unmarshal(answer, &parsed); err != nil {
+		return "", false
+	}
+	switch parsed.Verdict {
+	case "READ":
+		return QuietStopRead, true
+	case "NOTHING":
+		return QuietStopNothing, true
+	default:
+		return "", false
+	}
+}
+
 func parseVerdictToken(value string) (string, bool) {
 	match := verdictLineRegex.FindStringSubmatch(strings.TrimSpace(value))
 	if len(match) < 2 {
@@ -303,6 +335,13 @@ func CodexClassifierModel() string {
 	return defaultCodexClassifierModel
 }
 
+func CodexClassifierReasoningEffort() string {
+	if effort := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT"))); effort != "" {
+		return effort
+	}
+	return defaultCodexReasoningEffort
+}
+
 func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecutable, workDir, model string, timeout time.Duration) (string, error) {
 	if text == "" {
 		DefaultLogger("classifier: empty text, returning idle")
@@ -317,10 +356,7 @@ func ClassifyWithCodexModelInDir(parent context.Context, text, configuredExecuta
 	defer cancel()
 
 	executable := resolveCodexExecutable(configuredExecutable)
-	reasoningEffort := strings.TrimSpace(strings.ToLower(os.Getenv("ATTN_CODEX_CLASSIFIER_REASONING_EFFORT")))
-	if reasoningEffort == "" {
-		reasoningEffort = defaultCodexReasoningEffort
-	}
+	reasoningEffort := CodexClassifierReasoningEffort()
 
 	prompt := BuildPrompt(text)
 	DefaultLogger(

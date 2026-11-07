@@ -3613,6 +3613,29 @@
               }
             ]
           }
+        },
+        {
+          "id": "quiet-stop",
+          "delivery": "headless_prompt",
+          "description": "internal/classifier.BuildQuietStopPrompt",
+          "body": {
+            "kind": "text",
+            "id": "turn-classifier.quiet-stop",
+            "source": "content/turn-classifier/quiet-stop.md",
+            "bindings": [
+              {
+                "name": "message",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "message",
+                    "kind": "text",
+                    "description": "Message"
+                  }
+                }
+              }
+            ]
+          }
         }
       ]
     },
@@ -6167,5 +6190,5 @@
       ]
     }
   ],
-  "definitions_hash": "4d0b6c65b34592ae684632853931f23692e82c1137f465aac741e36708b45988"
+  "definitions_hash": "3ef56c1f7bf9335da13e41abeb2e3c80d46f4c026a5d04a3708627246a0d6bb1"
 }

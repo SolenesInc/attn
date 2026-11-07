@@ -9,9 +9,14 @@ func lifecycleRecipients() []Recipient {
 
 		{ID: "turn-classifier",
 			Description: "Separate model deciding whether a turn needs user input.",
-			Events: []Event{On("classify", "headless_prompt", "internal/classifier.BuildPrompt",
-				template("turn-classifier.classify", "content/turn-classifier/classify.md",
-					TextField("message", "Message")))}},
+			Events: []Event{
+				On("classify", "headless_prompt", "internal/classifier.BuildPrompt",
+					template("turn-classifier.classify", "content/turn-classifier/classify.md",
+						TextField("message", "Message"))),
+				On("quiet-stop", "headless_prompt", "internal/classifier.BuildQuietStopPrompt",
+					template("turn-classifier.quiet-stop", "content/turn-classifier/quiet-stop.md",
+						TextField("message", "Message"))),
+			}},
 
 		{ID: "session-title",
 			Description: "Session title",

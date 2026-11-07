@@ -16,6 +16,9 @@ func (h monitorHost) RunEnded(m *sessionmonitor.Monitor, run sessionmonitor.Run)
 	if err := d.appendAnalyticsAt(analytics.StreamRun, "run", string(session), run.EndedAt, d.runProps(session, run)); err != nil {
 		d.logf("analytics: %v", err)
 	}
+	if run.QuietStop && (!run.OpenedTurn || run.TurnRequested) {
+		d.life.Go("quietStopVerdict", func() { d.recordQuietStopVerdict(m, session, run) })
+	}
 }
 
 type runTokens struct {
@@ -26,25 +29,33 @@ type runTokens struct {
 }
 
 type runProps struct {
-	StartedBy  sessionmonitor.RunStart  `json:"started_by"`
-	DurationMs int64                    `json:"duration_ms"`
-	Ended      protocol.SessionState    `json:"ended"`
-	OpenedTurn bool                     `json:"opened_turn"`
-	Approvals  int                      `json:"approvals"`
-	Usage      sessionmonitor.RunUsage  `json:"usage"`
-	Tokens     *runTokens               `json:"tokens,omitempty"`
-	USD        *float64                 `json:"usd,omitempty"`
-	Session    *analytics.SessionTraits `json:"session,omitempty"`
+	StartedBy     sessionmonitor.RunStart  `json:"started_by"`
+	DurationMs    int64                    `json:"duration_ms"`
+	Ended         protocol.SessionState    `json:"ended"`
+	OpenedTurn    bool                     `json:"opened_turn"`
+	QuietStop     bool                     `json:"quiet_stop"`
+	TurnRequested bool                     `json:"turn_requested"`
+	UserInputMs   *int64                   `json:"user_input_ms,omitempty"`
+	Approvals     int                      `json:"approvals"`
+	Usage         sessionmonitor.RunUsage  `json:"usage"`
+	Tokens        *runTokens               `json:"tokens,omitempty"`
+	USD           *float64                 `json:"usd,omitempty"`
+	Session       *analytics.SessionTraits `json:"session,omitempty"`
 }
 
 func (d *Daemon) runProps(session protocol.SessionID, run sessionmonitor.Run) runProps {
 	props := runProps{
-		StartedBy:  run.StartedBy,
-		DurationMs: run.EndedAt.Sub(run.StartedAt).Milliseconds(),
-		Ended:      run.Ended,
-		OpenedTurn: run.OpenedTurn,
-		Approvals:  run.Approvals,
-		Usage:      run.Usage,
+		StartedBy:     run.StartedBy,
+		DurationMs:    run.EndedAt.Sub(run.StartedAt).Milliseconds(),
+		Ended:         run.Ended,
+		OpenedTurn:    run.OpenedTurn,
+		QuietStop:     run.QuietStop,
+		TurnRequested: run.TurnRequested,
+		Approvals:     run.Approvals,
+		Usage:         run.Usage,
+	}
+	if !run.UserInputAt.IsZero() {
+		props.UserInputMs = protocol.Ptr(run.UserInputAt.Sub(run.StartedAt).Milliseconds())
 	}
 	if traits := d.sessionTraits(session); traits != nil {
 		traits.State = ""

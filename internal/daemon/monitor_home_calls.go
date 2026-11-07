@@ -154,9 +154,8 @@ func (d *Daemon) monitorViewFor(session protocol.SessionID) (sessionmonitor.View
 }
 
 func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent, directory, text string, timeout time.Duration) (string, error) {
-	driver := agentdriver.Get(string(agent))
-	if _, ok := agentdriver.GetClassifier(driver); !ok {
-		driver = agentdriver.Get("claude")
+	driver, own := classifierDriver(agent)
+	if !own {
 		directory = ""
 	}
 	executable, err := d.machineAgentExecutable(driver, "")
@@ -175,6 +174,14 @@ func (d *Daemon) runClassifier(ctx context.Context, agent protocol.SessionAgent,
 		return state, err
 	}
 	return protocol.StateUnknown, errors.New("no classifier backend available")
+}
+
+func classifierDriver(agent protocol.SessionAgent) (driver agentdriver.Driver, own bool) {
+	driver = agentdriver.Get(string(agent))
+	if _, ok := agentdriver.GetClassifier(driver); ok {
+		return driver, true
+	}
+	return agentdriver.Get("claude"), false
 }
 
 func (d *Daemon) classifierModel(ctx context.Context, harness string) string {
