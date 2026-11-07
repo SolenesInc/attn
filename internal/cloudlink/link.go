@@ -88,7 +88,7 @@ type Status struct {
 	HomeID string
 }
 
-type Offer struct {
+type PairingCode struct {
 	ProfileID string
 	PairingID string
 	ExpiresAt time.Time
@@ -120,11 +120,11 @@ type Link struct {
 	cfg Config
 	now func() time.Time
 
-	mu          sync.Mutex
-	status      Status
-	offers      map[string]*Offer
-	session     *session
-	nextConnect chan struct{}
+	mu           sync.Mutex
+	status       Status
+	pairingCodes map[string]*PairingCode
+	session      *session
+	nextConnect  chan struct{}
 }
 
 func New(cfg Config) *Link {
@@ -136,7 +136,7 @@ func New(cfg Config) *Link {
 	if cfg.PairingLifetime == 0 {
 		cfg.PairingLifetime = PairingLifetime
 	}
-	return &Link{cfg: cfg, now: time.Now, offers: map[string]*Offer{}, nextConnect: make(chan struct{}), status: Status{State: StateConnecting, HomeID: cfg.Identity.HomeID()}}
+	return &Link{cfg: cfg, now: time.Now, pairingCodes: map[string]*PairingCode{}, nextConnect: make(chan struct{}), status: Status{State: StateConnecting, HomeID: cfg.Identity.HomeID()}}
 }
 
 func (l *Link) Status() Status {
@@ -171,47 +171,47 @@ func (l *Link) setStatus(state State, err error) {
 	l.cfg.Home.Changed()
 }
 
-func (l *Link) Offers() []Offer {
+func (l *Link) PairingCodes() []PairingCode {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.offersLocked()
+	return l.pairingCodesLocked()
 }
 
-func (l *Link) offersLocked() []Offer {
+func (l *Link) pairingCodesLocked() []PairingCode {
 	l.dropExpiredLocked()
-	out := make([]Offer, 0, len(l.offers))
-	for _, offer := range l.offers {
-		out = append(out, *offer)
+	out := make([]PairingCode, 0, len(l.pairingCodes))
+	for _, pairingCode := range l.pairingCodes {
+		out = append(out, *pairingCode)
 	}
-	slices.SortFunc(out, func(a, b Offer) int { return a.ExpiresAt.Compare(b.ExpiresAt) })
+	slices.SortFunc(out, func(a, b PairingCode) int { return a.ExpiresAt.Compare(b.ExpiresAt) })
 	return out
 }
 
 func (l *Link) dropExpiredLocked() {
 	now := l.now()
-	for profile, offer := range l.offers {
-		if !now.Before(offer.ExpiresAt) {
-			delete(l.offers, profile)
+	for profile, pairingCode := range l.pairingCodes {
+		if !now.Before(pairingCode.ExpiresAt) {
+			delete(l.pairingCodes, profile)
 		}
 	}
 }
 
-func (l *Link) Offer(profileID, profileName string, holder any) (Offer, error) {
+func (l *Link) NewPairingCode(profileID, profileName string, holder any) (PairingCode, error) {
 	homeID := l.cfg.Identity.HomeID()
 	if homeID == "" {
 		status := l.Status()
-		return Offer{}, fmt.Errorf("this home has not registered with Attn Cloud yet (%s); a QR code needs its home id", orWaiting(status.Error))
+		return PairingCode{}, fmt.Errorf("this home has not registered with Attn Cloud yet (%s); a QR code needs its home id", orWaiting(status.Error))
 	}
 	secret := randomBytes(32)
-	offer := &Offer{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(l.cfg.PairingLifetime), secret: secret, holder: holder}
+	pairingCode := &PairingCode{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(l.cfg.PairingLifetime), secret: secret, holder: holder}
 	qr, _ := json.Marshal(QR{
 		V: 1, Cloud: l.cfg.CloudURL, HomeID: homeID, HomeName: l.cfg.HomeName,
 		HomeNoisePub: b64(l.cfg.Identity.NoiseKey.Public), ProfileID: profileID, ProfileName: profileName,
-		PairingID: offer.PairingID, Secret: b64(secret),
+		PairingID: pairingCode.PairingID, Secret: b64(secret),
 	})
-	offer.QR = string(qr)
+	pairingCode.QR = string(qr)
 	l.mu.Lock()
-	l.offers[profileID] = offer
+	l.pairingCodes[profileID] = pairingCode
 	s := l.session
 	l.mu.Unlock()
 	time.AfterFunc(l.cfg.PairingLifetime, l.sendAllowlist)
@@ -219,30 +219,30 @@ func (l *Link) Offer(profileID, profileName string, holder any) (Offer, error) {
 	if s != nil {
 		if err := s.allowlistApplied(); err != nil {
 			l.mu.Lock()
-			if l.offers[profileID] == offer {
-				delete(l.offers, profileID)
+			if l.pairingCodes[profileID] == pairingCode {
+				delete(l.pairingCodes, profileID)
 			}
 			l.mu.Unlock()
 			l.cfg.Home.Changed()
-			return Offer{}, fmt.Errorf("the relay did not open the pairing window: %w", err)
+			return PairingCode{}, fmt.Errorf("the relay did not open the pairing window: %w", err)
 		}
 	}
-	return *offer, nil
+	return *pairingCode, nil
 }
 
-func (l *Link) CancelOffer(profileID string) {
-	if l.dropOffer(profileID) {
+func (l *Link) CancelPairingCode(profileID string) {
+	if l.dropPairingCode(profileID) {
 		l.cfg.Home.Changed()
 		l.sendAllowlist()
 	}
 }
 
-func (l *Link) CancelOffersHeldBy(holder any) {
+func (l *Link) CancelPairingCodesHeldBy(holder any) {
 	l.mu.Lock()
 	ended := false
-	for profile, offer := range l.offers {
-		if offer.holder == holder {
-			delete(l.offers, profile)
+	for profile, pairingCode := range l.pairingCodes {
+		if pairingCode.holder == holder {
+			delete(l.pairingCodes, profile)
 			ended = true
 		}
 	}
@@ -253,11 +253,11 @@ func (l *Link) CancelOffersHeldBy(holder any) {
 	}
 }
 
-func (l *Link) dropOffer(profileID string) bool {
+func (l *Link) dropPairingCode(profileID string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	_, held := l.offers[profileID]
-	delete(l.offers, profileID)
+	_, held := l.pairingCodes[profileID]
+	delete(l.pairingCodes, profileID)
 	return held
 }
 
@@ -278,25 +278,25 @@ func (l *Link) secretFor(claim firstMessage) ([]byte, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.dropExpiredLocked()
-	for _, offer := range l.offers {
-		if offer.PairingID == claim.PairingID {
-			return offer.secret, nil
+	for _, pairingCode := range l.pairingCodes {
+		if pairingCode.PairingID == claim.PairingID {
+			return pairingCode.secret, nil
 		}
 	}
 	return nil, fmt.Errorf("pairing code %s was already used or expired after %s; show a new one", claim.PairingID, l.cfg.PairingLifetime)
 }
 
-func (l *Link) spendOfferIntoPairing(pairingID string, pairingFor func(profileID string) Pairing) (Pairing, error) {
+func (l *Link) spendPairingCodeIntoPairing(pairingID string, pairingFor func(profileID string) Pairing) (Pairing, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.dropExpiredLocked()
-	for profile, offer := range l.offers {
-		if offer.PairingID == pairingID {
+	for profile, pairingCode := range l.pairingCodes {
+		if pairingCode.PairingID == pairingID {
 			pairing := pairingFor(profile)
 			if err := l.cfg.Home.AddPairing(pairing); err != nil {
 				return Pairing{}, err
 			}
-			delete(l.offers, profile)
+			delete(l.pairingCodes, profile)
 			return pairing, nil
 		}
 	}
@@ -326,7 +326,7 @@ func (l *Link) Revoked(device Device) {
 }
 
 func (l *Link) ProfileRemoved(profileID string) {
-	l.dropOffer(profileID)
+	l.dropPairingCode(profileID)
 	l.closeWhere(func(d Device) bool { return d.ProfileID == profileID })
 }
 
@@ -366,9 +366,9 @@ func (l *Link) allowlist() (allowlist, error) {
 			list.Devices = append(list.Devices, key)
 		}
 	}
-	for _, offer := range l.offersLocked() {
-		hash := sha256.Sum256(relayToken(offer.secret))
-		list.Pairings = append(list.Pairings, pairingWindow{TokenHash: b64(hash[:]), Until: offer.ExpiresAt.UnixMilli()})
+	for _, pairingCode := range l.pairingCodesLocked() {
+		hash := sha256.Sum256(relayToken(pairingCode.secret))
+		list.Pairings = append(list.Pairings, pairingWindow{TokenHash: b64(hash[:]), Until: pairingCode.ExpiresAt.UnixMilli()})
 	}
 	return list, nil
 }
@@ -743,7 +743,7 @@ func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
 	link := d.session.link
 	if d.answered.pairing {
 		claim := d.answered.claim
-		pairing, err := link.spendOfferIntoPairing(claim.PairingID, func(profileID string) Pairing {
+		pairing, err := link.spendPairingCodeIntoPairing(claim.PairingID, func(profileID string) Pairing {
 			return Pairing{DeviceID: KeyID(d.signPub), ProfileID: profileID, DeviceSignPub: d.signPub, DeviceNoisePub: d.answered.peerStatic, Name: claim.DeviceName}
 		})
 		if err != nil {

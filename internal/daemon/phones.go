@@ -151,10 +151,10 @@ func (h phoneHome) Logf(format string, args ...any) { h.d.logf(format, args...) 
 
 func (d *Daemon) phonesSnapshot() protocol.PhonesUpdatedMessage {
 	message := protocol.PhonesUpdatedMessage{
-		Event:    protocol.EventPhonesUpdated,
-		Link:     protocol.PhoneLink{State: protocol.PhoneLinkStateOff, CloudURL: cloudURL()},
-		Offers:   []protocol.PhonePairingOffer{},
-		Pairings: []protocol.PhonePairing{},
+		Event:        protocol.EventPhonesUpdated,
+		Link:         protocol.PhoneLink{State: protocol.PhoneLinkStateOff, CloudURL: cloudURL()},
+		PairingCodes: []protocol.PhonePairingCode{},
+		Pairings:     []protocol.PhonePairing{},
 	}
 	d.phones.mu.Lock()
 	whyUnlinked := d.phones.whyUnlinked
@@ -171,8 +171,8 @@ func (d *Daemon) phonesSnapshot() protocol.PhonesUpdatedMessage {
 		if status.HomeID != "" {
 			message.Link.HomeID = protocol.Ptr(status.HomeID)
 		}
-		for _, offer := range link.Offers() {
-			message.Offers = append(message.Offers, wireOffer(offer))
+		for _, pairingCode := range link.PairingCodes() {
+			message.PairingCodes = append(message.PairingCodes, wirePairingCode(pairingCode))
 		}
 	}
 	pairings, err := d.store.PhonePairings()
@@ -193,8 +193,8 @@ func (d *Daemon) phonesSnapshot() protocol.PhonesUpdatedMessage {
 	return message
 }
 
-func wireOffer(offer cloudlink.Offer) protocol.PhonePairingOffer {
-	return protocol.PhonePairingOffer{ProfileID: offer.ProfileID, ExpiresAt: offer.ExpiresAt.UTC().Format(time.RFC3339), Qr: offer.QR}
+func wirePairingCode(pairingCode cloudlink.PairingCode) protocol.PhonePairingCode {
+	return protocol.PhonePairingCode{ProfileID: pairingCode.ProfileID, ExpiresAt: pairingCode.ExpiresAt.UTC().Format(time.RFC3339), Qr: pairingCode.QR}
 }
 
 func (d *Daemon) projectPhones() {
@@ -212,52 +212,52 @@ func (d *Daemon) handlePhonesGet(client *wsClient) {
 
 func (d *Daemon) handlePhonePairBegin(client *wsClient, msg *protocol.PhonePairBeginMessage) {
 	result := protocol.PhonePairBeginResultMessage{Event: protocol.EventPhonePairBeginResult, RequestID: msg.RequestID}
-	offer, err := d.beginPhonePairing(client, msg.ProfileID)
+	pairingCode, err := d.beginPhonePairing(client, msg.ProfileID)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
 		result.Success = true
-		result.Offer = &offer
+		result.PairingCode = &pairingCode
 	}
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) beginPhonePairing(client *wsClient, profileID string) (protocol.PhonePairingOffer, error) {
+func (d *Daemon) beginPhonePairing(client *wsClient, profileID string) (protocol.PhonePairingCode, error) {
 	link := d.cloudLink()
 	if link == nil {
 		d.phones.mu.Lock()
 		whyUnlinked := d.phones.whyUnlinked
 		d.phones.mu.Unlock()
 		if whyUnlinked != "" {
-			return protocol.PhonePairingOffer{}, errors.New(whyUnlinked)
+			return protocol.PhonePairingCode{}, errors.New(whyUnlinked)
 		}
-		return protocol.PhonePairingOffer{}, errors.New(phoneAccessOff)
+		return protocol.PhonePairingCode{}, errors.New(phoneAccessOff)
 	}
 	profile, err := d.store.GetProfile(profileID)
 	if err != nil || profile.Deleted() {
-		return protocol.PhonePairingOffer{}, fmt.Errorf("profile %q is not on this home", profileID)
+		return protocol.PhonePairingCode{}, fmt.Errorf("profile %q is not on this home", profileID)
 	}
-	offer, err := link.Offer(profile.ID, profile.Name, client)
+	pairingCode, err := link.NewPairingCode(profile.ID, profile.Name, client)
 	if err != nil {
-		return protocol.PhonePairingOffer{}, err
+		return protocol.PhonePairingCode{}, err
 	}
 	select {
 	case <-client.gone:
-		link.CancelOffersHeldBy(client)
+		link.CancelPairingCodesHeldBy(client)
 	default:
 	}
-	return wireOffer(offer), nil
+	return wirePairingCode(pairingCode), nil
 }
 
-func (d *Daemon) endPhoneOffersHeldBy(client *wsClient) {
+func (d *Daemon) endPhonePairingCodesHeldBy(client *wsClient) {
 	if link := d.cloudLink(); link != nil {
-		link.CancelOffersHeldBy(client)
+		link.CancelPairingCodesHeldBy(client)
 	}
 }
 
 func (d *Daemon) handlePhonePairCancel(client *wsClient, msg *protocol.PhonePairCancelMessage) {
 	if link := d.cloudLink(); link != nil {
-		link.CancelOffer(msg.ProfileID)
+		link.CancelPairingCode(msg.ProfileID)
 	}
 	d.sendToClient(client, protocol.PhonePairCancelResultMessage{Event: protocol.EventPhonePairCancelResult, RequestID: msg.RequestID, Success: true})
 }

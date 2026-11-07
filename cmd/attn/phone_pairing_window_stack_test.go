@@ -84,7 +84,7 @@ func TestCancellingAPairingCodeClosesItsWindowAtTheRelay(t *testing.T) {
 	cancelPairing(t, app, profile, "cancel")
 
 	expectLapsed(t, cloud, socket, qr)
-	testworld.AwaitSince(app, listed, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool { return len(m.Offers) == 0 })
+	testworld.AwaitSince(app, listed, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool { return len(m.PairingCodes) == 0 })
 
 	cancelPairing(t, app, profile, "cancel-again")
 	after := openWindow(t, app, profile, "pair-after")
@@ -230,8 +230,8 @@ func TestQuittingTheAppClosesItsPairingWindowsAndKeepsPairedPhones(t *testing.T)
 
 	back := s.App()
 	listed := testworld.Request[protocol.PhonesUpdatedMessage](back, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, nil)
-	if len(listed.Offers) != 0 {
-		t.Fatalf("the app came back to live codes: %+v", listed.Offers)
+	if len(listed.PairingCodes) != 0 {
+		t.Fatalf("the app came back to live codes: %+v", listed.PairingCodes)
 	}
 	if _, kept := pairingOf(listed, phone.DeviceID()); !kept {
 		t.Fatalf("the app came back without the paired phone: %+v", listed.Pairings)

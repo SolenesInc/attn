@@ -33,9 +33,9 @@ import {
   Pairing,
   linkTarget,
   loadPairings,
-  pairingFromOffer,
+  pairingFromCode,
   pairingId,
-  readOffer,
+  readPairingCode,
   savePairings,
 } from './pairing'
 import { readPushTap, registerForPush, watchPushTokens } from './push'
@@ -261,20 +261,20 @@ const PairWithCode = Command.define('PairWithCode', {
   messages: [Message.Paired, Message.FailedPairing],
   execute: ({ code }) =>
     Effect.tryPromise(async () => {
-      const offer = readOffer(code)
+      const pairingCode = readPairingCode(code)
       const keys = await deviceKeys()
       const welcome = await pairWithHome(
         {
-          cloud: offer.cloud,
-          homeId: offer.home_id,
-          homeNoisePub: offer.home_noise_pub,
-          homeName: offer.home_name,
-          profileId: offer.profile_id,
+          cloud: pairingCode.cloud,
+          homeId: pairingCode.home_id,
+          homeNoisePub: pairingCode.home_noise_pub,
+          homeName: pairingCode.home_name,
+          profileId: pairingCode.profile_id,
         },
         keys,
-        { pairingId: offer.pairing_id, secret: fromBase64Url(offer.secret) },
+        { pairingId: pairingCode.pairing_id, secret: fromBase64Url(pairingCode.secret) },
       )
-      return pairingFromOffer(offer, welcome.homeName, welcome.profileName, Date.now())
+      return pairingFromCode(pairingCode, welcome.homeName, welcome.profileName, Date.now())
     }).pipe(
       Effect.map((pairing) => Message.Paired({ pairing })),
       Effect.catch((error) =>

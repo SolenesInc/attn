@@ -7759,8 +7759,8 @@ type PhonePairBeginResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Offer corresponds to the JSON schema field "offer".
-	Offer *PhonePairingOffer `json:"offer,omitempty,omitzero"`
+	// PairingCode corresponds to the JSON schema field "pairing_code".
+	PairingCode *PhonePairingCode `json:"pairing_code,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -7814,7 +7814,7 @@ type PhonePairing struct {
 	ProfileID string `json:"profile_id"`
 }
 
-type PhonePairingOffer struct {
+type PhonePairingCode struct {
 	// ExpiresAt corresponds to the JSON schema field "expires_at".
 	ExpiresAt string `json:"expires_at"`
 
@@ -7865,8 +7865,8 @@ type PhonesUpdatedMessage struct {
 	// Link corresponds to the JSON schema field "link".
 	Link PhoneLink `json:"link"`
 
-	// Offers corresponds to the JSON schema field "offers".
-	Offers []PhonePairingOffer `json:"offers"`
+	// PairingCodes corresponds to the JSON schema field "pairing_codes".
+	PairingCodes []PhonePairingCode `json:"pairing_codes"`
 
 	// Pairings corresponds to the JSON schema field "pairings".
 	Pairings []PhonePairing `json:"pairings"`

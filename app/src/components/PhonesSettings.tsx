@@ -3,7 +3,7 @@ import { encode } from 'uqr';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { usePhonesStore } from '../store/phones';
 import { useProfilesStore } from '../store/profiles';
-import type { PhoneLink, PhonePairing, PhonePairingOffer } from '../types/generated';
+import type { PhoneLink, PhonePairing, PhonePairingCode } from '../types/generated';
 
 const PAIRING_LIFETIME_MINUTES = 10;
 
@@ -50,16 +50,16 @@ function useExpired(expiresAt: string | undefined): boolean {
   return expired;
 }
 
-function PairingCode({ offer, profileName, onCancel }: { offer: PhonePairingOffer; profileName: string; onCancel: () => void }) {
-  const expired = useExpired(offer.expires_at);
+function PairingCode({ pairingCode, profileName, onCancel }: { pairingCode: PhonePairingCode; profileName: string; onCancel: () => void }) {
+  const expired = useExpired(pairingCode.expires_at);
   if (expired) {
     return <p className="settings-warning" role="status">Pairing code expired after {PAIRING_LIFETIME_MINUTES} min; show a new one.</p>;
   }
   return (
     <div className="settings-phone-code">
-      <QrCode text={offer.qr} label={`Pairing code for ${profileName}`} />
+      <QrCode text={pairingCode.qr} label={`Pairing code for ${profileName}`} />
       <p className="settings-description">
-        Scan with the attn app. The code works once, until {new Date(offer.expires_at).toLocaleTimeString()}.
+        Scan with the attn app. The code works once, until {new Date(pairingCode.expires_at).toLocaleTimeString()}.
       </p>
       <button type="button" className="settings-action" onClick={onCancel}>Cancel</button>
     </div>
@@ -88,8 +88,8 @@ export function PhonesSettings() {
   const profiles = useProfilesStore((state) => state.profiles);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const offeredProfiles = useRef<string[]>([]);
-  offeredProfiles.current = phones?.offers.map((offer) => offer.profile_id) ?? [];
+  const profilesWithCode = useRef<string[]>([]);
+  profilesWithCode.current = phones?.pairing_codes.map((pairingCode) => pairingCode.profile_id) ?? [];
   const left = useRef(false);
 
   useEffect(() => { sendPhonesGet(); }, [sendPhonesGet, connectionGeneration]);
@@ -98,7 +98,7 @@ export function PhonesSettings() {
     left.current = false;
     return () => {
       left.current = true;
-      offeredProfiles.current.forEach(cancelQuietly);
+      profilesWithCode.current.forEach(cancelQuietly);
     };
     function cancelQuietly(profileId: string) {
       sendPhonePairCancel(profileId).catch((error: unknown) => console.warn('[phones] cancelling on leave:', error));
@@ -138,7 +138,7 @@ export function PhonesSettings() {
         </div>
       </section>
       {profiles.map((profile) => {
-        const offer = phones.offers.find((o) => o.profile_id === profile.id);
+        const pairingCode = phones.pairing_codes.find((o) => o.profile_id === profile.id);
         const paired = phones.pairings.filter((p) => p.profile_id === profile.id);
         return (
           <section key={profile.id} className="settings-block" aria-label={`Phones for ${profile.name}`}>
@@ -152,10 +152,10 @@ export function PhonesSettings() {
                   {paired.map((pairing) => <PairedPhone key={pairing.device_id} pairing={pairing} onRevoke={() => revoke(pairing)} />)}
                 </ul>
               )}
-              {offer && <PairingCode offer={offer} profileName={profile.name} onCancel={() => cancel(profile.id)} />}
+              {pairingCode && <PairingCode pairingCode={pairingCode} profileName={profile.name} onCancel={() => cancel(profile.id)} />}
               {errors[profile.id] && <p className="settings-warning" role="alert">{errors[profile.id]}</p>}
               <button type="button" className="settings-action" disabled={phones.link.state === 'off'} onClick={() => pair(profile.id)}>
-                {offer ? 'Show a new pairing code' : 'Pair a phone'}
+                {pairingCode ? 'Show a new pairing code' : 'Pair a phone'}
               </button>
             </div>
           </section>

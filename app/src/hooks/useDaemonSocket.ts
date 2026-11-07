@@ -35,7 +35,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
 import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
-  PhonePairingOffer,
+  PhonePairingCode,
   AskAnswer,
   AskImageResultMessage,
   CommandUsage,
@@ -3628,7 +3628,7 @@ export function useDaemonSocket({
 
   const sendPhonesGet = useCallback(() => sendOrQueueCommand({ cmd: 'phones_get' }), [sendOrQueueCommand]);
 
-  const sendPhonePairBegin = useCallback((profileId: string): Promise<PhonePairingOffer> =>
+  const sendPhonePairBegin = useCallback((profileId: string): Promise<PhonePairingCode> =>
     sendRequest('phone_pair_begin', { profile_id: profileId }, 'Showing a pairing code timed out', PHONE_PAIR_BEGIN_TIMEOUT_MS), [sendRequest]);
 
   const sendPhonePairCancel = useCallback((profileId: string): Promise<true> =>

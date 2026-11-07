@@ -324,7 +324,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - reporting seed → stake
 - gateway → Home Gateway
 - relay → Cloud Relay
-- offer → pairing code
 - device (in the relay contract) → phone
 
 ### Changes to make

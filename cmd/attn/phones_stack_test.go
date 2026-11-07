@@ -38,14 +38,14 @@ func linkConnected(m protocol.PhonesUpdatedMessage) bool {
 	return m.Link.State == protocol.PhoneLinkStateConnected
 }
 
-func beginPairing(t *testing.T, app *testworld.Peer, profileID, id string) protocol.PhonePairingOffer {
+func beginPairing(t *testing.T, app *testworld.Peer, profileID, id string) protocol.PhonePairingCode {
 	t.Helper()
 	result := testworld.Request(app, protocol.PhonePairBeginMessage{Cmd: protocol.CmdPhonePairBegin, RequestID: id, ProfileID: profileID},
 		protocol.EventPhonePairBeginResult, func(m protocol.PhonePairBeginResultMessage) bool { return m.RequestID == id })
 	if !result.Success {
 		t.Fatalf("phone_pair_begin: %s", protocol.Deref(result.Error))
 	}
-	return *result.Offer
+	return *result.PairingCode
 }
 
 func pairingOf(m protocol.PhonesUpdatedMessage, deviceID string) (protocol.PhonePairing, bool) {
@@ -68,8 +68,8 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
-	offer := beginPairing(t, app, profile, "pair-1")
-	qr := testworld.ParsePhoneQR(t, offer.Qr)
+	pairingCode := beginPairing(t, app, profile, "pair-1")
+	qr := testworld.ParsePhoneQR(t, pairingCode.Qr)
 	if qr.ProfileID != profile || qr.Cloud != cloud.HomeURL {
 		t.Fatalf("QR = %+v, want profile %s and cloud %s", qr, profile, cloud.HomeURL)
 	}
@@ -90,8 +90,8 @@ func TestAPhonePairsReconnectsAndIsRevoked(t *testing.T) {
 		pairing, ok := pairingOf(m, phone.DeviceID())
 		return ok && pairing.Connected
 	})
-	if pairing, _ := pairingOf(listed, phone.DeviceID()); pairing.Name != "Test iPhone" || pairing.ProfileID != profile || len(listed.Offers) != 0 {
-		t.Fatalf("after pairing: pairing %+v, offers %+v", pairing, listed.Offers)
+	if pairing, _ := pairingOf(listed, phone.DeviceID()); pairing.Name != "Test iPhone" || pairing.ProfileID != profile || len(listed.PairingCodes) != 0 {
+		t.Fatalf("after pairing: pairing %+v, pairing codes %+v", pairing, listed.PairingCodes)
 	}
 
 	t.Run("reconnects after the relay socket is cut", func(t *testing.T) {

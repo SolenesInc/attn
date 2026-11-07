@@ -1,7 +1,7 @@
 import { Preferences } from '@capacitor/preferences'
 import { Schema, Struct } from 'effect'
 
-export const PairingOffer = Schema.Struct({
+export const PairingCode = Schema.Struct({
   v: Schema.Literal(1),
   cloud: Schema.String,
   home_id: Schema.String,
@@ -12,7 +12,7 @@ export const PairingOffer = Schema.Struct({
   pairing_id: Schema.String,
   secret: Schema.String,
 })
-export type PairingOffer = typeof PairingOffer.Type
+export type PairingCode = typeof PairingCode.Type
 
 export const Pairing = Schema.Struct({
   id: Schema.String,
@@ -33,7 +33,7 @@ export const linkTarget = (pairing: Pairing): LinkTarget => Struct.omit(pairing,
 
 export const pairingId = (homeId: string, profileId: string): string => `${homeId}/${profileId}`
 
-export const readOffer = (scanned: string): PairingOffer => {
+export const readPairingCode = (scanned: string): PairingCode => {
   let json: unknown
   try {
     json = JSON.parse(scanned)
@@ -43,25 +43,25 @@ export const readOffer = (scanned: string): PairingOffer => {
     )
   }
   try {
-    return Schema.decodeUnknownSync(PairingOffer)(json)
+    return Schema.decodeUnknownSync(PairingCode)(json)
   } catch (error) {
     throw new Error(`That pairing code is not one this app reads: ${String(error)}`)
   }
 }
 
-export const pairingFromOffer = (
-  offer: PairingOffer,
+export const pairingFromCode = (
+  pairingCode: PairingCode,
   homeName: string,
   profileName: string,
   pairedAt: number,
 ): Pairing => ({
-  id: pairingId(offer.home_id, offer.profile_id),
-  cloud: offer.cloud,
-  homeId: offer.home_id,
-  homeNoisePub: offer.home_noise_pub,
+  id: pairingId(pairingCode.home_id, pairingCode.profile_id),
+  cloud: pairingCode.cloud,
+  homeId: pairingCode.home_id,
+  homeNoisePub: pairingCode.home_noise_pub,
   homeName,
   profileName,
-  profileId: offer.profile_id,
+  profileId: pairingCode.profile_id,
   pairedAt,
 })
 

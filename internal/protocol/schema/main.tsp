@@ -8484,7 +8484,7 @@ model PhoneLink {
 
 // A live QR code for pairing a phone with one profile. Its secret works once,
 // until expires_at.
-model PhonePairingOffer {
+model PhonePairingCode {
   profile_id: string;
   expires_at: string;
   qr: string;
@@ -8505,12 +8505,12 @@ model PhonesGetMessage {
   cmd: "phones_get";
 }
 
-// The home's cloud link, live pairing offers and pairings, for every profile.
+// The home's cloud link, live pairing codes and pairings, for every profile.
 // Sent in answer to phones_get and whenever one of them changes.
 model PhonesUpdatedMessage {
   event: "phones_updated";
   link: PhoneLink;
-  offers: PhonePairingOffer[];
+  pairing_codes: PhonePairingCode[];
   pairings: PhonePairing[];
 }
 
@@ -8526,7 +8526,7 @@ model PhonePairBeginResultMessage {
   request_id: string;
   success: boolean;
   error?: string;
-  offer?: PhonePairingOffer;
+  pairing_code?: PhonePairingCode;
 }
 
 // Ends the profile's QR code before it expires, so the relay stops admitting it.

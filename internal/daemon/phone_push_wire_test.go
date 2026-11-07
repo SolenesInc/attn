@@ -28,7 +28,7 @@ func TestAPushWaitingForTheLinkDoesNotHoldTheDaemonsStop(t *testing.T) {
 	if !paired.Success {
 		t.Fatalf("phone_pair_begin: %s", protocol.Deref(paired.Error))
 	}
-	qr := testworld.ParsePhoneQR(t, paired.Offer.Qr)
+	qr := testworld.ParsePhoneQR(t, paired.PairingCode.Qr)
 	phone := testworld.NewPhone(t, cloud, "iPhone")
 	socket, err := phone.DialToPair(qr)
 	if err != nil {
@@ -107,12 +107,12 @@ func phonePushWorld(t *testing.T, queue, quiet bool) (*world, *testworld.Peer, *
 	testworld.Await(app, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool {
 		return m.Link.State == protocol.PhoneLinkStateConnected
 	})
-	offer := testworld.Request(app, protocol.PhonePairBeginMessage{Cmd: protocol.CmdPhonePairBegin, RequestID: "pair", ProfileID: app.SelectedProfile()},
+	pairingCode := testworld.Request(app, protocol.PhonePairBeginMessage{Cmd: protocol.CmdPhonePairBegin, RequestID: "pair", ProfileID: app.SelectedProfile()},
 		protocol.EventPhonePairBeginResult, func(m protocol.PhonePairBeginResultMessage) bool { return m.RequestID == "pair" })
-	if !offer.Success {
-		t.Fatalf("phone_pair_begin: %s", protocol.Deref(offer.Error))
+	if !pairingCode.Success {
+		t.Fatalf("phone_pair_begin: %s", protocol.Deref(pairingCode.Error))
 	}
-	qr := testworld.ParsePhoneQR(t, offer.Offer.Qr)
+	qr := testworld.ParsePhoneQR(t, pairingCode.PairingCode.Qr)
 	phone := testworld.NewPhone(t, cloud, "iPhone")
 	socket, err := phone.DialToPair(qr)
 	if err != nil {

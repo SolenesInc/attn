@@ -562,7 +562,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	d.wsReadPump(client)
 
 	close(client.gone)
-	d.endPhoneOffersHeldBy(client)
+	d.endPhonePairingCodesHeldBy(client)
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {

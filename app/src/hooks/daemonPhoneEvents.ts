@@ -9,7 +9,7 @@ export function handlePhoneDaemonEvent(event: { event?: string }, pending: Pendi
       return true;
     case 'phone_pair_begin_result': {
       const result = event as PhonePairBeginResultMessage;
-      settlePendingRequest(pending, 'phone_pair_begin', result, (r) => r.offer, 'Showing a pairing code failed');
+      settlePendingRequest(pending, 'phone_pair_begin', result, (r) => r.pairing_code, 'Showing a pairing code failed');
       return true;
     }
     case 'phone_pair_cancel_result':
