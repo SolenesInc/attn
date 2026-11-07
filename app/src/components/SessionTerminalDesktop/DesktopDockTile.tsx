@@ -28,6 +28,7 @@ import { SeedDocumentView, type SeedDocument } from '../SeedDocumentView';
 import { BrowserAddressForm } from './BrowserAddressForm';
 import { BrowserTileBody } from './BrowserTileBody';
 import { NotebookRootPicker } from './NotebookRootPicker';
+import { ReturnToRowButton } from './ReturnToRowButton';
 import { TileAnnotationControls } from './TileAnnotationControls';
 import { useSeedTileNavigation } from './useSeedTileNavigation';
 import { useTileAnnotations } from './useTileAnnotations';
@@ -61,6 +62,7 @@ interface DesktopDockTileProps {
   desktopDirectory?: string;
   onClose: () => void;
   onFocusDocument?: () => void;
+  onReturnToRow?: () => void;
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
   onRevealSeedInGarden?: (seedId: string) => void;
@@ -85,6 +87,7 @@ export function DesktopDockTile({
   desktopDirectory,
   onClose,
   onFocusDocument,
+  onReturnToRow,
   onUpdateParams,
   onRetargetTile,
   onRevealSeedInGarden,
@@ -226,6 +229,7 @@ export function DesktopDockTile({
           isAnnotatedDocument={isAnnotatedDocument}
           isSeed={isSeed}
           onFocusDocument={onFocusDocument}
+          onReturnToRow={onReturnToRow}
           onRevealSeedInGarden={onRevealSeedInGarden}
           onBackToCrew={onBackToCrew}
           path={path}
@@ -475,6 +479,7 @@ function DesktopTileActions({
   isAnnotatedDocument,
   isSeed,
   onFocusDocument,
+  onReturnToRow,
   onRevealSeedInGarden,
   onBackToCrew,
   path,
@@ -483,7 +488,7 @@ function DesktopTileActions({
   onClose,
 }: Pick<
   DesktopDockTileProps,
-  'tile' | 'desktopId' | 'onClose' | 'onFocusDocument' | 'onRevealSeedInGarden' | 'onBackToCrew'
+  'tile' | 'desktopId' | 'onClose' | 'onFocusDocument' | 'onReturnToRow' | 'onRevealSeedInGarden' | 'onBackToCrew'
 > & { isAnnotatedDocument: boolean; isSeed: boolean; path: string }) {
   const reloadBrowser = () => {
     void controlBrowserHost(desktopId, tile.tileId, 'reload').catch((error) => {
@@ -508,7 +513,9 @@ function DesktopTileActions({
           <span className="desktop-dock-tile-back-crew-label">Back to Crew</span>
         </button>
       ) : null}
-      {isAnnotatedDocument && onFocusDocument ? (
+      {onReturnToRow ? (
+        <ReturnToRowButton onReturn={onReturnToRow} />
+      ) : isAnnotatedDocument && onFocusDocument ? (
         <button
           type="button"
           className="desktop-dock-tile-focus-action"

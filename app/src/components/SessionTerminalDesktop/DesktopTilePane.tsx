@@ -39,6 +39,8 @@ export function DesktopTilePane({
     beginLeafDrag,
     effectiveDraggingLeafId,
     paneGeometry,
+    effectivePaneId,
+    setMaximizedLeafId,
   } = useDesktopContext();
 
   const paneAttributes = placement
@@ -77,6 +79,7 @@ export function DesktopTilePane({
         gardenSeeds={gardenSeeds}
         desktopDirectory={desktopDirectory}
         onClose={() => onUndockTile?.(tileLeaf.tileId)}
+        onReturnToRow={effectivePaneId === tileLeaf.tileId ? () => setMaximizedLeafId(null) : undefined}
         onFocusDocument={
           tileLeaf.tileKind === 'markdown' || tileLeaf.tileKind === 'seed'
             ? () => focusDocument(tileLeaf.tileId)

@@ -5,6 +5,7 @@ import { DesktopAgentSignals } from './DesktopAgentSignals';
 import { DesktopAgentSubline } from './DesktopAgentSubline';
 import { useDesktopContext } from './DesktopContext';
 import { HEADLINE_RANK, TITLE_MINIMUM } from './headerFit';
+import { ReturnToRowButton } from './ReturnToRowButton';
 import { useHeaderFit } from './useHeaderFit';
 import type { DesktopAgentProps } from './desktopTypes';
 
@@ -83,6 +84,7 @@ export function DesktopAgentHeader({ agentPane, paneSession, paneTitle }: Deskto
           </span>
         </span>
         <DesktopAgentSignals agentPane={agentPane} paneSession={paneSession} levels={headline} />
+        {effectivePaneId === agentPane.id ? <ReturnToRowButton onReturn={() => setMaximizedLeafId(null)} /> : null}
       </div>
       <DesktopAgentSubline agentPane={agentPane} paneSession={paneSession} paneTitle={paneTitle} />
     </div>

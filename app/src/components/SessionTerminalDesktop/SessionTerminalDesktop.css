@@ -11,52 +11,19 @@
   opacity: 0.72;
 }
 
-.desktop-focus-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border);
-  background:
-    linear-gradient(90deg, rgba(255, 107, 53, 0.18), rgba(255, 107, 53, 0.04)),
-    var(--color-bg-elevated, var(--color-bg-editor));
-}
-
-.desktop-focus-label {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-
-.desktop-focus-kicker {
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.desktop-focus-title {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-focus-tabs {
+.desktop-review-tabs {
   display: flex;
   align-items: center;
   gap: 3px;
   min-width: 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-elevated, var(--color-bg-editor));
   overflow-x: auto;
   scrollbar-width: none;
 }
 
-.desktop-focus-tab {
+.desktop-review-tab {
   max-width: 220px;
   padding: 5px 9px;
   border: 1px solid transparent;
@@ -70,32 +37,46 @@
   cursor: pointer;
 }
 
-.desktop-focus-tab:hover {
+.desktop-review-tab:hover {
   background: var(--color-bg-button);
   color: var(--color-text-primary);
 }
 
-.desktop-focus-tab--selected {
+.desktop-review-tab--selected {
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--color-text-primary);
 }
 
-.desktop-focus-exit {
-  border: 1px solid rgba(255, 107, 53, 0.35);
-  background: rgba(255, 107, 53, 0.08);
-  color: var(--color-text-primary);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: var(--font-size-xs);
-  font-weight: 600;
+.desktop-return-to-row {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-secondary);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: color 0.1s, background 0.1s;
 }
 
-.desktop-focus-exit:hover {
-  background: rgba(255, 107, 53, 0.16);
-  border-color: rgba(255, 107, 53, 0.55);
+.desktop-return-to-row svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.desktop-return-to-row:hover {
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
 }
 
 .session-terminal-panes {

@@ -224,7 +224,7 @@ test.describe('Desktop Sessions', () => {
     await expect(desktop.locator(paneOf('focus-main'))).toBeVisible();
     await expect(desktop.locator(paneOf('focus-peer'))).toHaveCount(0);
 
-    await desktop.getByRole('button', { name: 'Return to split' }).click();
+    await mainPane.getByRole('button', { name: 'Return to row' }).click();
 
     await expect(page.locator('.sidebar')).toBeVisible();
     await expect(desktop.locator(paneOf('focus-main'))).toBeVisible();

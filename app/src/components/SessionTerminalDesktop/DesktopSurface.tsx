@@ -3,9 +3,9 @@ import { ShelfWidthLabel } from './DesktopShelf';
 import { ShelfPeekPanel } from './ShelfPeekPanel';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDragOverlays } from './DesktopDragOverlays';
-import { DesktopFocusBar } from './DesktopFocusBar';
 import { DesktopLayoutRenderer } from './DesktopLayoutRenderer';
 import { DesktopPane } from './DesktopPane';
+import { DesktopReviewTabs } from './DesktopReviewTabs';
 
 function renderPaneSurface(paneId: string) {
   return <DesktopPane key={paneId} paneId={paneId} />;
@@ -61,7 +61,7 @@ export function DesktopSurface() {
       data-session-visible={sessionVisible ? '1' : '0'}
       data-zoomed-pane-id={effectiveZoomedPaneId || ''}
     >
-      <DesktopFocusBar />
+      <DesktopReviewTabs />
       {shelfWidthLabel && <ShelfWidthLabel desktopId={desktopId} clearedWidths={shelfWidthLabel.clearedWidths} tileCounts={shelfWidthLabel.tileCounts} />}
       <ShelfPeekPanel />
       <DesktopLayoutRenderer

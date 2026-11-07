@@ -398,7 +398,7 @@ async function main() {
       fs.writeFileSync(path.join(runner.runDir, 'focus-mode.png'), Buffer.from(shot.pngBase64, 'base64'));
       await hold();
 
-      await client.request('dom_click', { selector: '.desktop-focus-exit' });
+      await client.request('dom_click', { selector: `[data-pane-id="${desktopA.firstPane.paneId}"] .desktop-return-to-row` });
       const restoredSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
       const restored = restoredSnapshot.sessions.find((session) => session.id === desktopA.sessionId);
       if (!restored) {

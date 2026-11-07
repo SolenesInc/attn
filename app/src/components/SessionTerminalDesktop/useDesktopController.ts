@@ -1051,23 +1051,6 @@ export function useDesktopController(
       leafDragPreview,
     });
 
-  const focusModeTitle = useMemo(() => {
-    if (!effectivePaneId) {
-      return '';
-    }
-    const agentPane = agentPaneById.get(effectivePaneId);
-    if (agentPane) {
-      const session = sessionById.get(agentPane.sessionId);
-      return session ? sessionDisplayName(session) : agentPane.title || 'Session';
-    }
-    const tile = tileLeafById.get(effectivePaneId);
-    if (tile) {
-      const base = (tile.tileParams ?? '').split('/').filter(Boolean).pop();
-      return base || tile.tileKind || 'Tile';
-    }
-    return 'Pane';
-  }, [agentPaneById, effectivePaneId, sessionById, tileLeafById]);
-
   const reviewDeckTiles = useMemo(
     () =>
       [...tileLeafById.values()].filter(
@@ -1376,7 +1359,6 @@ export function useDesktopController(
     effectiveDraggingLeafId,
     effectiveDockTarget,
     effectiveGhostPos,
-    focusModeTitle,
     reviewDeckTiles,
     draggingLeafLabel,
     splitDividers,

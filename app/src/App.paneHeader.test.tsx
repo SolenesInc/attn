@@ -116,15 +116,15 @@ describe('App pane header', () => {
     expect(daemon.sentOf('rename_session')).toEqual([]);
   });
 
-  it('focuses the agent from its header until the user returns to the split', async () => {
+  it('focuses the agent from its header until the user returns to the row from the same header', async () => {
     const { daemon } = await openPane();
 
     await gesture(daemon, () => fireEvent.click(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })));
     expect(inHeader().queryByRole('button', { name: 'Focus agent ledger sweep' })).toBeNull();
 
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Return to split' })));
+    await gesture(daemon, () => fireEvent.click(inHeader().getByRole('button', { name: 'Return to row' })));
     expect(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Return to split' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Return to row' })).toBeNull();
   });
 
   it('leaves the focused agent when the user goes to another desktop and back', async () => {
@@ -134,7 +134,7 @@ describe('App pane header', () => {
     await gesture(daemon, () => fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true }));
     await gesture(daemon, () => fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true }));
 
-    expect(screen.queryByRole('button', { name: 'Return to split' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Return to row' })).toBeNull();
     expect(inHeader().getByRole('button', { name: 'Focus agent ledger sweep' })).toBeInTheDocument();
   });
 

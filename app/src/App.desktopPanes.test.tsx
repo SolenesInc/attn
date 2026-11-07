@@ -259,5 +259,32 @@ describe('App desktop panes', () => {
       await escape();
       expect(surfaceOf()).not.toHaveClass('focus-mode');
     });
+
+    it('shows the review tabs only while a review document fills the desktop', async () => {
+      const browser = { type: 'tile', tile_id: 'browser', tile_kind: 'browser', tile_params: 'https://example.com/' };
+      const root = beside('outer', split('docs', 'horizontal', [doc('document', 'review'), doc('second-document', 'second')]), split('rest', 'horizontal', [pane('s1'), browser]));
+      const { daemon, show } = await ring(2000, root, ['s1']);
+      await show('document', 'review');
+      await show('second-document', 'second');
+
+      await gesture(daemon, () => fireEvent.mouseDown(document.querySelector<HTMLElement>('[data-pane-id="browser"]')!));
+      await gesture(daemon, () => pressShortcut('terminal.toggleMaximize'));
+      expect(surfaceOf()).toHaveAttribute('data-maximized-pane-id', 'browser');
+      expect(screen.queryByRole('tablist', { name: 'Open review documents' })).toBeNull();
+    });
+
+    it('returns a focused document to the row from its own header, with no tab row for a lone document', async () => {
+      const { daemon, show } = await ring(2000, beside('document-split', pane('s1'), doc('document', 'review')), ['s1']);
+      await show('document', 'review');
+      const header = () => within(document.querySelector<HTMLElement>('[data-pane-id="document"] .desktop-dock-tile-header')!);
+
+      await gesture(daemon, () => fireEvent.click(header().getByRole('button', { name: 'Focus document' })));
+      expect(surfaceOf()).toHaveClass('focus-mode');
+      expect(screen.queryByRole('tablist', { name: 'Open review documents' })).toBeNull();
+
+      await gesture(daemon, () => fireEvent.click(header().getByRole('button', { name: 'Return to row' })));
+      expect(surfaceOf()).not.toHaveClass('focus-mode');
+      expect(header().queryByRole('button', { name: 'Return to row' })).toBeNull();
+    });
   });
 });
