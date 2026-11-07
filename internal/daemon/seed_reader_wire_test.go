@@ -88,6 +88,9 @@ func TestOpeningASeedDocksBesideItsCallerOrOnTheCurrentDesktop(t *testing.T) {
 			t.Fatalf("reopening = %+v, want tile %s again", reopened, tileID)
 		}
 		seedReaderTileIs(t, w, opener.desktop, tileID, seed, opener.session)
+		if tile := desktopTree(t, desktopOfDelegate(t, w, opener.desktop)).tiles()[tileID]; tile.ShowRequests != 1 {
+			t.Errorf("seed tile %s records %d show requests after one reopen, want 1", tileID, tile.ShowRequests)
+		}
 	})
 
 	t.Run("a standalone open lands on the current desktop bound to no agent", func(t *testing.T) {

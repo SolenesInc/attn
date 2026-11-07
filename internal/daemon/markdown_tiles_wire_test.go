@@ -222,7 +222,7 @@ func TestEachMarkdownFileGetsOneTileThatFollowsItsLatestOpener(t *testing.T) {
 		t.Fatalf("reopening from s2 used tile %s, want %s", got, firstTile)
 	}
 	if after := desktopTree(t, currentDesktop(t, w)); !reflect.DeepEqual(after, before.rebound(firstTile, "s2")) {
-		t.Errorf("reopening from s2 changed the tree to %+v, want only the binding of %s moved", after, firstTile)
+		t.Errorf("reopening from s2 changed the tree to %+v, want only the binding and show requests of %s moved", after, firstTile)
 	}
 	if got := open("s2", docked); got != "tile-markdown" {
 		t.Errorf("opening a file a docked tile already shows used tile %s, want the existing tile-markdown", got)
@@ -414,6 +414,7 @@ func markdownTileBodies(pushed []protocol.WebSocketEvent) []string {
 func (n layoutNode) rebound(tileID, sessionID string) layoutNode {
 	if n.Type == "tile" && n.TileID == tileID {
 		n.TileSessionID = sessionID
+		n.ShowRequests++
 	}
 	children := make([]layoutNode, len(n.Children))
 	for i, child := range n.Children {

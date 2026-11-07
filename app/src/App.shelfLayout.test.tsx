@@ -635,6 +635,10 @@ describe('Shelf layout', () => {
         daemon.emit(daemon.arrangement.changed());
       });
       const closeDocument = (daemon: ScriptedDaemon) => gesture(daemon, () => pressShortcut('terminal.close'));
+      const agentOpensAgain = (daemon: ScriptedDaemon, agent: string) => gesture(daemon, () => {
+        daemon.arrangement.requestTileShow('ws', 'doc', agent);
+        daemon.emit(daemon.arrangement.changed());
+      });
 
       it('slides into view without taking focus when the active tile stays on screen, and closing puts the screen back', async () => {
         const daemon = await renderRow(NARROWEST_66);
@@ -709,6 +713,89 @@ describe('Shelf layout', () => {
         await agentOpens(daemon, 's3');
         expect(active()).toBe('pane-s2');
         expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
+      });
+
+      describe('and opens again after the user viewed it', () => {
+        const documentViewedThenLeft = async () => {
+          const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR, others: ['other', 'third'] });
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
+          await agentOpens(daemon, 's1');
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(paneIds()).toEqual(['pane-s3', 'doc']);
+          await slideTo(daemon, 'terminal.focusLeft', 'terminal.focusLeft');
+          expect(active()).toBe('pane-s2');
+          expect(paneIds()).toEqual(onScreen('s2', 's3'));
+          expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
+          return daemon;
+        };
+
+        it('counts as waiting once however often it asks, and ⌘J brings it', async () => {
+          const daemon = await documentViewedThenLeft();
+
+          await agentOpensAgain(daemon, 's1');
+          await agentOpensAgain(daemon, 's1');
+
+          expect(active()).toBe('pane-s2');
+          expect(paneIds()).toEqual(onScreen('s2', 's3'));
+          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs', 'is-arrival');
+
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+
+          expect(active()).toBe('doc');
+          expect(screen.queryByTestId('shelf-chip-doc')).toBeNull();
+        });
+
+        it('slides into view for an agent on screen when the active tile stays', async () => {
+          const daemon = await renderRow(NARROWEST_66, { root: FOUR });
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight', 'terminal.focusRight');
+          await agentOpens(daemon, 's4');
+          expect(paneIds()).toEqual(['pane-s3', 'pane-s4', 'doc']);
+          await slideTo(daemon, 'terminal.focusLeft', 'terminal.focusLeft', 'terminal.focusRight');
+          expect(active()).toBe('pane-s3');
+          expect(paneIds()).toEqual(onScreen('s2', 's3', 's4'));
+
+          await agentOpensAgain(daemon, 's4');
+
+          expect(active()).toBe('pane-s3');
+          expect(paneIds()).toEqual(['pane-s3', 'pane-s4', 'doc']);
+          expect(screen.queryByTestId('shelf-chip-doc')).toBeNull();
+        });
+
+        it('leaves a document already on screen alone, and closing it still restores the first screen', async () => {
+          const daemon = await renderRow(NARROWEST_66);
+          await slideTo(daemon, 'terminal.focusRight');
+          await agentOpens(daemon, 's3');
+          expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
+
+          await agentOpensAgain(daemon, 's3');
+
+          expect(active()).toBe('pane-s2');
+          expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
+          expect(screen.queryByTestId('shelf-chip-doc')).toBeNull();
+
+          await gesture(daemon, () => {
+            const desktop = daemon.arrangement.desktop('ws')!;
+            daemon.arrangement.replace(daemon.arrangement.withTree(desktop, JSON.parse(JSON.stringify(rightChain(IDS.map(pane))))));
+            daemon.emit(daemon.arrangement.changed());
+          });
+          expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+        });
+
+        it.each([
+          ['stays mounted', ['desktop.select2']],
+          ['unmounted', ['desktop.select2', 'desktop.select3']],
+        ] as const)('waits for the user when the desktop %s meanwhile', async (_name, leave) => {
+          const daemon = await documentViewedThenLeft();
+          for (const key of leave) await gesture(daemon, () => pressShortcut(key));
+
+          await agentOpensAgain(daemon, 's1');
+
+          await gesture(daemon, () => pressShortcut('desktop.select1'));
+          expect(active()).toBe('pane-s2');
+          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
+          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
+          expect(active()).toBe('doc');
+        });
       });
 
       describe('while its desktop is not current', () => {

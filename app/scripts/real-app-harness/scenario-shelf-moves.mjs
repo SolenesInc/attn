@@ -22,7 +22,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOVES',
   tier: 'tier1-local-shell',
   prefix: 'shelf-moves',
-  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, and while its desktop is unmounted, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
+  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, and while its desktop is unmounted, opening it again from the shelf, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -241,6 +241,35 @@ try {
     await shot('screen-restored');
   });
 
+  await runner.step('a_document_sent_to_the_shelf_waits_when_its_agent_opens_it_again', async () => {
+    const owner = await offScreenLeaf();
+    const documentLeaf = await agentOpensDocument(owner, 'again.md');
+    await waitForChip(documentLeaf, '.is-needs');
+    await press('session.jumpToWaiting');
+    await waitForActive(documentLeaf);
+    await press('shelf.sendToShelf');
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
+    await waitForChip(documentLeaf, ':not(.is-needs)');
+    const active = await activeLeaf();
+    const shownBefore = await shownLeaves();
+
+    await agentRunsOpen(owner, 'again.md');
+
+    await waitForChip(documentLeaf, '.is-needs');
+    runner.assert((await shownLeaves()).join() === shownBefore.join(), 'the screen stays as it was', { shownBefore });
+    runner.assert((await activeLeaf()) === active, 'focus stays as it was', { active });
+    await hold();
+    await shot('document-waiting-again');
+
+    await press('session.jumpToWaiting');
+    await waitForActive(documentLeaf);
+    const brought = await shownLeaves();
+    runner.assert(brought.includes(active) && brought.includes(documentLeaf), '⌘J brings the document beside the active tile', { brought, active, documentLeaf });
+    await press('terminal.close');
+    await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
+    await waitForActive(active);
+  });
+
   await runner.step('more_tiles_reveal_an_agent_whose_document_then_shows', async () => {
     await narrowScreenToTwoTiles();
     await slideTo((await readRow())[0]);
@@ -398,13 +427,17 @@ async function offScreenLeaf() {
   return owner;
 }
 
-async function agentOpensDocument(ownerLeaf, fileName) {
-  const before = await readRow();
+async function agentRunsOpen(ownerLeaf, fileName) {
   const planPath = path.join(runner.sessionDir, fileName);
   fs.writeFileSync(planPath, `# ${fileName}\n\nAn agent opened this.\n`);
   const owner = await sessionOf(ownerLeaf);
   const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(owner) });
   await execFileAsync(appDaemonInTree(options.appPath), ['open', planPath, '--session', owner], { env });
+}
+
+async function agentOpensDocument(ownerLeaf, fileName) {
+  const before = await readRow();
+  await agentRunsOpen(ownerLeaf, fileName);
   const row = await waitForRow((current) => current.length === before.length + 1);
   return row.find((id) => !before.includes(id));
 }

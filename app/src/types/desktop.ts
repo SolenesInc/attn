@@ -19,6 +19,7 @@ export interface TileLeaf {
   tileKind: TileKind;
   tileParams?: string;
   tileSessionId?: string;
+  showRequests?: number;
   wantedCols?: number;
   wantedAreaCols?: number;
 }
@@ -333,6 +334,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
       tileSessionId: typeof value.tile_session_id === 'string' && value.tile_session_id.length > 0
         ? value.tile_session_id
         : undefined,
+      showRequests: typeof value.show_requests === 'number' ? value.show_requests : undefined,
       ...parseWantedWidth(value),
     };
   }

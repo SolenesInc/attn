@@ -128,13 +128,18 @@ interface RowSettlingInput {
 
 const leavesOf = (columns: readonly RowColumn[]) => columns.flatMap((column) => column.leafIds);
 
+function showRequestsOf(tiles: ReadonlyMap<string, TileLeaf>): ReadonlyMap<string, number> {
+  return new Map([...tiles].map(([leafId, tile]) => [leafId, tile.showRequests ?? 0]));
+}
+
 export function useRowSettling(input: RowSettlingInput) {
   const latest = useRef(input);
   useLayoutEffect(() => {
     latest.current = input;
   });
-  const { desktopId, rowPlan, measured, activeLeafId } = input;
+  const { desktopId, rowPlan, measured, activeLeafId, tileLeafById: tiles } = input;
   const orderKey = rowPlan ? [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|') : '';
+  const showRequestsKey = [...showRequestsOf(tiles)].join('|');
 
   useLayoutEffect(() => {
     const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById } = latest.current;
@@ -144,6 +149,10 @@ export function useRowSettling(input: RowSettlingInput) {
     const previousFirstColumn = shelf.firstColumnByDesktop[desktopId] ?? plan.firstColumn;
     const row = new Set(leavesOf([...plan.before, ...plan.screen, ...plan.after]));
     let firstColumn = plan.firstColumn;
+    const showRequests = showRequestsOf(tileLeafById);
+    const onScreen = new Set(leavesOf(plan.screen));
+    const askedToShow = (leafId: string) => !onScreen.has(leafId) && (showRequests.get(leafId) ?? 0) !== (previous?.showRequests.get(leafId) ?? 0);
+    const arrivals = new Set(previous ? [...row].filter((leafId) => !previous.row.has(leafId) || askedToShow(leafId)) : []);
 
     if (previous) {
       const returns = shelf.documentReturnsByDesktop[desktopId] ?? {};
@@ -157,9 +166,8 @@ export function useRowSettling(input: RowSettlingInput) {
         }
       }
 
-      const onScreen = new Set(leavesOf(plan.screen));
-      for (const leafId of row) {
-        if (previous.row.has(leafId) || leafId === activeLeafId) continue;
+      for (const leafId of arrivals) {
+        if (leafId === activeLeafId) continue;
         const tile = tileLeafById.get(leafId);
         if (!tile) continue;
         const owner = [...agentPaneById.values()].find((pane) => pane.sessionId === tile.tileSessionId);
@@ -185,13 +193,14 @@ export function useRowSettling(input: RowSettlingInput) {
 
     const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, firstColumn }).screen;
     const screen = new Set(leavesOf(settledScreen));
-    if (previous && visible && previous.orderKey !== orderKey) {
-      shelf.flash(desktopId, [...row].filter((leafId) => !screen.has(leafId) && (previous.screen.has(leafId) || !previous.row.has(leafId))));
+    if (previous && visible) {
+      const movedOff = (leafId: string) => previous.orderKey !== orderKey && previous.screen.has(leafId);
+      shelf.flash(desktopId, [...row].filter((leafId) => !screen.has(leafId) && (arrivals.has(leafId) || movedOff(leafId))));
     }
     shelf.settleLeaves(desktopId, row, screen, activeLeafId);
     shelf.setFirstColumn(desktopId, firstColumn);
-    shelf.settleRow(desktopId, { row, screen, activeLeafId, orderKey });
-  }, [activeLeafId, desktopId, measured, orderKey]);
+    shelf.settleRow(desktopId, { row, screen, activeLeafId, orderKey, showRequests });
+  }, [activeLeafId, desktopId, measured, orderKey, showRequestsKey]);
 
   const screenKey = rowPlan ? leavesOf(rowPlan.screen).join('|') : '';
   useLayoutEffect(() => {

@@ -47,6 +47,7 @@ type Node struct {
 	TileKind      string             `json:"tile_kind,omitempty"`
 	TileParams    string             `json:"tile_params,omitempty"`
 	TileSessionID protocol.SessionID `json:"tile_session_id,omitempty"`
+	ShowRequests  int                `json:"show_requests,omitempty"`
 	WantedWidth
 	SplitID     string    `json:"split_id,omitempty"`
 	Direction   Direction `json:"direction,omitempty"`
@@ -348,6 +349,10 @@ func UpdateTileSessionID(node Node, tileID string, sessionID protocol.SessionID)
 	return updateTile(node, tileID, func(tile *Node) { tile.TileSessionID = protocol.TrimID(sessionID) })
 }
 
+func RequestTileShow(node Node, tileID string) (Node, bool) {
+	return updateTile(node, tileID, func(tile *Node) { tile.ShowRequests++ })
+}
+
 func UpdateTileParams(node Node, tileID, tileParams string) (Node, bool) {
 	return updateTile(node, tileID, func(tile *Node) { tile.TileParams = strings.TrimSpace(tileParams) })
 }
@@ -428,15 +433,17 @@ func tileToDock(node Node, anchorID, tileID, tileKind, tileParams string, tileSe
 		return node, Node{}, false
 	}
 	var wanted WantedWidth
+	var showRequests int
 	cleaned = node
 	if rest, existing, found := takeLeafFromColumn(node, tileID); found {
 		cleaned = rest
 		wanted = existing.WantedWidth
+		showRequests = existing.ShowRequests
 		if tileSessionID == "" {
 			tileSessionID = existing.TileSessionID
 		}
 	}
-	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, WantedWidth: wanted}, true
+	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, ShowRequests: showRequests, WantedWidth: wanted}, true
 }
 
 type placement struct {

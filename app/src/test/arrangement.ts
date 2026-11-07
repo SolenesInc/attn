@@ -9,6 +9,7 @@ interface Node {
   tile_kind?: string;
   tile_params?: string;
   tile_session_id?: string;
+  show_requests?: number;
   split_id?: string;
   direction?: string;
   ratio?: number;
@@ -133,6 +134,12 @@ export class Arrangement {
     else columns.splice(at + 1, 0, leaf);
     const placed = this.withTree(desktop, fromRowColumns(columns), pane ? [...desktop.panes, pane] : desktop.panes);
     this.replace(focus ? { ...placed, active_pane_id: leafId(leaf)! } : placed);
+  }
+
+  requestTileShow(desktopId: string, tileId: string, sessionId: string) {
+    const desktop = this.desktop(desktopId)!;
+    const tree = mapTiles(parse(desktop), tileId, (tile) => ({ ...tile, tile_session_id: sessionId, show_requests: (tile.show_requests ?? 0) + 1 }));
+    this.replace(this.withTree(desktop, tree));
   }
 
   show(desktopId: string, leafId: string): boolean {

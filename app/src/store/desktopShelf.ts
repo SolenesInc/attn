@@ -43,17 +43,20 @@ export interface SettledRow {
   screen: ReadonlySet<string>;
   activeLeafId: string;
   orderKey: string;
+  showRequests: ReadonlyMap<string, number>;
 }
 
 const NONE: readonly string[] = [];
 const NO_SETTLED_ROWS: Readonly<Record<string, SettledRow>> = {};
 
 function unvisitedRow(desktop: Desktop): SettledRow {
+  const leaves = collectLayoutLeaves(parseLayoutJSON(desktop.tree_json));
   return {
-    row: new Set(collectLayoutLeaves(parseLayoutJSON(desktop.tree_json)).map(leafSlotId)),
+    row: new Set(leaves.map(leafSlotId)),
     screen: new Set(),
     activeLeafId: desktop.active_pane_id,
     orderKey: '',
+    showRequests: new Map(leaves.flatMap((leaf) => (leaf.type === 'tile' ? [[leaf.tileId, leaf.showRequests ?? 0]] : []))),
   };
 }
 
@@ -195,9 +198,9 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
       heldByDesktop: withEntry(state.heldByDesktop, desktopId, listWithout(state.heldByDesktop[desktopId], (id) => id === leafId)),
     })),
   markUnseen: (desktopId, leafId) =>
-    set((state) => ({
-      unseenByDesktop: { ...state.unseenByDesktop, [desktopId]: [...(state.unseenByDesktop[desktopId] ?? NONE), leafId] },
-    })),
+    set((state) => (state.unseenByDesktop[desktopId]?.includes(leafId)
+      ? state
+      : { unseenByDesktop: { ...state.unseenByDesktop, [desktopId]: [...(state.unseenByDesktop[desktopId] ?? NONE), leafId] } })),
   markSeen: (desktopId, leafId) =>
     set((state) => (state.unseenByDesktop[desktopId]?.includes(leafId)
       ? { unseenByDesktop: withEntry(state.unseenByDesktop, desktopId, listWithout(state.unseenByDesktop[desktopId], (id) => id === leafId)) }
