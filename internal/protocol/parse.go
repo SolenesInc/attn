@@ -260,7 +260,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSessionAnnotationsSubmit:      decodeInto[SessionAnnotationsSubmitMessage],
 	CmdMarkdownAnnotationsGet:        decodeInto[MarkdownAnnotationsGetMessage],
 	CmdMarkdownAnnotationsSave:       decodeInto[MarkdownAnnotationsSaveMessage],
-	CmdMarkdownAnnotationsClear:      decodeInto[MarkdownAnnotationsClearMessage],
 	CmdMarkdownAnnotationsSubmit:     decodeInto[MarkdownAnnotationsSubmitMessage],
 	CmdOpenBrowser:                   decodeInto[OpenBrowserMessage],
 	CmdCalloutShow:                   decodeInto[CalloutShowMessage],

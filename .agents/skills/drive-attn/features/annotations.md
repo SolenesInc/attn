@@ -12,7 +12,7 @@ quotes each marked passage with what the user said about it.
 - `terminal-annotations`: ⌥-drag across an agent's finished message in its terminal to mark it, then label it, comment on it or remove the mark.
 - `markdown-annotations`: select text in a markdown or seed tile to comment on it, label it or mark it for deletion, and add an overall note.
 - `quick-labels`: one-click labels such as Verify this, Show the receipt, Give me an example and Consider alternatives. Some carry instructions for the agent.
-- `annotation-drafts`: attn saves marks as drafts, and the drafts survive an app relaunch and the agent's next turn.
+- `annotation-drafts`: attn saves marks as drafts, and the drafts survive an app relaunch and the agent's next turn. Two seed tiles showing one seed share its draft mark by mark.
 - `review-notes`: the list of a tile's marks, to open a mark again, edit it or remove it.
 - `send-batch`: ⌘↩ or the send button sends every mark, with the note, as one message, and clears the marks it sent.
 - `send-destination`: a markdown tile sends to its bound session or another session on the desktop. A seed tile sends to the seed's tender, or leaves a note on the seed when nobody tends it (see [garden.md](garden.md) for the seed).

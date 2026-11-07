@@ -6478,58 +6478,6 @@ type MarkdownAnnotationAnchor struct {
 	Suffix string `json:"suffix"`
 }
 
-type MarkdownAnnotationsClearMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DocumentUri corresponds to the JSON schema field "document_uri".
-	DocumentUri string `json:"document_uri"`
-
-	// Generation corresponds to the JSON schema field "generation".
-	Generation int `json:"generation"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path *string `json:"path,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID *string `json:"seed_id,omitempty,omitzero"`
-
-	// SourceKind corresponds to the JSON schema field "source_kind".
-	SourceKind string `json:"source_kind"`
-}
-
-type MarkdownAnnotationsClearResultMessage struct {
-	// DocumentUri corresponds to the JSON schema field "document_uri".
-	DocumentUri string `json:"document_uri"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Generation corresponds to the JSON schema field "generation".
-	Generation int `json:"generation"`
-
-	// Path corresponds to the JSON schema field "path".
-	Path *string `json:"path,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SeedID corresponds to the JSON schema field "seed_id".
-	SeedID *string `json:"seed_id,omitempty,omitzero"`
-
-	// SourceKind corresponds to the JSON schema field "source_kind".
-	SourceKind string `json:"source_kind"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type MarkdownAnnotationsGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6583,20 +6531,17 @@ type MarkdownAnnotationsGetResultMessage struct {
 }
 
 type MarkdownAnnotationsSaveMessage struct {
-	// Annotations corresponds to the JSON schema field "annotations".
-	Annotations []MarkdownAnnotation `json:"annotations"`
-
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
-	// Generation corresponds to the JSON schema field "generation".
-	Generation int `json:"generation"`
-
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
+
+	// RemovedIds corresponds to the JSON schema field "removed_ids".
+	RemovedIds []string `json:"removed_ids"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -6606,9 +6551,15 @@ type MarkdownAnnotationsSaveMessage struct {
 
 	// SourceKind corresponds to the JSON schema field "source_kind".
 	SourceKind string `json:"source_kind"`
+
+	// Upserts corresponds to the JSON schema field "upserts".
+	Upserts []MarkdownAnnotation `json:"upserts"`
 }
 
 type MarkdownAnnotationsSaveResultMessage struct {
+	// Annotations corresponds to the JSON schema field "annotations".
+	Annotations []MarkdownAnnotation `json:"annotations"`
+
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
@@ -6632,9 +6583,6 @@ type MarkdownAnnotationsSaveResultMessage struct {
 
 	// SourceKind corresponds to the JSON schema field "source_kind".
 	SourceKind string `json:"source_kind"`
-
-	// Stale corresponds to the JSON schema field "stale".
-	Stale *bool `json:"stale,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -6670,6 +6618,9 @@ type MarkdownAnnotationsSubmitMessage struct {
 }
 
 type MarkdownAnnotationsSubmitResultMessage struct {
+	// Annotations corresponds to the JSON schema field "annotations".
+	Annotations []MarkdownAnnotation `json:"annotations,omitempty,omitzero"`
+
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
@@ -6690,9 +6641,6 @@ type MarkdownAnnotationsSubmitResultMessage struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
-
-	// SentAnnotations corresponds to the JSON schema field "sent_annotations".
-	SentAnnotations []MarkdownAnnotation `json:"sent_annotations,omitempty,omitzero"`
 
 	// SourceKind corresponds to the JSON schema field "source_kind".
 	SourceKind string `json:"source_kind"`

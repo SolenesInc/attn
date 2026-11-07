@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"slices"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-var ErrStaleMarkdownAnnotationSave = ErrStaleAnnotationSave
 
 type MarkdownAnnotationDraft struct {
 	Path        string
@@ -32,62 +32,92 @@ func (s *Store) GetMarkdownAnnotationDraft(path string) (*MarkdownAnnotationDraf
 	}, nil
 }
 
-func (s *Store) SaveMarkdownAnnotationDraft(path, annotationsJSON string, generation int, now time.Time) error {
-	return markdownDraftTable.save(s, path, annotationsJSON, "", generation, now)
-}
-
-func (s *Store) ClearMarkdownAnnotationDraft(path string, generation int, now time.Time) error {
-	return markdownDraftTable.clear(s, path, generation, now)
+// ChangeMarkdownAnnotations applies one reader's changes to whatever the draft
+// holds now, so marks the reader did not change stay. It returns the draft as it
+// then stands.
+func (s *Store) ChangeMarkdownAnnotations(path string, upserts []protocol.MarkdownAnnotation, removedIDs []string, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
+	return s.rewriteMarkdownDraft(path, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+		return withUpserts(withoutIDs(marks, removedIDs), upserts)
+	})
 }
 
 // SpendMarkdownAnnotations removes the marks a send delivered from whatever the
-// draft holds now, so marks saved while the send was under way stay. It keeps the
-// draft's generation unless nothing is left, so the sending client's next save
-// is still accepted. It returns the generation the draft stands at.
-func (s *Store) SpendMarkdownAnnotations(path string, sent []protocol.MarkdownAnnotation, now time.Time) (int, error) {
+// draft holds now, so marks saved while the send was under way stay. It returns
+// the draft as it then stands.
+func (s *Store) SpendMarkdownAnnotations(path string, sent []protocol.MarkdownAnnotation, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
+	return s.rewriteMarkdownDraft(path, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+		return withoutDelivered(marks, sent)
+	})
+}
+
+func (s *Store) rewriteMarkdownDraft(path string, now time.Time, rewrite func([]protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation) ([]protocol.MarkdownAnnotation, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin annotation spend: %w", err)
+		return nil, 0, fmt.Errorf("failed to begin annotation draft change: %w", err)
 	}
 	defer tx.Rollback()
 
 	generation, tombstone, err := markdownDraftTable.readGenerations(tx, path)
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
-	var stored string
+	current := max(generation, tombstone)
+	stored := "[]"
 	err = tx.QueryRow("SELECT annotations_json FROM markdown_annotation_drafts WHERE path = ?", path).Scan(&stored)
-	if errors.Is(err, sql.ErrNoRows) {
-		stored = "[]"
-	} else if err != nil {
-		return 0, fmt.Errorf("failed to read annotation draft: %w", err)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, 0, fmt.Errorf("failed to read annotation draft: %w", err)
 	}
-	var marks []protocol.MarkdownAnnotation
+	marks := []protocol.MarkdownAnnotation{}
 	if err := json.Unmarshal([]byte(stored), &marks); err != nil {
-		return 0, fmt.Errorf("stored annotation draft is corrupt: %w", err)
+		return nil, 0, fmt.Errorf("stored annotation draft is corrupt: %w", err)
 	}
-	kept := withoutDelivered(marks, sent)
-	if len(kept) == 0 {
-		if err := markdownDraftTable.emptyWithin(tx, path, generation, max(generation, tombstone), now); err != nil {
-			return 0, err
-		}
-	} else {
-		keptJSON, err := json.Marshal(kept)
-		if err != nil {
-			return 0, fmt.Errorf("failed to encode kept annotations: %w", err)
-		}
-		if _, err := tx.Exec("UPDATE markdown_annotation_drafts SET annotations_json = ?, updated_at = ? WHERE path = ?",
-			string(keptJSON), now.UTC().Format(time.RFC3339), path); err != nil {
-			return 0, fmt.Errorf("failed to save kept annotations: %w", err)
-		}
+	rewritten := rewrite(marks)
+	if reflect.DeepEqual(marks, rewritten) {
+		return marks, current, nil
+	}
+	rewrittenJSON, err := json.Marshal(rewritten)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to encode annotation draft: %w", err)
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO markdown_annotation_drafts (path, annotations_json, generation, tombstone_generation, updated_at)
+		VALUES (?, ?, ?, 0, ?)
+		ON CONFLICT(path) DO UPDATE SET
+			annotations_json = excluded.annotations_json,
+			generation = excluded.generation,
+			updated_at = excluded.updated_at
+	`, path, string(rewrittenJSON), current+1, now.UTC().Format(time.RFC3339)); err != nil {
+		return nil, 0, fmt.Errorf("failed to save annotation draft: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("failed to commit annotation spend: %w", err)
+		return nil, 0, fmt.Errorf("failed to commit annotation draft change: %w", err)
 	}
-	return max(generation, tombstone), nil
+	return rewritten, current + 1, nil
+}
+
+func withoutIDs(marks []protocol.MarkdownAnnotation, ids []string) []protocol.MarkdownAnnotation {
+	kept := make([]protocol.MarkdownAnnotation, 0, len(marks))
+	for _, mark := range marks {
+		if !slices.Contains(ids, mark.ID) {
+			kept = append(kept, mark)
+		}
+	}
+	return kept
+}
+
+func withUpserts(marks, upserts []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+	for _, upsert := range upserts {
+		at := slices.IndexFunc(marks, func(mark protocol.MarkdownAnnotation) bool { return mark.ID == upsert.ID })
+		if at >= 0 {
+			marks[at] = upsert
+		} else {
+			marks = append(marks, upsert)
+		}
+	}
+	return marks
 }
 
 func withoutDelivered(marks, sent []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {

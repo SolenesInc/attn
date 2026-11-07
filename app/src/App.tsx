@@ -142,7 +142,6 @@ function App() {
   const {
     getMarkdownAnnotations,
     saveMarkdownAnnotations,
-    clearMarkdownAnnotations,
     submitMarkdownAnnotations,
     sendSetSetting,
     sendNotificationList,
@@ -153,7 +152,6 @@ function App() {
     setMarkdownAnnotationsTransport({
       getMarkdownAnnotations,
       saveMarkdownAnnotations,
-      clearMarkdownAnnotations,
       submitMarkdownAnnotations,
     });
     return () => {
@@ -162,7 +160,6 @@ function App() {
   }, [
     getMarkdownAnnotations,
     saveMarkdownAnnotations,
-    clearMarkdownAnnotations,
     submitMarkdownAnnotations,
   ]);
 

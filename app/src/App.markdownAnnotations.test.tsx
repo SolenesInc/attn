@@ -39,14 +39,44 @@ async function addOverallNote(daemon: ScriptedDaemon, text: string) {
   await daemon.idle();
 }
 
-function answerSave(daemon: ScriptedDaemon, save: CommandMessage<'markdown_annotations_save'>, outcome: { success: boolean; stale?: boolean }) {
+// The daemon's draft: a save changes it mark by mark and every reply carries it whole.
+class StoredDraft {
+  constructor(public annotations: WireAnnotation[] = [], public generation = 5) {}
+
+  private set(next: WireAnnotation[]) {
+    this.annotations = next;
+    this.generation += 1;
+  }
+
+  change({ upserts, removed_ids }: { upserts: WireAnnotation[]; removed_ids: string[] }) {
+    const kept = this.annotations.filter((mark) => !removed_ids.includes(mark.id));
+    for (const upsert of upserts) {
+      const at = kept.findIndex((mark) => mark.id === upsert.id);
+      if (at >= 0) kept[at] = upsert;
+      else kept.push(upsert);
+    }
+    this.set(kept);
+    return this.reply();
+  }
+
+  spend(sent: WireAnnotation[]) {
+    this.set(this.annotations.filter((mark) => !sent.some((went) => went.id === mark.id && went.text === mark.text)));
+    return this.reply();
+  }
+
+  reply() {
+    return { annotations: this.annotations, generation: this.generation };
+  }
+}
+
+function answerSave(daemon: ScriptedDaemon, save: CommandMessage<'markdown_annotations_save'>, draft: StoredDraft) {
   daemon.emit({
     event: 'markdown_annotations_save_result',
     request_id: save.request_id,
     document_uri: save.document_uri,
     source_kind: save.source_kind,
-    generation: save.generation,
-    ...outcome,
+    success: true,
+    ...draft.change(save),
   });
 }
 
@@ -81,6 +111,7 @@ async function openDocument({
   path = `/tmp/doc-${++documentCount}.md`,
   getReply = 'answer',
 }: DocumentOptions = {}) {
+  const draft = new StoredDraft(annotations, generation);
   const view = await openMarkdownTiles(content, {
     path,
     tileIds: tiles,
@@ -91,18 +122,15 @@ async function openDocument({
           ? undefined
           : getReply === 'fail'
             ? { event: 'markdown_annotations_get_result', document_uri, source_kind, success: false, error: 'daemon busy', annotations: [], generation: 0 }
-            : { event: 'markdown_annotations_get_result', document_uri, source_kind, success: true, annotations, generation }
+            : { event: 'markdown_annotations_get_result', document_uri, source_kind, success: true, ...draft.reply() }
       ));
-      daemon.on('markdown_annotations_save', ({ document_uri, source_kind, generation: saved }) => ({
-        event: 'markdown_annotations_save_result', document_uri, source_kind, success: true, generation: saved,
-      }));
-      daemon.on('markdown_annotations_clear', ({ document_uri, source_kind, generation: cleared }) => ({
-        event: 'markdown_annotations_clear_result', document_uri, source_kind, success: true, generation: cleared,
+      daemon.on('markdown_annotations_save', (save) => ({
+        event: 'markdown_annotations_save_result', document_uri: save.document_uri, source_kind: save.source_kind, success: true, ...draft.change(save),
       }));
     },
   });
   const reader = (tileId = tiles[0]) => view.tile(tileId).querySelector<HTMLElement>('.md-reader')!;
-  return { ...view, reader, path };
+  return { ...view, reader, path, draft };
 }
 
 function textPoint(scope: Element, needle: string, at: 'start' | 'end' = 'start') {
@@ -143,7 +171,7 @@ const pickerRows = () => Array.from(picker()!.querySelectorAll<HTMLElement>('.md
 const sidebar = () => document.querySelector<HTMLElement>('.md-annotations-sidebar');
 const cards = () => Array.from(sidebar()!.querySelectorAll<HTMLElement>('.md-annotation-card'));
 const saves = (daemon: ScriptedDaemon) => daemon.sentOf('markdown_annotations_save');
-const lastSaved = (daemon: ScriptedDaemon) => saves(daemon).slice(-1)[0]?.annotations ?? [];
+const lastSaved = (daemon: ScriptedDaemon) => saves(daemon).slice(-1)[0]?.upserts ?? [];
 const paintedMarks = (scope: Element) =>
   Array.from(scope.querySelectorAll<HTMLElement>('[data-md-mark]'))
     .filter((mark) => !mark.dataset.mdMark!.startsWith('md-'))
@@ -164,7 +192,7 @@ describe('App markdown annotations', () => {
   it('keeps the displayed seed usable after an update fails and reloads the complete document', async () => {
     const { daemon } = await openSeedPlan();
     await addOverallNote(daemon, 'Check the plan.');
-    await gesture(daemon, () => answerSave(daemon, daemon.sentOf('markdown_annotations_save')[0], { success: true }));
+    await gesture(daemon, () => answerSave(daemon, daemon.sentOf('markdown_annotations_save')[0], new StoredDraft()));
     daemon.on('seed_document_get', () => undefined);
     const listed = { ...PLAN, rev: 2, body: '# Listed body', ...sessionClaim('s1') };
     await gesture(daemon, () => daemon.emit({
@@ -199,7 +227,7 @@ describe('App markdown annotations', () => {
     })));
   });
 
-  it('saves a seed document’s marks under the seed’s identity, and reads them again when the save was stale', async () => {
+  it('saves a seed document’s marks under the seed’s identity', async () => {
     const { daemon } = await openSeedPlan();
     expect(daemon.sentOf('markdown_annotations_get')).toEqual([
       expect.objectContaining({ document_uri: SEED_URI, source_kind: 'seed', seed_id: PLAN.id }),
@@ -211,18 +239,13 @@ describe('App markdown annotations', () => {
       document_uri: SEED_URI,
       source_kind: 'seed',
       seed_id: PLAN.id,
-      generation: 6,
-      annotations: [expect.objectContaining({ type: 'global', text: 'Split the fix from the refactor.' })],
+      removed_ids: [],
+      upserts: [expect.objectContaining({ type: 'global', text: 'Split the fix from the refactor.' })],
     });
-
-    answerSave(daemon, save, { success: false, stale: true });
-    await daemon.idle();
-
-    expect(daemon.sentOf('markdown_annotations_get')).toHaveLength(2);
   });
 
-  it('lets a newer save stand when the answer to the one it overtook arrives late', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('settles both of a reader’s overlapping saves on the marks it holds', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { daemon } = await openSeedPlan();
 
     await addOverallNote(daemon, 'First overall note');
@@ -230,11 +253,15 @@ describe('App markdown annotations', () => {
     const [first, second] = daemon.sentOf('markdown_annotations_save');
     expect(first.request_id).not.toBe(second.request_id);
 
-    answerSave(daemon, first, { success: false, stale: true });
-    answerSave(daemon, second, { success: true });
+    const draft = new StoredDraft();
+    answerSave(daemon, first, draft);
+    answerSave(daemon, second, draft);
+    await act(() => vi.advanceTimersByTimeAsync(6000));
     await daemon.idle();
 
-    expect(daemon.sentOf('markdown_annotations_get')).toHaveLength(1);
+    expect(draft.annotations.map((mark) => mark.text)).toEqual(['First overall note', 'Second overall note']);
+    expect(daemon.sentOf('markdown_annotations_save')).toHaveLength(2);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('reads a document’s marks once while two tiles show it', async () => {
@@ -590,20 +617,19 @@ describe('App markdown annotations inspector', () => {
     expect(sidebar()).toHaveTextContent('No annotations yet.');
   });
 
-  it('removes a mark from its card without focusing it, and clears the draft when the last one goes', async () => {
+  it('removes a mark from its card without focusing it, and saves each removal', async () => {
     const { daemon, tile, reader } = await openDocument({ annotations: [stored('target', TARGET_WORDS), stored('prose', PLAIN_PROSE)] });
     await openInspector(tile());
 
     fireEvent.click(within(cards()[0]).getByTitle('Remove annotation'));
     await settleSaves(daemon);
-    expect(lastSaved(daemon).map((annotation) => annotation.id)).toEqual(['prose']);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ upserts: [], removed_ids: ['target'] })]);
     expect(reader().querySelector('[data-md-mark="md-focus-glow"]')).toBeNull();
     expect(sidebar()).toBeInTheDocument();
 
     fireEvent.click(within(cards()[0]).getByTitle('Remove annotation'));
     await settleSaves(daemon);
-    expect(saves(daemon)).toHaveLength(1);
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([expect.objectContaining({ generation: 7 })]);
+    expect(saves(daemon)[1]).toMatchObject({ upserts: [], removed_ids: ['prose'] });
     expect(paintedMarks(reader())).toEqual([]);
   });
 
@@ -618,13 +644,12 @@ describe('App markdown annotations inspector', () => {
     expect(clearAll()).toHaveTextContent('Clear all');
     fireEvent.click(clearAll());
     await daemon.idle();
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
+    expect(saves(daemon)).toEqual([]);
 
     fireEvent.click(clearAll());
     await daemon.idle();
 
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([expect.objectContaining({ generation: 6 })]);
-    expect(saves(daemon)).toEqual([]);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ upserts: [], removed_ids: ['target'] })]);
     expect(paintedMarks(reader())).toEqual([]);
   });
 
@@ -650,7 +675,6 @@ describe('App markdown annotations persistence', () => {
 
     expect(reader().querySelector('[data-md-mark="target"]')).toHaveTextContent('target words');
     expect(saves(daemon)).toEqual([]);
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
   });
 
   it('paints a mark across inline code without changing the text, and restores the text when it is removed', async () => {
@@ -694,8 +718,8 @@ describe('App markdown annotations persistence', () => {
     expect(paintedMarks(reader('tile-b'))).toEqual(expect.arrayContaining(['target words', 'plain prose']));
   });
 
-  it('saves after a pause under the generation past the one it read, coalescing quick edits', async () => {
-    const { daemon, reader } = await openDocument({ generation: 5 });
+  it('saves after a pause, coalescing quick edits', async () => {
+    const { daemon, reader } = await openDocument();
 
     await select(daemon, reader(), 'target words');
     fireEvent.click(toolbarButton('Delete'));
@@ -707,7 +731,7 @@ describe('App markdown annotations persistence', () => {
     expect(saves(daemon)).toEqual([]);
     await settleSaves(daemon);
 
-    expect(saves(daemon)).toEqual([expect.objectContaining({ generation: 6, annotations: [expect.anything(), expect.anything()] })]);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ removed_ids: [], upserts: [expect.anything(), expect.anything()] })]);
   });
 
   it('keeps a mark on its text when lines are added above it, and saves the moved anchor', async () => {
@@ -718,8 +742,7 @@ describe('App markdown annotations persistence', () => {
 
     expect(reader().querySelector('[data-md-mark="target"]')).toHaveTextContent('target words');
     expect(saves(daemon)).toEqual([expect.objectContaining({
-      generation: 2,
-      annotations: [expect.objectContaining({ anchor: expect.objectContaining({ exact: 'target words', start_line: 5 }) })],
+      upserts: [expect.objectContaining({ id: 'target', anchor: expect.objectContaining({ exact: 'target words', start_line: 5 }) })],
     })]);
     expect(lastSaved(daemon)[0].anchor!.content_hash).not.toBe(DOC_HASH);
   });
@@ -742,32 +765,35 @@ describe('App markdown annotations persistence', () => {
 
     await layout([]);
 
-    expect(saves(daemon)).toEqual([expect.objectContaining({ annotations: [expect.objectContaining({ anchor: TARGET_WORDS })] })]);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ upserts: [expect.objectContaining({ anchor: TARGET_WORDS })] })]);
   });
 
-  it('saves nothing until the stored marks are read, then keeps what the user marked meanwhile', async () => {
-    const { daemon, reader } = await openDocument({ getReply: 'hold' });
+  it('saves nothing until the stored marks are read, then adds what the user marked meanwhile', async () => {
+    const { daemon, reader, draft } = await openDocument({ getReply: 'hold' });
     await select(daemon, reader(), 'plain prose');
     fireEvent.click(toolbarButton('Delete'));
     await settleSaves(daemon);
     expect(saves(daemon)).toEqual([]);
 
     const [get] = daemon.sentOf('markdown_annotations_get');
+    draft.annotations = [stored('target', TARGET_WORDS)];
     daemon.replyTo(get, { event: 'markdown_annotations_get_result', request_id: get.request_id, document_uri: get.document_uri, source_kind: get.source_kind, success: true, annotations: [stored('target', TARGET_WORDS)], generation: 4 });
     await settleSaves(daemon);
 
-    expect(saves(daemon)).toEqual([expect.objectContaining({ generation: 5 })]);
-    expect(lastSaved(daemon).map((annotation) => annotation.anchor?.exact).sort()).toEqual(['plain prose', 'target words']);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ removed_ids: [] })]);
+    expect(lastSaved(daemon).map((annotation) => annotation.anchor?.exact)).toEqual(['plain prose']);
+    expect(paintedMarks(reader()).sort()).toEqual(['plain prose', 'target words']);
   });
 
-  it('reads the marks again after a failed read, saving nothing until it succeeds, then saves the union', async () => {
+  it('reads the marks again after a failed read, saving nothing until it succeeds, then adds what was marked meanwhile', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { daemon, reader } = await openDocument({ getReply: 'fail' });
+    const { daemon, reader, draft } = await openDocument({ getReply: 'fail' });
     await select(daemon, reader(), 'plain prose');
     fireEvent.click(toolbarButton('Delete'));
     await settleSaves(daemon);
     expect(saves(daemon)).toEqual([]);
 
+    draft.annotations = [stored('target', TARGET_WORDS)];
     daemon.on('markdown_annotations_get', ({ document_uri, source_kind }) => ({
       event: 'markdown_annotations_get_result', document_uri, source_kind, success: true, annotations: [stored('target', TARGET_WORDS)], generation: 4,
     }));
@@ -775,15 +801,16 @@ describe('App markdown annotations persistence', () => {
     await settleSaves(daemon);
 
     expect(daemon.sentOf('markdown_annotations_get')).toHaveLength(2);
-    expect(saves(daemon)).toEqual([expect.objectContaining({ generation: 5 })]);
-    expect(lastSaved(daemon).map((annotation) => annotation.anchor?.exact).sort()).toEqual(['plain prose', 'target words']);
+    expect(saves(daemon)).toEqual([expect.objectContaining({ removed_ids: [] })]);
+    expect(lastSaved(daemon).map((annotation) => annotation.anchor?.exact)).toEqual(['plain prose']);
+    expect(paintedMarks(reader()).sort()).toEqual(['plain prose', 'target words']);
   });
 
   it('sends a failed save again rather than dropping the marks', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { daemon, reader } = await openDocument();
-    daemon.on('markdown_annotations_save', ({ document_uri, source_kind, generation }) => ({
-      event: 'markdown_annotations_save_result', document_uri, source_kind, success: false, error: 'database is locked', generation,
+    daemon.on('markdown_annotations_save', ({ document_uri, source_kind }) => ({
+      event: 'markdown_annotations_save_result', document_uri, source_kind, success: false, error: 'database is locked', annotations: [], generation: 0,
     }));
     await select(daemon, reader(), 'target words');
     fireEvent.click(toolbarButton('Delete'));
@@ -794,7 +821,6 @@ describe('App markdown annotations persistence', () => {
     await daemon.idle();
 
     expect(saves(daemon)).toHaveLength(2);
-    expect(saves(daemon)[1].generation).toBeGreaterThan(saves(daemon)[0].generation);
     expect(lastSaved(daemon)).toEqual([expect.objectContaining({ anchor: TARGET_WORDS })]);
   });
 });
@@ -804,7 +830,7 @@ describe('App markdown annotations sending', () => {
     daemon.on('markdown_annotations_submit', () => undefined);
   }
 
-  function answerSubmit(daemon: ScriptedDaemon, submit: CommandMessage<'markdown_annotations_submit'>, fields: { status: string; generation?: number; error?: string; sent_annotations?: WireAnnotation[] }) {
+  function answerSubmit(daemon: ScriptedDaemon, submit: CommandMessage<'markdown_annotations_submit'>, fields: { status: string; generation?: number; error?: string; annotations?: WireAnnotation[] }) {
     daemon.replyTo(submit, {
       event: 'markdown_annotations_submit_result',
       request_id: submit.request_id,
@@ -815,92 +841,77 @@ describe('App markdown annotations sending', () => {
     });
   }
 
-  it('saves the last edit before sending, waits for that save, and after delivery starts the next draft past the delivered generation', async () => {
-    const { daemon, reader, tile } = await openDocument();
+  function answerDelivered(daemon: ScriptedDaemon, draft: StoredDraft, sent: WireAnnotation[]) {
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', ...draft.spend(sent) });
+  }
+
+  async function addDeletion(daemon: ScriptedDaemon, scope: HTMLElement, text: string) {
+    await select(daemon, scope, text);
+    fireEvent.click(toolbarButton('Delete'));
+  }
+
+  it('saves the last edit before sending, waits for that save, and leaves nothing to save after delivery', async () => {
+    const { daemon, reader, tile, draft } = await openDocument();
     holdSubmit(daemon);
     daemon.on('markdown_annotations_save', () => undefined);
-    await select(daemon, reader(), 'target words');
-    fireEvent.click(toolbarButton('Delete'));
+    await addDeletion(daemon, reader(), 'target words');
 
     fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
     await daemon.idle();
     const [save] = saves(daemon);
-    expect(save).toMatchObject({ generation: 6 });
     expect(daemon.sentOf('markdown_annotations_submit')).toEqual([]);
 
-    answerSave(daemon, save, { success: true });
+    answerSave(daemon, save, draft);
     await daemon.idle();
     const [submit] = daemon.sentOf('markdown_annotations_submit');
     expect(submit).toMatchObject({ target_session_id: 's1', orphaned_ids: [] });
 
-    answerSubmit(daemon, submit, { status: 'delivered', generation: 9, sent_annotations: save.annotations });
-    await daemon.idle();
-    expect(paintedMarks(reader())).toEqual([]);
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
-
-    daemon.on('markdown_annotations_save', ({ document_uri, source_kind, generation }) => ({
-      event: 'markdown_annotations_save_result', document_uri, source_kind, success: true, generation,
-    }));
-    await select(daemon, reader(), 'plain prose');
-    fireEvent.click(toolbarButton('Delete'));
+    answerDelivered(daemon, draft, save.upserts);
     await settleSaves(daemon);
-    expect(saves(daemon).slice(-1)[0]).toMatchObject({ generation: 10 });
+    expect(paintedMarks(reader())).toEqual([]);
+    expect(saves(daemon)).toHaveLength(1);
   });
 
-  it('keeps a mark made while the send was in flight, saves it past the delivered generation and says it stayed', async () => {
-    const { daemon, reader, tile } = await openDocument();
+  it('removes what went when the send leaves the draft empty and the reply omits the empty list', async () => {
+    const { daemon, reader, tile } = await openDocument({ annotations: [stored('target', TARGET_WORDS)] });
     holdSubmit(daemon);
-    daemon.on('markdown_annotations_save', () => undefined);
-    await select(daemon, reader(), 'target words');
-    fireEvent.click(toolbarButton('Delete'));
-    await settleSaves(daemon);
-    const [sentDraft] = saves(daemon);
-    answerSave(daemon, sentDraft, { success: true });
     fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
     await daemon.idle();
-    await select(daemon, reader(), 'plain prose');
-    fireEvent.click(toolbarButton('Delete'));
+
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 6 });
+    await settleSaves(daemon);
+
+    expect(paintedMarks(reader())).toEqual([]);
+    expect(saves(daemon)).toEqual([]);
+  });
+
+  it('keeps a mark made while the send was in flight, saves only that mark, and says it stayed', async () => {
+    const { daemon, reader, tile, draft } = await openDocument();
+    holdSubmit(daemon);
+    daemon.on('markdown_annotations_save', () => undefined);
+    await addDeletion(daemon, reader(), 'target words');
+    await settleSaves(daemon);
+    const [sentDraft] = saves(daemon);
+    answerSave(daemon, sentDraft, draft);
+    fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+    await addDeletion(daemon, reader(), 'plain prose');
     await settleSaves(daemon);
     const [, duringSend] = saves(daemon);
-    answerSave(daemon, duringSend, { success: true });
+    expect(duringSend.upserts.map((mark) => mark.anchor?.exact)).toEqual(['plain prose']);
+    answerSave(daemon, duringSend, draft);
 
-    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 6, sent_annotations: sentDraft.annotations });
-    await daemon.idle();
+    answerDelivered(daemon, draft, sentDraft.upserts);
+    await settleSaves(daemon);
 
     expect(paintedMarks(reader())).toEqual(['plain prose']);
-    const after = saves(daemon).slice(-1)[0];
-    expect(after.generation).toBe(8);
-    expect(after.annotations.map((mark) => mark.anchor?.exact)).toEqual(['plain prose']);
-    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
+    expect(saves(daemon)).toHaveLength(2);
     expect(within(tile()).getByRole('status')).toHaveTextContent('1 still here');
     expect(within(tile()).getByRole('button', { name: 'Sent ✓' })).toBeInTheDocument();
   });
 
-  it('saves nothing more when the daemon already took the sent marks out of the newer draft', async () => {
-    const { daemon, reader, tile } = await openDocument();
-    holdSubmit(daemon);
-    daemon.on('markdown_annotations_save', () => undefined);
-    await select(daemon, reader(), 'target words');
-    fireEvent.click(toolbarButton('Delete'));
-    await settleSaves(daemon);
-    const [sentDraft] = saves(daemon);
-    answerSave(daemon, sentDraft, { success: true });
-    fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
-    await daemon.idle();
-    await select(daemon, reader(), 'plain prose');
-    fireEvent.click(toolbarButton('Delete'));
-    await settleSaves(daemon);
-    answerSave(daemon, saves(daemon)[1], { success: true });
-
-    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 7, sent_annotations: sentDraft.annotations });
-    await daemon.idle();
-
-    expect(paintedMarks(reader())).toEqual(['plain prose']);
-    expect(saves(daemon)).toHaveLength(2);
-  });
-
-  it('keeps a mark changed while the send carrying it was in flight', async () => {
-    const { daemon, reader, tile } = await openDocument();
+  it('keeps a mark the daemon kept because it changed while the send carrying it was in flight', async () => {
+    const { daemon, reader, tile, draft } = await openDocument();
     holdSubmit(daemon);
     daemon.on('markdown_annotations_save', () => undefined);
     await select(daemon, reader(), 'target words');
@@ -909,41 +920,123 @@ describe('App markdown annotations sending', () => {
     fireEvent.keyDown(composer()!, { key: 'Enter', metaKey: true });
     await settleSaves(daemon);
     const [sentDraft] = saves(daemon);
-    answerSave(daemon, sentDraft, { success: true });
+    answerSave(daemon, sentDraft, draft);
     fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
     await daemon.idle();
 
-    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], {
-      status: 'delivered', generation: 9,
-      sent_annotations: [{ ...sentDraft.annotations[0], text: 'an older thought' }],
-    });
+    answerDelivered(daemon, draft, [{ ...sentDraft.upserts[0], text: 'an older thought' }]);
     await daemon.idle();
 
     expect(paintedMarks(reader())).toEqual(['target words']);
   });
 
-  it('removes the delivered marks even if a stale answer to a save made during the send arrives late', async () => {
-    const { daemon, reader, tile } = await openDocument();
+  it('does not bring back a delivered mark when an older answer arrives after the send’s', async () => {
+    const { daemon, reader, tile, draft } = await openDocument();
     holdSubmit(daemon);
     daemon.on('markdown_annotations_save', () => undefined);
-    await select(daemon, reader(), 'target words');
-    fireEvent.click(toolbarButton('Delete'));
+    await addDeletion(daemon, reader(), 'target words');
     await settleSaves(daemon);
     const [sentDraft] = saves(daemon);
-    answerSave(daemon, sentDraft, { success: true });
+    answerSave(daemon, sentDraft, draft);
     fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
     await daemon.idle();
-    await select(daemon, reader(), 'plain prose');
-    fireEvent.click(toolbarButton('Delete'));
+    await addDeletion(daemon, reader(), 'plain prose');
     await settleSaves(daemon);
     const [, lateSave] = saves(daemon);
+    const beforeSend = draft.change(lateSave);
 
-    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 9, sent_annotations: sentDraft.annotations });
+    answerDelivered(daemon, draft, sentDraft.upserts);
     await daemon.idle();
-    answerSave(daemon, lateSave, { success: false, stale: true });
+    daemon.emit({
+      event: 'markdown_annotations_save_result', request_id: lateSave.request_id, document_uri: lateSave.document_uri,
+      source_kind: lateSave.source_kind, success: true, ...beforeSend,
+    });
     await daemon.idle();
 
-    expect(paintedMarks(reader())).not.toContain('target words');
+    expect(paintedMarks(reader())).toEqual(['plain prose']);
+  });
+
+  it('keeps what two readers of a document saved before the first reader heard its send finished', async () => {
+    const { daemon, reader, tile, draft } = await openDocument({
+      annotations: [stored('sent', TARGET_WORDS, { type: 'deletion', text: undefined })],
+      generation: 1,
+      tiles: ['tile-a', 'tile-b'],
+    });
+    holdSubmit(daemon);
+    daemon.on('markdown_annotations_save', () => undefined);
+
+    fireEvent.click(within(tile('tile-a')).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+    const spent = draft.spend(draft.annotations);
+
+    await addDeletion(daemon, reader('tile-b'), 'plain prose');
+    await settleSaves(daemon);
+    await select(daemon, reader('tile-a'), 'target words');
+    fireEvent.click(toolbarButton('Comment'));
+    fireEvent.change(composer()!, { target: { value: 'from the first reader' } });
+    fireEvent.keyDown(composer()!, { key: 'Enter', metaKey: true });
+    await settleSaves(daemon);
+    const [fromSecondReader, fromFirstReader] = saves(daemon);
+    expect(fromSecondReader.removed_ids).toEqual([]);
+    expect(fromFirstReader.removed_ids).toEqual([]);
+
+    const secondSaved = draft.change(fromSecondReader);
+    const firstSaved = draft.change(fromFirstReader);
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', ...spent });
+    for (const [save, reply] of [[fromSecondReader, secondSaved], [fromFirstReader, firstSaved]] as const) {
+      daemon.emit({ event: 'markdown_annotations_save_result', request_id: save.request_id, document_uri: save.document_uri, source_kind: save.source_kind, success: true, ...reply });
+    }
+    await settleSaves(daemon);
+
+    expect(saves(daemon)).toHaveLength(2);
+    expect(draft.annotations.map((mark) => mark.anchor?.exact)).toEqual(['plain prose', 'target words']);
+    for (const id of ['tile-a', 'tile-b']) {
+      expect(paintedMarks(reader(id)).sort()).toEqual(['plain prose', 'target words']);
+    }
+  });
+
+  it('does not bring back a sent mark whose anchor moved when the document was read', async () => {
+    const { daemon, reader, tile, draft } = await openDocument({
+      content: `A brand new intro paragraph.\n\n${DOC}`,
+      annotations: [stored('target', TARGET_WORDS)],
+      tiles: ['tile-a', 'tile-b'],
+    });
+    holdSubmit(daemon);
+    fireEvent.click(within(tile('tile-a')).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+    await settleSaves(daemon);
+    expect(saves(daemon).map((save) => save.upserts.map((mark) => mark.anchor?.start_line))).toContainEqual([5]);
+
+    answerDelivered(daemon, draft, draft.annotations);
+    await settleSaves(daemon);
+    await act(() => vi.advanceTimersByTimeAsync(6000));
+
+    expect(draft.annotations).toEqual([]);
+    expect(paintedMarks(reader('tile-a'))).toEqual([]);
+    expect(paintedMarks(reader('tile-b'))).toEqual([]);
+  });
+
+  it('removes only the marks a reader could see when it clears everything', async () => {
+    const { daemon, reader, tile, draft } = await openDocument({
+      annotations: [stored('target', TARGET_WORDS)],
+      tiles: ['tile-a', 'tile-b'],
+    });
+    daemon.on('markdown_annotations_save', () => undefined);
+    await addDeletion(daemon, reader('tile-b'), 'plain prose');
+    await openInspector(tile('tile-a'));
+    const clearAll = () => within(sidebar()!).getByRole('button', { name: /Clear all|Confirm\?/ });
+    fireEvent.click(clearAll());
+    fireEvent.click(clearAll());
+    await settleSaves(daemon);
+
+    for (const save of saves(daemon)) {
+      answerSave(daemon, save, draft);
+    }
+    await daemon.idle();
+
+    expect(draft.annotations.map((mark) => mark.anchor?.exact)).toEqual(['plain prose']);
+    expect(paintedMarks(reader('tile-a'))).toEqual(['plain prose']);
+    expect(paintedMarks(reader('tile-b'))).toEqual(['plain prose']);
   });
 
   it('refuses to send marks before the stored ones have been read', async () => {

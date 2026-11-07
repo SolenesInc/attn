@@ -23,14 +23,8 @@ func TestMarkdownAnnotationDraftsKeepEveryFieldAndRefuseADraftWithoutADocument(t
 	}, protocol.EventMarkdownAnnotationsGetResult, func(r protocol.MarkdownAnnotationsGetResultMessage) bool { return r.RequestID == requestID }); got.Success || got.Error == nil {
 		t.Errorf("get without a document = %+v, want an error result", got)
 	}
-	if got := saveDocumentAnnotations(app, nowhere, 1, nil); got.Success || got.Error == nil {
+	if got := saveDocumentAnnotations(app, nowhere, nil); got.Success || got.Error == nil {
 		t.Errorf("save without a document = %+v, want an error result", got)
-	}
-	requestID = uuid.NewString()
-	if got := testworld.Request(app, protocol.MarkdownAnnotationsClearMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsClear, RequestID: requestID, DocumentUri: nowhere.uri, SourceKind: "file", Path: nowhere.path, Generation: 1,
-	}, protocol.EventMarkdownAnnotationsClearResult, func(r protocol.MarkdownAnnotationsClearResultMessage) bool { return r.RequestID == requestID }); got.Success || got.Error == nil {
-		t.Errorf("clear without a document = %+v, want an error result", got)
 	}
 
 	plan := fileAnnotatedDocument("/notes/plan.md")
@@ -46,8 +40,8 @@ func TestMarkdownAnnotationDraftsKeepEveryFieldAndRefuseADraftWithoutADocument(t
 	}
 	padded := plan
 	padded.path = protocol.Ptr("  /notes/plan.md  ")
-	saved := saveDocumentAnnotations(app, padded, 1, marks)
-	if !saved.Success || saved.Stale != nil || protocol.Deref(saved.Path) != "/notes/plan.md" || saved.Generation != 1 {
+	saved := saveDocumentAnnotations(app, padded, marks)
+	if !saved.Success || !reflect.DeepEqual(saved.Annotations, marks) || protocol.Deref(saved.Path) != "/notes/plan.md" || saved.Generation != 1 {
 		t.Fatalf("save = %+v, want success on the trimmed path at generation 1", saved)
 	}
 	if got := getDocumentAnnotations(app, plan); !reflect.DeepEqual(got.Annotations, marks) || got.Generation != 1 {

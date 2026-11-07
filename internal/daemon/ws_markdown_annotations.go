@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -131,53 +132,32 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 }
 
 func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.MarkdownAnnotationsSaveMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
-	if sourceErr == nil && source.seedID != "" {
-		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
+	source, err := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	if err == nil && source.seedID != "" {
+		err = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
 	}
 	path, seedID := annotationSourcePointers(source)
-	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
-		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsSaveResultMessage {
-			if sourceErr != nil {
-				result.err = protocol.Ptr("markdown_annotations_save: " + sourceErr.Error())
-				result.success = false
-			}
-			return protocol.MarkdownAnnotationsSaveResultMessage{
-				Event: protocol.EventMarkdownAnnotationsSaveResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
-				Generation: result.generation, Success: result.success, Stale: result.stale, Error: result.err,
-			}
-		})
-	key := source.draftKey
-	if sourceErr != nil {
-		key = ""
+	result := protocol.MarkdownAnnotationsSaveResultMessage{
+		Event: protocol.EventMarkdownAnnotationsSaveResult, RequestID: msg.RequestID,
+		DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
+		Annotations: []protocol.MarkdownAnnotation{},
 	}
-	handler.save("markdown_annotations_save", key, msg.Annotations, "", msg.Generation)
-}
-
-func (d *Daemon) handleMarkdownAnnotationsClear(client *wsClient, msg *protocol.MarkdownAnnotationsClearMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
-	if sourceErr == nil && source.seedID != "" {
-		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
+	if err != nil {
+		result.Error = protocol.Ptr("markdown_annotations_save: " + err.Error())
+		d.sendToClient(client, result)
+		return
 	}
-	path, seedID := annotationSourcePointers(source)
-	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
-		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsClearResultMessage {
-			if sourceErr != nil {
-				result.err = protocol.Ptr("markdown_annotations_clear: " + sourceErr.Error())
-				result.success = false
-			}
-			return protocol.MarkdownAnnotationsClearResultMessage{
-				Event: protocol.EventMarkdownAnnotationsClearResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
-				Generation: result.generation, Success: result.success, Error: result.err,
-			}
-		})
-	key := source.draftKey
-	if sourceErr != nil {
-		key = ""
+	annotations, generation, err := d.store.ChangeMarkdownAnnotations(source.draftKey, msg.Upserts, msg.RemovedIds, time.Now())
+	if err != nil {
+		d.logf("markdown_annotations_save: %s: %v", source.draftKey, err)
+		result.Error = protocol.Ptr(err.Error())
+		d.sendToClient(client, result)
+		return
 	}
-	handler.clear("markdown_annotations_clear", key, msg.Generation)
+	result.Success = true
+	result.Annotations = annotations
+	result.Generation = generation
+	d.sendToClient(client, result)
 }
 
 func decodeMarkdownAnnotations(raw string) ([]protocol.MarkdownAnnotation, error) {

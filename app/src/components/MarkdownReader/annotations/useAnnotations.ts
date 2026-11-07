@@ -16,7 +16,17 @@ import {
 } from './annotationsAutomation';
 import { evaluateSelection, type PendingSelection } from './selection';
 import { getMarkdownAnnotationsTransport, type MarkdownAnnotationsTransport } from './transport';
-import { annotationFromWire, annotationToWire, type Annotation, type WireAnnotation } from './types';
+import type { MarkdownAnnotationsDraft } from './transport';
+import {
+  announceDocumentDraft,
+  listenToDocumentDraft,
+  rebaseOnDraft,
+  sameMarks,
+  syncedMarks,
+  unsavedChanges,
+  type SyncedMarks,
+} from './documentDraft';
+import { annotationFromWire, type Annotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 
@@ -60,8 +70,9 @@ export interface UseAnnotationsApi {
   /** While false, saves are suppressed: a Send that does not gate on this
       delivers the daemon's stale draft. */
   isHydrated(): boolean;
-  /** Returns how many marks stay because they were not part of what went. */
-  applyDelivered(sent: WireAnnotation[], generationFloor: number): number;
+  /** Tells every reader of the document what a send left in its draft. Returns how
+      many marks stay in this reader. */
+  adoptSentDraft(uri: string, draft: MarkdownAnnotationsDraft): number;
 
   selectAnnotation(id: string | null): void;
   focusAnnotation(id: string): void;
@@ -106,6 +117,7 @@ export function useAnnotations({
   const sourcePath = source.kind === 'file' ? source.path : '';
   const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const generationRef = useRef(0);
+  const syncedRef = useRef<SyncedMarks>(new Map());
   const hasHydratedRef = useRef(false);
   const hydrateTokenRef = useRef(0);
   const hydrateRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,7 +150,7 @@ export function useAnnotations({
 
   const persistNowRef = useRef<(() => void) | null>(null);
   /** flushPendingSave awaits this so a Send after the debounce fired — but
-      before its request settled — cannot tombstone the edit undelivered. */
+      before its request settled — cannot deliver a draft missing the edit. */
   const inFlightPersistRef = useRef<Promise<void> | null>(null);
 
   const schedulePersistRetry = useCallback((saveUri: string, op: string, err: unknown) => {
@@ -164,26 +176,15 @@ export function useAnnotations({
     if (!t) {
       return Promise.resolve();
     }
+    const { upserts, removedIds } = unsavedChanges(annotationsRef.current, syncedRef.current);
+    if (upserts.length === 0 && removedIds.length === 0) {
+      return inFlightPersistRef.current ?? Promise.resolve();
+    }
     const saveSource = sourceRef.current;
     const saveUri = saveSource.uri;
-    generationRef.current += 1;
-    const generation = generationRef.current;
-    const list = annotationsRef.current;
-    const request = list.length === 0
-      ? // Last annotation removed: tombstone instead of saving [] so a stale stored
-        // draft can never offer back deleted content.
-        t.clearMarkdownAnnotations(saveSource, generation)
-          .then(({ generation: floor }) => {
-            generationRef.current = Math.max(generationRef.current, floor);
-          })
-          .catch((err: unknown) => schedulePersistRetry(saveUri, 'clear', err))
-      : t.saveMarkdownAnnotations(saveSource, list.map(annotationToWire), generation)
-          .then(({ stale }) => {
-            if (stale && sourceRef.current.uri === saveUri) {
-              void hydrateRef.current?.();
-            }
-          })
-          .catch((err: unknown) => schedulePersistRetry(saveUri, 'save', err));
+    const request = t.saveMarkdownAnnotations(saveSource, upserts, removedIds)
+      .then((draft) => announceDocumentDraft(saveUri, draft))
+      .catch((err: unknown) => schedulePersistRetry(saveUri, 'save', err));
     inFlightPersistRef.current = request;
     const settle = () => {
       if (inFlightPersistRef.current === request) {
@@ -220,8 +221,24 @@ export function useAnnotations({
   }, [persistNow]);
 
 
+  const paintPending = useCallback(
+    (next: PendingSelection): void => {
+      const root = rootRef.current;
+      const painter = ensurePainter();
+      if (!root || !painter) {
+        return;
+      }
+      const blockEl = root.querySelector(`[data-block-id="${next.anchor.blockId}"]`);
+      const range = blockEl ? resolveDomRange(blockEl, next.anchor.start, next.anchor.end) : null;
+      if (range) {
+        painter.paint(PENDING_PAINT_ID, range, 'comment');
+      }
+    },
+    [ensurePainter, rootRef],
+  );
+
   const refreshAndPaint = useCallback(
-    (nextContent: string) => {
+    (nextContent: string, saveMovedAnchors = true) => {
       const root = rootRef.current;
       const painter = ensurePainter();
       if (!root || !painter) {
@@ -292,7 +309,7 @@ export function useAnnotations({
       orphansRef.current = nextOrphans;
       setAnnotations(next);
       setOrphans(nextOrphans);
-      if (rebasedAny) {
+      if (rebasedAny && saveMovedAnchors) {
         scheduleSave();
       }
 
@@ -355,15 +372,43 @@ export function useAnnotations({
   }, [content, enabled, refreshAndPaint, rootRef]);
 
 
+  const adoptDraft = useCallback(
+    ({ annotations: wire, generation }: MarkdownAnnotationsDraft, saveMovedAnchors = false): number => {
+      if (generation < generationRef.current) {
+        return annotationsRef.current.length;
+      }
+      generationRef.current = generation;
+      const draft = wire.map(annotationFromWire).filter((a): a is Annotation => a !== null);
+      const rebased = rebaseOnDraft(annotationsRef.current, syncedRef.current, draft);
+      syncedRef.current = syncedMarks(draft);
+      const { upserts, removedIds } = unsavedChanges(rebased, syncedRef.current);
+      if (!sameMarks(rebased, annotationsRef.current)) {
+        annotationsRef.current = rebased;
+        // Two readers on different versions of a document would otherwise answer
+        // each other's moved anchors for as long as the versions differ.
+        refreshAndPaint(contentRef.current, saveMovedAnchors);
+        if (pendingRef.current) {
+          paintPending(pendingRef.current);
+        }
+        if (selectedIdRef.current !== null && !rebased.some((a) => a.id === selectedIdRef.current)) {
+          selectedIdRef.current = null;
+          setSelectedId(null);
+        }
+      }
+      if ((upserts.length > 0 || removedIds.length > 0) && saveTimerRef.current === null) {
+        scheduleSave();
+      }
+      return rebased.length;
+    },
+    [paintPending, refreshAndPaint, scheduleSave],
+  );
+
   const hydrate = useCallback(async () => {
     const token = ++hydrateTokenRef.current;
     if (hydrateRetryTimerRef.current) {
       clearTimeout(hydrateRetryTimerRef.current);
       hydrateRetryTimerRef.current = null;
     }
-    // Only the INITIAL hydration may merge locally created records into the
-    // snapshot below; a re-sync must not.
-    const wasHydrated = hasHydratedRef.current;
     hasHydratedRef.current = false;
     const t = getTransport();
     if (!t) {
@@ -371,37 +416,18 @@ export function useAnnotations({
       return;
     }
     try {
-      const result = await t.getMarkdownAnnotations(sourceRef.current);
+      const draft = await t.getMarkdownAnnotations(sourceRef.current);
       if (hydrateTokenRef.current !== token) {
         return;
       }
-      let mergedOutageRecords = false;
-      generationRef.current = Math.max(generationRef.current, result.generation);
-      const list = result.annotations
-        .map(annotationFromWire)
-        .filter((a): a is Annotation => a !== null);
-      if (!wasHydrated) {
-        // Anything in the local list was created DURING the outage and must survive
-        // the snapshot. A re-sync after a stale save must NOT do this: it resurrects.
-        const known = new Set(list.map((a) => a.id));
-        const createdDuringOutage = annotationsRef.current.filter((a) => !known.has(a.id));
-        if (createdDuringOutage.length > 0) {
-          list.push(...createdDuringOutage);
-          mergedOutageRecords = true;
-        }
-      }
-      annotationsRef.current = list;
       hasHydratedRef.current = true;
-      refreshAndPaint(contentRef.current);
-      if (mergedOutageRecords) {
-        scheduleSave();
-      }
+      adoptDraft(draft, true);
     } catch (err) {
       if (hydrateTokenRef.current !== token) {
         return;
       }
-      // Keep saves SUPPRESSED (hasHydratedRef stays false) and retry: a generation-0
-      // save would come back stale and wipe every annotation just created.
+      // Keep saves SUPPRESSED (hasHydratedRef stays false) and retry: saving before
+      // the stored marks are known would treat them as removed by nobody.
       console.warn(`[md-annotations] hydrate failed for ${sourceRef.current.uri}; retrying`, err);
       hydrateRetryTimerRef.current = setTimeout(() => {
         hydrateRetryTimerRef.current = null;
@@ -410,7 +436,7 @@ export function useAnnotations({
         }
       }, ANNOTATION_HYDRATE_RETRY_MS);
     }
-  }, [getTransport, refreshAndPaint, scheduleSave]);
+  }, [adoptDraft, getTransport]);
   const hydrateRef = useRef<typeof hydrate | null>(null);
   hydrateRef.current = hydrate;
 
@@ -430,6 +456,7 @@ export function useAnnotations({
         seedId: sourceSeedId,
       };
     generationRef.current = 0;
+    syncedRef.current = new Map();
     annotationsRef.current = [];
     orphansRef.current = new Map();
     setAnnotations([]);
@@ -439,7 +466,13 @@ export function useAnnotations({
     pendingRef.current = null;
     setPending(null);
     void hydrate();
+    const stopListening = listenToDocumentDraft(sourceUri, (draft) => {
+      if (hasHydratedRef.current) {
+        adoptDraft(draft);
+      }
+    });
     return () => {
+      stopListening();
       flushPendingSave();
       hydrateTokenRef.current += 1;
       if (hydrateRetryTimerRef.current) {
@@ -455,6 +488,7 @@ export function useAnnotations({
     sourceSeedId,
     enabled,
     hydrate,
+    adoptDraft,
     flushPendingSave,
   ]);
 
@@ -499,21 +533,6 @@ export function useAnnotations({
     });
   }, []);
 
-  const paintPending = useCallback(
-    (next: PendingSelection): void => {
-      const root = rootRef.current;
-      const painter = ensurePainter();
-      if (!root || !painter) {
-        return;
-      }
-      const blockEl = root.querySelector(`[data-block-id="${next.anchor.blockId}"]`);
-      const range = blockEl ? resolveDomRange(blockEl, next.anchor.start, next.anchor.end) : null;
-      if (range) {
-        painter.paint(PENDING_PAINT_ID, range, 'comment');
-      }
-    },
-    [ensurePainter, rootRef],
-  );
 
   const handleSelectionChange = useCallback(
     (selection: Selection | null): PendingSelection | null => {
@@ -754,8 +773,6 @@ export function useAnnotations({
         selectedIdRef.current = null;
         setSelectedId(null);
       }
-      // Deleting the LAST annotation routes to the tombstone clear inside
-      // persistNow (empty list ⇒ clear, never save-[]).
       scheduleSave();
     },
     [scheduleSave],
@@ -776,62 +793,13 @@ export function useAnnotations({
     rangesRef.current.clear();
     pendingRef.current = null;
     setPending(null);
-    const t = getTransport();
-    if (t && hasHydratedRef.current) {
-      // Invalidate any in-flight re-hydrate: its `get` predates this clear. Only when
-      // hydrated — a first hydrate still in flight must survive, or saves stay locked.
-      hydrateTokenRef.current += 1;
-      const clearSource = sourceRef.current;
-      const clearUri = clearSource.uri;
-      generationRef.current += 1;
-      t.clearMarkdownAnnotations(clearSource, generationRef.current)
-        .then(({ generation: floor }) => {
-          generationRef.current = Math.max(generationRef.current, floor);
-        })
-        .catch((err: unknown) => schedulePersistRetry(clearUri, 'clear', err));
-    }
-  }, [getTransport, schedulePersistRetry]);
-
-  // The daemon already removed what it sent from the draft, so a second clear is
-  // owed only when this client's own save may have reached the daemon after that.
-  const applyDelivered = useCallback((sent: WireAnnotation[], generationFloor: number): number => {
-    const sentById = new Map(sent.map((mark) => [mark.id, mark]));
-    const delivered = (annotation: Annotation) => {
-      const mark = sentById.get(annotation.id);
-      return mark !== undefined
-        && mark.type === annotation.type
-        && mark.text === annotation.text
-        && mark.quick_label_id === annotation.quickLabelId;
-    };
-    const savedPastFloor = generationRef.current > generationFloor || saveTimerRef.current !== null;
-    generationRef.current = Math.max(generationRef.current, generationFloor);
-
-    const kept = annotationsRef.current.filter((annotation) => !delivered(annotation));
-    const keptOrphans = new Map(orphansRef.current);
-    for (const annotation of annotationsRef.current) {
-      if (delivered(annotation)) {
-        painterRef.current?.clear(annotation.id);
-        rangesRef.current.delete(annotation.id);
-        keptOrphans.delete(annotation.id);
-      }
-    }
-    annotationsRef.current = kept;
-    orphansRef.current = keptOrphans;
-    setAnnotations(kept);
-    setOrphans(keptOrphans);
-    if (selectedIdRef.current !== null && !kept.some((annotation) => annotation.id === selectedIdRef.current)) {
-      selectedIdRef.current = null;
-      setSelectedId(null);
-    }
-
-    if (!hasHydratedRef.current) {
-      // A re-sync's read may predate the send, so read the draft as it is now.
-      void hydrateRef.current?.();
-    } else if (savedPastFloor) {
-      persistNow();
-    }
-    return kept.length;
+    void persistNow();
   }, [persistNow]);
+
+  const adoptSentDraft = useCallback((uri: string, draft: MarkdownAnnotationsDraft): number => {
+    announceDocumentDraft(uri, draft);
+    return annotationsRef.current.length;
+  }, []);
 
   const isHydrated = useCallback(() => hasHydratedRef.current, []);
 
@@ -950,7 +918,7 @@ export function useAnnotations({
       clearAll,
       flushPendingSave,
       isHydrated,
-      applyDelivered,
+      adoptSentDraft,
       selectAnnotation,
       focusAnnotation,
       justCreatedIdRef,
@@ -974,7 +942,7 @@ export function useAnnotations({
       clearAll,
       flushPendingSave,
       isHydrated,
-      applyDelivered,
+      adoptSentDraft,
       selectAnnotation,
       focusAnnotation,
     ],

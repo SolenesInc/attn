@@ -144,10 +144,9 @@ import {
 } from './daemonSessionAnnotationEvents';
 import {
   handleMarkdownAnnotationDaemonEvent,
-  markdownAnnotationKey,
 } from './daemonMarkdownAnnotationEvents';
 import type { MarkdownDocumentSource } from '../components/MarkdownReader/documentSource';
-import type { MarkdownAnnotationsDestination, MarkdownAnnotationsSubmitResult } from '../components/MarkdownReader/annotations/transport';
+import type { MarkdownAnnotationsDestination, MarkdownAnnotationsDraft, MarkdownAnnotationsSubmitResult } from '../components/MarkdownReader/annotations/transport';
 import {
   pendingRequestKey,
   sendKeyedRequest as sendLastWriterWinsRequest,
@@ -2969,7 +2968,7 @@ export function useDaemonSocket({
   }, [sendKeyedRequest]);
 
   const sendMarkdownAnnotationsCommand = useCallback(<T,>(
-    op: 'get' | 'save' | 'clear' | 'submit',
+    op: 'get' | 'save' | 'submit',
     source: MarkdownDocumentSource,
     extra: Record<string, unknown>,
   ): Promise<T> => {
@@ -2977,8 +2976,8 @@ export function useDaemonSocket({
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('WebSocket not connected'));
     }
-    const key = markdownAnnotationKey(op, source.uri);
     const requestId = crypto.randomUUID();
+    const key = pendingRequestKey(op, requestId);
     const sourceFields = source.kind === 'file'
       ? { source_kind: 'file', path: source.path }
       : { source_kind: 'seed', seed_id: source.seedId };
@@ -3004,8 +3003,8 @@ export function useDaemonSocket({
     if (inflight) {
       return inflight;
     }
-    const promise: Promise<{ annotations: MarkdownAnnotation[]; generation: number }> =
-      sendMarkdownAnnotationsCommand<{ annotations: MarkdownAnnotation[]; generation: number }>(
+    const promise: Promise<MarkdownAnnotationsDraft> =
+      sendMarkdownAnnotationsCommand<MarkdownAnnotationsDraft>(
         'get', source, {},
       ).finally(() => {
         if (mdAnnotationsGetInflightRef.current.get(inflightKey) === promise) {
@@ -3018,16 +3017,11 @@ export function useDaemonSocket({
 
   const saveMarkdownAnnotations = useCallback((
     source: MarkdownDocumentSource,
-    annotations: MarkdownAnnotation[],
-    generation: number,
+    upserts: MarkdownAnnotation[],
+    removedIds: string[],
   ) =>
-    sendMarkdownAnnotationsCommand<{ stale: boolean }>(
-      'save', source, { annotations, generation },
-    ), [sendMarkdownAnnotationsCommand]);
-
-  const clearMarkdownAnnotations = useCallback((source: MarkdownDocumentSource, generation: number) =>
-    sendMarkdownAnnotationsCommand<{ generation: number }>(
-      'clear', source, { generation },
+    sendMarkdownAnnotationsCommand<MarkdownAnnotationsDraft>(
+      'save', source, { upserts, removed_ids: removedIds },
     ), [sendMarkdownAnnotationsCommand]);
 
   const submitMarkdownAnnotations = useCallback((
@@ -4297,7 +4291,6 @@ export function useDaemonSocket({
     sendPRAction,
     getMarkdownAnnotations,
     saveMarkdownAnnotations,
-    clearMarkdownAnnotations,
     submitMarkdownAnnotations,
     sendMutePR,
     sendMuteRepo,

@@ -1341,8 +1341,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMarkdownAnnotationsGet(client, msg.(*protocol.MarkdownAnnotationsGetMessage))
 	case protocol.CmdMarkdownAnnotationsSave:
 		d.handleMarkdownAnnotationsSave(client, msg.(*protocol.MarkdownAnnotationsSaveMessage))
-	case protocol.CmdMarkdownAnnotationsClear:
-		d.handleMarkdownAnnotationsClear(client, msg.(*protocol.MarkdownAnnotationsClearMessage))
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		submit := msg.(*protocol.MarkdownAnnotationsSubmitMessage)
 		if target := protocol.TrimID(protocol.SessionID(protocol.Deref(submit.TargetSessionID))); target != "" {

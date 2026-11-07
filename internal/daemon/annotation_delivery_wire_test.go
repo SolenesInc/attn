@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,13 +51,13 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 				return submitSessionAnnotationFeedback(app, session, sessionAnnotationFeedback)
 			}, "existing words" + sessionAnnotationFeedback, nil},
 		{"document annotations", "", func() annotationSubmitOutcome {
-			saveDocumentAnnotations(app, plan, 5, hello)
+			saveDocumentAnnotations(app, plan, hello)
 			return submitDocumentAnnotations(app, plan, session, "", nil)
-		}, planPayload("line 3"), protocol.Ptr(5)},
+		}, planPayload("line 3"), protocol.Ptr(2)},
 		{"moved document annotations over words the user typed", "existing words", func() annotationSubmitOutcome {
-			saveDocumentAnnotations(app, plan, 7, hello)
+			saveDocumentAnnotations(app, plan, hello)
 			return submitDocumentAnnotations(app, plan, session, "", []string{"c1"})
-		}, "existing words" + planPayload("~line 3, moved"), protocol.Ptr(7)},
+		}, "existing words" + planPayload("~line 3, moved"), protocol.Ptr(4)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.typed != "" {
@@ -74,11 +75,8 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 		})
 	}
 
-	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 0 || got.Generation != 7 {
-		t.Errorf("the delivered draft = %+v, want it cleared at floor 7", got)
-	}
-	if stale := saveDocumentAnnotations(app, plan, 7, hello); stale.Success || !protocol.Deref(stale.Stale) {
-		t.Errorf("a save at the delivered generation = %+v, want it refused as stale", stale)
+	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 0 || got.Generation != 4 {
+		t.Errorf("the delivered draft = %+v, want it empty at generation 4", got)
 	}
 }
 
@@ -92,17 +90,16 @@ func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
 		return out
 	}
 	for _, tc := range []struct {
-		name      string
-		saver     func(w *world, sender *testworld.Peer) *testworld.Peer
-		during    []string
-		wantKept  []string
-		wantFloor int
+		name     string
+		saver    func(w *world, sender *testworld.Peer) *testworld.Peer
+		during   []string
+		wantKept []string
 	}{
-		{name: "a mark added by the sending client", during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}, wantFloor: 2},
+		{name: "a mark added by the sending client", during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}},
 		{name: "a mark added by another client", saver: func(w *world, _ *testworld.Peer) *testworld.Peer { return w.App() },
-			during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}, wantFloor: 2},
-		{name: "a mark rewritten while it went", during: []string{"a=rewritten"}, wantKept: []string{"a=rewritten"}, wantFloor: 2},
-		{name: "the same marks saved again", during: []string{"a=first"}, wantFloor: 2},
+			during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}},
+		{name: "a mark rewritten while it went", during: []string{"a=rewritten"}, wantKept: []string{"a=rewritten"}},
+		{name: "the same marks saved again", during: []string{"a=first"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude)
@@ -115,7 +112,7 @@ func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
 			if tc.saver != nil {
 				saver = tc.saver(w, app)
 			}
-			if saved := saveDocumentAnnotations(app, doc, 1, marks("a=first")); !saved.Success {
+			if saved := saveDocumentAnnotations(app, doc, marks("a=first")); !saved.Success {
 				t.Fatalf("save before the send = %+v", saved)
 			}
 
@@ -124,27 +121,22 @@ func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
 			app.Send(protocol.MarkdownAnnotationsSubmitMessage{Cmd: protocol.CmdMarkdownAnnotationsSubmit, RequestID: requestID,
 				DocumentUri: doc.uri, SourceKind: doc.kind, Path: doc.path, TargetSessionID: protocol.Ptr(session)})
 			placing.Await()
-			if saved := saveDocumentAnnotations(saver, doc, 2, marks(tc.during...)); !saved.Success {
+			if saved := saveDocumentAnnotations(saver, doc, marks(tc.during...)); !saved.Success {
 				t.Fatalf("save during the send = %+v, want it acknowledged", saved)
 			}
 			placing.Release()
 
 			result := testworld.Await(app, protocol.EventMarkdownAnnotationsSubmitResult, func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
-			if result.Status != "delivered" || protocol.Deref(result.Generation) != tc.wantFloor {
-				t.Fatalf("the send = %+v, want delivered at generation %d", result, tc.wantFloor)
-			}
-			if !reflect.DeepEqual(result.SentAnnotations, marks("a=first")) {
-				t.Errorf("the send reported sending %+v, want only the mark it placed", result.SentAnnotations)
+			want := marks(tc.wantKept...)
+			if result.Status != "delivered" || !slices.EqualFunc(result.Annotations, want, func(a, b protocol.MarkdownAnnotation) bool { return reflect.DeepEqual(a, b) }) {
+				t.Fatalf("the send = %+v, want delivered leaving %+v", result, want)
 			}
 			if got := agent.Prompted(); !strings.Contains(got, "first") || strings.Contains(got, "second") || strings.Contains(got, "rewritten") {
 				t.Errorf("the agent was prompted with %q, want only what the draft held when the send began", got)
 			}
 			got := getDocumentAnnotations(w.App(), doc)
-			if want := marks(tc.wantKept...); !reflect.DeepEqual(got.Annotations, want) || got.Generation != tc.wantFloor {
-				t.Errorf("the draft after the send = %+v, want %+v at generation %d", got, want, tc.wantFloor)
-			}
-			if next := saveDocumentAnnotations(app, doc, tc.wantFloor+1, marks("c=third")); !next.Success {
-				t.Errorf("a save past the send's generation = %+v, want it accepted", next)
+			if !reflect.DeepEqual(got.Annotations, want) || got.Generation != protocol.Deref(result.Generation) {
+				t.Errorf("the draft after the send = %+v, want %+v at the send's generation %d", got, want, protocol.Deref(result.Generation))
 			}
 		})
 	}
@@ -167,7 +159,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 	const header = "# Markdown Annotations\n\nFile: /doc.md\n\n"
 	const closing = "---\nAddress the annotation feedback above."
 
-	for i, tc := range []struct {
+	for _, tc := range []struct {
 		name  string
 		marks []protocol.MarkdownAnnotation
 		want  string
@@ -224,7 +216,7 @@ func TestADocumentsAnnotationsReachTheAgentOrderedByPlaceWithGeneralFeedbackLast
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			saveDocumentAnnotations(app, doc, i+1, tc.marks)
+			saveDocumentAnnotations(app, doc, tc.marks)
 			if got := submitDocumentAnnotations(app, doc, session, "", nil); got.status != "delivered" {
 				t.Fatalf("submit = %+v, want delivered", got)
 			}
@@ -245,7 +237,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 	awaitClaudeAtItsPrompt(app, session)
 	plan, blank := fileAnnotatedDocument("/notes/plan.md"), fileAnnotatedDocument("/notes/blank.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("tighten the intro"), CreatedAt: 1}}
-	saveDocumentAnnotations(app, plan, 2, marks)
+	saveDocumentAnnotations(app, plan, marks)
 
 	if err := cli.RecordNotification(protocol.TerminalID(w.Terminal(session)), "permission_prompt", "Allow edit?"); err != nil {
 		t.Fatalf("ask for approval: %v", err)
@@ -283,7 +275,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 		})
 	}
 
-	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 1 || got.Generation != 2 {
+	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 1 || got.Generation != 1 {
 		t.Errorf("the undelivered draft = %+v, want it kept at generation 2", got)
 	}
 	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(session)), protocol.StateWorking); err != nil {
@@ -307,13 +299,13 @@ func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
 	awaitClaudeAtItsPrompt(app, session)
 	plan := fileAnnotatedDocument("/notes/plan.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr(strings.Repeat("tighten the intro ", 16<<10)), CreatedAt: 1}}
-	saveDocumentAnnotations(app, plan, 3, marks)
+	saveDocumentAnnotations(app, plan, marks)
 	agent.StopReadingTerminal()
 
 	if got := submitDocumentAnnotations(app, plan, session, "", nil); got.success || got.status != "error" || got.err == "" {
 		t.Errorf("submit to an agent that stopped reading its terminal = %+v, want an error naming the failed delivery", got)
 	}
-	if draft := getDocumentAnnotations(app, plan); len(draft.Annotations) != 1 || draft.Generation != 3 {
+	if draft := getDocumentAnnotations(app, plan); len(draft.Annotations) != 1 || draft.Generation != 1 {
 		t.Errorf("the undelivered draft = %+v, want it kept at generation 3", draft)
 	}
 	agent.Exit(0)
@@ -326,8 +318,8 @@ func TestSeedAnnotationsBecomeANoteOnThatSeedOnly(t *testing.T) {
 	seed := plantSeed(t, w, "Review target")
 	reviewed, plan := seedAnnotatedDocument(seed.ID), fileAnnotatedDocument("/notes/plan.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr("split the rollout"), CreatedAt: 1}}
-	saveDocumentAnnotations(app, reviewed, 4, marks)
-	saveDocumentAnnotations(app, plan, 2, marks)
+	saveDocumentAnnotations(app, reviewed, marks)
+	saveDocumentAnnotations(app, plan, marks)
 
 	for _, tc := range []struct {
 		name    string
@@ -389,12 +381,12 @@ func seedAnnotatedDocument(seedID string) annotatedDocument {
 	return annotatedDocument{uri: "attn://seed/" + seedID, kind: "seed", seedID: protocol.Ptr(seedID)}
 }
 
-func saveDocumentAnnotations(app *testworld.Peer, doc annotatedDocument, generation int, marks []protocol.MarkdownAnnotation) protocol.MarkdownAnnotationsSaveResultMessage {
+func saveDocumentAnnotations(app *testworld.Peer, doc annotatedDocument, marks []protocol.MarkdownAnnotation) protocol.MarkdownAnnotationsSaveResultMessage {
 	app.T.Helper()
 	requestID := uuid.NewString()
 	return testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: requestID, DocumentUri: doc.uri, SourceKind: doc.kind,
-		Path: doc.path, SeedID: doc.seedID, Generation: generation, Annotations: marks,
+		Path: doc.path, SeedID: doc.seedID, Upserts: marks, RemovedIds: []string{},
 	}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
 }
 

@@ -51,8 +51,8 @@ func TestRemoteMonitorCommandsLeaveTheAppPumpFree(t *testing.T) {
 	path := home.Path("review.md")
 	uri := "attn://file/" + strings.ReplaceAll(url.QueryEscape(path), "+", "%20")
 	saved := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: "draft", DocumentUri: uri, SourceKind: "file", Path: &path, Generation: 1,
-		Annotations: []protocol.MarkdownAnnotation{{ID: "review", Type: "global", Text: protocol.Ptr("Use blue for the banner"), CreatedAt: 1}},
+		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: "draft", DocumentUri: uri, SourceKind: "file", Path: &path, RemovedIds: []string{},
+		Upserts: []protocol.MarkdownAnnotation{{ID: "review", Type: "global", Text: protocol.Ptr("Use blue for the banner"), CreatedAt: 1}},
 	}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == "draft" })
 	if !saved.Success {
 		t.Fatalf("save annotation: %+v", saved)

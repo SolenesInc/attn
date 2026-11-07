@@ -192,9 +192,5 @@ func markdownAnnotationDraftAccessors(s *store.Store) annotationDraftAccessors {
 				generation:  draft.Generation,
 			}, nil
 		},
-		save: func(key, annotations, _ string, generation int, now time.Time) error {
-			return s.SaveMarkdownAnnotationDraft(key, annotations, generation, now)
-		},
-		clear: s.ClearMarkdownAnnotationDraft,
 	}
 }

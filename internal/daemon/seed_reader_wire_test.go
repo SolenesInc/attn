@@ -169,7 +169,7 @@ func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	uri := "attn://seed/" + seed
 	saved := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: uuid.NewString(), DocumentUri: uri, SourceKind: "seed", SeedID: protocol.Ptr(seed),
-		Generation: 1, Annotations: []protocol.MarkdownAnnotation{{ID: "g", Type: "global", Text: protocol.Ptr("tighten the scope"), CreatedAt: 1}},
+		RemovedIds: []string{}, Upserts: []protocol.MarkdownAnnotation{{ID: "g", Type: "global", Text: protocol.Ptr("tighten the scope"), CreatedAt: 1}},
 	}, protocol.EventMarkdownAnnotationsSaveResult, func(protocol.MarkdownAnnotationsSaveResultMessage) bool { return true })
 	if !saved.Success || protocol.Deref(saved.SeedID) != seed {
 		t.Fatalf("saving the seed's draft = %+v", saved)
@@ -202,8 +202,8 @@ func TestAnnotationDraftsFollowTheirTypedDocumentSource(t *testing.T) {
 	} {
 		result := testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
 			Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: uuid.NewString(), DocumentUri: source.uri, SourceKind: "file",
-			Path: protocol.Ptr(source.path), Generation: 1,
-			Annotations: []protocol.MarkdownAnnotation{{ID: "g", Type: "global", Text: protocol.Ptr("note"), CreatedAt: 1}},
+			Path: protocol.Ptr(source.path), RemovedIds: []string{},
+			Upserts: []protocol.MarkdownAnnotation{{ID: "g", Type: "global", Text: protocol.Ptr("note"), CreatedAt: 1}},
 		}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.DocumentUri == source.uri })
 		if source.accepted && !result.Success {
 			t.Errorf("saving %s as %s = %s, want it accepted", source.uri, source.path, protocol.Deref(result.Error))

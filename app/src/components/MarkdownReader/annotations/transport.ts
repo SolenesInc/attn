@@ -1,16 +1,20 @@
-/** Draft-persistence transport seam. Generation contract, mirroring
- * internal/store/markdown_annotations.go: a save at or below the tombstone is stale. */
+/** Draft-persistence transport seam. The daemon owns the draft: a save carries one
+ * reader's changes, and every reply carries the draft as it then stands. */
 
 import type { WireAnnotation } from './types';
 import type { MarkdownDocumentSource } from '../documentSource';
 
-/** `delivered` types into a session, `noted` appends to a seed; both remove
- * `sentAnnotations` from the draft. `skipped_pending_approval` keeps the draft. */
+export interface MarkdownAnnotationsDraft {
+  annotations: WireAnnotation[];
+  generation: number;
+}
+
+/** `delivered` types into a session, `noted` appends to a seed; both remove what
+ * went from the draft and answer with `draft`. `skipped_pending_approval` keeps it. */
 export interface MarkdownAnnotationsSubmitResult {
   status: string;
-  generation?: number;
+  draft?: MarkdownAnnotationsDraft;
   error?: string;
-  sentAnnotations: WireAnnotation[];
 }
 
 export type MarkdownAnnotationsDestination =
@@ -18,18 +22,12 @@ export type MarkdownAnnotationsDestination =
   | { kind: 'seed'; seedId: string };
 
 export interface MarkdownAnnotationsTransport {
-  getMarkdownAnnotations(
-    source: MarkdownDocumentSource,
-  ): Promise<{ annotations: WireAnnotation[]; generation: number }>;
+  getMarkdownAnnotations(source: MarkdownDocumentSource): Promise<MarkdownAnnotationsDraft>;
   saveMarkdownAnnotations(
     source: MarkdownDocumentSource,
-    annotations: WireAnnotation[],
-    generation: number,
-  ): Promise<{ stale: boolean }>;
-  clearMarkdownAnnotations(
-    source: MarkdownDocumentSource,
-    generation: number,
-  ): Promise<{ generation: number }>;
+    upserts: WireAnnotation[],
+    removedIds: string[],
+  ): Promise<MarkdownAnnotationsDraft>;
   /** `orphanedIds` is client-derived and not persisted; the document URI stays
    * opaque identity. */
   submitMarkdownAnnotations(

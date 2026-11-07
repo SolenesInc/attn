@@ -91,7 +91,7 @@ export function useTileAnnotations({
           return { kind: 'warning', message: result.error };
         }
         if (result.status === 'delivered' || result.status === 'noted') {
-          const kept = handle.applyDelivered(result.sentAnnotations, result.generation ?? 0);
+          const kept = result.draft ? handle.adoptSentDraft(documentSource.uri, result.draft) : 0;
           return { kind: 'sent', destination: result.status === 'noted' ? 'seed' : 'session', kept };
         }
         if (result.status === 'skipped_pending_approval') {

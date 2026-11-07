@@ -25,8 +25,7 @@ const transport: MarkdownAnnotationsTransport = {
     })),
     generation: 1,
   }),
-  saveMarkdownAnnotations: async () => ({ stale: false }),
-  clearMarkdownAnnotations: async (_source, generation) => ({ generation }),
+  saveMarkdownAnnotations: async (_source, upserts) => ({ annotations: upserts, generation: 1 }),
   submitMarkdownAnnotations: async () => ({ status: 'delivered', generation: 2 }),
 };
 setMarkdownAnnotationsTransport(transport);

@@ -85,7 +85,7 @@ When the agent is waiting on an approval prompt, Attn does not send: the Enter t
 <details>
 <summary>Do unsent annotations survive a restart?</summary>
 
-Yes. Attn keeps the batch for each agent and each file until you send the batch or remove its annotations, so closing the tile or restarting the app doesn't lose the batch. Sending clears what was sent.
+Yes. Attn keeps the batch for each agent and each file until you send the batch or remove its annotations, so closing the tile or restarting the app doesn't lose the batch. Sending clears what was sent. Tiles showing the same seed share its annotations, so a mark you add in one stays when you send from the other.
 </details>
 
 <details>

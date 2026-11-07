@@ -518,18 +518,16 @@ function globalNote(id = 'g1'): WireAnnotation {
 
 function makeSendTransport(seed: WireAnnotation[] = [globalNote()]) {
   const getSpy = vi.fn(async () => ({ annotations: seed, generation: 5 }));
-  const saveSpy = vi.fn(async (_source: unknown, _annotations: WireAnnotation[], _generation: number) => ({ stale: false }));
-  const clearSpy = vi.fn(async (_source: unknown, generation: number) => ({ generation }));
+  const saveSpy = vi.fn(async (_source: unknown, upserts: WireAnnotation[], _removedIds: string[]) => ({ annotations: upserts, generation: 6 }));
   const submitSpy = vi.fn(
-    async (): Promise<MarkdownAnnotationsSubmitResult> => ({ status: 'delivered', generation: 6, sentAnnotations: seed }),
+    async (): Promise<MarkdownAnnotationsSubmitResult> => ({ status: 'delivered', draft: { annotations: [], generation: 6 } }),
   );
   const transport: MarkdownAnnotationsTransport = {
     getMarkdownAnnotations: getSpy,
     saveMarkdownAnnotations: saveSpy,
-    clearMarkdownAnnotations: clearSpy,
     submitMarkdownAnnotations: submitSpy,
   };
-  return { transport, getSpy, saveSpy, clearSpy, submitSpy };
+  return { transport, getSpy, saveSpy, submitSpy };
 }
 
 const SEND_SESSIONS: DesktopTileSessionOption[] = [
@@ -729,7 +727,7 @@ describe('DesktopDockTile markdown send flow', () => {
   });
 
   it('delivers: Sending… → Sent ✓, list empties locally without re-fetch or second clear (E14)', async () => {
-    const { transport, getSpy, clearSpy, submitSpy } = makeSendTransport();
+    const { transport, getSpy, submitSpy } = makeSendTransport();
     let resolveSubmit: (result: MarkdownAnnotationsSubmitResult) => void = () => {};
     submitSpy.mockImplementation(
       () => new Promise<MarkdownAnnotationsSubmitResult>((resolve) => {
@@ -753,18 +751,17 @@ describe('DesktopDockTile markdown send flow', () => {
     });
 
     await act(async () => {
-      resolveSubmit({ status: 'delivered', generation: 9, sentAnnotations: [globalNote()] });
+      resolveSubmit({ status: 'delivered', draft: { annotations: [], generation: 9 } });
     });
     expect(screen.getByRole('status')).toHaveTextContent('Sent ✓');
     expect(sendButton()).toHaveTextContent('Sent ✓');
     expect(sendButton()).toBeDisabled();
     expect(getSpy).toHaveBeenCalledTimes(1);
-    expect(clearSpy).not.toHaveBeenCalled();
   });
 
   it('keeps annotations and explains when the target is waiting on approval (E15)', async () => {
     const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({ status: 'skipped_pending_approval', sentAnnotations: [] });
+    submitSpy.mockResolvedValue({ status: 'skipped_pending_approval' });
     setMarkdownAnnotationsTransport(transport);
     renderSendTile();
     await waitFor(() => {
@@ -1044,7 +1041,7 @@ describe('DesktopDockTile seed reader', () => {
       sendOpenMarkdown: vi.fn(),
     });
     const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({ status: 'noted', generation: 8, sentAnnotations: [globalNote()] });
+    submitSpy.mockResolvedValue({ status: 'noted', draft: { annotations: [], generation: 8 } });
     setMarkdownAnnotationsTransport(transport);
     render(
       <DesktopDockTile

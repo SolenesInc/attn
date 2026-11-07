@@ -234,7 +234,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSeedDocumentGet:               commandMetadata(false, true),
 	protocol.CmdMarkdownAnnotationsGet:        commandMetadata(true, true),
 	protocol.CmdMarkdownAnnotationsSave:       commandMetadata(true, true),
-	protocol.CmdMarkdownAnnotationsClear:      commandMetadata(true, true),
 	protocol.CmdMarkdownAnnotationsSubmit:     commandMetadata(true, true),
 	protocol.CmdSessionMessagesGet:            commandMetadata(false, true),
 	protocol.CmdSessionAnnotationsGet:         commandMetadata(false, true),

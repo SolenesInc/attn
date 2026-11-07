@@ -1,22 +1,14 @@
 
-import { takeKeyedRequest, type PendingKeyedRequests } from './daemonPendingRequests';
-
-// `<op>:<uri>` — one in-flight request per document per operation.
-export function markdownAnnotationKey(op: string, documentUri: string): string {
-  return `${op}:${documentUri}`;
-}
+import { pendingRequestKey, takeKeyedRequest, type PendingKeyedRequests } from './daemonPendingRequests';
 
 type MarkdownAnnotationEvent = {
   event: string;
   request_id?: unknown;
-  document_uri?: unknown;
   success?: boolean;
   error?: string;
-  stale?: unknown;
   status?: unknown;
   generation?: unknown;
   annotations?: unknown;
-  sent_annotations?: unknown;
 };
 
 export function handleMarkdownAnnotationDaemonEvent(
@@ -25,52 +17,38 @@ export function handleMarkdownAnnotationDaemonEvent(
 ): boolean {
   switch (event.event) {
     case 'markdown_annotations_get_result':
-    case 'markdown_annotations_save_result':
-    case 'markdown_annotations_clear_result': {
-      const op =
-        event.event === 'markdown_annotations_get_result'
-          ? 'get'
-          : event.event === 'markdown_annotations_save_result'
-            ? 'save'
-            : 'clear';
-      const key = markdownAnnotationKey(op, String(event.document_uri ?? ''));
-      const waiter = takeKeyedRequest(pending, key, event.request_id);
+    case 'markdown_annotations_save_result': {
+      const op = event.event === 'markdown_annotations_get_result' ? 'get' : 'save';
+      const waiter = takeKeyedRequest(pending, pendingRequestKey(op, String(event.request_id)), event.request_id);
       if (!waiter) {
         return true;
       }
-      if (op === 'save' && !event.success && event.stale) {
-        waiter.resolve({ stale: true });
-      } else if (!event.success) {
-        waiter.reject(new Error(event.error || `markdown_annotations_${op} failed`));
-      } else if (op === 'get') {
+      if (event.success) {
         waiter.resolve({
           annotations: Array.isArray(event.annotations) ? event.annotations : [],
           generation: typeof event.generation === 'number' ? event.generation : 0,
         });
-      } else if (op === 'save') {
-        waiter.resolve({ stale: false });
       } else {
-        waiter.resolve({
-          generation: typeof event.generation === 'number' ? event.generation : 0,
-        });
+        waiter.reject(new Error(event.error || `markdown_annotations_${op} failed`));
       }
       return true;
     }
 
     case 'markdown_annotations_submit_result': {
-      const key = markdownAnnotationKey('submit', String(event.document_uri ?? ''));
-      const waiter = takeKeyedRequest(pending, key, event.request_id);
+      const waiter = takeKeyedRequest(pending, pendingRequestKey('submit', String(event.request_id)), event.request_id);
       if (!waiter) {
         return true;
       }
       if (event.success || event.status === 'skipped_pending_approval') {
         // A delivered result may still carry `error` (delivery succeeded, draft
-        // clear failed) — never re-deliver in that case.
+        // update failed) — never re-deliver in that case.
         waiter.resolve({
           status: typeof event.status === 'string' && event.status !== '' ? event.status : 'delivered',
-          ...(typeof event.generation === 'number' ? { generation: event.generation } : {}),
+          // The wire omits an empty optional list: a send can leave nothing behind.
+          ...(typeof event.generation === 'number'
+            ? { draft: { annotations: Array.isArray(event.annotations) ? event.annotations : [], generation: event.generation } }
+            : {}),
           ...(typeof event.error === 'string' && event.error !== '' ? { error: event.error } : {}),
-          sentAnnotations: Array.isArray(event.sent_annotations) ? event.sent_annotations : [],
         });
       } else {
         waiter.reject(new Error(event.error || 'markdown_annotations_submit failed'));

@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -11,79 +12,85 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestClearingMarkdownAnnotationsNeverLowersTheFloorAndStaysWithItsFile(t *testing.T) {
+func TestReadersChangeADraftMarkByMark(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	const plan, other, fresh = "/notes/plan.md", "/notes/other.md", "/notes/fresh.md"
-
-	if saved := saveAnnotations(app, other, 1, "keep me"); !saved.Success {
-		t.Fatalf("save %s = %+v", other, saved)
+	plan, other := fileAnnotatedDocument("/notes/plan.md"), fileAnnotatedDocument("/notes/other.md")
+	note := func(id, text string) protocol.MarkdownAnnotation {
+		return protocol.MarkdownAnnotation{ID: id, Type: "global", Text: protocol.Ptr(text), CreatedAt: 1}
 	}
-	if saved := saveAnnotations(app, plan, 7, "first pass"); !saved.Success {
-		t.Fatalf("save %s = %+v", plan, saved)
-	}
-	if cleared := clearAnnotations(app, plan, 2); !cleared.Success || cleared.Generation != 7 {
-		t.Fatalf("a late clear at generation 2 = %+v, want success with the floor kept at 7", cleared)
-	}
-	if ghost := saveAnnotations(app, plan, 7, "ghost"); ghost.Success || !protocol.Deref(ghost.Stale) || ghost.Error != nil {
-		t.Errorf("a save at generation 7 after the clear = %+v, want it refused as stale without an error", ghost)
-	}
-	if cleared := clearAnnotations(app, plan, 1); !cleared.Success || cleared.Generation != 7 {
-		t.Errorf("an older clear = %+v, want success with the floor kept at 7", cleared)
-	}
-	if got := getAnnotations(app, plan); len(got.Annotations) != 0 || got.Generation != 7 {
-		t.Errorf("%s after the clears = %+v, want no annotations at floor 7", plan, got)
+	change := func(doc annotatedDocument, upserts []protocol.MarkdownAnnotation, removed ...string) protocol.MarkdownAnnotationsSaveResultMessage {
+		t.Helper()
+		requestID := uuid.NewString()
+		return testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
+			Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: requestID, DocumentUri: doc.uri, SourceKind: doc.kind, Path: doc.path,
+			Upserts: upserts, RemovedIds: append([]string{}, removed...),
+		}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
 	}
 
-	for range 2 {
-		if cleared := clearAnnotations(app, fresh, 3); !cleared.Success || cleared.Generation != 3 {
-			t.Errorf("clearing a never-annotated file = %+v, want success at floor 3", cleared)
-		}
-	}
-	if got := getAnnotations(app, fresh); len(got.Annotations) != 0 || got.Generation != 3 {
-		t.Errorf("%s after two clears = %+v, want no annotations at floor 3", fresh, got)
+	change(other, []protocol.MarkdownAnnotation{note("x", "keep me")})
+	first := change(plan, []protocol.MarkdownAnnotation{note("a", "first"), note("b", "second")})
+	if want := []protocol.MarkdownAnnotation{note("a", "first"), note("b", "second")}; !first.Success || !reflect.DeepEqual(first.Annotations, want) || first.Generation != 1 {
+		t.Fatalf("the first save = %+v, want both marks at generation 1", first)
 	}
 
-	if got := getAnnotations(app, other); got.Generation != 1 || len(got.Annotations) != 1 || protocol.Deref(got.Annotations[0].Text) != "keep me" {
-		t.Errorf("%s = %+v, want its own draft untouched by the other files' clears", other, got)
+	merged := change(plan, []protocol.MarkdownAnnotation{note("c", "from another reader"), note("a", "rewritten")}, "b")
+	want := []protocol.MarkdownAnnotation{note("a", "rewritten"), note("c", "from another reader")}
+	if !merged.Success || !reflect.DeepEqual(merged.Annotations, want) || merged.Generation != 2 {
+		t.Errorf("a save changing some marks = %+v, want %+v at generation 2", merged, want)
+	}
+
+	retried := change(plan, []protocol.MarkdownAnnotation{note("c", "from another reader"), note("a", "rewritten")}, "b")
+	if !retried.Success || !reflect.DeepEqual(retried.Annotations, want) || retried.Generation != 2 {
+		t.Errorf("the same save again = %+v, want nothing changed at generation 2", retried)
+	}
+
+	emptied := change(plan, nil, "a", "c")
+	if !emptied.Success || len(emptied.Annotations) != 0 || emptied.Annotations == nil || emptied.Generation != 3 {
+		t.Errorf("removing every mark = %+v, want an empty list at generation 3", emptied)
+	}
+	if got := getDocumentAnnotations(app, plan); len(got.Annotations) != 0 || got.Generation != 3 {
+		t.Errorf("%s = %+v, want it empty at generation 3", *plan.path, got)
+	}
+	if got := getDocumentAnnotations(app, other); got.Generation != 1 || len(got.Annotations) != 1 || protocol.Deref(got.Annotations[0].Text) != "keep me" {
+		t.Errorf("%s = %+v, want its own draft untouched", *other.path, got)
+	}
+}
+
+func TestASendKeepsWhatTwoReadersSavedBeforeItsReplyArrived(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	planted, err := cli.SeedPlant("", "Reviewed child", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := planted.Seed.ID
+	doc := annotatedDocument{uri: "attn://seed/" + seed, kind: "seed", seedID: protocol.Ptr(seed)}
+	note := func(id string) protocol.MarkdownAnnotation {
+		return protocol.MarkdownAnnotation{ID: id, Type: "global", Text: protocol.Ptr(id + " note"), CreatedAt: 1}
+	}
+	saveDocumentAnnotations(app, doc, []protocol.MarkdownAnnotation{note("a")})
+
+	submitID := uuid.NewString()
+	app.Send(protocol.MarkdownAnnotationsSubmitMessage{Cmd: protocol.CmdMarkdownAnnotationsSubmit, RequestID: submitID,
+		DocumentUri: doc.uri, SourceKind: doc.kind, SeedID: doc.seedID, TargetSeedID: doc.seedID})
+	saveDocumentAnnotations(app, doc, []protocol.MarkdownAnnotation{note("c")})
+	saveDocumentAnnotations(app, doc, []protocol.MarkdownAnnotation{note("b")})
+
+	sent := testworld.Await(app, protocol.EventMarkdownAnnotationsSubmitResult, func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == submitID })
+	if sent.Status != "noted" {
+		t.Fatalf("the send = %+v, want it noted", sent)
+	}
+	notes := lifeNoteBodies(t, cli, seed)
+	if len(notes) != 1 || !strings.Contains(notes[0], "a note") || strings.Contains(notes[0], "b note") || strings.Contains(notes[0], "c note") {
+		t.Errorf("the seed's log = %q, want one note carrying only the first reader's sent mark", notes)
+	}
+	want := []protocol.MarkdownAnnotation{note("c"), note("b")}
+	if got := getDocumentAnnotations(app, doc); !reflect.DeepEqual(got.Annotations, want) {
+		t.Errorf("the draft = %+v, want both unsent marks and not the sent one", got.Annotations)
 	}
 }
 
 func annotationSource(path string) (documentURI string, filePath *string) {
 	return "attn://file/" + strings.ReplaceAll(url.QueryEscape(path), "+", "%20"), protocol.Ptr(path)
-}
-
-func saveAnnotations(app *testworld.Peer, path string, generation int, text string) protocol.MarkdownAnnotationsSaveResultMessage {
-	app.T.Helper()
-	uri, filePath := annotationSource(path)
-	requestID := uuid.NewString()
-	return testworld.Request(app, protocol.MarkdownAnnotationsSaveMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsSave, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		Path: filePath, Generation: generation,
-		Annotations: []protocol.MarkdownAnnotation{{ID: uuid.NewString(), Type: "global", Text: protocol.Ptr(text), CreatedAt: 1}},
-	}, protocol.EventMarkdownAnnotationsSaveResult, func(r protocol.MarkdownAnnotationsSaveResultMessage) bool { return r.RequestID == requestID })
-}
-
-func clearAnnotations(app *testworld.Peer, path string, generation int) protocol.MarkdownAnnotationsClearResultMessage {
-	app.T.Helper()
-	uri, filePath := annotationSource(path)
-	requestID := uuid.NewString()
-	return testworld.Request(app, protocol.MarkdownAnnotationsClearMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsClear, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		Path: filePath, Generation: generation,
-	}, protocol.EventMarkdownAnnotationsClearResult, func(r protocol.MarkdownAnnotationsClearResultMessage) bool { return r.RequestID == requestID })
-}
-
-func getAnnotations(app *testworld.Peer, path string) protocol.MarkdownAnnotationsGetResultMessage {
-	app.T.Helper()
-	uri, filePath := annotationSource(path)
-	requestID := uuid.NewString()
-	got := testworld.Request(app, protocol.MarkdownAnnotationsGetMessage{
-		Cmd: protocol.CmdMarkdownAnnotationsGet, RequestID: requestID, DocumentUri: uri, SourceKind: "file",
-		Path: filePath,
-	}, protocol.EventMarkdownAnnotationsGetResult, func(r protocol.MarkdownAnnotationsGetResultMessage) bool { return r.RequestID == requestID })
-	if !got.Success {
-		app.T.Fatalf("get annotations for %s refused: %s", path, protocol.Deref(got.Error))
-	}
-	return got
 }

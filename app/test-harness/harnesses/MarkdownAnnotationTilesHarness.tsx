@@ -17,8 +17,7 @@ export function MarkdownAnnotationTilesHarness({ onReady }: HarnessProps) {
   useEffect(() => {
     setMarkdownAnnotationsTransport({
       getMarkdownAnnotations: async () => ({ annotations: [], generation: 0 }),
-      saveMarkdownAnnotations: async () => ({ stale: false }),
-      clearMarkdownAnnotations: async (_source, generation) => ({ generation }),
+      saveMarkdownAnnotations: async (_source, upserts) => ({ annotations: upserts, generation: 1 }),
       submitMarkdownAnnotations: async () => ({ status: 'delivered' }),
     });
     onReady();

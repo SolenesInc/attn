@@ -2850,10 +2850,8 @@ model SessionAnnotationsSubmitResultMessage {
   error?: string;
 }
 
-// Fetch the persisted annotation draft for an absolute markdown file path.
-// The reply's generation is the current generation floor —
-// max(stored generation, tombstone) — so a re-mounting client seeds its
-// counter past any tombstone even when the draft is empty.
+// Fetch the persisted annotation draft for a document. generation counts the
+// draft's changes, so a reader can tell a newer reply from an older one.
 model MarkdownAnnotationsGetMessage {
   cmd: "markdown_annotations_get";
   // Identity/correlation only. The daemon never parses authority from this.
@@ -2865,8 +2863,7 @@ model MarkdownAnnotationsGetMessage {
   request_id: string;
 }
 
-// Result of markdown_annotations_get. annotations may be empty; generation is
-// the floor the client must exceed on its next save.
+// Result of markdown_annotations_get. annotations may be empty.
 model MarkdownAnnotationsGetResultMessage {
   event: "markdown_annotations_get_result";
   request_id: string;
@@ -2880,23 +2877,21 @@ model MarkdownAnnotationsGetResultMessage {
   generation: int32;
 }
 
-// Persist the full annotation list for a path (debounced full-list save, not
-// per-op CRUD). generation must be strictly greater than both the stored
-// generation and the tombstone generation or the save is rejected as stale.
+// Apply one reader's changes to a document's draft, mark by mark, so a reader
+// never overwrites a mark it did not change. Retrying a save is harmless: an id
+// that is already gone stays gone and an unchanged upsert changes nothing.
 model MarkdownAnnotationsSaveMessage {
   cmd: "markdown_annotations_save";
   document_uri: string;
   source_kind: string;
   path?: string;
   seed_id?: string;
-  annotations: MarkdownAnnotation[];
-  generation: int32;
+  upserts: MarkdownAnnotation[];
+  removed_ids: string[];
   request_id: string;
 }
 
-// Result of markdown_annotations_save. stale=true (with success=false) means
-// the save lost to a tombstone or a newer generation — the client should drop
-// its pending list and re-hydrate; it is benign, not an error.
+// Result of markdown_annotations_save: the draft as it stands after the changes.
 model MarkdownAnnotationsSaveResultMessage {
   event: "markdown_annotations_save_result";
   request_id: string;
@@ -2904,41 +2899,15 @@ model MarkdownAnnotationsSaveResultMessage {
   source_kind: string;
   seed_id?: string;
   success: boolean;
-  stale?: boolean;
   error?: string;
   path?: string;
-  generation: int32;
-}
-
-// Tombstone the draft for a path at the given generation: empties the list and
-// rejects any later save carrying generation <= tombstone (stops a debounced
-// save that fires after clear from resurrecting ghost drafts). Idempotent.
-model MarkdownAnnotationsClearMessage {
-  cmd: "markdown_annotations_clear";
-  document_uri: string;
-  source_kind: string;
-  path?: string;
-  seed_id?: string;
-  generation: int32;
-  request_id: string;
-}
-
-// Result of markdown_annotations_clear; generation is the new floor.
-model MarkdownAnnotationsClearResultMessage {
-  event: "markdown_annotations_clear_result";
-  request_id: string;
-  document_uri: string;
-  source_kind: string;
-  seed_id?: string;
-  success: boolean;
-  error?: string;
-  path?: string;
+  annotations: MarkdownAnnotation[];
   generation: int32;
 }
 
 // Format the persisted annotation draft into feedback for one typed
 // destination: a session PTY (bracketed paste + Enter) or the source seed's
-// log. Drafts are tombstone-cleared only after the destination accepts it.
+// log. Sent marks leave the draft only after the destination accepts them.
 model MarkdownAnnotationsSubmitMessage {
   cmd: "markdown_annotations_submit";
   document_uri: string;
@@ -2957,13 +2926,13 @@ model MarkdownAnnotationsSubmitMessage {
 }
 
 // Result of markdown_annotations_submit.
-// status: "delivered" — payload typed into the session; drafts cleared.
-//         "noted" — payload appended to the source seed's log; drafts cleared.
+// status: "delivered" — payload typed into the session; sent marks removed.
+//         "noted" — payload appended to the source seed's log; sent marks removed.
 //         "skipped_pending_approval" — target is waiting on an approval
 //           prompt; nothing was typed, drafts kept.
 //         "error" — see error; drafts kept.
-// generation: new generation floor after a delivered/noted clear so the client
-// can seed its counter without a round-trip.
+// annotations and generation: the draft after a delivered or noted send removed
+// what went. Marks saved or changed while the send was under way stay in it.
 model MarkdownAnnotationsSubmitResultMessage {
   event: "markdown_annotations_submit_result";
   request_id: string;
@@ -2976,8 +2945,8 @@ model MarkdownAnnotationsSubmitResultMessage {
   success: boolean;
   status: string;
   error?: string;
+  annotations?: MarkdownAnnotation[];
   generation?: int32;
-  sent_annotations?: MarkdownAnnotation[];
 }
 
 // Open or retarget the docked browser tile. Sent by `attn browser open`.
@@ -8830,7 +8799,6 @@ alias DaemonEvent =
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage
-  | MarkdownAnnotationsClearResultMessage
   | MarkdownAnnotationsSubmitResultMessage
   | BusStatusResultMessage
   | BusSetConsumerEnabledResultMessage
