@@ -7022,6 +7022,7 @@ export interface MarkdownAnnotationsSubmitResultMessage {
     path?:              string;
     request_id:         string;
     seed_id?:           string;
+    sent_annotations?:  AnnotationElement[];
     source_kind:        string;
     status:             string;
     success:            boolean;
@@ -24448,6 +24449,7 @@ const typeMap: any = {
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+        { json: "sent_annotations", js: "sent_annotations", typ: u(undefined, a(r("AnnotationElement"))) },
         { json: "source_kind", js: "source_kind", typ: "" },
         { json: "status", js: "status", typ: "" },
         { json: "success", js: "success", typ: true },

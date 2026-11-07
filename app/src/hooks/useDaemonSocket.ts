@@ -147,7 +147,7 @@ import {
   markdownAnnotationKey,
 } from './daemonMarkdownAnnotationEvents';
 import type { MarkdownDocumentSource } from '../components/MarkdownReader/documentSource';
-import type { MarkdownAnnotationsDestination } from '../components/MarkdownReader/annotations/transport';
+import type { MarkdownAnnotationsDestination, MarkdownAnnotationsSubmitResult } from '../components/MarkdownReader/annotations/transport';
 import {
   pendingRequestKey,
   sendKeyedRequest as sendLastWriterWinsRequest,
@@ -3039,7 +3039,7 @@ export function useDaemonSocket({
       ? { target_session_id: destination.sessionId }
       : { target_seed_id: destination.seedId };
     return (
-    sendMarkdownAnnotationsCommand<{ status: string; generation?: number; error?: string }>(
+    sendMarkdownAnnotationsCommand<MarkdownAnnotationsSubmitResult>(
       'submit', source, { ...destinationFields, orphaned_ids: orphanedIds },
     ));
   }, [sendMarkdownAnnotationsCommand]);

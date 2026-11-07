@@ -4,12 +4,13 @@
 import type { WireAnnotation } from './types';
 import type { MarkdownDocumentSource } from '../documentSource';
 
-/** `delivered` types into a session, `noted` appends to a seed; both tombstone-clear
- * drafts. `skipped_pending_approval` keeps the draft. */
+/** `delivered` types into a session, `noted` appends to a seed; both remove
+ * `sentAnnotations` from the draft. `skipped_pending_approval` keeps the draft. */
 export interface MarkdownAnnotationsSubmitResult {
   status: string;
   generation?: number;
   error?: string;
+  sentAnnotations: WireAnnotation[];
 }
 
 export type MarkdownAnnotationsDestination =

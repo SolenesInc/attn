@@ -804,7 +804,7 @@ describe('App markdown annotations sending', () => {
     daemon.on('markdown_annotations_submit', () => undefined);
   }
 
-  function answerSubmit(daemon: ScriptedDaemon, submit: CommandMessage<'markdown_annotations_submit'>, fields: { status: string; generation?: number; error?: string }) {
+  function answerSubmit(daemon: ScriptedDaemon, submit: CommandMessage<'markdown_annotations_submit'>, fields: { status: string; generation?: number; error?: string; sent_annotations?: WireAnnotation[] }) {
     daemon.replyTo(submit, {
       event: 'markdown_annotations_submit_result',
       request_id: submit.request_id,
@@ -833,7 +833,7 @@ describe('App markdown annotations sending', () => {
     const [submit] = daemon.sentOf('markdown_annotations_submit');
     expect(submit).toMatchObject({ target_session_id: 's1', orphaned_ids: [] });
 
-    answerSubmit(daemon, submit, { status: 'delivered', generation: 9 });
+    answerSubmit(daemon, submit, { status: 'delivered', generation: 9, sent_annotations: save.annotations });
     await daemon.idle();
     expect(paintedMarks(reader())).toEqual([]);
     expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
@@ -847,14 +847,90 @@ describe('App markdown annotations sending', () => {
     expect(saves(daemon).slice(-1)[0]).toMatchObject({ generation: 10 });
   });
 
-  it('keeps the delivered marks gone when a stale answer to a save made during the send arrives late', async () => {
+  it('keeps a mark made while the send was in flight, saves it past the delivered generation and says it stayed', async () => {
     const { daemon, reader, tile } = await openDocument();
     holdSubmit(daemon);
     daemon.on('markdown_annotations_save', () => undefined);
     await select(daemon, reader(), 'target words');
     fireEvent.click(toolbarButton('Delete'));
     await settleSaves(daemon);
-    answerSave(daemon, saves(daemon)[0], { success: true });
+    const [sentDraft] = saves(daemon);
+    answerSave(daemon, sentDraft, { success: true });
+    fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+    await select(daemon, reader(), 'plain prose');
+    fireEvent.click(toolbarButton('Delete'));
+    await settleSaves(daemon);
+    const [, duringSend] = saves(daemon);
+    answerSave(daemon, duringSend, { success: true });
+
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 6, sent_annotations: sentDraft.annotations });
+    await daemon.idle();
+
+    expect(paintedMarks(reader())).toEqual(['plain prose']);
+    const after = saves(daemon).slice(-1)[0];
+    expect(after.generation).toBe(8);
+    expect(after.annotations.map((mark) => mark.anchor?.exact)).toEqual(['plain prose']);
+    expect(daemon.sentOf('markdown_annotations_clear')).toEqual([]);
+    expect(within(tile()).getByRole('status')).toHaveTextContent('1 still here');
+    expect(within(tile()).getByRole('button', { name: 'Sent ✓' })).toBeInTheDocument();
+  });
+
+  it('saves nothing more when the daemon already took the sent marks out of the newer draft', async () => {
+    const { daemon, reader, tile } = await openDocument();
+    holdSubmit(daemon);
+    daemon.on('markdown_annotations_save', () => undefined);
+    await select(daemon, reader(), 'target words');
+    fireEvent.click(toolbarButton('Delete'));
+    await settleSaves(daemon);
+    const [sentDraft] = saves(daemon);
+    answerSave(daemon, sentDraft, { success: true });
+    fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+    await select(daemon, reader(), 'plain prose');
+    fireEvent.click(toolbarButton('Delete'));
+    await settleSaves(daemon);
+    answerSave(daemon, saves(daemon)[1], { success: true });
+
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 7, sent_annotations: sentDraft.annotations });
+    await daemon.idle();
+
+    expect(paintedMarks(reader())).toEqual(['plain prose']);
+    expect(saves(daemon)).toHaveLength(2);
+  });
+
+  it('keeps a mark changed while the send carrying it was in flight', async () => {
+    const { daemon, reader, tile } = await openDocument();
+    holdSubmit(daemon);
+    daemon.on('markdown_annotations_save', () => undefined);
+    await select(daemon, reader(), 'target words');
+    fireEvent.click(toolbarButton('Comment'));
+    fireEvent.change(composer()!, { target: { value: 'first thought' } });
+    fireEvent.keyDown(composer()!, { key: 'Enter', metaKey: true });
+    await settleSaves(daemon);
+    const [sentDraft] = saves(daemon);
+    answerSave(daemon, sentDraft, { success: true });
+    fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
+    await daemon.idle();
+
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], {
+      status: 'delivered', generation: 9,
+      sent_annotations: [{ ...sentDraft.annotations[0], text: 'an older thought' }],
+    });
+    await daemon.idle();
+
+    expect(paintedMarks(reader())).toEqual(['target words']);
+  });
+
+  it('removes the delivered marks even if a stale answer to a save made during the send arrives late', async () => {
+    const { daemon, reader, tile } = await openDocument();
+    holdSubmit(daemon);
+    daemon.on('markdown_annotations_save', () => undefined);
+    await select(daemon, reader(), 'target words');
+    fireEvent.click(toolbarButton('Delete'));
+    await settleSaves(daemon);
+    const [sentDraft] = saves(daemon);
+    answerSave(daemon, sentDraft, { success: true });
     fireEvent.click(within(tile()).getByRole('button', { name: 'Send 1 to s1' }));
     await daemon.idle();
     await select(daemon, reader(), 'plain prose');
@@ -862,12 +938,12 @@ describe('App markdown annotations sending', () => {
     await settleSaves(daemon);
     const [, lateSave] = saves(daemon);
 
-    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 9 });
+    answerSubmit(daemon, daemon.sentOf('markdown_annotations_submit')[0], { status: 'delivered', generation: 9, sent_annotations: sentDraft.annotations });
     await daemon.idle();
     answerSave(daemon, lateSave, { success: false, stale: true });
     await daemon.idle();
 
-    expect(paintedMarks(reader())).toEqual([]);
+    expect(paintedMarks(reader())).not.toContain('target words');
   });
 
   it('refuses to send marks before the stored ones have been read', async () => {

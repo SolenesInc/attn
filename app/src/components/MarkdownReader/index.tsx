@@ -32,6 +32,7 @@ import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSou
 import { tilePathBasename } from '../../utils/tilePresentation';
 import { isSeedId } from '../../utils/seedId';
 import type { SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
+import type { WireAnnotation } from './annotations/types';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import './MarkdownReader.css';
 
@@ -468,7 +469,7 @@ export interface MarkdownAnnotationsSendHandle {
   /** False until the daemon draft loaded; a send before then formats the
       daemon's STORED draft, not the local list. */
   isHydrated(): boolean;
-  applyDeliveredClear(generationFloor: number): void;
+  applyDelivered(sent: WireAnnotation[], generationFloor: number): number;
   getOrphanedIds(): string[];
   openInspector(): void;
   openGlobalComment(anchorEl: HTMLElement): void;
@@ -583,8 +584,8 @@ export const MarkdownReader = memo(function MarkdownReader({
   useImperativeHandle(annotationsSendRef, () => ({
     flushPendingSave: () => annotationsApiRef.current.flushPendingSave(),
     isHydrated: () => annotationsApiRef.current.isHydrated(),
-    applyDeliveredClear: (generationFloor: number) =>
-      annotationsApiRef.current.applyDeliveredClear(generationFloor),
+    applyDelivered: (sent: WireAnnotation[], generationFloor: number) =>
+      annotationsApiRef.current.applyDelivered(sent, generationFloor),
     getOrphanedIds: () => Array.from(annotationsApiRef.current.orphans.keys()),
     openInspector: () => annotationLayerRef.current?.openInspector(),
     openGlobalComment: (anchorEl: HTMLElement) => annotationLayerRef.current?.openGlobalComment(anchorEl),

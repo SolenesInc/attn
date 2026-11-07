@@ -16,6 +16,7 @@ type MarkdownAnnotationEvent = {
   status?: unknown;
   generation?: unknown;
   annotations?: unknown;
+  sent_annotations?: unknown;
 };
 
 export function handleMarkdownAnnotationDaemonEvent(
@@ -69,6 +70,7 @@ export function handleMarkdownAnnotationDaemonEvent(
           status: typeof event.status === 'string' && event.status !== '' ? event.status : 'delivered',
           ...(typeof event.generation === 'number' ? { generation: event.generation } : {}),
           ...(typeof event.error === 'string' && event.error !== '' ? { error: event.error } : {}),
+          sentAnnotations: Array.isArray(event.sent_annotations) ? event.sent_annotations : [],
         });
       } else {
         waiter.reject(new Error(event.error || 'markdown_annotations_submit failed'));

@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -73,6 +74,74 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 	}
 	if stale := saveDocumentAnnotations(app, plan, 7, hello); stale.Success || !protocol.Deref(stale.Stale) {
 		t.Errorf("a save at the delivered generation = %+v, want it refused as stale", stale)
+	}
+}
+
+func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
+	marks := func(texts ...string) []protocol.MarkdownAnnotation {
+		out := make([]protocol.MarkdownAnnotation, 0, len(texts))
+		for _, text := range texts {
+			id, feedback, _ := strings.Cut(text, "=")
+			out = append(out, protocol.MarkdownAnnotation{ID: id, Type: "global", Text: protocol.Ptr(feedback), CreatedAt: 1})
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name      string
+		saver     func(w *world, sender *testworld.Peer) *testworld.Peer
+		during    []string
+		wantKept  []string
+		wantFloor int
+	}{
+		{name: "a mark added by the sending client", during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}, wantFloor: 2},
+		{name: "a mark added by another client", saver: func(w *world, _ *testworld.Peer) *testworld.Peer { return w.App() },
+			during: []string{"a=first", "b=second"}, wantKept: []string{"b=second"}, wantFloor: 2},
+		{name: "a mark rewritten while it went", during: []string{"a=rewritten"}, wantKept: []string{"a=rewritten"}, wantFloor: 2},
+		{name: "the same marks saved again", during: []string{"a=first"}, wantFloor: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+			agent := w.Launched(session)
+			app.AwaitScreen(session, "? for shortcuts")
+			doc := fileAnnotatedDocument("/notes/plan.md")
+			saver := app
+			if tc.saver != nil {
+				saver = tc.saver(w, app)
+			}
+			if saved := saveDocumentAnnotations(app, doc, 1, marks("a=first")); !saved.Success {
+				t.Fatalf("save before the send = %+v", saved)
+			}
+
+			placing := w.PauseAt(pausepoint.SessionInputPlacing)
+			requestID := uuid.NewString()
+			app.Send(protocol.MarkdownAnnotationsSubmitMessage{Cmd: protocol.CmdMarkdownAnnotationsSubmit, RequestID: requestID,
+				DocumentUri: doc.uri, SourceKind: doc.kind, Path: doc.path, TargetSessionID: protocol.Ptr(session)})
+			placing.Await()
+			if saved := saveDocumentAnnotations(saver, doc, 2, marks(tc.during...)); !saved.Success {
+				t.Fatalf("save during the send = %+v, want it acknowledged", saved)
+			}
+			placing.Release()
+
+			result := testworld.Await(app, protocol.EventMarkdownAnnotationsSubmitResult, func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == requestID })
+			if result.Status != "delivered" || protocol.Deref(result.Generation) != tc.wantFloor {
+				t.Fatalf("the send = %+v, want delivered at generation %d", result, tc.wantFloor)
+			}
+			if !reflect.DeepEqual(result.SentAnnotations, marks("a=first")) {
+				t.Errorf("the send reported sending %+v, want only the mark it placed", result.SentAnnotations)
+			}
+			if got := agent.Prompted(); !strings.Contains(got, "first") || strings.Contains(got, "second") || strings.Contains(got, "rewritten") {
+				t.Errorf("the agent was prompted with %q, want only what the draft held when the send began", got)
+			}
+			got := getDocumentAnnotations(w.App(), doc)
+			if want := marks(tc.wantKept...); !reflect.DeepEqual(got.Annotations, want) || got.Generation != tc.wantFloor {
+				t.Errorf("the draft after the send = %+v, want %+v at generation %d", got, want, tc.wantFloor)
+			}
+			if next := saveDocumentAnnotations(app, doc, tc.wantFloor+1, marks("c=third")); !next.Success {
+				t.Errorf("a save past the send's generation = %+v, want it accepted", next)
+			}
+		})
 	}
 }
 

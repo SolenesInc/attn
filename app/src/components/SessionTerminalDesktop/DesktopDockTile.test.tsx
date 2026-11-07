@@ -521,7 +521,7 @@ function makeSendTransport(seed: WireAnnotation[] = [globalNote()]) {
   const saveSpy = vi.fn(async (_source: unknown, _annotations: WireAnnotation[], _generation: number) => ({ stale: false }));
   const clearSpy = vi.fn(async (_source: unknown, generation: number) => ({ generation }));
   const submitSpy = vi.fn(
-    async (): Promise<MarkdownAnnotationsSubmitResult> => ({ status: 'delivered', generation: 6 }),
+    async (): Promise<MarkdownAnnotationsSubmitResult> => ({ status: 'delivered', generation: 6, sentAnnotations: seed }),
   );
   const transport: MarkdownAnnotationsTransport = {
     getMarkdownAnnotations: getSpy,
@@ -753,7 +753,7 @@ describe('DesktopDockTile markdown send flow', () => {
     });
 
     await act(async () => {
-      resolveSubmit({ status: 'delivered', generation: 9 });
+      resolveSubmit({ status: 'delivered', generation: 9, sentAnnotations: [globalNote()] });
     });
     expect(screen.getByRole('status')).toHaveTextContent('Sent ✓');
     expect(sendButton()).toHaveTextContent('Sent ✓');
@@ -764,7 +764,7 @@ describe('DesktopDockTile markdown send flow', () => {
 
   it('keeps annotations and explains when the target is waiting on approval (E15)', async () => {
     const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({ status: 'skipped_pending_approval' });
+    submitSpy.mockResolvedValue({ status: 'skipped_pending_approval', sentAnnotations: [] });
     setMarkdownAnnotationsTransport(transport);
     renderSendTile();
     await waitFor(() => {
@@ -1044,7 +1044,7 @@ describe('DesktopDockTile seed reader', () => {
       sendOpenMarkdown: vi.fn(),
     });
     const { transport, submitSpy } = makeSendTransport();
-    submitSpy.mockResolvedValue({ status: 'noted', generation: 8 });
+    submitSpy.mockResolvedValue({ status: 'noted', generation: 8, sentAnnotations: [globalNote()] });
     setMarkdownAnnotationsTransport(transport);
     render(
       <DesktopDockTile

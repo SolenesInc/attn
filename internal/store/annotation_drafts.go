@@ -118,8 +118,16 @@ func (t annotationDraftTable) clear(s *Store, key string, generation int, now ti
 	if err != nil {
 		return err
 	}
-	newTombstone := max(generation, max(storedGeneration, tombstone))
+	if err := t.emptyWithin(tx, key, storedGeneration, max(generation, max(storedGeneration, tombstone)), now); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit %s clear: %w", t.table, err)
+	}
+	return nil
+}
 
+func (t annotationDraftTable) emptyWithin(tx *sql.Tx, key string, generation, tombstone int, now time.Time) error {
 	noteColumns, noteValues, noteUpdates := "", "", ""
 	if t.note {
 		noteColumns, noteValues, noteUpdates = ", note", ", ''", "note = '',\n\t\t\t"
@@ -132,11 +140,8 @@ func (t annotationDraftTable) clear(s *Store, key string, generation int, now ti
 			%stombstone_generation = excluded.tombstone_generation,
 			updated_at = excluded.updated_at
 	`, t.table, t.key, noteColumns, noteValues, t.key, noteUpdates)
-	if _, err := tx.Exec(query, key, storedGeneration, newTombstone, now.UTC().Format(time.RFC3339)); err != nil {
+	if _, err := tx.Exec(query, key, generation, tombstone, now.UTC().Format(time.RFC3339)); err != nil {
 		return fmt.Errorf("failed to clear %s draft: %w", t.table, err)
-	}
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit %s clear: %w", t.table, err)
 	}
 	return nil
 }

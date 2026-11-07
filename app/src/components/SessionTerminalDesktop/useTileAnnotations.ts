@@ -11,7 +11,7 @@ import { type SeedDocument } from '../SeedDocumentView';
 
 import type { DesktopTileSessionOption } from './DesktopDockTile';
 type MarkdownSendResult =
-  | { kind: 'sent'; destination: 'session' | 'seed' }
+  | { kind: 'sent'; destination: 'session' | 'seed'; kept: number }
   | { kind: 'skipped' }
   | { kind: 'warning'; message: string }
   | { kind: 'error'; message: string };
@@ -91,8 +91,8 @@ export function useTileAnnotations({
           return { kind: 'warning', message: result.error };
         }
         if (result.status === 'delivered' || result.status === 'noted') {
-          handle.applyDeliveredClear(result.generation ?? 0);
-          return { kind: 'sent', destination: result.status === 'noted' ? 'seed' : 'session' };
+          const kept = handle.applyDelivered(result.sentAnnotations, result.generation ?? 0);
+          return { kind: 'sent', destination: result.status === 'noted' ? 'seed' : 'session', kept };
         }
         if (result.status === 'skipped_pending_approval') {
           return { kind: 'skipped' };
@@ -197,6 +197,10 @@ export function useTileAnnotations({
   };
 }
 
+function sendDoneLabel(destination: 'session' | 'seed') {
+  return destination === 'seed' ? 'Noted ✓' : 'Sent ✓';
+}
+
 function annotationSendPresentation(
   sendStatus: MarkdownSendResult | { kind: 'idle' | 'sending' },
   isSeed: boolean,
@@ -213,18 +217,18 @@ function annotationSendPresentation(
         ? 'Noting…'
         : 'Sending…'
       : sendStatus.kind === 'sent'
-        ? sendStatus.destination === 'seed'
-          ? 'Noted ✓'
-          : 'Sent ✓'
+        ? `${sendDoneLabel(sendStatus.destination)}${sendStatus.kept > 0 ? ` — ${sendStatus.kept} still here` : ''}`
         : sendStatus.kind === 'skipped'
           ? SKIPPED_APPROVAL_MESSAGE
           : sendStatus.kind === 'warning' || sendStatus.kind === 'error'
             ? sendStatus.message
             : null;
   const sendActionLabel =
-    sendStatus.kind === 'sending' || sendStatus.kind === 'sent'
+    sendStatus.kind === 'sending'
       ? (sendStatusMessage as string)
-      : sendStatus.kind === 'skipped'
+      : sendStatus.kind === 'sent'
+        ? sendDoneLabel(sendStatus.destination)
+        : sendStatus.kind === 'skipped'
         ? 'Approval needed'
         : sendStatus.kind === 'warning'
           ? 'Needs attention'

@@ -6691,6 +6691,9 @@ type MarkdownAnnotationsSubmitResultMessage struct {
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 
+	// SentAnnotations corresponds to the JSON schema field "sent_annotations".
+	SentAnnotations []MarkdownAnnotation `json:"sent_annotations,omitempty,omitzero"`
+
 	// SourceKind corresponds to the JSON schema field "source_kind".
 	SourceKind string `json:"source_kind"`
 

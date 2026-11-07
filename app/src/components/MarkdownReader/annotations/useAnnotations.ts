@@ -16,7 +16,7 @@ import {
 } from './annotationsAutomation';
 import { evaluateSelection, type PendingSelection } from './selection';
 import { getMarkdownAnnotationsTransport, type MarkdownAnnotationsTransport } from './transport';
-import { annotationFromWire, annotationToWire, type Annotation } from './types';
+import { annotationFromWire, annotationToWire, type Annotation, type WireAnnotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 
@@ -60,7 +60,8 @@ export interface UseAnnotationsApi {
   /** While false, saves are suppressed: a Send that does not gate on this
       delivers the daemon's stale draft. */
   isHydrated(): boolean;
-  applyDeliveredClear(generationFloor: number): void;
+  /** Returns how many marks stay because they were not part of what went. */
+  applyDelivered(sent: WireAnnotation[], generationFloor: number): number;
 
   selectAnnotation(id: string | null): void;
   focusAnnotation(id: string): void;
@@ -791,33 +792,46 @@ export function useAnnotations({
     }
   }, [getTransport, schedulePersistRetry]);
 
-  // The daemon already tombstone-cleared the draft at delivery time, so this must
-  // NOT issue a second daemon clear.
-  const applyDeliveredClear = useCallback((generationFloor: number) => {
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
-    hydrateTokenRef.current += 1;
-    // The post-clear empty state IS the authoritative daemon state at the returned
-    // floor; leaving hasHydratedRef false would suppress every save: silent data loss.
-    if (hydrateRetryTimerRef.current) {
-      clearTimeout(hydrateRetryTimerRef.current);
-      hydrateRetryTimerRef.current = null;
-    }
-    hasHydratedRef.current = true;
+  // The daemon already removed what it sent from the draft, so a second clear is
+  // owed only when this client's own save may have reached the daemon after that.
+  const applyDelivered = useCallback((sent: WireAnnotation[], generationFloor: number): number => {
+    const sentById = new Map(sent.map((mark) => [mark.id, mark]));
+    const delivered = (annotation: Annotation) => {
+      const mark = sentById.get(annotation.id);
+      return mark !== undefined
+        && mark.type === annotation.type
+        && mark.text === annotation.text
+        && mark.quick_label_id === annotation.quickLabelId;
+    };
+    const savedPastFloor = generationRef.current > generationFloor || saveTimerRef.current !== null;
     generationRef.current = Math.max(generationRef.current, generationFloor);
-    annotationsRef.current = [];
-    orphansRef.current = new Map();
-    setAnnotations([]);
-    setOrphans(new Map());
-    selectedIdRef.current = null;
-    setSelectedId(null);
-    painterRef.current?.clearAll();
-    rangesRef.current.clear();
-    pendingRef.current = null;
-    setPending(null);
-  }, []);
+
+    const kept = annotationsRef.current.filter((annotation) => !delivered(annotation));
+    const keptOrphans = new Map(orphansRef.current);
+    for (const annotation of annotationsRef.current) {
+      if (delivered(annotation)) {
+        painterRef.current?.clear(annotation.id);
+        rangesRef.current.delete(annotation.id);
+        keptOrphans.delete(annotation.id);
+      }
+    }
+    annotationsRef.current = kept;
+    orphansRef.current = keptOrphans;
+    setAnnotations(kept);
+    setOrphans(keptOrphans);
+    if (selectedIdRef.current !== null && !kept.some((annotation) => annotation.id === selectedIdRef.current)) {
+      selectedIdRef.current = null;
+      setSelectedId(null);
+    }
+
+    if (!hasHydratedRef.current) {
+      // A re-sync's read may predate the send, so read the draft as it is now.
+      void hydrateRef.current?.();
+    } else if (savedPastFloor) {
+      persistNow();
+    }
+    return kept.length;
+  }, [persistNow]);
 
   const isHydrated = useCallback(() => hasHydratedRef.current, []);
 
@@ -936,7 +950,7 @@ export function useAnnotations({
       clearAll,
       flushPendingSave,
       isHydrated,
-      applyDeliveredClear,
+      applyDelivered,
       selectAnnotation,
       focusAnnotation,
       justCreatedIdRef,
@@ -960,7 +974,7 @@ export function useAnnotations({
       clearAll,
       flushPendingSave,
       isHydrated,
-      applyDeliveredClear,
+      applyDelivered,
       selectAnnotation,
       focusAnnotation,
     ],

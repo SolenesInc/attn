@@ -106,17 +106,15 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		result.Status = annotationSubmitStatusNoted
 	}
 	result.Success = true
-	if err := d.store.ClearMarkdownAnnotationDraft(source.draftKey, draft.Generation, time.Now()); err != nil {
+	result.SentAnnotations = annotations
+	generation, err := d.store.SpendMarkdownAnnotations(source.draftKey, annotations, time.Now())
+	if err != nil {
 		verb := result.Status
 		d.logf("markdown_annotations_submit: %s: %s but clearing drafts failed: %v", source.draftKey, verb, err)
 		result.Error = protocol.Ptr(verb + "; failed to clear drafts: " + err.Error())
 		d.sendToClient(client, result)
 		return
 	}
-	if fresh, err := d.store.GetMarkdownAnnotationDraft(source.draftKey); err == nil {
-		result.Generation = protocol.Ptr(fresh.Generation)
-	} else {
-		d.logf("markdown_annotations_submit: %s: reading post-clear floor: %v", source.draftKey, err)
-	}
+	result.Generation = protocol.Ptr(generation)
 	d.sendToClient(client, result)
 }

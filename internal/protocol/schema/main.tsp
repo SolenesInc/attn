@@ -2977,6 +2977,7 @@ model MarkdownAnnotationsSubmitResultMessage {
   status: string;
   error?: string;
   generation?: int32;
+  sent_annotations?: MarkdownAnnotation[];
 }
 
 // Open or retarget the docked browser tile. Sent by `attn browser open`.
