@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -27,10 +28,11 @@ func (d *Daemon) inNotificationRun(sessionID protocol.SessionID) bool {
 	return ok && view.NotificationRun.V
 }
 
-func (d *Daemon) stopFollowsNotification(session *protocol.Session) (followsNotification, sameState bool) {
+func (d *Daemon) howRunStopped(session *protocol.Session) (followsNotification, failed, sameState bool) {
 	view, ok := d.monitorViewFor(session.ID)
 	if !ok {
-		return false, true
+		return false, false, true
 	}
-	return view.NotificationStop.V, view.State.V.State == session.State
+	state := view.State.V
+	return view.NotificationStop.V, attention.RunFailed(state.Reason), state.State == session.State
 }

@@ -196,16 +196,55 @@ func TestANotificationRunThatNeedsApprovalPushesInEitherFlow(t *testing.T) {
 	}
 }
 
-func TestANotificationRunThatDiesOnAnErrorPushesInEitherFlow(t *testing.T) {
+func TestARunThatDiesOnAnErrorPushesThatItFailedWithoutAnEarlierAnswer(t *testing.T) {
+	type failingRun struct {
+		agent    *fakeagent.Run
+		cli      *client.Client
+		session  string
+		terminal protocol.TerminalID
+	}
+	starts := []struct {
+		name string
+		run  func(app *testworld.Peer, r failingRun, before protocol.Session) protocol.Session
+	}{
+		{"a notification's run", func(app *testworld.Peer, r failingRun, before protocol.Session) protocol.Session {
+			working, _ := notificationRunStarts(t, app, r.cli, r.agent, r.session, before, "rebase onto main")
+			return working
+		}},
+		{"the user's run", func(app *testworld.Peer, r failingRun, before protocol.Session) protocol.Session {
+			app.TypeLine(r.session, "rebase onto main")
+			r.agent.Prompted()
+			return testworld.AwaitStateAfter(app, before, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		}},
+	}
+	failures := []struct {
+		name string
+		fail func(t *testing.T, r failingRun)
+	}{
+		{"terminal status", func(_ *testing.T, r failingRun) { r.agent.ProgramStatus("state=error:app=claude-code") }},
+		{"harness hook", func(t *testing.T, r failingRun) {
+			if err := r.cli.RecordStopFailure(r.terminal, "rate_limit", "usage limit reached"); err != nil {
+				t.Fatalf("recording the stop failure: %v", err)
+			}
+		}},
+	}
 	for _, flow := range phonePushFlows {
-		t.Run(flow.name, func(t *testing.T) {
-			w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
-			session, agent, owed := owingIdleAgent(t, w, app, cli)
-			working, _ := notificationRunStarts(t, app, cli, agent, session, settleFromApp(app, owed), "rebase onto main")
-			agent.ProgramStatus("state=error:app=claude-code")
-			testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
-			phone.expect("waiting", "Waiting.")
-		})
+		for _, start := range starts {
+			for _, failure := range failures {
+				t.Run(flow.name+"/"+start.name+"/"+failure.name, func(t *testing.T) {
+					w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
+					session, agent, owed := owingIdleAgent(t, w, app, cli)
+					run := failingRun{agent: agent, cli: cli, session: session, terminal: protocol.TerminalID(w.Terminal(session))}
+					working := start.run(app, run, settleFromApp(app, owed))
+					failure.fail(t, run)
+					failed := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+					phone.expect("run_failed", "")
+
+					userRunStops(app, agent, settleFromApp(app, failed), "try again", "Rebased. <!-- attn:state=waiting_input -->")
+					phone.expect("waiting", "Rebased.")
+				})
+			}
+		}
 	}
 }
 

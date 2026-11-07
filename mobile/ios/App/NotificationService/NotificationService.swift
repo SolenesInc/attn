@@ -80,6 +80,7 @@ class NotificationService: UNNotificationServiceExtension {
         switch note.kind {
         case "needs_approval": label = "needs approval"
         case "ask": label = "asks"
+        case "run_failed": label = "run failed"
         default: label = "waiting"
         }
         return note.text.isEmpty ? label : label + ": " + note.text

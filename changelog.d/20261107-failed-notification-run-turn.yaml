@@ -4,5 +4,6 @@ change: >
   A Claude Code agent that a notification woke and whose run then failed, such
   as on a usage limit, now goes into your queue and notifies your phone. It used
   to sit at its prompt with no turn, because it never got the response it needed
-  to ask for one. Attn also stops sending heartbeats and sleep requests to a crew
+  to ask for one. A failed run's phone notification says "run failed" and never
+  shows an earlier answer as its result. Attn also stops sending heartbeats and sleep requests to a crew
   member whose run failed, until it runs again.

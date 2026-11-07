@@ -52,7 +52,8 @@ message or a pull request update, sends nothing to the phone in any flow. In
 queue flow with quiet notifications off, the agent still goes into your queue,
 and the phone stays silent. If the agent opened its turn, such stops notify you
 once for that turn. A run that Claude Code reports as failed, such as on a usage
-limit, notifies you in any flow.
+limit, notifies you in any flow with "run failed" and no message text, so an
+earlier answer never reads as the result of that run.
 
 ## Read and tend the Garden
 

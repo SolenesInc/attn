@@ -36,6 +36,7 @@ const (
 
 const (
 	phonePushWaiting       = "waiting"
+	phonePushRunFailed     = "run_failed"
 	phonePushNeedsApproval = "needs_approval"
 	phonePushAsk           = "ask"
 )
@@ -199,12 +200,14 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	if askedForUser {
 		agentTurn = protocol.Deref(session.TurnOpenedAt)
 	}
-	notificationStop, sameState := d.stopFollowsNotification(session)
+	notificationStop, runFailed, sameState := d.howRunStopped(session)
 	if !sameState {
 		return phonePushNote{}, false
 	}
 	announced := agentTurn != "" && pushes.pushedAgentTurn[sessionID] == agentTurn
 	switch {
+	case session.State == protocol.SessionStateWaitingInput && runFailed:
+		kind = phonePushRunFailed
 	case session.State == protocol.SessionStateWaitingInput && !notificationStop:
 		kind = phonePushWaiting
 	case (session.State == protocol.SessionStateWaitingInput || session.State == protocol.SessionStateIdle) && askedForUser && !announced:
