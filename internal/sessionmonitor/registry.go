@@ -124,6 +124,7 @@ type Monitor struct {
 	activityAt           time.Time
 	transcriptWatch      *transcriptWatcher
 	finalUsage           []func()
+	lastWatcherDone      chan struct{}
 	usageRuns            int
 	usageIdle            chan struct{}
 	usageDraining        bool

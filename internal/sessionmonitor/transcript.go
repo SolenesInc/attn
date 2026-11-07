@@ -202,25 +202,7 @@ func watcherStopped(w *transcriptWatcher) bool {
 }
 
 func (m *Monitor) EnsureTranscriptWatcher(transcriptPath string) {
-	if m == nil {
-		return
-	}
-	m.mu.Lock()
-	agent := m.agent
-	m.mu.Unlock()
-	if !IsTranscriptWatchedAgent(agent) {
-		return
-	}
-	transcriptPath = strings.TrimSpace(transcriptPath)
-	m.mu.Lock()
-	watcher := m.transcriptWatch
-	current := watcher != nil && watcher.agent == agent &&
-		strings.TrimSpace(watcher.preferredPath) == transcriptPath && !watcherStopped(watcher)
-	m.mu.Unlock()
-	if current {
-		return
-	}
-	m.StartTranscriptWatcher(transcriptPath)
+	m.startTranscriptWatcher(transcriptPath, false)
 }
 
 func transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
@@ -233,6 +215,14 @@ func transcriptBootstrapBytesForAgent(agent protocol.SessionAgent) int64 {
 }
 
 func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
+	m.startTranscriptWatcher(transcriptPath, true)
+}
+
+func (w *transcriptWatcher) follows(agent protocol.SessionAgent, preferredPath string) bool {
+	return w != nil && w.agent == agent && w.preferredPath == preferredPath && !watcherStopped(w)
+}
+
+func (m *Monitor) startTranscriptWatcher(transcriptPath string, replaceCurrent bool) {
 	if m == nil {
 		return
 	}
@@ -254,14 +244,21 @@ func (m *Monitor) StartTranscriptWatcher(transcriptPath string) {
 		m.mu.Unlock()
 		return
 	}
-	watcher := newTranscriptWatcher(m, agent, cwd, startedAt, behavior)
-	watcher.preferredPath = strings.TrimSpace(transcriptPath)
-
-	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
-	if !m.registry.host.Go("runTranscriptWatcher", watcher.run) {
+	preferredPath := strings.TrimSpace(transcriptPath)
+	if !replaceCurrent && m.transcriptWatch.follows(agent, preferredPath) {
 		m.mu.Unlock()
 		return
 	}
+	watcher := newTranscriptWatcher(m, agent, cwd, startedAt, behavior)
+	watcher.preferredPath = preferredPath
+
+	// Admitted before it replaces the previous watcher, so a refused start leaves that one to stop's final reconcile.
+	predecessorDone := m.lastWatcherDone
+	if !m.registry.host.Go("runTranscriptWatcher", func() { watcher.run(predecessorDone) }) {
+		m.mu.Unlock()
+		return
+	}
+	m.lastWatcherDone = watcher.doneCh
 	m.beginUsageRunLocked()
 	previous := m.transcriptWatch
 	m.transcriptWatch = watcher
@@ -462,13 +459,17 @@ func (m *Monitor) TranscriptHead() (string, error) {
 
 var errNoActivityTranscript = errors.New("the session has no live transcript")
 
-func (w *transcriptWatcher) run() {
+func (w *transcriptWatcher) run(predecessorDone <-chan struct{}) {
 	m := w.monitor
 	label := m.Label()
 	defer m.endUsageRun()
 	var finalMeasureAt time.Time
 	defer func() { w.handOverRunsAtExit(finalMeasureAt) }()
 	defer close(w.doneCh)
+
+	if predecessorDone != nil {
+		<-predecessorDone
+	}
 
 	if w.behavior == nil {
 		m.logf("transcript watcher: no behavior configured session=%s agent=%s", label, w.agent)

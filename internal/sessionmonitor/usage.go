@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/sessioncost"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -144,6 +145,9 @@ func (t *usageTracker) readIfMoved(tracked *trackedUsageSource) (changed bool) {
 		return t.markIncomplete()
 	}
 	tracked.info = info
+	if len(batch.Usage) > 0 {
+		pausepoint.At(pausepoint.TranscriptUsageRead)
+	}
 	return t.monitor.applyCostObservations(tracked.source.ID, tracked.source.Root, tracked.follower.Cursor(), usageObservations(tracked.source, batch.Usage))
 }
 

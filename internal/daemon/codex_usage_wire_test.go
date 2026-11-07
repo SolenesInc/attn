@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -56,6 +57,41 @@ func codexRollout(t *testing.T, w *world, conversation string) string {
 		t.Fatalf("rollout of %s = %v (%v), want exactly one", conversation, rollouts, err)
 	}
 	return rollouts[0]
+}
+
+func TestAResumedCodexSessionCountsItsFirstReplyOnceWhenItsWatcherIsReplaced(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	cwd := w.Path("shop")
+	session := w.Spawn(app, fakeagent.Codex, cwd)
+	codex := w.Launched(session)
+	app.TypeLine(session, "add a discount field to checkout")
+	codex.Prompted()
+	question := "Before or after tax? <!-- attn:state=waiting_input -->"
+	codex.Reply(question)
+	counted := claudeTokens(question)
+	awaitUsageTokens(app, session, counted)
+
+	resumed := respawn(w, app, fakeagent.Codex, session, cwd)
+	app.TypeLine(session, "after tax")
+	resumed.Prompted()
+	read := w.PauseAt(pausepoint.TranscriptUsageRead)
+	w.OnTranscriptWrite(func() {})
+	applied := "Applied after tax. <!-- attn:state=idle -->"
+	resumed.Reply(applied)
+	counted += claudeTokens(applied)
+	read.Await()
+	read.Release()
+	w.OnTranscriptWrite(w.readTranscripts)
+
+	app.TypeLine(session, "show the diff")
+	resumed.Prompted()
+	shown := "Here is the diff. <!-- attn:state=idle -->"
+	resumed.Reply(shown)
+	counted += claudeTokens(shown)
+	if usage := awaitUsageTokens(app, session, counted); usage.MeasurementIncomplete != nil {
+		t.Errorf("usage after resuming = %+v, want it complete", usage)
+	}
 }
 
 func TestCodexUsageCountsEveryRequestOnceAcrossARestart(t *testing.T) {

@@ -78,6 +78,7 @@ const (
 	ConversationInputLookup        = "conversation-input-lookup"
 	ConversationCandidateBound     = "conversation-candidate-bound"
 	ConversationCandidateStart     = "conversation-candidate-start"
+	TranscriptUsageRead            = "transcript-usage-read"
 	MemberRetiredClearSleep        = "member-retired-clear-sleep"
 	ConversationDropped            = "conversation-dropped"
 	ConversationReportReady        = "conversation-report-ready"
