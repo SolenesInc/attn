@@ -30,6 +30,10 @@ function firstLine(text: string): string {
   return text.split('\n', 1)[0] ?? ''
 }
 
+function oneRow(text: string): string {
+  return text.replace(/\s*\n\s*/g, ' ')
+}
+
 function post($: EngineInterface, path: string, body: object, answered?: (text: string) => void): Promise<void> {
   lastRequest = lastRequest.then(() => send($, path, body, answered))
   return lastRequest
@@ -174,11 +178,11 @@ async function appendHeld($: EngineInterface): Promise<void> {
       .append({ message: { type: 'user', content: [{ type: 'text', text: MID_TURN_HEAD + text + MID_TURN_TAIL }] } })
       .catch((err: unknown) => ({ deny: String(err) }))
     if (appended.deny !== undefined) {
-      $.ui.log(`attn takes this back, Claude refused it (${appended.deny}): ${text}`, { to: 'debug' })
+      $.ui.log(`attn takes this back, Claude refused it (${appended.deny}): ${oneRow(text)}`, { to: 'debug' })
       await giveBack($, [message])
       continue
     }
-    $.ui.log(`❯ ${text}`)
+    $.ui.log(`❯ ${oneRow(text)}`)
     await ackHeld($, message, 'appended')
   }
 }

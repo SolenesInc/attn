@@ -321,8 +321,8 @@ func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheModAndIsTypedOnceTheS
 	t.Log("with the setting off, the same session was typed into")
 }
 
-func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtEsc(t *testing.T) {
-	t.Parallel()
+func realClaudeRunningATool(t *testing.T) (*testworld.Stack, *testworld.Peer, *fakeclaudeapi.Model, string, *os.File) {
+	t.Helper()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
 		t.Skip("claude is not on PATH")
@@ -367,13 +367,16 @@ func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtE
 	}()
 	select {
 	case toolRunning := <-opened:
-		defer toolRunning.Close()
+		return s, app, model, recipient, toolRunning
 	case <-time.After(fakeagent.HangGuard):
 		t.Fatalf("Claude did not start the tool within %s", fakeagent.HangGuard)
+		return nil, nil, nil, "", nil
 	}
+}
 
+func quickCapture(t *testing.T, app *testworld.Peer, recipient, words string) string {
+	t.Helper()
 	capture := uuid.NewString()
-	const words = "check the rounding"
 	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{
 		Cmd: protocol.CmdQuickCaptureSend, CaptureID: capture, Content: words, AttachmentIds: []string{},
 		Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(recipient))},
@@ -381,6 +384,16 @@ func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtE
 		t.Fatal(err)
 	}
 	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
+	return capture
+}
+
+func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtEsc(t *testing.T) {
+	t.Parallel()
+	s, app, model, recipient, toolRunning := realClaudeRunningATool(t)
+	defer toolRunning.Close()
+
+	const words = "check the rounding"
+	capture := quickCapture(t, app, recipient, words)
 
 	s.Stop()
 	s.Start()
@@ -393,4 +406,27 @@ func TestAQuickCaptureRealClaudesModHoldsThroughADaemonRestartComesBackUnreadAtE
 	mark := model.Mark()
 	app.TypeLine(recipient, "carry on")
 	model.AwaitPromptSince(t, mark, words)
+}
+
+func TestAMultiLineMessageRealClaudesModAppendsMidTurnShowsOnOneRow(t *testing.T) {
+	t.Parallel()
+	s, app, model, recipient, toolRunning := realClaudeRunningATool(t)
+	defer toolRunning.Close()
+
+	quickCapture(t, app, recipient, "check the rounding\n\nthen the totals")
+
+	mark := len(app.Log())
+	if err := toolRunning.Close(); err != nil {
+		t.Fatal(err)
+	}
+	model.AwaitPrompt(t, "check the rounding\n\nthen the totals")
+	testworld.AwaitSessionSince(app, mark, recipient, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+
+	screen := s.Attn("agent", "peek", recipient).Stdout
+	if strings.Contains(screen, "\uFFFD") {
+		t.Errorf("the screen shows U+FFFD for the message's line breaks:\n%s", screen)
+	}
+	if !strings.Contains(screen, "check the rounding then the totals") {
+		t.Errorf("the screen does not show the message on one row:\n%s", screen)
+	}
 }

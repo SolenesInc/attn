@@ -379,7 +379,8 @@ Probed on 2.1.317 the same way, in auto, default and bypass permission modes:
   redraw a prompt row or remove the "Prompt from the <plugin> plugin" line. A
   `$.session.append` of a `system` row is stored but not drawn.
   `$.ui.log(text)` draws a transcript line as `<plugin>: <text>`, which the
-  model never reads.
+  model never reads. On 2.1.319 it stores and draws U+FFFD in place of each
+  newline, so it cannot show more than one line.
 - `$.env.get(name)` reads the `claude` process's environment.
 - A loop started from `session.start` can call `$.http.fetch` with
   `socketPath` on a Unix socket. A call with no complete answer after 30 s
