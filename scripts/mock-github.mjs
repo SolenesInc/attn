@@ -30,7 +30,7 @@ function parseArgs(argv) {
   const options = {
     mode: 'serve',
     port: 0,
-    host: String(process.env.ATTN_AUTOMATION_MOCK_HOST || DEFAULT_HOST).trim(),
+    host: DEFAULT_HOST,
     fixture: null,
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -92,13 +92,8 @@ function automationPR(host, sha) {
 }
 
 function createServer({ host, fixturePath, identity }) {
-  const initialSHA = String(process.env.ATTN_AUTOMATION_MOCK_SHA || '').trim().toLowerCase();
-  if (initialSHA && !/^[0-9a-f]{40}$/.test(initialSHA)) {
-    throw new Error('ATTN_AUTOMATION_MOCK_SHA must be a full commit SHA');
-  }
-  const initialActive = process.env.ATTN_AUTOMATION_MOCK_ACTIVE !== '0';
-  let sha = initialSHA;
-  let active = initialActive;
+  let sha = '';
+  let active = true;
   let prs = loadFixture(fixturePath, host);
   const requests = [];
   let requestCount = 0;
@@ -162,8 +157,8 @@ function createServer({ host, fixturePath, identity }) {
       return;
     }
     if (url.pathname === '/__control/reset' && request.method === 'POST') {
-      sha = initialSHA;
-      active = initialActive;
+      sha = '';
+      active = true;
       prs = loadFixture(fixturePath, host);
       requests.length = 0;
       requestCount = 0;
