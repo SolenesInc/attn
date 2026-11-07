@@ -19,14 +19,12 @@ interface Launch {
   config?: Config;
   withSession?: boolean;
   quickCapture?: boolean;
-  shelfLayout?: boolean;
 }
 
-async function renderKeybindings({ platform, config, withSession = false, quickCapture = false, shelfLayout = false }: Launch = {}) {
+async function renderKeybindings({ platform, config, withSession = false, quickCapture = false }: Launch = {}) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
   const settings: Record<string, string> = config ? { [KEY]: JSON.stringify({ version: 1, overrides: {}, ...config }) } : {};
   if (quickCapture) settings.quick_capture_enabled = 'true';
-  if (shelfLayout) settings.shelf_layout_enabled = 'true';
   const view = await renderApp({
     initialState: {
       settings,
@@ -107,37 +105,24 @@ describe('App shortcut editor', () => {
     expect(saved(daemon).overrides).toEqual({});
   });
 
-  it('lists the shelf width keys only while the shelf layout is on', async () => {
-    await renderEditor({ shelfLayout: true });
+  it('lists the shelf width keys', async () => {
+    await renderEditor();
     expect(row('Fewer, wider tiles')).toHaveTextContent('⌘⌥-');
     expect(row('More, narrower tiles')).toHaveTextContent('⌘⌥=');
   });
 
-  it('lists the sidebar width keys only while the shelf layout is on', async () => {
-    const { editor } = await renderEditor({ shelfLayout: true });
+  it('lists the sidebar width keys', async () => {
+    const { editor } = await renderEditor();
     expect(row('Widen the sidebar')).toHaveTextContent('⌘⌥]');
     expect(row('Narrow the sidebar')).toHaveTextContent('⌘⌥[');
     expect(within(editor).queryByText('Reset sidebar width')).toBeNull();
   });
 
-  it('leaves out the sidebar width keys while the shelf layout is off', async () => {
-    const { editor } = await renderEditor();
-    expect(within(editor).queryByText('Widen the sidebar')).toBeNull();
-    expect(within(editor).queryByText('Narrow the sidebar')).toBeNull();
-  });
-
-  it('names where new tiles open while the shelf layout is on', async () => {
-    const { editor } = await renderEditor({ shelfLayout: true });
+  it('names where new tiles open', async () => {
+    await renderEditor();
     expect(row('New session below')).toBeInTheDocument();
     expect(row('New shell beside')).toBeInTheDocument();
     expect(row('New shell below')).toBeInTheDocument();
-    expect(within(editor).queryByText('New session, split sideways')).toBeNull();
-  });
-
-  it('leaves out the shelf width keys while the shelf layout is off', async () => {
-    const { editor } = await renderEditor();
-    expect(within(editor).queryByText('Fewer, wider tiles')).toBeNull();
-    expect(within(editor).queryByText('More, narrower tiles')).toBeNull();
   });
 
   it('marks a rebound shortcut as customized and offers a reset to its default', async () => {
@@ -185,7 +170,7 @@ describe('App shortcut editor', () => {
     ['a digit that types a bracket', { key: '[', code: 'Digit8', metaKey: true, altKey: true }, 'Move this to desktop 8 and follow'],
     ['a bracket key that types a symbol', { key: '“', code: 'BracketLeft', metaKey: true, altKey: true }, 'Narrow the sidebar'],
   ])('asks before taking the keys of %s, naming what those keys run', async (_, keys, holder) => {
-    const { daemon } = await renderEditor({ shelfLayout: true });
+    const { daemon } = await renderEditor();
 
     await record(daemon, 'New session below', keys);
 
@@ -197,7 +182,7 @@ describe('App shortcut editor', () => {
     const { daemon } = await renderEditor();
 
     await record(daemon, 'New session on this desktop', { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
-    expect(row('New session on this desktop')).toHaveTextContent('Split pane sideways');
+    expect(row('New session on this desktop')).toHaveTextContent('New shell below');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reassign' })));
 
     expect(saved(daemon).overrides).toEqual({
@@ -212,7 +197,7 @@ describe('App shortcut editor', () => {
     });
 
     await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByTitle('Reset to ⌘N')));
-    expect(row('New session on this desktop')).toHaveTextContent('Split pane sideways');
+    expect(row('New session on this desktop')).toHaveTextContent('New shell below');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reassign' })));
 
     expect(saved(daemon).overrides).toEqual({ 'terminal.splitHorizontal': null });
@@ -406,7 +391,7 @@ describe('App shortcut editor', () => {
 
   it.each([
     ['a label', 'focus active', ['Focus active pane'], ['New session on this desktop']],
-    ['the displayed keys', '⌘⇧n', ['New session, split sideways'], ['New session on this desktop']],
+    ['the displayed keys', '⌘⇧n', ['New session below'], ['New session on this desktop']],
   ])('filters by %s and hides the dock while filtering', async (_, query, shown, hidden) => {
     await renderEditor();
 

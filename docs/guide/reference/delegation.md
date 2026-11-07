@@ -8,9 +8,9 @@ inspect and steer, because the delegate is a full agent.
 
 ## Delegating
 
-Ask any agent to delegate work to another agent. The delegate opens next to the
-agent that started it, without taking your focus, or on whichever desktop you
-ask for.
+Ask any agent to delegate work to another agent. The delegate opens at the end of
+the row on your agent's desktop, without taking your focus, or on whichever
+desktop you ask for.
 
 Attn records your delegation chain. Cmd+Shift+Up (Ctrl+Alt+O on Linux)
 takes you from a delegate back to the agent that started it. To go the other way, click the chain button on an agent's sidebar row. The button lists everyone in the chain, and clicking an agent in the list takes you to that agent.

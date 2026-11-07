@@ -16,7 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 type LeafMove struct {
@@ -1159,43 +1158,19 @@ func insertCurrentDesktopPanes(tx *sql.Tx, now string, desktop profiles.Desktop,
 	return nil
 }
 
-func shelfLayoutValue(value string) bool {
-	return strings.EqualFold(strings.TrimSpace(value), "true")
-}
-
-func (s *Store) ShelfLayoutOn() bool {
-	return shelfLayoutValue(s.GetSetting(setting.ShelfLayoutEnabled.Key))
-}
-
-func shelfLayoutOn(tx *sql.Tx) (bool, error) {
-	var value string
-	if _, err := rowFound(tx.QueryRow(`SELECT value FROM settings WHERE key = ?`, setting.ShelfLayoutEnabled.Key), &value); err != nil {
-		return false, err
-	}
-	return shelfLayoutValue(value), nil
-}
-
 func newSplitID() string {
 	return newProfileEntityID("split")
 }
 
-func settleForWrite(tx *sql.Tx, desktop profiles.Desktop, previousTree layouttree.Node) (profiles.Desktop, error) {
-	shelf, err := shelfLayoutOn(tx)
-	if err != nil {
-		return desktop, err
-	}
-	closeFocus := profiles.RecentThenLeft
-	if shelf {
-		closeFocus = layouttree.NextInPosition
-	}
-	desktop = profiles.SettleAfter(desktop, previousTree, closeFocus)
+func settleDesktop(desktop profiles.Desktop, previousTree layouttree.Node) profiles.Desktop {
+	desktop = profiles.SettleAfter(desktop, previousTree, layouttree.NextInPosition)
 	for i := range desktop.Panes {
 		desktop.Panes[i].DesktopID = desktop.ID
 		if desktop.Panes[i].Status == "" {
 			desktop.Panes[i].Status = profiles.PaneStatusReady
 		}
 	}
-	return desktop, nil
+	return desktop
 }
 
 func writeCurrentDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
@@ -1211,9 +1186,7 @@ func writeCurrentArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.D
 		return err
 	}
 	desktop.FocusHistory = profiles.Focus(previous, previous.ActivePaneID).FocusHistory
-	if *desktop, err = settleForWrite(tx, *desktop, previous.Tree); err != nil {
-		return err
-	}
+	*desktop = settleDesktop(*desktop, previous.Tree)
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}
@@ -1270,10 +1243,6 @@ func placeSessionInTree(tx *sql.Tx, desktop profiles.Desktop, request SessionPla
 	if anchor == "" {
 		anchor = desktop.ActivePaneID
 	}
-	shelf, err := shelfLayoutOn(tx)
-	if err != nil {
-		return desktop, err
-	}
 	switch {
 	case layouttree.LayoutEmpty(desktop.Tree):
 		desktop.Tree = layouttree.DefaultLayout(paneID)
@@ -1284,7 +1253,7 @@ func placeSessionInTree(tx *sql.Tx, desktop profiles.Desktop, request SessionPla
 			return desktop, profiles.Errorf(profiles.CodeInvalid, "desktop %s holds only tiles %v and the new pane could not dock beside them", desktop.ID, leaves)
 		}
 		desktop.Tree = next.TargetLayout
-	case shelf && request.Direction != layouttree.DirectionHorizontal:
+	case request.Direction != layouttree.DirectionHorizontal:
 		if !request.Focus {
 			anchor = ""
 		}
@@ -1436,13 +1405,6 @@ func (s *Store) SetDesktopWantedWidth(desktopID, leafID string, width layouttree
 		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "wanted width %d for leaf %q is negative; send a width in cols, or 0 to clear it", width.WantedCols, leafID)
 	}
 	return s.editDesktopInTx(desktopID, func(tx *sql.Tx, desktop profiles.Desktop) (profiles.Desktop, error) {
-		shelf, err := shelfLayoutOn(tx)
-		if err != nil {
-			return desktop, err
-		}
-		if !shelf {
-			return desktop, profiles.Errorf(profiles.CodeInvalid, "a wanted width needs %s, which is off", setting.ShelfLayoutEnabled)
-		}
 		next, ok := layouttree.SetWantedWidth(desktop.Tree, leafID, width)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
@@ -1463,10 +1425,6 @@ func (s *Store) SetDesktopSplitRatio(desktopID, splitID string, ratio float64) (
 	})
 }
 
-func wholeColumnNeedsShelfLayout(request LeafMoveRequest) error {
-	return profiles.Errorf(profiles.CodeInvalid, "moving the whole column of leaf %q needs %s, which is off", request.LeafID, setting.ShelfLayoutEnabled)
-}
-
 func (r LeafMoveRequest) rowMove() layouttree.RowMove {
 	return layouttree.RowMove{
 		LeafID:      r.LeafID,
@@ -1484,25 +1442,12 @@ func (s *Store) moveLeafWithinDesktop(request LeafMoveRequest) (LeafMove, error)
 		if err := checkMoveLeaves(desktop, desktop, request); err != nil {
 			return desktop, err
 		}
-		shelf, err := shelfLayoutOn(tx)
-		if err != nil {
-			return desktop, err
-		}
-		if request.WholeColumn && !shelf {
-			return desktop, wholeColumnNeedsShelfLayout(request)
-		}
-		var next layouttree.Node
-		var ok bool
-		if shelf {
-			next, ok = layouttree.MoveWithinRow(desktop.Tree, request.rowMove())
-		} else {
-			next, ok = layouttree.MoveLeaf(desktop.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before))
-		}
+		next, ok := layouttree.MoveWithinRow(desktop.Tree, request.rowMove())
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move beside %q on desktop %s", request.LeafID, request.AnchorID, desktop.ID)
 		}
 		desktop.Tree = next
-		if shelf && request.Activate {
+		if request.Activate {
 			desktop.ActivePaneID = request.LeafID
 		}
 		return desktop, nil
@@ -1578,13 +1523,6 @@ func (s *Store) MoveLeafGroup(request LeafMoveRequest, dispatchers map[protocol.
 		if err != nil {
 			return err
 		}
-		shelf, err := shelfLayoutOn(tx)
-		if err != nil {
-			return err
-		}
-		if request.WholeColumn && !shelf {
-			return wholeColumnNeedsShelfLayout(request)
-		}
 		request.TargetDesktopID = target.ID
 		if request.UseActiveAnchor {
 			request.AnchorID = target.ActivePaneID
@@ -1613,15 +1551,11 @@ func recordArrivingPane(tx *sql.Tx, arrivals map[string]string, sourceID, target
 }
 
 func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profiles.Desktop, request LeafMoveRequest, followers []LeafFollower) (LeafMove, error) {
-	shelf, err := shelfLayoutOn(tx)
-	if err != nil {
-		return LeafMove{}, err
-	}
 	arrivals := map[string]string{}
 	movedIDs := map[string]string{}
 	var carried []layouttree.MovedLeaf
 	arrange := func(source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, error) {
-		move, moved, err := arrangeLeafBetweenDesktops(source, target, request, shelf)
+		move, moved, err := arrangeLeafBetweenDesktops(source, target, request)
 		if err != nil {
 			return LeafMove{}, err
 		}
@@ -1675,19 +1609,11 @@ func moveLeafGroupBetweenDesktops(tx *sql.Tx, now string, source, target profile
 	return result, nil
 }
 
-func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMoveRequest, shelf bool) (LeafMove, []layouttree.MovedLeaf, error) {
+func arrangeLeafBetweenDesktops(source, target profiles.Desktop, request LeafMoveRequest) (LeafMove, []layouttree.MovedLeaf, error) {
 	if err := checkMoveLeaves(source, target, request); err != nil {
 		return LeafMove{}, nil, err
 	}
-	var moved layouttree.RowMoveBetweenLayouts
-	var ok bool
-	if shelf {
-		moved, ok = layouttree.MoveBetweenRows(source.Tree, target.Tree, request.rowMove(), uuid.NewString())
-	} else {
-		var single layouttree.MoveBetweenLayoutsResult
-		single, ok = layouttree.MoveLeafBetweenLayouts(source.Tree, target.Tree, request.LeafID, request.AnchorID, newProfileEntityID("split"), request.Direction, request.Before, firstChildRatio(request.LeafShare, request.Before), uuid.NewString())
-		moved = layouttree.RowMoveBetweenLayouts{SourceLayout: single.SourceLayout, TargetLayout: single.TargetLayout, Moved: []layouttree.MovedLeaf{{From: request.LeafID, To: single.FinalLeafID}}}
-	}
+	moved, ok := layouttree.MoveBetweenRows(source.Tree, target.Tree, request.rowMove(), uuid.NewString())
 	if !ok {
 		return LeafMove{}, nil, profiles.Errorf(profiles.CodeInvalid, "leaf %q could not move from desktop %s beside %q on desktop %s", request.LeafID, source.ID, request.AnchorID, target.ID)
 	}

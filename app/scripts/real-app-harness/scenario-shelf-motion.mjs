@@ -20,7 +20,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOTION',
   tier: 'tier1-local-shell',
   prefix: 'shelf-motion',
-  metadata: { agent: 'shell', focus: 'per-frame trace of slide, open, close, carry and a new tile on an emptied desktop with streaming terminals; with --measure also idle cost and first paint beside the fold path' },
+  metadata: { agent: 'shell', focus: 'per-frame trace of slide, open, close, carry and a new tile on an emptied desktop with streaming terminals; with --measure also idle cost' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -183,19 +183,15 @@ async function topCpu(label) {
 runner.registerCleanup('stop_streams', () => { if (streamFlag) fs.rmSync(streamFlag, { force: true }); });
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-});
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shelf: '[data-testid="desktop-shelf"]' }) });
 
 try {
-  await runner.step('launch_with_the_setting_on', async () => {
+  await runner.step('launch', async () => {
     otherWebKitPids = await captureWebKitPids();
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
@@ -353,31 +349,6 @@ try {
       runner.log('idle_after', await topCpu('idle-after-moves'));
       fs.writeFileSync(streamFlag, '');
     });
-
-    await runner.step('first_paint_on_the_fold_path', async () => {
-      await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-      await request('dom_wait', { selector: '[data-testid="desktop-shelf"]', absent: true, timeoutMs: 15_000 });
-      await delay(1000);
-      for (const target of (await request('get_desktop', { sessionId: firstSession })).desktop.panes.slice(0, 3)) await addStream(target).catch(() => {});
-      const row = await readRow();
-      for (let step = 0; step < 4; step += 1) {
-        const { suspendedLeafIds } = await request('motion_at_rest');
-        runner.assert(suspendedLeafIds.length > 0, 'the fold path shows slivers', { suspendedLeafIds });
-        let index = row.indexOf(await activeLeaf());
-        const nearest = [...suspendedLeafIds].sort((a, b) => Math.abs(row.indexOf(a) - index) - Math.abs(row.indexOf(b) - index))[0];
-        const direction = row.indexOf(nearest) > index ? 1 : -1;
-        while (index + direction !== row.indexOf(nearest)) {
-          index += direction;
-          await press(direction > 0 ? 'terminal.focusRight' : 'terminal.focusLeft');
-          await waitForActive(row[index]);
-        }
-        await delay(SETTLE_WINDOW_MS);
-        await traceMove(`fold-restore-${step}`, async () => {
-          await press(direction > 0 ? 'terminal.focusRight' : 'terminal.focusLeft');
-          await waitForActive(nearest);
-        });
-      }
-    });
   }
 
   await runner.step('every_move_used_only_transform_and_opacity', async () => {
@@ -385,8 +356,7 @@ try {
     const summaries = moves.map((move) => summarizeMove(move, events));
     fs.writeFileSync(path.join(runner.runDir, 'motion-summary.json'), `${JSON.stringify(summaries, null, 2)}\n`);
     fs.writeFileSync(path.join(runner.runDir, 'motion-trace.jsonl'), events.filter((event) => event.at >= moves[0].pressedAt && ['motion_frame', 'resize', 'pane_mount', 'pane_unmount'].includes(event.kind)).map((event) => JSON.stringify(event)).join('\n'));
-    for (const summary of summaries.filter((entry) => entry.name.startsWith('fold-'))) runner.log('fold', summary);
-    for (const summary of summaries.filter((entry) => !entry.name.startsWith('fold-'))) {
+    for (const summary of summaries) {
       runner.log('move', summary);
       runner.assert(summary.animated.every((property) => property === 'transform' || property === 'opacity'), `${summary.name} animates only transform and opacity`, { animated: summary.animated });
       const screenChanged = ['open', 'close', 'carry', 'slide-left'].includes(summary.name) || Object.keys(summary.entering).length > 0;

@@ -188,6 +188,8 @@ async function main() {
   try {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
+      const { logicalBounds } = await client.request('get_window_bounds');
+      await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900 } });
     });
 
     let pane;
@@ -272,8 +274,6 @@ async function main() {
     // Docking a tile resizes the pane, which reflows text and invalidates any
     // cached row/col geometry.
     const clickTargetFor = async (relPath) => {
-      // A docked tile takes focus and can fold the terminal into a sliver, whose
-      // released surface reads empty; clicking the pane expands it first.
       await client.request('click_pane', { sessionId, paneId: pane.paneId });
       let read = { text: '' };
       let row = -1;
@@ -440,8 +440,6 @@ async function main() {
       // Octal escapes produce the same OSC bytes in bash, zsh, and fish.
       const esc = '\\033';
       const st = `${esc}\\134`; // string terminator: ESC + a single literal backslash
-      // Both markdown tiles are still docked, and they fold the terminal into a
-      // sliver whose released surface reads empty; clicking expands it first.
       await client.request('click_pane', { sessionId, paneId: pane.paneId });
       await client.request('write_pane', {
         sessionId,

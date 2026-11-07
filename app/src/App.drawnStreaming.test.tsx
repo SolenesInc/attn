@@ -92,26 +92,26 @@ describe('streaming only the terminals the window draws', () => {
     expect(streams(daemon, back)).toEqual(['attach s1']);
   });
 
-  it.each([false, true])('detaches an attached leaf the layout suspends to a strip (shared host %s)', async (enabled) => {
-    fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, 1200, 800) : null));
+  it.each([false, true])('detaches an attached tile that leaves the screen for the shelf (shared host %s)', async (enabled) => {
+    fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, 2000, 800) : null));
     const ids = ['s1', 's2', 's3', 's4'];
-    const { daemon } = await renderDesktop(split('a', 'vertical', [pane('s1'), pane('s2')]), ids);
+    const { daemon } = await renderDesktop(split('a', 'vertical', [pane('s1'), split('b', 'vertical', [pane('s2'), pane('s3')])]), ids);
     if (enabled) daemon.emit({ event: 'settings_updated', settings: sharedHost(true).settings });
     await openSession(daemon, 's1');
-    expect(streams(daemon)).toEqual(['attach s1', 'attach s2']);
+    expect(streams(daemon)).toEqual(['attach s1', 'attach s2', 'attach s3']);
 
-    relayOut(daemon, split('a', 'vertical', [split('b', 'vertical', [pane('s1'), pane('s2')]), split('c', 'vertical', [pane('s3'), pane('s4')])]), ids, { active: 'pane-s4' });
+    relayOut(daemon, split('a', 'vertical', [pane('s1'), split('b', 'vertical', [pane('s2'), split('c', 'vertical', [pane('s3'), pane('s4')])])]), ids, { active: 'pane-s4' });
     await act(() => vi.advanceTimersByTimeAsync(300));
     await daemon.idle();
 
-    const suspended = ids.filter((id) => document.querySelector(`[data-pane-id="pane-${id}"]`)?.getAttribute('data-pane-suspended') === 'true');
-    expect(suspended).toContain('s2');
+    const drawn = ids.filter((id) => document.querySelector(`[data-pane-id="pane-${id}"]`) !== null);
+    expect(drawn).toEqual(['s2', 's3', 's4']);
     const attached = new Set<string>();
     for (const entry of streams(daemon)) {
       const [verb, id] = entry.split(' ');
       if (verb === 'attach') attached.add(id); else attached.delete(id);
     }
-    expect([...attached].sort()).toEqual(ids.filter((id) => !suspended.includes(id)).sort());
+    expect([...attached].sort()).toEqual(drawn);
   });
 
   it('re-attaches after a respawn or a reconnect only the terminals a drawn pane holds', async () => {

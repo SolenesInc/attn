@@ -160,6 +160,9 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           effectiveGardenScale={state.effectiveGardenScale}
           onIncreaseGardenScale={state.onIncreaseGardenScale}
           onMatchAppGardenScale={state.onMatchAppGardenScale}
+          narrowestTileColsDraft={state.narrowestTileColsDraft}
+          sidebarWidthDraft={state.sidebarWidthDraft}
+          savedFlash={state.savedFlash}
         />
       );
     case 'desktop':
@@ -253,9 +256,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
       return (
         <ExperimentalSettings
           settings={state.settings}
-          narrowestTileColsDraft={state.narrowestTileColsDraft}
-          sidebarWidthDraft={state.sidebarWidthDraft}
-          savedFlash={state.savedFlash}
           onSetSetting={state.onSetSetting}
         />
       );

@@ -469,7 +469,7 @@ describe('App sidebar', () => {
 
     it('names no instance in a default build, expanded or collapsed', async () => {
       const { daemon } = await launch({ sessions: [daemonSession('s1')] });
-      expect(document.querySelector('.sidebar-header')).not.toHaveTextContent(/instance/i);
+      expect(screen.getByTestId('title-bar')).not.toHaveTextContent(/instance/i);
 
       await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
       expect(screen.queryByTitle(/^Instance:/)).toBeNull();

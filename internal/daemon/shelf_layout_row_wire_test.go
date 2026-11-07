@@ -55,11 +55,6 @@ func rowOf(t *testing.T, desktop protocol.Desktop) string {
 	return strings.Join(columns, " ")
 }
 
-func turnOnShelfLayout(t *testing.T, app *testworld.Peer) {
-	t.Helper()
-	setSetting(t, app, "shelf_layout_enabled", "true")
-}
-
 type rowDesktop struct {
 	t         *testing.T
 	w         *world
@@ -71,7 +66,6 @@ type rowDesktop struct {
 func injectedRow(t *testing.T, w *world, sessions ...string) rowDesktop {
 	t.Helper()
 	app := w.App()
-	turnOnShelfLayout(t, app)
 	for _, id := range sessions {
 		injectAgent(t, w, id)
 	}
@@ -167,7 +161,6 @@ func TestClosingATileFocusesByItsPositionInTheRow(t *testing.T) {
 func TestAnAgentExitFocusesByPositionLikeClosingItsTile(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	turnOnShelfLayout(t, app)
 	var sessions []string
 	for _, name := range []string{"a", "b", "c"} {
 		sessions = append(sessions, w.Spawn(app, fakeagent.Claude, w.Path(name)))
@@ -200,7 +193,6 @@ func openTerminal(t *testing.T, w *world, caller string, direction *protocol.Ter
 func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	turnOnShelfLayout(t, app)
 	first := w.Spawn(app, fakeagent.Claude, w.Path("first"))
 	second := w.Spawn(app, fakeagent.Claude, w.Path("second"))
 	requestShowSession(app, second)
@@ -233,7 +225,6 @@ func TestAnAgentsTerminalGoesToTheRowsEndAndStacksOnlyWhenAskedTo(t *testing.T) 
 func TestDirectionDownStacksUnderTheCallerAfterATerminalAtTheRowsEnd(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	turnOnShelfLayout(t, app)
 	caller := w.Spawn(app, fakeagent.Claude, w.Path("caller"))
 	other := w.Spawn(app, fakeagent.Claude, w.Path("other"))
 	requestShowSession(app, other)
@@ -260,23 +251,6 @@ func TestDirectionDownStacksUnderTheCallerAfterATerminalAtTheRowsEnd(t *testing.
 	alsoAtEnd := openTerminal(t, w, caller, nil)
 	row(fmt.Sprintf("%s/%s/%s %s %s %s", caller, under, underThat, other, atEnd, alsoAtEnd))
 	exitShells(app, string(atEnd), string(under), string(underThat), string(alsoAtEnd))
-}
-
-func TestWithTheShelfLayoutOffACallersTerminalsStackUnderItsNewestTerminal(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	caller := w.Spawn(app, fakeagent.Claude, w.Path("caller"))
-	profileID := app.SelectedProfile()
-	desktop, _ := viewProfile(t, w, profileID).paneOf(t, caller)
-
-	first := openTerminal(t, w, caller, nil)
-	down := openTerminal(t, w, caller, protocol.Ptr(protocol.TerminalDirectionDown))
-	again := openTerminal(t, w, caller, nil)
-	view := viewProfile(t, w, profileID).desktops[desktop.ID]
-	if got, want := rowOf(t, view), fmt.Sprintf("%s %s/%s/%s", caller, first, down, again); got != want {
-		t.Fatalf("the layout is %q, want %q", got, want)
-	}
-	exitShells(app, string(first), string(down), string(again))
 }
 
 func TestATileOpenedFromTheCLILandsBesideItsAgentWithoutFocus(t *testing.T) {
@@ -351,7 +325,6 @@ func TestSideBySidePlacementsAnchorOnTheColumnOfAStackedTile(t *testing.T) {
 func TestMovingATerminalToADesktopAnchorsOnTheColumnOfItsActiveTile(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	turnOnShelfLayout(t, app)
 	first := w.Spawn(app, fakeagent.Claude, w.Path("first"))
 	second := w.Spawn(app, fakeagent.Claude, w.Path("second"))
 	third := w.Spawn(app, fakeagent.Claude, w.Path("third"))
@@ -449,7 +422,6 @@ func TestWholeColumnMovesAStackWithItsOrderWithinAndBetweenDesktops(t *testing.T
 func TestWholeColumnWithDelegatesMovesEachDelegateOnce(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	turnOnShelfLayout(t, app)
 	cwd := w.Path("dispatcher")
 	root, _, _ := w.RequestSpawn(app, fakeagent.Codex, cwd)
 	bystander, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("bystander"))
@@ -514,7 +486,6 @@ func TestAMoveBetweenDesktopsWithActivateFalseLeavesTheTargetsActiveTile(t *test
 func TestWantedColsLandOnTheColumnsFirstTileAndSurviveMovesAndARestart(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
-		turnOnShelfLayout(t, app)
 		profileID := app.SelectedProfile()
 		initial := viewProfile(t, w, profileID)
 		desktop := rowDesktop{t: t, w: w, app: app, profileID: profileID, desktopID: initial.profile.CurrentDesktopID}
@@ -773,7 +744,6 @@ func TestAColumnKeepsItsWantedWidthOnItsFirstTile(t *testing.T) {
 		t.Run(change.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				app := w.App()
-				turnOnShelfLayout(t, app)
 				profileID := app.SelectedProfile()
 				row := rowDesktop{t: t, w: w, app: app, profileID: profileID, desktopID: viewProfile(t, w, profileID).profile.CurrentDesktopID}
 				change.start(row)
@@ -813,33 +783,6 @@ func TestAWholeColumnMovedBetweenDesktopsReportsEveryLeafWhenIDsCollide(t *testi
 		leaves := desktopTree(t, target.desktop()).leafIDs()
 		if !reflect.DeepEqual(leaves, []string{"tile-browser", paneA, browser.ToLeafID}) {
 			t.Fatalf("the target holds %v, want its browser and the moved column with %s", leaves, browser.ToLeafID)
-		}
-	})
-}
-
-func TestWithTheShelfLayoutOffTheRowOperationsAreRefusedByName(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		injectAgent(t, w, "a")
-		injectAgent(t, w, "b")
-		profileID := app.SelectedProfile()
-		desktop, paneA := viewProfile(t, w, profileID).paneOf(t, "a")
-		_, paneB := viewProfile(t, w, profileID).paneOf(t, "b")
-		other := createDesktop(app, profileID)
-		for _, target := range []string{desktop.ID, other.ID} {
-			id := uuid.NewString()
-			refused := profileRequest(app, protocol.DesktopMoveLeafMessage{
-				Cmd: protocol.CmdDesktopMoveLeaf, RequestID: id, SourceDesktopID: desktop.ID, TargetDesktopID: protocol.Ptr(target),
-				LeafID: paneA, AnchorID: protocol.Ptr(paneB), Edge: protocol.Ptr(protocol.LayoutDockEdgeRight), WholeColumn: protocol.Ptr(true),
-			}, id)
-			if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "shelf_layout_enabled") {
-				t.Fatalf("whole_column to %s with the setting off answered %+v", target, refused)
-			}
-		}
-		id := uuid.NewString()
-		refused := profileRequest(app, protocol.DesktopSetWantedColsMessage{Cmd: protocol.CmdDesktopSetWantedCols, RequestID: id, DesktopID: desktop.ID, LeafID: paneA, Cols: 100}, id)
-		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "shelf_layout_enabled") {
-			t.Fatalf("desktop_set_wanted_cols with the setting off answered %+v", refused)
 		}
 	})
 }

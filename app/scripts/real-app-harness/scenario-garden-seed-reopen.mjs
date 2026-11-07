@@ -18,8 +18,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 async function runInPane(client, pane, command, expected) {
   await client.request('select_session', { sessionId: pane.sessionId });
   await client.request('dom_wait', {
-    selector: `[data-pane-id="${pane.paneId}"][data-pane-suspended="true"]`,
-    absent: true,
+    selector: `[data-pane-id="${pane.paneId}"]`,
     timeoutMs: 10_000,
   });
   return runShellCommandInPane(client, pane, command, expected);

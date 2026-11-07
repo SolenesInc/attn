@@ -80,25 +80,3 @@ func TestOpenMarkdownReusesATileAlreadyShowingTheFile(t *testing.T) {
 		t.Fatalf("existing tile binding = %q, want session-1", tile.TileSessionID)
 	}
 }
-
-func TestRedockingATileKeepsItsFraction(t *testing.T) {
-	tileID := markdownTileIDForPath("/tmp/README.md")
-	desktop := profiles.Desktop{ID: "desktop-1", Tree: layouttree.DefaultLayout("pane-1")}
-	docked, err := dockTileOnDesktop(desktop, desktopTileDock{
-		tileID: tileID, tileKind: string(layouttree.TileKindMarkdown), params: "/tmp/README.md",
-		anchorID: "pane-1", edge: protocol.LayoutDockEdgeRight, share: 0.41,
-	})
-	if err != nil {
-		t.Fatalf("dock: %v", err)
-	}
-	moved, err := dockTileOnDesktop(docked, desktopTileDock{
-		tileID: tileID, tileKind: string(layouttree.TileKindMarkdown), params: "/tmp/README.md",
-		anchorID: "pane-1", edge: protocol.LayoutDockEdgeBottom,
-	})
-	if err != nil {
-		t.Fatalf("re-dock: %v", err)
-	}
-	if got, ok := layouttree.TileFractionByID(moved.Tree, tileID); !ok || got < 0.41-1e-9 || got > 0.41+1e-9 {
-		t.Fatalf("tile fraction after moving = (%v, %v), want (0.41, true)", got, ok)
-	}
-}

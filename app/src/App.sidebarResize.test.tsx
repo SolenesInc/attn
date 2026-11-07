@@ -4,9 +4,7 @@ import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import { pressShortcut, gesture, renderApp } from './test/renderApp';
 import { openSection, serveSettings } from './test/settings';
 
-const SHELF_ON = { shelf_layout_enabled: 'true' };
-
-async function renderSidebar(settings: Record<string, string>) {
+async function renderSidebar(settings: Record<string, string> = {}) {
   const { daemon } = await renderApp({
     initialState: {
       settings,
@@ -33,7 +31,7 @@ const release = (clientX: number) => fireEvent.pointerUp(window, { pointerId: 1,
 
 describe('Dragging the sidebar', () => {
   it('saves one width, on release', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     press(240);
     moveTo(260);
     moveTo(300);
@@ -48,7 +46,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('stops at each limit and names it', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     press(240);
     moveTo(-100);
     expect(shownWidth()).toBe(widthOf(200));
@@ -60,7 +58,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('restores the width and saves nothing on Esc', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     press(300);
     moveTo(400);
     await gesture(daemon, () => {
@@ -72,7 +70,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('restores the width and saves nothing when the window loses focus', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     press(300);
     moveTo(400);
     expect(shownWidth()).toBe(widthOf(400));
@@ -84,7 +82,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('starts a new drag after one was cancelled', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     press(300);
     moveTo(400);
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
@@ -96,7 +94,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('keeps a stored width the window cannot show when the handle is only clicked', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '600' });
+    const daemon = await renderSidebar({ sidebar_width: '600' });
     vi.stubGlobal('innerWidth', 800);
     await gesture(daemon, () => {
       press(320);
@@ -107,7 +105,7 @@ describe('Dragging the sidebar', () => {
   });
 
   it('cancels a drag when the sidebar collapses', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     press(300);
     moveTo(400);
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
@@ -118,16 +116,16 @@ describe('Dragging the sidebar', () => {
   });
 
   it('clears the setting on a double-click', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     await gesture(daemon, () => fireEvent.doubleClick(handle()!));
     expect(widthSaves(daemon).map((command) => command.value)).toEqual(['']);
     expect(shownWidth()).toBe(widthOf(240));
   });
 
   it('follows a settings event, and leaves a live drag alone until it ends', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     await act(async () => {
-      daemon.emit({ event: 'settings_updated', settings: { ...SHELF_ON, sidebar_width: '360' } });
+      daemon.emit({ event: 'settings_updated', settings: { sidebar_width: '360' } });
       await daemon.idle();
     });
     expect(shownWidth()).toBe(widthOf(360));
@@ -135,33 +133,12 @@ describe('Dragging the sidebar', () => {
     press(360);
     moveTo(380);
     await act(async () => {
-      daemon.emit({ event: 'settings_updated', settings: { ...SHELF_ON, sidebar_width: '420' } });
+      daemon.emit({ event: 'settings_updated', settings: { sidebar_width: '420' } });
       await daemon.idle();
     });
     expect(shownWidth()).toBe(widthOf(380));
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
     expect(shownWidth()).toBe(widthOf(420));
-  });
-
-  it('drops the width when the shelf turns off during a drag', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
-    press(300);
-    moveTo(400);
-    await act(async () => {
-      daemon.emit({ event: 'settings_updated', settings: { sidebar_width: '300' } });
-      await daemon.idle();
-    });
-    expect(handle()).toBeNull();
-    expect(shownWidth()).toBe('');
-    await gesture(daemon, () => release(400));
-    expect(widthSaves(daemon)).toEqual([]);
-    expect(shownWidth()).toBe('');
-  });
-
-  it('has no handle and no width with the shelf off', async () => {
-    await renderSidebar({ sidebar_width: '300' });
-    expect(handle()).toBeNull();
-    expect(shownWidth()).toBe('');
   });
 });
 
@@ -175,7 +152,7 @@ describe('Stepping the sidebar', () => {
   };
 
   it('moves 40px with each key, shows the width, and the label leaves', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     onTestFinished(() => { vi.useRealTimers(); });
     expect(label()).not.toBeVisible();
@@ -203,11 +180,10 @@ describe('Stepping the sidebar', () => {
   ])('leaves Cmd+Option+%s to the desktop move', async (_, keys, slot) => {
     const { daemon } = await renderApp({
       initialState: {
-        settings: SHELF_ON,
         sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
         desktops: [soloDesktop('s1', { shortcut_slot: 1 }), soloDesktop('s2', { shortcut_slot: slot })],
       },
-      script: (scripted) => serveSettings(scripted, SHELF_ON),
+      script: (scripted) => serveSettings(scripted),
     });
     await gesture(daemon, () => pressShortcut('desktop.select1'));
     await gesture(daemon, () => fireEvent.keyDown(window, { ...keys, metaKey: true, altKey: true }));
@@ -216,14 +192,14 @@ describe('Stepping the sidebar', () => {
   });
 
   it('steps from the bracket keys whatever they type', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     await gesture(daemon, () => fireEvent.keyDown(window, { key: '~', code: 'BracketRight', metaKey: true, altKey: true }));
     await gesture(daemon, () => fireEvent.keyDown(window, { key: '˙', code: 'BracketLeft', metaKey: true, altKey: true }));
     expect(savedValues(daemon)).toEqual(['280', '240']);
   });
 
   it('runs the same steps from the palette, and resets to the default', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '300' });
+    const daemon = await renderSidebar({ sidebar_width: '300' });
     await runCommand(daemon, 'Widen the sidebar');
     expect(shownWidth()).toBe(widthOf(340));
     await runCommand(daemon, 'Narrow the sidebar');
@@ -239,7 +215,7 @@ describe('Stepping the sidebar', () => {
     ["the window's share", 'sidebar.wider', '320', 800, "The sidebar can't pass 320px with the window at 800px: tiles keep 480px."],
     ["the window's share from a wider stored width", 'sidebar.wider', '600', 800, "The sidebar can't pass 320px with the window at 800px: tiles keep 480px."],
   ] as const)('names the limit past %s and saves nothing', async (_, id, width, windowPx, message) => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: width });
+    const daemon = await renderSidebar({ sidebar_width: width });
     vi.stubGlobal('innerWidth', windowPx);
     onTestFinished(() => { vi.unstubAllGlobals(); });
     await gesture(daemon, () => pressShortcut(id));
@@ -248,13 +224,13 @@ describe('Stepping the sidebar', () => {
   });
 
   it('shows one message however many times a step hits the limit', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '200' });
+    const daemon = await renderSidebar({ sidebar_width: '200' });
     for (let press = 0; press < 3; press += 1) await gesture(daemon, () => pressShortcut('sidebar.narrower'));
     expect(screen.getAllByText("The sidebar can't go below 200px.")).toHaveLength(1);
   });
 
   it('stops exactly on a limit, and steps down from what the window shows', async () => {
-    const daemon = await renderSidebar({ ...SHELF_ON, sidebar_width: '590' });
+    const daemon = await renderSidebar({ sidebar_width: '590' });
     vi.stubGlobal('innerWidth', 1600);
     onTestFinished(() => { vi.unstubAllGlobals(); });
     await gesture(daemon, () => pressShortcut('sidebar.wider'));
@@ -265,23 +241,11 @@ describe('Stepping the sidebar', () => {
   });
 
   it('says the sidebar is hidden instead of changing a width nobody can see', async () => {
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     await gesture(daemon, () => pressShortcut('sidebar.wider'));
     expect(screen.getByText('The sidebar is hidden. Show it to change its width.')).toBeInTheDocument();
     expect(widthSaves(daemon)).toEqual([]);
-  });
-
-  it('has no keys or commands with the shelf off', async () => {
-    const daemon = await renderSidebar({});
-    await gesture(daemon, () => pressShortcut('sidebar.wider'));
-    await gesture(daemon, () => pressShortcut('sidebar.narrower'));
-    expect(widthSaves(daemon)).toEqual([]);
-    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
-    await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>sidebar' } }));
-    for (const name of [/Widen the sidebar/, /Narrow the sidebar/, /Reset sidebar width/]) {
-      expect(screen.queryByRole('option', { name })).toBeNull();
-    }
   });
 });
 
@@ -289,8 +253,8 @@ describe('The sidebar width in Settings', () => {
   const field = () => screen.getByTestId('settings-sidebar-width');
 
   it('saves a typed width and goes back to the default', async () => {
-    const settings = { ...SHELF_ON, sidebar_width: '300' };
-    const daemon = await openSection('experimental', { settings });
+    const settings = { sidebar_width: '300' };
+    const daemon = await openSection('general', { settings });
     expect(field()).toHaveValue(300);
 
     fireEvent.change(field(), { target: { value: '360' } });
@@ -307,7 +271,7 @@ describe('The sidebar width in Settings', () => {
 
   it("shows the daemon's message for a refused width and keeps the stored one", async () => {
     const refusal = 'sidebar_width must be a whole number from 200 to 600, got "900"';
-    const daemon = await openSection('experimental', { settings: { ...SHELF_ON, sidebar_width: '300' } }, (scripted) => {
+    const daemon = await openSection('general', { settings: { sidebar_width: '300' } }, (scripted) => {
       scripted.on('set_setting', () => ({ event: 'settings_updated', success: false, error: refusal }));
     });
     fireEvent.change(field(), { target: { value: '900' } });
@@ -322,7 +286,7 @@ describe('The sidebar width in Settings', () => {
 
   it('raises the refusal as a notification when a width is refused outside Settings', async () => {
     const refusal = 'sidebar_width must be a whole number from 200 to 600';
-    const daemon = await renderSidebar(SHELF_ON);
+    const daemon = await renderSidebar();
     daemon.on('set_setting', () => ({ event: 'settings_updated', success: false, error: refusal }));
 
     await gesture(daemon, () => pressShortcut('sidebar.wider'));
@@ -332,22 +296,17 @@ describe('The sidebar width in Settings', () => {
   });
 
   it('follows a width set elsewhere while Settings is open', async () => {
-    const daemon = await openSection('experimental', { settings: SHELF_ON });
+    const daemon = await openSection('general');
     await act(async () => {
-      daemon.emit({ event: 'settings_updated', settings: { ...SHELF_ON, sidebar_width: '420' } });
+      daemon.emit({ event: 'settings_updated', settings: { sidebar_width: '420' } });
       await daemon.idle();
     });
     expect(field()).toHaveValue(420);
   });
 
   it('offers no way back when the daemon reports the default width', async () => {
-    await openSection('experimental', { settings: { ...SHELF_ON, sidebar_width: '240' } });
+    await openSection('general', { settings: { sidebar_width: '240' } });
     expect(field()).toHaveValue(240);
     expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
-  });
-
-  it('is unusable with the shelf off', async () => {
-    await openSection('experimental', { settings: { sidebar_width: '300' } });
-    expect(screen.getByTestId('settings-sidebar-width').closest('[inert]')).not.toBeNull();
   });
 });

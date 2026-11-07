@@ -32,20 +32,17 @@ Tiles are the boxes on a desktop. Agents, shells, seeds, markdown files, the
 editor and browsers all appear in a tile.
 
 Cmd+N (Ctrl+Shift+N on Linux) opens a new agent or shell on the current desktop,
-and Cmd+T (Ctrl+Shift+T on Linux) starts with a shell picked. To open a shell
-next to the agent or shell you're looking at, split the tile: Cmd+D (Ctrl+Shift+D on
-Linux) opens the new shell beside the tile, Cmd+Shift+D (Ctrl+Alt+D on Linux)
-opens it below.
+and Cmd+T (Ctrl+Shift+T on Linux) starts with a shell picked. Cmd+D (Ctrl+Shift+D
+on Linux) opens a shell beside the tile you're looking at, and Cmd+Shift+D
+(Ctrl+Alt+D on Linux) opens one below it.
 
 Drag a tile to rearrange it on the desktop. Drag it over a desktop in the
 sidebar to switch to that desktop and drop it there.
 
 Cmd+Option+arrows (Ctrl+Shift+arrows on Linux) move between tiles. At the edge of
 a desktop, they move to the next desktop, and on an empty desktop they move
-straight on from its launcher. When you close a tile, Attn takes you
-to the tile you used before it, unless the [shelf layout](#shelf-layout-experimental)
-is on. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) move back and forward through
-the tiles you've looked at.
+straight on from its launcher. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) move
+back and forward through the tiles you've looked at.
 
 When a desktop gets crowded:
 
@@ -64,16 +61,14 @@ delegates to…" from the command palette, or hold Option (Alt on Linux) when yo
 drop the agent on a desktop in the sidebar.
 
 You can ask agents to move themselves, their delegates or any shell, and the
-Chief can move any agent. A delegate opens next to the agent that started it,
-unless you ask for another desktop ("put it on desktop 7").
+Chief can move any agent. A delegate opens at the end of the row on the desktop
+of the agent that started it, unless you ask for another desktop ("put it on desktop 7").
 
-## Shelf layout (experimental)
+## The row and the shelf
 
-The shelf layout shows a desktop as one row of columns, left to right. A column is one tile, or a stack of tiles one above the other. The window shows as many neighbouring columns as fit at a width you can read. The other columns wait as chips on the shelf. The shelf shows only while a column is off screen.
+A desktop is one row of columns, left to right. A column is one tile, or a stack of tiles one above the other. The window shows as many neighbouring columns as fit at a width you can read. The other columns wait as chips on the shelf. The shelf shows only while a column is off screen.
 
-The shelf layout also makes the window's title bar one toolbar, so tiles and the sidebar list get the height the title bar and the sidebar's header took. From left to right, beside the window buttons, it holds New, Commands, the flow switch, the sidebar toggle and notifications. The shelf comes next, starting where the tiles start. On the right are the garden, the Notebook, the Ledger, automations, asks and the profile selector. Drag the empty parts of the toolbar to move the window, and double-click them to zoom it. While the Notebook, the Ledger, the full Garden or a dialog is open, the toolbar's controls are dimmed until you close it, and you can still drag the toolbar. With the queue sidebar collapsed, the queue bar's waiting pill, automation runs and desktop chips sit in the toolbar too, and the asks button replaces the bar's asks chip. When they don't all fit, the desktop chips shrink to the current desktop and a +N chip that opens the desktop overview, and automation runs leave the bar until there is room again. While a tile is focused with its agent, the toolbar stays empty, so the window can still be moved. On Linux, the toolbar sits under the native title bar.
-
-To turn it on, use **Settings → Experimental → Shelf layout** or run `attn settings set shelf_layout_enabled true`. It is off by default. Turning it off brings your splits back with no tile lost, although splits you moved may come back at even widths. The rest of this page applies either way, except for what this section changes.
+The window's title bar is one toolbar, so tiles and the sidebar list get the height the title bar and the sidebar's header took. From left to right, beside the window buttons, it holds New, Commands, the flow switch, the sidebar toggle and notifications. The shelf comes next, starting where the tiles start. On the right are the garden, the Notebook, the Ledger, automations, asks and the profile selector. Drag the empty parts of the toolbar to move the window, and double-click them to zoom it. While the Notebook, the Ledger, the full Garden or a dialog is open, the toolbar's controls are dimmed until you close it, and you can still drag the toolbar. With the queue sidebar collapsed, the queue bar's waiting pill, automation runs and desktop chips sit in the toolbar too, and the asks button replaces the bar's asks chip. When they don't all fit, the desktop chips shrink to the current desktop and a +N chip that opens the desktop overview, and automation runs leave the bar until there is room again. While a tile is focused with its agent, the toolbar stays empty, so the window can still be moved. On Linux, the toolbar sits under the native title bar.
 
 ### Keys
 
@@ -85,11 +80,11 @@ To turn it on, use **Settings → Experimental → Shelf layout** or run `attn s
 | Show fewer, wider tiles or more, narrower tiles | Cmd+Option+-, Cmd+Option+= | Ctrl+Alt+-, Ctrl+Alt+= |
 | Widen or narrow the open sidebar | Cmd+Option+], Cmd+Option+[ | Ctrl+Alt+], Ctrl+Alt+[ |
 
-The command palette offers these actions too. Zoom, focus and moving a tile to another desktop keep their keys and work as above.
+The command palette offers these actions too.
 
 On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl+Alt+Shift+arrows, so carry and send never reach Attn there. To use them, run the commands from the palette, rebind them in Attn (Cmd+/ on macOS, Ctrl+Shift+/ on Linux, then **Edit shortcuts**), or change GNOME's keys.
 
-### What changes
+### How tiles move
 
 - **Opening a tile.** Cmd+D, Cmd+N and Cmd+T (Ctrl+Shift+D, N and T on Linux) open beside the active column and take focus, even when the row is full. A tile on the far side goes to the shelf. Cmd+Shift+D (Ctrl+Alt+D on Linux) opens a shell below the active tile, in the same column, and Cmd+Shift+N (Ctrl+Alt+N on Linux) does the same for a new session. When a stack has no room for another tile at 320px, the new tile opens beside instead, and a message gives the numbers.
 - **What agents open.** A terminal an agent starts goes to the row's end and takes no focus. It shows if there is room. If not, its chip flashes and your screen stays as it is. `attn terminal open --down` still stacks the terminal below the agent. A document or browser tile an agent opens goes beside that agent and takes no focus. It slides into view when the active tile can stay on screen. Otherwise its chip counts as waiting, and Cmd+J (Ctrl+Shift+J on Linux) brings it first. Closing the document puts your screen back.
@@ -101,11 +96,11 @@ On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl
 
 ### Widths
 
-A tile never gets narrower than the narrowest width, 66 terminal character columns by default. Set it in **Settings → Experimental**, or with `attn settings set narrowest_tile_cols <number>`. Cmd+Option+- and Cmd+Option+= (Ctrl+Alt+- and Ctrl+Alt+= on Linux) step through 57, 66, 76, 86, 100, 120 and 150 until one tile fewer or one tile more fits, and a label lists the tile counts this window can reach with the current one highlighted. When no step fits another tile, a message gives the width it tried and what would make room: closing the sidebar, or a narrower width than 57 set here or with the command. When a dragged width is what keeps a tile off the screen, Cmd+Option+= also clears the dragged widths of the tiles that end up on screen, and the label says so. Hovering the dots in the middle of the shelf shows the same control.
+A tile never gets narrower than the narrowest width, 66 terminal character columns by default. Set it in **Settings → Appearance**, or with `attn settings set narrowest_tile_cols <number>`. Cmd+Option+- and Cmd+Option+= (Ctrl+Alt+- and Ctrl+Alt+= on Linux) step through 57, 66, 76, 86, 100, 120 and 150 until one tile fewer or one tile more fits, and a label lists the tile counts this window can reach with the current one highlighted. When no step fits another tile, a message gives the width it tried and what would make room: closing the sidebar, or a narrower width than 57 set here or with the command. When a dragged width is what keeps a tile off the screen, Cmd+Option+= also clears the dragged widths of the tiles that end up on screen, and the label says so. Hovering the dots in the middle of the shelf shows the same control.
 
 Drag the divider between two columns to give them the widths you want, and the other columns share the rest. A drag past the narrowest width moves the far column to the shelf, and dragging back restores it. Esc cancels the drag. To clear the widths beside one divider, double-click it. To clear every dragged width on the desktop, run "Clear dragged widths" from the palette. A dragged width remembers the room for tiles it was dragged at. With less room, such as on a smaller display or with the sidebar wider, it gives way, so the row shows the tiles the narrowest width allows. Attn keeps the width, and it comes back when the room does. A width saved before attn remembered the room gives way only when it is wider than all the room.
 
-The open sidebar has one width, in desktop flow and queue flow and on every profile. Drag its right edge to change it. The tiles hold still during the drag and fit once when you release, so running agents resize only once. Esc, leaving the window or collapsing the sidebar cancels the drag. Cmd+Option+] and Cmd+Option+[ (Ctrl+Alt+] and [ on Linux) step the width by 40 pixels, and so do "Widen the sidebar" and "Narrow the sidebar" in the palette. To type a width, use **Settings → Experimental** or `attn settings set sidebar_width <pixels>`.
+The open sidebar has one width, in desktop flow and queue flow and on every profile. Drag its right edge to change it. The tiles hold still during the drag and fit once when you release, so running agents resize only once. Esc, leaving the window or collapsing the sidebar cancels the drag. Cmd+Option+] and Cmd+Option+[ (Ctrl+Alt+] and [ on Linux) step the width by 40 pixels, and so do "Widen the sidebar" and "Narrow the sidebar" in the palette. To type a width, use **Settings → Appearance** or `attn settings set sidebar_width <pixels>`.
 
 On a Mac, Option shortcuts go by key position, so a keyboard that isn't US English keeps every one of them. On a Swedish keyboard, Option+8 types `[`, yet Cmd+Option+8 moves a tile to desktop 8. Cmd+Option+[ is the key to the right of P, Å.
 
@@ -182,19 +177,19 @@ Pressing the digit of the desktop you're on takes you back only while you're loo
 <details>
 <summary>Where does a tile land when I move it to another desktop?</summary>
 
-Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. Dropping a tile on a desktop in the sidebar docks the tile along that desktop's left side, at about a third of the desktop's width. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
+Cmd+Option+digit (Ctrl+Alt+digit on Linux), with or without Shift, puts the tile to the right of the active tile on that desktop and makes the tile active there. The shortcut creates the desktop when the digit has none. Dropping a tile on a desktop in the sidebar puts its column at the start of that desktop's row. Dropping the tile on the "New desktop" spot that appears below your desktops while you drag makes a new desktop for the tile. In the desktop overview (Cmd+G, Ctrl+Shift+G on Linux), Shift+Enter sends the active tile to the highlighted desktop and keeps you where you are. Delegates come along only with an Option drop (Alt on Linux) or the "Move with delegates to" commands.
 </details>
 
 <details>
 <summary>Which agents move when I move with delegates?</summary>
 
-Attn moves every delegate that the agent started and that is on the agent's desktop, and the delegates those delegates started. Each delegate lands beside the agent that started it. Attn leaves behind delegates on other desktops, and anything those delegates started, even if it is on this desktop. Attn also leaves behind shells you split off the agent. The "Move with delegates to" commands appear in the command palette only when the agent you're looking at has a delegate of its own on its desktop. They leave you where you are. An Option drop (Alt on Linux) on a sidebar desktop makes the same move and takes you to that desktop.
+Attn moves every delegate that the agent started and that is on the agent's desktop, and the delegates those delegates started. The delegates follow the agent along that desktop's row, in the order they had. Attn leaves behind delegates on other desktops, and anything those delegates started, even if it is on this desktop. Attn also leaves behind shells you opened from the agent. The "Move with delegates to" commands appear in the command palette only when the agent you're looking at has a delegate of its own on its desktop. They leave you where you are. An Option drop (Alt on Linux) on a sidebar desktop makes the same move and takes you to that desktop.
 </details>
 
 <details>
 <summary>How do I tell an agent which desktop to use?</summary>
 
-Point the agent at a desktop by digit, by name in any case, by the label an unnamed desktop shows (such as "Desktop 12"), or by id. Send an agent to a digit with no desktop and Attn makes that desktop, whether it's a new delegate or an agent that's already running. Attn refuses a name it can't find and lists your desktops instead, and when two desktops share a name it asks for the digit or id. On another desktop the tile lands beside that desktop's active tile, and the desktop you're on stays the same.
+Point the agent at a desktop by digit, by name in any case, by the label an unnamed desktop shows (such as "Desktop 12"), or by id. Send an agent to a digit with no desktop and Attn makes that desktop, whether it's a new delegate or an agent that's already running. Attn refuses a name it can't find and lists your desktops instead, and when two desktops share a name it asks for the digit or id. A new delegate opens at the end of that desktop's row, and an agent you move lands to the right of its active tile. The desktop you're on stays the same.
 </details>
 
 <details>

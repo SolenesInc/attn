@@ -18,8 +18,6 @@ export interface ShortcutMeta {
   /** A native menu item in `app_menu` (src-tauri/src/lib.rs) delivers the keystroke
    * because AppKit consumes it first, so a rebind here would never fire. */
   nativeDelivery?: boolean;
-  requiresShelfLayout?: boolean;
-  shelfLabel?: string;
 }
 
 export const SHORTCUT_CATEGORY_LABELS: Record<ShortcutCategory, string> = {
@@ -41,7 +39,7 @@ export const SHORTCUT_CATEGORY_ORDER: ShortcutCategory[] = [
 export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.new': { label: 'New session on this desktop', category: 'sessions' },
   'session.newTerminal': { label: 'New terminal on this desktop', category: 'sessions', dockLabel: 'terminal' },
-  'session.newHorizontal': { label: 'New session, split sideways', shelfLabel: 'New session below', category: 'sessions', dockLabel: 'session h' },
+  'session.newHorizontal': { label: 'New session below', category: 'sessions', dockLabel: 'session h' },
   'session.close': { label: 'Close session, focused pane or empty desktop', category: 'sessions' },
   'session.prev': { label: 'Previous desktop (queue mode: previous agent in the queue)', category: 'sessions' },
   'session.next': { label: 'Next desktop (queue mode: next agent in the queue)', category: 'sessions' },
@@ -54,8 +52,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'session.jumpToWaiting': { label: 'Jump to next waiting session', category: 'sessions' },
   'session.nextRun': { label: 'Next automation run needing you', category: 'sessions' },
   'sidebar.agentList': { label: 'All agents', category: 'sessions' },
-  'sidebar.wider': { label: 'Widen the sidebar', category: 'sessions', requiresShelfLayout: true },
-  'sidebar.narrower': { label: 'Narrow the sidebar', category: 'sessions', requiresShelfLayout: true },
+  'sidebar.wider': { label: 'Widen the sidebar', category: 'sessions' },
+  'sidebar.narrower': { label: 'Narrow the sidebar', category: 'sessions' },
   'session.settle': { label: 'Settle turn', category: 'sessions' },
   'dock.asks': { label: 'Asks drawer', category: 'sessions', dockLabel: 'Asks' },
   'session.priority': { label: 'Toggle session priority', category: 'sessions' },
@@ -92,8 +90,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
 
   'terminal.open': { label: 'Focus utility terminal', category: 'panes', requiresTerminal: true },
   'terminal.collapse': { label: 'Collapse utility terminal', category: 'panes' },
-  'terminal.splitVertical': { label: 'Split pane down', shelfLabel: 'New shell beside', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
-  'terminal.splitHorizontal': { label: 'Split pane sideways', shelfLabel: 'New shell below', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
+  'terminal.splitVertical': { label: 'New shell beside', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
+  'terminal.splitHorizontal': { label: 'New shell below', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
   'terminal.toggleZoom': { label: 'Zoom active pane', category: 'panes', dockLabel: 'zoom', requiresTerminal: true },
   'terminal.toggleMaximize': { label: 'Focus active pane', category: 'panes', requiresTerminal: true },
   'terminal.close': { label: 'Close focused pane', category: 'panes', requiresTerminal: true },
@@ -101,11 +99,11 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'terminal.focusRight': { label: 'Move focus right', category: 'panes', requiresTerminal: true },
   'terminal.focusUp': { label: 'Move focus up', category: 'panes', requiresTerminal: true },
   'terminal.focusDown': { label: 'Move focus down', category: 'panes', requiresTerminal: true },
-  'shelf.fewerTiles': { label: 'Fewer, wider tiles', category: 'panes', requiresShelfLayout: true },
-  'shelf.moreTiles': { label: 'More, narrower tiles', category: 'panes', requiresShelfLayout: true },
-  'shelf.carryLeft': { label: 'Carry tile left along the row', category: 'panes', requiresShelfLayout: true },
-  'shelf.carryRight': { label: 'Carry tile right along the row', category: 'panes', requiresShelfLayout: true },
-  'shelf.sendToShelf': { label: 'Send tile to the shelf', category: 'panes', requiresShelfLayout: true },
+  'shelf.fewerTiles': { label: 'Fewer, wider tiles', category: 'panes' },
+  'shelf.moreTiles': { label: 'More, narrower tiles', category: 'panes' },
+  'shelf.carryLeft': { label: 'Carry tile left along the row', category: 'panes' },
+  'shelf.carryRight': { label: 'Carry tile right along the row', category: 'panes' },
+  'shelf.sendToShelf': { label: 'Send tile to the shelf', category: 'panes' },
   'terminal.find': { label: 'Find in terminal', category: 'panes', requiresTerminal: true },
 
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },
@@ -142,7 +140,6 @@ export function dockShortcutLabel(id: ShortcutId): string {
   return SHORTCUT_META[id].dockLabel ?? SHORTCUT_META[id].label;
 }
 
-export function shortcutLabel(id: ShortcutId, shelfLayoutEnabled: boolean): string {
-  const meta = SHORTCUT_META[id];
-  return (shelfLayoutEnabled && meta.shelfLabel) || meta.label;
+export function shortcutLabel(id: ShortcutId): string {
+  return SHORTCUT_META[id].label;
 }

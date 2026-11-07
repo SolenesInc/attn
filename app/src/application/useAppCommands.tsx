@@ -47,7 +47,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 import { useSharedCodexCommands } from './useSharedCodex';
-import { BoolSetting, FEATURES, isOn } from '../utils/settings';
+import { FEATURES, isOn } from '../utils/settings';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -65,7 +65,6 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
-  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
   const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
@@ -307,82 +306,78 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
         icon: <KeyboardActionIcon />,
         run: whatsNew.open,
       },
-      ...(shelfLayoutEnabled
-        ? [
-            {
-              id: 'sidebar-wider',
-              title: 'Widen the sidebar',
-              keywords: ['sidebar', 'width', 'wider', 'resize'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('sidebar.wider'),
-              run: () => void triggerShortcut('sidebar.wider'),
-            },
-            {
-              id: 'sidebar-narrower',
-              title: 'Narrow the sidebar',
-              keywords: ['sidebar', 'width', 'narrower', 'resize'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('sidebar.narrower'),
-              run: () => void triggerShortcut('sidebar.narrower'),
-            },
-            {
-              id: 'sidebar-reset-width',
-              title: 'Reset sidebar width',
-              keywords: ['sidebar', 'width', 'default', 'resize'],
-              icon: <KeyboardActionIcon />,
-              run: () => sendSetSetting('sidebar_width', ''),
-            },
-            {
-              id: 'shelf-fewer-tiles',
-              title: 'Fewer, wider tiles',
-              keywords: ['shelf', 'narrowest', 'width', 'tiles'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('shelf.fewerTiles'),
-              run: () => void triggerShortcut('shelf.fewerTiles'),
-            },
-            {
-              id: 'shelf-more-tiles',
-              title: 'More, narrower tiles',
-              keywords: ['shelf', 'narrowest', 'width', 'tiles'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('shelf.moreTiles'),
-              run: () => void triggerShortcut('shelf.moreTiles'),
-            },
-            {
-              id: 'shelf-carry-left',
-              title: 'Carry tile left along the row',
-              keywords: ['shelf', 'row', 'move', 'reorder'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('shelf.carryLeft'),
-              run: () => void triggerShortcut('shelf.carryLeft'),
-            },
-            {
-              id: 'shelf-carry-right',
-              title: 'Carry tile right along the row',
-              keywords: ['shelf', 'row', 'move', 'reorder'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('shelf.carryRight'),
-              run: () => void triggerShortcut('shelf.carryRight'),
-            },
-            {
-              id: 'shelf-send-to-shelf',
-              title: 'Send tile to the shelf',
-              keywords: ['shelf', 'row', 'hide', 'hold'],
-              icon: <KeyboardActionIcon />,
-              shortcut: keys('shelf.sendToShelf'),
-              run: () => void triggerShortcut('shelf.sendToShelf'),
-            },
-            {
-              id: 'shelf-clear-dragged-widths',
-              title: 'Clear dragged widths',
-              keywords: ['shelf', 'row', 'width', 'divider', 'reset'],
-              icon: <KeyboardActionIcon />,
-              run: () => {
-                if (currentDesktopId) useDesktopShelfStore.getState().rowActionsByDesktop[currentDesktopId]?.clearDraggedWidths();
-              },
-            },
-          ]
-        : []),
+      {
+        id: 'sidebar-wider',
+        title: 'Widen the sidebar',
+        keywords: ['sidebar', 'width', 'wider', 'resize'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('sidebar.wider'),
+        run: () => void triggerShortcut('sidebar.wider'),
+      },
+      {
+        id: 'sidebar-narrower',
+        title: 'Narrow the sidebar',
+        keywords: ['sidebar', 'width', 'narrower', 'resize'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('sidebar.narrower'),
+        run: () => void triggerShortcut('sidebar.narrower'),
+      },
+      {
+        id: 'sidebar-reset-width',
+        title: 'Reset sidebar width',
+        keywords: ['sidebar', 'width', 'default', 'resize'],
+        icon: <KeyboardActionIcon />,
+        run: () => sendSetSetting('sidebar_width', ''),
+      },
+      {
+        id: 'shelf-fewer-tiles',
+        title: 'Fewer, wider tiles',
+        keywords: ['shelf', 'narrowest', 'width', 'tiles'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('shelf.fewerTiles'),
+        run: () => void triggerShortcut('shelf.fewerTiles'),
+      },
+      {
+        id: 'shelf-more-tiles',
+        title: 'More, narrower tiles',
+        keywords: ['shelf', 'narrowest', 'width', 'tiles'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('shelf.moreTiles'),
+        run: () => void triggerShortcut('shelf.moreTiles'),
+      },
+      {
+        id: 'shelf-carry-left',
+        title: 'Carry tile left along the row',
+        keywords: ['shelf', 'row', 'move', 'reorder'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('shelf.carryLeft'),
+        run: () => void triggerShortcut('shelf.carryLeft'),
+      },
+      {
+        id: 'shelf-carry-right',
+        title: 'Carry tile right along the row',
+        keywords: ['shelf', 'row', 'move', 'reorder'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('shelf.carryRight'),
+        run: () => void triggerShortcut('shelf.carryRight'),
+      },
+      {
+        id: 'shelf-send-to-shelf',
+        title: 'Send tile to the shelf',
+        keywords: ['shelf', 'row', 'hide', 'hold'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('shelf.sendToShelf'),
+        run: () => void triggerShortcut('shelf.sendToShelf'),
+      },
+      {
+        id: 'shelf-clear-dragged-widths',
+        title: 'Clear dragged widths',
+        keywords: ['shelf', 'row', 'width', 'divider', 'reset'],
+        icon: <KeyboardActionIcon />,
+        run: () => {
+          if (currentDesktopId) useDesktopShelfStore.getState().rowActionsByDesktop[currentDesktopId]?.clearDraggedWidths();
+        },
+      },
       {
         id: 'settings',
         title: 'Settings',
@@ -395,7 +390,6 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return commands;
   }, [
     agentOnScreenId,
-    shelfLayoutEnabled,
     automationsPanelOpen,
     desktopNavigation,
     desktops,

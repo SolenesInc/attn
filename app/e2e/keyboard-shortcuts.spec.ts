@@ -95,6 +95,7 @@ test.describe('Keyboard Shortcuts', () => {
     });
 
     test('⌘⇧Z zooms toward the active pane without hiding the others', async ({ page, daemon }) => {
+      await page.setViewportSize({ width: 1900, height: 900 });
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');

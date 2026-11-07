@@ -111,9 +111,8 @@ func TestMovingAnAgentWithItsSameDesktopDelegates(t *testing.T) {
 				if !slices.Equal(tree.leafIDs(), want) {
 					t.Fatalf("target leaf order %v; want %v", tree.leafIDs(), want)
 				}
-				parent, _, ok := tree.splitHolding(paneFor(finalTarget, nested))
-				if !ok || parent.Direction != "vertical" || !slices.Equal(parent.leafIDs(), []string{paneFor(finalTarget, first), paneFor(finalTarget, nested)}) {
-					t.Fatalf("nested delegate did not land beside its dispatcher: %s", finalTarget.TreeJson)
+				if columns := columnsOf(tree); len(columns) != len(want) {
+					t.Fatalf("the moved delegates share columns: %s", finalTarget.TreeJson)
 				}
 			}
 		})

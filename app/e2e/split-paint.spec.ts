@@ -304,7 +304,7 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
 
 test('hidden split desktop defers paints until return after a window resize', async ({ page, daemon }) => {
   await daemon.start();
-  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.setViewportSize({ width: 1600, height: 1000 });
   await page.clock.install();
   await page.goto('/');
   await page.waitForSelector('.dashboard');
@@ -327,13 +327,13 @@ test('hidden split desktop defers paints until return after a window resize', as
   await expect(page.locator('.dashboard')).toBeVisible();
   await page.setViewportSize({ width: 900, height: 650 });
   await expect(
-    page.locator(`[data-pane-session-id="${agentId}-peer"]`),
-    'the narrower window suspends the peer the user did not leave on',
-  ).toHaveAttribute('data-pane-suspended', 'true');
+    page.locator(`[data-pane-session-id="${agentId}-peer"] .terminal-container`),
+    'the narrower window sends the peer the user did not leave on to the shelf, which unmounts its terminal',
+  ).toHaveCount(0);
   await expect(
-    agentPane,
-    'the pane the user left on must stay a live terminal when the narrower window suspends its peer',
-  ).not.toHaveAttribute('data-pane-suspended', 'true');
+    agentPane.locator('.terminal-container'),
+    'the tile the user left on must stay a live terminal when the narrower window sends its peer to the shelf',
+  ).toHaveCount(1);
 
   const paintsBeforeBurst = (await readTrace(page, agentId)).length;
   const hiddenFrame = fullFrame('HIDDEN', 35, 90);

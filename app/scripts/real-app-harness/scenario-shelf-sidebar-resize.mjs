@@ -147,7 +147,7 @@ runner.registerCleanup('close_page_server', () => new Promise((resolve) => pageS
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
-  for (const [key, value] of [['sidebar_width', ''], ['queue_mode_enabled', 'false'], ['shelf_layout_enabled', 'false']]) {
+  for (const [key, value] of [['sidebar_width', ''], ['queue_mode_enabled', 'false']]) {
     await request('set_setting', { key, value }).catch(() => {});
   }
 });
@@ -157,9 +157,8 @@ runner.registerCleanup('close_sessions', async () => {
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ handle: HANDLE, sidebar: '.sidebar' }) });
 
 try {
-  await runner.step('launch_with_the_setting_on', async () => {
+  await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1700, height: 900 } });

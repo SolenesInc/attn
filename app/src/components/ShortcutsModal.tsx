@@ -12,11 +12,10 @@ interface ShortcutsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onEdit?: () => void;
-  shelfLayoutEnabled: boolean;
 }
 
-export function ShortcutsModal({ isOpen, onClose, onEdit, shelfLayoutEnabled }: ShortcutsModalProps) {
-  const categories = useMemo(() => buildCheatsheet({ shelfLayoutEnabled }), [shelfLayoutEnabled]);
+export function ShortcutsModal({ isOpen, onClose, onEdit }: ShortcutsModalProps) {
+  const categories = useMemo(() => buildCheatsheet(), []);
   useEscapeStack(onClose, isOpen);
 
   if (!isOpen) return null;

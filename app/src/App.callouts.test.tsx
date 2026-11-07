@@ -46,7 +46,7 @@ describe('App callouts', () => {
       cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button'],
     });
     expect(card()).toHaveTextContent('Work lives here');
-    expect(card()).toHaveAttribute('data-side', 'right');
+    expect(card()).toHaveAttribute('data-side', 'below');
     expect(screen.getByTestId('callout-ring')).toHaveStyle({ left: '7px', top: '7px', width: '186px', height: '36px' });
   });
 
@@ -231,7 +231,7 @@ describe('App callouts', () => {
     [false, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
     [false, true, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
     [true, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'queue', 'settings-button']],
-    [true, true, ['sidebar', 'desktops', 'queue', 'settings-button']],
+    [true, true, ['sidebar', 'commands', 'garden', 'desktops', 'queue', 'settings-button']],
   ])('lists anchors for queue=%s collapsed=%s', async (queue, collapsed, anchors) => {
     const { daemon } = await launch(queue);
     if (collapsed) await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
@@ -262,7 +262,7 @@ describe('App callouts', () => {
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     expect(screen.getByTestId('queue-bar-desktop-extras')).toBeInTheDocument();
     expect(await show(daemon, [{ anchor: 'desktops', text: 'All your desktops' }])).toEqual({
-      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'desktops', 'queue', 'settings-button'],
+      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'commands', 'garden', 'desktops', 'queue', 'settings-button'],
     });
     expect(card()).toHaveAttribute('data-side', 'below');
     expect(screen.getByTestId('callout-ring')).toBeInTheDocument();

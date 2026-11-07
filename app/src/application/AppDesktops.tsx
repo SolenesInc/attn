@@ -186,7 +186,7 @@ export function AppDesktops() {
           isSessionViewVisible={view === 'session'}
           terminalsLive
           attachOnlyDrawn={isOn(settings, BoolSetting.ptySharedHostEnabled)}
-          shelfNarrowestCols={isOn(settings, BoolSetting.shelfLayoutEnabled) ? Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS : undefined}
+          shelfNarrowestCols={Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS}
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}
           onMoveRowLeaf={(move) => sendDesktopMoveLeaf({ sourceDesktopId: desktop.id, targetDesktopId: desktop.id, ...move })}

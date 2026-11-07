@@ -10,7 +10,7 @@ top. Commands the user picks often rise in the list.
 
 ## Sub-features
 
-- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or wakes a sleeping crew member. With the shelf layout on, an off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
+- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or wakes a sleeping crew member. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
 - `command-palette`: ⌘⇧K, or `>` in the agent palette, lists every command attn offers, with its shortcut.
 - `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text. The same key again closes the palette.
 - `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.
@@ -22,7 +22,7 @@ top. Commands the user picks often rise in the list.
 ### People
 
 - ⌘K (`ui.actionMenu`) opens the agent palette and ⌘⇧K (`ui.commandPalette`) the command palette (`app/src/shortcuts/registry.ts`).
-- The sidebar's `button[aria-label="Commands"]` opens the command palette (`app/src/components/SidebarHeader.tsx`). With `shelf_layout_enabled` on, the same button sits in the title bar's left group. On the queue bar, the waiting pill opens the agent palette (`app/src/components/QueueBar.tsx`). ⌘⇧A opens the agent palette wherever the queue sidebar is not showing ([sidebar.md](sidebar.md)).
+- The title bar's left group holds `button[aria-label="Commands"]`, which opens the command palette (`app/src/components/SidebarHeader.tsx`). On the queue bar, the waiting pill opens the agent palette (`app/src/components/QueueBar.tsx`). ⌘⇧A opens the agent palette wherever the queue sidebar is not showing ([sidebar.md](sidebar.md)).
 - In the palette (`app/src/components/palette/UnifiedPalette.tsx`, `app/src/components/palette/Palette.tsx`): the input is `[role="combobox"][aria-label="Agents"]`, or `[aria-label="Commands"]` in command mode. ↑ and ↓ move, Enter runs, and Escape closes. Typing `>` switches to commands, and deleting it switches back. `.unified-palette-count` reads `<shown> of <all>`. Rows are `.unified-palette-option`, agents `[data-testid="palette-agent-<session>"]` and tiles `[data-testid="palette-tile-<tile>"]`. The footer names the settle and snooze keys (`[data-testid="palette-settle-hint"]`, `[data-testid="palette-snooze-hint"]`).
 - The commands come from `app/src/application/useAppCommands.tsx` and `app/src/application/useSharedCodex.tsx`. Each command belongs to a feature, and that feature's file covers how to drive it.
 - ⌘P opens other finders, not this palette: the markdown opener ([markdown.md](markdown.md)), or the note finder inside the notebook or an editor tile ([notebook.md](notebook.md)).

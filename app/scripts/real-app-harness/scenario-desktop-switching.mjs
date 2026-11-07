@@ -264,7 +264,7 @@ async function main() {
     });
 
     let tileId;
-    await runner.step('a_docked_tile_is_the_active_leaf_and_takes_the_keyboard', async () => {
+    await runner.step('going_to_a_docked_tile_makes_it_the_active_leaf_with_the_keyboard', async () => {
       await client.request('select_session', { sessionId: first.sessionId });
       await client.request('dom_click', { selector: `[data-testid="focus-pane-${first.paneId}"]` });
       const focused = await focusModeOf(client, first.sessionId);
@@ -279,6 +279,21 @@ async function main() {
         env: instanceCliEnv(currentHarnessInstance(), { ATTN_SOCKET_PATH: socketPathForInstance() }),
         encoding: 'utf8',
       });
+      const docked = await observer.waitFor(
+        () => observer.desktop(desktopA.id)?.tree_json?.match(/"tile_id":"(tile-markdown-[^"]+)"/)?.[1],
+        'the document in desktop A\'s row',
+      );
+      await pressShortcutKeys(client, driver, 'ui.actionMenu');
+      await client.request('dom_wait', { selector: '[role="combobox"][aria-label="Agents"]', focused: true, timeoutMs: 10_000 });
+      await driver.typeText('notes');
+      await client.request('dom_wait', { selector: `.unified-palette-option[aria-selected="true"] [data-testid="palette-tile-${docked}"]`, timeoutMs: 10_000 });
+      const stayed = await focusModeOf(client, first.sessionId);
+      runner.assert(
+        stayed?.desktop?.view?.activeLeafId === first.paneId && stayed?.desktop?.view?.maximizedPaneId === first.paneId,
+        `Opening a document moved the focus off the agent: ${JSON.stringify(stayed?.desktop?.view, null, 2)}`,
+        stayed?.desktop?.view,
+      );
+      await driver.pressKey('Enter');
       const state = await waitForDesktopUi(
         client,
         desktopA.id,

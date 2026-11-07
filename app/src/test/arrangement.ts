@@ -121,7 +121,6 @@ export class Arrangement {
     this.replace({ ...placed, active_pane_id: paneId });
   }
 
-  // Places as the daemon does with the shelf layout on: beside the anchor's column, or under the anchor.
   placeInRow(desktopId: string, leaf: Node, anchorId: string, { below = false, focus = true, pane }: { below?: boolean; focus?: boolean; pane?: DaemonDesktop['panes'][number] } = {}) {
     const desktop = this.desktop(desktopId)!;
     const columns = rowColumns(parse(desktop));

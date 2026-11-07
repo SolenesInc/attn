@@ -11,7 +11,7 @@ import type { ScriptedDaemon } from './test/scriptedDaemon';
 const PANES_WIDTH = 2000;
 const PANES_HEIGHT = 900;
 const IDS = Array.from({ length: 6 }, (_, index) => `s${index + 1}`);
-const SHELF_ON = { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' };
+const NARROWEST_66 = { narrowest_tile_cols: '66' };
 const LAYOUT_COMMANDS = ['desktop_set_active_pane', 'desktop_show_leaf', 'desktop_move_leaf', 'desktop_set_split_ratio', 'desktop_set_wanted_cols', 'pty_resize'];
 
 function rightChain(nodes: unknown[], depth = 0): unknown {
@@ -82,7 +82,7 @@ async function peekAt(daemon: Awaited<ReturnType<typeof renderRow>>, id: string)
 
 describe('Shelf peek', () => {
   it('opens after a short hover with the latest text, without attaching or changing the layout', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     const layoutBefore = layoutTraffic(daemon).length;
     const shownBefore = paneIds();
 
@@ -101,7 +101,7 @@ describe('Shelf peek', () => {
   });
 
   it('opens nothing for a chip that arrives under a still pointer, until the pointer moves', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
 
     fireEvent.pointerEnter(chip('s5'));
     await advance(1000);
@@ -115,7 +115,7 @@ describe('Shelf peek', () => {
   });
 
   it('counts the delay from the first move, and stays closed after Esc until the pointer comes back', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
 
     movePointerOnto(chip('s5'));
     await advance(179);
@@ -136,7 +136,7 @@ describe('Shelf peek', () => {
 
   it('refreshes the text while open and reads nothing once closed', async () => {
     let reads = 0;
-    const daemon = await renderRow(SHELF_ON, { screens: () => `read ${++reads}` });
+    const daemon = await renderRow(NARROWEST_66, { screens: () => `read ${++reads}` });
     await peekAt(daemon, 's5');
     expect(screen.getByTestId('shelf-peek-screen').textContent).toBe('read 1');
 
@@ -153,7 +153,7 @@ describe('Shelf peek', () => {
   });
 
   it('sends a reply to that terminal and changes nothing on screen', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     const layoutBefore = layoutTraffic(daemon).length;
     const shownBefore = paneIds();
     await peekAt(daemon, 's5');
@@ -170,7 +170,7 @@ describe('Shelf peek', () => {
   });
 
   it('opens the tile on Enter with an empty reply', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     await peekAt(daemon, 's5');
 
     await gesture(daemon, () => fireEvent.keyDown(screen.getByTestId('shelf-peek-input'), { key: 'Enter' }));
@@ -182,7 +182,7 @@ describe('Shelf peek', () => {
   });
 
   it('closes on Esc, on a click outside, and after the pointer leaves', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     const shownBefore = paneIds();
 
     await peekAt(daemon, 's5');
@@ -208,7 +208,7 @@ describe('Shelf peek', () => {
   });
 
   it('shows only the title and kind for a document chip', async () => {
-    const daemon = await renderRow(SHELF_ON, { tiles: [{ tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }] });
+    const daemon = await renderRow(NARROWEST_66, { tiles: [{ tile_id: 'tile-doc', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }] });
 
     movePointerOnto(screen.getByTestId('shelf-chip-tile-doc'));
     await advance(180);
@@ -221,7 +221,7 @@ describe('Shelf peek', () => {
   });
 
   it('opens from the sidebar row of an off-screen tile, and not from one on screen', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
 
     movePointerOnto(screen.getByTestId('sidebar-session-s1'));
     await advance(180);
@@ -234,7 +234,7 @@ describe('Shelf peek', () => {
   });
 
   it('says why when the text cannot be read', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     daemon.on('terminal_read_text', () => ({ event: 'terminal_read_text_result', success: false, error: 'host unreachable' }));
 
     await peekAt(daemon, 's5');
@@ -247,7 +247,7 @@ describe('Shelf peek', () => {
     ['a stopped agent', { state: 'idle', terminal_exit: { code: 143, at: '2026-10-07T00:20:04+02:00' } }, [], 'Agent stopped'],
   ])('with %s', (_name, targetFields, outposts, notice) => {
     it('keeps the reply, sends nothing, and says why', async () => {
-      const daemon = await renderRow(SHELF_ON, { targetFields, outposts });
+      const daemon = await renderRow(NARROWEST_66, { targetFields, outposts });
       await peekAt(daemon, 's5');
       expect(screen.getByTestId('shelf-peek-notice')).toHaveTextContent(notice);
 
@@ -265,7 +265,7 @@ describe('Shelf peek', () => {
     });
 
     it('shows the unsent reply on the tile after Open, where Discard ends it', async () => {
-      const daemon = await renderRow(SHELF_ON, { targetFields, outposts });
+      const daemon = await renderRow(NARROWEST_66, { targetFields, outposts });
       await peekAt(daemon, 's5');
       fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
 
@@ -279,7 +279,7 @@ describe('Shelf peek', () => {
   });
 
   it('sends a kept reply once the outpost connects', async () => {
-    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTING] });
+    const daemon = await renderRow(NARROWEST_66, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTING] });
     await peekAt(daemon, 's5');
     const input = screen.getByTestId('shelf-peek-input');
     fireEvent.change(input, { target: { value: 'ship it' } });
@@ -296,7 +296,7 @@ describe('Shelf peek', () => {
   });
 
   it('keeps a refused reply, reports it at once, and sends it whole on retry', async () => {
-    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    const daemon = await renderRow(NARROWEST_66, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
     answerInput(daemon, () => 'studio is unreachable; this needs it now');
     await peekAt(daemon, 's5');
     const input = screen.getByTestId('shelf-peek-input');
@@ -341,7 +341,7 @@ describe('Shelf peek', () => {
       ['after the failure', false],
       ['before the failure arrives', true],
     ])('Open keeps the reply on the tile and types nothing, with the stop %s', async (_name, stopFirst) => {
-      const daemon = await renderRow(SHELF_ON, { screens });
+      const daemon = await renderRow(NARROWEST_66, { screens });
       await replyWhoseReturnFails(daemon, () => {
         if (stopFirst) stop(daemon);
       });
@@ -359,7 +359,7 @@ describe('Shelf peek', () => {
     });
 
     it('the tile offers the reply when reached from its chip, without the peek', async () => {
-      const daemon = await renderRow(SHELF_ON, { screens });
+      const daemon = await renderRow(NARROWEST_66, { screens });
       await replyWhoseReturnFails(daemon);
       await gesture(daemon, () => stop(daemon));
 
@@ -369,7 +369,7 @@ describe('Shelf peek', () => {
     });
 
     it('after a resume, Enter sends the whole reply to the new process, and only then', async () => {
-      const daemon = await renderRow(SHELF_ON, { screens });
+      const daemon = await renderRow(NARROWEST_66, { screens });
       await replyWhoseReturnFails(daemon);
       await gesture(daemon, () => stop(daemon));
       await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: daemonSession('s5', { state: 'waiting_input' as const }) }));
@@ -390,7 +390,7 @@ describe('Shelf peek', () => {
   });
 
   it('Open keeps a reply whose Return failed when the outpost cannot be reached', async () => {
-    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    const daemon = await renderRow(NARROWEST_66, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
     answerInput(daemon, (data) => (data === '\r' ? 'the bridge ended before the answer' : null));
     await peekAt(daemon, 's5');
     fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
@@ -405,7 +405,7 @@ describe('Shelf peek', () => {
   });
 
   it('Open leaves a reply whose Return failed to the live terminal that holds its text', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     answerInput(daemon, (data) => (data === '\r' ? 'the terminal did not answer' : null));
     await peekAt(daemon, 's5');
     fireEvent.change(screen.getByTestId('shelf-peek-input'), { target: { value: 'ship it' } });
@@ -419,7 +419,7 @@ describe('Shelf peek', () => {
   });
 
   it('after the text lands and Return fails, a retry sends only Return', async () => {
-    const daemon = await renderRow(SHELF_ON, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
+    const daemon = await renderRow(NARROWEST_66, { targetFields: { host: 'outpost-1' }, outposts: [CONNECTED] });
     answerInput(daemon, (data) => (data === '\r' ? 'the bridge ended before the answer' : null));
     await peekAt(daemon, 's5');
     const input = screen.getByTestId('shelf-peek-input');
@@ -440,7 +440,7 @@ describe('Shelf peek', () => {
   });
 
   it('does not send twice while the first send is unanswered, or resend by itself after the daemon drops', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
     daemon.on('pty_input', () => undefined);
     await peekAt(daemon, 's5');
     const input = screen.getByTestId('shelf-peek-input');
@@ -460,16 +460,5 @@ describe('Shelf peek', () => {
     await advance(10_000);
     await daemon.idle();
     expect(daemon.connection.sent.filter((command) => command.cmd === 'pty_input' && command.id === 's5')).toEqual([]);
-  });
-
-  it('with the setting off, sidebar rows open nothing', async () => {
-    const daemon = await renderRow({});
-
-    movePointerOnto(screen.getByTestId('sidebar-session-s5'));
-    await advance(1000);
-    await daemon.idle();
-
-    expect(screen.queryByTestId('shelf-peek')).toBeNull();
-    expect(daemon.sentOf('terminal_read_text')).toEqual([]);
   });
 });

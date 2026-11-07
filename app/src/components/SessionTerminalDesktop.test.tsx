@@ -248,62 +248,6 @@ describe('SessionTerminalDesktop', () => {
     expect(mockTerminalSetSurfaceReleased.mock.calls.map(([released]) => released)).not.toContain(true);
   });
 
-  it('accepts an authoritative split ratio that supersedes an optimistic resize', () => {
-    const onResizeSplit = vi.fn(() => new Promise<void>(() => {}));
-    const terminalState = createSplitDesktop();
-    const { container, rerender } = render(
-      <SessionTerminalDesktop
-        desktopId="desktop-session-1"
-        desktopSessions={[
-          { id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" },
-          { id: "session-2", label: "Session 2", agent: "claude", cwd: "/tmp/repo" },
-        ]}
-        terminalState={terminalState}
-        activePaneId={SESSION_PANE_ID}
-        fontSize={14}
-        enabled
-        isActiveSession
-        eventRouter={mockEventRouter}
-        onSplitPane={vi.fn()}
-        onClosePane={vi.fn()}
-        onFocusPane={vi.fn()}
-        onNavigateOutOfSession={vi.fn()}
-        onResizeSplit={onResizeSplit}
-      />
-    );
-    const panes = container.querySelector('.session-terminal-panes') as HTMLElement;
-    vi.spyOn(panes, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
-    });
-
-    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
-    fireEvent.pointerUp(window, { clientX: 800, clientY: 250 });
-    expect(container.querySelector('.desktop-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.800');
-
-    rerender(
-      <SessionTerminalDesktop
-        desktopId="desktop-session-1"
-        desktopSessions={[
-          { id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" },
-          { id: "session-2", label: "Session 2", agent: "claude", cwd: "/tmp/repo" },
-        ]}
-        terminalState={createSplitDesktop(0.6)}
-        activePaneId={SESSION_PANE_ID}
-        fontSize={14}
-        enabled
-        isActiveSession
-        eventRouter={mockEventRouter}
-        onSplitPane={vi.fn()}
-        onClosePane={vi.fn()}
-        onFocusPane={vi.fn()}
-        onNavigateOutOfSession={vi.fn()}
-        onResizeSplit={onResizeSplit}
-      />
-    );
-
-    expect(container.querySelector('.desktop-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.600');
-  });
-
   it('settles an optimistic resize when the daemon echoes it as preferred', () => {
     const onResizeSplit = vi.fn(() => new Promise<void>(() => {}));
     const commonProps = {

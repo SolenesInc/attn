@@ -2,7 +2,6 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
-import { serveSettings } from './test/settings';
 
 async function openCheatsheet(platform?: string) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
@@ -58,45 +57,12 @@ describe('App shortcut cheatsheet', () => {
     if (platform !== 'MacIntel') expect(cheatsheet).not.toHaveTextContent('⌘');
   });
 
-  it.each([
-    ['lists', { shelf_layout_enabled: 'true' }, [['⌘', '⌥', '-'], ['⌘', '⌥', '=']]],
-    ['leaves out', {}, undefined],
-  ])('%s the shelf width keys by the shelf layout setting', async (_, settings, combos) => {
-    const { daemon } = await renderApp({
-      initialState: { settings },
-      script: (scripted) => serveSettings(scripted, settings),
-    });
-    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
+  it('lists the shelf and sidebar width keys, and names where new tiles open', async () => {
+    const { cheatsheet } = await openCheatsheet();
 
-    expect(combosOf(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' }), 'Fewer, wider / more, narrower tiles')).toEqual(combos);
-  });
-
-  it.each([
-    ['lists', { shelf_layout_enabled: 'true' }, [['⌘', '⌥', ']'], ['⌘', '⌥', '[']]],
-    ['leaves out', {}, undefined],
-  ])('%s the sidebar width keys by the shelf layout setting', async (_, settings, combos) => {
-    const { daemon } = await renderApp({
-      initialState: { settings },
-      script: (scripted) => serveSettings(scripted, settings),
-    });
-    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
-
-    expect(combosOf(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' }), 'Widen / narrow the sidebar')).toEqual(combos);
-  });
-
-  it.each([
-    ['on', { shelf_layout_enabled: 'true' }, ['New session below', 'New shell beside', 'New shell below'], ['New session, split sideways', 'Split pane down', 'Split pane sideways']],
-    ['off', {}, ['New session, split sideways', 'Split pane down', 'Split pane sideways'], ['New session below', 'New shell beside', 'New shell below']],
-  ])('names where new tiles open with the shelf layout %s', async (_, settings, shown, hidden) => {
-    const { daemon } = await renderApp({
-      initialState: { settings },
-      script: (scripted) => serveSettings(scripted, settings),
-    });
-    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
-
-    const cheatsheet = screen.getByRole('dialog', { name: 'Keyboard Shortcuts' });
-    for (const label of shown) expect(cheatsheet).toHaveTextContent(label);
-    for (const label of hidden) expect(cheatsheet).not.toHaveTextContent(label);
+    expect(combosOf(cheatsheet, 'Fewer, wider / more, narrower tiles')).toEqual([['⌘', '⌥', '-'], ['⌘', '⌥', '=']]);
+    expect(combosOf(cheatsheet, 'Widen / narrow the sidebar')).toEqual([['⌘', '⌥', ']'], ['⌘', '⌥', '[']]);
+    for (const label of ['New session below', 'New shell beside', 'New shell below']) expect(cheatsheet).toHaveTextContent(label);
   });
 
   it('closes from its close button', async () => {

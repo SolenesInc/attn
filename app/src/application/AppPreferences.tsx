@@ -10,7 +10,6 @@ import {
   useAppPanelsContext,
   useNavigationContext,
 } from './AppContexts';
-import { BoolSetting, isOn } from '../utils/settings';
 
 export function AppPreferences() {
   const {
@@ -54,7 +53,6 @@ export function AppPreferences() {
   } = useDaemonApi();
   const { handleSelectSession } = useNavigationContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
-  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
   return (
     <>
       <ShortcutsModal
@@ -64,12 +62,10 @@ export function AppPreferences() {
           setShortcutsOpen(false);
           setShortcutEditorOpen(true);
         }}
-        shelfLayoutEnabled={shelfLayoutEnabled}
       />
       <ShortcutEditorModal
         isOpen={shortcutEditorOpen}
         onClose={() => setShortcutEditorOpen(false)}
-        shelfLayoutEnabled={shelfLayoutEnabled}
       />
       <WhatsNewModal
         isOpen={whatsNew.isOpen}

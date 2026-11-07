@@ -64,15 +64,6 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
-	ShelfLayoutEnabled = feature("shelf_layout_enabled", "Lay out each desktop as one row of tiles with a shelf, instead of splits: true or false. Experimental; off by default.", Info{
-		Name:    "Shelf layout",
-		Summary: "Lay out each desktop as one row of tiles that slides sideways, with the rest waiting on a shelf, instead of splits.",
-		Group:   Interface,
-		Applies: Now,
-		Stage:   Experimental,
-		Since:   "2026-11-05",
-		Search:  "narrowest tile width row columns",
-	})
 	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false.", Info{
 		Name:    "Agent callouts",
 		Summary: "Let agents point at parts of the app with short, guided steps.",
@@ -153,8 +144,8 @@ var (
 	EditorExecutable             = add(&Setting{Key: "editor_executable", Class: Home, Kind: Checked, Description: "Command to open files in your editor. Empty uses the default editor."})
 	NewSessionAgent              = add(&Setting{Key: "new_session_agent", Class: Home, Kind: Checked, Description: "Harness selected for new sessions. Empty uses the default harness."})
 	Theme                        = add(&Setting{Key: "theme", Class: Home, Kind: Checked, Description: "App color theme: dark, light or system."})
-	NarrowestTileCols            = add(&Setting{Key: "narrowest_tile_cols", Class: Home, Kind: Checked, Description: "Narrowest width of a tile in the shelf layout, in terminal columns: a positive whole number. Empty uses the default of 66."})
-	SidebarWidth                 = add(&Setting{Key: "sidebar_width", Class: Home, Kind: Checked, Description: "Width of the open sidebar in pixels, from 200 to 600, with the shelf layout on. Empty uses the default of 240."})
+	NarrowestTileCols            = add(&Setting{Key: "narrowest_tile_cols", Class: Home, Kind: Checked, Description: "Narrowest width of a tile in a desktop's row, in terminal columns: a positive whole number. Empty uses the default of 66."})
+	SidebarWidth                 = add(&Setting{Key: "sidebar_width", Class: Home, Kind: Checked, Description: "Width of the open sidebar in pixels, from 200 to 600. Empty uses the default of 240."})
 	AutoApproveEnabled           = add(&Setting{Key: "auto_approve_enabled", Class: Home, Kind: Bool, Default: On, Description: "Auto-approve supported agent requests: true or false."})
 	QueueModeEnabled             = add(&Setting{Key: "queue_mode_enabled", Class: Home, Kind: Bool, Description: "Use queue flow across all profiles: true or false."})
 	QueueCrewEnabled             = add(&Setting{Key: "queue_crew_enabled", Class: Home, Kind: Bool, Description: "Include crew sessions in the queue: true or false."})

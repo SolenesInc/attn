@@ -8,7 +8,6 @@ import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { BUILD_DEMO, BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
-import { BoolSetting, isOn } from '../utils/settings';
 import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
@@ -38,7 +37,7 @@ export function AppSidebar() {
   return (
     <>
       <Sidebar />
-      {width.resizable && !sidebarCollapsed && !agentFocused && <SidebarResizeHandle width={width} />}
+      {!sidebarCollapsed && !agentFocused && <SidebarResizeHandle width={width} />}
     </>
   );
 }
@@ -123,7 +122,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   const { desktopNavigation } = useDesktopNavigationContext();
   return (
     <SidebarProvider
-      oneToolbar={isOn(settings, BoolSetting.shelfLayoutEnabled)}
+      oneToolbar
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
       selectedId={shownAgentId}

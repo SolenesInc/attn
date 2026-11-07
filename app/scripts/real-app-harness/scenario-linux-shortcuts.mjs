@@ -29,14 +29,8 @@ function parseArgs(argv) {
   };
 }
 
-async function waitForActivePane(client, sessionId, paneId, description, timeoutMs = 10_000) {
-  return waitForSessionDesktop(
-    client,
-    sessionId,
-    (desktop) => desktop?.activePaneId === paneId,
-    description,
-    timeoutMs,
-  );
+async function waitForActivePane(client, paneId) {
+  await client.request('dom_wait', { selector: `[data-session-terminal-desktop][data-active-leaf-id="${paneId}"]`, timeoutMs: 10_000 });
 }
 
 async function waitForPicker(client, title, timeoutMs = 10_000) {
@@ -156,7 +150,7 @@ async function main() {
       await waitForSelector(client, '.unified-palette[aria-label="Agents"]');
       await driver.pressKeyCode(53);
       await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
-      await driver.pressKey('k', { control: true, alt: true });
+      await driver.pressKey('k', { control: true, option: true });
       await waitForSelector(client, '.unified-palette[aria-label="Commands"]');
       await driver.pressKeyCode(53);
     });
@@ -175,12 +169,12 @@ async function main() {
       runner.assert(Boolean(utilityPane?.paneId), `No utility pane after split: ${JSON.stringify(desktop)}`);
       await waitForPaneVisible(client, sessionId, utilityPane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, utilityPane.paneId, 20_000);
-      await waitForActivePane(client, sessionId, utilityPane.paneId, 'new utility pane to hold focus');
+      await waitForActivePane(client, utilityPane.paneId);
 
       await driver.pressKey('Left', { control: true, shift: true });
-      await waitForActivePane(client, sessionId, primaryPane.paneId, 'Ctrl+Shift+Left to focus the left pane');
+      await waitForActivePane(client, primaryPane.paneId);
       await driver.pressKey('Right', { control: true, shift: true });
-      await waitForActivePane(client, sessionId, utilityPane.paneId, 'Ctrl+Shift+Right to focus the right pane');
+      await waitForActivePane(client, utilityPane.paneId);
     });
 
     await runner.step('ctrl_shift_w_closes_focused_pane', async () => {

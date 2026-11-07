@@ -16,7 +16,7 @@ Appearance.
 - `settings-cli`: `attn settings list`, `get` and `set`, with read-only computed values under `--all`.
 - `home-and-machine`: home settings decided at the home, which an outpost reads from a copy and sets through the home, and machine settings per machine.
 - `experimental`: the switches for features still in development, off by default, generated from the declarations in `internal/setting`. Palette commands turn each one on and off, and `attn settings list --features` lists them.
-- `appearance`: theme, and text size for the app and for the garden.
+- `appearance`: theme, text size for the app and for the garden, the narrowest tile width and the sidebar width.
 - `github-hosts`: the GitHub hosts attn found.
 
 ## How to get to it
@@ -24,7 +24,7 @@ Appearance.
 ### People
 
 - ⌘, (`ui.openSettings`, `app/src/shortcuts/registry.ts`) opens the dialog, and closes it when open. The binding is protected: the user can rebind it but never unbind it.
-- With the shelf layout on, ⌥⌘− and ⌥⌘= and the shelf's width control set `narrowest_tile_cols`, and dragging the sidebar's edge, ⌥⌘] and ⌥⌘[ set `sidebar_width`. The Experimental section also shows both ([desktops.md](desktops.md), [sidebar.md](sidebar.md)).
+- ⌥⌘− and ⌥⌘= and the shelf's width control set `narrowest_tile_cols`, and dragging the sidebar's edge, ⌥⌘] and ⌥⌘[ set `sidebar_width`. The Appearance section also shows both ([desktops.md](desktops.md), [sidebar.md](sidebar.md)).
 - ⌘=, ⌘- and ⌘0 (`ui.increaseFontSize`, `ui.decreaseFontSize`, `ui.resetFontSize`) change the app's text size, which Appearance also shows.
 - Palette (`app/src/application/useAppCommands.tsx`): `settings` ("Settings").
 - Home screen: the gear, `[data-testid="settings-button"]` (`app/src/components/Dashboard.tsx`).

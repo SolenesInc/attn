@@ -96,8 +96,6 @@ export interface ShelfPeek {
 }
 
 interface DesktopShelfState {
-  shelfLayoutOn: boolean;
-  shelfLayoutChanged: (on: boolean) => void;
   settledRowByDesktop: Readonly<Record<string, SettledRow>>;
   settleRow: (desktopId: string, settled: SettledRow) => void;
   settleScreen: (desktopId: string, screen: ReadonlySet<string>) => void;
@@ -135,15 +133,6 @@ function without<T>(record: Readonly<Record<string, T>>, key: string): Readonly<
 }
 
 export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
-  shelfLayoutOn: false,
-  shelfLayoutChanged: (on) =>
-    set((state) => {
-      if (on === state.shelfLayoutOn) return state;
-      return {
-        shelfLayoutOn: on,
-        settledRowByDesktop: on ? withUnvisitedRows(state.settledRowByDesktop, useProfilesStore.getState().desktops) : NO_SETTLED_ROWS,
-      };
-    }),
   settledRowByDesktop: NO_SETTLED_ROWS,
   settleRow: (desktopId, settled) =>
     set((state) => ({ settledRowByDesktop: { ...state.settledRowByDesktop, [desktopId]: settled } })),
@@ -252,17 +241,15 @@ export const useDesktopShelfStore = create<DesktopShelfState>((set) => ({
 useProfilesStore.subscribe((state, previous) => {
   if (state.desktops === previous.desktops) return;
   const current = new Set(state.desktops.map((desktop) => desktop.id));
-  const { settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop, forgetDesktop, shelfLayoutOn } = useDesktopShelfStore.getState();
+  const { settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop, forgetDesktop } = useDesktopShelfStore.getState();
   const known = [settledRowByDesktop, firstColumnByDesktop, shelfByDesktop, heldByDesktop, unseenByDesktop, flashingByDesktop, documentReturnsByDesktop];
   for (const desktopId of new Set(known.flatMap((record) => Object.keys(record)))) {
     if (!current.has(desktopId)) forgetDesktop(desktopId);
   }
-  if (shelfLayoutOn) {
-    useDesktopShelfStore.setState((shelf) => {
-      const settledRowByDesktop = withUnvisitedRows(shelf.settledRowByDesktop, state.desktops);
-      return settledRowByDesktop === shelf.settledRowByDesktop ? shelf : { settledRowByDesktop };
-    });
-  }
+  useDesktopShelfStore.setState((shelf) => {
+    const settledRowByDesktop = withUnvisitedRows(shelf.settledRowByDesktop, state.desktops);
+    return settledRowByDesktop === shelf.settledRowByDesktop ? shelf : { settledRowByDesktop };
+  });
 });
 
 export function bringAnchor(leaf: { desktopId: string; leafId: string }): string | null {
@@ -273,8 +260,8 @@ export function bringAnchor(leaf: { desktopId: string; leafId: string }): string
 }
 
 export function oldestUnseenDocument(desktopId: string | null): string | null {
-  const { shelfLayoutOn, unseenByDesktop } = useDesktopShelfStore.getState();
-  if (!desktopId || !shelfLayoutOn) return null;
+  const { unseenByDesktop } = useDesktopShelfStore.getState();
+  if (!desktopId) return null;
   return unseenByDesktop[desktopId]?.[0] ?? null;
 }
 

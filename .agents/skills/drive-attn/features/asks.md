@@ -33,7 +33,7 @@ the seed. Asks are an experimental setting, off by default.
 - In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). A narrow tile cuts the subject, then shows only the `?` mark; the chip never leaves the header. The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
 - **Settings → Experimental**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do: the queue bar counts open asks and shows them on hover, and an ask row says "Waiting on you" when its agent is also owed a turn.
+- Where people see what agents do: the title bar's asks button counts open asks, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 
 ### Agents
@@ -99,8 +99,8 @@ Preconditions:
   - Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`.
   - Run `wsctl input --id <terminal> --text "list asks" --enter` to read the id of the `Release note` ask. Withdraw that ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, so only `Cache store` stays open for the queue bar.
 - **The queue bar.**
-  - With an ask open and ask-agent owed a turn (`./attn agent list` shows `owed`), run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"queue-bar-asks\"]"}'` reads `1 ask· 1 waiting on you`.
-  - Move the pointer over it natively: `[data-testid="queue-bar-asks-peek"]` lists the ask, with `[aria-label="Waiting on you"]` on its row. Click the chip natively: the drawer opens on the ask.
+  - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .sidebar-count-badge"}'` reads `1`.
+  - Click the asks button in `[data-testid="title-bar-right"]` natively: the drawer opens on the ask.
   - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
 - **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.
 - **An ask about a seed, from the tile chip.**
@@ -122,7 +122,7 @@ Preconditions:
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep the harness's own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
-- **Flow**: in queue flow, the queue bar counts open asks and shows them on hover. Clicking the queue bar or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
+- **Flow**: in queue flow, the title bar's asks button counts open asks. Clicking it or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
 
 ## Tests
 
@@ -139,6 +139,5 @@ Preconditions:
 - `attn ask --seed <id>` needs the asker to tend the seed. attn refuses it from an agent that has not claimed the seed, with `nobody is tending <seed> ... tend it first`.
 - attn types a multi-line answer as one bracketed paste, so the mock sees one prompt. Keep `answered the ask` as the fixture's first turn: the mock tries turns in order, and the rest of the answer carries the user's own words, which can match a later turn.
 - The drawer's letter keys act only while focus is on the drawer itself. ⌘⇧R and `j` put focus in an answer field, and a text answer's field takes the letter as text, so click the ask's subject natively first. With the drawer closed, the letter reaches the agent's terminal and restarts the 30-second quiet wait.
-- The queue bar exists only in queue flow with the sidebar collapsed.
 - The `dock.asks` shortcut, the palette command and the sidebar icon exist only while asks are on or some ask exists. A fresh instance with asks off shows none of them. Their absence there is not a missing way in.
 - Working but wrong: after sending, the drawer moves to the next open ask, or to its empty state, with no confirmation that the answer reached the agent. The proof is the agent's screen, not the drawer.

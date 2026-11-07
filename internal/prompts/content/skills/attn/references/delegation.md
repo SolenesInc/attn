@@ -101,7 +101,7 @@ Two conflicts have different recoveries:
 
 ## Choose the desktop
 
-The new agent opens beside you on your desktop without changing what the user sees. When the user asks for the agent elsewhere, pass `--desktop` with the desktop's shortcut digit, its name as shown (case-insensitive), or its id. The agent opens beside that desktop's active pane. Only desktops of your profile are accepted, and a refusal lists them.
+The new agent opens at the end of your desktop's row without changing what the user sees. When the user asks for the agent elsewhere, pass `--desktop` with the desktop's shortcut digit, its name as shown (case-insensitive), or its id. The agent opens at the end of that desktop's row. Only desktops of your profile are accepted, and a refusal lists them.
 
 ```sh
 attn delegate --seed s-example --role builder --cwd /notes --desktop ops

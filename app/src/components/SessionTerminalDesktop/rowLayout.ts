@@ -363,7 +363,7 @@ export function stepNarrowestCols(
   const narrowerWouldHelp = narrowestPx > ATTENTION_MIN_WIDTH && asked * ATTENTION_MIN_WIDTH <= input.areaPx;
   return {
     kind: 'limit',
-    message: `${asked} tiles at the narrowest width (${narrowest} cols, ${narrowestPx}px) need ${askedPx}px. Tiles have ${input.areaPx}px here.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}${narrowerWouldHelp ? ' A narrower width can be set in Settings → Experimental.' : ''}`,
+    message: `${asked} tiles at the narrowest width (${narrowest} cols, ${narrowestPx}px) need ${askedPx}px. Tiles have ${input.areaPx}px here.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}${narrowerWouldHelp ? ' A narrower width can be set in Settings → Appearance.' : ''}`,
   };
 }
 

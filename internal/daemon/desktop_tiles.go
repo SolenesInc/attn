@@ -34,15 +34,14 @@ func dockAnchor(desktop profiles.Desktop, requested, tileID string) string {
 }
 
 type desktopTileDock struct {
-	tileID       string
-	tileKind     string
-	params       string
-	sessionID    protocol.SessionID
-	anchorID     string
-	edge         protocol.LayoutDockEdge
-	share        float64
-	besideColumn bool
-	keepActive   bool
+	tileID     string
+	tileKind   string
+	params     string
+	sessionID  protocol.SessionID
+	anchorID   string
+	edge       protocol.LayoutDockEdge
+	share      float64
+	keepActive bool
 }
 
 const defaultTileFraction = 0.32
@@ -67,7 +66,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 		share = dock.share
 	}
 	direction, before := layoutDockEdge(dock.edge)
-	if dock.besideColumn && direction == layouttree.DirectionVertical {
+	if direction == layouttree.DirectionVertical {
 		next, ok := layouttree.DockTileBesideColumn(desktop.Tree, anchor, before, func() string { return "split-" + uuid.NewString() }, dock.tileID, dock.tileKind, dock.params, dock.sessionID)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeInvalid, "tile %s could not dock beside the column of %s on desktop %s", dock.tileID, anchor, desktop.ID)
@@ -119,7 +118,6 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	if err := d.checkedTileSession(desktop, dock.sessionID); err != nil {
 		return dock, err
 	}
-	dock.besideColumn = d.store.ShelfLayoutOn()
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
 	if !docked {
 		dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)

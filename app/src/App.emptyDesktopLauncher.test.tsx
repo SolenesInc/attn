@@ -8,9 +8,8 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 
 const launcher = () => screen.queryByTestId('empty-desktop-launcher');
 
-async function onAgentBesideEmptyDesktop(settings: Record<string, string> = {}) {
+async function onAgentBesideEmptyDesktop() {
   const view = await renderApp({ initialState: {
-    settings,
     sessions: [daemonSession('s1', { state: 'idle', directory: '/tmp/s1' })],
     desktops: [soloDesktop('s1', { shortcut_slot: 1 }), emptyDesktop('other', { shortcut_slot: 2 })],
   } });
@@ -32,11 +31,8 @@ describe('App empty desktop launcher', () => {
     expect(screen.getByRole('radiogroup', { name: /agent/i })).toBeInTheDocument();
   });
 
-  it.each([
-    ['off', {}],
-    ['on', { shelf_layout_enabled: 'true' }],
-  ])('walks off the launcher with the row keys, shelf layout %s', async (_layout, settings) => {
-    const { daemon } = await onAgentBesideEmptyDesktop(settings);
+  it('walks off the launcher with the row keys', async () => {
+    const { daemon } = await onAgentBesideEmptyDesktop();
     const currentDesktop = () => daemon.arrangement.profile.current_desktop_id;
 
     await gesture(daemon, () => pressShortcut('terminal.focusRight'));

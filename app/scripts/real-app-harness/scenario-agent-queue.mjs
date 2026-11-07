@@ -334,7 +334,7 @@ async function main() {
         'alpha keeps its terminal through the layout change',
       );
 
-      await client.request('dom_click', { selector: '[data-testid="queue-bar-show-sidebar"]' });
+      await client.request('dom_click', { selector: '[data-testid="title-bar-left"] [aria-label="Show sidebar"]' });
       await pollFor(async () => {
         const reopened = await queueState(client);
         return reopened.present && !reopened.bar.present ? reopened : null;

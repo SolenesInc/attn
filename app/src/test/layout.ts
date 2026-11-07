@@ -100,8 +100,9 @@ export function observedResizes() {
 }
 
 export function fakeRects(rect: (element: HTMLElement) => DOMRect | null) {
+  const windowRect = HTMLElement.prototype.getBoundingClientRect;
   const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    return rect(this) ?? new DOMRect(0, 0, 0, 0);
+    return rect(this) ?? windowRect.call(this);
   });
   onTestFinished(() => spy.mockRestore());
 }

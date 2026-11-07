@@ -52,10 +52,10 @@ on the target machine.
 Claude, Codex and shells run on outposts. An agent's attn commands reach the
 home. Spawning chief, crew and plugin agents on outposts is unavailable.
 
-Open preserves focus: first terminal right (or --down), later terminals below
-the last live terminal you opened there. With the shelf layout on, every
-terminal goes to the row's end and shows if it fits; --down still stacks it
-below you. --desktop starts at its active tile.
+Open preserves focus. A terminal goes to the end of the desktop's row and shows
+if it fits. --down stacks it below you, or below the terminal you most recently
+opened in your column. --desktop opens it on that desktop; with --down it stacks
+below that desktop's active tile.
 A missing numbered --desktop is created; ls, typing, and closing require an
 existing desktop. Open with a command requires OSC 133: known unsupported
 shells are refused before opening. First-prompt wait limit=30s (measured 9-176ms in fish/zsh/bash).

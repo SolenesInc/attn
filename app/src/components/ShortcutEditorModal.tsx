@@ -29,7 +29,6 @@ import { setShortcutCaptureSuspended } from '../shortcuts/useShortcut';
 interface ShortcutEditorModalProps {
   isOpen: boolean;
   onClose: () => void;
-  shelfLayoutEnabled: boolean;
 }
 
 type BindingChange = Binding | 'default';
@@ -43,12 +42,11 @@ interface PendingReassign {
 
 const REGISTRY_ORDER = Object.keys(SHORTCUTS) as ShortcutId[];
 
-function groupedByCategory(shelfLayoutEnabled: boolean): Record<ShortcutCategory, ShortcutId[]> {
+function groupedByCategory(): Record<ShortcutCategory, ShortcutId[]> {
   const groups = {
     sessions: [], panes: [], markdown: [], review: [], app: [],
   } as Record<ShortcutCategory, ShortcutId[]>;
   for (const id of REGISTRY_ORDER) {
-    if (SHORTCUT_META[id].requiresShelfLayout && !shelfLayoutEnabled) continue;
     groups[SHORTCUT_META[id].category].push(id);
   }
   return groups;
@@ -66,10 +64,10 @@ function overrideValue(id: ShortcutId, change: BindingChange): Binding | undefin
   return bindingsConflict(change, defaultShortcut(id)) ? undefined : change;
 }
 
-export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: ShortcutEditorModalProps) {
+export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProps) {
   const capture = useCaptureShortcut();
   const kb = useKeybindings();
-  const groups = useMemo(() => groupedByCategory(shelfLayoutEnabled), [shelfLayoutEnabled]);
+  const groups = useMemo(() => groupedByCategory(), []);
 
   const [recordingId, setRecordingId] = useState<ShortcutId | 'quickCapture' | null>(null);
   const [recordingMode, setRecordingMode] = useState<'combo' | 'chord'>('combo');
@@ -112,7 +110,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
 
   const q = query.trim().toLowerCase();
   const matchesQuery = (id: ShortcutId) =>
-    shortcutLabel(id, shelfLayoutEnabled).toLowerCase().includes(q) ||
+    shortcutLabel(id).toLowerCase().includes(q) ||
     formatShortcut(id).toLowerCase().includes(q);
   const visibleIds = (category: ShortcutCategory): ShortcutId[] =>
     q ? groups[category].filter(matchesQuery) : groups[category];
@@ -136,7 +134,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
       if (kb.isProtected(conflictId)) {
         setRowError({
           id,
-          message: `${formatShortcut(binding)} is reserved by “${shortcutLabel(conflictId, shelfLayoutEnabled)}” and can’t be reassigned.`,
+          message: `${formatShortcut(binding)} is reserved by “${shortcutLabel(conflictId)}” and can’t be reassigned.`,
         });
         return;
       }
@@ -227,13 +225,13 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                 <ol className="shortcut-editor-dock-list">
                   {kb.dock.items.map((id, index) => (
                     <li className="shortcut-editor-dock-item" key={id}>
-                      <span className="shortcut-editor-dock-name">{shortcutLabel(id, shelfLayoutEnabled)}</span>
+                      <span className="shortcut-editor-dock-name">{shortcutLabel(id)}</span>
                       <span className="shortcut-editor-dock-keys">{formatShortcut(id)}</span>
                       <button
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Move up"
-                        aria-label={`Move ${shortcutLabel(id, shelfLayoutEnabled)} up`}
+                        aria-label={`Move ${shortcutLabel(id)} up`}
                         disabled={index === 0}
                         onClick={() => kb.moveDockItem(id, -1)}
                       >
@@ -243,7 +241,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Move down"
-                        aria-label={`Move ${shortcutLabel(id, shelfLayoutEnabled)} down`}
+                        aria-label={`Move ${shortcutLabel(id)} down`}
                         disabled={index === kb.dock.items.length - 1}
                         onClick={() => kb.moveDockItem(id, 1)}
                       >
@@ -253,7 +251,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         type="button"
                         className="shortcut-editor-icon-btn"
                         title="Remove from dock"
-                        aria-label={`Remove ${shortcutLabel(id, shelfLayoutEnabled)} from dock`}
+                        aria-label={`Remove ${shortcutLabel(id)} from dock`}
                         onClick={() => kb.setInDock(id, false)}
                       >
                         ✕
@@ -283,7 +281,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                     return (
                       <div className="shortcut-editor-row" key={id}>
                         <span className="shortcut-editor-row-label">
-                          {shortcutLabel(id, shelfLayoutEnabled)}
+                          {shortcutLabel(id)}
                           {customized && (
                             <span className="shortcut-editor-badge">Customized</span>
                           )}
@@ -313,7 +311,7 @@ export function ShortcutEditorModal({ isOpen, onClose, shelfLayoutEnabled }: Sho
                         {isPending ? (
                           <span className="shortcut-editor-reassign">
                             <span className="shortcut-editor-reassign-text">
-                              {formatShortcut(pending!.binding)} is “{shortcutLabel(pending!.conflictId, shelfLayoutEnabled)}”.
+                              {formatShortcut(pending!.binding)} is “{shortcutLabel(pending!.conflictId)}”.
                             </span>
                             <button
                               type="button"

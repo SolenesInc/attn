@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
+	"github.com/victorarias/attn/internal/setting"
 	"maps"
+	"strings"
 )
 
 func writeDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
@@ -57,4 +59,35 @@ func insertDesktopPanes(tx *sql.Tx, now string, desktop profiles.Desktop, create
 		}
 	}
 	return nil
+}
+
+func shelfLayoutValue(value string) bool {
+	return strings.EqualFold(strings.TrimSpace(value), "true")
+}
+
+func shelfLayoutOn(tx *sql.Tx) (bool, error) {
+	var value string
+	if _, err := rowFound(tx.QueryRow(`SELECT value FROM settings WHERE key = ?`, setting.ShelfLayoutEnabled.Key), &value); err != nil {
+		return false, err
+	}
+	return shelfLayoutValue(value), nil
+}
+
+func settleForWrite(tx *sql.Tx, desktop profiles.Desktop, previousTree layouttree.Node) (profiles.Desktop, error) {
+	shelf, err := shelfLayoutOn(tx)
+	if err != nil {
+		return desktop, err
+	}
+	closeFocus := profiles.RecentThenLeft
+	if shelf {
+		closeFocus = layouttree.NextInPosition
+	}
+	desktop = profiles.SettleAfter(desktop, previousTree, closeFocus)
+	for i := range desktop.Panes {
+		desktop.Panes[i].DesktopID = desktop.ID
+		if desktop.Panes[i].Status == "" {
+			desktop.Panes[i].Status = profiles.PaneStatusReady
+		}
+	}
+	return desktop, nil
 }

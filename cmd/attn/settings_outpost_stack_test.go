@@ -95,10 +95,10 @@ func TestEveryFeatureFollowsTheHomeOnItsOutposts(t *testing.T) {
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
-	requireStdout(t, home.Attn("settings", "set", "shelf_layout_enabled", "true"), "true")
+	requireStdout(t, home.Attn("settings", "set", "narrowest_tile_cols", "86"), "86")
 	remote := outpost.App()
 	pair.Connect()
-	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["shelf_layout_enabled"] == "true" })
+	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["narrowest_tile_cols"] == "86" })
 	for _, feature := range setting.Features() {
 		value := "true"
 		if feature.Default == setting.On {

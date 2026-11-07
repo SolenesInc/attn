@@ -117,6 +117,15 @@ class ResizeObserverStub {
 }
 globalThis.ResizeObserver = ResizeObserverStub;
 
+const WINDOW_TILE_AREA = { width: 3840, height: 1200 };
+if (typeof HTMLElement !== 'undefined') {
+  const nativeRect = HTMLElement.prototype.getBoundingClientRect;
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    if (this.classList.contains('session-terminal-panes')) return new DOMRect(0, 0, WINDOW_TILE_AREA.width, WINDOW_TILE_AREA.height);
+    return nativeRect.call(this);
+  };
+}
+
 // Node 22+ ships a built-in `localStorage` that shadows happy-dom's Storage and
 // lacks its methods unless --localstorage-file is set.
 if (typeof window !== 'undefined') {

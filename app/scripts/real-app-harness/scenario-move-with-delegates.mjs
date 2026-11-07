@@ -62,7 +62,7 @@ try {
     await dom(`[data-desktop-id="${source.id}"][data-session-visible="1"]`);
     const nestedPane = source.panes.find(pane => pane.session_id === nested);
     runner.assert(Boolean(nestedPane), "nested delegate has a placement", source);
-    await dom(`[data-pane-id="${nestedPane.pane_id}"]`);
+    await dom(`[data-testid="shelf-chip-${nestedPane.pane_id}"]`);
     await screenshot('before-move');
   });
   const assertGroup = async (desktopId) => {

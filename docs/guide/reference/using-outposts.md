@@ -126,7 +126,7 @@ attn terminal open --host ai-sandbox --cwd /home/user/project
 The first command starts in the outpost's home directory. An outpost agent's
 `attn terminal open` defaults to its own machine and directory. Use `--host home`
 to open a shell at the home. `--cwd` names a directory on the target machine.
-The shell opens beside your agent, and focus stays
+The shell opens at the end of the row, and focus stays
 where it was. Read it and type into it with `attn terminal read`, `run`, and `send`,
 using the terminal id printed by `open`.
 

@@ -130,11 +130,21 @@ describe('SettingsModal sections', () => {
     expect(screen.getByRole('heading', { name: 'Font Size' })).toBeInTheDocument();
   });
 
+  it('saves the narrowest tile width from Appearance when focus leaves the field', async () => {
+    const daemon = await openSection('general', { settings: { narrowest_tile_cols: '66' } });
+    const field = screen.getByLabelText('Narrowest tile width (columns)');
+    expect(field).toHaveValue(66);
+    fireEvent.change(field, { target: { value: '86' } });
+    await gesture(daemon, () => fireEvent.blur(field));
+    expect(savedSettings(daemon)).toEqual([['narrowest_tile_cols', '86']]);
+    expect(field).toHaveValue(86);
+  });
+
   it('finds every Experimental feature by its name, including one whose own section is hidden while it is off', async () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Crew v2', 'Outposts', 'Asks', 'Agent callouts', 'Phone access', 'Shelf layout', 'Shared Codex', 'Usage analytics']) {
+    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Crew v2', 'Outposts', 'Asks', 'Agent callouts', 'Phone access', 'Shared Codex', 'Usage analytics']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
       expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
     }

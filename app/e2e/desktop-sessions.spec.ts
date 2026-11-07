@@ -33,6 +33,7 @@ const currentDesktop = (page: import('@playwright/test').Page) =>
 const paneOf = (sessionId: string) => `[data-pane-kind="agent"][data-pane-session-id="${sessionId}"]`;
 
 async function openSide(page: import('@playwright/test').Page, first: string, second: string) {
+  await page.setViewportSize({ width: 1900, height: 900 });
   await page.locator(`[data-testid="session-${first}"]`).click();
   await expect(currentDesktop(page).locator(paneOf(first))).toBeVisible();
   await page.locator(`[data-testid="sidebar-session-${second}"]`).getByRole('button', { name: /^Open / }).click();
@@ -51,7 +52,12 @@ test.describe('Desktop Sessions', () => {
     const open = page.getByTestId('sidebar-session-repeat-agent').getByRole('button', { name: 'Open repeat-agent' });
     await open.click();
     await expect(pane).toHaveClass(/leaf-arrival/);
-    await pane.evaluate((el) => {
+    await pane.evaluate(async (el) => {
+      const nextFrame = () => new Promise(requestAnimationFrame);
+      const pulseRunning = () => el.getAnimations({ subtree: true })
+        .some((animation) => (animation as CSSAnimation).animationName === 'leaf-arrival-pulse' && !animation.pending);
+      while (!pulseRunning()) await nextFrame();
+      await nextFrame();
       el.addEventListener('animationcancel', (event) => {
         if ((event as AnimationEvent).animationName === 'leaf-arrival-pulse') {
           (el as HTMLElement).dataset.arrivalCanceled = 'true';
@@ -65,7 +71,7 @@ test.describe('Desktop Sessions', () => {
     expect(await pane.evaluate((el) => getComputedStyle(el, '::after').animationName)).toBe('leaf-arrival-pulse');
   });
 
-  test('opening an agent places it beside the active pane of the current desktop', async ({ page, daemon }) => {
+  test('opening an agent adds it to the row of the current desktop and selects it', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');

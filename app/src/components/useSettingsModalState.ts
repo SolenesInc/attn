@@ -259,7 +259,6 @@ export function useSettingsModalState({
   const directAgentLaunchEnabled = isOn(settings, BoolSetting.directAgentLaunchEnabled);
   const sharedPTYHostEnabled = isOn(settings, BoolSetting.ptySharedHostEnabled);
   const queueQuietNotifications = isOn(settings, BoolSetting.queueQuietNotifications);
-  const shelfLayoutEnabled = isOn(settings, BoolSetting.shelfLayoutEnabled);
 
   const draftDeps = { active: isOpen, onSetSetting, savedFlash };
   const projectsDirDraft = useSettingDraft({
@@ -498,8 +497,8 @@ export function useSettingsModalState({
           {
             id: 'general',
             label: 'Appearance',
-            description: 'Theme and text size, for the app and for the garden.',
-            keywords: 'theme appearance dark light system font size text scale zoom garden',
+            description: 'Theme, text size and layout widths, for the app and for the garden.',
+            keywords: 'theme appearance dark light system font size text scale zoom garden layout narrowest tile width columns sidebar width',
           },
           {
             id: 'desktop',
@@ -683,7 +682,6 @@ export function useSettingsModalState({
     handleRemovePlugin,
     commitPluginPriority,
     ptyBackendMode,
-    shelfLayoutEnabled,
     narrowestTileColsDraft,
     sidebarWidthDraft,
     queueShowHiddenSessions,

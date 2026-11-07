@@ -3524,7 +3524,7 @@ model DesktopMoveLeafMessage {
   anchor_id?: string;
   edge?: LayoutDockEdge;
   leaf_share?: float64;         // The moved leaf's share of the new split, in (0,1)
-  whole_column?: boolean;       // Moves leaf_id's column. Needs shelf_layout_enabled
+  whole_column?: boolean;       // Moves leaf_id's column
   activate?: boolean;           // Absent means true, as today
 }
 
@@ -3555,7 +3555,7 @@ model DesktopSetSplitRatioMessage {
 
 // Sets the wanted width of leaf_id's column. The width applies only while the
 // tile area is at least area_cols wide, the area it was set at. An area_cols of
-// 0 applies it wherever it fits the area. Needs shelf_layout_enabled.
+// 0 applies it wherever it fits the area.
 model DesktopSetWantedColsMessage {
   cmd: "desktop_set_wanted_cols";
   request_id: string;

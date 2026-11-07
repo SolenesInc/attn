@@ -94,11 +94,11 @@ func TestATileDocksBesideTheActiveLeafTakesFocusAndReDockingKeepsItsParams(t *te
 
 	w.apply(map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes,
-		"tile_session_id": "agent-a", "edge": "right", "tile_share": 0.4,
+		"tile_session_id": "agent-a", "edge": "right",
 	})
 	tree := w.tree()
-	if tree.Type != "split" || tree.Children[0].PaneID != paneID || tree.Children[1].TileID != "tile-md" || tree.Ratio != 0.6 {
-		t.Fatalf("docking beside the active pane produced %s, want pane %s then the tile at 40%%", w.desktop.TreeJson, paneID)
+	if tree.Type != "split" || tree.Children[0].PaneID != paneID || tree.Children[1].TileID != "tile-md" {
+		t.Fatalf("docking beside the active pane produced %s, want pane %s then the tile", w.desktop.TreeJson, paneID)
 	}
 	if w.desktop.ActivePaneID != "tile-md" {
 		t.Fatalf("docking a tile left the active leaf at %q, want the new tile", w.desktop.ActivePaneID)

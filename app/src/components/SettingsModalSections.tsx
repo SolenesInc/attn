@@ -102,6 +102,9 @@ export function AppearanceSettings({
   effectiveGardenScale,
   onIncreaseGardenScale,
   onMatchAppGardenScale,
+  narrowestTileColsDraft,
+  sidebarWidthDraft,
+  savedFlash,
 }: Pick<
   SettingsModalState,
   | 'themePreference'
@@ -115,6 +118,9 @@ export function AppearanceSettings({
   | 'effectiveGardenScale'
   | 'onIncreaseGardenScale'
   | 'onMatchAppGardenScale'
+  | 'narrowestTileColsDraft'
+  | 'sidebarWidthDraft'
+  | 'savedFlash'
 >) {
   return (
     <>
@@ -230,6 +236,68 @@ export function AppearanceSettings({
               )}
             </div>
           </div>
+        </div>
+      </section>
+      <section className="settings-block">
+        <div className="settings-block-intro">
+          <h3>Layout</h3>
+          <p className="settings-description">How wide tiles and the sidebar get.</p>
+        </div>
+        <div className="settings-block-body">
+          <div className="settings-row-card">
+            <div>
+              <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
+              <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
+            </div>
+            <div>
+              <input
+                id="settings-narrowest-tile-cols"
+                data-testid="settings-narrowest-tile-cols"
+                type="number"
+                min={1}
+                value={narrowestTileColsDraft.value}
+                onChange={narrowestTileColsDraft.onChange}
+                onBlur={narrowestTileColsDraft.onBlur}
+                onKeyDown={narrowestTileColsDraft.onKeyDown}
+                className="settings-input"
+              />
+              <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
+              <SettingRefusal settingKey="narrowest_tile_cols" />
+            </div>
+          </div>
+          <div className="settings-row-card">
+            <div>
+              <label className="settings-row-title" htmlFor="settings-sidebar-width">Sidebar width (pixels)</label>
+              <p className="settings-row-copy">The open sidebar's width, from {SIDEBAR_WIDTH.min} to {SIDEBAR_WIDTH.max}. Empty uses the default of {SIDEBAR_WIDTH.default}.</p>
+            </div>
+            <div className="settings-row-inline">
+              <input
+                id="settings-sidebar-width"
+                data-testid="settings-sidebar-width"
+                type="number"
+                min={SIDEBAR_WIDTH.min}
+                max={SIDEBAR_WIDTH.max}
+                placeholder={String(SIDEBAR_WIDTH.default)}
+                value={sidebarWidthDraft.value}
+                onChange={sidebarWidthDraft.onChange}
+                onBlur={sidebarWidthDraft.onBlur}
+                onKeyDown={sidebarWidthDraft.onKeyDown}
+                className="settings-input"
+              />
+              {sidebarWidthDraft.value !== '' && sidebarWidthDraft.value !== String(SIDEBAR_WIDTH.default) && (
+                <button
+                  type="button"
+                  className="settings-action"
+                  data-testid="settings-sidebar-width-reset"
+                  onClick={() => void sidebarWidthDraft.apply('')}
+                >
+                  Use default
+                </button>
+              )}
+              <SavedMark shown={savedFlash.saved('sidebar_width')} testID="settings-sidebar-width-saved" />
+            </div>
+          </div>
+          <SettingRefusal settingKey="sidebar_width" />
         </div>
       </section>
     </>
@@ -653,16 +721,10 @@ export function FeaturePage({ featureKey, settings, onSetSetting, children }: {
 
 export function ExperimentalSettings({
   settings,
-  narrowestTileColsDraft,
-  sidebarWidthDraft,
-  savedFlash,
   onSetSetting,
 }: Pick<
   SettingsModalState,
   | 'settings'
-  | 'narrowestTileColsDraft'
-  | 'sidebarWidthDraft'
-  | 'savedFlash'
   | 'onSetSetting'
 >) {
   const groups = [...new Set(EXPERIMENTAL_FEATURES.map(feature => feature.group))];
@@ -675,66 +737,7 @@ export function ExperimentalSettings({
         <div className="settings-block-body" key={group} data-testid={`settings-feature-group-${group}`}>
           <p className="settings-label">{group}</p>
           {EXPERIMENTAL_FEATURES.filter(feature => feature.group === group).map(feature => (
-            <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting}>
-              {feature.key === BoolSetting.shelfLayoutEnabled ? (
-                <>
-                <div className="settings-row-card">
-                  <div>
-                    <label className="settings-row-title" htmlFor="settings-narrowest-tile-cols">Narrowest tile width (columns)</label>
-                    <p className="settings-row-copy">A tile never gets narrower than this. A narrower width fits more tiles in the row.</p>
-                  </div>
-                  <div>
-                    <input
-                      id="settings-narrowest-tile-cols"
-                      data-testid="settings-narrowest-tile-cols"
-                      type="number"
-                      min={1}
-                      value={narrowestTileColsDraft.value}
-                      onChange={narrowestTileColsDraft.onChange}
-                      onBlur={narrowestTileColsDraft.onBlur}
-                      onKeyDown={narrowestTileColsDraft.onKeyDown}
-                      className="settings-input"
-                    />
-                    <SavedMark shown={savedFlash.saved('narrowest_tile_cols')} testID="settings-narrowest-tile-cols-saved" />
-                    <SettingRefusal settingKey="narrowest_tile_cols" />
-                  </div>
-                </div>
-            <div className="settings-row-card">
-              <div>
-                <label className="settings-row-title" htmlFor="settings-sidebar-width">Sidebar width (pixels)</label>
-                <p className="settings-row-copy">The open sidebar's width, from {SIDEBAR_WIDTH.min} to {SIDEBAR_WIDTH.max}. Empty uses the default of {SIDEBAR_WIDTH.default}.</p>
-              </div>
-              <div className="settings-row-inline">
-                <input
-                  id="settings-sidebar-width"
-                  data-testid="settings-sidebar-width"
-                  type="number"
-                  min={SIDEBAR_WIDTH.min}
-                  max={SIDEBAR_WIDTH.max}
-                  placeholder={String(SIDEBAR_WIDTH.default)}
-                  value={sidebarWidthDraft.value}
-                  onChange={sidebarWidthDraft.onChange}
-                  onBlur={sidebarWidthDraft.onBlur}
-                  onKeyDown={sidebarWidthDraft.onKeyDown}
-                  className="settings-input"
-                />
-                {sidebarWidthDraft.value !== '' && sidebarWidthDraft.value !== String(SIDEBAR_WIDTH.default) && (
-                  <button
-                    type="button"
-                    className="settings-action"
-                    data-testid="settings-sidebar-width-reset"
-                    onClick={() => void sidebarWidthDraft.apply('')}
-                  >
-                    Use default
-                  </button>
-                )}
-                <SavedMark shown={savedFlash.saved('sidebar_width')} testID="settings-sidebar-width-saved" />
-              </div>
-            </div>
-            <SettingRefusal settingKey="sidebar_width" />
-                </>
-              ) : null}
-            </FeatureRow>
+            <FeatureRow key={feature.key} feature={feature} settings={settings} onSetSetting={onSetSetting} />
           ))}
         </div>
       ))}

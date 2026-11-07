@@ -49,10 +49,19 @@ func TestASplitRatioTheUserSetStaysLockedAsPanesComeAndGoAndAcrossARestart(t *te
 	w := newWorld(t)
 	app := w.App()
 	cwd := w.Path("shop")
-	desktop, _, secondPane := spawnSideBySide(t, w, app, cwd)
+	desktop, firstPane, secondPane := spawnSideBySide(t, w, app, cwd)
+	stackID := uuid.NewString()
+	stacked := desktopRequest(app, protocol.DesktopMoveLeafMessage{
+		Cmd: protocol.CmdDesktopMoveLeaf, SourceDesktopID: desktop.ID, TargetDesktopID: protocol.Ptr(desktop.ID),
+		LeafID: secondPane, AnchorID: protocol.Ptr(firstPane), Edge: protocol.Ptr(protocol.LayoutDockEdgeBottom), RequestID: stackID,
+	}, stackID)
+	if !stacked.Success {
+		t.Fatalf("stacking the second shell failed: %s", protocol.Deref(stacked.Error))
+	}
+	desktop = changedDesktop(t, stacked, desktop.ID)
 	split, _, ok := desktopTree(t, desktop).splitHolding(secondPane)
-	if !ok {
-		t.Fatal("two panes share no split")
+	if !ok || split.Direction != "horizontal" {
+		t.Fatalf("the two shells share no stack: %s", desktop.TreeJson)
 	}
 
 	for _, c := range []struct {

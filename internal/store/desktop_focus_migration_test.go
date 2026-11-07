@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 )
 
-func TestDesktopFocusHistoryUpgradePreservesSelectionAndLeftFallback(t *testing.T) {
+func TestDesktopFocusHistoryUpgradePreservesSelectionAndClosesByPosition(t *testing.T) {
 	tile := func(id string) layouttree.Node {
 		return layouttree.Node{Type: "tile", TileID: id, TileKind: "browser", TileParams: "https://example.com"}
 	}
@@ -22,7 +22,7 @@ func TestDesktopFocusHistoryUpgradePreservesSelectionAndLeftFallback(t *testing.
 	}{
 		{"first selection after upgrade", split("ab", layouttree.DirectionVertical, tile("a"), tile("b")), "b", "b", "a"},
 		{"left neighbour without past visits", split("ab", layouttree.DirectionVertical, tile("a"), split("bc", layouttree.DirectionVertical, tile("b"), tile("c"))), "", "c", "b"},
-		{"left neighbour rather than the tile above", split("ab", layouttree.DirectionVertical, tile("a"), split("bc", layouttree.DirectionHorizontal, tile("b"), tile("c"))), "", "c", "a"},
+		{"the tile above rather than the left neighbour", split("ab", layouttree.DirectionVertical, tile("a"), split("bc", layouttree.DirectionHorizontal, tile("b"), tile("c"))), "", "c", "b"},
 	} {
 		for _, schema := range []int{169, 170} {
 			t.Run(fmt.Sprintf("%d/%s", schema, row.name), func(t *testing.T) {

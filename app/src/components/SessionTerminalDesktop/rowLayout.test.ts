@@ -321,7 +321,7 @@ describe('stepNarrowestCols', () => {
     const tree = rightChain([{ id: 'a', wanted: 100 }, 'b']);
     expect(stepNarrowestCols({ ...base, tree, areaPx: 1000 }, 66, 'more', 1000)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Experimental.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Appearance.',
     });
   });
 
@@ -334,11 +334,11 @@ describe('stepNarrowestCols', () => {
   it('says the numbers when no step shows another tile', () => {
     expect(stepNarrowestCols({ ...base, areaPx: 1000 }, 57, 'more', 1100)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Experimental.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. A narrower width can be set in Settings → Appearance.',
     });
     expect(stepNarrowestCols({ ...base, areaPx: 1000 }, 57, 'more', 1240)).toEqual({
       kind: 'limit',
-      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. Closing the sidebar would make room. A narrower width can be set in Settings → Experimental.',
+      message: '2 tiles at the narrowest width (57 cols, 570px) need 1140px. Tiles have 1000px here. Closing the sidebar would make room. A narrower width can be set in Settings → Appearance.',
     });
     expect(stepNarrowestCols({ ...base, areaPx: 500 }, 66, 'fewer', 500)).toEqual({ kind: 'limit', message: 'Already showing one tile.' });
     expect(stepNarrowestCols({ ...base, areaPx: 3100 }, 150, 'fewer', 3100)).toEqual({
@@ -359,9 +359,9 @@ describe('limit messages', () => {
     return result.kind === 'limit' ? result.message : result;
   };
 
-  it('points to Settings → Experimental when a narrower width than the step floor could fit another tile', () => {
+  it('points to Settings → Appearance when a narrower width than the step floor could fit another tile', () => {
     expect(messageOf(1700, 57, 'more')).toBe(
-      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Experimental.',
+      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Appearance.',
     );
   });
 
@@ -372,7 +372,7 @@ describe('limit messages', () => {
 
   it('states the step floor, not the setting, when the setting is between steps', () => {
     expect(messageOf(1700, 70, 'more')).toBe(
-      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Experimental.',
+      '3 tiles at the narrowest width (57 cols, 570px) need 1710px. Tiles have 1700px here. A narrower width can be set in Settings → Appearance.',
     );
   });
 

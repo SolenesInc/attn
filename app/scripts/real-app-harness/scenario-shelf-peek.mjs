@@ -83,7 +83,6 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
   await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
 });
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
@@ -97,9 +96,8 @@ try {
   let targetSize;
   let targetSession;
 
-  await runner.step('build_a_row_with_the_setting_on', async () => {
+  await runner.step('build_a_row', async () => {
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const cwd = path.join(runner.sessionDir, 'row');
     fs.mkdirSync(cwd, { recursive: true });

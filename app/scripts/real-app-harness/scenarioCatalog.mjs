@@ -199,7 +199,7 @@ export const scenarioCatalog = [
   {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
-    label: 'Row keys walk onto and off an empty desktop, shelf layout off and on',
+    label: 'Row keys walk onto and off an empty desktop',
     command: ['pnpm', 'run', 'real-app:scenario-empty-desktop-keys'],
   },
   {

@@ -12,7 +12,7 @@ import { waitForFirstDesktopPane, waitForPaneInputFocus } from './scenarioAssert
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'AGENT-TERMINALS', tier: 'local', prefix: 'agent-terminals',
-  metadata: { focus: 'Agent-opened shell splits pulse and stack while native input stays with the agent.' },
+  metadata: { focus: 'A terminal an agent opens pulses at the row\'s end or stacked below the agent while native input stays with the agent.' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
@@ -25,14 +25,14 @@ runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, cre
 try {
   await launchFreshAppAndConnect(client, observer);
   const window = await client.request('get_window_bounds');
-  await client.request('set_window_bounds', { logicalBounds: { ...window.logicalBounds, x: 0, y: 0 } });
+  await client.request('set_window_bounds', { logicalBounds: { ...window.logicalBounds, x: 0, y: 0, width: 1500 } });
   await driver.activateApp();
   await client.request('dismiss_whats_new');
   fs.mkdirSync(runner.sessionDir, { recursive: true });
   writeMockAgentFixture(runner.sessionDir, {
     name: 'Agent terminal splits', minimumWorkingMs: 0,
-    turns: ['first', 'second'].map(name => ({ includes: `Open the ${name} terminal`, actions: [
-      { type: 'attn', args: ['terminal', 'open', '--', `printf '${name} terminal ready\\n'`] },
+    turns: [['first', []], ['second', ['--down']]].map(([name, placement]) => ({ includes: `Open the ${name} terminal`, actions: [
+      { type: 'attn', args: ['terminal', 'open', ...placement, '--', `printf '${name} terminal ready\\n'`] },
       { type: 'reply', text: `${name} terminal opened; focus stays here.`, state: 'idle' },
     ] })),
   });
@@ -76,10 +76,10 @@ try {
   const desktop = observer.desktopOf(caller);
   const tree = JSON.parse(desktop.tree_json);
   const contains = (node, id) => node.pane_id === id || (node.children ?? []).some(child => contains(child, id));
-  const column = tree.children?.find(child => shellPanes.every(id => contains(child, id)));
-  runner.assert(tree.direction === 'vertical' && contains(tree.children[0], callerPane.paneId)
-    && column?.direction === 'horizontal' && contains(column.children[0], shellPanes[0]) && contains(column.children[1], shellPanes[1]),
-  'the first shell is right of the caller and the second is below it', tree);
+  const callerColumn = tree.children?.[0];
+  runner.assert(tree.direction === 'vertical' && tree.children.length === 2 && contains(tree.children[1], shellPanes[0])
+    && callerColumn?.direction === 'horizontal' && contains(callerColumn.children[0], callerPane.paneId) && contains(callerColumn.children[1], shellPanes[1]),
+  'the first shell ends the row and --down stacks the second below the caller', tree);
   runner.writeText('arrangement.json', JSON.stringify(desktop, null, 2));
   await runner.finishSuccess({ caller, shellPanes });
 } catch (error) {

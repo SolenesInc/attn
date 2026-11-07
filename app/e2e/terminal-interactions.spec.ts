@@ -161,6 +161,8 @@ async function lastRowCenterY(
   return canvas!.y + canvas!.height - cellHeight / 2;
 }
 
+const PAST_SIDEBAR_HANDLE = 5;
+
 async function openTerminalSession(
   page: import('@playwright/test').Page,
   daemon: { injectSession: (session: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
@@ -870,7 +872,7 @@ test.describe('Ghostty terminal interactions', () => {
     const text = 'select while tracked';
     await writeTerminalOutput(page, 's-option-selection', `\u001b[2J\u001b[H\u001b[?1000h${text}`);
 
-    await terminal.hover({ position: { x: 2, y: 8 } });
+    await terminal.hover({ position: { x: PAST_SIDEBAR_HANDLE, y: 8 } });
     await page.keyboard.down('Alt');
     await page.mouse.down();
     await terminal.hover({ position: { x: 200, y: 8 } });
@@ -889,7 +891,7 @@ test.describe('Ghostty terminal interactions', () => {
     const url = 'https://example.test/copied-link';
     await writeTerminalOutput(page, 's-copy', `\u001b[2J\u001b[H${url}`);
 
-    await terminal.hover({ position: { x: 2, y: 8 } });
+    await terminal.hover({ position: { x: PAST_SIDEBAR_HANDLE, y: 8 } });
     await page.mouse.down();
     await terminal.hover({ position: { x: 500, y: 8 } });
     await page.mouse.up();
@@ -922,7 +924,7 @@ test.describe('Ghostty terminal interactions', () => {
     const bounds = await terminal.boundingBox();
     expect(bounds).not.toBeNull();
     const selectionEndX = bounds!.x + bounds!.width / 2;
-    await page.mouse.move(bounds!.x + 2, bounds!.y + 8);
+    await page.mouse.move(bounds!.x + PAST_SIDEBAR_HANDLE, bounds!.y + 8);
     await page.mouse.down();
     await page.mouse.move(selectionEndX, bounds!.y + 8);
     await page.mouse.move(Math.max(1, bounds!.x - 60), bounds!.y + 8);
@@ -949,7 +951,7 @@ test.describe('Ghostty terminal interactions', () => {
     const terminalBounds = await terminal.boundingBox();
     expect(terminalBounds).not.toBeNull();
     const rowY = await lastRowCenterY(page, terminal, 's-selection-scroll');
-    await page.mouse.move(terminalBounds!.x + 2, rowY);
+    await page.mouse.move(terminalBounds!.x + PAST_SIDEBAR_HANDLE, rowY);
     await page.mouse.down();
     await page.mouse.move(terminalBounds!.x + 220, rowY);
     await page.mouse.up();

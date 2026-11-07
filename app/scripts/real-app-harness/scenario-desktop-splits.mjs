@@ -255,6 +255,8 @@ async function main() {
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
+      const { logicalBounds } = await client.request('get_window_bounds');
+      await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1500, height: 900 } });
     });
 
     let desktopA;

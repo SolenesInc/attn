@@ -15,7 +15,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'TITLE-BAR',
   tier: 'tier1-local-shell',
   prefix: 'title-bar',
-  metadata: { agent: 'shell', focus: 'with the shelf layout on, native clicks reach every control of the one toolbar, a chip opens its peek, a tile drops on the shelf, and tiles start below the band; with it off, the sidebar header is back' },
+  metadata: { agent: 'shell', focus: 'native clicks reach every control of the one toolbar, a chip opens its peek, a tile drops on the shelf, and tiles start below the band; with it off, the sidebar header is back' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -71,7 +71,6 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
   await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
   await request('set_setting', { key: 'asks_enabled', value: 'false' });
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
 });
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
@@ -86,6 +85,7 @@ async function assertPopUpSitsUnderItsSelector(selector, popUp) {
 
 async function assertTilesStartBelowTheBand(name) {
   const leaf = (await shownLeaves())[0];
+  await request('dom_native_point', { selector: paneSelector(leaf) });
   const { bounds } = await request('dom_bounds', { selector: paneSelector(leaf) });
   const band = (await request('dom_bounds', { selector: BAND })).bounds;
   runner.log(`${name} geometry`, { tileTop: bounds.y, bandTop: band.y, bandHeight: band.height });
@@ -96,9 +96,8 @@ async function assertTilesStartBelowTheBand(name) {
 try {
   let row;
 
-  await runner.step('build_a_row_with_the_setting_on', async () => {
+  await runner.step('build_a_row', async () => {
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'asks_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const cwd = path.join(runner.sessionDir, 'row');
@@ -173,19 +172,6 @@ try {
     await waitDom('[data-testid="queue-sidebar"]');
     await driver.click(`${LEFT} button[aria-label="Switch to desktop flow"]`);
     await waitDom('.sidebar:not(.collapsed):not(.queue-sidebar)');
-  });
-
-  await runner.step('turning_it_off_brings_the_header_back_with_no_tile_lost', async () => {
-    const before = [...await readRow()].sort().join();
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-    await waitDom(BAND, { absent: true });
-    await waitDom('.sidebar-header');
-    runner.assert([...await readRow()].sort().join() === before, 'every tile is still on the desktop', { before });
-    await shot('setting-off');
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
-    await waitDom(BAND);
-    await waitDom('.sidebar-header', { absent: true });
-    await assertTilesStartBelowTheBand('back on');
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

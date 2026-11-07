@@ -1,6 +1,6 @@
 
 import { ShortcutId } from './registry';
-import { modifierTokens, shortcutTokens } from './formatShortcut';
+import { formatShortcut, modifierTokens, shortcutTokens } from './formatShortcut';
 import { shortcutLabel } from './metadata';
 
 export interface CheatsheetRow {
@@ -18,14 +18,14 @@ function fromId(id: ShortcutId): string[] {
   return shortcutTokens(id);
 }
 
-export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): CheatsheetCategory[] {
+export function buildCheatsheet(): CheatsheetCategory[] {
   return [
     {
       title: 'Desktops & Sessions',
       rows: [
         { label: 'New terminal on this desktop', combos: [fromId('session.newTerminal')] },
         { label: 'New session on this desktop', combos: [fromId('session.new')] },
-        { label: shortcutLabel('session.newHorizontal', shelfLayoutEnabled), combos: [fromId('session.newHorizontal')] },
+        { label: shortcutLabel('session.newHorizontal'), combos: [fromId('session.newHorizontal')] },
         { label: 'Close session, focused pane or empty desktop', combos: [fromId('session.close')] },
         {
           label: 'Previous / next desktop (queue mode: agent in the queue)',
@@ -63,9 +63,7 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
         { label: 'Snooze this agent', combos: [fromId('session.snooze')] },
         { label: 'Stop the countdown, or keep the next turn', combos: [fromId('session.cancelCountdown')] },
         { label: 'Toggle sidebar', combos: [fromId('session.toggleSidebar')] },
-        ...(shelfLayoutEnabled
-          ? [{ label: 'Widen / narrow the sidebar', combos: [fromId('sidebar.wider'), fromId('sidebar.narrower')] }]
-          : []),
+        { label: 'Widen / narrow the sidebar', combos: [fromId('sidebar.wider'), fromId('sidebar.narrower')] },
         {
           label: 'Sessions list, live and closed',
           combos: [fromId('sessions.open')],
@@ -77,28 +75,19 @@ export function buildCheatsheet({ shelfLayoutEnabled = false } = {}): Cheatsheet
       title: 'Panes & Terminals',
       rows: [
         { label: 'Find in terminal', combos: [fromId('terminal.find')] },
-        { label: shortcutLabel('terminal.splitVertical', shelfLayoutEnabled), combos: [fromId('terminal.splitVertical')] },
-        { label: shortcutLabel('terminal.splitHorizontal', shelfLayoutEnabled), combos: [fromId('terminal.splitHorizontal')] },
+        { label: shortcutLabel('terminal.splitVertical'), combos: [fromId('terminal.splitVertical')] },
+        { label: shortcutLabel('terminal.splitHorizontal'), combos: [fromId('terminal.splitHorizontal')] },
         {
           label: 'Move focus between panes',
           combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
           note: 'Steps to the next desktop at an edge.',
         },
-        ...(shelfLayoutEnabled
-          ? [
-              { label: 'Carry tile along the row', combos: [fromId('shelf.carryLeft'), fromId('shelf.carryRight')] },
-              { label: 'Send tile to the shelf', combos: [fromId('shelf.sendToShelf')], note: 'A held tile returns with a chip, ⌘J or a restart.' },
-            ]
-          : []),
+        { label: 'Carry tile along the row', combos: [fromId('shelf.carryLeft'), fromId('shelf.carryRight')] },
+        { label: 'Send tile to the shelf', combos: [fromId('shelf.sendToShelf')], note: `A held tile returns with a chip, ${formatShortcut('session.jumpToWaiting')} or a restart.` },
         { label: 'Zoom active pane', combos: [fromId('terminal.toggleZoom')] },
         { label: 'Focus active pane', combos: [fromId('terminal.toggleMaximize')] },
         { label: 'Focus utility terminal', combos: [fromId('terminal.open')] },
-        ...(shelfLayoutEnabled
-          ? [{
-              label: 'Fewer, wider / more, narrower tiles',
-              combos: [fromId('shelf.fewerTiles'), fromId('shelf.moreTiles')],
-            }]
-          : []),
+        { label: 'Fewer, wider / more, narrower tiles', combos: [fromId('shelf.fewerTiles'), fromId('shelf.moreTiles')] },
       ],
     },
     {

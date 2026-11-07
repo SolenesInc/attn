@@ -25,8 +25,6 @@ Recommended: 5
 ASK`;
 
 const QUEUE_BAR = '[data-testid="queue-bar"]';
-const ASKS_CHIP = '[data-testid="queue-bar-asks"]';
-const ASKS_PEEK = '[data-testid="queue-bar-asks-peek"]';
 
 const present = (demo, selector) => demo.read('dom_wait', { selector, timeoutMs: 1000 }).then(() => true, () => false);
 
@@ -56,17 +54,8 @@ export default {
     ));
 
     if (await present(demo, QUEUE_BAR)) await demo.ui('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
-    await demo.read('dom_wait', { selector: '.sidebar-header-panels .sidebar-count-badge', textIncludes: '2', timeoutMs: 10_000 });
-    await demo.still('sidebar-header-asks.png', { crop: { selector: '.sidebar-header' } });
-    await demo.ui('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
-    await demo.read('dom_wait', { selector: ASKS_CHIP, textIncludes: '2 asks', timeoutMs: 10_000 });
-    await demo.pause();
-    await demo.still('queue-bar-asks.png', { crop: { selector: QUEUE_BAR } });
-    await demo.ui('dom_hover', { selector: '[data-testid="queue-bar-asks-anchor"]' });
-    await demo.read('dom_wait', { selector: ASKS_PEEK, timeoutMs: 10_000 });
-    await demo.pause();
-    await demo.still('queue-bar-asks-peek.png');
-    await demo.ui('dom_hover', { selector: '[data-testid="queue-bar-asks-anchor"]', leave: true });
+    await demo.read('dom_wait', { selector: '[data-testid="title-bar-right"] .sidebar-count-badge', textIncludes: '2', timeoutMs: 10_000 });
+    await demo.still('sidebar-header-asks.png', { crop: { selector: '[data-testid="title-bar"]' } });
 
     const chip = `[data-testid="ask-chip-${cache.id}"]`;
     await demo.ui('select_session', { sessionId: cache.id });

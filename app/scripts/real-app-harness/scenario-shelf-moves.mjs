@@ -22,7 +22,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOVES',
   tier: 'tier1-local-shell',
   prefix: 'shelf-moves',
-  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, with the setting off and on, and while its desktop is unmounted, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
+  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, and while its desktop is unmounted, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -76,18 +76,14 @@ async function slideTo(leafId) {
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-});
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shelf: '[data-testid="desktop-shelf"]' }) });
 
 try {
-  await runner.step('launch_with_the_setting_on', async () => {
+  await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
@@ -267,30 +263,6 @@ try {
     await waitForRow((current) => current.length === row.length);
     await waitForActive(active);
     await hold();
-  });
-
-  await runner.step('the_jump_key_ignores_a_waiting_document_while_the_setting_is_off', async () => {
-    const owner = await offScreenLeaf();
-    const active = await activeLeaf();
-    const row = await readRow();
-    const documentLeaf = await agentOpensDocument(owner, 'setting-off.md');
-    await waitForChip(documentLeaf, '.is-needs');
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-    await waitDom('[data-testid="desktop-shelf"]', { absent: true });
-    for (const attempt of ['first', 'second']) {
-      await press('session.jumpToWaiting');
-      await waitForActive(active);
-      runner.assert((await activeLeaf()) === active, `the ${attempt} press of the jump key leaves the document alone`, { active, documentLeaf });
-    }
-    await shot('setting-off-after-jump');
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
-    await waitForChip(documentLeaf, '.is-needs');
-    await press('session.jumpToWaiting');
-    await waitForActive(documentLeaf);
-    await hold();
-    await press('terminal.close');
-    await waitForRow((current) => current.length === row.length);
-    await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
   });
 
   await runner.step('a_document_opened_while_the_desktop_is_unmounted_still_waits', async () => {

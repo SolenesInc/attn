@@ -48,7 +48,7 @@ For delegation mechanics and configured role selection, read [references/delegat
 - **Onboard the user as the Chief:** read
   [references/onboarding.md](references/onboarding.md).
 
-- **Open shell splits, read terminals, type into them, wait, move them between desktops, or close them:** read
+- **Open terminals, read them, type into them, wait, move them between desktops, or close them:** read
   [references/terminal.md](references/terminal.md).
 
 - **Create an authorized Attn delegation:** read [references/delegation.md](references/delegation.md).

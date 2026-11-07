@@ -12,7 +12,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'EMPTY-DESKTOP-KEYS',
   tier: 'tier1-local-shell',
   prefix: 'empty-desktop-keys',
-  metadata: { agent: 'shell', focus: 'the row keys walk past a row end onto an empty desktop and off it again through AppKit, with the shelf layout off and on' },
+  metadata: { agent: 'shell', focus: 'the row keys walk past a row end onto an empty desktop and off it again through AppKit' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -30,7 +30,6 @@ runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_settings', async () => {
   await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
 });
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
@@ -70,14 +69,14 @@ async function settledOn(desktopId, activeTile) {
   if (!holdsOnlyTiles) await waitForPaneInputFocus(client, pane.session_id, pane.pane_id);
 }
 
-async function press(layout, key, expected) {
+async function press(key, expected) {
   const before = await screenState();
   await pressShortcutKeys(client, driver, `terminal.focus${key}`);
   await settledOn(expected.desktopId, expected.activeTile);
   const after = await screenState();
-  walk.push({ layout, key, before, after });
-  runner.assert(after.desktopId === expected.desktopId, `${key} lands on the expected desktop`, { layout, key, before, after, expected });
-  if (expected.activeTile) runner.assert(after.activeTile === expected.activeTile, `${key} lands on the expected tile`, { layout, key, before, after, expected });
+  walk.push({ key, before, after });
+  runner.assert(after.desktopId === expected.desktopId, `${key} lands on the expected desktop`, { key, before, after, expected });
+  if (expected.activeTile) runner.assert(after.activeTile === expected.activeTile, `${key} lands on the expected tile`, { key, before, after, expected });
 }
 
 try {
@@ -111,27 +110,24 @@ try {
     empty = keptEmpty;
   });
 
-  for (const [layout, setting] of [['off', 'false'], ['on', 'true']]) {
-    await runner.step(`walk_with_shelf_layout_${layout}`, async () => {
-      await request('set_setting', { key: 'shelf_layout_enabled', value: setting });
-      await request('select_desktop', { desktopId: home });
-      await settledOn(home);
-      await waitDom(`[data-session-terminal-desktop="${home}"].shelf-layout`, layout === 'on' ? {} : { absent: true });
-      if ((await screenState()).activeTile === firstTile) await press(layout, 'Right', { desktopId: home, activeTile: lastTile });
+  await runner.step('walk', async () => {
+    await request('select_desktop', { desktopId: home });
+    await settledOn(home);
+    await waitDom(`[data-session-terminal-desktop="${home}"].shelf-layout`);
+    if ((await screenState()).activeTile === firstTile) await press('Right', { desktopId: home, activeTile: lastTile });
 
-      await press(layout, 'Right', { desktopId: empty });
-      const beyond = desktopAfter(empty, 'Right');
-      await press(layout, 'Right', { desktopId: beyond });
-      await press(layout, 'Left', { desktopId: empty });
-      await press(layout, 'Left', { desktopId: home, activeTile: lastTile });
+    await press('Right', { desktopId: empty });
+    const beyond = desktopAfter(empty, 'Right');
+    await press('Right', { desktopId: beyond });
+    await press('Left', { desktopId: empty });
+    await press('Left', { desktopId: home, activeTile: lastTile });
 
-      await press(layout, 'Right', { desktopId: empty });
-      await press(layout, 'Up', { desktopId: desktopAfter(empty, 'Up') });
-      await request('select_desktop', { desktopId: empty });
-      await settledOn(empty);
-      await press(layout, 'Down', { desktopId: desktopAfter(empty, 'Down') });
-    });
-  }
+    await press('Right', { desktopId: empty });
+    await press('Up', { desktopId: desktopAfter(empty, 'Up') });
+    await request('select_desktop', { desktopId: empty });
+    await settledOn(empty);
+    await press('Down', { desktopId: desktopAfter(empty, 'Down') });
+  });
 
   runner.writeJson('walk.json', walk);
   await runner.finishSuccess({ keysPressed: walk.length });

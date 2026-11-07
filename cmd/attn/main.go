@@ -932,9 +932,9 @@ session options:
   --desktop <ref>            desktop of your profile for the new agent: its
                              shortcut digit (1-9), its name as shown
                              (case-insensitive) or its id; the agent opens
-                             beside that desktop's active pane without changing
-                             what you see. Defaults to beside the source
-                             session.
+                             at the end of that desktop's row without changing
+                             what you see. Defaults to the source session's
+                             desktop.
   --source-session <id>      source session (defaults to the current session)
   --yolo                     bypass agent approval prompts
 

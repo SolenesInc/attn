@@ -41,7 +41,7 @@ removes outposts in Settings. Agents open shells and delegate onto them with
 
 ### Agents
 
-- `attn terminal open --host <outpost|home>` opens a shell on that machine beside the caller (`cmd/attn/terminal.go`). For the verb itself, see [terminals.md](terminals.md). An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
+- `attn terminal open --host <outpost|home>` opens a shell on that machine at the end of the row (`cmd/attn/terminal.go`). For the verb itself, see [terminals.md](terminals.md). An agent on an outpost opens on its own machine by default, and `--host home` reaches the home.
 - `attn delegate --host <outpost|home>` starts a delegate on that machine, and that machine checks the folder, refs and worktree. For the verb itself, see [delegation.md](delegation.md).
 - `attn session reopen <id>` resumes a closed outpost session on the outpost it ran on, and refuses naming the host while that outpost is unreachable or removed (`cmd/attn/session_reopen.go`). For the verb itself, see [ledger.md](ledger.md).
 - `attn enrollment status` and `attn enrollment leave [--home <daemon-id>]` (`cmd/attn/enrollment.go`). Run them on an outpost to see or release the home that outpost is enrolled to. With `--home`, the outpost keeps an enrollment to any other home, and the status reads `kept`.

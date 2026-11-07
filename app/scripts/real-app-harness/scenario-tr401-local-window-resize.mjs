@@ -48,9 +48,7 @@ function parseArgs(argv) {
   };
 }
 
-// The shrunk window still has to clear the desktop's 1248px split floor (see
-// widenWindowForSplitPanes), which 1560 at 0.82 does with 31px to spare.
-const BASELINE_WINDOW = { width: 1_560, height: 900 };
+const BASELINE_WINDOW = { width: 1_720, height: 900 };
 const SHRINK_RATIO = { width: 0.82, height: 0.82 };
 const STRUCTURED_BLOCK_LINES = 6;
 
@@ -78,7 +76,6 @@ function shrunkWindowBounds(bounds) {
 }
 
 // 704px is the width the retired tr401-codex-initial-pane actually ran green at.
-// Only one pane exists at this point, so the 1248px split floor does not apply.
 const CODEX_HEADER_NARROW_WIDTH = 704;
 
 function narrowWindowBounds(bounds) {
@@ -1045,8 +1042,6 @@ async function main() {
       return setFrontWindowBounds(targetBounds, { client });
     });
 
-    // Codex runs first: its header-frame leg narrows the window below the
-    // 1248px split floor, which is only safe while no split exists anywhere.
     const codexLeg = await startAgentLeg('codex');
     await runCodexHeaderFrameLeg(codexLeg);
     await runCloseRedrawLeg(codexLeg);

@@ -73,16 +73,15 @@ func TestDesktopMoveChoosesCurrentPlacementAndKeepsExplicitDragGeometry(t *testi
 		"source_desktop_id": source.ID, "target_desktop_id": target.ID, "leaf_id": "moving",
 	})
 	current := changedDesktop(t, moved, target.ID)
-	split, _, found := desktopTree(t, current).splitHolding("moving")
-	if !found || !slices.Equal(split.leafIDs(), []string{"anchor", "moving"}) || split.Direction != "vertical" {
-		t.Fatalf("keyboard move did not use current active anchor: %s", current.TreeJson)
+	if got, want := rowOf(t, current), "anchor moving background"; got != want {
+		t.Fatalf("keyboard move made the row %q, want %q beside the current active anchor", got, want)
 	}
 	desktopOperation(other, protocol.CmdDesktopRename, map[string]any{"desktop_id": target.ID, "name": "Changed target"})
 	dragged := desktopOperation(app, protocol.CmdDesktopMoveLeaf, map[string]any{
 		"source_desktop_id": source.ID, "target_desktop_id": target.ID, "leaf_id": "dragged", "anchor_id": "anchor", "edge": "bottom", "leaf_share": 0.25,
 	})
 	current = changedDesktop(t, dragged, target.ID)
-	split, _, found = desktopTree(t, current).splitHolding("dragged")
+	split, _, found := desktopTree(t, current).splitHolding("dragged")
 	if !found || !slices.Equal(split.leafIDs(), []string{"anchor", "dragged"}) || split.Direction != "horizontal" || math.Abs(split.Ratio-0.75) > 1e-9 {
 		t.Fatalf("drag lost requested anchor, edge or share: %s", current.TreeJson)
 	}

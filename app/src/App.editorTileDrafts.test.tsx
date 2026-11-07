@@ -9,15 +9,15 @@ import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { serveSettings } from './test/settings';
 
-const NOTEBOOK = { 'notebook.root.effective': '/notebook' };
-const SHELF_ON = { ...NOTEBOOK, shelf_layout_enabled: 'true', narrowest_tile_cols: '66' };
+const SETTINGS = { 'notebook.root.effective': '/notebook', narrowest_tile_cols: '66' };
 const EDITOR = { type: 'tile', tile_id: 'tile-note', tile_kind: 'notebook', tile_params: JSON.stringify({ path: 'notes.txt' }) };
 const TREE = split('a', 'vertical', [EDITOR, split('b', 'vertical', [pane('s1'), split('c', 'vertical', [pane('s2'), pane('s3')])])]);
 const SAVED = { event: 'fs_write_result', success: true, result: { path: 'notes.txt', conflict: false, hash: 'h2' } } as const;
 
 type WriteReply = (command: CommandMessage<'fs_write'>) => Record<string, unknown> | undefined;
 
-async function renderRow(settings: Record<string, string>, areaWidth: number, writeReply: WriteReply = () => SAVED) {
+async function renderRow(writeReply: WriteReply = () => SAVED) {
+  const areaWidth = 2000;
   sizeTerminals((terminal) => ({
     clientWidth: (areaWidth * parseFloat(terminal.closest<HTMLElement>('[data-pane-id]')?.style.width || '100')) / 100,
     clientHeight: 900,
@@ -29,7 +29,7 @@ async function renderRow(settings: Record<string, string>, areaWidth: number, wr
   });
   const disk = { content: 'original', hash: 'h1' };
   const script = (daemon: ScriptedDaemon) => {
-    serveSettings(daemon, settings);
+    serveSettings(daemon, SETTINGS);
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
     daemon.on('fs_list', () => ({ event: 'fs_list_result', success: true, entries: [{ path: 'notes.txt', name: 'notes.txt', is_dir: false, size: 8 }] }));
     daemon.on('fs_read', ({ path }) => ({ event: 'fs_read_result', success: true, result: { path, ...disk } }));
@@ -43,7 +43,7 @@ async function renderRow(settings: Record<string, string>, areaWidth: number, wr
   };
   const { daemon } = await renderApp({
     initialState: {
-      settings,
+      settings: SETTINGS,
       sessions: ['s1', 's2', 's3'].map((id) => daemonSession(id, { state: 'idle' })),
       desktops: [{ ...laidOutDesktop(TREE, ['s1', 's2', 's3']), active_pane_id: 'tile-note' }],
     },
@@ -55,7 +55,7 @@ async function renderRow(settings: Record<string, string>, areaWidth: number, wr
 }
 
 async function renderRowInEditor(writeReply?: WriteReply) {
-  const rendered = await renderRow(SHELF_ON, 2000, writeReply);
+  const rendered = await renderRow(writeReply);
   await gesture(rendered.daemon, () => pressShortcut('terminal.focusLeft'));
   expect(document.querySelector('[data-session-terminal-desktop="ws"]')).toHaveAttribute('data-active-leaf-id', 'tile-note');
   return rendered;
@@ -96,21 +96,6 @@ describe('Editor tile drafts', () => {
     expect(field()).toHaveValue('original edited');
     await moveTime(daemon, 1000);
     expect(writes(daemon)).toHaveLength(1);
-  });
-
-  it('saves an edit made just before the tile folds to a sliver, and shows it on return', async () => {
-    const { daemon, disk } = await renderRow(NOTEBOOK, 900);
-    const expand = (paneId: string) => document.querySelector<HTMLElement>(`[data-pane-id="${paneId}"][data-pane-suspended] button`)!;
-    await gesture(daemon, () => fireEvent.click(expand('tile-note')));
-    await edit(daemon, 'original edited');
-
-    await gesture(daemon, () => fireEvent.click(expand('pane-s3')));
-    expect(editorGone()).toBeNull();
-    expect(writes(daemon)).toEqual([['original edited', 'h1']]);
-    expect(disk.content).toBe('original edited');
-
-    await gesture(daemon, () => fireEvent.click(expand('tile-note')));
-    expect(field()).toHaveValue('original edited');
   });
 
   it('brings back the draft and the conflict when the save conflicts while on the shelf', async () => {

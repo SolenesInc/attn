@@ -221,9 +221,6 @@ runner.registerCleanup('close_server', () => new Promise((resolve) => {
 }));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-});
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
@@ -232,11 +229,10 @@ registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shel
 try {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 
-  await runner.step('launch_with_the_setting_on', async () => {
+  await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
     queueDaemonSettingRestore(observer, 'queue_mode_enabled');
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
   });
 

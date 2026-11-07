@@ -143,6 +143,8 @@ try {
   await client.quitApp();
   await run(binary, ['daemon', 'stop']);
   await launchFreshAppAndConnect(client, observer);
+  const { logicalBounds } = await client.request('get_window_bounds');
+  await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
   await removeScenarioOutposts();
   runner.registerCleanup('remove_scenario_outposts', removeScenarioOutposts);
   const previous = observer.getSetting('outposts_enabled');

@@ -255,6 +255,10 @@ async function main() {
 
     await runner.step('phase_c_width_changes', async () => {
       await selectAndWaitForPane(client, sessionId, paneId);
+      const startCols = (await client.request('get_pane_block_state', { sessionId, paneId })).cols;
+      const { logicalBounds } = await client.request('get_window_bounds');
+      await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1500 } });
+      await waitForPaneColumnsToChange(client, sessionId, paneId, startCols);
       const wideCols = (await client.request('get_pane_block_state', { sessionId, paneId })).cols;
       await client.request('split_pane', { sessionId, targetPaneId: paneId, direction: 'vertical' });
       await client.request('select_session', { sessionId });

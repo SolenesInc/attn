@@ -93,36 +93,6 @@ describe('Experimental settings for Nisse', () => {
   });
 });
 
-describe('Experimental settings for the shelf layout', () => {
-  const shelfLayout = () => screen.getByRole('switch', { name: 'Shelf layout' });
-  const narrowestWidth = () => screen.queryByLabelText('Narrowest tile width (columns)');
-
-  it('starts off with the width control unusable, and turning it on saves the setting and opens the control', async () => {
-    const daemon = await openSection('experimental', { settings: { narrowest_tile_cols: '66' } });
-    const widths = () => screen.getByTestId('settings-feature-content-shelf_layout_enabled');
-    expect(shelfLayout()).toHaveAttribute('aria-checked', 'false');
-    expect(widths()).toHaveAttribute('inert');
-
-    await gesture(daemon, () => fireEvent.click(shelfLayout()));
-    expect(savedSettings(daemon)).toEqual([['shelf_layout_enabled', 'true']]);
-    expect(shelfLayout()).toHaveAttribute('aria-checked', 'true');
-    expect(narrowestWidth()).toHaveValue(66);
-    expect(widths()).not.toHaveAttribute('inert');
-
-    await gesture(daemon, () => fireEvent.click(shelfLayout()));
-    expect(widths()).toHaveAttribute('inert');
-  });
-
-  it('saves the narrowest width when focus leaves the field', async () => {
-    const daemon = await openSection('experimental', { settings: { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' } });
-    const field = narrowestWidth()!;
-    fireEvent.change(field, { target: { value: '86' } });
-    await gesture(daemon, () => fireEvent.blur(field));
-    expect(savedSettings(daemon)).toEqual([['narrowest_tile_cols', '86']]);
-    expect(field).toHaveValue(86);
-  });
-});
-
 describe('Experimental settings come from the declarations', () => {
   it('offers a switch for every feature and mentions timing only when a change does not apply at once', async () => {
     await openSection('experimental');

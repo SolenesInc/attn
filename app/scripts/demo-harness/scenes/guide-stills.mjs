@@ -36,7 +36,7 @@ export default {
     await demo.pause();
     await demo.still('home-screen.png');
     await demo.still('ledger-button.png', {
-      crop: { selector: '.sidebar-header', extendBottom: 72 },
+      crop: { selector: '[data-testid="title-bar"]', extendBottom: 72 },
       highlight: 'button[aria-label^="Open Ledger"]',
     });
 

@@ -51,11 +51,11 @@ func TestTerminalCLI(t *testing.T) {
 					if entry.TerminalID != first.TerminalID || !strings.HasPrefix(string(entry.TerminalID), entry.ShortID) {
 						t.Errorf("listed terminal identity: %+v", entry)
 					}
-					if protocol.Deref(entry.Position) != "right/top" || protocol.Deref(entry.OpenedBy) != protocol.SessionID(caller) {
+					if protocol.Deref(entry.Position) != "right/left" || protocol.Deref(entry.OpenedBy) != protocol.SessionID(caller) {
 						t.Errorf("first placement: %+v", entry)
 					}
 				case second.SessionID:
-					if protocol.Deref(entry.Position) != "right/bottom" {
+					if protocol.Deref(entry.Position) != "right/right" {
 						t.Errorf("second placement: %+v", entry)
 					}
 				}

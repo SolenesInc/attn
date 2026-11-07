@@ -88,18 +88,14 @@ async function focusShownLeaf(leafId) {
 
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
-runner.registerCleanup('restore_settings', async () => {
-  await request('set_setting', { key: 'shelf_layout_enabled', value: 'false' });
-});
 runner.registerCleanup('close_sessions', async () => {
   for (const sessionId of [...sessions].reverse()) await request('close_session', { sessionId }).catch(() => {});
 });
 registerNativeFailureEvidence(runner, { client, driver, selectors: () => ({ shelf: '[data-testid="desktop-shelf"]' }) });
 
 try {
-  await runner.step('launch_with_the_setting_on', async () => {
+  await runner.step('launch', async () => {
     await launchFreshAppAndConnect(client, observer);
-    await request('set_setting', { key: 'shelf_layout_enabled', value: 'true' });
     await request('set_setting', { key: 'narrowest_tile_cols', value: '66' });
     const { logicalBounds } = await request('get_window_bounds');
     await request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1600, height: 900 } });

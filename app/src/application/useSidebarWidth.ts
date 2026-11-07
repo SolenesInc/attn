@@ -7,7 +7,6 @@ import { useShortcut } from '../shortcuts/useShortcut';
 import { useSidebarDrag } from '../store/sidebarDrag';
 import { beginPointerResize } from '../utils/resizeGesture';
 import { useAppErrorsContext, useAppInputs } from './AppContexts';
-import { BoolSetting, isOn } from '../utils/settings';
 
 const WIDTH_VARIABLE = '--sidebar-width';
 
@@ -19,7 +18,6 @@ export function useSidebarWidth({ sidebarShown }: { sidebarShown: boolean }) {
   const { settings } = useAppInputs();
   const { sendSetSetting } = useDaemonApi();
   const { showError } = useAppErrorsContext();
-  const resizable = isOn(settings, BoolSetting.shelfLayoutEnabled);
   const storedPx = storedSidebarPx(settings.sidebar_width);
   const dragging = useSidebarDrag((state) => state.dragging);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -28,12 +26,8 @@ export function useSidebarWidth({ sidebarShown }: { sidebarShown: boolean }) {
   const cancelLiveDrag = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
-    if (!resizable) {
-      document.documentElement.style.removeProperty(WIDTH_VARIABLE);
-      return;
-    }
     if (!cancelLiveDrag.current) showSidebarWidth(storedPx);
-  }, [resizable, storedPx]);
+  }, [storedPx]);
 
   const cancelDrag = useCallback(() => cancelLiveDrag.current?.(), []);
   useEscapeStack(cancelDrag, dragging);
@@ -110,10 +104,10 @@ export function useSidebarWidth({ sidebarShown }: { sidebarShown: boolean }) {
     if (stepLabelTimer.current !== null) window.clearTimeout(stepLabelTimer.current);
     stepLabelTimer.current = window.setTimeout(() => setStepLabelShown(false), WIDTH_LABEL_MS);
   };
-  useShortcut('sidebar.wider', () => step('wider'), resizable);
-  useShortcut('sidebar.narrower', () => step('narrower'), resizable);
+  useShortcut('sidebar.wider', () => step('wider'));
+  useShortcut('sidebar.narrower', () => step('narrower'));
 
-  return { resizable, dragging, stepLabelShown, labelRef, startDrag, cancelDrag, clearWidth };
+  return { dragging, stepLabelShown, labelRef, startDrag, cancelDrag, clearWidth };
 }
 
 export type SidebarWidth = ReturnType<typeof useSidebarWidth>;

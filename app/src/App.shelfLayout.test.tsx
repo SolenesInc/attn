@@ -73,7 +73,7 @@ const SAVED_AREA_COLS = 280;
 const SMALLER_AREA = 1800;
 const FITS_ALONE_AT_THE_SMALLER_AREA = 180;
 
-const SHELF_ON = { shelf_layout_enabled: 'true', narrowest_tile_cols: '66' };
+const NARROWEST_66 = { narrowest_tile_cols: '66' };
 
 const paneIds = () => Array.from(document.querySelectorAll<HTMLElement>('.desktop-pane[data-pane-id]')).map((element) => element.dataset.paneId);
 const onScreen = (...ids: string[]) => ids.map((id) => `pane-${id}`);
@@ -90,7 +90,7 @@ const mountedTerminals = () =>
 
 describe('Shelf layout', () => {
   it('shows the screen and the shelf instead of slivers, and unmounts off-screen terminals', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
 
     expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
     expect(document.querySelector('[data-pane-suspended]')).toBeNull();
@@ -103,13 +103,13 @@ describe('Shelf layout', () => {
   });
 
   it('shows no shelf when every column fits', async () => {
-    await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+    await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
     expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
     expect(screen.queryByTestId('desktop-shelf')).toBeNull();
   });
 
   it('slides along the row with the move keys, and goes to the next desktop past the end', async () => {
-    const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 4).map(pane)), others: ['next'] });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 4).map(pane)), others: ['next'] });
 
     await gesture(daemon, () => pressShortcut('terminal.focusRight'));
     await gesture(daemon, () => pressShortcut('terminal.focusRight'));
@@ -127,7 +127,7 @@ describe('Shelf layout', () => {
   });
 
   it('slides left only past the screen’s first column', async () => {
-    const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 4).map(pane)) });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 4).map(pane)) });
     for (let press = 0; press < 3; press += 1) await gesture(daemon, () => pressShortcut('terminal.focusRight'));
     expect(paneIds()).toEqual(onScreen('s2', 's3', 's4'));
 
@@ -143,7 +143,7 @@ describe('Shelf layout', () => {
 
   it('returns to a stack’s most recently used tile', async () => {
     const stack = split('stack', 'horizontal', [pane('s2'), pane('s3')]);
-    const daemon = await renderRow(SHELF_ON, { root: rightChain([pane('s1'), stack, pane('s4')]) });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain([pane('s1'), stack, pane('s4')]) });
 
     await gesture(daemon, () => pressShortcut('terminal.focusRight'));
     expect(surface()).toHaveAttribute('data-active-leaf-id', 'pane-s2');
@@ -156,7 +156,7 @@ describe('Shelf layout', () => {
   });
 
   it('puts chips that do not fit behind caps with their menus', async () => {
-    const daemon = await renderRow(SHELF_ON, { shelfWidth: 500 });
+    const daemon = await renderRow(NARROWEST_66, { shelfWidth: 500 });
 
     expect(chipKeys()).toEqual(['s4', 's5']);
     expect(screen.getByTestId('shelf-cap-after')).toHaveTextContent('6 ›');
@@ -169,7 +169,7 @@ describe('Shelf layout', () => {
   });
 
   it('steps the narrowest width with the keys until one fewer or one more tile fits', async () => {
-    const daemon = await renderRow(SHELF_ON);
+    const daemon = await renderRow(NARROWEST_66);
 
     await gesture(daemon, () => pressShortcut('shelf.fewerTiles'));
     expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'narrowest_tile_cols', value: '86' });
@@ -188,7 +188,7 @@ describe('Shelf layout', () => {
   });
 
   it('says the numbers when no narrower step can fit another tile', async () => {
-    const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '57' });
+    const daemon = await renderRow({ narrowest_tile_cols: '57' });
     expect(paneIds()).toEqual(onScreen('s1', 's2', 's3', 's4'));
 
     await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
@@ -198,14 +198,14 @@ describe('Shelf layout', () => {
   });
 
   it('states the width in force when the setting is not a step', async () => {
-    const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '40' });
+    const daemon = await renderRow({ narrowest_tile_cols: '40' });
     await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
     expect(screen.getByText('5 tiles at the narrowest width (40 cols, 480px) need 2400px. Tiles have 2000px here.')).toBeInTheDocument();
     expect(daemon.sentOf('set_setting')).toEqual([]);
   });
 
   it('steps down from a setting between steps, and keeps the highlighted count true', async () => {
-    const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '70' });
+    const daemon = await renderRow({ narrowest_tile_cols: '70' });
 
     await gesture(daemon, () => pressShortcut('shelf.fewerTiles'));
     expect(widthLabelCounts().current).toBe(paneIds().length);
@@ -216,7 +216,7 @@ describe('Shelf layout', () => {
 
   it('lets a dragged width wider than the tile area give way, and returns it when the room does', async () => {
     const resize = observedResizes();
-    const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', WIDER_THAN_THE_AREA), pane('s2'), pane('s3')]) });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain([wanted('s1', WIDER_THAN_THE_AREA), pane('s2'), pane('s3')]) });
     const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
 
     await resizeTiles(ROOM_FOR_THAT_WIDTH);
@@ -239,7 +239,7 @@ describe('Shelf layout', () => {
 
   it('lets a saved width hide neighbours only at the area it was saved at or larger', async () => {
     const resize = observedResizes();
-    const daemon = await renderRow(SHELF_ON, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, SAVED_AREA_COLS), pane('s2'), pane('s3')]) });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, SAVED_AREA_COLS), pane('s2'), pane('s3')]) });
     const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
 
     await resizeTiles(PANES_WIDTH);
@@ -256,7 +256,7 @@ describe('Shelf layout', () => {
 
   it('keeps a saved width with no stored area hiding neighbours wherever it fits the area', async () => {
     const resize = observedResizes();
-    const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FITS_ALONE_AT_THE_SMALLER_AREA), pane('s2'), pane('s3')]) });
+    const daemon = await renderRow(NARROWEST_66, { root: rightChain([wanted('s1', FITS_ALONE_AT_THE_SMALLER_AREA), pane('s2'), pane('s3')]) });
 
     await gesture(daemon, () => resize('.session-terminal-panes', { width: SMALLER_AREA, height: PANES_HEIGHT }));
 
@@ -268,7 +268,7 @@ describe('Shelf layout', () => {
     const clearedLeaves = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_set_wanted_cols').map((command) => [command.leaf_id, command.cols]);
 
     it('clears the width and brings the next tile back without changing the narrowest width', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2')]) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2')]) });
       expect(paneIds()).toEqual(onScreen('s1'));
 
       await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
@@ -281,7 +281,7 @@ describe('Shelf layout', () => {
     });
 
     it('clears the width of the tile coming back too', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([wanted('s1', FILLS_THE_AREA), wanted('s2', FILLS_THE_AREA), pane('s3')]) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([wanted('s1', FILLS_THE_AREA), wanted('s2', FILLS_THE_AREA), pane('s3')]) });
 
       await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
 
@@ -291,7 +291,7 @@ describe('Shelf layout', () => {
     });
 
     it('steps narrower as well when clearing alone is not enough', async () => {
-      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '150' }, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2'), pane('s3')]) });
+      const daemon = await renderRow({ narrowest_tile_cols: '150' }, { root: rightChain([wanted('s1', FILLS_THE_AREA), pane('s2'), pane('s3')]) });
       expect(paneIds()).toEqual(onScreen('s1'));
 
       await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
@@ -302,7 +302,7 @@ describe('Shelf layout', () => {
     });
 
     it('keeps a dragged width when a narrower step alone brings the tile back', async () => {
-      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: rightChain([wanted('s1', 90), pane('s2'), pane('s3')]) });
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: rightChain([wanted('s1', 90), pane('s2'), pane('s3')]) });
       expect(paneIds()).toEqual(onScreen('s1', 's2'));
 
       await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
@@ -312,30 +312,14 @@ describe('Shelf layout', () => {
     });
   });
 
-  it('offers the width steps in the palette while the setting is on', async () => {
-    const daemon = await renderRow(SHELF_ON);
+  it('offers the width steps in the palette', async () => {
+    const daemon = await renderRow(NARROWEST_66);
     await gesture(daemon, () => pressShortcut('ui.commandPalette'));
     await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>wider tiles' } }));
 
     await gesture(daemon, () => fireEvent.mouseDown(screen.getByRole('option', { name: /Fewer, wider tiles/ })));
 
     expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'narrowest_tile_cols', value: '86' });
-  });
-
-  it('with the setting off shows slivers, and the width keys do nothing', async () => {
-    const daemon = await renderRow({});
-
-    expect(screen.queryByTestId('desktop-shelf')).toBeNull();
-    expect(document.querySelectorAll('[data-pane-suspended]').length).toBeGreaterThan(0);
-    expect(paneIds()).toHaveLength(11);
-
-    await gesture(daemon, () => pressShortcut('shelf.fewerTiles'));
-    await gesture(daemon, () => pressShortcut('shelf.moreTiles'));
-    expect(daemon.sentOf('set_setting')).toEqual([]);
-
-    await gesture(daemon, () => pressShortcut('ui.commandPalette'));
-    await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>wider tiles' } }));
-    expect(screen.queryByRole('option', { name: /Fewer, wider tiles/ })).toBeNull();
   });
 
   describe('moves', () => {
@@ -353,7 +337,7 @@ describe('Shelf layout', () => {
     };
 
     it('carries the active column along the row and keeps it active', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
 
       await gesture(daemon, () => pressShortcut('shelf.carryRight'));
       expect(lastMove(daemon)).toMatchObject({ source_desktop_id: 'ws', target_desktop_id: 'ws', leaf_id: 'pane-s1', anchor_id: 'pane-s2', edge: 'right', whole_column: true });
@@ -368,7 +352,7 @@ describe('Shelf layout', () => {
 
     it('carries a stack as one column, and names the row end', async () => {
       const stack = split('stack', 'horizontal', [pane('s1'), pane('s2')]);
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([stack, pane('s3')]) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([stack, pane('s3')]) });
 
       await gesture(daemon, () => pressShortcut('shelf.carryLeft'));
       expect(screen.getByText('This tile is already at the start of the row.')).toBeInTheDocument();
@@ -380,7 +364,7 @@ describe('Shelf layout', () => {
     });
 
     it('brings a chip beside the active tile, and keeps the anchor on screen', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
       expect(active()).toBe('pane-s3');
       const shows = daemon.sentOf('desktop_show_leaf').length;
@@ -397,7 +381,7 @@ describe('Shelf layout', () => {
     });
 
     it('brings an off-screen tile from the sidebar and the agent palette', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       await openSession(daemon, 's9');
       expect(lastMove(daemon)).toMatchObject({ leaf_id: 'pane-s9', anchor_id: 'pane-s1', whole_column: true });
       expect(paneIds()).toEqual(onScreen('s1', 's9', 's2'));
@@ -410,7 +394,7 @@ describe('Shelf layout', () => {
     });
 
     it('keeps typing for the brought terminal while the daemon answers, and reports it when the bring fails', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       const held: CommandMessage<'desktop_move_leaf'>[] = [];
       daemon.on('desktop_move_leaf', (command) => { held.push(command); return undefined; });
 
@@ -435,7 +419,7 @@ describe('Shelf layout', () => {
     });
 
     it('slides, and reorders nothing, when ⌘[ goes back to an off-screen tile', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       await gesture(daemon, () => fireEvent.click(chip('s7')));
       const row = rowOf(daemon);
       const moves = daemon.sentOf('desktop_move_leaf').length;
@@ -452,7 +436,7 @@ describe('Shelf layout', () => {
     });
 
     it('sends a single tile past the far side and keeps focus in its slot', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       await slideTo(daemon, 'terminal.focusRight');
 
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
@@ -465,7 +449,7 @@ describe('Shelf layout', () => {
     });
 
     it('sends a tile to the row start when nothing lies past the screen', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight', 'terminal.focusRight');
       expect(paneIds()).toEqual(onScreen('s2', 's3', 's4'));
 
@@ -479,7 +463,7 @@ describe('Shelf layout', () => {
 
     it('takes a stacked tile out of its stack to the row end', async () => {
       const stack = split('stack', 'horizontal', [pane('s1'), pane('s2')]);
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([stack, pane('s3'), pane('s4'), pane('s5')]) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([stack, pane('s3'), pane('s4'), pane('s5')]) });
 
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
 
@@ -492,7 +476,7 @@ describe('Shelf layout', () => {
     });
 
     it('holds a column that would have fit, skips it when sliding, and gives it back when brought', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       await slideTo(daemon, 'terminal.focusRight');
 
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
@@ -512,7 +496,7 @@ describe('Shelf layout', () => {
     });
 
     it('holds again when another held column leaves room', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       await slideTo(daemon, 'terminal.focusRight');
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
@@ -524,7 +508,7 @@ describe('Shelf layout', () => {
     });
 
     it('steps to the next tile when the screen shows only one', async () => {
-      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '150' }, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow({ narrowest_tile_cols: '150' }, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       expect(paneIds()).toEqual(onScreen('s1'));
 
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
@@ -534,8 +518,8 @@ describe('Shelf layout', () => {
       expect(paneIds()).toEqual(onScreen('s2'));
     });
 
-    it('offers the moves in the palette and the shortcut help only while the setting is on', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+    it('offers the moves in the palette and the shortcut help', async () => {
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       await gesture(daemon, () => pressShortcut('ui.commandPalette'));
       await gesture(daemon, () => fireEvent.change(screen.getByRole('combobox'), { target: { value: '>carry tile right' } }));
       await gesture(daemon, () => fireEvent.mouseDown(screen.getByRole('option', { name: /Carry tile right along the row/ })));
@@ -552,13 +536,13 @@ describe('Shelf layout', () => {
     });
 
     it('says when the only tile cannot go to the shelf', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: pane('s1') });
+      const daemon = await renderRow(NARROWEST_66, { root: pane('s1') });
       await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
       expect(screen.getByText('This is the only tile on screen.')).toBeInTheDocument();
     });
 
     it('opens beside the active column at capacity, keeping the anchor on screen', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
 
       await gesture(daemon, () => pressShortcut('terminal.splitVertical'));
@@ -571,7 +555,7 @@ describe('Shelf layout', () => {
     });
 
     it('opens below in the same column until the height limit, then beside with the numbers', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 2).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 2).map(pane)) });
 
       await gesture(daemon, () => pressShortcut('terminal.splitHorizontal'));
       const [below] = daemon.sentOf('spawn_session').slice(-1);
@@ -592,7 +576,7 @@ describe('Shelf layout', () => {
       const closeDocument = (daemon: ScriptedDaemon) => gesture(daemon, () => pressShortcut('terminal.close'));
 
       it('slides into view without taking focus when the active tile stays on screen, and closing puts the screen back', async () => {
-        const daemon = await renderRow(SHELF_ON);
+        const daemon = await renderRow(NARROWEST_66);
         await slideTo(daemon, 'terminal.focusRight');
         expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
 
@@ -612,7 +596,7 @@ describe('Shelf layout', () => {
       });
 
       it('counts as waiting when it cannot show, and ⌘J takes it before the queue; closing restores the screen', async () => {
-        const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: FOUR });
+        const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
         await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
         const screenBefore = paneIds();
         expect(screenBefore).toEqual(onScreen('s2', 's3'));
@@ -646,7 +630,7 @@ describe('Shelf layout', () => {
       });
 
       it('with the agent on the shelf leaves the screen alone', async () => {
-        const daemon = await renderRow(SHELF_ON);
+        const daemon = await renderRow(NARROWEST_66);
         await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
         await agentOpens(daemon, 's4');
         expect(active()).toBe('pane-s3');
@@ -655,7 +639,7 @@ describe('Shelf layout', () => {
       });
 
       it('shows a document opened by an agent newly revealed by more tiles', async () => {
-        const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: FOUR });
+        const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
         await slideTo(daemon, 'terminal.focusRight');
         expect(active()).toBe('pane-s2');
         expect(paneIds()).toEqual(onScreen('s1', 's2'));
@@ -666,72 +650,8 @@ describe('Shelf layout', () => {
         expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
       });
 
-      describe('when the setting changes', () => {
-        const NARROW = { ...SHELF_ON, narrowest_tile_cols: '86' };
-        const flipSetting = async (daemon: ScriptedDaemon, value: 'true' | 'false') => {
-          await gesture(daemon, () => pressShortcut('ui.openSettings'));
-          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-experimental')));
-          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-feature-shelf_layout_enabled')));
-          expect(daemon.sentOf('set_setting').slice(-1)[0]).toMatchObject({ key: 'shelf_layout_enabled', value });
-          await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-close')));
-        };
-        const waitingS4 = (daemon: ScriptedDaemon) => gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [
-          ...IDS.slice(0, 3).map((id) => daemonSession(id, { state: 'idle' })),
-          daemonSession('s4', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-11-05T00:00:00Z' }),
-        ] }));
-        const activate = (daemon: ScriptedDaemon, leafId: string) => gesture(daemon, () => {
-          daemon.arrangement.replace({ ...daemon.arrangement.desktop('ws')!, active_pane_id: leafId });
-          daemon.emit(daemon.arrangement.changed());
-        });
-
-        it('jump to waiting follows the queue while off, and the document waits again when back on', async () => {
-          const daemon = await renderRow(NARROW, { root: FOUR });
-          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
-          await waitingS4(daemon);
-          await agentOpens(daemon, 's1');
-          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
-
-          await flipSetting(daemon, 'false');
-          expect(screen.queryByTestId('desktop-shelf')).toBeNull();
-          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
-          expect(active()).toBe('pane-s4');
-          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
-          expect(active()).toBe('pane-s4');
-
-          await flipSetting(daemon, 'true');
-          expect(screen.getByTestId('shelf-chip-doc')).toHaveClass('is-needs');
-          await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
-          expect(active()).toBe('doc');
-        });
-
-        it('a document read while off no longer waits when back on', async () => {
-          const daemon = await renderRow(NARROW, { root: FOUR });
-          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
-          await agentOpens(daemon, 's1');
-          await flipSetting(daemon, 'false');
-          await activate(daemon, 'doc');
-          await activate(daemon, 'pane-s4');
-
-          await flipSetting(daemon, 'true');
-
-          expect(active()).toBe('pane-s4');
-          expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
-        });
-
-        it('a document opened while off does not wait when back on', async () => {
-          const daemon = await renderRow(NARROW, { root: FOUR });
-          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
-          await flipSetting(daemon, 'false');
-          await agentOpens(daemon, 's1');
-
-          await flipSetting(daemon, 'true');
-
-          expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
-        });
-      });
-
       describe('while its desktop is not current', () => {
-        const NARROW = { ...SHELF_ON, narrowest_tile_cols: '86' };
+        const NARROW = { narrowest_tile_cols: '86' };
         const others = ['other', 'third'];
         const present = () => document.querySelector('[data-session-terminal-desktop="ws"]');
         const returnAndJump = async (daemon: ScriptedDaemon) => {
@@ -779,7 +699,7 @@ describe('Shelf layout', () => {
       });
 
       it('a terminal an agent starts flashes its chip and moves nothing', async () => {
-        const daemon = await renderRow(SHELF_ON);
+        const daemon = await renderRow(NARROWEST_66);
         await gesture(daemon, () => {
           daemon.arrangement.placeInRow('ws', pane('late'), 'pane-s11', { focus: false, pane: agentPane('late', 'ws') });
           daemon.emit(daemon.arrangement.changed());
@@ -794,7 +714,7 @@ describe('Shelf layout', () => {
     });
 
     it('keeps focus in the slot when ⌘W closes a tile and the next one slides in', async () => {
-      const daemon = await renderRow({ ...SHELF_ON, narrowest_tile_cols: '86' }, { root: FOUR });
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: FOUR });
       await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight', 'terminal.focusRight');
       await slideTo(daemon, 'terminal.focusLeft', 'terminal.focusLeft');
       expect(paneIds()).toEqual(onScreen('s2', 's3'));
@@ -812,19 +732,10 @@ describe('Shelf layout', () => {
       expect(active()).toBe('pane-s3');
       expect(terminalInput('s3')).toHaveFocus();
     });
-
-    it('with the setting off the new keys do nothing', async () => {
-      const daemon = await renderRow({});
-      await gesture(daemon, () => pressShortcut('shelf.carryRight'));
-      await gesture(daemon, () => pressShortcut('shelf.sendToShelf'));
-      expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
-      expect(paneIds()).toHaveLength(11);
-    });
   });
 
   describe('drags', () => {
     const FOUR = rightChain(IDS.slice(0, 4).map(pane));
-    const FIVE = rightChain(IDS.slice(0, 5).map(pane));
     const moves = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_move_leaf');
     const widths = (daemon: ScriptedDaemon) => daemon.sentOf('desktop_set_wanted_cols');
     const active = () => surface().getAttribute('data-active-leaf-id');
@@ -855,7 +766,7 @@ describe('Shelf layout', () => {
     const paneWidth = (id: string) => parseFloat(document.querySelector<HTMLElement>(`[data-pane-id="pane-${id}"]`)!.style.width);
 
     it('swaps a chip dropped on a tile’s centre into that slot, and takes focus', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
 
       await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(1, 0.5));
 
@@ -870,7 +781,7 @@ describe('Shelf layout', () => {
     });
 
     it('moves a chip dropped on a tile’s side edge beside it, as a column', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
 
       await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(0, 0.95));
 
@@ -880,7 +791,7 @@ describe('Shelf layout', () => {
     });
 
     it('stacks a chip dropped on a tile’s top or bottom edge', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
 
       await drag(daemon, chip('s7'), chipCentre('s7'), tilePoint(1, 0.5, 0.97));
 
@@ -899,7 +810,7 @@ describe('Shelf layout', () => {
         ['a stack with a short tile', 0.8, 2000, 0.02, 1600 / 2000],
         ['the band the pointer chose when it already fits', 0.5, 4000, 0.2, 0.2],
       ])('keeps every tile at the minimum height: %s', async (_name, lowerShare, panesHeight, y, share) => {
-        const daemon = await renderRow(SHELF_ON, { root: stackOnTheShelf(lowerShare), panesHeight });
+        const daemon = await renderRow(NARROWEST_66, { root: stackOnTheShelf(lowerShare), panesHeight });
 
         await drag(daemon, chip('s10'), chipCentre('s10'), nearTop(panesHeight, y));
 
@@ -909,7 +820,7 @@ describe('Shelf layout', () => {
       });
 
       it('moves the stack beside the tile and says why when the tile cannot hold it', async () => {
-        const daemon = await renderRow(SHELF_ON, { root: stackOnTheShelf(0.5) });
+        const daemon = await renderRow(NARROWEST_66, { root: stackOnTheShelf(0.5) });
 
         await gesture(daemon, () => {
           press(chip('s10'), chipCentre('s10'));
@@ -927,7 +838,7 @@ describe('Shelf layout', () => {
     });
 
     it('reorders chips without changing focus or the screen', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       const focused = daemon.sentOf('desktop_set_active_pane').length;
 
       const between = { clientX: chipKeys().indexOf('s5') * CHIP_STEP + 4, clientY: 15 };
@@ -941,7 +852,7 @@ describe('Shelf layout', () => {
     });
 
     it('leaves the order alone when a chip is dropped on itself, and a dragged chip does not bring on release', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       const from = chipCentre('s8');
 
       await gesture(daemon, () => {
@@ -956,7 +867,7 @@ describe('Shelf layout', () => {
     });
 
     it('still brings a chip on a plain click', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       const at = chipCentre('s8');
 
       await gesture(daemon, () => {
@@ -969,7 +880,7 @@ describe('Shelf layout', () => {
     });
 
     it('moves a tile dragged onto the shelf to that place in the row, and focus stays in the slot', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
       await gesture(daemon, () => pressShortcut('terminal.focusRight'));
       expect(active()).toBe('pane-s2');
 
@@ -984,7 +895,7 @@ describe('Shelf layout', () => {
     });
 
     it('keeps a tile on the shelf when it would have fitted', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
 
       await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
 
@@ -994,7 +905,7 @@ describe('Shelf layout', () => {
     });
 
     it('gives the tile back and names the failure when the daemon refuses a shelf drop', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       daemon.on('desktop_move_leaf', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: false, error: 'refused' }));
 
       await drag(daemon, header('s3'), { clientX: 1400, clientY: 60 }, chipCentre('s4'));
@@ -1005,7 +916,7 @@ describe('Shelf layout', () => {
 
     it('moves a stack’s whole column when its chip is dropped on a sidebar desktop', async () => {
       const stack = split('stack', 'horizontal', [pane('s4'), pane('s5')]);
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([pane('s1'), pane('s2'), pane('s3'), stack]), others: ['next'] });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([pane('s1'), pane('s2'), pane('s3'), stack]), others: ['next'] });
       const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
 
       await gesture(daemon, () => {
@@ -1019,7 +930,7 @@ describe('Shelf layout', () => {
     });
 
     it('moves a chip dropped on a sidebar desktop before the app has rendered the drag', async () => {
-      const daemon = await renderRow(SHELF_ON, { others: ['next'] });
+      const daemon = await renderRow(NARROWEST_66, { others: ['next'] });
       const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
 
       await gesture(daemon, () => {
@@ -1034,7 +945,7 @@ describe('Shelf layout', () => {
     });
 
     it('cancels a chip or tile drag with Esc: no message, and the row stays', async () => {
-      const daemon = await renderRow(SHELF_ON);
+      const daemon = await renderRow(NARROWEST_66);
 
       await gesture(daemon, () => {
         press(chip('s7'), chipCentre('s7'));
@@ -1062,8 +973,8 @@ describe('Shelf layout', () => {
       expect(rowOf(daemon)).toEqual(IDS);
     });
 
-    it('docks only against tiles while the setting is on, not the desktop’s outer frame', async () => {
-      const daemon = await renderRow(SHELF_ON);
+    it('docks only against tiles, not the desktop’s outer frame', async () => {
+      const daemon = await renderRow(NARROWEST_66);
 
       await drag(daemon, header('s2'), { clientX: 700, clientY: 60 }, { clientX: 5, clientY: 450 });
 
@@ -1071,7 +982,7 @@ describe('Shelf layout', () => {
     });
 
     it('resizes neighbours by dragging a column divider, and keeps the width pending until the daemon’s echo', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       const held: CommandMessage<'desktop_set_wanted_cols'>[] = [];
       daemon.on('desktop_set_wanted_cols', (command) => { held.push(command); return undefined; });
       const before = paneWidth('s1');
@@ -1087,7 +998,7 @@ describe('Shelf layout', () => {
 
     it('moves only the dragged divider when every wanted width is scaled to fit', async () => {
       const root = rightChain([{ ...pane('s1'), wanted_cols: 80 }, { ...pane('s2'), wanted_cols: 75 }, { ...pane('s3'), wanted_cols: 70 }]);
-      const daemon = await renderRow(SHELF_ON, { root });
+      const daemon = await renderRow(NARROWEST_66, { root });
       const [s1, s2, s3] = ['s1', 's2', 's3'].map(paneWidth);
       expect(s1 + s2 + s3).toBeCloseTo(100);
       expect(s1 / s3).toBeCloseTo(80 / 70);
@@ -1102,7 +1013,7 @@ describe('Shelf layout', () => {
     });
 
     it('saves a dragged width and keeps it after the echo', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       const before = paneWidth('s1');
 
       await dragDivider(daemon, 's1', 45);
@@ -1114,7 +1025,7 @@ describe('Shelf layout', () => {
     });
 
     it('sends the far column to the shelf past the narrowest, and brings it back when dragged back, in one drag', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       expect(screen.queryByTestId('desktop-shelf')).toBeNull();
       const from = { clientX: SLOT_WIDTH, clientY: 300 };
 
@@ -1136,7 +1047,7 @@ describe('Shelf layout', () => {
     });
 
     it('stops the drag rather than shelve the active column', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       await gesture(daemon, () => pressShortcut('terminal.focusRight'));
       await gesture(daemon, () => pressShortcut('terminal.focusRight'));
       expect(active()).toBe('pane-s3');
@@ -1149,7 +1060,7 @@ describe('Shelf layout', () => {
 
     it('saves the area with a drag past the narrowest, which holds there and gives way below it', async () => {
       const resize = observedResizes();
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 2).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 2).map(pane)) });
       const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
       await resizeTiles(PANES_WIDTH);
 
@@ -1170,7 +1081,7 @@ describe('Shelf layout', () => {
 
     it('still shelves the far column on a drag past the narrowest at a smaller area', async () => {
       const resize = observedResizes();
-      const daemon = await renderRow(SHELF_ON, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, WIDER_THAN_THE_AREA), pane('s2')]) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([wantedAt('s1', FILLS_THE_AREA, WIDER_THAN_THE_AREA), pane('s2')]) });
       const resizeTiles = (width: number) => gesture(daemon, () => resize('.session-terminal-panes', { width, height: PANES_HEIGHT }));
       await resizeTiles(PANES_WIDTH);
       expect(paneIds()).toEqual(onScreen('s1', 's2'));
@@ -1186,7 +1097,7 @@ describe('Shelf layout', () => {
     });
 
     it('cancels a divider drag with Esc and restores the screen', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain(IDS.slice(0, 3).map(pane)) });
       const before = paneWidth('s1');
       const from = { clientX: SLOT_WIDTH, clientY: 300 };
 
@@ -1207,7 +1118,7 @@ describe('Shelf layout', () => {
     });
 
     it('returns the old width and names the failure when the daemon refuses', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       daemon.on('desktop_set_wanted_cols', (command) => ({ event: 'profile_action_result', action: command.cmd, request_id: command.request_id, success: false, error: 'refused' }));
       const before = paneWidth('s1');
 
@@ -1218,7 +1129,7 @@ describe('Shelf layout', () => {
     });
 
     it('clears the wanted widths on both sides with a double-click, and on the whole desktop from the palette', async () => {
-      const daemon = await renderRow(SHELF_ON, { root: FOUR });
+      const daemon = await renderRow(NARROWEST_66, { root: FOUR });
       const before = paneWidth('s1');
       await dragDivider(daemon, 's1', 45);
       const sent = widths(daemon).length;
@@ -1240,7 +1151,7 @@ describe('Shelf layout', () => {
     });
 
     it('moves a chip beside a tile, without replacing it, after hovering over to another desktop', async () => {
-      const daemon = await renderRow(SHELF_ON, { others: ['next'] });
+      const daemon = await renderRow(NARROWEST_66, { others: ['next'] });
       const target = document.querySelector<HTMLElement>('[data-desktop-id="desktop-next"] .sidebar-row-select')!;
 
       await gesture(daemon, () => {
@@ -1258,12 +1169,6 @@ describe('Shelf layout', () => {
       });
 
       expect(moves(daemon)).toEqual([expect.objectContaining({ source_desktop_id: 'ws', target_desktop_id: 'desktop-next', leaf_id: 'pane-s7', anchor_id: 'pane-next', whole_column: true })]);
-    });
-
-    it('has no column dividers or shelf with the setting off', async () => {
-      await renderRow({ shelf_layout_enabled: 'false' }, { root: FIVE });
-      expect(document.querySelector('.desktop-split-divider[data-split-id^="row:"]')).toBeNull();
-      expect(screen.queryByTestId('desktop-shelf')).toBeNull();
     });
   });
 });

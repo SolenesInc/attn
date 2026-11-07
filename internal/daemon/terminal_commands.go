@@ -284,7 +284,7 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 			if pane.SessionID == caller.ID {
 				callerPanes++
 				if callerPanes > 1 {
-					d.sendError(conn, "placement rule: caller has several terminal tiles; pass --desktop <ref> to open beside its active tile")
+					d.sendError(conn, "placement rule: caller has several terminal tiles; pass --desktop <ref> to open on that desktop")
 					return
 				}
 				anchor = pane.PaneID
@@ -303,15 +303,10 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		}
 	}
 	sort.Slice(previous, func(i, j int) bool { return previous[i].at.After(previous[j].at) })
-	if d.store.ShelfLayoutOn() {
-		if direction == layouttree.DirectionHorizontal {
-			if newest := slices.IndexFunc(previous, func(earlier opened) bool { return layouttree.SameColumn(desktop.Tree, anchor, earlier.pane) }); newest >= 0 {
-				anchor = previous[newest].pane
-			}
+	if direction == layouttree.DirectionHorizontal {
+		if newest := slices.IndexFunc(previous, func(earlier opened) bool { return layouttree.SameColumn(desktop.Tree, anchor, earlier.pane) }); newest >= 0 {
+			anchor = previous[newest].pane
 		}
-	} else if len(previous) > 0 {
-		anchor = previous[0].pane
-		direction = layouttree.DirectionHorizontal
 	}
 	cwd := protocol.Deref(msg.Cwd)
 	if cwd == "" {

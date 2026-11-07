@@ -114,7 +114,7 @@ func TestPlacingWithAShareKeepsThatShare(t *testing.T) {
 
 	placed, _, err := s.PlaceSession(SessionPlacementRequest{
 		DesktopID: desktop.ID, SessionID: "agent-b",
-		AnchorPaneID: paneA, Direction: layouttree.DirectionVertical, NewPaneShare: 0.25,
+		AnchorPaneID: paneA, Direction: layouttree.DirectionHorizontal, NewPaneShare: 0.25,
 	})
 	if err != nil {
 		t.Fatalf("PlaceSession: %v", err)

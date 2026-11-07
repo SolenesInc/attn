@@ -9,7 +9,7 @@ import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { closeTileAnswer, pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 import { serveLaunches } from './test/locations';
 
-const PANES_WIDTH = 4000;
+const PANES_HEIGHT = 2000;
 const SIDE_BY_SIDE = split('split-a', 'vertical', [pane('s1'), pane('s2')]);
 
 function layOutPanes(width: number, height: number) {
@@ -26,11 +26,11 @@ function splitRatio(splitId: string) {
   return document.querySelector(`.desktop-split[data-split-id="${splitId}"]`)?.getAttribute('data-split-ratio');
 }
 
-async function dragDivider(daemon: ScriptedDaemon, splitId: string, clientX: number) {
+async function dragDivider(daemon: ScriptedDaemon, splitId: string, clientY: number) {
   const divider = document.querySelector<HTMLElement>(`.desktop-split-divider[data-split-id="${splitId}"]`)!;
-  const dividerX = (parseFloat(divider.style.left) / 100) * PANES_WIDTH;
-  fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: dividerX });
-  fireEvent.pointerUp(window, { pointerId: 1, clientX });
+  const dividerY = (parseFloat(divider.style.top) / 100) * PANES_HEIGHT;
+  fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientY: dividerY });
+  fireEvent.pointerUp(window, { pointerId: 1, clientY });
   await daemon.idle();
   return daemon.sentOf('desktop_set_split_ratio').pop()!;
 }
@@ -266,7 +266,7 @@ describe('App desktop layout', () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 200, clientY: 100 });
     const dropzone = screen.getByTestId('new-desktop-dropzone');
     fireEvent.pointerEnter(dropzone);
-    fireEvent.pointerUp(dropzone, { pointerId: 1 });
+    fireEvent.pointerUp(dropzone, { pointerId: 1, clientX: -40, clientY: 100 });
     await daemon.idle();
 
     expect(daemon.sentOf('desktop_move_leaf')).toEqual([expect.objectContaining({
@@ -281,14 +281,14 @@ describe('App desktop layout', () => {
       desktops: [daemonDesktop('ws', { root: { type: 'tile', tile_id: 'notes', tile_kind: 'markdown', tile_params: '/notes.md' } }, { shortcut_slot: 1, active_pane_id: 'notes' })],
     } });
     await gesture(daemon, () => pressShortcut('desktop.select1'));
-    await gesture(daemon, () => fireEvent.click(screen.getByTitle('Expand sidebar')));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' })));
     const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'desktop_move_leaf' }>> = [];
     daemon.on('desktop_move_leaf', (command) => { held.push(command); });
 
     fireEvent.pointerDown(document.querySelector('[data-pane-id="notes"] .desktop-dock-tile-header')!, { button: 0, pointerId: 1, clientX: 100, clientY: 10 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 150, clientY: 60 });
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 200, clientY: 100 });
-    fireEvent.pointerUp(screen.getByTestId('new-desktop-dropzone'), { pointerId: 1 });
+    fireEvent.pointerUp(screen.getByTestId('new-desktop-dropzone'), { pointerId: 1, clientX: -40, clientY: 100 });
     await daemon.idle();
     expect(held).toHaveLength(1);
     expect(daemon.sentOf('desktop_create')).toEqual([]);
@@ -304,13 +304,13 @@ describe('App desktop layout', () => {
     expect(screen.getByTestId('sidebar-home').getAttribute('aria-current')).toBe('page');
   });
 
-  it('keeps a later split resize the daemon accepted when an earlier one on the same split is refused', async () => {
-    layOutPanes(PANES_WIDTH, 600);
-    const { daemon } = await openDesktop(SIDE_BY_SIDE, ['s1', 's2']);
+  it('keeps a later stack resize the daemon accepted when an earlier one on the same stack is refused', async () => {
+    layOutPanes(4000, PANES_HEIGHT);
+    const { daemon } = await openDesktop(split('split-a', 'horizontal', [pane('s1'), pane('s2')]), ['s1', 's2']);
     holdAnswers(daemon, 'desktop_set_split_ratio');
 
-    const first = await dragDivider(daemon, 'split-a', 0.3 * PANES_WIDTH);
-    const second = await dragDivider(daemon, 'split-a', 0.7 * PANES_WIDTH);
+    const first = await dragDivider(daemon, 'split-a', 0.3 * PANES_HEIGHT);
+    const second = await dragDivider(daemon, 'split-a', 0.7 * PANES_HEIGHT);
     expect([first.ratio, second.ratio]).toEqual([0.3, 0.7]);
     expect(first.request_id).not.toBe(second.request_id);
 
@@ -323,16 +323,16 @@ describe('App desktop layout', () => {
     expect(splitRatio('split-a')).toBe('0.700');
   });
 
-  it('undoes only the split whose resize the daemon refused', async () => {
-    layOutPanes(PANES_WIDTH, 600);
+  it('undoes only the stack whose resize the daemon refused', async () => {
+    layOutPanes(4000, PANES_HEIGHT);
     const { daemon } = await openDesktop(
-      split('split-a', 'vertical', [pane('s1'), split('split-b', 'vertical', [pane('s2'), pane('s3')])]),
-      ['s1', 's2', 's3'],
+      split('row', 'vertical', [split('split-a', 'horizontal', [pane('s1'), pane('s2')]), split('split-b', 'horizontal', [pane('s3'), pane('s4')])]),
+      ['s1', 's2', 's3', 's4'],
     );
     holdAnswers(daemon, 'desktop_set_split_ratio');
 
-    const resizeA = await dragDivider(daemon, 'split-a', 0.4 * PANES_WIDTH);
-    const resizeB = await dragDivider(daemon, 'split-b', 0.85 * PANES_WIDTH);
+    const resizeA = await dragDivider(daemon, 'split-a', 0.4 * PANES_HEIGHT);
+    const resizeB = await dragDivider(daemon, 'split-b', 0.7 * PANES_HEIGHT);
     expect([resizeA.split_id, resizeB.split_id]).toEqual(['split-a', 'split-b']);
 
     answer(daemon, resizeB, 'persist failed');
@@ -341,6 +341,19 @@ describe('App desktop layout', () => {
 
     expect(splitRatio('split-a')).toBe(resizeA.ratio.toFixed(3));
     expect(splitRatio('split-b')).toBe('0.500');
+  });
+
+  it('takes the daemon’s ratio over a resize still waiting for its answer', async () => {
+    layOutPanes(4000, PANES_HEIGHT);
+    const { daemon } = await openDesktop(split('split-a', 'horizontal', [pane('s1'), pane('s2')]), ['s1', 's2']);
+    holdAnswers(daemon, 'desktop_set_split_ratio');
+
+    await dragDivider(daemon, 'split-a', 0.7 * PANES_HEIGHT);
+    expect(splitRatio('split-a')).toBe('0.700');
+
+    relayOut(daemon, split('split-a', 'horizontal', [pane('s1'), pane('s2')], 0.6), ['s1', 's2']);
+    await daemon.idle();
+    expect(splitRatio('split-a')).toBe('0.600');
   });
 
   it('persists the browser tile’s location again after the daemon refused to store it', async () => {
@@ -426,9 +439,9 @@ describe('App desktop layout', () => {
   });
 
   describe('dragging a pane by its header', () => {
-    async function renderPanes(root: unknown = SIDE_BY_SIDE, sessionIds = ['s1', 's2']) {
-      layOutPanes(1000, 1000);
-      return openDesktop(root, sessionIds);
+    async function renderPanes() {
+      layOutPanes(2000, 1000);
+      return openDesktop(SIDE_BY_SIDE, ['s1', 's2']);
     }
 
     function paneHeader(sessionId: string) {
@@ -449,44 +462,31 @@ describe('App desktop layout', () => {
     it('docks the pane against the edge of the pane it is dropped on', async () => {
       const { daemon } = await renderPanes();
 
-      await drag(daemon, 's1', [250, 10], [[400, 500], [900, 500]]);
+      await drag(daemon, 's1', [500, 10], [[800, 500], [1800, 500]]);
 
       expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', anchor_id: 'pane-s2', edge: 'right' })]);
-      expect(moves(daemon)[0].leaf_share).toBeCloseTo(0.2, 5);
     });
 
     it('still docks a fast drag whose pointer moves the browser folded into the release', async () => {
       const { daemon } = await renderPanes();
 
-      fireEvent.pointerDown(paneHeader('s1'), { button: 0, pointerId: 1, clientX: 250, clientY: 10 });
-      fireEvent.pointerUp(window, { pointerId: 1, clientX: 900, clientY: 500 });
+      fireEvent.pointerDown(paneHeader('s1'), { button: 0, pointerId: 1, clientX: 500, clientY: 10 });
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 1800, clientY: 500 });
       await daemon.idle();
 
       expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', anchor_id: 'pane-s2', edge: 'right' })]);
     });
 
-    it('docks against the whole desktop when dropped on the outer band of a side holding two panes', async () => {
-      const { daemon } = await renderPanes(
-        split('split-a', 'vertical', [split('split-b', 'horizontal', [pane('s1'), pane('s2')]), pane('s3')]),
-        ['s1', 's2', 's3'],
-      );
-
-      await drag(daemon, 's3', [750, 10], [[400, 500], [10, 500]]);
-
-      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s3', edge: 'left', leaf_share: 0.5 })]);
-      expect(moves(daemon)[0]).not.toHaveProperty('anchor_id');
-    });
-
     it.each([
       ['a click on the header', [] as Array<[number, number]>, 'pointerup' as const],
-      ['a jitter of a few pixels', [[752, 13]] as Array<[number, number]>, 'pointerup' as const],
-      ['a drop back onto the dragged pane', [[400, 500], [700, 500]] as Array<[number, number]>, 'pointerup' as const],
-      ['a cancelled drag', [[400, 500], [100, 500]] as Array<[number, number]>, 'pointercancel' as const],
+      ['a jitter of a few pixels', [[1502, 13]] as Array<[number, number]>, 'pointerup' as const],
+      ['a drop back onto the dragged pane', [[800, 500], [1400, 500]] as Array<[number, number]>, 'pointerup' as const],
+      ['a cancelled drag', [[800, 500], [200, 500]] as Array<[number, number]>, 'pointercancel' as const],
     ])('moves nothing for %s', async (_, path, end) => {
       const { daemon } = await renderPanes();
 
-      await drag(daemon, 's2', [750, 10], path, end);
-      fireEvent.pointerUp(window, { pointerId: 1, clientX: 100, clientY: 500 });
+      await drag(daemon, 's2', [1500, 10], path, end);
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 200, clientY: 500 });
       await daemon.idle();
 
       expect(moves(daemon)).toEqual([]);
@@ -496,7 +496,7 @@ describe('App desktop layout', () => {
 
   it('shows the tiles and preferred ratios the daemon lays out', async () => {
     await openDesktop(
-      { ...split('split-a', 'vertical', [pane('s1'), { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }], 0.73), ratio_mode: 'preferred' },
+      { ...split('split-a', 'horizontal', [pane('s1'), { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }], 0.73), ratio_mode: 'preferred' },
       ['s1'],
     );
 

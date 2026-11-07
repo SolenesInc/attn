@@ -1,13 +1,11 @@
 import { DesktopOverview } from '../components/DesktopOverview';
 import { ProfileSwitcher } from '../components/ProfileSwitcher';
-import { BoolSetting, isOn } from '../utils/settings';
-import { useAppInputs, useDesktopNavigationContext, useNavigationContext } from './AppContexts';
+import { useDesktopNavigationContext, useNavigationContext } from './AppContexts';
 
 export function AppDesktopNavigation() {
   const { desktopNavigation, desktopOverviewOpen, setDesktopOverviewOpen, profileSwitcherOpen, setProfileSwitcherOpen } =
     useDesktopNavigationContext();
   const { setView } = useNavigationContext();
-  const { settings } = useAppInputs();
   const {
     profiles,
     selectedProfile,
@@ -40,7 +38,7 @@ export function AppDesktopNavigation() {
       )}
       {profileSwitcherOpen && (
         <ProfileSwitcher
-          underTitleBarSelector={isOn(settings, BoolSetting.shelfLayoutEnabled)}
+          underTitleBarSelector
           profiles={profiles}
           selectedProfileId={selectedProfile?.id ?? null}
           onSelect={(profileId) => {

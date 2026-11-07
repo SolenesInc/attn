@@ -5,7 +5,7 @@ import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp'
 import { serveSettings } from './test/settings';
 import { openActionMenu } from './test/appFixtures';
 
-describe('shared sidebar header', () => {
+describe('shared toolbar and sidebar top', () => {
   it.each([false, true])('opens Commands in desktop/queue flow (%s)', async (queue) => {
     const { daemon } = await renderApp({ initialState: {
       settings: { queue_mode_enabled: String(queue) },
@@ -13,25 +13,21 @@ describe('shared sidebar header', () => {
     } });
     await daemon.idle();
     expect(daemon.sent.map(({ cmd }) => cmd)).toEqual(['client_hello', 'senders_get', 'set_terminal_theme', 'set_client_presence', 'notification_list']);
-    const header = document.querySelector('.sidebar-header')!;
-    const panels = within(header.querySelector('.sidebar-header-panels') as HTMLElement).getAllByRole('button');
-    expect(panels.map((button) => button.title)).toEqual([
-      'Show the garden', expect.stringMatching(/^Open Notebook/), expect.stringMatching(/^Open Ledger/), 'Show Automations', 'Show Notifications',
-    ]);
-    await gesture(daemon, () => fireEvent.click(within(header as HTMLElement).getByRole('button', { name: 'Commands' })));
+    const toolbar = screen.getByTestId('title-bar-left');
+    await gesture(daemon, () => fireEvent.click(within(toolbar).getByRole('button', { name: 'Commands' })));
     await act(() => vi.advanceTimersToNextFrame());
     expect(screen.getByRole('combobox', { name: 'Commands' })).toHaveFocus();
     expect(screen.getByRole('dialog', { name: 'Commands' })).toBeVisible();
   });
 
-  it('keeps Commands and the five panels in the collapsed desktop rail', async () => {
+  it('keeps Commands and the panels in the band with the sidebar collapsed', async () => {
     const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } });
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
-    const rail = document.querySelector('.icon-rail') as HTMLElement;
-    expect(within(rail).getAllByRole('button').slice(0, 8).map((button) => button.title)).toEqual([
-      expect.stringMatching(/^Home/), expect.stringMatching(/^Commands/), 'Switch to queue flow', 'Show the garden', expect.stringMatching(/^Open Notebook/), expect.stringMatching(/^Open Ledger/), 'Show Automations', 'Show Notifications',
-    ]);
-    await gesture(daemon, () => fireEvent.click(within(rail).getByRole('button', { name: 'Commands' })));
+    const band = within(screen.getByTestId('title-bar'));
+    for (const name of ['Show the garden', /^Open Notebook/, /^Open Ledger/, 'Show Automations', 'Show Notifications']) {
+      expect(band.getByRole('button', { name })).toBeVisible();
+    }
+    await gesture(daemon, () => fireEvent.click(band.getByRole('button', { name: 'Commands' })));
     expect(screen.getByRole('dialog', { name: 'Commands' })).toBeVisible();
   });
 

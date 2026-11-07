@@ -16,7 +16,7 @@ pass to a fresh agent, and the previous agent keeps running.
 - `handover`: a new session takes over a seed and its claim, with a note. The previous agent keeps running.
 - `roles`: the user's roles, their alternatives and the fallback, kept in revisions with history and rollback.
 - `workflow-skill`: "Add Attn roles" or `attn delegate roles install` adds attn's own roles and installs the attn-workflow skill that those roles use, beside the attn skill. While workflow skills are enabled, the daemon refreshes them at startup, when you save an executable setting, when you save delegation preferences, and when a role launches. Every way of saving preferences counts: the app, a CLI commit, and a rollback. Reading settings does not touch the skill files.
-- `delegate-placement`: the delegate opens beside the dispatcher, or on a named desktop, without changing what the user sees.
+- `delegate-placement`: the delegate opens at the end of the row on the dispatcher's desktop, or on a named desktop, without changing what the user sees.
 - `delegate-checkout`: the machine, folder and Git checkout the delegate works in.
 - `delegation-status`: a stable request id to check or retry a delegation whose answer was lost.
 - `delegation-chain`: the dispatcher, peers and delegates of a session, as a card you walk with the keyboard.
@@ -34,7 +34,7 @@ pass to a fresh agent, and the previous agent keeps running.
 - The chain trigger on the agent's tile header, which names the role, opens the delegation chain card. On a sidebar row the trigger shows at rest, and the card opens when you point at the row. While the pointer is over the row, the row's actions cover the trigger (`app/src/components/DelegationChain.tsx`). In the card, ↑ ↓ Home End walk the chain, Enter opens an agent, Escape closes the card.
 - A seed's page in the garden: "Resume" and "Handover", with the handover form that asks "What should the new agent know?", the working folder, the Git checkout and the agent (`app/src/components/GardenPanel.tsx`, `app/src/components/DelegationCheckoutFields.tsx`).
 - **Settings → Delegation** (`app/src/components/DelegationSettings.tsx`): the roles table and its switch, the alternatives, the fallback "Anything else", and "Add Attn roles". "Add Attn roles" also installs the attn-workflow skill for each harness that has a skills folder.
-- Where people see and steer what agents do: the delegate is a full session in a tile beside its dispatcher, with the delegate's role on the tile header and the seed the delegate tends on the tile's seed chip. People type into the delegate like any agent.
+- Where people see and steer what agents do: the delegate is a full session in a tile on its dispatcher's desktop, with the delegate's role on the tile header and the seed the delegate tends on the tile's seed chip. People type into the delegate like any agent.
 - Their own shell: `attn delegate --source-session <id>` and `attn delegate roles`, below.
 
 ### Agents

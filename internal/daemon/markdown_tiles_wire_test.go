@@ -144,8 +144,8 @@ func TestRedockingATileKeepsTheSizeTheUserGaveIt(t *testing.T) {
 		edge  protocol.LayoutDockEdge
 		share *float64
 	}{
-		{protocol.LayoutDockEdgeRight, protocol.Ptr(0.41)},
-		{protocol.LayoutDockEdgeBottom, nil},
+		{protocol.LayoutDockEdgeBottom, protocol.Ptr(0.41)},
+		{protocol.LayoutDockEdgeTop, nil},
 	} {
 		if docked := dockOnDesktop(app, currentDesktop(t, w), protocol.DesktopDockTileMessage{
 			AnchorID: protocol.Ptr(anchor), Edge: edge.edge, TileID: "tile-readme", TileKind: "markdown", TileParams: protocol.Ptr(readme), TileShare: edge.share,
@@ -159,7 +159,7 @@ func TestRedockingATileKeepsTheSizeTheUserGaveIt(t *testing.T) {
 		fraction = 1 - split.Ratio
 	}
 	if !ok || split.Direction != "horizontal" || math.Abs(fraction-0.41) > 1e-9 {
-		t.Errorf("after moving the tile to the bottom it takes %v of a %s split (found=%v), want the 0.41 it was given", fraction, split.Direction, ok)
+		t.Errorf("after moving the tile to the top it takes %v of a %s split (found=%v), want the 0.41 it was given", fraction, split.Direction, ok)
 	}
 }
 

@@ -18,6 +18,8 @@ export const tauriFakes = {
     getCurrentWindow: vi.fn(() => ({
       hide: vi.fn(async () => {}),
       isVisible: vi.fn(async () => true),
+      isFullscreen: vi.fn(async () => false),
+      onResized: vi.fn(async () => () => {}),
     })),
   },
   path: {

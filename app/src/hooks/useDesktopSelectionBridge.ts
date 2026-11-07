@@ -9,7 +9,6 @@ import { arrangementOf } from '../store/sessionNavigationSlice';
 import { isRetainedTerminalEvent, retainTerminalEvent, usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { removeCompositionTextNodes } from '../ghostty/input';
 import { terminalClipboardChord } from '../shortcuts/platform';
-import { BoolSetting, isOn } from '../utils/settings';
 
 export function activeLeafIn(state: Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops'>): ActiveLeaf | null {
   return activeLeafOf({
@@ -186,7 +185,7 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         if (!leaf || sameLeaf(leaf, before)) return;
         const sessions = useSessionStore.getState();
         if (sessions.view !== 'session' || sessions.intent) return;
-        const closedPaneDroppedFocus = isOn(sessions.navigationSettings, BoolSetting.shelfLayoutEnabled) && focusIsNowhere();
+        const closedPaneDroppedFocus = focusIsNowhere();
         if (focusBelongsTo(before) || closedPaneDroppedFocus) sessions.transferFocus(leaf);
       }),
     [],

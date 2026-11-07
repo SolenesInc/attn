@@ -289,22 +289,6 @@ describe('App asks', () => {
     expect(seedHeading()).toBe('Cache store migration');
   });
 
-  it('shows open asks on the collapsed queue bar and opens the one picked', async () => {
-    const daemon = await renderAsks(undefined, undefined, [], { queue_mode_enabled: 'true' });
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
-
-    expect(screen.getByTestId('queue-bar-asks')).toHaveTextContent('?2 asks· 1 waiting on you');
-    await gesture(daemon, () => fireEvent.pointerEnter(screen.getByTestId('queue-bar-asks-anchor')));
-    const peek = screen.getByTestId('queue-bar-asks-peek');
-    expect(within(peek).getAllByRole('button').map((row) => row.getAttribute('data-testid'))).toEqual(['queue-bar-peek-ask-a-release', 'queue-bar-peek-ask-a-cache1']);
-    await gesture(daemon, () => fireEvent.click(within(peek).getByTestId('queue-bar-peek-ask-a-cache1')));
-    expect(openAsk()).toBe('Cache store');
-
-    daemon.emit({ event: 'asks_updated', profile_id: DEFAULT_PROFILE_ID, asks: [] });
-    await daemon.idle();
-    expect(screen.queryByTestId('queue-bar-asks')).toBeNull();
-  });
-
   it('counts open asks on the collapsed rail and marks the desktops that hold them', async () => {
     const daemon = await renderAsks([cacheStore], [apiWorking, daemonSession('idle')]);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));

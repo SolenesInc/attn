@@ -1,6 +1,6 @@
-# Terminals beside your agent
+# Terminals
 
-Use `attn terminal` inside an attn agent to open shell splits, inspect terminals,
+Use `attn terminal` inside an attn agent to open terminals, inspect them,
 type into them, wait for a command or terminal to finish, move terminals between
 desktops, and close shells.
 Run `attn terminal --help` for the full syntax and supported key names.
@@ -18,11 +18,11 @@ attn terminal close <id>
 
 ## Placement and lifetime
 
-`open` keeps the user's focus where it was. Your first terminal goes to your
-right, and `--down` puts it below you. Later terminals stack below your most
-recently opened live terminal on that desktop. With `--desktop <ref>`, the
-first split starts at that desktop's active tile. `--cwd <dir>` selects the
-directory on the target machine. attn creates a missing numbered `--desktop`.
+`open` keeps the user's focus where it was. A terminal goes to the end of the
+desktop's row. `--down` stacks it below you, or below the terminal you most
+recently opened in your column. `--desktop <ref>` opens it on that desktop, and
+with `--down` it stacks below that desktop's active tile. attn creates a missing
+numbered `--desktop`. `--cwd <dir>` selects the directory on the target machine.
 
 `open` defaults to your session's machine and directory. `--host <name|id>`
 selects an outpost, and `--host home` selects the home. If you change the

@@ -84,7 +84,7 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile, focus boo
 		return desktop, "", err
 	}
 	tileID := openTileID(desktop, tile)
-	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID, focus || !d.store.ShelfLayoutOn())
+	edit, err := d.agentTileEdit(desktop, location.paneID, tile, tileID, focus)
 	if err != nil {
 		return desktop, "", err
 	}

@@ -7,7 +7,7 @@ import { gesture, pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { pane, relayOut, renderDesktop, split } from './test/desktopLayouts';
 
-const PANES_WIDTH = 1000;
+const PANES_WIDTH = 2000;
 const PANES_HEIGHT = 600;
 const CELL_WIDTH = 8;
 
@@ -34,6 +34,8 @@ function terminalInput(sessionId: string) {
   return within(paneEl(sessionId)).getByRole('textbox', { name: 'Terminal input' });
 }
 
+const columnDivider = (sessionId: string) => document.querySelector<HTMLElement>(`.desktop-split-divider[data-split-id="row:pane-${sessionId}"]`)!;
+
 const surface = () => document.querySelector<HTMLElement>('[data-session-terminal-desktop="ws"]')!;
 
 function lastResize(daemon: ScriptedDaemon, sessionId: string) {
@@ -48,23 +50,24 @@ describe('App desktop panes', () => {
 
     await openSession(daemon, 's1');
 
-    expect(lastResize(daemon, 's1')).toMatchObject({ cols: 62 });
-    expect(lastResize(daemon, 's2')).toMatchObject({ cols: 62 });
+    expect(lastResize(daemon, 's1')).toMatchObject({ cols: 125 });
+    expect(lastResize(daemon, 's2')).toMatchObject({ cols: 125 });
   });
 
-  it('fits both panes to a divider drag once it ends, and the remaining pane when the split closes', async () => {
+  it('fits both tiles to a column divider drag once it ends, and the remaining tile when the other closes', async () => {
     layOutPanes();
     const { daemon } = await renderDesktop(SIDE_BY_SIDE, ['s1', 's2']);
     await openSession(daemon, 's1');
 
-    const divider = document.querySelector<HTMLElement>('.desktop-split-divider[data-split-id="split-a"]')!;
-    fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 500 });
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 300 });
+    fireEvent.pointerDown(columnDivider('s1'), { button: 0, pointerId: 1, clientX: 1000 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 800 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 800 });
     await settleLayout(daemon);
-    const { ratio } = daemon.sentOf('desktop_set_split_ratio')[0];
+    const widthOf = (sessionId: string) => (parseFloat(paneEl(sessionId).style.width) * PANES_WIDTH) / 100;
+    expect(widthOf('s1')).toBeLessThan(1000);
 
-    expect(lastResize(daemon, 's1')).toMatchObject({ cols: Math.floor((ratio * PANES_WIDTH) / CELL_WIDTH) });
-    expect(lastResize(daemon, 's2')).toMatchObject({ cols: Math.floor(((1 - ratio) * PANES_WIDTH) / CELL_WIDTH) });
+    expect(lastResize(daemon, 's1')).toMatchObject({ cols: Math.floor(widthOf('s1') / CELL_WIDTH) });
+    expect(lastResize(daemon, 's2')).toMatchObject({ cols: Math.floor(widthOf('s2') / CELL_WIDTH) });
 
     relayOut(daemon, pane('s1'), ['s1']);
     await settleLayout(daemon);
@@ -164,33 +167,35 @@ describe('App desktop panes', () => {
     const selection = () => document.body.style.userSelect;
     const tileHeader = () => document.querySelector<HTMLElement>('[data-pane-id="tile-md"] .desktop-dock-tile-header')!;
 
-    fireEvent.pointerDown(document.querySelector<HTMLElement>('.desktop-split-divider[data-split-id="split-a"]')!, { button: 0, pointerId: 1, clientX: 500, clientY: 250 });
+    fireEvent.pointerDown(columnDivider('s1'), { button: 0, pointerId: 1, clientX: 1000, clientY: 250 });
+    expect(selection()).toBe('');
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 900, clientY: 250 });
     expect(selection()).toBe('none');
     fireEvent.pointerCancel(window, { pointerId: 1 });
     expect(selection()).toBe('');
 
-    fireEvent.pointerDown(tileHeader(), { button: 0, pointerId: 1, clientX: 750, clientY: 8 });
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 750, clientY: 8 });
+    fireEvent.pointerDown(tileHeader(), { button: 0, pointerId: 1, clientX: 1500, clientY: 8 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 1500, clientY: 8 });
     expect(selection()).toBe('');
 
-    fireEvent.pointerDown(tileHeader(), { button: 0, pointerId: 1, clientX: 750, clientY: 8 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 760, clientY: 280 });
+    fireEvent.pointerDown(tileHeader(), { button: 0, pointerId: 1, clientX: 1500, clientY: 8 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 1510, clientY: 280 });
     expect(selection()).toBe('none');
     fireEvent.blur(window);
     expect(selection()).toBe('');
     await daemon.idle();
 
     expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
-    expect(daemon.sentOf('desktop_set_split_ratio')).toEqual([]);
+    expect(daemon.sentOf('desktop_set_wanted_cols')).toEqual([]);
   });
 
-  it('fits the agent pane once, to its final width, when docking a document suspends an older one', async () => {
+  it('fits the agent tile once, to its final width, when a docked document narrows it', async () => {
     layOutPanes();
     const { daemon } = await renderDesktop(pane('s1'), ['s1']);
     await openSession(daemon, 's1');
     const dock = async (...documentIds: string[]) => {
       const root = documentIds.reduce<unknown>(
-        (layout, id) => split(`split-${id}`, 'vertical', [layout, { type: 'tile', tile_id: id, tile_kind: 'markdown', tile_params: `/tmp/${id}.md` }], 0.68),
+        (layout, id) => split(`split-${id}`, 'vertical', [layout, { type: 'tile', tile_id: id, tile_kind: 'markdown', tile_params: `/tmp/${id}.md` }]),
         pane('s1'),
       );
       relayOut(daemon, root, ['s1'], { active: documentIds[documentIds.length - 1] });
@@ -199,21 +204,21 @@ describe('App desktop panes', () => {
     await dock('oldest');
     fireEvent.mouseDown(paneEl('s1'));
     await settleLayout(daemon);
+    const widthBefore = parseFloat(paneEl('s1').style.width);
     const before = daemon.sentOf('pty_resize').length;
 
     await dock('oldest', 'newest');
 
-    expect(document.querySelector('[data-pane-id="oldest"]')).toHaveAttribute('data-pane-suspended', 'true');
-    const finalCols = Math.floor((parseFloat(paneEl('s1').style.width) * PANES_WIDTH) / 100 / CELL_WIDTH);
+    const width = parseFloat(paneEl('s1').style.width);
+    expect(width).toBeLessThan(widthBefore);
+    const finalCols = Math.floor((width * PANES_WIDTH) / 100 / CELL_WIDTH);
     expect(daemon.sentOf('pty_resize').slice(before)).toEqual([expect.objectContaining({ id: 's1', cols: finalCols })]);
   });
 
-  describe('attention ring', () => {
+  describe('document focus', () => {
     const doc = (id: string, name = id) => ({ type: 'tile', tile_id: id, tile_kind: 'markdown', tile_params: `/tmp/${name}.md` });
     const beside = (id: string, left: unknown, right: unknown, ratio = 0.5) => split(id, 'vertical', [left, right], ratio);
-    const crowded = () => beside('outer', beside('document-split', pane('s1'), doc('document', 'review'), 0.68), pane('s2'));
     const surfaceOf = () => document.querySelector<HTMLElement>('.session-terminal-desktop[data-desktop-id="ws"]')!;
-    const slivers = () => screen.queryAllByRole('button', { name: /^Expand / }).map((button) => button.getAttribute('aria-label'));
 
     async function ring(width: number, root: unknown, sessionIds: string[]) {
       fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, width, 700) : null));
@@ -229,65 +234,6 @@ describe('App desktop panes', () => {
       };
       return { ...view, layOut, show };
     }
-
-    it('folds the agent into a sliver to make room for a document docked beside it on a narrow desktop', async () => {
-      const { layOut } = await ring(560, pane('s1'), ['s1']);
-
-      await layOut(beside('opened', pane('s1'), doc('document', 'review'), 0.68), 'document');
-
-      expect(slivers()).toEqual(['Expand s1']);
-      expect(surfaceOf()).toHaveAttribute('data-active-leaf-id', 'document');
-    });
-
-    it('folds the oldest documents first as more are docked', async () => {
-      const { daemon, layOut } = await ring(1816, pane('s1'), ['s1']);
-      const opened = ['oldest', 'older', 'newer', 'newest'];
-      for (const [index, id] of opened.entries()) {
-        await layOut(opened.slice(0, index + 1).reduce<unknown>((left, next) => beside(`split-${next}`, left, doc(next), 0.68), pane('s1')), id);
-        if (id !== 'newest') {
-          fireEvent.mouseDown(paneEl('s1'));
-          await settleLayout(daemon);
-        }
-      }
-
-      expect(slivers()).toEqual(['Expand oldest.md', 'Expand older.md']);
-    });
-
-    it('expands a clicked sliver and folds the leaf focused longest ago, not the one just left', async () => {
-      const { daemon, show } = await ring(1100, crowded(), ['s1', 's2']);
-      await show('document', 'review');
-      expect(slivers()).toEqual(['Expand s2']);
-      fireEvent.mouseDown(document.querySelector<HTMLElement>('[data-pane-id="document"]')!);
-      await settleLayout(daemon);
-      fireEvent.mouseDown(paneEl('s1'));
-      await settleLayout(daemon);
-
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand s2' })));
-      await settleLayout(daemon);
-
-      expect(slivers()).toEqual(['Expand review.md']);
-      expect(surfaceOf()).toHaveAttribute('data-active-leaf-id', 'pane-s2');
-    });
-
-    it('folds a pane dragged below its minimum width and unfolds it when dragged back', async () => {
-      const { daemon, show } = await ring(1100, crowded(), ['s1', 's2']);
-      await show('document', 'review');
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand s2' })));
-      await settleLayout(daemon);
-      const divider = document.querySelector<HTMLElement>('.desktop-split-divider[data-split-grab][data-split-id="outer"]')!;
-
-      fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 500, clientY: 350 });
-      fireEvent.pointerMove(window, { pointerId: 1, clientX: 300, clientY: 350 });
-      await act(() => vi.advanceTimersToNextFrame());
-      expect(slivers()).toEqual(['Expand s1', 'Expand review.md']);
-
-      fireEvent.pointerMove(window, { pointerId: 1, clientX: 520, clientY: 350 });
-      await act(() => vi.advanceTimersToNextFrame());
-      fireEvent.pointerUp(window, { pointerId: 1, clientX: 520, clientY: 350 });
-      await settleLayout(daemon);
-
-      expect(slivers()).toEqual(['Expand review.md']);
-    });
 
     it('focuses documents as a tabbed review deck that Escape unwinds one layer at a time', async () => {
       const root = beside('outer', beside('document-split', pane('s1'), doc('document', 'review'), 0.68), beside('second-split', pane('s2'), doc('second-document', 'second')));
