@@ -212,7 +212,7 @@ func (d *Daemon) handlePhonesGet(client *wsClient) {
 
 func (d *Daemon) handlePhonePairBegin(client *wsClient, msg *protocol.PhonePairBeginMessage) {
 	result := protocol.PhonePairBeginResultMessage{Event: protocol.EventPhonePairBeginResult, RequestID: msg.RequestID}
-	offer, err := d.beginPhonePairing(msg.ProfileID)
+	offer, err := d.beginPhonePairing(client, msg.ProfileID)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	} else {
@@ -222,7 +222,7 @@ func (d *Daemon) handlePhonePairBegin(client *wsClient, msg *protocol.PhonePairB
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) beginPhonePairing(profileID string) (protocol.PhonePairingOffer, error) {
+func (d *Daemon) beginPhonePairing(client *wsClient, profileID string) (protocol.PhonePairingOffer, error) {
 	link := d.cloudLink()
 	if link == nil {
 		d.phones.mu.Lock()
@@ -237,11 +237,22 @@ func (d *Daemon) beginPhonePairing(profileID string) (protocol.PhonePairingOffer
 	if err != nil || profile.Deleted() {
 		return protocol.PhonePairingOffer{}, fmt.Errorf("profile %q is not on this home", profileID)
 	}
-	offer, err := link.Offer(profile.ID, profile.Name)
+	offer, err := link.Offer(profile.ID, profile.Name, client)
 	if err != nil {
 		return protocol.PhonePairingOffer{}, err
 	}
+	select {
+	case <-client.gone:
+		link.CancelOffersHeldBy(client)
+	default:
+	}
 	return wireOffer(offer), nil
+}
+
+func (d *Daemon) endPhoneOffersHeldBy(client *wsClient) {
+	if link := d.cloudLink(); link != nil {
+		link.CancelOffersHeldBy(client)
+	}
 }
 
 func (d *Daemon) handlePhonePairCancel(client *wsClient, msg *protocol.PhonePairCancelMessage) {

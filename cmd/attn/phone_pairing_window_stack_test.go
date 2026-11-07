@@ -12,7 +12,7 @@ import (
 
 const relayRefused = 4403
 
-func startPairingHome(t *testing.T, vars ...string) (*testworld.Cloud, *testworld.Peer) {
+func startPairingStack(t *testing.T, vars ...string) (*testworld.Cloud, *testworld.Stack, *testworld.Peer) {
 	t.Helper()
 	cloud := testworld.StartCloud(t)
 	s := testworld.NewStack(t)
@@ -21,6 +21,12 @@ func startPairingHome(t *testing.T, vars ...string) (*testworld.Cloud, *testworl
 	app := s.App()
 	setPhoneAccess(t, app, true)
 	testworld.Await(app, protocol.EventPhonesUpdated, linkConnected)
+	return cloud, s, app
+}
+
+func startPairingHome(t *testing.T, vars ...string) (*testworld.Cloud, *testworld.Peer) {
+	t.Helper()
+	cloud, _, app := startPairingStack(t, vars...)
 	return cloud, app
 }
 
@@ -185,6 +191,85 @@ func TestEachProfileHasItsOwnPairingWindow(t *testing.T) {
 	if code := otherHolder.AwaitClosed(); code != relayRefused {
 		t.Fatalf("the second holder closed with %d, want the relay's %d", code, relayRefused)
 	}
+}
+
+func TestQuittingTheAppClosesItsPairingWindowsAndKeepsPairedPhones(t *testing.T) {
+	t.Parallel()
+	cloud, s, app := startPairingStack(t)
+	profile := app.SelectedProfile()
+	work := addProfile(t, app, "Work")
+
+	spent := openWindow(t, app, work.ID, "pair-work")
+	phone := testworld.NewPhone(t, cloud, "Work phone")
+	paired, err := phone.DialToPair(spent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := paired.Pair(spent); err != nil {
+		t.Fatal(err)
+	}
+	paired.Hello()
+
+	qr := openWindow(t, app, profile, "pair-home")
+	holder := holdSocket(t, cloud, qr)
+
+	app.Close()
+
+	expectLapsed(t, cloud, holder, qr)
+	paired.Send(map[string]any{"cmd": "ping"})
+	if _, err := paired.Next(); err != nil {
+		t.Fatalf("the paired phone was cut off when the app quit: %v", err)
+	}
+	resumed, err := phone.Dial(spent)
+	if err != nil {
+		t.Fatalf("the paired phone's later dial, with no token: %v", err)
+	}
+	if err := resumed.Resume(spent); err != nil {
+		t.Fatal(err)
+	}
+
+	back := s.App()
+	listed := testworld.Request[protocol.PhonesUpdatedMessage](back, protocol.PhonesGetMessage{Cmd: protocol.CmdPhonesGet}, protocol.EventPhonesUpdated, nil)
+	if len(listed.Offers) != 0 {
+		t.Fatalf("the app came back to live codes: %+v", listed.Offers)
+	}
+	if _, kept := pairingOf(listed, phone.DeviceID()); !kept {
+		t.Fatalf("the app came back without the paired phone: %+v", listed.Pairings)
+	}
+}
+
+func TestAClientLeavingEndsOnlyThePairingCodesItStillHolds(t *testing.T) {
+	t.Parallel()
+	cloud, s, leaving := startPairingStack(t)
+	profile := leaving.SelectedProfile()
+	work := addProfile(t, leaving, "Work")
+	staying := s.App()
+
+	replaced := openWindow(t, leaving, profile, "pair-replaced")
+	replacedHolder := holdSocket(t, cloud, replaced)
+	workQR := openWindow(t, leaving, work.ID, "pair-work")
+	workHolder := holdSocket(t, cloud, workQR)
+	kept := openWindow(t, staying, profile, "pair-kept")
+	if code := replacedHolder.AwaitClosed(); code != relayRefused {
+		t.Fatalf("the replaced code's socket closed with %d, want the relay's %d", code, relayRefused)
+	}
+
+	leaving.Close()
+	expectLapsed(t, cloud, workHolder, workQR)
+
+	socket, err := testworld.NewPhone(t, cloud, "Test iPhone").DialToPair(kept)
+	if err != nil {
+		t.Fatalf("the code another client holds closed with the client that left: %v", err)
+	}
+	if err := socket.Pair(kept); err != nil {
+		t.Fatal(err)
+	}
+	socket.Hello()
+
+	third := openWindow(t, staying, work.ID, "pair-third")
+	thirdHolder := holdSocket(t, cloud, third)
+	staying.Close()
+	expectLapsed(t, cloud, thirdHolder, third)
 }
 
 func TestAPhoneWithoutARelayTokenIsToldToUpdate(t *testing.T) {

@@ -94,6 +94,7 @@ type Offer struct {
 	ExpiresAt time.Time
 	QR        string
 	secret    []byte
+	holder    any
 }
 
 const relayTokenLabel = "attn-cloud/v1 relay token"
@@ -195,14 +196,14 @@ func (l *Link) dropExpiredLocked() {
 	}
 }
 
-func (l *Link) Offer(profileID, profileName string) (Offer, error) {
+func (l *Link) Offer(profileID, profileName string, holder any) (Offer, error) {
 	homeID := l.cfg.Identity.HomeID()
 	if homeID == "" {
 		status := l.Status()
 		return Offer{}, fmt.Errorf("this home has not registered with Attn Cloud yet (%s); a QR code needs its home id", orWaiting(status.Error))
 	}
 	secret := randomBytes(32)
-	offer := &Offer{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(l.cfg.PairingLifetime), secret: secret}
+	offer := &Offer{ProfileID: profileID, PairingID: b64(randomBytes(9)), ExpiresAt: l.now().Add(l.cfg.PairingLifetime), secret: secret, holder: holder}
 	qr, _ := json.Marshal(QR{
 		V: 1, Cloud: l.cfg.CloudURL, HomeID: homeID, HomeName: l.cfg.HomeName,
 		HomeNoisePub: b64(l.cfg.Identity.NoiseKey.Public), ProfileID: profileID, ProfileName: profileName,
@@ -231,6 +232,22 @@ func (l *Link) Offer(profileID, profileName string) (Offer, error) {
 
 func (l *Link) CancelOffer(profileID string) {
 	if l.dropOffer(profileID) {
+		l.cfg.Home.Changed()
+		l.sendAllowlist()
+	}
+}
+
+func (l *Link) CancelOffersHeldBy(holder any) {
+	l.mu.Lock()
+	ended := false
+	for profile, offer := range l.offers {
+		if offer.holder == holder {
+			delete(l.offers, profile)
+			ended = true
+		}
+	}
+	l.mu.Unlock()
+	if ended {
 		l.cfg.Home.Changed()
 		l.sendAllowlist()
 	}
