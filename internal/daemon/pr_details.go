@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"sync"
+	"time"
 
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type prDetailFetches struct {
@@ -68,4 +70,39 @@ func (d *Daemon) fetchPRDetails(client *github.Client, id, repo string, number i
 	return d.prDetailFetches.acceptUnlessSuperseded(id, started, func() (bool, error) {
 		return d.store.UpdatePRDetails(id, details.Mergeable, details.MergeableState, details.CIStatus, details.ReviewStatus, details.HeadSHA, details.HeadBranch)
 	})
+}
+
+const launchFetchFreshFor = protocol.HeatHotInterval
+
+type launchFetch struct {
+	mu         sync.Mutex
+	running    bool
+	finishedAt time.Time
+}
+
+func (f *launchFetch) begin(now time.Time) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.running || (!f.finishedAt.IsZero() && now.Sub(f.finishedAt) < launchFetchFreshFor) {
+		return false
+	}
+	f.running = true
+	return true
+}
+
+func (f *launchFetch) end(askedEveryPR bool, now time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.running = false
+	if askedEveryPR {
+		f.finishedAt = now
+	}
+}
+
+func (d *Daemon) fetchPRDetailsOnConnect() {
+	if !d.launchFetch.begin(time.Now()) {
+		return
+	}
+	askedEveryPR := d.fetchAllPRDetails()
+	d.launchFetch.end(askedEveryPR, time.Now())
 }

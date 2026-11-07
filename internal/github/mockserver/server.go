@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"sync"
+	"time"
 )
 
 type RequestLog struct {
@@ -22,6 +23,8 @@ type Server struct {
 	requests []RequestLog
 	PRs      []MockPR
 	holds    map[string]*reviewsHold
+
+	rateLimitedUntil time.Time
 }
 
 type reviewsHold struct {
@@ -65,9 +68,18 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		Path:   r.URL.Path,
 		Body:   body,
 	})
+	rateLimitedUntil := s.rateLimitedUntil
 	s.mu.Unlock()
 
 	w.Header().Set("Content-Type", "application/json")
+
+	if !rateLimitedUntil.IsZero() {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(rateLimitedUntil.Unix(), 10))
+		w.WriteHeader(http.StatusForbidden)
+		json.NewEncoder(w).Encode(map[string]string{"message": "API rate limit exceeded"})
+		return
+	}
 
 	if r.URL.Path == "/search/issues" {
 		s.handleSearch(w, r)
@@ -187,6 +199,12 @@ func (s *Server) awaitReleaseOfHeld(path string) {
 	}
 	close(hold.held)
 	<-hold.release
+}
+
+func (s *Server) RateLimitUntil(resetAt time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.rateLimitedUntil = resetAt
 }
 
 func (s *Server) AddPR(pr MockPR) {

@@ -35,8 +35,6 @@ func (c *Client) GitHTTPSAuthorizationHeader() string {
 
 var ErrRateLimited = errors.New("GitHub rate limit exceeded")
 
-var ErrSelfRateLimited = errors.New("self-imposed rate limit exceeded")
-
 var ErrNoToken = errors.New("no GitHub token available")
 
 type RateLimitInfo struct {
@@ -90,8 +88,11 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 }
 
 func (c *Client) doRequestWithClient(ctx context.Context, httpClient *http.Client, method, path string, body interface{}) ([]byte, error) {
-	if !c.selfLimiter.Allow() {
-		return nil, ErrSelfRateLimited
+	if err := c.selfLimiter.Wait(ctx); err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return nil, cause
+		}
+		return nil, fmt.Errorf("waiting for attn's budget of %v GitHub requests per second, burst %d: %w", c.selfLimiter.Limit(), c.selfLimiter.Burst(), err)
 	}
 
 	requestURL := path

@@ -413,9 +413,6 @@ func (d *Daemon) broadcastSessionPullRequestLimits(limits map[string]time.Time) 
 }
 
 func hostRateLimitReset(host sessionPRHost, resource string, err error) (time.Time, bool) {
-	if errors.Is(err, github.ErrSelfRateLimited) {
-		return time.Now().Add(time.Minute), true
-	}
 	if !errors.Is(err, github.ErrRateLimited) {
 		return time.Time{}, false
 	}

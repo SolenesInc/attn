@@ -569,7 +569,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	}
 	d.nudgeDesktopTileContent()
 
-	d.life.Go("fetchAllPRDetails", d.fetchAllPRDetails)
+	d.life.Go("fetchPRDetailsOnConnect", d.fetchPRDetailsOnConnect)
 }
 
 const defaultWSWriteTimeout = 10 * time.Second

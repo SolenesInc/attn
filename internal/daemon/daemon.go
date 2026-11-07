@@ -126,6 +126,7 @@ type Daemon struct {
 	gardenSeeds         store.DocumentsMemo[gardenSeeds]
 	// Serializes PR fetches with review-request edge reconciliation.
 	prRefreshMu             sync.Mutex
+	launchFetch             launchFetch
 	prDetailFetches         prDetailFetches
 	automationMu            sync.Mutex
 	automationLaunchResults sync.Map
@@ -3649,11 +3650,6 @@ func (d *Daemon) doPRPoll() {
 				skippedHosts[host] = true
 				continue
 			}
-			if errors.Is(err, github.ErrSelfRateLimited) {
-				d.logf("PR poll: self-rate-limited for %s, skipping", host)
-				skippedHosts[host] = true
-				continue
-			}
 			d.logf("PR poll error for %s: %v", host, err)
 			skippedHosts[host] = true
 			continue
@@ -3767,11 +3763,6 @@ func (d *Daemon) doDetailRefresh() {
 				}
 				continue
 			}
-			if errors.Is(err, github.ErrSelfRateLimited) {
-				d.logf("Detail refresh: %s self-rate-limited, stopping host refresh", host)
-				limitedHosts[host] = time.Now().Add(60 * time.Second)
-				continue
-			}
 			d.logf("Failed to refresh details for %s: %v", pr.ID, err)
 			continue
 		}
@@ -3810,14 +3801,14 @@ func (d *Daemon) publishPRDetailsChanged(origin string, ids []string) {
 	})
 }
 
-func (d *Daemon) fetchAllPRDetails() {
+func (d *Daemon) fetchAllPRDetails() (askedEveryPR bool) {
 	if !d.githubAvailable() {
-		return
+		return false
 	}
 
 	allPRs := d.store.ListPRs("")
 	if len(allPRs) == 0 {
-		return
+		return false
 	}
 
 	d.logf("App launch: fetching details for %d PRs", len(allPRs))
@@ -3870,11 +3861,6 @@ func (d *Daemon) fetchAllPRDetails() {
 				}
 				continue
 			}
-			if errors.Is(err, github.ErrSelfRateLimited) {
-				d.logf("App launch: %s self-rate-limited, stopping host fetch loop", host)
-				limitedHosts[host] = time.Now().Add(60 * time.Second)
-				continue
-			}
 			d.logf("Failed to fetch details for %s: %v", pr.ID, err)
 			continue
 		}
@@ -3899,6 +3885,7 @@ func (d *Daemon) fetchAllPRDetails() {
 	}
 
 	d.publishPRDetailsChanged("App launch", changedIDs)
+	return len(limitedHosts) == 0
 }
 
 func (d *Daemon) handleInjectTestPR(conn net.Conn, msg *protocol.InjectTestPRMessage) {
@@ -4091,10 +4078,6 @@ func (d *Daemon) fetchPRDetailsImmediate(prID string) {
 			if info := client.GetRateLimit("core"); info != nil {
 				d.broadcastRateLimited("core", info.ResetAt)
 			}
-			return
-		}
-		if errors.Is(err, github.ErrSelfRateLimited) {
-			d.logf("Immediate fetch for %s: self-rate-limited", prID)
 			return
 		}
 		d.logf("Immediate fetch failed for %s: %v", prID, err)
