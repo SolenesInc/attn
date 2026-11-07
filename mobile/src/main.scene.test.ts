@@ -564,6 +564,24 @@ describe('waking an asleep member from the phone', () => {
     )
   })
 
+  it('names the member, not the session title, at the top of the session a crew row opens', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [{ ...member('s-keel', 'keel', 'Keel', 'idle'), terminalId: 't-keel' }],
+          asleepCrew: [],
+        }),
+      ),
+      ...openSession('Keel', 't-keel'),
+      Scene.expect(Scene.role('button', { name: '‹ Queue' })).toExist(),
+      Scene.expect(Scene.text('Keel')).toExist(),
+      Scene.expect(Scene.text('Keel day')).not.toExist(),
+    )
+  })
+
   it('sends one wake however many times the waking row is tapped', () => {
     const tapped = update(paired(personal), asleepHome).model
     const waking = update(tapped, Message.ClickedAsleepMember({ pairingId: personal.id, crewMember: 'keel' }))

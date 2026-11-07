@@ -412,10 +412,23 @@ func (d *Daemon) homeGatewayRoster(profileID string) homeGatewayRoster {
 
 func (d *Daemon) homeGatewayCrewWake(conn *homeGatewayConn, command homegateway.HomeGatewayCrewWake) {
 	result := homegateway.HomeGatewayCrewWakeResult{Event: "crew_wake_result", RequestID: command.RequestID, CrewMember: command.CrewMember}
-	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: crew.KeyRefPrefix + command.CrewMember, ProfileID: protocol.Ptr(conn.phone.ProfileID)}); err != nil {
+	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: crew.KeyRefPrefix + command.CrewMember, ProfileID: protocol.Ptr(conn.phone.ProfileID)}, crewWakeRequest{RequestedBy: d.phoneName(conn.phone)}); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
 	_ = homeGatewaySend(conn, result)
+}
+
+func (d *Daemon) phoneName(phone HomeGatewayPhone) string {
+	pairings, err := d.store.PhonePairings()
+	if err != nil {
+		d.logf("phones: reading the name of phone %s: %v", phone.PhoneID, err)
+	}
+	for _, pairing := range pairings {
+		if pairing.PhoneID == phone.PhoneID && pairing.ProfileID == phone.ProfileID {
+			return pairing.Name
+		}
+	}
+	return "a phone"
 }
 
 func homeGatewaySend(conn *homeGatewayConn, message any) error {

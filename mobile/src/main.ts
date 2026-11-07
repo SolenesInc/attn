@@ -1921,7 +1921,9 @@ const sessionView = (model: Model, h: HtmlBuilder<Message>): Html => {
       h.div(
         [h.Class('session-title')],
         [
-          h.div([h.Class('row-title')], [session.title || session.id]),
+          session.crewMemberName
+            ? crewTitle(session.crewMemberName, session.chief, h)
+            : h.div([h.Class('row-title')], [session.title || session.id]),
           h.div(
             [h.Class('row-where')],
             [

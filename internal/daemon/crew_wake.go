@@ -192,23 +192,18 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, member crew.Member) {
 	}
 }
 
-func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeAskedFor(msg, false)
-}
-
-func (d *Daemon) crewWakeAskedFor(msg *protocol.CrewWakeMessage, userStarted bool) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
 	member, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		return nil, err
 	}
-	request := crewWakeRequest{UserStarted: userStarted, RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	return d.crewWakeDayWithChargeLocked(member.ID, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg)
+	result, err := d.crewWakeAsked(msg, crewWakeRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")})
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
 		return
@@ -217,7 +212,7 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAskedFor(msg, true)
+	result, err := d.crewWakeAsked(msg, crewWakeRequest{UserStarted: true})
 	var showErr error
 	if err == nil {
 		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))

@@ -230,7 +230,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent"))},
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent")), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
 	} {
-		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
+		if _, err := d.crewWakeAsked(msg, crewWakeRequest{}); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
 			t.Fatalf("wake %+v = %v, want a refusal naming profile Work", msg, err)
 		}
 	}
@@ -238,7 +238,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		t.Fatal("a refused wake spawned a session")
 	}
 
-	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))})
+	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))}, crewWakeRequest{})
 	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
 		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
 	}

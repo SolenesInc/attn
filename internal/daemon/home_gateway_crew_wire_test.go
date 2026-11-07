@@ -5,9 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/protocol/homegateway"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func (p *testPhone) sessionsFrameUntil(match func(homegateway.HomeGatewaySessions) bool) homegateway.HomeGatewaySessions {
@@ -200,5 +202,37 @@ func TestAHomeServesNoWakeToAPhoneOfAnOlderAPI(t *testing.T) {
 	phone.next("pong", &pong)
 	if got := crewSessionCount(t, cli); got != 0 {
 		t.Errorf("a wake from an api 7 phone left %d sessions, want none", got)
+	}
+}
+
+func TestTheDesktopHearsThatAPhoneWokeTheMemberAndWhichPhone(t *testing.T) {
+	cloud := testworld.StartCloud(t)
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	writeCrewHomes(t, w)
+	t.Setenv(config.CloudURLEnv, cloud.HomeURL)
+	w.start()
+	app := w.App()
+	setSetting(t, app, "phone_access_enabled", "true")
+	testworld.Await(app, protocol.EventPhonesUpdated, func(m protocol.PhonesUpdatedMessage) bool { return m.Link.State == protocol.PhoneLinkStateConnected })
+	paired := testworld.Request(app, protocol.PhonePairBeginMessage{Cmd: protocol.CmdPhonePairBegin, RequestID: "pair", ProfileID: app.SelectedProfile()},
+		protocol.EventPhonePairBeginResult, func(m protocol.PhonePairBeginResultMessage) bool { return m.RequestID == "pair" })
+	if !paired.Success {
+		t.Fatalf("phone_pair_begin: %s", protocol.Deref(paired.Error))
+	}
+	qr := testworld.ParsePhoneQR(t, paired.PairingCode.Qr)
+	socket, err := testworld.NewPhone(t, cloud, "Victor's iPhone").DialToPair(qr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := socket.Pair(qr); err != nil {
+		t.Fatal(err)
+	}
+	socket.Hello()
+
+	socket.Send(homegateway.HomeGatewayCrewWake{Cmd: "crew_wake", RequestID: "wake", CrewMember: "keel"})
+	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(m protocol.BackgroundLaunchMessage) bool { return m.Name == "Keel" })
+	w.Launched(string(arrival.SessionID))
+	if arrival.RequestedBy != "Victor's iPhone" {
+		t.Errorf("the desktop heard Keel's wake was requested by %q, want the phone that asked, Victor's iPhone", arrival.RequestedBy)
 	}
 }
