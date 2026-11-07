@@ -14,7 +14,6 @@ import './ShelfPeekPanel.css';
 const REFRESH_MS = 1000;
 const EDGE_PX = 8;
 const ANCHOR_GAP_PX = 6;
-const SIDEBAR_ROW_LIFT_PX = 60;
 
 function useStoppedAgentsRetainTypedReplies() {
   const { agentPaneById, sessionById } = useDesktopContext();
@@ -44,14 +43,9 @@ export function ShelfPeekPanel() {
   return <OpenPeek key={tile.leafId} tile={tile} anchor={peek.anchor} />;
 }
 
-function placeWithin(layer: DOMRect, anchor: ShelfPeekAnchor | null, width: number, height: number): CSSProperties {
-  let x = (layer.width - width) / 2;
-  let y = EDGE_PX;
-  if (anchor) {
-    const rightOfAnchor = anchor.right - layer.left <= 0;
-    x = rightOfAnchor ? EDGE_PX : anchor.left - layer.left;
-    y = rightOfAnchor ? anchor.top - layer.top - SIDEBAR_ROW_LIFT_PX : anchor.bottom - layer.top + ANCHOR_GAP_PX;
-  }
+function placeWithin(layer: DOMRect, anchor: ShelfPeekAnchor, width: number, height: number): CSSProperties {
+  const x = anchor.left - layer.left;
+  const y = anchor.bottom - layer.top + ANCHOR_GAP_PX;
   return {
     left: Math.max(EDGE_PX, Math.min(layer.width - width - EDGE_PX, x)),
     top: Math.max(EDGE_PX, Math.min(layer.height - height - EDGE_PX, y)),
@@ -59,7 +53,7 @@ function placeWithin(layer: DOMRect, anchor: ShelfPeekAnchor | null, width: numb
   };
 }
 
-function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor | null }) {
+function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor }) {
   const { desktopId, agentPaneById, sessionById, focusActiveLeaf } = useDesktopContext();
   const layer = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);

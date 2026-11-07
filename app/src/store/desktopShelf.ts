@@ -87,15 +87,13 @@ export interface DesktopRowActions {
 
 export interface ShelfPeekAnchor {
   left: number;
-  right: number;
-  top: number;
   bottom: number;
 }
 
 export interface ShelfPeek {
   desktopId: string;
   leafId: string;
-  anchor: ShelfPeekAnchor | null;
+  anchor: ShelfPeekAnchor;
 }
 
 interface DesktopShelfState {

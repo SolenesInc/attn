@@ -220,19 +220,6 @@ describe('Shelf peek', () => {
     expect(daemon.sentOf('terminal_read_text')).toEqual([]);
   });
 
-  it('opens from the sidebar row of an off-screen tile, and not from one on screen', async () => {
-    const daemon = await renderRow(NARROWEST_66);
-
-    movePointerOnto(screen.getByTestId('sidebar-session-s1'));
-    await advance(180);
-    expect(screen.queryByTestId('shelf-peek')).toBeNull();
-
-    movePointerOnto(screen.getByTestId('sidebar-session-s5'));
-    await advance(180);
-    await daemon.idle();
-    expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s5');
-  });
-
   it('says why when the text cannot be read', async () => {
     const daemon = await renderRow(NARROWEST_66);
     daemon.on('terminal_read_text', () => ({ event: 'terminal_read_text_result', success: false, error: 'host unreachable' }));
