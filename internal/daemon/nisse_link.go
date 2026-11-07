@@ -384,7 +384,11 @@ func (l *nisseLink) apply(c *nisse.Client, tree nisseTree) {
 		}
 		l.busy[tree.Conversation] = tree.Status
 	}
-	l.observe(l.holder(tree.Conversation), tree.Status, ended)
+	holder := l.holder(tree.Conversation)
+	if ended != nil && tree.Status == "idle" {
+		l.d.sessionMonitor(holder).RecordRunAnswer(ended.Said)
+	}
+	l.observe(holder, tree.Status, ended)
 }
 
 func (l *nisseLink) launchStarted(sessionID protocol.SessionID) {

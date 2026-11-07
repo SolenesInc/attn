@@ -63,6 +63,7 @@ func (m *Monitor) agentTurnLocked(action protocol.AgentTurnAction, now time.Time
 	if action == protocol.AgentTurnActionSettle {
 		withdrawn := !m.turn.RequestedAt.IsZero()
 		m.turn.RequestedAt = time.Time{}
+		m.runAskedForTurnLocked(false)
 		switch {
 		case m.turnOwedLocked() && !m.turnByAgentLocked():
 			return "", errors.New("this turn opened when you stopped, not with attn turn open; only the user settles it")
@@ -75,6 +76,7 @@ func (m *Monitor) agentTurnLocked(action protocol.AgentTurnAction, now time.Time
 		return protocol.AgentTurnOutcomeNotOpen, nil
 	}
 	m.turn.RequestedAt = now.UTC()
+	m.runAskedForTurnLocked(true)
 	switch {
 	case m.turn.SnoozedUntil.After(now):
 		return protocol.AgentTurnOutcomeSnoozed, nil

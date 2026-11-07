@@ -28,6 +28,7 @@ type runRecord struct {
 	OpenedTurn    bool   `json:"opened_turn"`
 	QuietStop     bool   `json:"quiet_stop"`
 	TurnRequested bool   `json:"turn_requested"`
+	TurnAfterStop string `json:"turn_after_stop"`
 	UserInputMs   *int64 `json:"user_input_ms"`
 	Approvals     int    `json:"approvals"`
 	Usage         string `json:"usage"`

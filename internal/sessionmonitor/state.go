@@ -118,7 +118,7 @@ func (m *Monitor) ApplyState(change Change) bool {
 			m.firstReportAt = time.Now()
 		}
 		deadline := m.turn.SnoozedUntil
-		stop := runStop{quiet: m.policy.QuietNotifications && m.notificationStopLocked(), turnRequested: !m.turn.RequestedAt.IsZero()}
+		stop := runStop{quiet: m.policy.QuietNotifications && m.notificationStopLocked()}
 		stop.openedTurn = m.openTurnLocked(time.Now(), m.evidence.IdleCompaction || stop.quiet)
 		if !deadline.IsZero() && m.turn.SnoozedUntil.IsZero() {
 			endedSnooze = deadline

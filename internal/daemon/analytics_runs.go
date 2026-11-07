@@ -16,7 +16,7 @@ func (h monitorHost) RunEnded(m *sessionmonitor.Monitor, run sessionmonitor.Run)
 	if err := d.appendAnalyticsAt(analytics.StreamRun, "run", string(session), run.EndedAt, d.runProps(session, run)); err != nil {
 		d.logf("analytics: %v", err)
 	}
-	if run.QuietStop && (!run.OpenedTurn || run.TurnRequested) {
+	if run.QuietStop && (run.TurnRequested || run.TurnAfterStop == sessionmonitor.TurnAfterStopNone) {
 		d.life.Go("quietStopVerdict", func() { d.recordQuietStopVerdict(m, session, run) })
 	}
 }
@@ -29,18 +29,19 @@ type runTokens struct {
 }
 
 type runProps struct {
-	StartedBy     sessionmonitor.RunStart  `json:"started_by"`
-	DurationMs    int64                    `json:"duration_ms"`
-	Ended         protocol.SessionState    `json:"ended"`
-	OpenedTurn    bool                     `json:"opened_turn"`
-	QuietStop     bool                     `json:"quiet_stop"`
-	TurnRequested bool                     `json:"turn_requested"`
-	UserInputMs   *int64                   `json:"user_input_ms,omitempty"`
-	Approvals     int                      `json:"approvals"`
-	Usage         sessionmonitor.RunUsage  `json:"usage"`
-	Tokens        *runTokens               `json:"tokens,omitempty"`
-	USD           *float64                 `json:"usd,omitempty"`
-	Session       *analytics.SessionTraits `json:"session,omitempty"`
+	StartedBy     sessionmonitor.RunStart      `json:"started_by"`
+	DurationMs    int64                        `json:"duration_ms"`
+	Ended         protocol.SessionState        `json:"ended"`
+	OpenedTurn    bool                         `json:"opened_turn"`
+	QuietStop     bool                         `json:"quiet_stop"`
+	TurnRequested bool                         `json:"turn_requested"`
+	TurnAfterStop sessionmonitor.TurnAfterStop `json:"turn_after_stop"`
+	UserInputMs   *int64                       `json:"user_input_ms,omitempty"`
+	Approvals     int                          `json:"approvals"`
+	Usage         sessionmonitor.RunUsage      `json:"usage"`
+	Tokens        *runTokens                   `json:"tokens,omitempty"`
+	USD           *float64                     `json:"usd,omitempty"`
+	Session       *analytics.SessionTraits     `json:"session,omitempty"`
 }
 
 func (d *Daemon) runProps(session protocol.SessionID, run sessionmonitor.Run) runProps {
@@ -51,6 +52,7 @@ func (d *Daemon) runProps(session protocol.SessionID, run sessionmonitor.Run) ru
 		OpenedTurn:    run.OpenedTurn,
 		QuietStop:     run.QuietStop,
 		TurnRequested: run.TurnRequested,
+		TurnAfterStop: run.TurnAfterStop,
 		Approvals:     run.Approvals,
 		Usage:         run.Usage,
 	}

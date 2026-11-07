@@ -5,5 +5,5 @@ change: >
   stopped on something you needed to read. It asks the small model that judges
   session states, once per stop, at about $0.0012 per call, and stores only the
   answer. This measures how often such stops hide results, and it never opens a
-  turn. Run records also say whether the agent asked for your turn and when you
-  first typed during the run.
+  turn. Run records also say whether the agent asked for your turn, whether your
+  queue shows the agent after the stop, and when you first typed during the run.

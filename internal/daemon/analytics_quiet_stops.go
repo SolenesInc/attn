@@ -43,6 +43,8 @@ func (d *Daemon) judgeQuietStop(m *sessionmonitor.Monitor, run sessionmonitor.Ru
 	}
 	message, err := m.RunLastMessage(run, quietStopMessageMaxChars)
 	switch {
+	case errors.Is(err, sessionmonitor.ErrRunMessageUnavailable):
+		return quietStopProps{Verdict: quietStopFailed, Failure: "message_unavailable"}
 	case err != nil:
 		d.logf("quiet stop verdict: session=%s transcript: %v", m.Session(), err)
 		return quietStopProps{Verdict: quietStopFailed, Failure: "transcript"}

@@ -425,6 +425,7 @@ func (d *Daemon) handlePluginClassifyStop(plugin *pluginConnection, msg jsonRPCM
 		return
 	}
 	session := d.store.Get(params.SessionID)
+	d.sessionMonitor(params.SessionID).RecordRunAnswer(text)
 	id := msg.ID
 	d.life.Go("classifyPluginStop", func() {
 		verdict, err := d.classifyPluginStop(session, text)

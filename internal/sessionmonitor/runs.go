@@ -1,6 +1,7 @@
 package sessionmonitor
 
 import (
+	"errors"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,6 +28,16 @@ const (
 	RunUsageIncomplete  RunUsage = "incomplete"
 )
 
+type TurnAfterStop string
+
+const (
+	TurnAfterStopOwed    TurnAfterStop = "owed"
+	TurnAfterStopSnoozed TurnAfterStop = "snoozed"
+	TurnAfterStopNone    TurnAfterStop = "none"
+)
+
+var ErrRunMessageUnavailable = errors.New("the harness reported no answer and the session has no transcript")
+
 type Run struct {
 	StartedBy     RunStart
 	StartedAt     time.Time
@@ -35,6 +46,8 @@ type Run struct {
 	OpenedTurn    bool
 	QuietStop     bool
 	TurnRequested bool
+	TurnAfterStop TurnAfterStop
+	Answer        *string
 	UserInputAt   time.Time
 	Approvals     int
 	Usage         RunUsage
@@ -49,9 +62,8 @@ type trackedRun struct {
 }
 
 type runStop struct {
-	openedTurn    bool
-	quiet         bool
-	turnRequested bool
+	openedTurn bool
+	quiet      bool
 }
 
 type runRecorder struct {
@@ -94,7 +106,7 @@ func (m *Monitor) observeRunLocked(previous protocol.SessionState, cause Cause, 
 		}
 	default:
 		open.EndedAt, open.Ended, open.OpenedTurn = now, phase, stop.openedTurn
-		open.QuietStop, open.TurnRequested = stop.quiet, stop.turnRequested
+		open.QuietStop, open.TurnAfterStop = stop.quiet, m.turnAfterStopLocked(now)
 		m.runs.open = nil
 		m.runs.ended = append(m.runs.ended, *open)
 		if watcher := m.transcriptWatch; watcher == nil || watcherStopped(watcher) {
@@ -127,6 +139,34 @@ func (m *Monitor) runStartedDuringPlacementLocked() {
 func (m *Monitor) runHeardUserLocked(now time.Time) {
 	if open := m.runs.open; open != nil && open.UserInputAt.IsZero() {
 		open.UserInputAt = now
+	}
+}
+
+func (m *Monitor) turnAfterStopLocked(now time.Time) TurnAfterStop {
+	switch {
+	case m.turnOwedLocked():
+		return TurnAfterStopOwed
+	case m.turn.SnoozedUntil.After(now):
+		return TurnAfterStopSnoozed
+	default:
+		return TurnAfterStopNone
+	}
+}
+
+func (m *Monitor) runAskedForTurnLocked(asked bool) {
+	if open := m.runs.open; open != nil {
+		open.TurnRequested = asked
+	}
+}
+
+func (m *Monitor) RecordRunAnswer(answer string) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if open := m.runs.open; open != nil {
+		open.Answer = &answer
 	}
 }
 
@@ -196,7 +236,15 @@ func (m *Monitor) Agent() protocol.SessionAgent {
 }
 
 func (m *Monitor) RunLastMessage(run Run, maxChars int) (string, error) {
-	message, err := transcript.ExtractLastAssistantMessageBetween(m.transcriptPathFor(""), maxChars, run.StartedAt, run.EndedAt)
+	if run.Answer != nil {
+		message := statemarker.Strip(*run.Answer)
+		return message[max(0, len(message)-maxChars):], nil
+	}
+	path := m.transcriptPathFor("")
+	if path == "" {
+		return "", ErrRunMessageUnavailable
+	}
+	message, err := transcript.ExtractLastAssistantMessageBetween(path, maxChars, run.StartedAt, run.EndedAt)
 	return statemarker.Strip(message), err
 }
 
