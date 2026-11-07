@@ -75,7 +75,7 @@ func (d *Daemon) crewApplyTarget(asker crewAsker, name string) (crew.Member, *pr
 
 func (d *Daemon) crewApplyInPlace(member crew.Member, sessionID protocol.SessionID) (*protocol.CrewApplyResult, error) {
 	d.clearCrewSwitching(member.ID)
-	if err := d.reloadSessionForClient(sessionID, 80, 24); err != nil {
+	if err := d.reloadSession(sessionID, 80, 24); err != nil {
 		return nil, fmt.Errorf("reload %s's session %s: %w", member.Name, shortSessionID(sessionID), err)
 	}
 	prompt := prompts.RenderText("crew", "settings-applied", prompts.Values{"charter_path": member.CharterPath(d.dataRoot)})

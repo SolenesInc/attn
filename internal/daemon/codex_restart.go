@@ -362,7 +362,7 @@ func (r *codexShared) relaunchStarting(starting codexStarting) {
 	}
 	info, err := provider.SessionInfo(context.Background(), starting.terminal)
 	if err == nil {
-		err = r.d.reloadSessionOwing(starting.session, int(info.Cols), int(info.Rows), r.d.sessionMonitor(starting.session).OwedInitialPrompt())
+		err = r.d.reloadSession(starting.session, int(info.Cols), int(info.Rows))
 	}
 	if err != nil {
 		r.d.logf("shared Codex: relaunching terminal %s, whose Codex showed no conversation when its app-server restarted: %v", starting.terminal, err)

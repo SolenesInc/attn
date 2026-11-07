@@ -398,6 +398,29 @@ func TestRestartNowRelaunchesAnAutomationStillBootingAndItsCodexTakesThePrompt(t
 	}
 }
 
+func TestReloadingAnAutomationStillBootingCarriesItsPromptToTheRelaunchedCodex(t *testing.T) {
+	w, app := sharedCodexAutomation(t)
+	boot := w.HoldNextBoot()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "booting"})
+	boot.Await()
+	defer boot.Release()
+	answered := awaitAutomationRunResult(app, "booting")
+	if answered.Run == nil || answered.Run.State != "pending" {
+		t.Fatalf("while its Codex boots the run answered %s, want pending", describeRunAnswer(answered))
+	}
+	session := string(protocol.Deref(answered.Run.SessionID))
+
+	launchIntentReload(t, app, session)
+	relaunched := w.Launched(session)
+	if prompt := relaunched.Prompted(); !strings.Contains(prompt, "Check the code.") {
+		t.Fatalf("the reloaded Codex took %q, want the automation's prompt", prompt)
+	}
+	run := awaitOnlyRunSettled(t, w, app)
+	if run.State != "delivered" {
+		t.Fatalf("the reloaded automation is %s with %q, want delivered", run.State, protocol.Deref(run.LastError))
+	}
+}
+
 func TestRestartNowDuringAnAutomationsOpeningWriteNeverLeavesItPending(t *testing.T) {
 	w, app := sharedCodexAutomation(t)
 	arrived, _ := w.CodexServer().HoldNextInjectReply()

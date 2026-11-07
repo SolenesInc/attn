@@ -57,7 +57,7 @@ func (d *Daemon) handleAgentReload(conn net.Conn, msg *protocol.AgentReloadMessa
 	for _, target := range sessions {
 		err := d.mayActOnSession(caller.ID, target, "reload")
 		if err == nil {
-			err = d.reloadSessionForClient(target.ID, 80, 24)
+			err = d.reloadSession(target.ID, 80, 24)
 		}
 		outcome := protocol.AgentReloadOutcome{Target: string(target.ID), SessionID: protocol.Ptr(target.ID), Success: err == nil}
 		if err != nil {
