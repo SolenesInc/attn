@@ -636,7 +636,7 @@ func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy inte
 
 func (d *Daemon) awaitSpawnHarness(msg *protocol.SpawnSessionMessage) {
 	if protocol.Deref(msg.Host) == "" {
-		d.awaitPluginHarness(msg.Agent)
+		d.awaitHarness(msg.Agent)
 	}
 }
 

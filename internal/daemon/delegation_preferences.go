@@ -289,7 +289,7 @@ func (d *Daemon) resolveDelegationPreferences(msg *protocol.DelegateMessage, hos
 		return nil, err
 	}
 	s := resolved.Selection
-	d.awaitPluginHarness(s.Harness)
+	d.awaitHarness(s.Harness)
 	if _, err := d.resolveDelegationAgent("", &s.Harness); err != nil {
 		return nil, err
 	}

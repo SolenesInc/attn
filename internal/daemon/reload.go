@@ -239,7 +239,7 @@ func (d *Daemon) reloadSessionOwing(sessionID protocol.SessionID, cols, rows int
 		return errors.New("session not found")
 	}
 	if session := d.store.Get(sessionID); session != nil {
-		d.awaitPluginHarness(session.Agent)
+		d.awaitHarness(session.Agent)
 	}
 	resume, err := d.reloadLiveOrPlanResume(sessionID, cols, rows, owedPrompt)
 	if err != nil || resume == nil {

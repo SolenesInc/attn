@@ -566,7 +566,7 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d *Daemon) sendInitialState(client *wsClient) {
-	reportsChecking := d.capturingInBackground()
+	reportsChecking := d.capturingLoginEnv()
 	state := d.currentStateProjection()
 	event := &protocol.InitialStateMessage{
 		TerminalBindings:       d.terminals().Bindings(),
@@ -592,7 +592,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 	d.fillInitialMigrationPhase(event)
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
 	d.sendInitialArrangement(client, event)
-	if reportsChecking && !d.capturingInBackground() {
+	if reportsChecking && !d.capturingLoginEnv() {
 		d.publishHarnessAvailability()
 	}
 	d.nudgeDesktopTileContent()

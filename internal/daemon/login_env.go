@@ -98,10 +98,7 @@ func (d *Daemon) launchEnvUntilStop() []string {
 	return env
 }
 
-func (d *Daemon) capturingInBackground() bool {
-	if !d.backgroundLoginEnv {
-		return false
-	}
+func (d *Daemon) capturingLoginEnv() bool {
 	_, capturing := d.loginEnv.Peek()
 	return capturing
 }
@@ -111,9 +108,12 @@ func (d *Daemon) finishLoginEnvCapture() {
 	if d.stopping() {
 		return
 	}
-	d.publishHarnessAvailability()
 	d.ensureAvailableAgentSkills()
-	d.startDiscoveredPlugins()
+	d.publishHarnessAvailability()
+	if d.startDiscoveredPlugins() == 0 {
+		close(d.pluginStartEnded)
+		return
+	}
 	limit := d.clock.NewTimer(PluginStartLimitTimer, pluginStartLimit)
 	defer limit.Stop()
 	select {
@@ -123,11 +123,16 @@ func (d *Daemon) finishLoginEnvCapture() {
 	}
 }
 
-// awaitPluginHarness holds a launch that names a harness no plugin has registered yet, until a plugin registers it or the
-// plugins started after the capture have had pluginStartLimit to do so. The caller then looks the harness up as usual.
-func (d *Daemon) awaitPluginHarness(agent string) {
+// awaitHarness holds a launch until the daemon can answer whether its harness exists: until the capture ends, and for a harness
+// no plugin has registered yet, until a plugin registers it or the plugins started after the capture have had pluginStartLimit.
+// The caller then looks the harness up as usual.
+func (d *Daemon) awaitHarness(agent string) {
 	agent = strings.TrimSpace(strings.ToLower(agent))
-	if !d.backgroundLoginEnv || agent == "" || agent == protocol.AgentShellValue || agentdriver.Get(agent) != nil {
+	if agent == "" || agent == protocol.AgentShellValue {
+		return
+	}
+	d.launchEnvUntilStop()
+	if agentdriver.Get(agent) != nil {
 		return
 	}
 	for {

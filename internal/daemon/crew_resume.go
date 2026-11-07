@@ -17,7 +17,7 @@ func (d *Daemon) reviveMembersInterruptedSession(memberID string) bool {
 	if session == nil || session.State != protocol.SessionStateRecoverable {
 		return false
 	}
-	d.awaitPluginHarness(string(session.Agent))
+	d.awaitHarness(string(session.Agent))
 	if !d.agentAvailable(string(session.Agent)) {
 		return false
 	}

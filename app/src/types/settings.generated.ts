@@ -15,7 +15,6 @@ export const BoolSetting = {
   analyticsEnabled: "analytics.enabled",
   directAgentLaunchEnabled: "direct_agent_launch_enabled",
   ptySharedHostEnabled: "pty_shared_host_enabled",
-  backgroundLoginEnvEnabled: "background_login_env_enabled",
   queueShowHiddenSessions: "queue_show_hidden_sessions",
   queueQuietNotifications: "queue_quiet_notifications",
   analyticsSharingEnabled: "analytics.sharing_enabled",
@@ -76,5 +75,4 @@ export const FEATURES: readonly Feature[] = [
   { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used on this home and its outposts. Nothing is sent.", group: "Data", timing: "", stage: "experimental", since: "2026-10-24", search: "telemetry vents record" },
   { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-15", search: "memory launcher" },
   { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
-  { key: "background_login_env_enabled", name: "Background login environment", summary: "Answer clients while the login shell runs, instead of waiting for it before listening.", group: "Under the hood", timing: "Starts the next time attn's daemon restarts.", stage: "experimental", since: "2026-11-04", search: "startup shell environment" },
 ];

@@ -120,7 +120,7 @@ func (d *Daemon) reapStrandedPluginRuntimes() {
 	)
 }
 
-func (d *Daemon) startDiscoveredPlugins() {
+func (d *Daemon) startDiscoveredPlugins() (discovered int) {
 	catalog, issues := discoverPluginManifests(d.pluginDir)
 	d.logf("plugin discovery user_dir=%s catalog=%d issues=%d", d.pluginDir, len(catalog), len(issues))
 	for _, issue := range issues {
@@ -132,6 +132,7 @@ func (d *Daemon) startDiscoveredPlugins() {
 			d.logf("plugin %s failed to start: %v", manifest.Name, err)
 		}
 	}
+	return len(catalog)
 }
 
 func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {

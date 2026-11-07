@@ -127,15 +127,6 @@ var (
 		Since:   "2026-09-04",
 		Search:  "terminal hosting pty backend rust workers memory",
 	})
-	BackgroundLoginEnvEnabled = feature("background_login_env_enabled", "Answer clients while the login shell runs, instead of waiting for it before listening. Takes effect at the next daemon start: true or false.", Info{
-		Name:    "Background login environment",
-		Summary: "Answer clients while the login shell runs, instead of waiting for it before listening.",
-		Group:   UnderTheHood,
-		Applies: NextDaemonStart,
-		Stage:   Experimental,
-		Since:   "2026-11-04",
-		Search:  "startup shell environment",
-	})
 )
 
 var (

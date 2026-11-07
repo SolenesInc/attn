@@ -288,7 +288,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	if agent == "" {
 		agent = member.LaunchAgent()
 	}
-	d.awaitPluginHarness(agent)
+	d.awaitHarness(agent)
 	if beforeWake != nil {
 		if err := beforeWake(); err != nil {
 			return nil, err

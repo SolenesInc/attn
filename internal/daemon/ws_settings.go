@@ -349,7 +349,7 @@ const (
 )
 
 func (d *Daemon) harnessAvailability(driver agentdriver.Driver) harnessAvailability {
-	if d.capturingInBackground() {
+	if d.capturingLoginEnv() {
 		return harnessChecking
 	}
 	if _, err := d.machineAgentExecutable(driver, ""); err != nil {

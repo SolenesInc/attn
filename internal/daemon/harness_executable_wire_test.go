@@ -39,9 +39,7 @@ func TestHarnessesOnTheLoginPathServeLaunchAndHeadlessWork(t *testing.T) {
 			w.start()
 			app := w.App()
 			name := string(harness)
-			if available := app.Initial.Settings[name+"_available"]; available != "true" {
-				t.Fatalf("%s is available only in the login shell, got available=%q", name, available)
-			}
+			awaitAgentAvailable(app, name)
 			models := harnessCatalog(app, name, false)
 			if !models.Success || len(models.Models) == 0 {
 				t.Fatalf("%s model discovery = %+v", name, models)

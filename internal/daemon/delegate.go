@@ -344,7 +344,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	} else if existingSession != nil {
 		sourceAgent = existingSession.Agent
 	}
-	d.awaitPluginHarness(delegationAgentName(sourceAgent, msg.Agent))
+	d.awaitHarness(delegationAgentName(sourceAgent, msg.Agent))
 	agent, err := d.resolveDelegationAgent(sourceAgent, msg.Agent)
 	if err != nil {
 		return nil, err

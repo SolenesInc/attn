@@ -528,14 +528,9 @@ func (l *nisseLink) recoverProcesses(ctx context.Context) {
 	if len(l.sessions()) == 0 {
 		return
 	}
-	reconnect := func() {
+	l.d.life.Go("nisseReconnect", func() {
 		if _, err := l.ensureServer(ctx, nil); err != nil {
 			l.d.logf("nisse: reconnect to the Nisse server: %v", err)
 		}
-	}
-	if l.d.backgroundLoginEnv {
-		l.d.life.Go("nisseReconnect", reconnect)
-		return
-	}
-	reconnect()
+	})
 }

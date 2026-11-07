@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -17,8 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/testworld"
 )
-
-const loginEnvSetting = "background_login_env_enabled"
 
 type blockedLoginShell struct {
 	t        *testing.T
@@ -62,8 +62,12 @@ func (s *blockedLoginShell) block() {
 
 func (s *blockedLoginShell) release() {
 	s.t.Helper()
-	gate, err := os.OpenFile(s.gate, os.O_WRONLY, 0)
+	gate, err := os.OpenFile(s.gate, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if os.IsNotExist(err) {
+		return
+	}
+	if errors.Is(err, syscall.ENXIO) {
+		os.Remove(s.gate)
 		return
 	}
 	if err != nil {
@@ -85,11 +89,6 @@ func (s *blockedLoginShell) requireOneCapture() {
 	}
 }
 
-func answerBeforeTheCapture(t *testing.T, w *world) {
-	t.Helper()
-	setSetting(t, w.App(), loginEnvSetting, "true")
-}
-
 func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	shell := installBlockedLoginShell(t, w)
@@ -100,7 +99,6 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	checkout := pluginsCheckout(t, w.Path("checkouts", "probe"), "probe", "0.1.0",
 		"#!/bin/sh\nprintf '%s %s' \"$ATTN_TEST_LOGIN_ONLY\" \"$PATH\" > '"+report+"'\nexec sleep 3600\n")
 	w.start()
-	answerBeforeTheCapture(t, w)
 	pluginsAct(t, w.App(), protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout}, "install", "probe")
 	if _, err := os.ReadFile(report); err != nil {
 		t.Fatal(err)
@@ -160,24 +158,10 @@ func TestTheDaemonAnswersWhileTheLoginShellRuns(t *testing.T) {
 	shell.requireOneCapture()
 }
 
-func TestWithoutTheSettingTheDaemonAnswersAfterTheLoginShell(t *testing.T) {
-	w := &world{World: prepareWorld(t, fakeagent.Claude)}
-	shell := installBlockedLoginShell(t, w)
-	w.start()
-	w.stop()
-	shell.block()
-	go shell.release()
-	w.start()
-	if got := w.App().Initial.Settings["claude_available"]; got != "true" {
-		t.Fatalf("initial_state carries claude_available=%v with the setting off, want true", got)
-	}
-}
-
 func TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer(t *testing.T) {
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	shell := installBlockedLoginShell(t, w)
 	w.start()
-	answerBeforeTheCapture(t, w)
 	shell.block()
 	w.stop()
 	built := w.PauseAt(pausepoint.DaemonInitialStateBuilt)
@@ -204,7 +188,6 @@ func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	shell := installBlockedLoginShell(t, w)
 	w.start()
-	answerBeforeTheCapture(t, w)
 	app := w.App()
 	session, nisse, server := nisseSession(t, w, app)
 	conversation := nisse.ConversationID
@@ -237,7 +220,6 @@ func TestADelegationToAPluginHarnessWaitsForItsPluginAcrossARestartDuringTheCapt
 			w := &world{World: prepareWorld(t)}
 			shell := installBlockedLoginShell(t, w)
 			w.start()
-			answerBeforeTheCapture(t, w)
 			app := w.App()
 			driver := connectDriver(t, w, "attn-plug", "plug", map[string]bool{"state_reporting": true, "initial_prompt": true})
 			awaitDriverAvailable(app, "plug")
@@ -309,7 +291,6 @@ func TestStoppingDuringTheCaptureDoesNotWaitForAChildHoldingTheShellsOutput(t *t
 	}
 	t.Setenv("SHELL", path)
 	w.start()
-	answerBeforeTheCapture(t, w)
 	w.stop()
 	if err := syscall.Mkfifo(gate, 0o600); err != nil {
 		t.Fatal(err)
@@ -362,7 +343,6 @@ func plugWorldBehindALoginShell(t *testing.T) (*world, *blockedLoginShell) {
 	writeCrewHomes(t, w)
 	shell := installBlockedLoginShell(t, w)
 	w.start()
-	answerBeforeTheCapture(t, w)
 	pluginDriverSettings(w.App(), "plug")
 	return w, shell
 }
@@ -514,6 +494,51 @@ func TestAnAgentNoPluginRegistersFailsWithItsErrorOnceThePluginsHadTheirTime(t *
 	}
 	if result, _, _ := w.RequestSpawn(app, unknown, w.Path("shop")); result.Success || protocol.Deref(result.Error) != want {
 		t.Fatalf("spawn of an unregistered agent after the limit = %+v, want %q at once", result, want)
+	}
+}
+
+func TestALaunchDuringTheCaptureOfAHarnessTheLoginShellDoesNotHaveIsRefused(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell := installBlockedLoginShell(t, w)
+	w.start()
+	if err := os.Remove(filepath.Join(w.Dir, "bin", "claude")); err != nil {
+		t.Fatal(err)
+	}
+	shell.block()
+	w.restart()
+
+	spawned := make(chan protocol.SpawnResultMessage, 1)
+	go func() {
+		result, _, _ := w.RequestSpawn(w.App(), fakeagent.Claude, w.Path("shop"))
+		spawned <- result
+	}()
+	shell.release()
+	if result := <-spawned; result.Success || !strings.Contains(protocol.Deref(result.Error), `agent "claude" is not available`) {
+		t.Fatalf("spawn of a missing harness during the capture = %+v, want it refused", result)
+	}
+}
+
+func TestWithNoPluginInstalledAnUnknownAgentFailsAsSoonAsTheCaptureEnds(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell := installBlockedLoginShell(t, w)
+	w.start()
+	shell.block()
+	w.restart()
+
+	spawned := make(chan protocol.SpawnResultMessage, 1)
+	go func() {
+		result, _, _ := w.RequestSpawn(w.App(), fakeagent.Harness("no-such-harness"), w.Path("shop"))
+		spawned <- result
+	}()
+	shell.release()
+	select {
+	case result := <-spawned:
+		want := `agent "no-such-harness" is not available`
+		if result.Success || protocol.Deref(result.Error) != want {
+			t.Fatalf("spawn of an unknown agent = %+v, want %q", result, want)
+		}
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatalf("the spawn of an unknown agent still waits for plugins after the capture, with none installed")
 	}
 }
 

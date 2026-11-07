@@ -261,8 +261,6 @@ type Daemon struct {
 	loginEnv         *loginEnv
 	pluginStartEnded chan struct{}
 
-	backgroundLoginEnv bool
-
 	terminalThemeMu sync.Mutex
 	terminalTheme   pty.TerminalTheme
 
@@ -673,16 +671,11 @@ func (d *Daemon) Start() error {
 		}
 		d.clientToken = token
 	}
-	d.backgroundLoginEnv = d.on(setting.BackgroundLoginEnvEnabled)
 	if err := d.dropStaleCopy(); err != nil {
 		d.logf("drop the copy of terminals run for another home: %v", err)
 	}
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
-	if !d.backgroundLoginEnv {
-		_, _ = d.loginEnv.Wait(d.life.Context())
-		d.ensureAvailableAgentSkills()
-	}
 	pausepoint.At(pausepoint.DaemonEnrollmentLoaded)
 	d.copyImagesOfAsksOpenedBeforeImagesTravelled()
 	if err := d.recoverQuickCaptureAssets(); err != nil {
@@ -732,11 +725,7 @@ func (d *Daemon) Start() error {
 		d.startSessionMonitor(session.ID)
 	}
 	d.reapStrandedPluginRuntimes()
-	if d.backgroundLoginEnv {
-		d.life.Go("finishLoginEnvCapture", d.finishLoginEnvCapture)
-	} else {
-		d.startDiscoveredPlugins()
-	}
+	d.life.Go("finishLoginEnvCapture", d.finishLoginEnvCapture)
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 

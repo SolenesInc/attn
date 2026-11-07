@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -95,6 +96,8 @@ func TestLauncherReadsRunOnTheNamedOutpost(t *testing.T) {
 		}
 		return harnesses
 	}
+	awaitAgentAvailable(outpostApp, fakeagent.Codex)
+	awaitAgentAvailable(app, fakeagent.Claude)
 	if onOutpostHarnesses := available("catalog-outpost", host); !onOutpostHarnesses["codex"] || onOutpostHarnesses["claude"] {
 		t.Errorf("agent_catalog on the outpost = %v; want codex and not claude", onOutpostHarnesses)
 	}
