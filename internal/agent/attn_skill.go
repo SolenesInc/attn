@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/toolhome"
 )
@@ -161,12 +162,14 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 	if err != nil || !info.IsDir() {
 		return false, nil
 	}
+	var checkedFiles, dirs []string
 	attnInstalledAll := true
 	err = filepath.WalkDir(skillDir, func(file string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if entry.IsDir() {
+			dirs = append(dirs, file)
 			return nil
 		}
 		if !entry.Type().IsRegular() {
@@ -185,6 +188,7 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 			attnInstalledAll = false
 			return fs.SkipAll
 		}
+		checkedFiles = append(checkedFiles, file)
 		return nil
 	})
 	if err != nil {
@@ -193,8 +197,19 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 	if !attnInstalledAll {
 		return false, nil
 	}
-	if err := os.RemoveAll(skillDir); err != nil {
-		return false, fmt.Errorf("remove the retired attn skill at %s: %w", skillDir, err)
+	pausepoint.At(pausepoint.RetiredSkillChecked)
+	for _, file := range checkedFiles {
+		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("remove the retired attn skill file %s: %w", file, err)
+		}
+	}
+	for _, dir := range slices.Backward(dirs) {
+		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+			if entries, readErr := os.ReadDir(dir); readErr == nil && len(entries) > 0 {
+				return false, nil
+			}
+			return false, fmt.Errorf("remove the retired attn skill directory %s: %w", dir, err)
+		}
 	}
 	return true, nil
 }

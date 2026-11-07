@@ -6,8 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 var attnSkillRoots = map[fakeagent.Harness]string{
@@ -105,6 +108,33 @@ func TestStartingAttnKeepsAUserChangedCopyOfTheOldSkillWhole(t *testing.T) {
 		checkSkillUnchanged(t, installedAttnSkill(toolHome, fakeagent.Claude), customized)
 		checkSkillUnchanged(t, installedAttnSkill(toolHome, fakeagent.Codex), withNote)
 	})
+}
+
+func TestSavingAHarnessExecutableKeepsAReferenceSavedWhileAttnRemovesTheOldSkill(t *testing.T) {
+	installed := skillAnEarlierVersionInstalled(t)
+	saved := map[string]string{"references/saved-during-cleanup.md": "A reference the user saved while attn was checking the old skill.\n"}
+	for h := range attnSkillRoots {
+		t.Run(string(h), func(t *testing.T) {
+			t.Setenv("ATTN_INSTANCE", "")
+			w := newWorld(t, fakeagent.Claude)
+			app := w.App()
+			skillDir := installedAttnSkill(os.Getenv("ATTN_TOOL_HOME"), h)
+			plantFiles(t, skillDir, installed)
+
+			checked := w.PauseAt(pausepoint.RetiredSkillChecked)
+			requestID := uuid.NewString()
+			app.Send(protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "claude_executable", Value: os.Getenv("ATTN_CLAUDE_EXECUTABLE"), RequestID: protocol.Ptr(requestID)})
+			checked.Await()
+			plantFiles(t, skillDir, saved)
+			checked.Release()
+			result := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+			if !protocol.Deref(result.Success) {
+				t.Fatalf("save claude_executable: %s", protocol.Deref(result.Error))
+			}
+
+			checkSkillUnchanged(t, skillDir, saved)
+		})
+	}
 }
 
 func TestStartingAttnKeepsASkillTheUserNamedAttn(t *testing.T) {

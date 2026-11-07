@@ -124,6 +124,7 @@ const (
 	PtySizeOwnerChecked            = "pty-size-owner-checked"
 	PtySizesReleased               = "pty-sizes-released"
 	HomeGatewayScreenCaptured      = "home-gateway-screen-captured"
+	RetiredSkillChecked            = "retired-skill-checked"
 )
 
 type armed struct {
