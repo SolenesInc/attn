@@ -69,6 +69,10 @@ export interface GhosttyModelOpRing {
   capture(): ModelFaultCapture;
 }
 
+type RetainedOp =
+  | Exclude<ModelOp, { kind: 'write' }>
+  | { t: number; kind: 'write'; start: number; length: number; oversized: Uint8Array | null };
+
 interface SnapshotState {
   cols: number;
   rows: number;
@@ -101,7 +105,9 @@ export function bytesToBase64(bytes: Uint8Array): string {
 
 export function createGhosttyModelOpRing(options?: { now?: () => number }): GhosttyModelOpRing {
   const now = options?.now ?? (() => Date.now());
-  const slots: Array<ModelOp | undefined> = Array.from({ length: MODEL_OP_RING_MAX_OPS }, () => undefined);
+  const slots: Array<RetainedOp | undefined> = Array.from({ length: MODEL_OP_RING_MAX_OPS }, () => undefined);
+  let writeArena: Uint8Array | null = null;
+  let writeArenaEnd = 0;
   let head = 0;
   let count = 0;
   let retainedWriteBytes = 0;
@@ -120,8 +126,8 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
     count -= 1;
     droppedOps += 1;
     if (op?.kind === 'write') {
-      retainedWriteBytes -= op.bytes.length;
-      droppedWriteBytes += op.bytes.length;
+      retainedWriteBytes -= op.length;
+      droppedWriteBytes += op.length;
     }
     if (op?.kind === 'resize') {
       startCols = op.cols;
@@ -129,18 +135,41 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
     }
   };
 
-  const push = (op: ModelOp) => {
+  const push = (op: RetainedOp) => {
     if (count === MODEL_OP_RING_MAX_OPS) {
       evictOldest();
     }
     slots[(head + count) % MODEL_OP_RING_MAX_OPS] = op;
     count += 1;
     if (op.kind === 'write') {
-      retainedWriteBytes += op.bytes.length;
+      retainedWriteBytes += op.length;
     }
     while (retainedWriteBytes > MODEL_OP_RING_MAX_BYTES && count > 1) {
       evictOldest();
     }
+  };
+
+  const copyToArena = (bytes: Uint8Array) => {
+    writeArena ??= new Uint8Array(MODEL_OP_RING_MAX_BYTES);
+    const roomBeforeWrap = MODEL_OP_RING_MAX_BYTES - writeArenaEnd;
+    if (bytes.length <= roomBeforeWrap) {
+      writeArena.set(bytes, writeArenaEnd);
+    } else {
+      writeArena.set(bytes.subarray(0, roomBeforeWrap), writeArenaEnd);
+      writeArena.set(bytes.subarray(roomBeforeWrap), 0);
+    }
+    writeArenaEnd = (writeArenaEnd + bytes.length) % MODEL_OP_RING_MAX_BYTES;
+  };
+
+  const retainedBytes = (op: Extract<RetainedOp, { kind: 'write' }>): Uint8Array => {
+    if (op.oversized) return op.oversized;
+    const arena = writeArena as Uint8Array;
+    const end = op.start + op.length;
+    if (end <= MODEL_OP_RING_MAX_BYTES) return arena.slice(op.start, end);
+    const bytes = new Uint8Array(op.length);
+    bytes.set(arena.subarray(op.start), 0);
+    bytes.set(arena.subarray(0, end - MODEL_OP_RING_MAX_BYTES), MODEL_OP_RING_MAX_BYTES - op.start);
+    return bytes;
   };
 
   const reset = (cols: number | null, rows: number | null) => {
@@ -169,7 +198,12 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
     noteWrite(bytes) {
       restoreInProgress = false;
       if (bytes.length === 0) return;
-      push({ t: now(), kind: 'write', bytes: bytes.slice() });
+      if (bytes.length > MODEL_OP_RING_MAX_BYTES) {
+        push({ t: now(), kind: 'write', start: 0, length: bytes.length, oversized: bytes.slice() });
+        return;
+      }
+      push({ t: now(), kind: 'write', start: writeArenaEnd, length: bytes.length, oversized: null });
+      copyToArena(bytes);
     },
 
     noteRestoreChunk(bytes, cols, rows) {
@@ -211,7 +245,8 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
       const out: ModelOp[] = [];
       for (let i = 0; i < count; i += 1) {
         const op = slots[(head + i) % MODEL_OP_RING_MAX_OPS];
-        if (op) out.push(op);
+        if (!op) continue;
+        out.push(op.kind === 'write' ? { t: op.t, kind: 'write', bytes: retainedBytes(op) } : op);
       }
       return out;
     },
@@ -245,8 +280,8 @@ export function createGhosttyModelOpRing(options?: { now?: () => number }): Ghos
         const op = slots[(head + i) % MODEL_OP_RING_MAX_OPS];
         if (!op) continue;
         if (op.kind === 'write') {
-          encoded.push({ t: op.t, kind: 'write', b64: bytesToBase64(op.bytes), len: op.bytes.length });
-          budget += base64Length(op.bytes.length) + WRITE_OP_OVERHEAD_BYTES;
+          encoded.push({ t: op.t, kind: 'write', b64: bytesToBase64(retainedBytes(op)), len: op.length });
+          budget += base64Length(op.length) + WRITE_OP_OVERHEAD_BYTES;
         } else if (op.kind === 'resize') {
           encoded.push({ t: op.t, kind: 'resize', cols: op.cols, rows: op.rows, noReflow: op.noReflow });
           budget += RESIZE_OP_OVERHEAD_BYTES;
