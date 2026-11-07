@@ -362,27 +362,34 @@ func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64)
 	}
 }
 
-func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
-	voice := delivery.origin.voice()
+func (l *lane) unlockedWhilePlacing(work func()) {
 	l.placing = true
 	l.mu.Unlock()
-	// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
-	link := l.monitor.registry.host.Link(l.monitor, voice)
-	if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
-		link = nil
-	}
-	in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring}
-	var custody harness.Custody
-	if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
-		custody = compactor.Compact(ctx, in)
-	} else if delivery.Compact {
-		link = nil
-	} else if link != nil {
-		custody = link.Deliver(ctx, in)
-	}
+	work()
 	l.mu.Lock()
 	l.placing = false
 	l.placementEnded.Broadcast()
+}
+
+func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
+	voice := delivery.origin.voice()
+	var link harness.Link
+	var custody harness.Custody
+	l.unlockedWhilePlacing(func() {
+		// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
+		link = l.monitor.registry.host.Link(l.monitor, voice)
+		if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
+			link = nil
+		}
+		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring}
+		if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
+			custody = compactor.Compact(ctx, in)
+		} else if delivery.Compact {
+			link = nil
+		} else if link != nil {
+			custody = link.Deliver(ctx, in)
+		}
+	})
 	if link == nil {
 		return Attempt{}, false
 	}

@@ -3,6 +3,7 @@ package sessionmonitor
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -16,7 +17,10 @@ const (
 	pasteEnd   = "\x1b[201~"
 )
 
-var SubmitDelay = 150 * time.Millisecond
+var (
+	SubmitDelay          = 150 * time.Millisecond
+	InputPlacementWindow = 5 * time.Second
+)
 
 func (l *lane) ptySafetyLocked(delivery Delivery) error {
 	if l.monitor.awaitingHarness {
@@ -105,8 +109,14 @@ func (l *lane) placePTYLocked(ctx context.Context, delivery Delivery) Attempt {
 	input = append(input, delivery.Text...)
 	input = append(input, pasteEnd...)
 	terminal := m.primaryTerminalLocked()
-	if err := m.registry.host.Input(ctx, terminal, input); err != nil {
-		return Attempt{Stage: Failed, Err: err}
+	var err error
+	l.unlockedWhilePlacing(func() {
+		pausepoint.At(pausepoint.SessionInputPlacing)
+		err = m.registry.host.PlaceInput(ctx, terminal, input, InputPlacementWindow)
+	})
+	if err != nil {
+		closeWithdrawnPaste := m.registry.host.Input(ctx, terminal, []byte(pasteEnd))
+		return Attempt{Stage: Failed, Err: errors.Join(err, closeWithdrawnPaste)}
 	}
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(SubmitDelay)

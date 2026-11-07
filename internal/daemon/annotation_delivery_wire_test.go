@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -224,6 +225,7 @@ func TestAnnotationsThatCannotBeDeliveredTypeNothingAndKeepTheDraft(t *testing.T
 }
 
 func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
+	daemon.ShortenInputPlacementWindow(t)
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))

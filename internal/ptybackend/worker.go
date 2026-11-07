@@ -898,6 +898,17 @@ func (b *WorkerBackend) inputSession(ctx context.Context, session *workerSession
 	return err
 }
 
+func (b *WorkerBackend) PlaceInput(ctx context.Context, id harness.TerminalID, data []byte, within time.Duration) error {
+	session, err := b.getSession(string(id))
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, within+defaultRPCTimeout)
+	defer cancel()
+	payload := ptyworker.InputParams{Data: base64.StdEncoding.EncodeToString(data), PlaceWithinMs: within.Milliseconds()}
+	return b.callResultOneShot(ctx, session, ptyworker.MethodInput, payload, nil)
+}
+
 func (b *WorkerBackend) Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
 	sessionID := string(id)
 	session, err := b.getSession(sessionID)
@@ -1014,7 +1025,7 @@ func (b *WorkerBackend) callEndingLocked(ctx context.Context, session *workerSes
 		return fmt.Errorf("%w: %s", pty.ErrSessionNotFound, session.SessionID)
 	}
 	if b.kind == workerRuntimeSharedHost {
-		return b.callResultSharedOneShot(ctx, session, method, params, nil)
+		return b.callResultOneShot(ctx, session, method, params, nil)
 	}
 	_, err := b.callResultPersistentLocked(ctx, session, method, params, nil)
 	return err
@@ -1652,7 +1663,7 @@ func (b *WorkerBackend) callSimplePersistent(ctx context.Context, session *worke
 func (b *WorkerBackend) callResultPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
 	if b.kind == workerRuntimeSharedHost {
 		if method == ptyworker.MethodSignal || method == ptyworker.MethodRemove {
-			return false, b.callResultSharedOneShot(ctx, session, method, params, result)
+			return false, b.callResultOneShot(ctx, session, method, params, result)
 		}
 		return b.callResultSharedPersistent(ctx, session, method, params, result)
 	}

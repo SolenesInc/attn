@@ -70,7 +70,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: the daemon keeps drafts for each session and each document, and they come back after an app or daemon restart and across the agent's next turn. A send clears the marks it sent. Marks made while a send was in flight stay.
+- **Durability across restarts**: the daemon keeps drafts for each session and each document, and they come back after an app or daemon restart and across the agent's next turn. A send clears the marks it sent. Marks made while a send was in flight stay. A send the agent's terminal does not take within 5 s fails, keeps the marks and shows the reason, and other terminals keep taking input meanwhile.
 - **Linux**: the send key is Ctrl+Shift+Enter there (`LINUX_SHORTCUTS`). Marking a terminal is an Alt-drag.
 - **Outposts**: while an outpost's host is offline, its agent's terminal refuses new marks and says `<host> is unreachable`.
 - **Profiles**: marks go to a session of the profile the app shows. A seed's marks go only to a seed in that profile.

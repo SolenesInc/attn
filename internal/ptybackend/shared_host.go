@@ -58,7 +58,7 @@ type sharedHostMonitor struct {
 	stopping    bool
 }
 
-func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *workerSession, method string, params, result any) error {
+func (b *WorkerBackend) callResultOneShot(ctx context.Context, session *workerSession, method string, params, result any) error {
 	conn, err := b.openSharedCall(ctx, session, method, params, result)
 	if err != nil {
 		return err
@@ -878,5 +878,5 @@ func (b *WorkerBackend) sharedHostInfo(ctx context.Context, inc hostIncarnation)
 }
 
 func (b *WorkerBackend) callSharedHost(ctx context.Context, inc hostIncarnation, method string, params, result any) error {
-	return b.callResultSharedOneShot(ctx, inc.endpoint(), method, params, result)
+	return b.callResultOneShot(ctx, inc.endpoint(), method, params, result)
 }

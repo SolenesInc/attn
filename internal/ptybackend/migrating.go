@@ -8,6 +8,7 @@ import (
 	"slices"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
@@ -141,6 +142,14 @@ func (b *MigratingBackend) Input(ctx context.Context, id harness.TerminalID, dat
 		return err
 	}
 	return backend.Input(ctx, id, data)
+}
+
+func (b *MigratingBackend) PlaceInput(ctx context.Context, id harness.TerminalID, data []byte, within time.Duration) error {
+	backend, err := b.backendFor(id)
+	if err != nil {
+		return err
+	}
+	return backend.PlaceInput(ctx, id, data, within)
 }
 
 func (b *MigratingBackend) Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {

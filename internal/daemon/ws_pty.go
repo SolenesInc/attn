@@ -193,14 +193,18 @@ func (d *Daemon) inTerminalOrder(client terminalClient, terminal protocol.Termin
 func (d *Daemon) inSessionOrder(client terminalClient, session protocol.SessionID, command func()) {
 	session = protocol.TrimID(session)
 	if d.sessionHost(session) != "" {
-		key := d.primaryTerminal(session)
-		if key == "" {
-			key = protocol.TerminalID("session/" + string(session))
-		}
-		d.offPumpInTerminalOrder(client, key, command)
+		d.offPumpInSessionOrder(client, session, command)
 		return
 	}
 	command()
+}
+
+func (d *Daemon) offPumpInSessionOrder(client terminalClient, session protocol.SessionID, command func()) {
+	key := d.primaryTerminal(session)
+	if key == "" {
+		key = protocol.TerminalID("session/" + string(session))
+	}
+	d.offPumpInTerminalOrder(client, key, command)
 }
 
 func (d *Daemon) offPumpInTerminalOrder(client terminalClient, terminal protocol.TerminalID, command func()) {

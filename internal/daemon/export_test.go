@@ -129,6 +129,12 @@ func UseShippedPasteGap(t testing.TB) {
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
 }
 
+func ShortenInputPlacementWindow(t testing.TB) {
+	shipped := sessionmonitor.InputPlacementWindow
+	sessionmonitor.InputPlacementWindow = 200 * time.Millisecond
+	t.Cleanup(func() { sessionmonitor.InputPlacementWindow = shipped })
+}
+
 func (w *WireDaemon) ServeHomeGateway(phone HomeGatewayPhone, stream HomeGatewayStream) error {
 	return w.d.ServeHomeGateway(phone, stream)
 }

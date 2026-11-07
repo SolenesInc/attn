@@ -1333,7 +1333,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleSessionAnnotationsClear(client, msg.(*protocol.SessionAnnotationsClearMessage))
 	case protocol.CmdSessionAnnotationsSubmit:
 		submit := msg.(*protocol.SessionAnnotationsSubmitMessage)
-		d.inSessionOrder(client, submit.SessionID, func() { d.handleSessionAnnotationsSubmit(client, submit) })
+		d.offPumpInSessionOrder(client, protocol.TrimID(submit.SessionID), func() { d.handleSessionAnnotationsSubmit(client, submit) })
 	case protocol.CmdMarkdownAnnotationsGet:
 		d.handleMarkdownAnnotationsGet(client, msg.(*protocol.MarkdownAnnotationsGetMessage))
 	case protocol.CmdMarkdownAnnotationsSave:
@@ -1342,7 +1342,11 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMarkdownAnnotationsClear(client, msg.(*protocol.MarkdownAnnotationsClearMessage))
 	case protocol.CmdMarkdownAnnotationsSubmit:
 		submit := msg.(*protocol.MarkdownAnnotationsSubmitMessage)
-		d.inSessionOrder(client, protocol.SessionID(protocol.Deref(submit.TargetSessionID)), func() { d.handleMarkdownAnnotationsSubmit(client, submit) })
+		if target := protocol.TrimID(protocol.SessionID(protocol.Deref(submit.TargetSessionID))); target != "" {
+			d.offPumpInSessionOrder(client, target, func() { d.handleMarkdownAnnotationsSubmit(client, submit) })
+		} else {
+			d.handleMarkdownAnnotationsSubmit(client, submit)
+		}
 	case protocol.CmdCalloutResult:
 		d.handleCalloutResult(client, msg.(*protocol.CalloutResultMessage))
 	case protocol.CmdBrowserControlResult:

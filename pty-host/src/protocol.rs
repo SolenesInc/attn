@@ -116,6 +116,8 @@ pub struct AttachParams {
 #[derive(Deserialize)]
 pub struct InputParams {
     pub data: String,
+    #[serde(default)]
+    pub place_within_ms: u64,
 }
 
 #[derive(Deserialize)]

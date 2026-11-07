@@ -2,8 +2,9 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{ErrorKind, Write};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::quiesce::{Quiesce, set_cloexec};
 
@@ -13,13 +14,20 @@ const WRITER_STACK_BYTES: usize = 128 * 1024;
 
 pub struct InputQueue {
     state: Mutex<State>,
+    settled: Condvar,
     wake_read: OwnedFd,
     wake_write: OwnedFd,
 }
 
+struct Chunk {
+    id: u64,
+    data: Vec<u8>,
+}
+
 #[derive(Default)]
 struct State {
-    chunks: VecDeque<Vec<u8>>,
+    chunks: VecDeque<Chunk>,
+    next_chunk: u64,
     front_written: usize,
     waiting: usize,
     failure: Option<String>,
@@ -49,6 +57,7 @@ impl InputQueue {
         }
         let queue = Self {
             state: Mutex::new(State::default()),
+            settled: Condvar::new(),
             wake_read,
             wake_write,
         };
@@ -62,6 +71,10 @@ impl InputQueue {
         if data.is_empty() {
             return Ok(());
         }
+        self.push_chunk(data).map(|_| ())
+    }
+
+    pub fn push_chunk(&self, data: &[u8]) -> Result<u64, String> {
         let mut state = self.state.lock().expect("input queue mutex poisoned");
         if state.waiting + data.len() > INPUT_QUEUE_MAX_BYTES {
             return Err(format!(
@@ -71,13 +84,50 @@ impl InputQueue {
             ));
         }
         let was_empty = state.chunks.is_empty();
-        state.chunks.push_back(data.to_vec());
+        let id = state.next_chunk;
+        state.next_chunk += 1;
+        state.chunks.push_back(Chunk {
+            id,
+            data: data.to_vec(),
+        });
         state.waiting += data.len();
         drop(state);
         if was_empty {
             self.wake();
         }
-        Ok(())
+        Ok(id)
+    }
+
+    pub fn settle_or_withdraw(&self, id: u64, within: Duration) -> Result<(), String> {
+        let deadline = Instant::now() + within;
+        let mut state = self.state.lock().expect("input queue mutex poisoned");
+        loop {
+            let Some(at) = state.chunks.iter().position(|chunk| chunk.id == id) else {
+                return state.failure.take().map_or(Ok(()), Err);
+            };
+            if state.stopped {
+                return Err("session not running".to_owned());
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                let skip = if at == 0 {
+                    std::mem::take(&mut state.front_written)
+                } else {
+                    0
+                };
+                let withdrawn = state.chunks.remove(at).expect("position is in the queue");
+                state.waiting -= withdrawn.data.len() - skip;
+                return Err(format!(
+                    "the program in this terminal is not reading its input: this write did not finish within {} ms, and attn withdrew what it had not written",
+                    within.as_millis()
+                ));
+            }
+            state = self
+                .settled
+                .wait_timeout(state, remaining)
+                .expect("input queue mutex poisoned")
+                .0;
+        }
     }
 
     pub fn take_failure(&self) -> Option<String> {
@@ -93,7 +143,7 @@ impl InputQueue {
         let mut pending = Vec::with_capacity(state.waiting);
         for (index, chunk) in state.chunks.iter().enumerate() {
             let skip = if index == 0 { state.front_written } else { 0 };
-            pending.extend_from_slice(&chunk[skip..]);
+            pending.extend_from_slice(&chunk.data[skip..]);
         }
         pending
     }
@@ -103,6 +153,7 @@ impl InputQueue {
             .lock()
             .expect("input queue mutex poisoned")
             .stopped = true;
+        self.settled.notify_all();
         self.wake();
     }
 
@@ -129,11 +180,11 @@ impl InputQueue {
             return Progress::Stopped;
         }
         while let Some(chunk) = state.chunks.front() {
-            match master.write(&chunk[state.front_written..]) {
+            match master.write(&chunk.data[state.front_written..]) {
                 Ok(written) if written > 0 => {
                     state.waiting -= written;
                     state.front_written += written;
-                    if state.front_written == chunk.len() {
+                    if state.front_written == chunk.data.len() {
                         state.chunks.pop_front();
                         state.front_written = 0;
                     }
@@ -187,7 +238,9 @@ fn write_until_stopped(queue: &InputQueue, master: &File, quiesce: &Quiesce) {
             return;
         }
         queue.clear_wake();
-        match queue.write_waiting(master) {
+        let progress = queue.write_waiting(master);
+        queue.settled.notify_all();
+        match progress {
             Progress::Idle => blocked = false,
             Progress::Blocked => blocked = true,
             Progress::Stopped => return,

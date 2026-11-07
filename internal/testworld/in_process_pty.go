@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/harness"
@@ -142,6 +143,10 @@ func (b *InProcessPTY) ScreenSnapshot(_ context.Context, id harness.TerminalID) 
 
 func (b *InProcessPTY) Input(ctx context.Context, id harness.TerminalID, data []byte) error {
 	return b.manager.Input(ctx, string(id), data)
+}
+
+func (b *InProcessPTY) PlaceInput(_ context.Context, id harness.TerminalID, data []byte, within time.Duration) error {
+	return b.manager.PlaceInput(string(id), data, within)
 }
 
 func (b *InProcessPTY) Resize(_ context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ptybackend.ResizeResult, error) {

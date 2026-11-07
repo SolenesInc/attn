@@ -280,7 +280,8 @@ type AttachParams struct {
 }
 
 type InputParams struct {
-	Data string `json:"data"`
+	Data          string `json:"data"`
+	PlaceWithinMs int64  `json:"place_within_ms,omitempty"`
 }
 
 type ResizeParams struct {

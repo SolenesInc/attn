@@ -813,15 +813,21 @@ func (s *Session) screenSnapshot() ScreenSnapshotInfo {
 	return info
 }
 
-func (s *Session) input(data []byte) error {
+var errSessionNotRunning = errors.New("session not running")
+
+func (s *Session) takingInput() error {
 	s.exitMu.RLock()
 	running := s.running
 	s.exitMu.RUnlock()
 	if !running {
-		return errors.New("session not running")
+		return errSessionNotRunning
 	}
-	if failure := s.inputs.takeFailure(); failure != nil {
-		return failure
+	return s.inputs.takeFailure()
+}
+
+func (s *Session) input(data []byte) error {
+	if err := s.takingInput(); err != nil {
+		return err
 	}
 	return s.inputs.push(data)
 }

@@ -446,6 +446,14 @@ func (m *Manager) Input(_ context.Context, sessionID string, data []byte) error 
 	return session.input(data)
 }
 
+func (m *Manager) PlaceInput(sessionID string, data []byte, within time.Duration) error {
+	session, err := m.getSession(sessionID)
+	if err != nil {
+		return err
+	}
+	return session.placeInput(data, within)
+}
+
 func (m *Manager) Resize(sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {

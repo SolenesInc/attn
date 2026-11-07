@@ -131,6 +131,10 @@ func (b *Terminals) Attach(_ context.Context, id harness.TerminalID, _ string, _
 		&terminalStream{owner: b, term: term, events: events}, nil
 }
 
+func (b *Terminals) PlaceInput(ctx context.Context, id harness.TerminalID, data []byte, _ time.Duration) error {
+	return b.Input(ctx, id, data)
+}
+
 func (b *Terminals) Input(_ context.Context, id harness.TerminalID, data []byte) error {
 	b.mu.Lock()
 	term, err := b.lookup(id)

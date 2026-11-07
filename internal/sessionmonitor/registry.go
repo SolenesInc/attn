@@ -40,6 +40,7 @@ type Host interface {
 	LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{}
 	ViewOwner(harness.TerminalID) string
 	Input(ctx context.Context, terminal harness.TerminalID, data []byte) error
+	PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error
 	Link(*Monitor, harness.Voice) harness.Link
 	LinkTranscriptPath(link, path string) string
 	NoteKey(terminal harness.TerminalID, at time.Time)

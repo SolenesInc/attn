@@ -1138,7 +1138,12 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		if c.runtime.capture != nil {
 			c.runtime.capture.recordInput(data)
 		}
-		if err := c.runtime.manager.Input(context.Background(), c.runtime.cfg.SessionID, data); err != nil {
+		if params.PlaceWithinMs > 0 {
+			err = c.runtime.manager.PlaceInput(c.runtime.cfg.SessionID, data, time.Duration(params.PlaceWithinMs)*time.Millisecond)
+		} else {
+			err = c.runtime.manager.Input(context.Background(), c.runtime.cfg.SessionID, data)
+		}
+		if err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) {
 				c.sendError(req.ID, ErrSessionNotFound, err.Error())
 				return

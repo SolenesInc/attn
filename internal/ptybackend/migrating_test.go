@@ -9,6 +9,7 @@ import (
 	"sync"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
@@ -92,6 +93,10 @@ func TestMigratingBackendToggleKeepsExistingAndPendingOwners(t *testing.T) {
 
 func (b *migrationTestBackend) Attach(context.Context, harness.TerminalID, string, ...AttachOptions) (AttachInfo, Stream, error) {
 	return AttachInfo{}, nil, nil
+}
+
+func (b *migrationTestBackend) PlaceInput(ctx context.Context, id harness.TerminalID, data []byte, _ time.Duration) error {
+	return b.Input(ctx, id, data)
 }
 
 func (b *migrationTestBackend) Input(_ context.Context, id harness.TerminalID, data []byte) error {

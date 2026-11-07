@@ -1153,7 +1153,11 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
             let Ok(session) = connection.session(host, &request) else {
                 return connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found");
             };
-            match session.input(&data) {
+            let outcome = match params.place_within_ms {
+                0 => session.input(&data),
+                within => session.place_input(&data, Duration::from_millis(within)),
+            };
+            match outcome {
                 Ok(()) => connection.send(&response(&request.id, json!({"ok": true}))),
                 Err((code, message)) => connection.fail(&request.id, code, message),
             }

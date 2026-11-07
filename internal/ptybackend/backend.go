@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
@@ -204,6 +205,7 @@ type Backend interface {
 	Spawn(ctx context.Context, opts SpawnOptions) error
 	Attach(ctx context.Context, id harness.TerminalID, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error)
 	Input(ctx context.Context, id harness.TerminalID, data []byte) error
+	PlaceInput(ctx context.Context, id harness.TerminalID, data []byte, within time.Duration) error
 	Resize(ctx context.Context, id harness.TerminalID, cols, rows, xpixel, ypixel uint16) (ResizeResult, error)
 	SetTheme(ctx context.Context, id harness.TerminalID, theme pty.TerminalTheme) error
 	Kill(ctx context.Context, id harness.TerminalID, sig syscall.Signal) error

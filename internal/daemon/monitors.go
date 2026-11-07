@@ -307,6 +307,13 @@ func (h monitorHost) Input(ctx context.Context, terminal harness.TerminalID, dat
 	return h.daemon.ptyBackend.Input(ctx, terminal, data)
 }
 
+func (h monitorHost) PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, within time.Duration) error {
+	if h.daemon.ptyBackend == nil {
+		return errNoPTYBackend
+	}
+	return h.daemon.ptyBackend.PlaceInput(ctx, terminal, data, within)
+}
+
 func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) harness.Link {
 	target := monitor.LinkTarget()
 	if target.Kind == codexLinkKind {

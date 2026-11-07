@@ -808,6 +808,22 @@ impl Session {
             .map_err(|refusal| (ERR_INPUT_QUEUE_FULL, refusal))
     }
 
+    pub fn place_input(&self, data: &[u8], within: Duration) -> Result<(), (&'static str, String)> {
+        if !self.is_running() {
+            return Err((ERR_SESSION_NOT_RUNNING, "session not running".to_owned()));
+        }
+        if let Some(failure) = self.input_queue.take_failure() {
+            return Err((ERR_IO, failure));
+        }
+        let chunk = self
+            .input_queue
+            .push_chunk(data)
+            .map_err(|refusal| (ERR_INPUT_QUEUE_FULL, refusal))?;
+        self.input_queue
+            .settle_or_withdraw(chunk, within)
+            .map_err(|failure| (ERR_IO, failure))
+    }
+
     pub fn resize(
         &self,
         cols: u16,

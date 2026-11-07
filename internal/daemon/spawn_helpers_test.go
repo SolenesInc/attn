@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/pty"
@@ -81,6 +82,10 @@ func (b *fakeSpawnBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions
 
 func (b *fakeSpawnBackend) Attach(context.Context, harness.TerminalID, string, ...ptybackend.AttachOptions) (ptybackend.AttachInfo, ptybackend.Stream, error) {
 	return ptybackend.AttachInfo{Running: true}, newFakeOutputStream(), nil
+}
+
+func (b *fakeSpawnBackend) PlaceInput(ctx context.Context, terminal harness.TerminalID, data []byte, _ time.Duration) error {
+	return b.Input(ctx, terminal, data)
 }
 
 func (b *fakeSpawnBackend) Input(_ context.Context, terminal harness.TerminalID, data []byte) error {

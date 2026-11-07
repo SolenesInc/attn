@@ -47,6 +47,7 @@ const (
 	AttachRevivePending        = "attach-revive-pending"
 	LaunchAwaitsPluginHarness  = "launch-awaits-plugin-harness"
 	DaemonInitialStateBuilt    = "daemon-initial-state-built"
+	SessionInputPlacing        = "session-input-placing"
 	SessionInputPasteGap       = "session-input-paste-gap"
 	ClaudeModReturnWaits       = "claude-mod-return-waits"
 	RingPlacementAnswering     = "ring-placement-answering"
