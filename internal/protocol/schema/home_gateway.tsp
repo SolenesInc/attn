@@ -17,7 +17,7 @@ model HomeGatewayHello {
   device_id: string;
 }
 
-// Since api 2: a device sends ping to learn that its home still answers
+// Since api 2: a phone sends ping to learn that its home still answers
 // through the Cloud Relay; the home answers pong.
 model HomeGatewayPing {
   cmd: "ping";
@@ -29,7 +29,7 @@ model HomeGatewayPong {
 
 model HomeGatewayWelcome {
   event: "welcome";
-  // min(the device's api, HOME_GATEWAY_API_VERSION).
+  // min(the phone's api, HOME_GATEWAY_API_VERSION).
   api: int32;
   home_name: string;
   profile: HomeGatewayProfile;
@@ -201,17 +201,17 @@ model HomeGatewayAskImageError {
   message: string;
 }
 
-// Since api 4: a device opens a session's terminal with terminal_attach. The
+// Since api 4: a phone opens a session's terminal with terminal_attach. The
 // home answers terminal_screen, then the terminal's output as binary frames:
 // 0x01 | id_len u8 | terminal_id | seq u32 BE | bytes. The home sends output
-// only while the device's credit allows; the device grants credit with the
+// only while the phone's credit allows; the phone grants credit with the
 // attach and with terminal_credit as it renders. Credit counts terminal bytes:
 // a screen's decoded ANSI and each frame's output bytes. A screen waits until
 // the credit covers the largest Home Gateway message (65,514 bytes).
 model TerminalAttach {
   cmd: "terminal_attach";
   terminal_id: string;
-  // The size the device asks for; it applies while the device owns the size.
+  // The size the phone asks for; it applies while the phone owns the size.
   cols: int32;
   rows: int32;
   // Bytes of screen and output the home may send before the next terminal_credit.
@@ -229,7 +229,7 @@ model TerminalDetach {
   terminal_id: string;
 }
 
-// Keys the user pressed; makes the device the size owner.
+// Keys the user pressed; makes the phone the size owner.
 model TerminalInput {
   cmd: "terminal_input";
   terminal_id: string;
@@ -243,7 +243,7 @@ model TerminalResize {
   rows: int32;
 }
 
-// Makes the device the size owner: the PTY takes the device's size, and every
+// Makes the phone the size owner: the PTY takes the phone's size, and every
 // other client shows it scaled until one of them claims it back.
 model TerminalFocus {
   cmd: "terminal_focus";
@@ -267,7 +267,7 @@ model SubmitResult {
   message?: string;
 }
 
-// The visible screen as ANSI, base64-encoded. The device resets its terminal
+// The visible screen as ANSI, base64-encoded. The phone resets its terminal
 // to cols x rows and writes it; output frames that follow continue from it.
 model TerminalScreen {
   event: "terminal_screen";
@@ -286,7 +286,7 @@ model TerminalResized {
   rows: int32;
 }
 
-// The home could not attach, or the terminal refused input; the device shows message.
+// The home could not attach, or the terminal refused input; the phone shows message.
 model TerminalError {
   event: "terminal_error";
   terminal_id: string;
@@ -456,7 +456,7 @@ model HomeGatewaySeedMove {
   text: string;
 }
 
-// error is absent on success; the seed's change reaches the device as garden
+// error is absent on success; the seed's change reaches the phone as garden
 // frames.
 model HomeGatewaySeedResult {
   event: "seed_result";

@@ -46,13 +46,13 @@ func awaitPushesUntil(t *testing.T, cloud *testworld.Cloud, phones []*testworld.
 		}
 		i := slices.IndexFunc(phones, func(p *testworld.Phone) bool { return p.SignPub() == push.Device })
 		if i < 0 {
-			t.Fatalf("a push went to device %s, which no test phone owns", push.Device)
+			t.Fatalf("a push went to phone %s, which no test phone owns", push.Device)
 		}
 		note, err := phones[i].OpenPush(push)
 		if err != nil {
-			t.Fatalf("%s could not open its push: %v", phones[i].DeviceID(), err)
+			t.Fatalf("%s could not open its push: %v", phones[i].PhoneID(), err)
 		}
-		got := openedPush{phone: phones[i].DeviceID(), note: note}
+		got := openedPush{phone: phones[i].PhoneID(), note: note}
 		opened = append(opened, got)
 		if last(got) {
 			return opened
@@ -111,9 +111,9 @@ func TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly(t *testing.T) 
 
 	opened := awaitPushesUntil(t, cloud, phones, func(p openedPush) bool { return p.note.SessionID == reviewer })
 	want := []openedPush{
-		{phone: phones[0].DeviceID(), note: testworld.PushNote{SessionID: builder, ProfileID: home, Title: "builder", Kind: "waiting", Text: "Should I land this?"}},
-		{phone: phones[1].DeviceID(), note: testworld.PushNote{SessionID: builder, ProfileID: home, Title: "builder", Kind: "waiting", Text: "Should I land this?"}},
-		{phone: phones[2].DeviceID(), note: testworld.PushNote{SessionID: reviewer, ProfileID: work, Title: "reviewer", Kind: "waiting", Text: "Reviewed."}},
+		{phone: phones[0].PhoneID(), note: testworld.PushNote{SessionID: builder, ProfileID: home, Title: "builder", Kind: "waiting", Text: "Should I land this?"}},
+		{phone: phones[1].PhoneID(), note: testworld.PushNote{SessionID: builder, ProfileID: home, Title: "builder", Kind: "waiting", Text: "Should I land this?"}},
+		{phone: phones[2].PhoneID(), note: testworld.PushNote{SessionID: reviewer, ProfileID: work, Title: "reviewer", Kind: "waiting", Text: "Reviewed."}},
 	}
 	got := make([]openedPush, len(opened))
 	for i, p := range opened {
@@ -135,7 +135,7 @@ func TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly(t *testing.T) 
 	seen := 0
 	asks := awaitPushesUntil(t, cloud, phones, func(openedPush) bool { seen++; return seen == 2 })
 	for _, p := range asks {
-		if wantAsk := (testworld.PushNote{V: 1, HomeID: p.note.HomeID, HomeName: p.note.HomeName, ProfileID: home, ProfileName: p.note.ProfileName, SessionID: builder, Title: "builder", Kind: "ask", Text: "Which store keeps the cache?", AskID: askID[1]}); p.note != wantAsk || p.phone == phones[2].DeviceID() {
+		if wantAsk := (testworld.PushNote{V: 1, HomeID: p.note.HomeID, HomeName: p.note.HomeName, ProfileID: home, ProfileName: p.note.ProfileName, SessionID: builder, Title: "builder", Kind: "ask", Text: "Which store keeps the cache?", AskID: askID[1]}); p.note != wantAsk || p.phone == phones[2].PhoneID() {
 			t.Errorf("ask push to %s = %+v, want %+v to a phone of the asking session's profile", p.phone, p.note, wantAsk)
 		}
 	}
@@ -146,7 +146,7 @@ func TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly(t *testing.T) 
 
 func cmpPhone(phones []*testworld.Phone, a, b string) int {
 	index := func(id string) int {
-		return slices.IndexFunc(phones, func(p *testworld.Phone) bool { return p.DeviceID() == id })
+		return slices.IndexFunc(phones, func(p *testworld.Phone) bool { return p.PhoneID() == id })
 	}
 	return index(a) - index(b)
 }

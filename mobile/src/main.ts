@@ -26,7 +26,7 @@ import { attachZoom } from './asks/zoom'
 import { fromBase64Url } from './bytes'
 import { GardenSeed, SeedDetail, Verb, fromHomeGatewayDetail, fromHomeGatewaySeed } from './garden/seed'
 import { gardenScreen, seedScreen, type GardenActions } from './garden/view'
-import { deviceKeys } from './device'
+import { phoneKeys } from './phoneKeys'
 import { homeGardenApi, homeTerminalApi, pairWithHome, runLink, type Link, type LinkEvent } from './link'
 import {
   LinkTarget,
@@ -269,7 +269,7 @@ const PairWithCode = Command.define('PairWithCode', {
   execute: ({ code }) =>
     Effect.tryPromise(async () => {
       const pairingCode = readPairingCode(code)
-      const keys = await deviceKeys()
+      const keys = await phoneKeys()
       const welcome = await pairWithHome(
         {
           cloud: pairingCode.cloud,
@@ -1184,7 +1184,7 @@ const linkStream = (pairing: LinkTarget) =>
   Stream.callback<Message>((queue) =>
     Effect.acquireRelease(
       Effect.promise(async () => {
-        const keys = await deviceKeys()
+        const keys = await phoneKeys()
         const link = runLink(pairing, keys, (event) =>
           Queue.offerUnsafe(queue, linkMessage(pairing.id, event)),
         )

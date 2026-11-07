@@ -71,8 +71,8 @@ const homeAnswersPairedHandshake = (homeStatic: Uint8Array, prologue: Uint8Array
   mixKey(x25519.getSharedSecret(e, re))
   mixKey(x25519.getSharedSecret(e, rs))
   const msg2 = join(ePub, encryptAndHash(new Uint8Array(0)))
-  const [toHome, toDevice] = kdf(ck, new Uint8Array(0))
-  return { msg2, recv: new Cipher(toHome), send: new Cipher(toDevice) }
+  const [toHome, toPhone] = kdf(ck, new Uint8Array(0))
+  return { msg2, recv: new Cipher(toHome), send: new Cipher(toPhone) }
 }
 
 export const frame = (type: number, connId: number, payload: Uint8Array = new Uint8Array(0)) => {

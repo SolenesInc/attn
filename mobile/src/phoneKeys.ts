@@ -21,7 +21,7 @@ const Keychain = registerPlugin<KeychainPlugin>('Keychain', {
   }),
 })
 
-export type DeviceKeys = {
+export type PhoneKeys = {
   readonly signSecret: Uint8Array
   readonly signPub: Uint8Array
   readonly noiseSecret: Uint8Array
@@ -31,7 +31,7 @@ export type DeviceKeys = {
 
 const keychainKey = 'device-keys'
 
-const fromSecrets = (signSecret: Uint8Array, noiseSecret: Uint8Array): DeviceKeys => {
+const fromSecrets = (signSecret: Uint8Array, noiseSecret: Uint8Array): PhoneKeys => {
   const signPub = ed25519.getPublicKey(signSecret)
   return {
     signSecret,
@@ -42,15 +42,15 @@ const fromSecrets = (signSecret: Uint8Array, noiseSecret: Uint8Array): DeviceKey
   }
 }
 
-let loading: Promise<DeviceKeys> | undefined
+let loading: Promise<PhoneKeys> | undefined
 
-export const deviceKeys = (): Promise<DeviceKeys> =>
+export const phoneKeys = (): Promise<PhoneKeys> =>
   (loading ??= loadOrCreate().catch((error: unknown) => {
     loading = undefined
     throw error
   }))
 
-const loadOrCreate = async (): Promise<DeviceKeys> => {
+const loadOrCreate = async (): Promise<PhoneKeys> => {
   const stored = await Keychain.get({ key: keychainKey })
   if (stored.value) {
     const { sign, noise } = JSON.parse(stored.value) as { sign: string; noise: string }
@@ -65,7 +65,7 @@ const loadOrCreate = async (): Promise<DeviceKeys> => {
   return fromSecrets(signSecret, noiseSecret)
 }
 
-export const signChallenge = (keys: DeviceKeys, homeId: string, nonce: Uint8Array): Uint8Array => {
+export const signChallenge = (keys: PhoneKeys, homeId: string, nonce: Uint8Array): Uint8Array => {
   const prefix = new TextEncoder().encode(`attn-cloud/v1 auth device\n${homeId}\n`)
   const message = new Uint8Array(prefix.length + nonce.length)
   message.set(prefix)

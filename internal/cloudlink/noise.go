@@ -19,8 +19,8 @@ const noiseTagSize = 16
 // MaxMessageBytes is the largest Home Gateway message that fits one Cloud Relay frame once sealed.
 const MaxMessageBytes = maxCloudRelayFrame - envelopeHeader - noiseTagSize
 
-func prologue(deviceSignPub []byte) []byte {
-	return append([]byte("attn-cloud/v1 noise\n"), deviceSignPub...)
+func prologue(phoneSignPub []byte) []byte {
+	return append([]byte("attn-cloud/v1 noise\n"), phoneSignPub...)
 }
 
 type transport struct {
@@ -47,36 +47,36 @@ type answered struct {
 	transport  transport
 }
 
-func answerPaired(static noise.DHKey, deviceSignPub, msg1 []byte, rng io.Reader, noisePubFor func(firstMessage) ([]byte, error)) (answered, error) {
+func answerPaired(static noise.DHKey, phoneSignPub, msg1 []byte, rng io.Reader, noisePubFor func(firstMessage) ([]byte, error)) (answered, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
 		CipherSuite: cipherSuite, Random: rng, Pattern: noise.HandshakeIK,
-		Prologue: prologue(deviceSignPub), StaticKeypair: static,
+		Prologue: prologue(phoneSignPub), StaticKeypair: static,
 	})
 	if err != nil {
 		return answered{}, err
 	}
 	payload, _, _, err := hs.ReadMessage(nil, msg1)
 	if err != nil {
-		return answered{}, fmt.Errorf("reading a paired device's handshake: %w", err)
+		return answered{}, fmt.Errorf("reading a paired phone's handshake: %w", err)
 	}
 	var claim firstMessage
 	if err := json.Unmarshal(payload, &claim); err != nil || claim.ProfileID == "" {
-		return answered{}, errors.New("a paired device's handshake named no profile_id")
+		return answered{}, errors.New("a paired phone's handshake named no profile_id")
 	}
 	want, err := noisePubFor(claim)
 	if err != nil {
 		return answered{}, err
 	}
 	if !bytes.Equal(hs.PeerStatic(), want) {
-		return answered{}, errors.New("a paired device presented a Noise key other than the one it paired with")
+		return answered{}, errors.New("a paired phone presented a Noise key other than the one it paired with")
 	}
 	return finish(hs, claim, false)
 }
 
-func answerPairing(static noise.DHKey, deviceSignPub, msg1 []byte, rng io.Reader, secretFor func(firstMessage) ([]byte, error)) (answered, error) {
+func answerPairing(static noise.DHKey, phoneSignPub, msg1 []byte, rng io.Reader, secretFor func(firstMessage) ([]byte, error)) (answered, error) {
 	hs, err := noise.NewHandshakeState(noise.Config{
 		CipherSuite: cipherSuite, Random: rng, Pattern: noise.HandshakeIK,
-		Prologue: prologue(deviceSignPub), StaticKeypair: static, PresharedKeyPlacement: pskPlacement,
+		Prologue: prologue(phoneSignPub), StaticKeypair: static, PresharedKeyPlacement: pskPlacement,
 	})
 	if err != nil {
 		return answered{}, err

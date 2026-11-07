@@ -167,7 +167,7 @@ func (d *Daemon) sendNote(link *cloudlink.Link, note phonePushNote, reached map[
 		return nil
 	}
 	for _, pairing := range pairings {
-		if pairing.ProfileID != note.ProfileID || reached[pairing.DeviceID] {
+		if pairing.ProfileID != note.ProfileID || reached[pairing.PhoneID] {
 			continue
 		}
 		err := link.Push(pairing, plaintext, note.collapseID)
@@ -175,11 +175,11 @@ func (d *Daemon) sendNote(link *cloudlink.Link, note phonePushNote, reached map[
 		case errors.Is(err, cloudlink.ErrLinkDown):
 			return err
 		case err != nil:
-			d.logf("phone push: %s %s for device %s: %v", note.Kind, note.SessionID, pairing.DeviceID, err)
+			d.logf("phone push: %s %s for phone %s: %v", note.Kind, note.SessionID, pairing.PhoneID, err)
 		default:
-			d.logf("phone push: sent %s %s to device %s", note.Kind, note.SessionID, pairing.DeviceID)
+			d.logf("phone push: sent %s %s to phone %s", note.Kind, note.SessionID, pairing.PhoneID)
 		}
-		reached[pairing.DeviceID] = true
+		reached[pairing.PhoneID] = true
 	}
 	return nil
 }

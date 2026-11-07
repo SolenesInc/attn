@@ -30,7 +30,7 @@ func (d *Daemon) homeGatewaySendAsks(conn *homeGatewayConn) error {
 	ids := []string{}
 	frames := map[string][]byte{}
 	for _, shown := range d.asks() {
-		if !askShownIn(conn.device.ProfileID, shown.profileID) {
+		if !askShownIn(conn.phone.ProfileID, shown.profileID) {
 			continue
 		}
 		frame, err := homeGatewayAskFrame(shown.wire)
@@ -158,7 +158,7 @@ func (d *Daemon) homeGatewayAnswerAsk(conn *homeGatewayConn, command homegateway
 		answers = append(answers, protocol.AskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
 	}
 	result := homegateway.HomeGatewayAskAnswerResult{Event: "ask_answer_result", RequestID: command.RequestID, AskID: command.AskID}
-	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note}, conn.device.ProfileID)
+	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note}, conn.phone.ProfileID)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
@@ -185,7 +185,7 @@ func (d *Daemon) homeGatewayAskImage(conn *homeGatewayConn, command homegateway.
 }
 
 func (d *Daemon) homeGatewayAskImageBytes(conn *homeGatewayConn, askID, src string) (string, []byte, error) {
-	stored, err := d.askShownTo(askID, conn.device.ProfileID)
+	stored, err := d.askShownTo(askID, conn.phone.ProfileID)
 	if err != nil {
 		return "", nil, err
 	}

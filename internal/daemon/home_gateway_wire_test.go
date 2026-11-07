@@ -60,11 +60,11 @@ func (l phoneLink) Close() error {
 	return nil
 }
 
-func connectPhone(t *testing.T, w *world, deviceID, profileID string) *testPhone {
+func connectPhone(t *testing.T, w *world, phoneID, profileID string) *testPhone {
 	t.Helper()
 	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]homegateway.HomeGatewayAsk{}, seeds: map[string]homegateway.HomeGatewaySeed{}}
 	go func() {
-		p.served <- w.daemon.ServeHomeGateway(daemon.HomeGatewayDevice{DeviceID: deviceID, ProfileID: profileID}, phoneLink{p})
+		p.served <- w.daemon.ServeHomeGateway(daemon.HomeGatewayPhone{PhoneID: phoneID, ProfileID: profileID}, phoneLink{p})
 	}()
 	t.Cleanup(func() {
 		phoneLink{p}.Close()

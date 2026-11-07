@@ -110,7 +110,7 @@ func (pt *phoneTerminal) read() string {
 			pt.resized = append(pt.resized, resized)
 			return "resized"
 		default:
-			t.Fatalf("the home sent %s while the device awaited its terminal", frame)
+			t.Fatalf("the home sent %s while the phone awaited its terminal", frame)
 		}
 	}
 }

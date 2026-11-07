@@ -1,7 +1,7 @@
 import { ed25519, x25519 } from '@noble/curves/ed25519.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toBase64Url } from '../bytes'
-import type { DeviceKeys } from '../device'
+import type { PhoneKeys } from '../phoneKeys'
 import { runLink, type Link } from '../link'
 import { FakeCloudRelay, socketsOf } from '../test/fakeCloudRelay'
 import { ImageRefused, chunkWindow, fetchAskImage } from './images'
@@ -10,7 +10,7 @@ let cloudRelay: FakeCloudRelay
 let link: Link
 
 const signSecret = ed25519.utils.randomSecretKey()
-const keys: DeviceKeys = {
+const keys: PhoneKeys = {
   signSecret,
   signPub: ed25519.getPublicKey(signSecret),
   noiseSecret: x25519.utils.randomSecretKey(),

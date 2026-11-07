@@ -61,10 +61,10 @@ func NewPhone(t *testing.T, cloud *Cloud, name string) *Phone {
 	return &Phone{t: t, cloud: cloud, name: name, sign: sign, noise: key}
 }
 
-func (p *Phone) DeviceID() string { return keyID(p.sign.Public().(ed25519.PublicKey)) }
+func (p *Phone) PhoneID() string { return keyID(p.sign.Public().(ed25519.PublicKey)) }
 
-// ErrNotAdmitted is the Cloud Relay closing a device socket with 4403. The error's text carries the Cloud Relay's reason.
-var ErrNotAdmitted = errors.New("the Cloud Relay closed the device socket with 4403")
+// ErrNotAdmitted is the Cloud Relay closing a phone socket with 4403. The error's text carries the Cloud Relay's reason.
+var ErrNotAdmitted = errors.New("the Cloud Relay closed the phone socket with 4403")
 
 type PhoneSocket struct {
 	t      *testing.T
@@ -103,7 +103,7 @@ func (p *Phone) dial(qr PhoneQR, relayToken []byte) (*PhoneSocket, error) {
 		return nil, err
 	}
 	if challenge.kind != frameChallenge {
-		p.t.Fatalf("device socket: frame %d before the challenge", challenge.kind)
+		p.t.Fatalf("phone socket: frame %d before the challenge", challenge.kind)
 	}
 	message := append([]byte("attn-cloud/v1 auth device\n"+qr.HomeID+"\n"), challenge.payload...)
 	s.write(encodeEnvelope(frameAuth, 0, append(ed25519.Sign(p.sign, message), relayToken...)))
@@ -117,7 +117,7 @@ func (p *Phone) dial(qr PhoneQR, relayToken []byte) (*PhoneSocket, error) {
 			return s, nil
 		}
 		if f.kind != framePresence {
-			p.t.Fatalf("device socket: frame %d while waiting for ready: %s", f.kind, f.payload)
+			p.t.Fatalf("phone socket: frame %d while waiting for ready: %s", f.kind, f.payload)
 		}
 	}
 }
@@ -136,7 +136,7 @@ func (s *PhoneSocket) write(data []byte) {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	if err := s.conn.Write(ctx, websocket.MessageBinary, data); err != nil {
-		s.t.Fatalf("device socket write: %v", err)
+		s.t.Fatalf("phone socket write: %v", err)
 	}
 }
 
@@ -163,7 +163,7 @@ func (s *PhoneSocket) AwaitPresence(online bool) {
 	for {
 		f, err := s.read()
 		if err != nil {
-			s.t.Fatalf("device socket: waiting for presence %d: %v", want, err)
+			s.t.Fatalf("phone socket: waiting for presence %d: %v", want, err)
 		}
 		if f.kind == framePresence && len(f.payload) == 1 && f.payload[0] == want {
 			return
@@ -181,7 +181,7 @@ func (s *PhoneSocket) AwaitClosed() websocket.StatusCode {
 		if code := websocket.CloseStatus(err); code != -1 {
 			return code
 		}
-		s.t.Fatalf("device socket ended without a close frame: %v", err)
+		s.t.Fatalf("phone socket ended without a close frame: %v", err)
 	}
 }
 
@@ -222,7 +222,7 @@ func (s *PhoneSocket) handshake(kind byte, qr PhoneQR, first map[string]string, 
 			continue
 		}
 		if reply.kind != frameData {
-			s.t.Fatalf("device socket: frame %d while waiting for the handshake reply", reply.kind)
+			s.t.Fatalf("phone socket: frame %d while waiting for the handshake reply", reply.kind)
 		}
 		if _, s.send, s.recv, err = hs.ReadMessage(nil, reply.payload); err != nil {
 			s.t.Fatalf("reading the home's handshake reply: %v", err)
@@ -257,14 +257,14 @@ func (s *PhoneSocket) Next() (json.RawMessage, error) {
 			}
 			return plaintext, nil
 		default:
-			return nil, fmt.Errorf("device socket: unexpected frame %d", f.kind)
+			return nil, fmt.Errorf("phone socket: unexpected frame %d", f.kind)
 		}
 	}
 }
 
 func (s *PhoneSocket) Hello() homegateway.HomeGatewayWelcome {
 	s.t.Helper()
-	s.Send(homegateway.HomeGatewayHello{Cmd: "hello", API: homegateway.APIVersion, DeviceID: s.phone.DeviceID()})
+	s.Send(homegateway.HomeGatewayHello{Cmd: "hello", API: homegateway.APIVersion, DeviceID: s.phone.PhoneID()})
 	raw, err := s.Next()
 	if err != nil {
 		s.t.Fatalf("waiting for welcome: %v", err)

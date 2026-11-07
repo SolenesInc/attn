@@ -1,7 +1,7 @@
 import { CapacitorHttp, registerPlugin } from '@capacitor/core'
 import { ed25519 } from '@noble/curves/ed25519.js'
 import { toBase64Url } from './bytes'
-import { deviceKeys } from './device'
+import { phoneKeys } from './phoneKeys'
 
 export type ApnsEnvironment = 'sandbox' | 'production'
 
@@ -30,7 +30,7 @@ export const watchPushTokens = async (
   onRefused: (message: string) => void,
 ): Promise<() => Promise<void>> => {
   const { PushNotifications } = await import('@capacitor/push-notifications')
-  const keys = await deviceKeys()
+  const keys = await phoneKeys()
   const { environment } = await AttnPush.prepare({ noiseSecret: toBase64Url(keys.noiseSecret) })
   let permission = await PushNotifications.checkPermissions()
   if (permission.receive === 'prompt' || permission.receive === 'prompt-with-rationale') {
@@ -54,22 +54,22 @@ export const watchPushTokens = async (
   }
 }
 
-export const pushTokenMessage = (homeId: string, devicePub: string, environment: string, token: string) =>
-  new TextEncoder().encode(`attn-cloud/v1 push-token\n${homeId}\n${devicePub}\n${environment}\n${token}`)
+export const pushTokenMessage = (homeId: string, phonePub: string, environment: string, token: string) =>
+  new TextEncoder().encode(`attn-cloud/v1 push-token\n${homeId}\n${phonePub}\n${environment}\n${token}`)
 
 export const registerForPush = async (home: PushHome, { token, environment }: PushToken): Promise<void> => {
-  const keys = await deviceKeys()
-  const devicePub = toBase64Url(keys.signPub)
+  const keys = await phoneKeys()
+  const phonePub = toBase64Url(keys.signPub)
   const response = await CapacitorHttp.post({
     url: `${home.cloud}/v1/homes/${home.homeId}/push-token`,
     headers: { 'content-type': 'application/json' },
     data: {
-      device_sign_pub: devicePub,
+      device_sign_pub: phonePub,
       platform: 'apns',
       environment,
       token,
       sig: toBase64Url(
-        ed25519.sign(pushTokenMessage(home.homeId, devicePub, environment, token), keys.signSecret),
+        ed25519.sign(pushTokenMessage(home.homeId, phonePub, environment, token), keys.signSecret),
       ),
     },
   })

@@ -14,13 +14,13 @@ import (
 	"github.com/victorarias/attn/internal/setting"
 )
 
-// HomeGatewayDevice is a device the caller has already authenticated, with the profile its pairing reaches.
-type HomeGatewayDevice struct {
-	DeviceID  string
+// HomeGatewayPhone is a phone the caller has already authenticated, with the profile its pairing reaches.
+type HomeGatewayPhone struct {
+	PhoneID   string
 	ProfileID string
 }
 
-// HomeGatewayStream carries one device's Home Gateway messages, one JSON message per frame. Close must unblock Recv.
+// HomeGatewayStream carries one phone's Home Gateway messages, one JSON message per frame. Close must unblock Recv.
 type HomeGatewayStream interface {
 	Recv() ([]byte, error)
 	Send([]byte) error
@@ -70,7 +70,7 @@ type homeGatewayConns struct {
 }
 
 type homeGatewayConn struct {
-	device        HomeGatewayDevice
+	phone         HomeGatewayPhone
 	stream        HomeGatewayStream
 	sendMu        sync.Mutex
 	changed       chan struct{}
@@ -148,9 +148,9 @@ func (d *Daemon) phoneAccessEnabled() bool {
 	return d.on(setting.PhoneAccessEnabled)
 }
 
-// ServeHomeGateway answers one device until its stream ends, the home turns phone access off, or the daemon stops.
+// ServeHomeGateway answers one phone until its stream ends, the home turns phone access off, or the daemon stops.
 // A daemon stop closes the stream.
-func (d *Daemon) ServeHomeGateway(device HomeGatewayDevice, stream HomeGatewayStream) error {
+func (d *Daemon) ServeHomeGateway(phone HomeGatewayPhone, stream HomeGatewayStream) error {
 	defer stream.Close()
 	release, ok := d.life.Hold("home-gateway")
 	if !ok {
@@ -160,7 +160,7 @@ func (d *Daemon) ServeHomeGateway(device HomeGatewayDevice, stream HomeGatewaySt
 	stopClosing := context.AfterFunc(d.life.Context(), func() { stream.Close() })
 	defer stopClosing()
 
-	conn := &homeGatewayConn{device: device, stream: stream, changed: make(chan struct{}, 1), gardenChanged: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*homeGatewayTerminal{}}
+	conn := &homeGatewayConn{phone: phone, stream: stream, changed: make(chan struct{}, 1), gardenChanged: make(chan struct{}, 1), pinged: make(chan struct{}, 1), terminals: map[protocol.TerminalID]*homeGatewayTerminal{}}
 	d.homeGateway.add(conn)
 	defer d.homeGateway.remove(conn)
 	if err := d.homeGatewayWelcome(conn); err != nil {
@@ -227,9 +227,9 @@ func (d *Daemon) homeGatewayWelcome(conn *homeGatewayConn) error {
 	if hello.API < 1 {
 		return d.homeGatewayRefuse(conn, fmt.Sprintf("hello asked for api %d; this home serves api 1 to %d", hello.API, homegateway.APIVersion))
 	}
-	profile, err := d.store.GetProfile(conn.device.ProfileID)
+	profile, err := d.store.GetProfile(conn.phone.ProfileID)
 	if err != nil || profile.Deleted() {
-		return d.homeGatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.device.ProfileID))
+		return d.homeGatewayRefuse(conn, fmt.Sprintf("profile %s is gone from this home; pair the phone again", conn.phone.ProfileID))
 	}
 	conn.api = min(hello.API, homegateway.APIVersion)
 	if err := homeGatewaySend(conn, homegateway.HomeGatewayWelcome{
@@ -273,7 +273,7 @@ func (d *Daemon) homeGatewayReceive(conn *homeGatewayConn) error {
 		case "ask_answer":
 			var command homegateway.HomeGatewayAskAnswerCommand
 			if err := json.Unmarshal(frame, &command); err != nil {
-				return fmt.Errorf("device %s sent a malformed ask_answer: %w", conn.device.DeviceID, err)
+				return fmt.Errorf("phone %s sent a malformed ask_answer: %w", conn.phone.PhoneID, err)
 			}
 			if err := d.homeGatewayAnswerAsk(conn, command); err != nil {
 				return err
@@ -290,7 +290,7 @@ func (d *Daemon) homeGatewayReceive(conn *homeGatewayConn) error {
 		case "ask_image":
 			var command homegateway.HomeGatewayAskImage
 			if err := json.Unmarshal(frame, &command); err != nil {
-				return fmt.Errorf("device %s sent a malformed ask_image: %w", conn.device.DeviceID, err)
+				return fmt.Errorf("phone %s sent a malformed ask_image: %w", conn.phone.PhoneID, err)
 			}
 			if err := d.homeGatewayAskImage(conn, command); err != nil {
 				return err
@@ -300,7 +300,7 @@ func (d *Daemon) homeGatewayReceive(conn *homeGatewayConn) error {
 		if conn.api >= homeGatewayTerminalAPI && d.homeGatewayCommand(conn, message.Cmd, frame) {
 			continue
 		}
-		d.logf("Home Gateway: device %s sent %q, which this home does not serve", conn.device.DeviceID, message.Cmd)
+		d.logf("Home Gateway: phone %s sent %q, which this home does not serve", conn.phone.PhoneID, message.Cmd)
 	}
 }
 
@@ -308,11 +308,11 @@ func (d *Daemon) homeGatewayRefuse(conn *homeGatewayConn, message string) error 
 	if err := homeGatewaySend(conn, homegateway.HomeGatewayRefused{Event: "refused", Message: message}); err != nil {
 		return err
 	}
-	return errors.New("the Home Gateway refused device " + conn.device.DeviceID + ": " + message)
+	return errors.New("the Home Gateway refused phone " + conn.phone.PhoneID + ": " + message)
 }
 
 func (d *Daemon) homeGatewaySendSessions(conn *homeGatewayConn) error {
-	sessions := d.homeGatewaySessions(conn.device.ProfileID)
+	sessions := d.homeGatewaySessions(conn.phone.ProfileID)
 	if conn.sent != nil && wireEqual(conn.sent, sessions) {
 		return nil
 	}

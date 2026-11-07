@@ -233,7 +233,7 @@ func TestQuittingTheAppClosesItsPairingWindowsAndKeepsPairedPhones(t *testing.T)
 	if len(listed.PairingCodes) != 0 {
 		t.Fatalf("the app came back to live codes: %+v", listed.PairingCodes)
 	}
-	if _, kept := pairingOf(listed, phone.DeviceID()); !kept {
+	if _, kept := pairingOf(listed, phone.PhoneID()); !kept {
 		t.Fatalf("the app came back without the paired phone: %+v", listed.Pairings)
 	}
 }

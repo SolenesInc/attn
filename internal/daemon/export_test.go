@@ -129,6 +129,6 @@ func UseShippedPasteGap(t testing.TB) {
 	t.Cleanup(func() { sessionmonitor.SubmitDelay = 0 })
 }
 
-func (w *WireDaemon) ServeHomeGateway(device HomeGatewayDevice, stream HomeGatewayStream) error {
-	return w.d.ServeHomeGateway(device, stream)
+func (w *WireDaemon) ServeHomeGateway(phone HomeGatewayPhone, stream HomeGatewayStream) error {
+	return w.d.ServeHomeGateway(phone, stream)
 }

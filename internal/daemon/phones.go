@@ -113,7 +113,7 @@ func (h phoneHome) Pairings() ([]cloudlink.Pairing, error) {
 	}
 	pairings := make([]cloudlink.Pairing, 0, len(stored))
 	for _, p := range stored {
-		pairings = append(pairings, cloudlink.Pairing{DeviceID: p.DeviceID, ProfileID: p.ProfileID, DeviceSignPub: p.DeviceSignPub, DeviceNoisePub: p.DeviceNoisePub, Name: p.Name})
+		pairings = append(pairings, cloudlink.Pairing{PhoneID: p.PhoneID, ProfileID: p.ProfileID, PhoneSignPub: p.PhoneSignPub, PhoneNoisePub: p.PhoneNoisePub, Name: p.Name})
 	}
 	return pairings, nil
 }
@@ -121,28 +121,28 @@ func (h phoneHome) Pairings() ([]cloudlink.Pairing, error) {
 func (h phoneHome) AddPairing(p cloudlink.Pairing) error {
 	name := p.Name
 	if name == "" {
-		name = "Phone " + p.DeviceID[:6]
+		name = "Phone " + p.PhoneID[:6]
 	}
-	if err := h.d.store.AddPhonePairing(store.PhonePairing{DeviceID: p.DeviceID, ProfileID: p.ProfileID, DeviceSignPub: p.DeviceSignPub, DeviceNoisePub: p.DeviceNoisePub, Name: name, CreatedAt: time.Now()}); err != nil {
+	if err := h.d.store.AddPhonePairing(store.PhonePairing{PhoneID: p.PhoneID, ProfileID: p.ProfileID, PhoneSignPub: p.PhoneSignPub, PhoneNoisePub: p.PhoneNoisePub, Name: name, CreatedAt: time.Now()}); err != nil {
 		return err
 	}
-	h.d.logf("phones: paired device %s (%s) with profile %s", p.DeviceID, name, p.ProfileID)
+	h.d.logf("phones: paired phone %s (%s) with profile %s", p.PhoneID, name, p.ProfileID)
 	return nil
 }
 
-func (h phoneHome) Serve(device cloudlink.Device, stream cloudlink.Stream) {
+func (h phoneHome) Serve(phone cloudlink.Phone, stream cloudlink.Stream) {
 	d := h.d
-	d.touchPhonePairing(device)
-	err := d.ServeHomeGateway(HomeGatewayDevice{DeviceID: device.ID, ProfileID: device.ProfileID}, stream)
-	d.touchPhonePairing(device)
-	d.logf("phones: device %s left profile %s: %v", device.ID, device.ProfileID, err)
+	d.touchPhonePairing(phone)
+	err := d.ServeHomeGateway(HomeGatewayPhone{PhoneID: phone.ID, ProfileID: phone.ProfileID}, stream)
+	d.touchPhonePairing(phone)
+	d.logf("phones: phone %s left profile %s: %v", phone.ID, phone.ProfileID, err)
 }
 
-func (d *Daemon) touchPhonePairing(device cloudlink.Device) {
-	if err := d.store.TouchPhonePairing(device.ID, device.ProfileID, time.Now()); err != nil {
-		d.logf("phones: recording when device %s was last seen: %v", device.ID, err)
+func (d *Daemon) touchPhonePairing(phone cloudlink.Phone) {
+	if err := d.store.TouchPhonePairing(phone.ID, phone.ProfileID, time.Now()); err != nil {
+		d.logf("phones: recording when phone %s was last seen: %v", phone.ID, err)
 	}
-	d.publishFact(FactPhonesChanged, device.ProfileID, nil)
+	d.publishFact(FactPhonesChanged, phone.ProfileID, nil)
 }
 
 func (h phoneHome) Changed() { h.d.publishFact(FactPhonesChanged, "", nil) }
@@ -179,15 +179,15 @@ func (d *Daemon) phonesSnapshot() protocol.PhonesUpdatedMessage {
 	if err != nil {
 		d.logf("phones snapshot: %v", err)
 	}
-	connected := map[cloudlink.Device]bool{}
+	connected := map[cloudlink.Phone]bool{}
 	if link := d.cloudLink(); link != nil {
 		connected = link.Connected()
 	}
 	for _, p := range pairings {
 		message.Pairings = append(message.Pairings, protocol.PhonePairing{
-			DeviceID: p.DeviceID, ProfileID: p.ProfileID, Name: p.Name,
+			DeviceID: p.PhoneID, ProfileID: p.ProfileID, Name: p.Name,
 			CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339), LastSeenAt: p.LastSeenAt.UTC().Format(time.RFC3339),
-			Connected: connected[cloudlink.Device{ID: p.DeviceID, ProfileID: p.ProfileID}],
+			Connected: connected[cloudlink.Phone{ID: p.PhoneID, ProfileID: p.ProfileID}],
 		})
 	}
 	return message
@@ -269,12 +269,12 @@ func (d *Daemon) handlePhonePairingRevoke(client *wsClient, msg *protocol.PhoneP
 	case err != nil:
 		result.Error = protocol.Ptr(err.Error())
 	case !removed:
-		result.Error = protocol.Ptr(fmt.Sprintf("device %s has no pairing with profile %s", msg.DeviceID, msg.ProfileID))
+		result.Error = protocol.Ptr(fmt.Sprintf("phone %s has no pairing with profile %s", msg.DeviceID, msg.ProfileID))
 	default:
 		result.Success = true
-		d.logf("phones: revoked device %s from profile %s", msg.DeviceID, msg.ProfileID)
+		d.logf("phones: revoked phone %s from profile %s", msg.DeviceID, msg.ProfileID)
 		if link := d.cloudLink(); link != nil {
-			link.Revoked(cloudlink.Device{ID: msg.DeviceID, ProfileID: msg.ProfileID})
+			link.Revoked(cloudlink.Phone{ID: msg.DeviceID, ProfileID: msg.ProfileID})
 		}
 		d.publishFact(FactPhonesChanged, msg.ProfileID, nil)
 	}

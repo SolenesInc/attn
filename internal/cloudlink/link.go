@@ -40,14 +40,14 @@ const (
 )
 
 type Pairing struct {
-	DeviceID       string
-	ProfileID      string
-	DeviceSignPub  []byte
-	DeviceNoisePub []byte
-	Name           string
+	PhoneID       string
+	ProfileID     string
+	PhoneSignPub  []byte
+	PhoneNoisePub []byte
+	Name          string
 }
 
-type Device struct {
+type Phone struct {
 	ID        string
 	ProfileID string
 }
@@ -61,7 +61,7 @@ type Stream interface {
 type Home interface {
 	Pairings() ([]Pairing, error)
 	AddPairing(Pairing) error
-	Serve(Device, Stream)
+	Serve(Phone, Stream)
 	Changed()
 	Logf(format string, args ...any)
 }
@@ -300,43 +300,43 @@ func (l *Link) spendPairingCodeIntoPairing(pairingID string, pairingFor func(pro
 			return pairing, nil
 		}
 	}
-	return Pairing{}, fmt.Errorf("pairing code %s was used by another device first or expired; show a new one", pairingID)
+	return Pairing{}, fmt.Errorf("pairing code %s was used by another phone first or expired; show a new one", pairingID)
 }
 
-func (l *Link) Connected() map[Device]bool {
+func (l *Link) Connected() map[Phone]bool {
 	l.mu.Lock()
 	s := l.session
 	l.mu.Unlock()
-	connected := map[Device]bool{}
+	connected := map[Phone]bool{}
 	if s == nil {
 		return connected
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, dev := range s.devices {
+	for _, dev := range s.phones {
 		if dev.stream != nil {
-			connected[dev.device] = true
+			connected[dev.phone] = true
 		}
 	}
 	return connected
 }
 
-func (l *Link) Revoked(device Device) {
-	l.closeWhere(func(d Device) bool { return d == device })
+func (l *Link) Revoked(phone Phone) {
+	l.closeWhere(func(d Phone) bool { return d == phone })
 }
 
 func (l *Link) ProfileRemoved(profileID string) {
 	l.dropPairingCode(profileID)
-	l.closeWhere(func(d Device) bool { return d.ProfileID == profileID })
+	l.closeWhere(func(d Phone) bool { return d.ProfileID == profileID })
 }
 
-func (l *Link) closeWhere(match func(Device) bool) {
+func (l *Link) closeWhere(match func(Phone) bool) {
 	l.sendAllowlist()
 	l.mu.Lock()
 	s := l.session
 	l.mu.Unlock()
 	if s != nil {
-		s.closeDevices(match)
+		s.closePhones(match)
 	}
 }
 
@@ -359,11 +359,11 @@ func (l *Link) allowlist() (allowlist, error) {
 	if err != nil {
 		return allowlist{}, err
 	}
-	list := allowlist{Devices: []string{}, Pairings: []pairingWindow{}}
+	list := allowlist{Phones: []string{}, Pairings: []pairingWindow{}}
 	for _, pairing := range pairings {
-		key := b64(pairing.DeviceSignPub)
-		if !slices.Contains(list.Devices, key) {
-			list.Devices = append(list.Devices, key)
+		key := b64(pairing.PhoneSignPub)
+		if !slices.Contains(list.Phones, key) {
+			list.Phones = append(list.Phones, key)
 		}
 	}
 	for _, pairingCode := range l.pairingCodesLocked() {
@@ -435,7 +435,7 @@ func (l *Link) connect(ctx context.Context) (time.Duration, error) {
 	}
 	began := time.Now()
 	ctx, cancel := context.WithCancelCause(ctx)
-	s := &session{link: l, conn: conn, ctx: ctx, lost: cancel, devices: map[uint32]*deviceConn{}, allowChanged: make(chan struct{})}
+	s := &session{link: l, conn: conn, ctx: ctx, lost: cancel, phones: map[uint32]*phoneConn{}, allowChanged: make(chan struct{})}
 	defer func() {
 		cancel(nil)
 		conn.CloseNow()
@@ -469,7 +469,7 @@ type session struct {
 	pingUnseen bool
 
 	mu      sync.Mutex
-	devices map[uint32]*deviceConn
+	phones  map[uint32]*phoneConn
 	serving sync.WaitGroup
 
 	allow         sync.Mutex
@@ -593,22 +593,22 @@ func (s *session) handle(f frame) {
 	switch f.kind {
 	case frameOpen:
 		s.mu.Lock()
-		s.devices[f.connID] = &deviceConn{session: s, connID: f.connID, signPub: bytes.Clone(f.payload)}
+		s.phones[f.connID] = &phoneConn{session: s, connID: f.connID, signPub: bytes.Clone(f.payload)}
 		s.mu.Unlock()
 	case frameData:
 		s.mu.Lock()
-		dev := s.devices[f.connID]
+		dev := s.phones[f.connID]
 		s.mu.Unlock()
 		if dev == nil {
 			return
 		}
 		if err := dev.receive(f.payload); err != nil {
-			logf("cloudlink: device connection %d: %v", f.connID, err)
+			logf("cloudlink: phone connection %d: %v", f.connID, err)
 			dev.close()
 		}
 	case frameClose:
 		s.mu.Lock()
-		dev := s.devices[f.connID]
+		dev := s.phones[f.connID]
 		s.mu.Unlock()
 		if dev != nil {
 			dev.end()
@@ -630,11 +630,11 @@ func (s *session) handle(f frame) {
 	}
 }
 
-func (s *session) closeDevices(match func(Device) bool) {
+func (s *session) closePhones(match func(Phone) bool) {
 	s.mu.Lock()
-	var matches []*deviceConn
-	for _, dev := range s.devices {
-		if dev.stream != nil && match(dev.device) {
+	var matches []*phoneConn
+	for _, dev := range s.phones {
+		if dev.stream != nil && match(dev.phone) {
 			matches = append(matches, dev)
 		}
 	}
@@ -646,35 +646,35 @@ func (s *session) closeDevices(match func(Device) bool) {
 
 func (s *session) closeAll() {
 	s.mu.Lock()
-	devices := make([]*deviceConn, 0, len(s.devices))
-	for _, dev := range s.devices {
-		devices = append(devices, dev)
+	phones := make([]*phoneConn, 0, len(s.phones))
+	for _, dev := range s.phones {
+		phones = append(phones, dev)
 	}
 	s.mu.Unlock()
-	for _, dev := range devices {
+	for _, dev := range phones {
 		dev.end()
 	}
 	s.serving.Wait()
 }
 
 type firstMessage struct {
-	ProfileID  string `json:"profile_id,omitempty"`
-	PairingID  string `json:"pairing_id,omitempty"`
-	DeviceName string `json:"device_name,omitempty"`
+	ProfileID string `json:"profile_id,omitempty"`
+	PairingID string `json:"pairing_id,omitempty"`
+	PhoneName string `json:"device_name,omitempty"`
 }
 
-type deviceConn struct {
+type phoneConn struct {
 	session *session
 	connID  uint32
 	signPub []byte
 
 	answered *answered
-	device   Device
+	phone    Phone
 	pairing  *Pairing
 	stream   *stream
 }
 
-func (d *deviceConn) receive(payload []byte) error {
+func (d *phoneConn) receive(payload []byte) error {
 	switch {
 	case d.answered == nil:
 		return d.answer(payload)
@@ -690,7 +690,7 @@ func (d *deviceConn) receive(payload []byte) error {
 	}
 }
 
-func (d *deviceConn) answer(payload []byte) error {
+func (d *phoneConn) answer(payload []byte) error {
 	if len(payload) < 1 {
 		return errors.New("an empty first message")
 	}
@@ -707,7 +707,7 @@ func (d *deviceConn) answer(payload []byte) error {
 				return nil, err
 			}
 			d.pairing = &pairing
-			return pairing.DeviceNoisePub, nil
+			return pairing.PhoneNoisePub, nil
 		})
 	case handshakePair:
 		result, err = answerPairing(static, d.signPub, msg1, nil, link.secretFor)
@@ -721,21 +721,21 @@ func (d *deviceConn) answer(payload []byte) error {
 	return d.session.write(frameData, d.connID, result.msg2)
 }
 
-func (l *Link) findPairing(deviceID, profileID string) (Pairing, error) {
+func (l *Link) findPairing(phoneID, profileID string) (Pairing, error) {
 	pairings, err := l.cfg.Home.Pairings()
 	if err != nil {
 		return Pairing{}, err
 	}
 	for _, pairing := range pairings {
-		if pairing.DeviceID == deviceID && pairing.ProfileID == profileID {
+		if pairing.PhoneID == phoneID && pairing.ProfileID == profileID {
 			return pairing, nil
 		}
 	}
-	return Pairing{}, fmt.Errorf("device %s has no pairing with profile %q on this home; it was revoked or never paired", deviceID, profileID)
+	return Pairing{}, fmt.Errorf("phone %s has no pairing with profile %q on this home; it was revoked or never paired", phoneID, profileID)
 }
 
-// The first transport message is the first proof that a pairing device holds the secret.
-func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
+// The first transport message is the first proof that a pairing phone holds the secret.
+func (d *phoneConn) acceptFirstMessage(ciphertext []byte) error {
 	plaintext, err := d.answered.transport.open(ciphertext)
 	if err != nil {
 		return fmt.Errorf("decrypting the first message after the handshake: %w", err)
@@ -744,7 +744,7 @@ func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
 	if d.answered.pairing {
 		claim := d.answered.claim
 		pairing, err := link.spendPairingCodeIntoPairing(claim.PairingID, func(profileID string) Pairing {
-			return Pairing{DeviceID: KeyID(d.signPub), ProfileID: profileID, DeviceSignPub: d.signPub, DeviceNoisePub: d.answered.peerStatic, Name: claim.DeviceName}
+			return Pairing{PhoneID: KeyID(d.signPub), ProfileID: profileID, PhoneSignPub: d.signPub, PhoneNoisePub: d.answered.peerStatic, Name: claim.PhoneName}
 		})
 		if err != nil {
 			return err
@@ -759,57 +759,57 @@ func (d *deviceConn) acceptFirstMessage(ciphertext []byte) error {
 	d.session.serving.Add(1)
 	go func() {
 		defer d.session.serving.Done()
-		link.cfg.Home.Serve(d.device, d.stream)
+		link.cfg.Home.Serve(d.phone, d.stream)
 	}()
 	return nil
 }
 
-func (d *deviceConn) openStreamIfStillPaired(first []byte) error {
+func (d *phoneConn) openStreamIfStillPaired(first []byte) error {
 	s := d.session
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.devices[d.connID] != d {
-		return errors.New("the device's connection closed during its handshake")
+	if s.phones[d.connID] != d {
+		return errors.New("the phone's connection closed during its handshake")
 	}
-	if _, err := s.link.findPairing(d.pairing.DeviceID, d.pairing.ProfileID); err != nil {
+	if _, err := s.link.findPairing(d.pairing.PhoneID, d.pairing.ProfileID); err != nil {
 		return err
 	}
-	d.device = Device{ID: d.pairing.DeviceID, ProfileID: d.pairing.ProfileID}
+	d.phone = Phone{ID: d.pairing.PhoneID, ProfileID: d.pairing.ProfileID}
 	d.stream = &stream{dev: d, in: make(chan []byte, 1), done: make(chan struct{})}
 	d.stream.in <- first
 	return nil
 }
 
-func (d *deviceConn) close() {
+func (d *phoneConn) close() {
 	if d.forget() {
 		_ = d.session.write(frameClose, d.connID, nil)
 	}
 	d.endStream()
 }
 
-func (d *deviceConn) end() {
+func (d *phoneConn) end() {
 	d.forget()
 	d.endStream()
 }
 
-func (d *deviceConn) forget() bool {
+func (d *phoneConn) forget() bool {
 	d.session.mu.Lock()
 	defer d.session.mu.Unlock()
-	if d.session.devices[d.connID] != d {
+	if d.session.phones[d.connID] != d {
 		return false
 	}
-	delete(d.session.devices, d.connID)
+	delete(d.session.phones, d.connID)
 	return true
 }
 
-func (d *deviceConn) endStream() {
+func (d *phoneConn) endStream() {
 	if d.stream != nil {
 		d.stream.end()
 	}
 }
 
 type stream struct {
-	dev    *deviceConn
+	dev    *phoneConn
 	sendMu sync.Mutex
 	in     chan []byte
 	done   chan struct{}

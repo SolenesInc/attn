@@ -8,7 +8,7 @@ import type {
 } from '@attn/types/homeGatewayGenerated'
 import { HOME_GATEWAY_API_VERSION } from '@attn/types/homeGatewayVersion'
 import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
-import { relayToken, signChallenge, type DeviceKeys } from './device'
+import { relayToken, signChallenge, type PhoneKeys } from './phoneKeys'
 import { HandshakeKind, startHandshake, type Transport } from './noise'
 
 export const connectTimeoutMs = 10_000
@@ -120,7 +120,7 @@ export const terminalCreditBytes = 256 << 10
 
 type Pending = { readonly resolve: (reply: Reply) => void; readonly reject: (error: Error) => void }
 
-const deviceAddress = (home: Home): string =>
+const phoneAddress = (home: Home): string =>
   `${home.cloud.replace(/^http/, 'ws')}/v1/homes/${home.homeId}/device`
 
 const closeReason = (
@@ -150,13 +150,13 @@ const closeReason = (
 
 const openSocket = (
   home: Home,
-  keys: DeviceKeys,
+  keys: PhoneKeys,
   pairing: Pairing | undefined,
   onEvent: (event: LinkEvent) => void,
   onTerminal: (event: TerminalEvent) => void,
   onEnd: (reason: string, final: boolean) => void,
 ): Socket => {
-  const url = deviceAddress(home)
+  const url = phoneAddress(home)
   const socket = new WebSocket(`${url}?device_sign_pub=${toBase64Url(keys.signPub)}`)
   socket.binaryType = 'arraybuffer'
   let ended = false
@@ -242,7 +242,7 @@ const openSocket = (
         kind: pairing ? HandshakeKind.pair : HandshakeKind.paired,
         staticPrivate: keys.noiseSecret,
         homeStaticPublic: fromBase64Url(home.homeNoisePub),
-        deviceSignPub: keys.signPub,
+        phoneSignPub: keys.signPub,
         ...(pairing ? { psk: pairing.secret } : {}),
       },
       new TextEncoder().encode(JSON.stringify(first)),
@@ -402,7 +402,7 @@ type Attached = { request: TerminalRequest; readonly sink: TerminalSink }
 const olderHome = (homeName: string) =>
   `attn on ${homeName} is too old to open terminals from a phone; update it to the latest attn`
 
-export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent) => void): Link => {
+export const runLink = (home: Home, keys: PhoneKeys, onEvent: (event: LinkEvent) => void): Link => {
   let retryMs = firstRetryMs
   let retry: ReturnType<typeof setTimeout> | undefined
   let socket: Socket | undefined
@@ -499,7 +499,7 @@ export const runLink = (home: Home, keys: DeviceKeys, onEvent: (event: LinkEvent
 
 export const pairWithHome = (
   home: Home,
-  keys: DeviceKeys,
+  keys: PhoneKeys,
   pairing: Pairing,
 ): Promise<{ homeName: string; profileName: string }> =>
   new Promise((resolve, reject) => {

@@ -124,7 +124,7 @@ func respond(t *testing.T, kind handshakeKind, homePrivate, homeEphemeral, signP
 func TestNoiseVectors(t *testing.T) {
 	if *update {
 		vectors := []noiseVector{
-			generateVector(t, "pair: IKpsk2 with a pairing secret", handshakePair, firstMessage{PairingID: "pairing-1", DeviceName: "Test iPhone"}),
+			generateVector(t, "pair: IKpsk2 with a pairing secret", handshakePair, firstMessage{PairingID: "pairing-1", PhoneName: "Test iPhone"}),
 			generateVector(t, "paired: IK with the paired Noise key", handshakePaired, firstMessage{ProfileID: "default"}),
 		}
 		data, _ := json.MarshalIndent(vectors, "", "  ")

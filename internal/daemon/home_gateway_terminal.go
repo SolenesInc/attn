@@ -24,8 +24,8 @@ const homeGatewayTerminalAPI = 4
 // Cloud Relay's measured 4,000 messages a second for a whole home (plan F2).
 const homeGatewayOutputCoalesce = 16 * time.Millisecond
 
-// homeGatewayPendingTripwire bounds output held for a device that stopped granting credit. Past it, a fresh screen
-// replaces the backlog: a device that far behind gains nothing from replaying it.
+// homeGatewayPendingTripwire bounds output held for a phone that stopped granting credit. Past it, a fresh screen
+// replaces the backlog: a phone that far behind gains nothing from replaying it.
 const homeGatewayPendingTripwire = 1 << 20
 
 type homeGatewayTerminal struct {
@@ -97,7 +97,7 @@ func (d *Daemon) homeGatewayCommand(conn *homeGatewayConn, cmd string, frame []b
 func decodeHomeGatewayCommand[T any](d *Daemon, conn *homeGatewayConn, frame []byte) (T, bool) {
 	var message T
 	if err := json.Unmarshal(frame, &message); err != nil {
-		d.logf("Home Gateway: device %s sent %s, which does not decode: %v", conn.device.DeviceID, frame, err)
+		d.logf("Home Gateway: phone %s sent %s, which does not decode: %v", conn.phone.PhoneID, frame, err)
 		return message, false
 	}
 	return message, true
@@ -123,7 +123,7 @@ func (d *Daemon) homeGatewayTerminalOfProfile(conn *homeGatewayConn, terminal pr
 		return false
 	}
 	session := d.store.Get(sessionID)
-	return session != nil && session.ProfileID == conn.device.ProfileID
+	return session != nil && session.ProfileID == conn.phone.ProfileID
 }
 
 func (d *Daemon) homeGatewayAttach(conn *homeGatewayConn, message homegateway.TerminalAttach) {
@@ -155,7 +155,7 @@ func (d *Daemon) homeGatewayAttach(conn *homeGatewayConn, message homegateway.Te
 }
 
 func (d *Daemon) homeGatewayOpenStream(terminal *homeGatewayTerminal) (ptybackend.Stream, error) {
-	subscriber := fmt.Sprintf("home-gateway:%s:%p", terminal.conn.device.DeviceID, terminal)
+	subscriber := fmt.Sprintf("home-gateway:%s:%p", terminal.conn.phone.PhoneID, terminal)
 	_, stream, err := d.router().Attach(context.Background(), terminal.id, subscriber, ptybackend.AttachOptions{OmitReplay: true})
 	return stream, err
 }
@@ -242,7 +242,7 @@ func (d *Daemon) homeGatewaySubmitPrompt(conn *homeGatewayConn, message homegate
 	sessionID := protocol.SessionID(message.SessionID)
 	session := d.store.Get(sessionID)
 	switch {
-	case session == nil || session.ProfileID != conn.device.ProfileID:
+	case session == nil || session.ProfileID != conn.phone.ProfileID:
 		result.Message = protocol.Ptr(fmt.Sprintf("session %s is not a session of this pairing's profile", sessionID))
 	case strings.TrimSpace(message.Text) == "":
 		result.Message = protocol.Ptr("there is no text to send")
@@ -258,7 +258,7 @@ func (d *Daemon) homeGatewaySubmitPrompt(conn *homeGatewayConn, message homegate
 }
 
 func (d *Daemon) homeGatewayTerminalError(conn *homeGatewayConn, id protocol.TerminalID, message string) {
-	d.logf("Home Gateway: device %s, terminal %s: %s", conn.device.DeviceID, id, message)
+	d.logf("Home Gateway: phone %s, terminal %s: %s", conn.phone.PhoneID, id, message)
 	_ = homeGatewaySend(conn, homegateway.TerminalError{Event: "terminal_error", TerminalID: string(id), Message: message})
 }
 

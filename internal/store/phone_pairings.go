@@ -5,13 +5,13 @@ import (
 )
 
 type PhonePairing struct {
-	DeviceID       string
-	ProfileID      string
-	DeviceSignPub  []byte
-	DeviceNoisePub []byte
-	Name           string
-	CreatedAt      time.Time
-	LastSeenAt     time.Time
+	PhoneID       string
+	ProfileID     string
+	PhoneSignPub  []byte
+	PhoneNoisePub []byte
+	Name          string
+	CreatedAt     time.Time
+	LastSeenAt    time.Time
 }
 
 func (s *Store) PhonePairings() ([]PhonePairing, error) {
@@ -27,7 +27,7 @@ func (s *Store) PhonePairings() ([]PhonePairing, error) {
 	for rows.Next() {
 		var p PhonePairing
 		var created, seen string
-		if err := rows.Scan(&p.DeviceID, &p.ProfileID, &p.DeviceSignPub, &p.DeviceNoisePub, &p.Name, &created, &seen); err != nil {
+		if err := rows.Scan(&p.PhoneID, &p.ProfileID, &p.PhoneSignPub, &p.PhoneNoisePub, &p.Name, &created, &seen); err != nil {
 			return nil, err
 		}
 		p.CreatedAt, _ = time.Parse(time.RFC3339Nano, created)
@@ -45,22 +45,22 @@ func (s *Store) AddPhonePairing(p PhonePairing) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(device_id, profile_id) DO UPDATE SET device_sign_pub = excluded.device_sign_pub,
 			device_noise_pub = excluded.device_noise_pub, name = excluded.name, created_at = excluded.created_at, last_seen_at = excluded.last_seen_at`,
-		p.DeviceID, p.ProfileID, p.DeviceSignPub, p.DeviceNoisePub, p.Name, now, now)
+		p.PhoneID, p.ProfileID, p.PhoneSignPub, p.PhoneNoisePub, p.Name, now, now)
 	return err
 }
 
-func (s *Store) TouchPhonePairing(deviceID, profileID string, seen time.Time) error {
+func (s *Store) TouchPhonePairing(phoneID, profileID string, seen time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`UPDATE phone_pairings SET last_seen_at = ? WHERE device_id = ? AND profile_id = ?`,
-		seen.UTC().Format(time.RFC3339Nano), deviceID, profileID)
+		seen.UTC().Format(time.RFC3339Nano), phoneID, profileID)
 	return err
 }
 
-func (s *Store) RemovePhonePairing(deviceID, profileID string) (bool, error) {
+func (s *Store) RemovePhonePairing(phoneID, profileID string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result, err := s.db.Exec(`DELETE FROM phone_pairings WHERE device_id = ? AND profile_id = ?`, deviceID, profileID)
+	result, err := s.db.Exec(`DELETE FROM phone_pairings WHERE device_id = ? AND profile_id = ?`, phoneID, profileID)
 	if err != nil {
 		return false, err
 	}

@@ -26,7 +26,7 @@ func (d *Daemon) homeGatewaySendGarden(conn *homeGatewayConn) error {
 	if conn.api < homeGatewayGardenAPI {
 		return nil
 	}
-	read, err := d.readGarden(conn.device.ProfileID)
+	read, err := d.readGarden(conn.phone.ProfileID)
 	if err != nil {
 		if docstore.IsUndeclaredCollection(err) {
 			return d.homeGatewaySendGardenWindow(conn, nil, nil)
@@ -58,11 +58,11 @@ func (d *Daemon) homeGatewaySendSeedChanges(conn *homeGatewayConn) error {
 		seed, _, err := d.readSeed(id)
 		if err != nil {
 			if refusal := protocol.RefusalOf(err); refusal == nil || *refusal != protocol.RefusalNotFound {
-				d.logf("Home Gateway: device %s misses a change to seed %s: %v", conn.device.DeviceID, id, err)
+				d.logf("Home Gateway: phone %s misses a change to seed %s: %v", conn.phone.PhoneID, id, err)
 			}
 			continue
 		}
-		if seed.ProfileID != conn.device.ProfileID {
+		if seed.ProfileID != conn.phone.ProfileID {
 			continue
 		}
 		if err := homeGatewaySend(conn, homegateway.HomeGatewaySeedChanged{Event: "seed_changed", SeedID: id}); err != nil {
@@ -187,7 +187,7 @@ func (g gardenRead) homeGatewaySeed(seed garden.Seed) homegateway.HomeGatewaySee
 
 func (d *Daemon) homeGatewayProfileSeed(conn *homeGatewayConn, id string) (garden.Seed, error) {
 	seed, _, err := d.readSeed(id)
-	if err == nil && seed.ProfileID != conn.device.ProfileID {
+	if err == nil && seed.ProfileID != conn.phone.ProfileID {
 		return garden.Seed{}, protocol.Refuse(protocol.RefusalNotFound, "no seed %s is planted here; `attn seed ls` lists the garden", id)
 	}
 	return seed, err
@@ -343,7 +343,7 @@ func (d *Daemon) homeGatewayMoveSeed(conn *homeGatewayConn, command homegateway.
 
 func (d *Daemon) homeGatewayGardenCommand(conn *homeGatewayConn, cmd string, frame []byte) error {
 	malformed := func(err error) error {
-		return fmt.Errorf("device %s sent a malformed %s: %w", conn.device.DeviceID, cmd, err)
+		return fmt.Errorf("phone %s sent a malformed %s: %w", conn.phone.PhoneID, cmd, err)
 	}
 	switch cmd {
 	case "seed_get":

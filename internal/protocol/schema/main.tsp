@@ -8490,7 +8490,7 @@ model PhonePairingCode {
   qr: string;
 }
 
-// One device's access to one profile. connected: the device holds a Home Gateway
+// One phone's access to one profile. connected: the phone holds a Home Gateway
 // conversation right now.
 model PhonePairing {
   device_id: string;
@@ -8544,7 +8544,7 @@ model PhonePairCancelResultMessage {
   error?: string;
 }
 
-// Removes the pairing and disconnects the device from that profile.
+// Removes the pairing and disconnects the phone from that profile.
 model PhonePairingRevokeMessage {
   cmd: "phone_pairing_revoke";
   request_id: string;

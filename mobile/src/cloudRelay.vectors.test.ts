@@ -5,7 +5,7 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { toBase64Url } from './bytes'
-import { relayToken, type DeviceKeys } from './device'
+import { relayToken, type PhoneKeys } from './phoneKeys'
 import { pairWithHome, runLink, type LinkEvent } from './link'
 import { pushTokenMessage, registerForPush } from './push'
 import { FakeCloudRelay, FakeSocket, frame } from './test/fakeCloudRelay'
@@ -37,7 +37,7 @@ const named = (name: string) => vectors.frames.find((each) => each.name === name
 const wire = (name: string) => hexToBytes(named(name).bytes).buffer as ArrayBuffer
 
 const signSecret = hexToBytes(vectors.sign_seed)
-const keys: DeviceKeys = {
+const keys: PhoneKeys = {
   signSecret,
   signPub: ed25519.getPublicKey(signSecret),
   noiseSecret: x25519.utils.randomSecretKey(),

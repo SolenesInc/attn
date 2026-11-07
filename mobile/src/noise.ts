@@ -8,8 +8,8 @@ export type HandshakeKind = (typeof HandshakeKind)[keyof typeof HandshakeKind]
 const encoder = new TextEncoder()
 const empty = new Uint8Array(0)
 
-export const prologue = (deviceSignPub: Uint8Array): Uint8Array =>
-  concat(encoder.encode('attn-cloud/v1 noise\n'), deviceSignPub)
+export const prologue = (phoneSignPub: Uint8Array): Uint8Array =>
+  concat(encoder.encode('attn-cloud/v1 noise\n'), phoneSignPub)
 
 export const concat = (...parts: ReadonlyArray<Uint8Array>): Uint8Array => {
   const out = new Uint8Array(parts.reduce((size, part) => size + part.length, 0))
@@ -100,7 +100,7 @@ export type InitiatorConfig = {
   kind: HandshakeKind
   staticPrivate: Uint8Array
   homeStaticPublic: Uint8Array
-  deviceSignPub: Uint8Array
+  phoneSignPub: Uint8Array
   psk?: Uint8Array
   ephemeralPrivate?: Uint8Array
 }
@@ -116,7 +116,7 @@ export const startHandshake = async (config: InitiatorConfig, payload: Uint8Arra
   const state = new SymmetricState(
     usesPsk ? 'Noise_IKpsk2_25519_ChaChaPoly_SHA256' : 'Noise_IK_25519_ChaChaPoly_SHA256',
   )
-  state.mixHash(prologue(config.deviceSignPub))
+  state.mixHash(prologue(config.phoneSignPub))
   state.mixHash(config.homeStaticPublic)
 
   const ephemeralPrivate = config.ephemeralPrivate ?? crypto.getRandomValues(new Uint8Array(32))
