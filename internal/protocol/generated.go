@@ -3753,6 +3753,20 @@ type Desktop struct {
 	TreeJson string `json:"tree_json"`
 }
 
+type DesktopBringBackLeafMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// LeafID corresponds to the JSON schema field "leaf_id".
+	LeafID string `json:"leaf_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
 type DesktopCloseMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3915,6 +3929,23 @@ type DesktopPlaceSessionMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID SessionID `json:"session_id"`
+}
+
+type DesktopPopOutLeafMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Frame corresponds to the JSON schema field "frame".
+	Frame TileWindowFrame `json:"frame"`
+
+	// LeafID corresponds to the JSON schema field "leaf_id".
+	LeafID string `json:"leaf_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type DesktopRemoveLeafMessage struct {
@@ -13845,6 +13876,20 @@ type TierDefaults struct {
 
 	// Standard corresponds to the JSON schema field "standard".
 	Standard *string `json:"standard,omitempty,omitzero"`
+}
+
+type TileWindowFrame struct {
+	// Height corresponds to the JSON schema field "height".
+	Height float64 `json:"height"`
+
+	// Width corresponds to the JSON schema field "width".
+	Width float64 `json:"width"`
+
+	// X corresponds to the JSON schema field "x".
+	X float64 `json:"x"`
+
+	// Y corresponds to the JSON schema field "y".
+	Y float64 `json:"y"`
 }
 
 type TranscriptActivityKind string

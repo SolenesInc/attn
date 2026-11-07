@@ -73,6 +73,15 @@ var (
 		Since:   "2026-10-18",
 		Search:  "point guided steps tour",
 	})
+	TilePopoutEnabled = feature("tile_popout_enabled", "Let tiles pop out of the main window into their own windows: true or false. Off by default.", Info{
+		Name:    "Tile windows",
+		Summary: "Pop a tile out of the main window into its own window, and bring it back to its column.",
+		Group:   Interface,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-07",
+		Search:  "pop out popout window tile detach bring back",
+	})
 	OutpostsEnabled = feature("outposts_enabled", "Connect to outposts from this home: true or false. Experimental; off by default.", Info{
 		Name:    "Outposts",
 		Summary: "Connect this home to attn on other computers.",

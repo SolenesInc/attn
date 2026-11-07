@@ -29,7 +29,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { AgentCatalogResult, DelegationPreferences, OutpostInfo } from '../types/generated';
+import type { AgentCatalogResult, DelegationPreferences, OutpostInfo, TileWindowFrame } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -4170,6 +4170,18 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopPopOutLeaf = useCallback(
+    ({ desktopId, leafId, frame }: { desktopId: string; leafId: string; frame: TileWindowFrame }) =>
+      sendProfileCommand('desktop_pop_out_leaf', { desktop_id: desktopId, leaf_id: leafId, frame }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopBringBackLeaf = useCallback(
+    ({ desktopId, leafId }: { desktopId: string; leafId: string }) =>
+      sendProfileCommand('desktop_bring_back_leaf', { desktop_id: desktopId, leaf_id: leafId }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopSetSplitRatio = useCallback(
     (desktopId: string, splitId: string, ratio: number) =>
       sendProfileCommand('desktop_set_split_ratio', {
@@ -4272,6 +4284,8 @@ export function useDaemonSocket({
     sendDesktopCloseTile,
     sendDesktopSetSplitRatio,
     sendDesktopSetWantedCols,
+    sendDesktopPopOutLeaf,
+    sendDesktopBringBackLeaf,
     sendMigrationGet,
     sendLaunchDesktopGet,
     sendLaunchDesktopSet,

@@ -949,6 +949,9 @@ func showDesktopLeaf(tx *sql.Tx, now string, profile *profiles.Profile, desktop 
 	if err := saveDesktopFocus(tx, now, desktop, leafID); err != nil {
 		return err
 	}
+	if layouttree.Popped(desktop.Tree, leafID) {
+		return touchProfileUse(tx, profile, now)
+	}
 	profile.CurrentDesktopID = desktop.ID
 	profile.LastUsedAt = now
 	_, err := tx.Exec(`UPDATE profiles SET current_desktop_id = ?, last_used_at = ? WHERE id = ?`, desktop.ID, now, profile.ID)
@@ -999,10 +1002,9 @@ func (s *Store) ShowSession(sessionID protocol.SessionID) (profiles.Profile, pro
 			return err
 		}
 		if len(tiles) > 0 {
-			if desktop, err = loadDesktop(tx, tiles[0].desktopID); err != nil {
+			if desktop, leafID, err = shownSessionTile(tx, tiles); err != nil {
 				return err
 			}
-			leafID = tiles[0].tileID
 			return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
 		}
 		if desktop, leafID, err = placeShownSession(tx, now, profile, sessionID); err != nil {
@@ -1011,6 +1013,23 @@ func (s *Store) ShowSession(sessionID protocol.SessionID) (profiles.Profile, pro
 		return showDesktopLeaf(tx, now, &profile, &desktop, leafID)
 	})
 	return profile, desktop, leafID, err
+}
+
+func shownSessionTile(tx *sql.Tx, tiles []sessionTile) (profiles.Desktop, string, error) {
+	var first profiles.Desktop
+	for i, tile := range tiles {
+		desktop, err := loadDesktop(tx, tile.desktopID)
+		if err != nil {
+			return profiles.Desktop{}, "", err
+		}
+		if layouttree.Popped(desktop.Tree, tile.tileID) {
+			return desktop, tile.tileID, nil
+		}
+		if i == 0 {
+			first = desktop
+		}
+	}
+	return first, tiles[0].tileID, nil
 }
 
 func placeShownSession(tx *sql.Tx, now string, profile profiles.Profile, sessionID protocol.SessionID) (profiles.Desktop, string, error) {
@@ -1406,6 +1425,31 @@ func (s *Store) SetDesktopWantedWidth(desktopID, leafID string, width layouttree
 	}
 	return s.editDesktopInTx(desktopID, func(tx *sql.Tx, desktop profiles.Desktop) (profiles.Desktop, error) {
 		next, ok := layouttree.SetWantedWidth(desktop.Tree, leafID, width)
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
+		}
+		desktop.Tree = next
+		return desktop, nil
+	})
+}
+
+func (s *Store) PopOutLeaf(desktopID, leafID string, frame layouttree.TileWindow) (profiles.Desktop, error) {
+	if !(frame.Width > 0 && frame.Height > 0) {
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeInvalid, "tile window frame for leaf %q is %gx%g; send a width and height above 0", leafID, frame.Width, frame.Height)
+	}
+	return s.EditDesktopArrangement(desktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		next, ok := layouttree.PopOut(desktop.Tree, leafID, frame)
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
+		}
+		desktop.Tree = next
+		return desktop, nil
+	})
+}
+
+func (s *Store) BringBackLeaf(desktopID, leafID string) (profiles.Desktop, error) {
+	return s.EditDesktopArrangement(desktopID, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		next, ok := layouttree.BringBack(desktop.Tree, leafID)
 		if !ok {
 			return desktop, profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", leafID, desktopID)
 		}

@@ -340,6 +340,8 @@ const (
 	CmdDesktopCloseTile     = "desktop_close_tile"
 	CmdDesktopSetSplitRatio = "desktop_set_split_ratio"
 	CmdDesktopSetWantedCols = "desktop_set_wanted_cols"
+	CmdDesktopPopOutLeaf    = "desktop_pop_out_leaf"
+	CmdDesktopBringBackLeaf = "desktop_bring_back_leaf"
 	CmdDesktopDockTile      = "desktop_dock_tile"
 	CmdDesktopUpdateTile    = "desktop_update_tile"
 )

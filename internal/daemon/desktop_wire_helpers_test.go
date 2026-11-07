@@ -80,21 +80,22 @@ func focusAgent(t *testing.T, w *world, app *testworld.Peer, sessionID string) {
 }
 
 type layoutNode struct {
-	Type           string       `json:"type"`
-	PaneID         string       `json:"pane_id"`
-	TileID         string       `json:"tile_id"`
-	TileKind       string       `json:"tile_kind"`
-	TileParams     string       `json:"tile_params"`
-	TileSessionID  string       `json:"tile_session_id"`
-	ShowRequests   int          `json:"show_requests"`
-	WantedCols     int          `json:"wanted_cols"`
-	WantedAreaCols int          `json:"wanted_area_cols"`
-	SplitID        string       `json:"split_id"`
-	Direction      string       `json:"direction"`
-	Ratio          float64      `json:"ratio"`
-	RatioLocked    bool         `json:"ratio_locked"`
-	RatioMode      string       `json:"ratio_mode"`
-	Children       []layoutNode `json:"children"`
+	Type           string                    `json:"type"`
+	PaneID         string                    `json:"pane_id"`
+	TileID         string                    `json:"tile_id"`
+	TileKind       string                    `json:"tile_kind"`
+	TileParams     string                    `json:"tile_params"`
+	TileSessionID  string                    `json:"tile_session_id"`
+	ShowRequests   int                       `json:"show_requests"`
+	WantedCols     int                       `json:"wanted_cols"`
+	WantedAreaCols int                       `json:"wanted_area_cols"`
+	Window         *protocol.TileWindowFrame `json:"window"`
+	SplitID        string                    `json:"split_id"`
+	Direction      string                    `json:"direction"`
+	Ratio          float64                   `json:"ratio"`
+	RatioLocked    bool                      `json:"ratio_locked"`
+	RatioMode      string                    `json:"ratio_mode"`
+	Children       []layoutNode              `json:"children"`
 }
 
 func desktopTree(t *testing.T, desktop protocol.Desktop) layoutNode {

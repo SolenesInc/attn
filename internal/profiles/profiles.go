@@ -3,6 +3,7 @@ package profiles
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -259,8 +260,8 @@ func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus Close
 	}
 	if !live[desktop.ActivePaneID] {
 		desktop.ActivePaneID = closeFocus(previousTree, desktop.ActivePaneID, live, history)
-		if desktop.ActivePaneID == "" && len(leaves) > 0 {
-			desktop.ActivePaneID = leaves[0]
+		if fallback := slices.Concat(layouttree.MainLeafIDs(desktop.Tree), leaves); desktop.ActivePaneID == "" && len(fallback) > 0 {
+			desktop.ActivePaneID = fallback[0]
 		}
 	}
 	desktop.FocusHistory = history

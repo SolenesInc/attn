@@ -2,6 +2,7 @@ package layouttree
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"sort"
@@ -19,10 +20,11 @@ type tileMeta struct {
 }
 
 type layoutModel struct {
-	tree  Node
-	panes map[string]bool
-	tiles map[string]tileMeta
-	next  int
+	tree   Node
+	panes  map[string]bool
+	tiles  map[string]tileMeta
+	popped map[string]TileWindow
+	next   int
 }
 
 func (m *layoutModel) mint(prefix string) string {
@@ -176,9 +178,10 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		root := "p0"
 		m := &layoutModel{
-			tree:  DefaultLayout(root),
-			panes: map[string]bool{root: true},
-			tiles: map[string]tileMeta{},
+			tree:   DefaultLayout(root),
+			panes:  map[string]bool{root: true},
+			tiles:  map[string]tileMeta{},
+			popped: map[string]TileWindow{},
 		}
 
 		apply := func(t *rapid.T, op func(Node) (Node, bool)) (Node, bool) {
@@ -261,6 +264,39 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tree = next
 				delete(m.panes, leaf)
 				delete(m.tiles, leaf)
+				delete(m.popped, leaf)
+			},
+
+			"pop_out": func(t *rapid.T) {
+				leaf := rapid.SampledFrom(m.leafIDs()).Draw(t, "leaf")
+				frame := TileWindow{
+					X:      rapid.Float64Range(-2000, 4000).Draw(t, "x"),
+					Y:      rapid.Float64Range(-2000, 4000).Draw(t, "y"),
+					Width:  rapid.Float64Range(1, 4000).Draw(t, "width"),
+					Height: rapid.Float64Range(1, 4000).Draw(t, "height"),
+				}
+				next, ok := apply(t, func(n Node) (Node, bool) { return PopOut(n, leaf, frame) })
+				if !ok {
+					t.Fatalf("PopOut of %q, which is in the tree, was refused", leaf)
+				}
+				if !reflect.DeepEqual(LeafIDs(next), LeafIDs(m.tree)) {
+					t.Fatalf("popping out %q moved leaves from %v to %v", leaf, LeafIDs(m.tree), LeafIDs(next))
+				}
+				m.tree = next
+				m.popped[leaf] = frame
+			},
+
+			"bring_back": func(t *rapid.T) {
+				leaf := rapid.SampledFrom(m.leafIDs()).Draw(t, "leaf")
+				next, ok := apply(t, func(n Node) (Node, bool) { return BringBack(n, leaf) })
+				if !ok {
+					t.Fatalf("BringBack of %q, which is in the tree, was refused", leaf)
+				}
+				if !reflect.DeepEqual(LeafIDs(next), LeafIDs(m.tree)) {
+					t.Fatalf("bringing back %q moved leaves from %v to %v", leaf, LeafIDs(m.tree), LeafIDs(next))
+				}
+				m.tree = next
+				delete(m.popped, leaf)
 			},
 
 			"update_tile": func(t *rapid.T) {
@@ -353,6 +389,29 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				}
 				if want := m.tileIDs(); !sameIDs(tiles, want) {
 					t.Fatalf("tree holds tiles %v, want %v", tiles, want)
+				}
+
+				for _, id := range LeafIDs(m.tree) {
+					leaf, _ := findLeaf(m.tree, id)
+					want, popped := m.popped[id]
+					if popped != (leaf.Window != nil) || (popped && *leaf.Window != want) {
+						t.Fatalf("leaf %q has window %+v, want popped=%v at %+v", id, leaf.Window, popped, want)
+					}
+				}
+				live := make(map[string]bool)
+				for _, id := range LeafIDs(m.tree) {
+					live[id] = true
+				}
+				for _, closing := range LeafIDs(m.tree) {
+					stillLive := maps.Clone(live)
+					delete(stillLive, closing)
+					next := NextInPosition(m.tree, closing, stillLive, nil)
+					if _, popped := m.popped[next]; popped {
+						t.Fatalf("closing %q hands the active tile to popped %q", closing, next)
+					}
+					if next == "" && len(MainLeafIDs(m.tree)) > 1 {
+						t.Fatalf("closing %q found no next tile though main still holds %v", closing, MainLeafIDs(m.tree))
+					}
 				}
 
 				for _, leaf := range TileLeaves(m.tree) {

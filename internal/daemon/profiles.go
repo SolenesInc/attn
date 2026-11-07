@@ -772,6 +772,21 @@ func (d *Daemon) handleDesktopSetWantedCols(client *wsClient, msg *protocol.Desk
 	})
 }
 
+func (d *Daemon) handleDesktopPopOutLeaf(client *wsClient, msg *protocol.DesktopPopOutLeafMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		frame := layouttree.TileWindow{X: msg.Frame.X, Y: msg.Frame.Y, Width: msg.Frame.Width, Height: msg.Frame.Height}
+		desktop, err := d.store.PopOutLeaf(msg.DesktopID, msg.LeafID, frame)
+		return d.desktopChanged(desktop), err
+	})
+}
+
+func (d *Daemon) handleDesktopBringBackLeaf(client *wsClient, msg *protocol.DesktopBringBackLeafMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		desktop, err := d.store.BringBackLeaf(msg.DesktopID, msg.LeafID)
+		return d.desktopChanged(desktop), err
+	})
+}
+
 func (d *Daemon) projectProfilesChanged() {
 	d.projectSnapshot(protocol.EventProfilesChanged, func() {
 		live, err := d.liveProtocolProfiles()

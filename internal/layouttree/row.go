@@ -46,6 +46,7 @@ func SameColumn(tree Node, leafID, otherLeafID string) bool {
 }
 
 func NextInPosition(previous Node, leafID string, live map[string]bool, history []string) string {
+	live = inMain(previous, live)
 	at, ok := ColumnOf(previous, leafID)
 	if !ok {
 		return ""
@@ -74,6 +75,14 @@ func NextInPosition(previous Node, leafID string, live map[string]bool, history 
 		}
 	}
 	return ""
+}
+
+func inMain(tree Node, live map[string]bool) map[string]bool {
+	main := make(map[string]bool, len(live))
+	for _, id := range MainLeafIDs(tree) {
+		main[id] = live[id]
+	}
+	return main
 }
 
 func mostRecentlyUsedLeaf(column Node, live map[string]bool, history []string) string {

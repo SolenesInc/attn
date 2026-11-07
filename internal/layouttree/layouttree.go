@@ -49,12 +49,20 @@ type Node struct {
 	TileSessionID protocol.SessionID `json:"tile_session_id,omitempty"`
 	ShowRequests  int                `json:"show_requests,omitempty"`
 	WantedWidth
-	SplitID     string    `json:"split_id,omitempty"`
-	Direction   Direction `json:"direction,omitempty"`
-	Ratio       float64   `json:"ratio,omitempty"`
-	RatioLocked bool      `json:"ratio_locked,omitempty"`
-	RatioMode   RatioMode `json:"ratio_mode,omitempty"`
-	Children    []Node    `json:"children,omitempty"`
+	Window      *TileWindow `json:"window,omitempty"`
+	SplitID     string      `json:"split_id,omitempty"`
+	Direction   Direction   `json:"direction,omitempty"`
+	Ratio       float64     `json:"ratio,omitempty"`
+	RatioLocked bool        `json:"ratio_locked,omitempty"`
+	RatioMode   RatioMode   `json:"ratio_mode,omitempty"`
+	Children    []Node      `json:"children,omitempty"`
+}
+
+type TileWindow struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
 }
 
 func DefaultLayout(paneID string) Node {
@@ -345,6 +353,40 @@ func updateTile(node Node, tileID string, update func(*Node)) (Node, bool) {
 	})
 }
 
+func updateLeaf(node Node, leafID string, update func(*Node)) (Node, bool) {
+	target := isLeafWithID(leafID)
+	return rewriteFirst(node, func(candidate Node) (Node, bool) {
+		if !target(candidate) {
+			return candidate, false
+		}
+		update(&candidate)
+		return candidate, true
+	})
+}
+
+func PopOut(node Node, leafID string, frame TileWindow) (Node, bool) {
+	return updateLeaf(node, leafID, func(leaf *Node) { leaf.Window = &frame })
+}
+
+func BringBack(node Node, leafID string) (Node, bool) {
+	return updateLeaf(node, leafID, func(leaf *Node) { leaf.Window = nil })
+}
+
+func Popped(node Node, leafID string) bool {
+	leaf, ok := findLeaf(node, leafID)
+	return ok && leaf.Window != nil
+}
+
+func MainLeafIDs(node Node) []string {
+	var ids []string
+	walk(node, func(visited Node) {
+		if isLeaf(visited) && visited.Window == nil {
+			ids = append(ids, leafIDOf(visited))
+		}
+	})
+	return ids
+}
+
 func UpdateTileSessionID(node Node, tileID string, sessionID protocol.SessionID) (Node, bool) {
 	return updateTile(node, tileID, func(tile *Node) { tile.TileSessionID = protocol.TrimID(sessionID) })
 }
@@ -434,16 +476,18 @@ func tileToDock(node Node, anchorID, tileID, tileKind, tileParams string, tileSe
 	}
 	var wanted WantedWidth
 	var showRequests int
+	var window *TileWindow
 	cleaned = node
 	if rest, existing, found := takeLeafFromColumn(node, tileID); found {
 		cleaned = rest
 		wanted = existing.WantedWidth
 		showRequests = existing.ShowRequests
+		window = existing.Window
 		if tileSessionID == "" {
 			tileSessionID = existing.TileSessionID
 		}
 	}
-	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, ShowRequests: showRequests, WantedWidth: wanted}, true
+	return cleaned, Node{Type: "tile", TileID: tileID, TileKind: tileKind, TileParams: strings.TrimSpace(tileParams), TileSessionID: tileSessionID, ShowRequests: showRequests, WantedWidth: wanted, Window: window}, true
 }
 
 type placement struct {
@@ -582,6 +626,9 @@ func claimNodeID(seen map[string]string, path, id, what string) error {
 }
 
 func validateSplit(node Node, path string, seen map[string]string) error {
+	if node.Window != nil {
+		return &ValidationError{Path: path, Reason: "split " + node.SplitID + " has a window; only a pane or tile can pop out"}
+	}
 	if err := claimNodeID(seen, path, node.SplitID, "split"); err != nil {
 		return err
 	}

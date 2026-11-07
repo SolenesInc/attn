@@ -3565,6 +3565,32 @@ model DesktopSetWantedColsMessage {
   area_cols: int32;
 }
 
+model TileWindowFrame {
+  x: float64;                   // logical points, the window's outer origin
+  y: float64;
+  width: float64;               // logical points, the window's inner size
+  height: float64;
+}
+
+// Pops a pane or tile out into its own window, or saves the frame of one
+// already out. The leaf stays in the desktop's tree.
+model DesktopPopOutLeafMessage {
+  cmd: "desktop_pop_out_leaf";
+  request_id: string;
+  desktop_id: string;
+  leaf_id: string;
+  frame: TileWindowFrame;
+}
+
+// Brings a popped leaf back into its column. A leaf that is not popped is left
+// as is.
+model DesktopBringBackLeafMessage {
+  cmd: "desktop_bring_back_leaf";
+  request_id: string;
+  desktop_id: string;
+  leaf_id: string;
+}
+
 // Docks a tile beside anchor_id or, absent, beside the active leaf. The tile
 // becomes the active leaf.
 model DesktopDockTileMessage {

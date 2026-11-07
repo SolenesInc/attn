@@ -864,6 +864,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
 	case protocol.CmdDesktopSetWantedCols:
 		d.handleDesktopSetWantedCols(client, msg.(*protocol.DesktopSetWantedColsMessage))
+	case protocol.CmdDesktopPopOutLeaf:
+		d.handleDesktopPopOutLeaf(client, msg.(*protocol.DesktopPopOutLeafMessage))
+	case protocol.CmdDesktopBringBackLeaf:
+		d.handleDesktopBringBackLeaf(client, msg.(*protocol.DesktopBringBackLeafMessage))
 	case protocol.CmdDesktopDockTile:
 		d.handleDesktopDockTile(client, msg.(*protocol.DesktopDockTileMessage))
 	case protocol.CmdDesktopUpdateTile:

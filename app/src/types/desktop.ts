@@ -1,4 +1,6 @@
 
+import type { TileWindowFrame } from './generated';
+
 export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
 export type TerminalDockEdge = 'left' | 'right' | 'top' | 'bottom';
@@ -11,6 +13,7 @@ export interface TerminalPaneLeaf {
   paneId: string;
   wantedCols?: number;
   wantedAreaCols?: number;
+  window?: TileWindowFrame;
 }
 
 export interface TileLeaf {
@@ -22,6 +25,7 @@ export interface TileLeaf {
   showRequests?: number;
   wantedCols?: number;
   wantedAreaCols?: number;
+  window?: TileWindowFrame;
 }
 
 export type TerminalLeaf = TerminalPaneLeaf | TileLeaf;
@@ -307,6 +311,15 @@ function parseWantedWidth(value: { wanted_cols?: unknown; wanted_area_cols?: unk
   };
 }
 
+function parseTileWindow(value: { window?: unknown }): { window?: TileWindowFrame } {
+  const frame = value.window as Partial<Record<keyof TileWindowFrame, unknown>> | null | undefined;
+  if (!frame || typeof frame !== 'object') return {};
+  const { x, y, width, height } = frame;
+  if (typeof x !== 'number' || typeof y !== 'number' || typeof width !== 'number' || typeof height !== 'number') return {};
+  if (width <= 0 || height <= 0) return {};
+  return { window: { x, y, width, height } };
+}
+
 function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
   if (!raw || typeof raw !== 'object') {
     return null;
@@ -317,6 +330,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
       type: 'pane',
       paneId: value.pane_id,
       ...parseWantedWidth(value),
+      ...parseTileWindow(value),
     };
   }
   if (
@@ -336,6 +350,7 @@ function parseLayoutNode(raw: unknown): TerminalLayoutNode | null {
         : undefined,
       showRequests: typeof value.show_requests === 'number' ? value.show_requests : undefined,
       ...parseWantedWidth(value),
+      ...parseTileWindow(value),
     };
   }
   if (

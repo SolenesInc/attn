@@ -134,3 +134,17 @@ func TestRealLayoutsKeepEveryLeafAcrossMovesBetweenTwoTrees(t *testing.T) {
 		})
 	})
 }
+
+func TestOnlyALeafCanCarryATileWindow(t *testing.T) {
+	for i, layout := range loadRealLayouts(t) {
+		if layout.Type != "split" {
+			continue
+		}
+		layout.Window = &TileWindow{Width: 640, Height: 480}
+		if err := Validate(layout); err == nil {
+			t.Fatalf("real layout %d validates with a window on split %s", i, layout.SplitID)
+		}
+		return
+	}
+	t.Fatal("no real layout has a split at its root")
+}
