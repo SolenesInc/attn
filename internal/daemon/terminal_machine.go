@@ -369,9 +369,9 @@ func (d *Daemon) themeTerminals(ctx context.Context, msg protocol.TerminalThemeM
 
 func (d *Daemon) loginShell(ctx context.Context, _ protocol.TerminalShellMessage) (protocol.TerminalShellResult, error) {
 	shell := pty.GetUserLoginShell()
-	loginEnv, err := d.launchEnv(ctx)
-	if err != nil {
-		return protocol.TerminalShellResult{}, err
+	loginEnv := d.loginEnv.Latest(ctx)
+	if err := ctx.Err(); err != nil {
+		return protocol.TerminalShellResult{}, fmt.Errorf("stopped waiting for the login environment: %w", err)
 	}
 	env := pty.MergeEnvironment(os.Environ(), loginEnv)
 	home, _ := os.UserHomeDir()

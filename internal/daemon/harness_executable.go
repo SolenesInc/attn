@@ -16,7 +16,7 @@ func (d *Daemon) machineAgentExecutable(driver agentdriver.Driver, configured st
 		name = strings.TrimSpace(d.setting(executableSetting(driver.Name())))
 	}
 	if name == "" {
-		env := pty.MergeEnvironment(os.Environ(), d.launchEnvUntilStop())
+		env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
 		name, _ = pty.LookupEnv(env, driver.ExecutableEnvVar())
 		name = strings.TrimSpace(name)
 	}
@@ -35,7 +35,7 @@ func (d *Daemon) machineExecutable(name string) (string, error) {
 		}
 		return path, nil
 	}
-	env := pty.MergeEnvironment(os.Environ(), d.launchEnvUntilStop())
+	env := pty.MergeEnvironment(os.Environ(), d.latestLoginEnv())
 	if path, ok := pty.ResolveCommandPath(name, env); ok {
 		return path, nil
 	}

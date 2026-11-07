@@ -725,7 +725,7 @@ func (d *Daemon) Start() error {
 		d.startSessionMonitor(session.ID)
 	}
 	d.reapStrandedPluginRuntimes()
-	d.life.Go("finishLoginEnvCapture", d.finishLoginEnvCapture)
+	d.life.Go("followLoginEnv", d.followLoginEnv)
 
 	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
 

@@ -141,7 +141,7 @@ func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {
 
 func (d *Daemon) pluginCommandEnv(extra ...string) []string {
 	env := append([]string(nil), os.Environ()...)
-	env = mergePluginEnvironment(env, d.launchEnvUntilStop())
+	env = mergePluginEnvironment(env, d.latestLoginEnv())
 	env = mergePluginEnvironment(env, extra)
 	return env
 }

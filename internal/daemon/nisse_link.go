@@ -80,7 +80,7 @@ func (d *Daemon) agentOffered(agent string) bool {
 }
 
 func (l *nisseLink) home() string {
-	env := pty.MergeEnvironment(os.Environ(), l.d.launchEnvUntilStop())
+	env := pty.MergeEnvironment(os.Environ(), l.d.latestLoginEnv())
 	lookup := func(key string) string {
 		for i := len(env) - 1; i >= 0; i-- {
 			if name, value, ok := strings.Cut(env[i], "="); ok && name == key {

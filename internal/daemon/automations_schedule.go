@@ -84,8 +84,8 @@ func (d *Daemon) observeDueSchedules(ctx context.Context, now time.Time) {
 			continue
 		}
 		if env == nil {
-			var err error
-			if env, err = d.launchEnv(ctx); err != nil {
+			env = d.loginEnv.Latest(ctx)
+			if err := ctx.Err(); err != nil {
 				d.logf("automation guards not run: %v", err)
 				return
 			}

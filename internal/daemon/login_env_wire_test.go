@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/testworld"
@@ -563,4 +564,199 @@ func TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose(t *testing
 	waiting.Release()
 	shell.release()
 	testworld.Await(app, protocol.EventReloadSessionResult, func(m protocol.ReloadSessionResultMessage) bool { return string(m.ID) == session })
+}
+
+// installFailingLoginShell makes a login shell whose capture exits 7 for the first failures runs, or on every run when
+// failures is negative, after waiting on a fifo that exists. A later capture gives the shell's variable and PATH entry.
+func installFailingLoginShell(t *testing.T, w *world, failures int) (*blockedLoginShell, string) {
+	t.Helper()
+	shell := &blockedLoginShell{t: t, gate: filepath.Join(w.Dir, "login-gate"), captures: filepath.Join(w.Dir, "login-captures")}
+	path := filepath.Join(w.Dir, "login-shell")
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$3" = 'env -0' ]; then
+  echo capture >> '%s'
+  if [ -p '%s' ]; then
+    cat '%s' >/dev/null
+  fi
+  ran=$(wc -l < '%s')
+  if [ %d -lt 0 ] || [ "$ran" -le %d ]; then
+    exit 7
+  fi
+  export ATTN_TEST_LOGIN_ONLY=present PATH='%s':$PATH
+fi
+exec /bin/sh "$@"
+`, shell.captures, shell.gate, shell.gate, shell.captures, failures, failures, filepath.Join(w.Dir, ".local", "bin"))
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SHELL", path)
+	return shell, path
+}
+
+func (s *blockedLoginShell) captureCount() int {
+	s.t.Helper()
+	got, err := os.ReadFile(s.captures)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	return strings.Count(string(got), "\n")
+}
+
+func loginEnvFailures(app *testworld.Peer) (unread []protocol.Notification, all int) {
+	for _, n := range listNotifications(app).Notifications {
+		if n.Kind == "login_env_failed" {
+			all++
+			if n.ReadAt == "" {
+				unread = append(unread, n)
+			}
+		}
+	}
+	return unread, all
+}
+
+func TestAFailedLoginShellCaptureWarnsAndTheNextLaunchGetsTheEnvironment(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell, shellPath := installFailingLoginShell(t, w, 1)
+	if err := syscall.Mkfifo(shell.gate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(shell.release)
+	w.start()
+	app := w.App()
+
+	mark := app.EventCount()
+	shell.release()
+	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
+	unread, _ := loginEnvFailures(app)
+	if len(unread) != 1 {
+		t.Fatalf("after a failed capture the feed shows %d unread login environment failures, want 1", len(unread))
+	}
+	for _, want := range []string{shellPath, pty.ShellEnvTimeout.String(), "exit status 7"} {
+		if !strings.Contains(unread[0].Body, want) {
+			t.Errorf("the failure reads %q, want it to name %q", unread[0].Body, want)
+		}
+	}
+
+	w.AppOn("")
+	if got := shell.captureCount(); got != 1 {
+		t.Fatalf("reports after the failure ran %d captures, want only the first: only a launch tries again", got)
+	}
+
+	mark = app.EventCount()
+	run := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
+	if got, _ := envEntry(run.Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("the launch after the failed capture has ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 0 })
+	if unread, all := loginEnvFailures(app); len(unread) != 0 || all != 1 {
+		t.Fatalf("after the capture succeeded the feed has %d unread of %d login environment failures, want the one cleared", len(unread), all)
+	}
+	if got := shell.captureCount(); got != 2 {
+		t.Fatalf("the login shell ran %d captures, want the failed one and the launch's", got)
+	}
+}
+
+func TestAFailureShownBeforeARestartClearsWhenTheNewDaemonsCaptureSucceeds(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell, _ := installFailingLoginShell(t, w, 1)
+	if err := syscall.Mkfifo(shell.gate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(shell.release)
+	w.start()
+	app := w.App()
+	mark := app.EventCount()
+	shell.release()
+	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
+
+	if err := syscall.Mkfifo(shell.gate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.restart()
+	app = w.App()
+	if unread, _ := loginEnvFailures(app); len(unread) != 1 {
+		t.Fatalf("while the new daemon captures the feed shows %d unread failures, want the last run's one", len(unread))
+	}
+	mark = app.EventCount()
+	shell.release()
+	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 0 })
+	if unread, all := loginEnvFailures(app); len(unread) != 0 || all != 1 {
+		t.Fatalf("after the new daemon's capture succeeded the feed has %d unread of %d failures, want the one cleared", len(unread), all)
+	}
+}
+
+func TestInstallingAPluginAfterAFailedCaptureRunsNoCaptureOfItsOwn(t *testing.T) {
+	w := &world{World: prepareWorld(t)}
+	shell, _ := installFailingLoginShell(t, w, 1)
+	report := filepath.Join(t.TempDir(), "plugin-report")
+	if err := syscall.Mkfifo(report, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	checkout := pluginsCheckout(t, w.Path("checkouts", "probe"), "probe", "0.1.0", "#!/bin/sh\nprintf started > '"+report+"'\nexec sleep 3600\n")
+	w.start()
+	app := w.App()
+	pluginsAct(t, app, protocol.InstallPluginMessage{Cmd: protocol.CmdInstallPlugin, Source: checkout}, "install", "probe")
+	if _, err := os.ReadFile(report); err != nil {
+		t.Fatal(err)
+	}
+	if got := shell.captureCount(); got != 1 {
+		t.Fatalf("installing a plugin after the failed capture ran %d captures, want only the first", got)
+	}
+}
+
+func TestALoginShellThatKeepsFailingIsShownOnceAndEachLaunchTriesAgain(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell, _ := installFailingLoginShell(t, w, -1)
+	w.start()
+	app := w.App()
+	first := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
+	if got, _ := envEntry(first.Env, "ATTN_TEST_LOGIN_ONLY"); got != "" {
+		t.Fatalf("a launch with no login environment has ATTN_TEST_LOGIN_ONLY=%q", got)
+	}
+	ran := shell.captureCount()
+	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("cart")))
+	if got := shell.captureCount(); got != ran+1 {
+		t.Fatalf("the second launch took the login shell from %d captures to %d, want it to try once: each capture can hold the launch for the whole budget", ran, got)
+	}
+	if unread, all := loginEnvFailures(app); len(unread) != 1 || all != 1 {
+		t.Fatalf("the feed has %d unread of %d login environment failures, want the one failure shown once", len(unread), all)
+	}
+}
+
+func TestAHarnessOnlyTheLoginPathHasStaysSelectableAfterAFailedCapture(t *testing.T) {
+	w := &world{World: prepareWorld(t, fakeagent.Claude)}
+	shell, _ := installFailingLoginShell(t, w, 1)
+	if err := syscall.Mkfifo(shell.gate, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(shell.release)
+	localBin := filepath.Join(w.Dir, ".local", "bin")
+	if err := os.MkdirAll(localBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"claude", "fakeagent.json"} {
+		if err := os.Rename(filepath.Join(w.Dir, "bin", name), filepath.Join(localBin, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", filepath.Join(w.Dir, "bin")+":/usr/bin:/bin")
+	t.Setenv("ATTN_CLAUDE_EXECUTABLE", "")
+	w.start()
+	app := w.App()
+	mark := app.EventCount()
+	shell.release()
+	testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(m protocol.NotificationsUpdatedMessage) bool { return m.UnreadCount == 1 })
+	if got := w.AppOn("").Initial.Settings["claude_available"]; got != "checking" {
+		t.Fatalf("after a failed capture a harness outside the bare PATH reads claude_available=%v, want checking, so the app still offers the launch that tries again", got)
+	}
+
+	mark = app.EventCount()
+	run := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
+	if got, _ := envEntry(run.Env, "ATTN_TEST_LOGIN_ONLY"); got != "present" {
+		t.Fatalf("the launch of a harness only the login PATH has got ATTN_TEST_LOGIN_ONLY=%q, want the login environment", got)
+	}
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_available"] == "true" })
+	if got := shell.captureCount(); got != 2 {
+		t.Fatalf("the login shell ran %d captures, want the failed one and the one the launch waited for", got)
+	}
 }

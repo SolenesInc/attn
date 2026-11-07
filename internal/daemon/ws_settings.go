@@ -353,6 +353,9 @@ func (d *Daemon) harnessAvailability(driver agentdriver.Driver) harnessAvailabil
 		return harnessChecking
 	}
 	if _, err := d.machineAgentExecutable(driver, ""); err != nil {
+		if d.loginEnvFailed() {
+			return harnessChecking
+		}
 		return harnessMissing
 	}
 	return harnessAvailable

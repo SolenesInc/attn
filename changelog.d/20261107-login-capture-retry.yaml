@@ -1,0 +1,8 @@
+kind: fixed
+area: sessions
+change: >
+  A slow or failed read of your login shell's environment no longer leaves attn
+  without it until a restart. attn gives the shell 10 seconds instead of 2,
+  shows a notification naming the shell, the limit and the error, tries again
+  on the next launch, and clears the notification once a read succeeds. An agent
+  found only on your login PATH stays selectable in the meantime.

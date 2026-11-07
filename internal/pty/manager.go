@@ -26,7 +26,8 @@ import (
 
 const (
 	defaultKillTimeout = 10 * time.Second
-	shellEnvTimeout    = 2 * time.Second
+	// fish, zsh and bash took at most 0.59 s over 10,330 captures at load up to 61 on a Mac and a 16-core Linux box (2026-11-07). Full test suites have stalled a capture past 2 s.
+	ShellEnvTimeout = 10 * time.Second
 	// Killing fish, zsh or bash closed its stdout within 3.6 ms over 50 kills each at load 22.
 	shellEnvStdoutCloseLimit = 500 * time.Millisecond
 )
@@ -630,22 +631,14 @@ func readCachedShellEnvFromProcess() []string {
 	return env
 }
 
-func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath string, logf LogFunc) []string {
+func buildSpawnEnv(opts SpawnOptions, agent, wrapperPath string) []string {
 	env := os.Environ()
 
 	shellEnv := opts.LoginShellEnv
 	if len(shellEnv) == 0 {
 		shellEnv = readCachedShellEnvFromProcess()
 	}
-	if len(shellEnv) > 0 {
-		env = MergeEnvironment(env, shellEnv)
-	} else if loginShell != "" {
-		if captured, err := ReadLoginShellEnv(context.Background(), loginShell); err == nil {
-			env = MergeEnvironment(env, captured)
-		} else if logf != nil {
-			logf("pty spawn: failed to capture login shell env from %s: %v", loginShell, err)
-		}
-	}
+	env = MergeEnvironment(env, shellEnv)
 	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 
@@ -681,7 +674,7 @@ func buildSpawnEnv(loginShell string, opts SpawnOptions, agent, wrapperPath stri
 }
 
 func ReadLoginShellEnv(parent context.Context, shellPath string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(parent, shellEnvTimeout)
+	ctx, cancel := context.WithTimeout(parent, ShellEnvTimeout)
 	defer cancel()
 
 	args := []string{"-l", "-c", "env -0"}
@@ -693,11 +686,15 @@ func ReadLoginShellEnv(parent context.Context, shellPath string) ([]string, erro
 	output, err := cmd.Output()
 	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("timeout after %s", shellEnvTimeout)
+			return nil, fmt.Errorf("timeout after %s", ShellEnvTimeout)
 		}
 		return nil, err
 	}
-	return parseNullSeparatedEnv(output), nil
+	env := parseNullSeparatedEnv(output)
+	if len(env) == 0 {
+		return nil, errors.New("it printed no environment")
+	}
+	return env, nil
 }
 
 func parseNullSeparatedEnv(output []byte) []string {

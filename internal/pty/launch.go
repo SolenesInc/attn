@@ -34,7 +34,7 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 	}
 	attnPath := launchenv.ActiveAttnExecutable()
 	loginShell := GetUserLoginShell()
-	cmdEnv := buildSpawnEnv(loginShell, opts, agent, attnPath, logf)
+	cmdEnv := buildSpawnEnv(opts, agent, attnPath)
 
 	prepared := PreparedLaunch{Agent: agent}
 	shellCandidates := preferredShellCandidates(loginShell)
