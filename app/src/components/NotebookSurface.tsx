@@ -17,6 +17,7 @@ import { registerPaletteClaim } from './palette/paletteClaim';
 import { parseOutline } from './notebook/outline';
 import './NotebookBrowser.css';
 import { formatShortcut } from '../shortcuts/formatShortcut';
+import { useTileWindow } from '../tileWindow';
 
 export interface NotebookSurfaceProps {
   variant: 'modal' | 'tile';
@@ -100,10 +101,11 @@ export const NotebookSurface = forwardRef<NotebookSurfaceHandle, NotebookSurface
   const [finderOpen, setFinderOpen] = useState(false);
   const { files: finderFiles, loading: finderLoading } = useNotebookFileIndex(listFiles, changeSignal, finderEnabled && finderActive);
   const finderReturnFocusRef = useRef<HTMLElement | null>(null);
+  const tileWindow = useTileWindow();
   const openFinder = useCallback(() => {
-    finderReturnFocusRef.current = document.activeElement as HTMLElement | null;
+    finderReturnFocusRef.current = tileWindow.document.activeElement as HTMLElement | null;
     setFinderOpen(true);
-  }, []);
+  }, [tileWindow]);
   useEffect(() => {
     if (!finderEnabled) return;
     return registerPaletteClaim({ container: () => dialogRef.current, open: openFinder });

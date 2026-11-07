@@ -16,6 +16,7 @@ import { noteDir } from './linkResolver';
 import { markdownTables } from './tableWidget';
 import { computeMinimalEdit } from './minimalEdit';
 import { acceleratorBindings } from './acceleratorKeymap';
+import { useTileWindow } from '../../tileWindow';
 
 const acceleratorSearchKeymap: readonly KeyBinding[] = acceleratorBindings(searchKeymap);
 
@@ -122,6 +123,12 @@ export const LiveMarkdownEditor = forwardRef<LiveMarkdownEditorHandle, LiveMarkd
 }, ref) {
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const searchOpenRef = useRef(false);
+  const tileWindow = useTileWindow();
+
+  useEffect(() => {
+    const view = cmRef.current?.view;
+    if (view && view.root !== tileWindow.document) view.setRoot(tileWindow.document);
+  }, [tileWindow]);
 
   useImperativeHandle(ref, () => ({
     scrollToPos: (pos: number) => {

@@ -4,9 +4,10 @@ import { useDelegationChainControl, useDelegationChainTrigger } from './delegati
 import { hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import './SessionLabel.css';
 import { SessionPriority } from './SessionPriority';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 
 // Load-bearing: the panel starts at the rail's right edge and never re-enters it,
-// or it blacks out the row's actions; it portals to document.body past the clip.
+// or it blacks out the row's actions; it portals to the window's body past the clip.
 
 const PAD_Y = 6;
 const MAX_PANEL_WIDTH = 460;
@@ -46,6 +47,8 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
   const spanRef = useRef<HTMLSpanElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [reveal, setReveal] = useState<RevealStyle | null>(null);
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
   const hide = useCallback(() => setReveal(null), []);
 
   const show = useCallback(() => {
@@ -58,13 +61,13 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
       return;
     }
     const rect = span.getBoundingClientRect();
-    const style = window.getComputedStyle(span);
+    const style = tileWindow.getComputedStyle(span);
     const rail = span.closest('.sidebar') ?? span.closest('.session-item') ?? span;
     const left = rail.getBoundingClientRect().right;
     setReveal({
       top: rect.top - PAD_Y,
       left,
-      maxWidth: Math.min(window.innerWidth - left - VIEWPORT_MARGIN, MAX_PANEL_WIDTH),
+      maxWidth: Math.min(tileWindow.innerWidth - left - VIEWPORT_MARGIN, MAX_PANEL_WIDTH),
       fontFamily: style.fontFamily,
       fontSize: style.fontSize,
       fontWeight: style.fontWeight,
@@ -73,7 +76,7 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
       letterSpacing: style.letterSpacing,
       color: style.color,
     });
-  }, []);
+  }, [tileWindow]);
 
   useEffect(() => {
     const span = spanRef.current;
@@ -98,13 +101,13 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
       return;
     }
     // Capture, so the sidebar's own scroller invalidates the measured position too.
-    window.addEventListener('scroll', hide, true);
-    window.addEventListener('resize', hide);
+    tileWindow.addEventListener('scroll', hide, true);
+    tileWindow.addEventListener('resize', hide);
     return () => {
-      window.removeEventListener('scroll', hide, true);
-      window.removeEventListener('resize', hide);
+      tileWindow.removeEventListener('scroll', hide, true);
+      tileWindow.removeEventListener('resize', hide);
     };
-  }, [reveal, hide]);
+  }, [reveal, hide, tileWindow]);
 
   useLayoutEffect(() => {
     const panel = panelRef.current;
@@ -112,11 +115,11 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
       return;
     }
     const rect = panel.getBoundingClientRect();
-    const overflow = rect.bottom - (window.innerHeight - VIEWPORT_MARGIN);
+    const overflow = rect.bottom - (tileWindow.innerHeight - VIEWPORT_MARGIN);
     if (overflow > 0) {
       panel.style.top = `${Math.max(VIEWPORT_MARGIN, rect.top - overflow)}px`;
     }
-  }, [reveal]);
+  }, [reveal, tileWindow]);
 
   return (
     <>
@@ -144,7 +147,7 @@ function OverflowSessionLabel({ label, priority }: { label: string; priority?: b
               {/* Its own element: the name can arrive a beat after its surface. */}
               <span className="session-label-reveal-text">{label}</span>
             </div>,
-            document.body,
+            portalTarget,
           )
         : null}
     </>

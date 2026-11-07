@@ -8,6 +8,7 @@ import {
 } from '../../browser/host';
 import { useDesktopShelfStore } from '../../store/desktopShelf';
 import { useSidebarDrag } from '../../store/sidebarDrag';
+import { useTileWindow } from '../../tileWindow';
 
 function hostRect(element: HTMLElement): BrowserHostRect {
   const rect = element.getBoundingClientRect();
@@ -41,6 +42,7 @@ export function BrowserTileBody({
   const sidebarDragging = useSidebarDrag((state) => state.dragging);
   const dragging = tileDragging || sidebarDragging;
   const hostRef = useRef<HTMLDivElement>(null);
+  const tileWindow = useTileWindow();
   const draggingRef = useRef(dragging);
   const visibleRef = useRef(visible);
   const nativeLocationsRef = useRef<string[]>([]);
@@ -135,15 +137,15 @@ export function BrowserTileBody({
         }
       });
     };
-    const observer = new ResizeObserver(sync);
+    const observer = new tileWindow.ResizeObserver(sync);
     observer.observe(element);
-    window.addEventListener('resize', sync);
+    tileWindow.addEventListener('resize', sync);
     sync();
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', sync);
+      tileWindow.removeEventListener('resize', sync);
     };
-  }, [dragging, label, paneGeometry, visible]);
+  }, [dragging, label, paneGeometry, tileWindow, visible]);
 
   useEffect(() => {
     const handleNativeClose = (event: Event) => {

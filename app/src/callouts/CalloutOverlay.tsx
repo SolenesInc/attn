@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigationContext, useAppPanelsContext } from '../application/AppContexts';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { usePortalTarget } from '../tileWindow';
 import { CalloutAnchor, type CalloutStep } from '../types/generated';
 import { calloutElements, calloutTarget } from './calloutAnchors';
 import { useCalloutStore } from './useCalloutStore';
@@ -69,6 +70,7 @@ export function CalloutOverlay() {
 
   const holdsKeys = Boolean(callout) && !hidden && !keysReleased;
   useEscapeStack(end, holdsKeys);
+  const portalTarget = usePortalTarget();
 
   useEffect(() => {
     if (!callout || hidden) return;
@@ -151,6 +153,6 @@ export function CalloutOverlay() {
           <span><kbd>esc</kbd> end</span>
         </div>
       </div>
-    </div>, document.body,
+    </div>, portalTarget,
   );
 }

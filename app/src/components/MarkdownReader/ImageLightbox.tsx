@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
+import { usePortalTarget } from '../../tileWindow';
 
 export interface ImageLightboxProps {
   src: string;
@@ -7,10 +8,11 @@ export interface ImageLightboxProps {
   onClose: () => void;
 }
 
-// Portals to document.body so it escapes tile overflow/stacking contexts. Escape goes
+// Portals to the tile window's body so it escapes tile overflow/stacking contexts. Escape goes
 // through useEscapeStack, so one press closes only the lightbox, not the tile underneath.
 export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
   useEscapeStack(onClose, true);
+  const portalTarget = usePortalTarget();
 
   return createPortal(
     <div className="md-lightbox" role="dialog" aria-modal="true" onClick={onClose}>
@@ -22,6 +24,6 @@ export function ImageLightbox({ src, alt, onClose }: ImageLightboxProps) {
       />
       {alt && <div className="md-lightbox-caption">{alt}</div>}
     </div>,
-    document.body,
+    portalTarget,
   );
 }

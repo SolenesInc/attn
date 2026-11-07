@@ -11,6 +11,7 @@ import { createPortal } from 'react-dom';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useSessionStore } from '../store/sessions';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 import type { Seed } from '../types/generated';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import {
@@ -70,6 +71,8 @@ export function TerminalSeedPreview({
   const cardRef = useRef<HTMLDialogElement>(null);
   const [placement, setPlacement] = useState<TerminalSeedPreviewPlacement | null>(null);
   const titleId = useId();
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
   const excerpt = terminalSeedBodyExcerpt(seed.body);
   const daemonSessions = useDaemonStore((state) => state.daemonSessions);
   const sessionLabels = useMemo(
@@ -90,19 +93,19 @@ export function TerminalSeedPreview({
       const rect = card.getBoundingClientRect();
       const width = card.offsetWidth || rect.width || Math.min(
         TERMINAL_SEED_PREVIEW_FALLBACK_SIZE.width,
-        window.innerWidth - 16,
+        tileWindow.innerWidth - 16,
       );
       const height = card.offsetHeight || rect.height || TERMINAL_SEED_PREVIEW_FALLBACK_SIZE.height;
       setPlacement(terminalSeedPreviewPlacement(
         anchor,
         { width, height },
-        { width: window.innerWidth, height: window.innerHeight },
+        { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
       ));
     };
     place();
-    window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
-  }, [agent?.name, anchor, excerpt, seed.status, seed.title, tender, updated]);
+    tileWindow.addEventListener('resize', place);
+    return () => tileWindow.removeEventListener('resize', place);
+  }, [agent?.name, anchor, excerpt, seed.status, seed.title, tender, updated, tileWindow]);
 
   const style = placement
     ? ({
@@ -119,9 +122,9 @@ export function TerminalSeedPreview({
         <svg
           className="terminal-seed-preview-signal"
           data-placement={placement.side}
-          width={window.innerWidth}
-          height={window.innerHeight}
-          viewBox={`0 0 ${window.innerWidth} ${window.innerHeight}`}
+          width={tileWindow.innerWidth}
+          height={tileWindow.innerHeight}
+          viewBox={`0 0 ${tileWindow.innerWidth} ${tileWindow.innerHeight}`}
           aria-hidden="true"
         >
           <path className="terminal-seed-preview-signal__shadow" pathLength={1} d={placement.path} />
@@ -214,6 +217,6 @@ export function TerminalSeedPreview({
         </div>
       </dialog>
     </>,
-    document.body,
+    portalTarget,
   );
 }

@@ -7,6 +7,7 @@ import { PaneSeedContext } from './PaneSeedContext';
 import { SeedPlotIcon, SeedStateIcon } from './SeedStateIcon';
 import { seedStateLabel } from './seedStatePresentation';
 import { terminalSeedBodyExcerpt } from '../utils/terminalSeedPreviewText';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 import './TendedSeedsPopover.css';
 
 const VIEWPORT_MARGIN = 8;
@@ -46,6 +47,8 @@ export function TendedSeedsPopover({
   const [selected, setSelected] = useState(firstSelectable === -1 ? 0 : firstSelectable);
   const single = rows.length === 1 || (rows.length === 2 && rows[0].role === 'tended' && rows[1].role === 'crown');
   const primary = rows[0];
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
 
   useEscapeStack(onClose, pinned);
 
@@ -57,25 +60,25 @@ export function TendedSeedsPopover({
       const source = anchorRef?.current?.getBoundingClientRect();
       const left = Math.max(VIEWPORT_MARGIN, Math.min(
         (source?.right ?? anchor.right) - rect.width,
-        window.innerWidth - rect.width - VIEWPORT_MARGIN,
+        tileWindow.innerWidth - rect.width - VIEWPORT_MARGIN,
       ));
       const top = Math.max(VIEWPORT_MARGIN, Math.min(
         source ? source.bottom + 4 : anchor.top,
-        window.innerHeight - rect.height - VIEWPORT_MARGIN,
+        tileWindow.innerHeight - rect.height - VIEWPORT_MARGIN,
       ));
       setPosition((previous) => previous?.left === left && previous.top === top ? previous : { top, left });
     };
     place();
-    const observer = new ResizeObserver(place);
+    const observer = new tileWindow.ResizeObserver(place);
     observer.observe(el);
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
+    tileWindow.addEventListener('resize', place);
+    tileWindow.addEventListener('scroll', place, true);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
+      tileWindow.removeEventListener('resize', place);
+      tileWindow.removeEventListener('scroll', place, true);
     };
-  }, [anchor.top, anchor.right, anchorRef]);
+  }, [anchor.top, anchor.right, anchorRef, tileWindow]);
 
   // Capture phase: the terminal and pane handlers stop propagation of pointer
   // events, so a bubble-phase document listener never hears an outside click.
@@ -87,9 +90,10 @@ export function TendedSeedsPopover({
       if (anchorRef?.current?.contains(target)) return;
       onClose();
     };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [pinned, onClose, anchorRef]);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('pointerdown', handlePointerDown, true);
+    return () => tileDocument.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [pinned, onClose, anchorRef, tileWindow]);
 
   const move = (delta: number) => {
     if (rows.length === 0) return;
@@ -212,7 +216,7 @@ export function TendedSeedsPopover({
 
   // Keep the same DOM when pinning so measurement and in-flight note reads survive.
   // Only a pinned preview traps focus against the terminal's refocusing.
-  return createPortal(<PinnedTrap containerRef={containerRef} active={pinned}>{surface}</PinnedTrap>, document.body);
+  return createPortal(<PinnedTrap containerRef={containerRef} active={pinned}>{surface}</PinnedTrap>, portalTarget);
 }
 
 function PinnedTrap({
@@ -224,6 +228,7 @@ function PinnedTrap({
   active: boolean;
   children: ReactNode;
 }) {
+  const portalTarget = usePortalTarget();
   return (
     <FocusTrap
       active={active}
@@ -231,7 +236,7 @@ function PinnedTrap({
         allowOutsideClick: true,
         escapeDeactivates: false,
         initialFocus: () => containerRef.current ?? false,
-        fallbackFocus: () => containerRef.current ?? document.body,
+        fallbackFocus: () => containerRef.current ?? portalTarget,
       }}
     >
       {children}

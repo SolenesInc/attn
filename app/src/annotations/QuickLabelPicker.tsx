@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 import { LABEL_COLOR_MAP, type QuickLabel } from './quickLabels';
 import { placeQuickLabelPicker, QUICK_LABEL_PICKER_WIDTH } from './quickLabelPlacement';
 import './QuickLabelPicker.css';
@@ -37,13 +38,13 @@ interface ChipQuickLabelPickerProps {
 
 type QuickLabelPickerProps = FloatingQuickLabelPickerProps | ChipQuickLabelPickerProps;
 
-function addDeferredPointerDownListener(listener: (event: PointerEvent) => void): () => void {
+function addDeferredPointerDownListener(target: Document, listener: (event: PointerEvent) => void): () => void {
   const timer = window.setTimeout(() => {
-    document.addEventListener('pointerdown', listener, true);
+    target.addEventListener('pointerdown', listener, true);
   }, 0);
   return () => {
     window.clearTimeout(timer);
-    document.removeEventListener('pointerdown', listener, true);
+    target.removeEventListener('pointerdown', listener, true);
   };
 }
 
@@ -59,6 +60,8 @@ function FloatingQuickLabelPicker({
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const [height, setHeight] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
   const { labels, indexedGroups } = useMemo(() => {
     const flattened = groups.flat();
     let nextIndex = 0;
@@ -75,16 +78,16 @@ function FloatingQuickLabelPicker({
       anchorEl.getBoundingClientRect(),
       cursorHint,
       height,
-      { width: window.innerWidth, height: window.innerHeight },
+      { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
     ));
     update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    tileWindow.addEventListener('scroll', update, true);
+    tileWindow.addEventListener('resize', update);
     return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      tileWindow.removeEventListener('scroll', update, true);
+      tileWindow.removeEventListener('resize', update);
     };
-  }, [anchorEl, cursorHint, height]);
+  }, [anchorEl, cursorHint, height, tileWindow]);
 
   useLayoutEffect(() => {
     const measured = ref.current?.offsetHeight ?? 0;
@@ -107,11 +110,11 @@ function FloatingQuickLabelPicker({
         }
       }
     };
-    window.addEventListener('keydown', handleKeyDown);
+    tileWindow.addEventListener('keydown', handleKeyDown);
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      tileWindow.removeEventListener('keydown', handleKeyDown);
     };
-  }, [labels, onSelect]);
+  }, [labels, onSelect, tileWindow]);
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -119,8 +122,8 @@ function FloatingQuickLabelPicker({
         onDismiss();
       }
     };
-    return addDeferredPointerDownListener(handlePointerDown);
-  }, [onDismiss]);
+    return addDeferredPointerDownListener(tileWindow.document, handlePointerDown);
+  }, [onDismiss, tileWindow]);
 
   if (!position) {
     return null;
@@ -171,7 +174,7 @@ function FloatingQuickLabelPicker({
         </Fragment>
       ))}
     </div>,
-    document.body,
+    portalTarget,
   );
 }
 

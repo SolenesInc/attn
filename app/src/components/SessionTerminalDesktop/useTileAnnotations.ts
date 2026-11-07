@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAnnotationSend } from '../../annotations/useAnnotationSend';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
+import { useFrameScheduler, useTileWindow } from '../../tileWindow';
 import type { MarkdownAnnotationsSendHandle } from '../MarkdownReader';
 import type { MarkdownAnnotationsDestination } from '../MarkdownReader/annotations/transport';
 import { getMarkdownAnnotationsTransport } from '../MarkdownReader/annotations/transport';
@@ -278,12 +279,14 @@ function useAnnotationDestinationMenu({
   const destinationGroupRef = useRef<HTMLDivElement>(null);
   const destinationCaretRef = useRef<HTMLButtonElement>(null);
   const destinationMenuRef = useRef<HTMLDivElement>(null);
+  const tileWindow = useTileWindow();
+  const frames = useFrameScheduler();
   const closeDestinationMenu = useCallback((restoreFocus = false) => {
     setOpenDestinationMenuKey(null);
     if (restoreFocus) {
-      window.requestAnimationFrame(() => destinationCaretRef.current?.focus());
+      frames.request(() => destinationCaretRef.current?.focus());
     }
-  }, []);
+  }, [frames]);
   useEscapeStack(() => closeDestinationMenu(true), destinationMenuOpen);
   useEffect(() => {
     if (!destinationMenuOpen) return;
@@ -295,9 +298,10 @@ function useAnnotationDestinationMenu({
         closeDestinationMenu();
       }
     };
-    document.addEventListener('mousedown', handleMouseDown);
-    return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, [closeDestinationMenu, destinationMenuOpen]);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('mousedown', handleMouseDown);
+    return () => tileDocument.removeEventListener('mousedown', handleMouseDown);
+  }, [closeDestinationMenu, destinationMenuOpen, tileWindow]);
 
   return {
     destinationGroupRef,

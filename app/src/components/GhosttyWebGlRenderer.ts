@@ -1,4 +1,5 @@
 import { measureCellWidth } from '../utils/terminalSizing';
+import { ownerWindow } from '../utils/realm';
 import { CellFlags, type GhosttyCell, type GhosttyTerminal } from '../ghostty';
 import { cursorRowInViewport, viewportBufferStart } from '../utils/ghosttyScroll';
 import {
@@ -347,7 +348,7 @@ export class WebGlTerminalRenderer {
     this.defaultBg = parseColor(theme.background);
     this.defaultBgPacked = packColor(this.defaultBg);
     this.cursorBgPacked = parsePackedColor(theme.cursor);
-    this.dpr = Math.max(window.devicePixelRatio || 1, 1);
+    this.dpr = Math.max(ownerWindow(canvas).devicePixelRatio || 1, 1);
 
     // `depth` defaults to on for a WebGL2 context and is a drawing-buffer-sized allocation per
     // pane; this renderer never enables a depth or stencil test. `stencil` already defaults off.

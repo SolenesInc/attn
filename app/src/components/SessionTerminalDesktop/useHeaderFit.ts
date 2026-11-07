@@ -8,6 +8,7 @@ import {
   type PieceWidths,
   type RankStep,
 } from './headerFit';
+import { useFrameScheduler, useTileWindow } from '../../tileWindow';
 
 interface Measured {
   widths: Partial<Record<HeaderPiece, PieceWidths>>;
@@ -47,6 +48,8 @@ export function useHeaderFit(
 ): HeaderLevels {
   const [levels, setLevels] = useState<HeaderLevels>({});
   const keepKey = keep.join(' ');
+  const tileWindow = useTileWindow();
+  const frames = useFrameScheduler();
 
   useLayoutEffect(() => {
     const row = rowRef.current;
@@ -67,13 +70,13 @@ export function useHeaderFit(
       }
       pending = next;
       if (frame) return;
-      frame = requestAnimationFrame(() => {
+      frame = frames.request(() => {
         frame = 0;
         flushSync(() => commit(pending));
       });
     };
     const fit = () => {
-      const style = getComputedStyle(row);
+      const style = tileWindow.getComputedStyle(row);
       const available = row.clientWidth - (Number.parseFloat(style.paddingLeft) || 0) - (Number.parseFloat(style.paddingRight) || 0);
       if (available <= 0) {
         apply({});
@@ -102,7 +105,7 @@ export function useHeaderFit(
       fit();
     };
 
-    const resizes = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver((entries) => {
+    const resizes = typeof tileWindow.ResizeObserver === 'undefined' ? null : new tileWindow.ResizeObserver((entries) => {
       if (entries.every((entry) => entry.target === row)) fit();
       else remeasure();
     });
@@ -113,11 +116,11 @@ export function useHeaderFit(
     mutations?.observe(row, { childList: true, subtree: true, characterData: true });
     return () => {
       disposed = true;
-      cancelAnimationFrame(frame);
+      frames.cancel(frame);
       mutations?.disconnect();
       resizes?.disconnect();
     };
-  }, [rowRef, rank, reserve, keepKey]);
+  }, [rowRef, rank, reserve, keepKey, tileWindow, frames]);
 
   return levels;
 }

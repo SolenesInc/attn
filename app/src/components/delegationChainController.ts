@@ -35,6 +35,7 @@ export class DelegationChainController {
   private pointerPosition: { x: number; y: number } | null = null;
   private commandFocus: FocusReturn | null = null;
   private popover: HTMLElement | null = null;
+  private view: Window = window;
 
   getSnapshot = () => this.current;
 
@@ -60,19 +61,20 @@ export class DelegationChainController {
     return open !== null && !scope.blocked && open.navigationKey === scope.navigationKey && scope.sessionIds.has(open.sessionId);
   }
 
-  connect() {
-    window.addEventListener('pointermove', this.pointerMoved, true);
-    window.addEventListener('pointerover', this.pointerMoved, true);
-    window.addEventListener('pointerout', this.pointerMoved, true);
-    document.addEventListener('pointerdown', this.outsidePointer, true);
-    window.addEventListener('wheel', this.outsideScroll, { capture: true, passive: true });
+  connect(view: Window) {
+    this.view = view;
+    view.addEventListener('pointermove', this.pointerMoved, true);
+    view.addEventListener('pointerover', this.pointerMoved, true);
+    view.addEventListener('pointerout', this.pointerMoved, true);
+    view.document.addEventListener('pointerdown', this.outsidePointer, true);
+    view.addEventListener('wheel', this.outsideScroll, { capture: true, passive: true });
     return () => {
       this.cancelClose();
-      window.removeEventListener('pointermove', this.pointerMoved, true);
-      window.removeEventListener('pointerover', this.pointerMoved, true);
-      window.removeEventListener('pointerout', this.pointerMoved, true);
-      document.removeEventListener('pointerdown', this.outsidePointer, true);
-      window.removeEventListener('wheel', this.outsideScroll, true);
+      view.removeEventListener('pointermove', this.pointerMoved, true);
+      view.removeEventListener('pointerover', this.pointerMoved, true);
+      view.removeEventListener('pointerout', this.pointerMoved, true);
+      view.document.removeEventListener('pointerdown', this.outsidePointer, true);
+      view.removeEventListener('wheel', this.outsideScroll, true);
     };
   }
 
@@ -112,7 +114,7 @@ export class DelegationChainController {
     if (this.scope.blocked) return;
     if (mode === 'hover' && (this.hoverSuppressed || this.current?.mode === 'pinned')) return;
     this.cancelClose();
-    const target = mode === 'pinned' ? anchor : this.current?.focus.target ?? document.activeElement as HTMLElement | null;
+    const target = mode === 'pinned' ? anchor : this.current?.focus.target ?? anchor.ownerDocument.activeElement as HTMLElement | null;
     this.activate(sessionId, anchor, mode, target);
   }
 
@@ -141,7 +143,7 @@ export class DelegationChainController {
 
   prepareCommand = () => {
     this.commandFocus = {
-      target: this.current?.focus.target ?? document.activeElement as HTMLElement | null,
+      target: this.current?.focus.target ?? this.view.document.activeElement as HTMLElement | null,
       navigationKey: this.scope.navigationKey,
       restore: false,
     };
@@ -150,7 +152,7 @@ export class DelegationChainController {
 
   open = (sessionId: string, returnFocus?: HTMLElement | null) => {
     this.cancelClose();
-    const anchor = Array.from(document.querySelectorAll<HTMLElement>('.delegation-chain-trigger--header'))
+    const anchor = Array.from(this.view.document.querySelectorAll<HTMLElement>('.delegation-chain-trigger--header'))
       .find((element) => element.dataset.delegationSession === sessionId && element.getClientRects().length > 0) ?? null;
     this.activate(sessionId, anchor, 'pinned', returnFocus ?? this.commandFocus?.target ?? anchor);
     this.commandFocus = null;
