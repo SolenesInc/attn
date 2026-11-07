@@ -34,8 +34,10 @@ is your turn, and the agent is owed a turn. When you settle the agent, the turn
 goes back to the agent.
 
 The "N waiting" line at the top of the queue counts how many agents are waiting
-for you. Click it, or press Cmd+J (Ctrl+Shift+J on Linux), to go to the agent at
-the top of the queue.
+for you. Agents on an [outpost](using-outposts.md#work-while-an-outpost-is-offline)
+that Attn can't reach are counted apart, as in "2 waiting · 1 unreachable", and
+listed after the rest. Click the line, or press Cmd+J (Ctrl+Shift+J on Linux), to
+go to the agent at the top of the queue.
 
 Closing the agent on your screen moves you the same way, as if you had pressed
 Cmd+J. If nobody is waiting, you stay where the close leaves you. You also stay

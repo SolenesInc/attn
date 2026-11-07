@@ -125,6 +125,7 @@ export function formatTurnAge(openedAt: string | undefined, now: number): string
 
 
 export function compareTurnOrder(a: QueueBandSession, b: QueueBandSession): number {
+  if (Boolean(a.offline) !== Boolean(b.offline)) return a.offline ? 1 : -1;
   if (Boolean(a.priority) !== Boolean(b.priority)) return a.priority ? -1 : 1;
   const openedA = a.turnOpenedAt ?? '';
   const openedB = b.turnOpenedAt ?? '';
@@ -132,6 +133,11 @@ export function compareTurnOrder(a: QueueBandSession, b: QueueBandSession): numb
     return openedA < openedB ? -1 : 1;
   }
   return a.id < b.id ? -1 : 1;
+}
+
+export function countTurns(rows: readonly { session: Pick<QueueBandSession, 'offline'> }[]) {
+  const unreachable = rows.filter((row) => row.session.offline).length;
+  return { waiting: rows.length - unreachable, unreachable };
 }
 
 /** The jump-to-waiting (⌘J) target, in queue order rather than list order. `wants` is

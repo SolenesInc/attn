@@ -5,6 +5,7 @@ import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { tileContentKey, type TileLeaf } from '../types/desktop';
+import { countTurns } from '../utils/queueBands';
 import { nextRunNeedingYou, runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
@@ -62,7 +63,7 @@ function BarCriticalStrip() {
 function WaitingPill() {
   const { queue, onOpenAgents } = useSidebarContext();
   const turns = queue?.turns ?? [];
-  const waitingCount = turns.filter((row) => !row.session.offline).length;
+  const { waiting: waitingCount, unreachable } = countTurns(turns);
   const lead = turns.slice(0, LEAD_TURNS);
   const hidden = turns.length - lead.length;
   return (
@@ -76,7 +77,7 @@ function WaitingPill() {
     >
       <span className="queue-bar-pill-count">
         <span className={`queue-bar-dot ${waitingCount ? 'is-waiting' : ''}`} />
-        {waitingCount ? `${waitingCount} waiting` : 'nothing owed'}
+        {owedLabel(waitingCount, unreachable)}
       </span>
       {lead.length > 0 && <span className="queue-bar-sep">·</span>}
       {lead.map((row, index) => (
@@ -89,6 +90,11 @@ function WaitingPill() {
       <span className="queue-bar-chevron" aria-hidden="true">▾</span>
     </button>
   );
+}
+
+function owedLabel(waiting: number, unreachable: number): string {
+  const parts = [waiting && `${waiting} waiting`, unreachable && `${unreachable} unreachable`].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'nothing owed';
 }
 
 function useSlotOf(): SlotOf {

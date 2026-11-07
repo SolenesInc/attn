@@ -64,6 +64,27 @@ describe('Remote agents in the app', () => {
     expect(turns().getByText('1', { selector: '.group-count' })).toBeInTheDocument();
   });
 
+  it('counts unreachable turns apart on the queue head and pill, never reading nothing owed above them', async () => {
+    const { daemon } = await setup(host);
+    const lead = () => Array.from(document.querySelectorAll('.queue-waiting-lead .queue-row')).map((row) => row.getAttribute('data-testid'));
+    const owed = async () => {
+      const head = screen.getByTestId('queue-waiting-head').textContent;
+      await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+      const pill = screen.getByTestId('queue-bar-pill').querySelector('.queue-bar-pill-count')!.textContent;
+      await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
+      return { head: head!.replace(/⌘J$/, ''), pill };
+    };
+    expect(lead()).toEqual(['queue-turn-remote', 'queue-turn-local']);
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [offline] }));
+    expect(await owed()).toEqual({ head: '1 waiting · 1 unreachable', pill: '1 waiting · 1 unreachable' });
+    expect(lead()).toEqual(['queue-turn-local', 'queue-turn-remote']);
+    await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: daemonSession('local', { turn_owed: false }) }));
+    expect(await owed()).toEqual({ head: '1 unreachable', pill: '1 unreachable' });
+    expect(lead()).toEqual(['queue-turn-remote']);
+    await gesture(daemon, () => daemon.emit({ event: 'outposts_updated', outposts: [host] }));
+    expect(await owed()).toEqual({ head: '1 waiting', pill: '1 waiting' });
+  });
+
   it('hides palette turn actions for the highlighted offline agent and restores them on reconnect', async () => {
     const { daemon } = await setup(host);
     await gesture(daemon, () => pressShortcut('ui.actionMenu'));

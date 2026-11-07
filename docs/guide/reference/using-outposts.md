@@ -340,7 +340,7 @@ immediately to close, split, kill or reload a live terminal, naming the outpost.
 A stopped, recoverable agent still allows record-only close, rename and
 priority changes.
 
-Offline agents keep their queue rows, marked, but Next, automatic advance and Cmd+J skip them, and the waiting counts leave them out. Attn hides the actions Settle, snooze, unsnooze,
+Offline agents keep their queue rows, marked, below the agents you can reach, but Next, automatic advance and Cmd+J skip them. The waiting counts leave them out and name them apart, as in "2 waiting · 1 unreachable". Attn hides the actions Settle, snooze, unsnooze,
 cancel countdown and submit annotation. A running auto-settle countdown shows
 frozen, and the assistant window names the unreachable outpost. Rename and
 priority remain available.

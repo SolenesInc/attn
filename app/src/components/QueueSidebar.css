@@ -102,6 +102,10 @@
   font-weight: 700;
 }
 
+.queue-waiting-unreachable {
+  color: var(--color-text-tertiary);
+}
+
 .queue-waiting-lead {
   display: flex;
   flex-direction: column;

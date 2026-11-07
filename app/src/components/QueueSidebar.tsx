@@ -2,7 +2,7 @@ import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
+import { countTurns, crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
 import { formatWakeTimeShort } from '../utils/snoozeDurations';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
@@ -213,18 +213,19 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
   if (!queue) return null;
 
   const turns = queue.turns;
-  const waitingCount = turns.filter((row) => !row.session.offline).length;
+  const { waiting: waitingCount, unreachable: unreachableCount } = countTurns(turns);
   const lead = turns.slice(0, leadCount);
   const hidden = turns.length - lead.length;
   const pinnedCrew = new Set(queue.crew.map((row) => row.session.id));
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || sessionDisplayName(row.session).toLowerCase().includes(agentFilter.toLowerCase());
-  const hiddenWaiting = turns.slice(leadCount).filter((row) => !row.session.offline && !pinnedCrew.has(row.session.id)).length;
+  const hiddenTurns = countTurns(turns.slice(leadCount).filter((row) => !pinnedCrew.has(row.session.id)));
   const hiddenWorking = queue.settled.filter((row) => !pinnedCrew.has(row.session.id)).length;
   const hiddenSnoozed = queue.snoozed.filter((row) => !pinnedCrew.has(row.session.id)).length;
-  const more = hiddenWaiting + hiddenWorking + hiddenSnoozed;
+  const more = hiddenTurns.waiting + hiddenTurns.unreachable + hiddenWorking + hiddenSnoozed;
   const parts = [
-    [hiddenWaiting, 'waiting'],
+    [hiddenTurns.waiting, 'waiting'],
+    [hiddenTurns.unreachable, 'unreachable'],
     [hiddenWorking, 'working'],
     [hiddenSnoozed, 'snoozed'],
   ] as const;
@@ -258,9 +259,11 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
         onClick={onJumpToWaiting}
         disabled={waitingCount === 0}
       >
-        {waitingCount > 0 ? (
+        {waitingCount + unreachableCount > 0 ? (
           <span className="queue-waiting-count">
-            <span className="queue-waiting-number">{waitingCount}</span> waiting
+            {waitingCount > 0 && <><span className="queue-waiting-number">{waitingCount}</span> waiting</>}
+            {waitingCount > 0 && unreachableCount > 0 && ' · '}
+            {unreachableCount > 0 && <span className="queue-waiting-unreachable">{unreachableCount} unreachable</span>}
           </span>
         ) : (
           <span className="queue-waiting-count is-zero" data-testid="queue-empty">
