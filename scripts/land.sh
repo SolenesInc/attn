@@ -364,8 +364,17 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
+refuse_commits_by_another_author() {
+  local identity others
+  identity="$(git config --global --includes --get user.email || true)"
+  [ -n "$identity" ] || return 0
+  others="$(git log --format='  %h %ae %s' origin/main..HEAD | awk -v identity="$identity" '$2 != identity')"
+  [ -z "$others" ] || fail "these commits are not authored by your global git identity, $identity:
+$others
+See which config set the identity with git config --show-origin user.email. If it is not yours, remove it. Then fix these commits with git rebase origin/main --exec 'git commit --amend --no-edit --reset-author' and run scripts/land.sh again."
+}
+
 run_landing_scenarios() {
-  git fetch --quiet origin main
   rebase_onto_main
   scripts/land-scenarios.sh origin/main
 }
@@ -373,6 +382,8 @@ run_landing_scenarios() {
 # GOGC=400 cut staticcheck on internal/daemon from 19.4 to 15.3 CPU-s and added
 # about 1 GiB to its peak of 1.2 GiB (2026-11-04).
 export GOGC="${GOGC:-400}"
+git fetch --quiet origin main
+refuse_commits_by_another_author
 run_landing_scenarios
 take_land_queue
 land 9>&-

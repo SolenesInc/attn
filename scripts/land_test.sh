@@ -328,6 +328,13 @@ refuses() {
   git reset -q --hard origin/main
 }
 
+printf '[user]\n\temail = global@example.invalid\n' >"$work/global-identity"
+refuses 'a commit whose author is not the global identity' GIT_CONFIG_GLOBAL="$work/global-identity"
+grep -qF 'landing@example.invalid' "$work/failure" && grep -qF 'global@example.invalid' "$work/failure" || { echo 'the refusal did not name both identities' >&2; cat "$work/failure" >&2; exit 1; }
+printf '[user]\n\temail = landing@example.invalid\n' >"$work/matching-identity"
+printf '\n' >>app/src/example.ts
+land 'A commit by the global identity' GIT_CONFIG_GLOBAL="$work/matching-identity"
+
 refuses 'a failed app check' LAND_CHECK_EXIT=1
 refuses 'a failed landing test' LAND_TESTS_EXIT=1
 refuses 'a failed Go check' LAND_CHECK_EXIT=1 internal/example/example.go

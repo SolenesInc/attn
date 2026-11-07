@@ -88,6 +88,12 @@ process, while it chooses the landing tests. Both then read that one build. It
 waits for both and prints both outcomes, and a failure in either stops the
 push. The other checks run before them, because some rewrite tracked files.
 
+Before all of this, `land.sh` refuses a landing with a commit whose author email
+differs from the global git identity, and names the commits. Running `git config`
+in a linked worktree writes to the config that every worktree of the clone
+shares, and nothing else would stop the wrong author from reaching `main`. On a
+machine with no global identity, it skips this check.
+
 `land.sh` also warns, without stopping the push, when the landing undoes an
 earlier commit. It compares the landing with the last 30 commits on `main` that
 share a file with it, and names each commit whose whole change could be applied

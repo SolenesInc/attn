@@ -132,7 +132,7 @@ class Scratch:
         for name in ("ATTN_SESSION_ID", "ATTN_INSTANCE", "ATTN_DATA_DIR", "ATTN_DB_PATH", "ATTN_SOCKET_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "GIT_DIR", "GIT_WORK_TREE"):
             self.env.pop(name, None)
         self.env["ATTN_TEST_HISTORY_DIR"] = str(root / "spool")
-        self.land_env = {**self.env, "XDG_CONFIG_HOME": str(root / "config")}
+        self.land_env = {**self.env, "XDG_CONFIG_HOME": str(root / "config"), "GIT_CONFIG_GLOBAL": os.devnull}
         (root / "config").mkdir(exist_ok=True)
         with measurement("scratch setup"):
             self.make_origin()

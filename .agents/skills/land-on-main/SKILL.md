@@ -128,6 +128,11 @@ pushes. `.githooks/pre-push` refuses a plain
 `git push`. Use `git push --no-verify` only when `scripts/land.sh` cannot run,
 after you run its checks yourself.
 
+`scripts/land.sh` refuses commits whose author is not your global git identity,
+and says how to fix them. Set a throwaway identity with `git -c user.email=…`,
+never `git config` in a worktree, because that writes to the config every
+worktree of the clone shares.
+
 The last lines of the output warn when the landing undid earlier commits on
 `main`, and name them. The push has already happened. If you did not mean to
 undo a commit, restore it right away in a new landing with `git cherry-pick`,
