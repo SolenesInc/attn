@@ -222,15 +222,31 @@ instance                a daemon, an app and a data folder under one name;
 
 ```text
 home                    the main daemon the user's app connects to
-└─ bridge (0..n)       a connection through the user's ssh to one outpost
-   ├─ state (1)
-   │  ├─ connecting    the home is dialing the outpost
-   │  ├─ connected     heartbeats arrive (every 0.5 s)
-   │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
-   │  ├─ lost          no heartbeat for 60 s, or no connection; the home redials
-   │  └─ refused       ssh refused authentication or a host key, or attn
-   │                   refused the outpost's identity or build
-   └─ outpost (1)     a remote daemon paired to that home
+├─ bridge (0..n)       a connection through the user's ssh to one outpost
+│  ├─ state (1)
+│  │  ├─ connecting    the home is dialing the outpost
+│  │  ├─ connected     heartbeats arrive (every 0.5 s)
+│  │  ├─ stalled       no heartbeat for 3 s on an open connection; usually clears
+│  │  ├─ lost          no heartbeat for 60 s, or no connection; the home redials
+│  │  └─ refused       ssh refused authentication or a host key, or attn
+│  │                   refused the outpost's identity or build
+│  └─ outpost (1)     a remote daemon paired to that home
+├─ Home Gateway (1)    the API a home serves to its paired phones; like a
+│                      backend API
+└─ cloud link (at most 1)
+                       the home's connection to its Cloud Relay
+
+Attn Cloud              the hosted service that connects phones to homes
+└─ Cloud Relay (1 per home)
+                        passes traffic between a home and its phones and cannot
+                        read it; like a TURN server
+
+phone                   an app paired with one or more profiles; like a mobile
+│                       client
+└─ phone pairing (1..n) connects 1 phone to 1 profile
+pairing code            the QR code that creates a phone pairing; works once
+relay token             a value derived from a pairing code that gets a phone
+                        through the Cloud Relay while pairing
 
 setting                 a daemon option, read and set with attn settings
 ├─ home setting         the home decides it; outposts keep a read-only copy
@@ -306,6 +322,10 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - pending_approval → needs approval
 - reopen → resume
 - reporting seed → stake
+- gateway → Home Gateway
+- relay → Cloud Relay
+- offer → pairing code
+- device (in the relay contract) → phone
 
 ### Changes to make
 
