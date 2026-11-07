@@ -51,8 +51,9 @@ and profile.
 A member with a session opens like any other agent. A member that is asleep shows
 **asleep**: tap the row to wake it. The row shows **waking…** until the member's
 session arrives, and then opens like any other. If the computer refuses the wake,
-the row says why, and you can tap it again. A member on a computer or outpost the
-phone cannot reach stays in the section and shows **offline**.
+the row says why, and you can tap it again. If the session ends at once, the row
+shows **asleep** again. A member on a computer or outpost the phone cannot reach
+stays in the section and shows **offline**.
 
 A computer that runs an older attn sends no crew data, so the phone lists its
 members with its other agents and shows no asleep members.

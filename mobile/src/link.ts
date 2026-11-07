@@ -319,11 +319,16 @@ const openSocket = (
       case 'submit_result':
       case 'ask_answer_result':
       case 'ask_image_chunk':
-      case 'ask_image_error': {
+      case 'ask_image_error':
+      case 'crew_wake_result': {
         const request = pending.get(event.request_id)
         pending.delete(event.request_id)
         return request?.resolve(event)
       }
+      case undefined:
+        return
+      default:
+        return event satisfies never
     }
   }
 

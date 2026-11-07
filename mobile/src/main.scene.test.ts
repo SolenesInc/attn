@@ -536,6 +536,7 @@ describe('waking an asleep member from the phone', () => {
     sessions: [],
     asleepCrew: [asleep('keel', 'Keel')],
   })
+  const acceptedKeel = Message.AcceptedWake({ key: `${personal.id}/crew/keel` })
 
   it('sends the wake on a tap, shows it is waking, and the same row becomes the live session', () => {
     Scene.scene(
@@ -548,9 +549,7 @@ describe('waking an asleep member from the phone', () => {
       Scene.Command.expectExact(wakeKeel),
       expectEntries([['Keel', 'waking…']]),
 
-      Scene.Command.resolve(wakeKeel, Message.CompletedCommand()),
-      expectEntries([['Keel', 'waking…']]),
-
+      Scene.Command.resolve(wakeKeel, acceptedKeel),
       Scene.Subscription.emit(
         Message.ReceivedSessions({
           pairingId: personal.id,
@@ -592,7 +591,23 @@ describe('waking an asleep member from the phone', () => {
       Scene.click(Scene.text('Keel')),
       Scene.Command.expectExact(wakeKeel),
       expectEntries([['Keel', 'waking…']]),
-      Scene.Command.resolve(wakeKeel, Message.CompletedCommand()),
+      Scene.Command.resolve(wakeKeel, acceptedKeel),
+    )
+  })
+
+  it('offers the wake again when the woken session ended before the home ever listed it', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(asleepHome),
+      Scene.click(Scene.text('Keel')),
+      Scene.Command.resolve(wakeKeel, acceptedKeel),
+      expectEntries([['Keel', 'asleep']]),
+
+      Scene.click(Scene.text('Keel')),
+      Scene.Command.expectExact(wakeKeel),
+      expectEntries([['Keel', 'waking…']]),
+      Scene.Command.resolve(wakeKeel, acceptedKeel),
     )
   })
 

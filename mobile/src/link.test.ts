@@ -217,3 +217,25 @@ describe('a phone keeps its home’s garden', () => {
     ])
   })
 })
+
+describe('a phone wakes a crew member on its home', () => {
+  it('hears the reason the home refused the wake', async () => {
+    await connect()
+    const reply = link.request({ cmd: 'crew_wake', crew_member: 'keel' })
+    await vi.advanceTimersByTimeAsync(1)
+    const asked = cloudRelay.commands.find((command) => command.cmd === 'crew_wake')!
+
+    cloudRelay.sockets[0]!.toPhone({
+      event: 'crew_wake_result',
+      request_id: asked.request_id,
+      crew_member: 'keel',
+      error: 'Keel launches in /gone, which is not there',
+    })
+    await vi.advanceTimersByTimeAsync(1)
+
+    await expect(reply).resolves.toMatchObject({
+      event: 'crew_wake_result',
+      error: 'Keel launches in /gone, which is not there',
+    })
+  })
+})

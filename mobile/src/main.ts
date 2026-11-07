@@ -224,6 +224,7 @@ export const Message = defineMessageUnion({
   ChangedComposer: { value: Schema.String },
   SubmittedComposer: {},
   ClickedAsleepMember: { pairingId: Schema.String, crewMember: Schema.String },
+  AcceptedWake: { key: Schema.String },
   RefusedWake: { key: Schema.String, message: Schema.String },
   DeliveredPrompt: { key: Schema.String, text: Schema.String },
   FailedPrompt: { key: Schema.String, message: Schema.String },
@@ -444,14 +445,14 @@ export const SendPrompt = Command.define('SendPrompt', {
 
 export const WakeCrewMember = Command.define('WakeCrewMember', {
   args: { key: Schema.String, pairingId: Schema.String, crewMember: Schema.String },
-  messages: [Message.CompletedCommand, Message.RefusedWake],
+  messages: [Message.AcceptedWake, Message.RefusedWake],
   execute: ({ key, pairingId, crewMember }) =>
     Effect.tryPromise(async () => {
       const reply = await linkTo(pairingId).request({ cmd: 'crew_wake', crew_member: crewMember })
       if (reply.event !== 'crew_wake_result') throw new Error(`the home answered ${reply.event}`)
       if (reply.error) throw new Error(reply.error)
     }).pipe(
-      Effect.map(() => Message.CompletedCommand()),
+      Effect.map(() => Message.AcceptedWake({ key })),
       Effect.catch(({ cause }) => Effect.succeed(Message.RefusedWake({ key, message: errorText(cause) }))),
     ),
 })
@@ -1108,6 +1109,11 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
             commands: [WakeCrewMember({ key, pairingId, crewMember })],
           }
     },
+    AcceptedWake: ({ key }) => ({
+      model: modifyFields(model, {
+        crewWakes: (wakes) => Object.fromEntries(Object.entries(wakes).filter(([wake]) => wake !== key)),
+      }),
+    }),
     RefusedWake: ({ key, message }) => ({
       model: modifyFields(model, {
         crewWakes: (wakes) => ({ ...wakes, [key]: { status: 'refused' as const, message } }),
