@@ -85,6 +85,7 @@
 }
 
 .agent-option {
+  position: relative;
   border: 0;
   background: transparent;
   color: var(--color-text-tertiary);

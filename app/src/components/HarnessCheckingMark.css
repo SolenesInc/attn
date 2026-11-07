@@ -1,0 +1,18 @@
+.harness-checking-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  box-sizing: border-box;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.agent-option .harness-checking-mark {
+  right: 5px;
+}
+
+.launcher-controls .agent-option .harness-checking-mark {
+  right: 3px;
+}

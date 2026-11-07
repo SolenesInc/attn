@@ -8,6 +8,8 @@ import { daemonSession, soloDesktop } from './test/daemonFixtures';
 import type { CommandMessage } from './test/protocol';
 import { openSection } from './test/settings';
 
+const checkingMark = (harness: HTMLElement) => within(harness).queryByRole('img', { name: 'checking' });
+
 async function openNewSession(settings: Record<string, string>) {
   const { daemon } = await renderApp({ initialState: { settings }, script: daemon => { if (settings['gemini-cli_available']) serveHarnessCatalogs(daemon, [...harnesses, { id: 'gemini-cli', name: 'Gemini Cli', available: true, model_pin: true, effort_pin: true, discovery: false }].sort((a, b) => a.id.localeCompare(b.id))); } });
   await gesture(daemon, () => pressShortcut('session.new'));
@@ -85,7 +87,9 @@ describe('App new session', () => {
       expect(claude()).toBeEnabled();
       expect(claude()).toHaveAttribute('aria-checked', 'true');
       expect(claude()).toHaveAttribute('title', 'Checking for Claude on this machine');
-      expect(screen.getByText('Checking for Claude on this machine')).toBeVisible();
+      expect(checkingMark(claude())).toBeVisible();
+      expect(checkingMark(codex())).toBeNull();
+      expect(screen.queryByText('Checking for Claude on this machine')).toBeNull();
 
       await gesture(daemon, () => fireEvent.click(codex()));
       await gesture(daemon, () => fireEvent.click(claude()));
@@ -95,7 +99,7 @@ describe('App new session', () => {
       expect(claude()).toBeDisabled();
       expect(claude()).toHaveAttribute('title', 'Claude is not available on this machine');
       expect(codex()).toHaveAttribute('aria-checked', 'true');
-      expect(screen.queryByText('Checking for Claude on this machine')).toBeNull();
+      expect(checkingMark(claude())).toBeNull();
     });
 
     it('does not say no agent was found while every harness is being checked', async () => {
@@ -104,25 +108,26 @@ describe('App new session', () => {
 
       expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
       expect(screen.getByRole('radio', { name: /^Claude/ })).toHaveAttribute('aria-checked', 'true');
-      expect(screen.getByText('Checking for Claude and Codex on this machine')).toBeVisible();
+      expect(checkingMark(screen.getByRole('radio', { name: /^Claude/ }))).toBeVisible();
+      expect(checkingMark(screen.getByRole('radio', { name: /^Codex/ }))).toBeVisible();
     });
 
     it('shows a harness as checking in Settings until the daemon knows', async () => {
       const daemon = await openSection('agents', { settings: { new_session_agent: 'claude', claude_available: 'checking', codex_available: 'checking' } });
       const claudeSummary = () => document.querySelector('.settings-agent summary .settings-agent-summary');
-      const defaultClaude = () => within(screen.getByRole('group', { name: 'Default session agent' })).getByRole('button', { name: 'Claude' });
+      const defaultClaude = () => within(screen.getByRole('group', { name: 'Default session agent' })).getByRole('button', { name: /^Claude/ });
 
       expect(claudeSummary()).toHaveTextContent('Checking');
       expect(defaultClaude()).toBeEnabled();
       expect(defaultClaude()).toHaveAttribute('aria-pressed', 'true');
       expect(defaultClaude()).toHaveAttribute('title', 'Checking for Claude on this machine');
-      expect(screen.getByText('Checking for Claude and Codex on this machine')).toBeVisible();
+      expect(checkingMark(defaultClaude())).toBeVisible();
       expect(screen.queryByText('No supported agent CLI found in PATH.')).toBeNull();
 
       await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { claude_available: 'true', codex_available: 'true' } }));
       expect(claudeSummary()).toHaveTextContent('Available');
       expect(defaultClaude()).not.toHaveAttribute('title');
-      expect(screen.queryByText('Checking for Claude and Codex on this machine')).toBeNull();
+      expect(checkingMark(defaultClaude())).toBeNull();
     });
 
     it('waits for reported harness order before assigning agent shortcuts', async () => {

@@ -457,6 +457,7 @@
 }
 
 .settings-segmented-option {
+  position: relative;
   min-height: 32px;
   border: 1px solid transparent;
   border-radius: 6px;

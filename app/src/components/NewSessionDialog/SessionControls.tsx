@@ -15,7 +15,7 @@ import {
 } from '../../utils/agentAvailability';
 import { keyCombo } from '../../shortcuts/formatShortcut';
 import { modifierGlyphs } from '../../shortcuts/platform';
-import { HarnessCheckingStatus } from '../HarnessCheckingStatus';
+import { HarnessCheckingMark } from '../HarnessCheckingMark';
 
 const DEFAULT_AGENT_AVAILABILITY: AgentAvailability = {
   shell: 'available',
@@ -273,12 +273,6 @@ export function SessionControls({
     setChiefOfStaff,
   } = controls;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
-  const checkingStatus = (
-    <HarnessCheckingStatus
-      agents={targetIsOutpost ? [] : orderedAgentList}
-      availability={effectiveAgentAvailability}
-    />
-  );
   const toggles = (
     <>
       {chiefToggleEligible && (
@@ -340,7 +334,6 @@ export function SessionControls({
       {' '}
       <div className="picker-agent-bar">
         <div className="picker-agent-label">SESSION AGENT</div>
-        {!compact && checkingStatus}
         <div className="picker-agent-controls">
           {harnessesLoading && <span role="status">Loading harnesses…</span>}
           {harnessesError && (
@@ -370,6 +363,7 @@ export function SessionControls({
               const shortcut = key && (compact ? key : keyCombo('alt', key));
               const label = pickerAgentLabel(candidate);
               const absent = missing?.harnesses.has(candidate) && missing.machine;
+              const checking = availability === 'checking' && !targetIsOutpost && !absent;
               return (
                 <button
                   key={candidate}
@@ -385,20 +379,20 @@ export function SessionControls({
                       ? `${label} is not available on this machine`
                       : absent
                         ? `${label} is not installed on ${absent}`
-                        : availability === 'checking' && !targetIsOutpost
+                        : checking
                           ? checkingForHarnessLabel(label)
                           : undefined
                   }
                 >
                   <span className="agent-option-name">{label}</span>
                   {available && shortcut && <kbd className="agent-shortcut">{shortcut}</kbd>}
+                  {checking && <HarnessCheckingMark />}
                 </button>
               );
             })}
           </div>
         </div>
       </div>
-      {compact && checkingStatus}
       {compact ? <div className="launcher-toggle-group">{toggles}</div> : toggles}
       {!hasAvailableAgents && <div className="picker-agent-warning">{noAgentsMessage}</div>}
     </>

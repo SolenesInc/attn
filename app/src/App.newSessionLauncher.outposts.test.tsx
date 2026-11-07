@@ -262,10 +262,10 @@ describe('launcher with outposts attached', () => {
     const { daemon } = await open({ claude_available: 'checking' });
     const claude = screen.getByRole('radio', { name: /Claude/ });
     const titleByTarget = [];
-    const statusByTarget = [];
+    const markByTarget = [];
     for (let row = 0; row < recents.length; row++) {
       titleByTarget.push(claude.getAttribute('title'));
-      statusByTarget.push(screen.queryByText('Checking for Claude on this machine') !== null);
+      markByTarget.push(within(claude).queryByRole('img', { name: 'checking' }) !== null);
       expect(claude).toBeEnabled();
       expect(claude).toHaveAttribute('aria-checked', 'true');
       if (row < recents.length - 1) await press(daemon, 'ArrowDown');
@@ -276,7 +276,7 @@ describe('launcher with outposts attached', () => {
       null,
       'Checking for Claude on this machine',
     ]);
-    expect(statusByTarget).toEqual([false, true, false, true]);
+    expect(markByTarget).toEqual([false, true, false, true]);
     await press(daemon, 'Enter');
     expect(spawns(daemon)).toEqual([{ cwd: NOTES, agent: 'claude', host: undefined }]);
   });
@@ -285,6 +285,7 @@ describe('launcher with outposts attached', () => {
     const { daemon } = await open({ claude_available: 'checking' }, [sandbox], ['codex']);
     const claude = screen.getByRole('radio', { name: /Claude/ });
     expect(claude).toHaveAttribute('title', 'Claude is not installed on ai-sandbox');
+    expect(within(claude).queryByRole('img', { name: 'checking' })).toBeNull();
     await highlight(daemon, 1);
     expect(claude).toHaveAttribute('title', 'Checking for Claude on this machine');
     await gesture(daemon, () =>

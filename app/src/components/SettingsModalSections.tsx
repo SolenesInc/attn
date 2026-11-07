@@ -7,7 +7,7 @@ import { routeFromStored } from '../hooks/useHarnessRoute';
 import { ModelTier } from '../types/generated';
 import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
 import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
-import { HarnessCheckingStatus } from './HarnessCheckingStatus';
+import { HarnessCheckingMark } from './HarnessCheckingMark';
 import { agentCapabilityLabel, agentLabel, checkingForHarnessLabel, harnessAvailability, type HarnessAvailability } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
 import { BackgroundTasksSettings } from './BackgroundTasksSettings';
@@ -924,7 +924,6 @@ export function AgentSettings({
             <p className="settings-row-title">Default agent</p>
             <p className="settings-row-copy">Used for new sessions and opening PRs.</p>
           </div>
-          <HarnessCheckingStatus agents={orderedAgentList} availability={agentAvailability} />
           <div className="settings-segmented" role="group" aria-label="Default session agent">
             {orderedAgentList.map((agent) => {
               const availability = harnessAvailability(agentAvailability, agent);
@@ -945,6 +944,7 @@ export function AgentSettings({
                   }
                 >
                   {agentLabel(agent)}
+                  {availability === 'checking' && <HarnessCheckingMark />}
                 </button>
               );
             })}
