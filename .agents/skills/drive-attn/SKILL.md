@@ -44,8 +44,8 @@ attn you run inside. Code blocks here show the prefix. Inline commands, here
 and in the feature map, are written without it.
 
 Pick a name of your own (`[a-z0-9][a-z0-9-]{0,15}`), not `dev`, because `dev`
-is shared with other work and installs the attn skill into your harness
-homes. Keep a list of every name you start. Clean each name as
+is shared with other work and installs the enabled workflow skill into your
+harness homes. Keep a list of every name you start. Clean each name as
 [Cleanup](#cleanup) says, including when you abandon the run.
 
 Sourcing the env file runs `attn instance-env <name>`, which selects the

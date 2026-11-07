@@ -14,12 +14,12 @@ work.
 Open the pull request and finish its checks before you hand off the merge. Fix failing checks until CI is green on the pull request head and the required repository checks pass. Address review, and answer it on the pull request. Evidence is valid for the pull request head.
 
 When only the merge remains, report the pull request and arm harvest with
-`--when-merged`, as [Harvesting on a merge](garden.md#harvesting-on-a-merge)
+`--when-merged`, as Harvesting on a merge (`attn skill --reference garden`)
 describes. Wait for the user before you merge or push to the main line, unless
 the task authorizes you to merge or push.
 
 A seed that waits on a review, a merge or a rollout can wait on standby instead
-of a session held open, as [Standby](garden.md#standby) describes. Standby
+of a session held open, as Standby (`attn skill --reference garden`) describes. Standby
 grants nothing. A merge or a push still needs the task's authorization, so write
 what the user approved into the standby note.
 

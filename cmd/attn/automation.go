@@ -12,8 +12,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+const automationUsageText = "usage: attn automation <apply|set|validate|list|show|run|runs|enable|disable|delete|cleanup> [--profile <name|id>]\n"
+
 func automationUsage() {
-	fmt.Fprint(os.Stderr, "usage: attn automation <apply|set|validate|list|show|run|runs|enable|disable|delete|cleanup> [--profile <name|id>]\n")
+	fmt.Fprint(os.Stderr, automationUsageText)
 }
 
 func runAutomationCommand() {

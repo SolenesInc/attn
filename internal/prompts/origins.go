@@ -59,6 +59,7 @@ func originRecipients() []Recipient {
 			On("handover-brief", "message_fragment", "Seed reference for a handover opening.", seedContract),
 			On("opening", "opening_message", "Delegation identity and seed reference.", leafOpening(seedContract)),
 			On("brief", "message_fragment", "Seed reference for the delegated opening.", seedContract),
+			On("started", "cli_output", "attn delegate, after the agent started.", Use("delegation.started", "content/delegation/started.md")),
 			On("authorization", "message_fragment", "The seed's authorization, after the role block of a delegation or handover opening.", authorizationLine),
 			On("identity", "message_fragment", "Delegation identity shared by delegation and automation.", leafOpening(Input(brief))),
 			On("authorization-update", "inbox_content", "A change to a seed's authorization by someone other than its tender, typed into the tender's conversation as the user's message.", authorizationUpdate),

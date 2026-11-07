@@ -38,7 +38,7 @@ writers never collide. The chief treats the notebook as its home.
 
 - `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
 - `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (on an outpost, the copy of that folder, inside a session only). `attn settings set notebook.root <path> [--profile <name|id>]` sets a profile's folder. Inside a session, both commands use the session's profile.
-- Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`), and the attn skill's notebook reference covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
+- Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`), and `attn skill --reference notebook` covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
 
 ### Triggers
 

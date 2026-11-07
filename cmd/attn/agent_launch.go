@@ -149,9 +149,6 @@ func runAgentDirectly(requestedAgent string) {
 		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
 	}
 
-	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: skill synchronization failed for %s: %v\n", driver.Name(), err)
-	}
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
 		if err := preparer.PrepareLaunch(opts); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: launch preparation failed for %s: %v\n", driver.Name(), err)

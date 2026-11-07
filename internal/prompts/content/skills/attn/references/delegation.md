@@ -109,7 +109,7 @@ attn delegate --seed s-example --role builder --cwd /notes --desktop ops
 
 To move a terminal later, run `attn terminal move <desktop>` for yourself, or
 `attn terminal move <terminal> <desktop>` for a shell or an agent below you in
-the delegation chain. [Terminals](terminal.md#move) covers targeting, placement,
+the delegation chain. Terminals (`attn skill --reference terminal`) covers targeting, placement,
 and what a move changes.
 
 ## Choose the role and model
@@ -131,7 +131,7 @@ attn delegate --brief-file question.md --cwd /notes \
 attn delegate --brief-file task.md --cwd /notes --fallback
 ```
 
-Use Attn's configured roles and choices by default. Honor an explicit user request for a model or role for that delegation, and do not save it as a preference. When the user asks to change the saved roles themselves, read [delegation-roles.md](delegation-roles.md). If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain the conflict and ask which should govern.
+Use Attn's configured roles and choices by default. Honor an explicit user request for a model or role for that delegation, and do not save it as a preference. When the user asks to change the saved roles themselves, read `attn skill --reference delegation-roles`. If standing instructions in AGENTS.md, skills or other files actually conflict with the configuration, explain the conflict and ask which should govern.
 
 Start a separate Reviewer delegation only when the user explicitly asks for one. Wording with the same meaning counts, even if the user does not name the role. When the user asks you to review the current work, do the review yourself. If the user requires reviews of the implementation in general, that requirement remains the Orchestrator's responsibility. If you are a Pathfinder or Orchestrator, do not add a Reviewer to a plan on your own, and do not treat the user's later approval of the plan as authorization for that delegation.
 
@@ -141,9 +141,9 @@ For direct delegation, choose the model explicitly. Available harnesses, models 
 
 ## Follow progress and recover
 
-The launch output names the seed, the session, the folder and branch, and the operation. A successful launch means the agent started, not that its work is done. Each new delegation starts an ordinary watch on the delegation's seed and on that seed's descendants. For watch and unwatch behavior, read [Rings and watches](garden.md#rings-and-watches). A recovery does not recreate a watch you removed.
+The launch output names the seed, the session, the folder and branch, and the operation. A successful launch means the agent started, not that its work is done. Each new delegation starts an ordinary watch on the delegation's seed and on that seed's descendants. For watch and unwatch behavior, read Rings and watches (`attn skill --reference garden`). A recovery does not recreate a watch you removed.
 
-To read the work, run `attn seed show <seed-id>`. To reach the seed's current or next tender, run `attn agent msg <seed-id> "…"`. To message the previous session after a handover, address that session by its id, using the syntax in `attn agent --help`. The delegate reports as [delegated-agent.md](delegated-agent.md) says. Respond to the completion, progress, and advice requests that reach you, and do not track every edit.
+To read the work, run `attn seed show <seed-id>`. To reach the seed's current or next tender, run `attn agent msg <seed-id> "…"`. To message the previous session after a handover, address that session by its id, using the syntax in `attn agent --help`. The delegate reports as `attn skill --reference delegated-agent` says. Respond to the completion, progress, and advice requests that reach you, and do not track every edit.
 
 If the CLI loses the response, check the request before you start another delegation:
 
@@ -161,9 +161,9 @@ Launch failures leave transferred ownership and created worktrees and branches i
 
 When the delegate's work is complete, you can harvest the delegate's seed
 without `--force`, even while the delegate's session is live.
-[Moving a seed another agent tends](garden.md#moving-a-seed-another-agent-tends)
+Moving a seed another agent tends (`attn skill --reference garden`)
 says who else can move a seed without `--force`. The log records the move and
 whose claim the move ended, and the delegate's watch delivers the seed update.
 
-When you no longer need the delegate's session, read the seed and use the closing rules in [converse-and-observe.md](converse-and-observe.md). Closing a session is immediate
+When you no longer need the delegate's session, read the seed and use the closing rules in `attn skill --reference converse-and-observe`. Closing a session is immediate
 and separate from harvesting the session's assignment.

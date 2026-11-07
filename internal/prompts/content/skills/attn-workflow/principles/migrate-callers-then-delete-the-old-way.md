@@ -2,6 +2,6 @@
 
 Apply when a new interface replaces an old one that still has callers.
 
-When a new interface replaces an old one and every caller is yours to change, migrate all the callers and delete the old interface in the same piece of work. Leave no compatibility shim and no parallel old and new path for the next agent to copy. When a plan splits the work across delivery units, as [Delivery](../../attn/references/delivery.md) describes, name the unit that deletes the old interface. Leave no caller on the old interface after that unit. Move the tests to the new contract and delete the ones that only pinned the old internals.
+When a new interface replaces an old one and every caller is yours to change, migrate all the callers and delete the old interface in the same piece of work. Leave no compatibility shim and no parallel old and new path for the next agent to copy. When a plan splits the work across delivery units, as Delivery (`attn skill --reference delivery`) describes, name the unit that deletes the old interface. Leave no caller on the old interface after that unit. Move the tests to the new contract and delete the ones that only pinned the old internals.
 
 Callers you cannot change in the same piece of work, such as a released client, another team's code, or data a later version reads, need a compatibility path. Name those callers.

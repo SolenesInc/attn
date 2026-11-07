@@ -27,7 +27,7 @@ them on.
 ### Agents
 
 - `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attn/callout.go`).
-- Prompts: the attn skill's callouts reference covers when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
+- Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
 

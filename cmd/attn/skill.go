@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/prompts"
 )
 
 func runSkill() {
@@ -48,11 +49,11 @@ func writeSkill(stdout, stderr io.Writer, args []string) int {
 		return 0
 	}
 
-	relative := "SKILL.md"
-	if reference != "" {
-		relative = "references/" + strings.TrimSuffix(reference, ".md") + ".md"
+	if reference == "" {
+		fmt.Fprintln(stdout, prompts.RenderText("session", "attn-map", prompts.Values{}))
+		return 0
 	}
-	content, err := agent.SkillFile(relative)
+	content, err := agent.SkillFile("references/" + strings.TrimSuffix(reference, ".md") + ".md")
 	if err != nil {
 		fmt.Fprintf(stderr, "skill: no bundled reference %q; bundled references: %s\n",
 			reference, strings.Join(agent.SkillReferenceNames(), ", "))
@@ -68,11 +69,11 @@ func writeSkill(stdout, stderr io.Writer, args []string) int {
 func printSkillHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn skill [--reference <name>] [--list]
 
-print the agent skill bundled with this binary — the instructions attn
-installs for supported agents, release-matched to the running version.
+print what attn offers agents, and the rules for each capability. The text is
+release-matched to the running version.
 
-  (no flags)            print SKILL.md
-  --reference <name>    print one bundled reference, e.g. garden
+  (no flags)            print the map of what attn can do
+  --reference <name>    print one capability's rules, e.g. garden
   --list                list bundled reference names
 `)
 }

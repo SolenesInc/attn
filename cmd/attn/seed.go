@@ -1554,14 +1554,14 @@ func runSeedSendToChief(args []string) {
 }
 
 func fprintArtifacts(w io.Writer, artifacts []protocol.SeedArtifact) {
-	fmt.Fprintln(w, "artifacts:")
+	fmt.Fprintf(w, "artifacts: %s\n", prompts.RenderText("session", "seed-artifacts", prompts.Values{}))
 	for _, artifact := range artifacts {
 		fmt.Fprintf(w, "  file  %s  %d bytes\n", artifact.Filename, artifact.Size)
 	}
 }
 
 func fprintArtifactReferences(w io.Writer, artifacts []protocol.SeedArtifactReference) {
-	fmt.Fprintln(w, "linked artifacts:")
+	fmt.Fprintf(w, "linked artifacts: %s\n", prompts.RenderText("session", "seed-artifacts", prompts.Values{}))
 	for _, artifact := range artifacts {
 		line := protocol.Deref(artifact.Path)
 		if line == "" {

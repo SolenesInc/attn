@@ -31,7 +31,7 @@ most one browser tile, and the tile's cookies and storage outlive restarts.
 ### Agents
 
 - `attn browser` (`cmd/attn/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
-- Prompts: the attn skill's browser reference covers the workflow, sessions, credentials, and treating page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
+- Prompts: `attn skill --reference browser` covers the workflow, sessions, credentials, and treating page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
 

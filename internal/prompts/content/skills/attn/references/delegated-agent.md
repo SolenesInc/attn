@@ -1,6 +1,6 @@
 # Delegated-agent guidance
 
-This reference covers an assigned delegation: how you start, report, and finish. The authorization limits in the skill's "Delegation and reporting" section apply.
+This reference covers an assigned delegation: how you start, report, and finish. Delegate further only when the user or your task authorizes it. A configured role does not authorize a delegation, and neither does the seed you were assigned.
 
 ## Start from the seed
 
@@ -52,7 +52,7 @@ attn seed harvest <seed-id> -m "<outcome and verification>"
 
 4. Write your final response in the conversation so the user understands the outcome and the next step without inspecting the seed.
 
-When only the merge of someone else's pull request remains, release your claim with `--when-merged`, as [Harvesting on a merge](garden.md#harvesting-on-a-merge) describes. Keep tending while work remains. Follow [Delivery](delivery.md) for the repository's flow and stopping point.
+When only the merge of someone else's pull request remains, release your claim with `--when-merged`, as Harvesting on a merge (`attn skill --reference garden`) describes. Keep tending while work remains. Follow Delivery (`attn skill --reference delivery`) for the repository's flow and stopping point.
 
 Harvest only when the assigned outcome and required verification are complete. The harvest command lists the checks that are still open or rejected. Leave a seed open when its plan still needs a decision from the user. Do not treat a finished plan as a finished seed when the assigned outcome includes implementation. To abandon the assignment, record why and wither the seed. A temporary blocker is not abandonment.
 

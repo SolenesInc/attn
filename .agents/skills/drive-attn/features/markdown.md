@@ -34,7 +34,7 @@ current while the user reads it. For review notes on a markdown tile, see
 ### Agents
 
 - `attn open <file.md|seed-id> [--session <id>]` (`cmd/attn/main.go`): a relative path resolves against the folder `attn` runs in. The tile docks beside the caller, or beside the tile of `--session`.
-- Prompts: the attn skill's markdown reference (`internal/prompts/content/skills/attn/references/markdown.md`), named in its capability index as "Show the user a markdown document" (`internal/prompts/content/skills/attn/SKILL.md`), and `attn open <plot>` in the seed craft (`internal/prompts/content/resources/seed-guide.md`).
+- Prompts: `attn skill --reference markdown` (`internal/prompts/content/skills/attn/references/markdown.md`), named in the attn map as "Show the user a markdown document" (`internal/prompts/content/session/attn-map.md`), and `attn open <plot>` in the seed craft (`internal/prompts/content/resources/seed-guide.md`).
 
 ### Triggers
 

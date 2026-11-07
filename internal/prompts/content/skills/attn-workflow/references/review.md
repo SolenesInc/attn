@@ -10,7 +10,7 @@ For a pull request or landed commits, read the description or commit messages an
 
 For changes against a plan, read the agreed plan, its decisions, and the seed notes that record how and why the plan changed. Check that the implementation covers the requirements. Examine departures from the plan, including departures from its findings, and explain their consequences. What you learned while implementing can justify a departure.
 
-Identify the revision under review, and use [Delivery](../../attn/references/delivery.md)'s timing and evidence rules for the repository's flow. Read the relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
+Identify the revision under review, and use Delivery (`attn skill --reference delivery`)'s timing and evidence rules for the repository's flow. Read the relevant repository guidance and inspect the surrounding code to understand how the changed paths fit the system.
 
 ## Inspect and exercise the change
 

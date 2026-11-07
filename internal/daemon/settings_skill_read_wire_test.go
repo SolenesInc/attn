@@ -21,13 +21,11 @@ func TestSettingsSnapshotsLeaveInstalledSkillsAlone(t *testing.T) {
 	}
 	var files []string
 	for _, root := range []string{".claude", ".agents"} {
-		for _, skill := range []string{"attn", "attn-workflow"} {
-			file := filepath.Join(os.Getenv("ATTN_TOOL_HOME"), root, "skills", skill, "SKILL.md")
-			if err := os.WriteFile(file, []byte("locally edited skill"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			files = append(files, file)
+		file := filepath.Join(os.Getenv("ATTN_TOOL_HOME"), root, "skills", "attn-workflow", "SKILL.md")
+		if err := os.WriteFile(file, []byte("locally edited skill"), 0o644); err != nil {
+			t.Fatal(err)
 		}
+		files = append(files, file)
 	}
 	unchanged := func(t *testing.T) {
 		t.Helper()

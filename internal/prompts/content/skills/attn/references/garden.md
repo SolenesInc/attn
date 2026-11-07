@@ -55,7 +55,7 @@ reported, confirmed or rejected.
     attn seed check confirm <id> <C#> [-m "<how you verified it>"]
     attn seed check reject <id> <C#> -m "<what would prove it>"
 
-Whoever does the work reports each check, as [Report each check as you prove it](delegated-agent.md#report-each-check-as-you-prove-it) describes. Whoever judges the work confirms or rejects. Checks never block a move. The harvest command lists the checks that are still open or rejected. Add `--ring` to a check command when the other side must act now.
+Whoever does the work reports each check, as Report each check as you prove it (`attn skill --reference delegated-agent`) describes. Whoever judges the work confirms or rejects. Checks never block a move. The harvest command lists the checks that are still open or rejected. Add `--ring` to a check command when the other side must act now.
 
 ## Speaking of seeds
 
@@ -234,7 +234,7 @@ does. attn refuses it while the seed has unread mail and names
 
 `--close --compact` compacts your conversation before the close, as
 `attn agent close --self --compact` does, so the session that wakes resumes a
-shorter conversation. [Closing a session](converse-and-observe.md#closing-a-session)
+shorter conversation. Closing a session (`attn skill --reference converse-and-observe`)
 says how it works and which sessions can compact. Seed mail you read before the
 compact ends the standby, and you stay open. Seed mail you leave unread does not
 cancel the close: the session compacts and closes, and the unread mail wakes it
@@ -280,6 +280,8 @@ Repository, Notebook and URL documents remain links where they already live:
     attn seed attach <id> --notebook <document-id>
     attn seed attach <id> --url <url>
     attn seed detach <id> --path <file.md> --reference
+
+When you name a seed's artifact to the next agent, say which copy is canonical. For a repository document, the Git file is canonical, so name its branch and introducing commit in the brief. For a Notebook document, the Notebook file is canonical. Notes on the seed record meaningful edits, renames and deletions, and tell you when to read the plan again.
 
 The Garden labels old path associations as linked files. Bring a linked file into seed
 ownership explicitly with Move or Copy. A failed transfer leaves the link alone.

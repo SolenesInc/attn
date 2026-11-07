@@ -14,8 +14,8 @@ conversation. Write it that way even when you plan to do the work yourself.
   authorization out of the body. The authorization lists what the tender may do
   without asking and which actions wait for the user, and
   `attn delegate --authorization` sets the authorization from the user's words.
-  Follow the
-  `attn` skill's Delivery reference for repository delivery.
+  Follow
+  `attn skill --reference delivery` for repository delivery.
 - Specify completion. Define the checks that verify the result on the seed, as
   CHECKS below describes, and cite each check in the body by id. Say where to
   leave the deliverable and what the report back contains.

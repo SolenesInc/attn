@@ -1,6 +1,9 @@
 package main_test
 
 import (
+	"regexp"
+
+	"github.com/victorarias/attn/internal/agent"
 	"strings"
 	"testing"
 
@@ -34,9 +37,38 @@ func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 
 	for _, command := range []string{"help", "-h", "--help"} {
 		help := s.Attn(command)
-		requireStdout(t, help, "guide [<topic>]", "For AI agents:", "attn skill")
-		if !strings.HasSuffix(help.Stdout, "  attn guide    the user guide, to answer questions about Attn\n") {
-			t.Fatalf("%s does not end with the agent footer:\n%s", command, help.Stdout)
+		requireStdout(t, help, "guide [<topic>]", "## What attn can do", "attn skill --reference <name>")
+	}
+}
+
+func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	help := s.Attn("--help").Stdout
+
+	commands := map[string]bool{}
+	for _, match := range regexp.MustCompile("`attn ([a-z][a-z-]*)").FindAllStringSubmatch(help, -1) {
+		commands[match[1]] = true
+	}
+	for _, match := range regexp.MustCompile(`(?m)^  ([a-z][a-z-]*)`).FindAllStringSubmatch(help[strings.Index(help, "Other commands:"):], -1) {
+		commands[match[1]] = true
+	}
+	if len(commands) < 30 {
+		t.Fatalf("attn --help names only %d commands:\n%s", len(commands), help)
+	}
+	delete(commands, "instance")
+	delete(commands, "version")
+	for command := range commands {
+		out := s.Attn(command, "--help")
+		text := strings.ToLower(out.Stdout + out.Stderr)
+		if out.Code != 0 || !strings.Contains(text, "usage") || !regexp.MustCompile(`attn `+regexp.QuoteMeta(command)+`\b`).MatchString(text) {
+			t.Errorf("attn --help names %q, but attn %s --help exited %d with:\n%s%s", command, command, out.Code, out.Stdout, out.Stderr)
+		}
+	}
+
+	for _, reference := range agent.SkillReferenceNames() {
+		if reference != "onboarding" && !strings.Contains(help, "`"+reference+"`") {
+			t.Errorf("attn --help does not name the reference %q, so no agent can find it", reference)
 		}
 	}
 }

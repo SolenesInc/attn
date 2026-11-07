@@ -81,7 +81,7 @@ sequenceDiagram
 
 - When the content is too dense for these forms, such as a layout or a
   visual comparison, write a markdown document instead of forcing it into
-  a comment. See [markdown.md](markdown.md).
+  a comment. See `attn skill --reference markdown`.
 
 Place each visual next to the short text it supports. Keep only the
 calls, files, states, and boundaries needed to answer the reader's

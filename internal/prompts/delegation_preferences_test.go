@@ -14,7 +14,7 @@ func TestDelegationDiscoveryIsOnDemand(t *testing.T) {
 		{"garden_available": "true", "crew_priming": "You are a crew member."},
 	} {
 		output := RenderText("session", "launch", values)
-		if !strings.Contains(output, "Before delegating, read the delegation reference") {
+		if !strings.Contains(output, "attn skill --reference delegation") {
 			t.Fatal("launch is missing the capability discovery hint")
 		}
 		if !strings.Contains(output, "standing guidance in AGENTS.md") || !strings.Contains(output, "which should govern") {

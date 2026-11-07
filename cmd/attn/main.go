@@ -28,6 +28,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/probetui"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/store"
@@ -130,6 +131,9 @@ func run() {
 	}
 
 	setCommandPath(os.Args[1])
+	if printed := printCommandHelp(os.Args[1:], os.Stdout); printed {
+		return
+	}
 	switch os.Args[1] {
 	case "daemon":
 		if daemonStart {
@@ -727,61 +731,61 @@ func runHelp() {
 	writeHelp(os.Stdout)
 }
 
-func writeHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn <command>
+func printCommandHelp(args []string, w io.Writer) bool {
+	if len(args) != 2 || !isHelpArg(args[1]) {
+		return false
+	}
+	help, ok := commandHelp[args[0]]
+	if ok {
+		help(w)
+	}
+	return ok
+}
 
-commands:
+var commandHelp = map[string]func(io.Writer){
+	"activity":     func(w io.Writer) { fmt.Fprint(w, activityUsage) },
+	"automation":   func(w io.Writer) { fmt.Fprint(w, automationUsageText) },
+	"browser":      printBrowserUsage,
+	"handoff":      writeHandoffHelp,
+	"list":         func(w io.Writer) { fmt.Fprintln(w, "usage: attn list\n\nPrint sessions and profiles as JSON.") },
+	"open":         func(w io.Writer) { fmt.Fprintln(w, "usage: attn open <file.md|seed-id> [--session <id>]") },
+	"presence":     func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") },
+	"vision-check": func(w io.Writer) { fmt.Fprintln(w, visionCheckUsage) },
+}
+
+func writeHelp(w io.Writer) {
+	fmt.Fprintln(w, "usage: attn <command>")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, prompts.RenderText("session", "attn-map", prompts.Values{}))
+	fmt.Fprint(w, `
+Other commands:
   presence [--session-id|--seed-ids] check whether the shell runs inside attn, or print only its session or seeds
-  agent list                        name every session running here
-  agent peek <session-or-member>    read a session without interrupting it
-  agent msg <target> "text"            notify a live session, crew member or seed's tender
-  agent inbox [message-id]              read durable agent notifications
-  agent msg-status <message-id>         inspect a sent peer message
-  agent close <session-or-seed> | --self -m "reason"   close a session and keep the reason
-  agent reload <session-or-member>... | --all   restart agents in place
+  ask [list|close]                  ask the user something they answer from attn
+  turn open|settle                  put yourself in the user's queue, or take yourself out
+  vent [withdraw]                   report what got in your way
+  handoff -m "<letter>"             file this crew member's letter; the day turns over
+  onboarding [done|again]           show, finish or restart the Chief's onboarding
+  skill [--reference <name>|--list] print the map above, or a capability's rules
+  guide [<topic>]                   read the user guide
   send <command>                    send files and a message to a session as the user; pair, senders, unpair
-  terminal <command>                open, read, type into, wait on, move and close terminals
-  session <command>                 read the ledger and conversations; reopen, rename, snooze and prioritize sessions
-  state explain <id>                replay why a session's state is what it is
-  delegate --brief-file <path> --cwd <path>    start another agent on a new seed
-  delegate --seed <id> --cwd <path>            start another agent on an existing seed
-  journal append --entry <text>     serialized append to the daily notebook journal
-  open <file.md|seed-id> [--session <id>]   show a document in attn
-  callout <anchors|show>            point at the app with a callout
-  browser <command>                 open and control the in-app browser
-  automation <command>              manage and run durable automations
-  settings list|get|set             read and change daemon settings
-  preflight                         diagnose tools, paths, routing, and launch settings
-  pr <command>                      watch or inspect pull request readiness
-  codex status|update|restart       shared Codex versions, its update and restart
   list                              list sessions and profiles
   activity [clear <id>]             what each agent is doing right now
+  state explain <id>                replay why a session's state is what it is
   conversation <command>            list, keep forever or forget attn's conversation copies
   worktree <command>                every tracked worktree, the sweep and the keep pin
-  ask [list|close]                  ask the user something they answer from attn
-  vent [withdraw]                   report what got in your way
-  turn open|settle                  put yourself in the user's queue, or take yourself out
+  preflight                         diagnose tools, paths, routing, and launch settings
+  codex status|update|restart       shared Codex versions, its update and restart
   debug <command>                   probe debug artifacts (incidents, logs)
   db <command>                      database maintenance (restore from backup)
   bus <command>                     event bus: consumer cursors, lag, kill switch
   enrollment <command>              this data folder's enrollment: status, leave
-  seed <command>                    the garden: plant, tend, harvest, note, ls
-  crew <command>                    the crew roster: who exists, who is awake
-  handoff -m "<letter>"             file this crew member's letter; the day turns over
-  onboarding [done|again]           show, finish or restart the Chief's onboarding
   doc <command>                     document store: collections, documents, live queries
   vision-check <image> <question>   answer a question about an image (single LLM call)
   daemon [ensure|stop]              run the daemon, ensure it is running, or stop it
   instance <status|resolve|list>    show / resolve the active instance's resources
   instance-env <instance|--unset>   print shell commands for selecting an instance
-  skill [--reference <name>|--list] print the bundled agent skill and its references
-  guide [<topic>]                   read the user guide
-  prompts <command>                inspect prompt sources and scenario composition
+  prompts <command>                 inspect prompt sources and scenario composition
   version [--json]                  print version, channel and commit
-
-For AI agents:
-  attn skill    how to operate Attn
-  attn guide    the user guide, to answer questions about Attn
 `)
 }
 
@@ -850,6 +854,7 @@ func runDelegate() {
 		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.FirstTurnUnconfirmed)
 	}
 	printJSON(operation.Result)
+	fmt.Fprintln(os.Stderr, prompts.RenderText("delegation", "started", prompts.Values{}))
 }
 
 func waitDelegationCLI(

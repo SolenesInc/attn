@@ -1,17 +1,16 @@
 # Notebook
 
 Load this reference when you read or maintain the attn Notebook, your
-profile's durable markdown store, especially when your session is the chief of
-staff. The Notebook outlives any single agent.
+profile's folder of notes. Any agent can read and write it, and the Chief
+maintains its structure. The Notebook outlives any single agent.
 
-The Notebook is plain markdown on disk. Read the files, and edit knowledge
-notes, with your native tools (Read, Write, Edit, `ls`, `rg`). To append a
-journal entry, run `attn journal append`, which serializes writes at the home.
-There is no `attn notebook` CLI.
+The Notebook is a folder of files, mostly markdown. Read the files, and edit
+knowledge notes, with your native tools (Read, Write, Edit, `ls`, `rg`). To
+append a journal entry, run `attn journal append`, which serializes writes at
+the home. There is no `attn notebook` CLI.
 
-Your operating guidance gives you the Notebook root, and the chief of staff
-gets that guidance at launch. `attn settings get notebook.root.effective`
-prints the root. Each profile sets its folder with `notebook.root`. A blank
+`attn settings get notebook.root.effective` prints the root, and the Chief gets
+the root at launch. Each profile sets its folder with `notebook.root`. A blank
 value uses `~/attn-notebook`, and a non-default instance adds its name to that
 folder name. Profiles on the same folder share its files. attn refuses a
 folder inside or around another profile's folder or the default folder. Paths
@@ -22,8 +21,9 @@ profile's Notebook folder, and the copy syncs with the home. `attn seed show
 <seed>` prints that machine's artifact folder.
 
 `<root>/crew/` holds crew members' homes: a folder per member with the member's
-charter and letters. attn owns that folder and records where each home is, so
-do not move, rename or delete anything in it.
+charter and letters. attn records where each home is, so do not move, rename or
+delete a home folder by hand. `attn crew move-home` moves one. The Chief can
+change what is inside any home.
 
 ## Orient first
 

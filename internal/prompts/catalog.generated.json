@@ -92,6 +92,11 @@
                 ]
               },
               {
+                "kind": "text",
+                "id": "session.attn-map",
+                "source": "content/session/attn-map.md"
+              },
+              {
                 "kind": "when",
                 "condition": {
                   "field": {
@@ -108,6 +113,11 @@
                     "source": "content/garden.md"
                   }
                 ]
+              },
+              {
+                "kind": "text",
+                "id": "session.queue",
+                "source": "content/session/queue.md"
               },
               {
                 "kind": "when",
@@ -267,6 +277,26 @@
                 ]
               }
             ]
+          }
+        },
+        {
+          "id": "attn-map",
+          "delivery": "cli_output",
+          "description": "attn skill and attn --help: what attn offers and where to learn more.",
+          "body": {
+            "kind": "text",
+            "id": "session.attn-map",
+            "source": "content/session/attn-map.md"
+          }
+        },
+        {
+          "id": "seed-artifacts",
+          "delivery": "cli_output",
+          "description": "attn seed show, under a seed's artifacts.",
+          "body": {
+            "kind": "text",
+            "id": "session.seed-artifacts",
+            "source": "content/session/seed-artifacts.md"
           }
         },
         {
@@ -2685,6 +2715,16 @@
           }
         },
         {
+          "id": "started",
+          "delivery": "cli_output",
+          "description": "attn delegate, after the agent started.",
+          "body": {
+            "kind": "text",
+            "id": "delegation.started",
+            "source": "content/delegation/started.md"
+          }
+        },
+        {
           "id": "authorization",
           "delivery": "message_fragment",
           "description": "The seed's authorization, after the role block of a delegation or handover opening.",
@@ -3754,24 +3794,12 @@
     },
     {
       "id": "attn-skill",
-      "description": "Installed skill and references. Availability does not establish that the harness loaded them.",
+      "description": "References printed by attn skill --reference. Availability does not establish that the agent read them.",
       "events": [
-        {
-          "id": "available",
-          "delivery": "available_skill",
-          "description": "Installed for supported harnesses by internal/agent; the harness decides when to load it.",
-          "body": {
-            "kind": "text",
-            "id": "attn-skill",
-            "source": "content/skills/attn/SKILL.md",
-            "verbatim": true,
-            "keep_final_newline": true
-          }
-        },
         {
           "id": "browser",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.browser",
@@ -3783,7 +3811,7 @@
         {
           "id": "callouts",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.callouts",
@@ -3795,7 +3823,7 @@
         {
           "id": "charter",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.charter",
@@ -3807,7 +3835,7 @@
         {
           "id": "converse-and-observe",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.converse-and-observe",
@@ -3819,7 +3847,7 @@
         {
           "id": "delegated-agent",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.delegated-agent",
@@ -3831,7 +3859,7 @@
         {
           "id": "delegation-roles",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.delegation-roles",
@@ -3843,7 +3871,7 @@
         {
           "id": "delegation",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.delegation",
@@ -3855,7 +3883,7 @@
         {
           "id": "delivery",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.delivery",
@@ -3867,7 +3895,7 @@
         {
           "id": "garden",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.garden",
@@ -3879,7 +3907,7 @@
         {
           "id": "markdown",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.markdown",
@@ -3891,7 +3919,7 @@
         {
           "id": "notebook",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.notebook",
@@ -3903,7 +3931,7 @@
         {
           "id": "onboarding",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.onboarding",
@@ -3915,7 +3943,7 @@
         {
           "id": "showing",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.showing",
@@ -3927,7 +3955,7 @@
         {
           "id": "terminal",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.terminal",
@@ -3939,7 +3967,7 @@
         {
           "id": "wrap-up",
           "delivery": "reference",
-          "description": "Loaded on demand through attn skill show or the installed skill directory.",
+          "description": "Printed on demand by attn skill --reference.",
           "body": {
             "kind": "text",
             "id": "attn-skill.wrap-up",
@@ -6190,5 +6218,5 @@
       ]
     }
   ],
-  "definitions_hash": "3ef56c1f7bf9335da13e41abeb2e3c80d46f4c026a5d04a3708627246a0d6bb1"
+  "definitions_hash": "7932963be3ba8f9c90bfd9d2a5a7e9ac49b0618e1ac506194bb3c2d442329fa2"
 }

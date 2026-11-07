@@ -1,4 +1,6 @@
-When you need a decision only the user can make and it can wait, ask it with `attn ask` rather than stopping to ask in this conversation. The user answers every agent's asks from one place in attn, without opening this terminal. Keep your harness's own question tool for when you can do nothing useful until they answer.
+## Asking the user
+
+When you need a decision only the user can make, ask it with `attn ask` instead of stopping to ask in this conversation. The user answers every agent's asks from one place in attn, without opening this terminal. Ask this way whether or not you can keep working meanwhile.
 
 Pipe the ask as markdown to `attn ask`. The command prints the ask's id and returns at once:
 
@@ -14,12 +16,9 @@ Pipe the ask as markdown to `attn ask`. The command prints the ask's id and retu
     :::
     ASK
 
-- Use `:::question` for one choice, `:::question-multi` for any number of choices, and `:::question-text` for a written answer. A block's first line is the question and its other lines are context. Write choices as `- [ ] label` or `- [ ] label — why`, and mark yours with `Recommended: <label>`. The user can always answer in their own words instead. An ask can also be plain markdown with no question block.
 - The user reads the ask cold, without this conversation. In a few short sentences, say what the decision affects, what you know, why you recommend a choice, what waits on the answer, and what you will do if it stays unanswered.
 - To ask permission for a risky action, name the exact action and its target in the question, such as the command, branch or environment. The permission you get covers only the action the question names.
-- An ask is about your stake (the seed a delegation assigned you) unless you pass `--seed <id>` to ask about another seed you tend. The user sees which seed the ask is about. The answer goes to whoever tends that seed by then, and the seed keeps the answer as a note (`attn seed notes <id>`).
-- The ask renders markdown, mermaid diagrams, and png, jpg, gif and webp images: `![alt](path)`, with paths relative to where you run `attn ask` (or to the `--file`). attn copies the images when the ask opens, at most 5 MiB in all, so the user sees them as they were even after you change or delete the files. An image that cannot be read refuses the ask. Draw diagrams in mermaid. svg images do not render.
 - Ask only what you cannot settle yourself, a few questions at a time.
 - After you ask, carry on with work that does not depend on the answer. When none is left, end your turn. Do not wait or poll.
 - When the user answers, attn types the answer into this conversation as their message, approvals included. By then the user has likely moved on and will not read what you write back here. If the user asks you something in their answer, reply with a new ask. If you still need the user, ask again.
-- `attn ask list` shows your open asks and the asks about seeds you tend. To withdraw an ask you no longer need answered, run `attn ask close <id>`.
+- `attn ask --help` covers other question types, images, which seed an ask is about, and listing and withdrawing asks.

@@ -37,15 +37,14 @@ func AttnWorkflowSkillFiles() fs.ReadFileFS {
 }
 
 func skillRecipient() Recipient {
-	r := Recipient{ID: "attn-skill", Description: "Installed skill and references. Availability does not establish that the harness loaded them."}
+	r := Recipient{ID: "attn-skill", Description: "References printed by attn skill --reference. Availability does not establish that the agent read them."}
 	entries, err := fs.Glob(content, "content/skills/attn/references/*.md")
 	if err != nil {
 		panic(err)
 	}
-	r.Events = append(r.Events, On("available", "available_skill", "Installed for supported harnesses by internal/agent; the harness decides when to load it.", Document("attn-skill", "content/skills/attn/SKILL.md")))
 	for _, source := range entries {
 		name := strings.TrimSuffix(strings.TrimPrefix(source, "content/skills/attn/references/"), ".md")
-		r.Events = append(r.Events, On(name, "reference", "Loaded on demand through attn skill show or the installed skill directory.", Document("attn-skill."+name, source)))
+		r.Events = append(r.Events, On(name, "reference", "Printed on demand by attn skill --reference.", Document("attn-skill."+name, source)))
 	}
 	return r
 }

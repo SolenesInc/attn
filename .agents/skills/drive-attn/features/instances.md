@@ -88,5 +88,5 @@ Preconditions:
 - `(daemon socket present)` only means the socket file exists, and the file can outlive a daemon that just stopped. Tell a restarted daemon by the PID in `attn.pid`.
 - `attn instance list` shows other maintainers' instances too. Never stop, drive or clean an instance this run did not start.
 - An app built from this checkout never asks GitHub for a newer release, so the "Version … is available on GitHub." notice cannot show on an instance. `app/src/App.releaseUpdates.test.tsx` covers it.
-- `dev` installs the attn skill into your harness homes. A named instance does not.
+- `dev` installs the enabled workflow skill into your harness homes. A named instance does not.
 - Working but wrong: the instance-mismatch refusal tells the user to launch `attn.app` or `attn-dev.app`, though a named instance's app has a name of its own.

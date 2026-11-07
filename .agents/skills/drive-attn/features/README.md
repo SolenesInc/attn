@@ -378,7 +378,7 @@ instance. A file whose recipe ran live says so here.
 
 ### Agent toolkit and operations
 
-- [Agent guidance](agent-guidance.md) (agents): What attn tells the agents it runs: the attn skill, session instructions and prompts.
+- [Agent guidance](agent-guidance.md) (agents): What attn tells the agents it runs: session instructions, the attn map, references and prompts.
 - [Document store](doc-store.md) (agents): Collections of documents with live queries, for agents and plugins.
 - [Vents](vents.md) (agents): Agents report what got in their way, for the user to review later, like a bug report.
 - [Vision check](vision-check.md) (agents): Ask a model one question about an image.

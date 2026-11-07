@@ -56,10 +56,6 @@ func installBundledSkill(files fs.ReadFileFS, root, skillDir string) error {
 	return pruneOrphanedSkillFiles(skillDir, expected)
 }
 
-func installAttnSkill(skillDir string) error {
-	return installBundledSkill(attnSkillFiles, "attn_skill", skillDir)
-}
-
 func installAttnWorkflowSkill(skillDir string) error {
 	return installBundledSkill(attnWorkflowSkillFiles, "attn_workflow_skill", skillDir)
 }
@@ -107,22 +103,6 @@ func SkillReferenceNames() []string {
 	return names
 }
 
-func ensureAttnClaudeSkillInstalled() error {
-	homeDir, err := toolhome.Dir()
-	if err != nil {
-		return fmt.Errorf("resolve home directory for Claude skills: %w", err)
-	}
-	return installAttnSkill(filepath.Join(homeDir, ".claude", "skills", "attn"))
-}
-
-func ensureAttnAgentsSkillInstalled() error {
-	homeDir, err := toolhome.Dir()
-	if err != nil {
-		return fmt.Errorf("resolve home directory for agent skills: %w", err)
-	}
-	return installAttnSkill(filepath.Join(homeDir, ".agents", "skills", "attn"))
-}
-
 func userGlobalSkillSyncEnabled() bool {
 	instance := config.Instance()
 	if instance == "" || instance == "dev" {
@@ -131,18 +111,25 @@ func userGlobalSkillSyncEnabled() bool {
 	return os.Getenv("ATTN_AUTOMATION") == "1" && os.Getenv(harnessSkillSyncEnv) == "1" && strings.TrimSpace(os.Getenv(toolhome.EnvVar)) != ""
 }
 
-func EnsureAttnSkillInstalled(harness string) (bool, error) {
+func RemoveRetiredAttnSkill() (bool, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil
 	}
-	switch harness {
-	case "claude":
-		return true, ensureAttnClaudeSkillInstalled()
-	case "codex":
-		return true, ensureAttnAgentsSkillInstalled()
-	default:
-		return true, nil
+	homeDir, err := toolhome.Dir()
+	if err != nil {
+		return true, fmt.Errorf("resolve home directory for the retired attn skill: %w", err)
 	}
+	for _, root := range []string{".claude", ".agents"} {
+		skillDir := filepath.Join(homeDir, root, "skills", "attn")
+		manifest, err := os.ReadFile(filepath.Join(skillDir, "SKILL.md"))
+		if err != nil || !strings.Contains(string(manifest), "\nname: attn\n") {
+			continue
+		}
+		if err := os.RemoveAll(skillDir); err != nil {
+			return true, fmt.Errorf("remove the retired attn skill at %s: %w", skillDir, err)
+		}
+	}
+	return true, nil
 }
 
 func EnsureWorkflowSkillsInstalled(harnesses []string) ([]string, bool, error) {

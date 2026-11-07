@@ -82,4 +82,4 @@ Preconditions:
 - A command missing from the list is usually conditional: the pinned ones need an agent on screen, snooze and unsnooze need queue flow, settle needs an agent that is owed a turn the user can settle, and others need their feature to be available.
 - Snoozing from the agent palette opens choices inside the palette: Escape returns to the agents instead of closing.
 - Settling or snoozing from the agent palette leaves the palette open. The change shows on the row.
-- Working but wrong: the attn skill's callouts reference has an example `callout show` on `commands` that says "Everything attn can do, searchable (⌘K)", but ⌘K opens the agent palette. The Commands button and ⌘⇧K open the command palette (`internal/prompts/content/skills/attn/references/callouts.md`).
+- Working but wrong: `attn skill --reference callouts` has an example `callout show` on `commands` that says "Everything attn can do, searchable (⌘K)", but ⌘K opens the agent palette. The Commands button and ⌘⇧K open the command palette (`internal/prompts/content/skills/attn/references/callouts.md`).

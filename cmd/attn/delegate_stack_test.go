@@ -150,6 +150,9 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 	if started.Code != 0 {
 		t.Fatalf("attn delegate exited %d: %s", started.Code, started.Stderr)
 	}
+	if !strings.Contains(started.Stderr, "attn tells you when the delegate reports") {
+		t.Errorf("delegate did not tell the agent what happens next: %s", started.Stderr)
+	}
 	var result delegated
 	started.JSON(t, &result)
 	if result.Agent != "claude" || result.Branch != "feat/parser" || result.Checkout != "created" || result.Model != "" || result.Effort != "high" {

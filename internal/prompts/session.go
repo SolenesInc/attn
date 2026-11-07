@@ -31,6 +31,8 @@ var (
 	quickCaptureGuidance = When(Enabled(quickCaptureEnabled), Use("session.quick-capture-guidance", "content/session/quick-capture.md"))
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
 	gardenGuidance       = Use("session.garden", "content/garden.md")
+	queueGuidance        = Use("session.queue", "content/session/queue.md")
+	attnMap              = Use("session.attn-map", "content/session/attn-map.md")
 	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
 	ventGuidance         = Compose(
 		Use("session.vent-guidance", "content/session/vent-guidance.md"),
@@ -50,12 +52,16 @@ var session = Recipient{
 				Choose(Present(notebookRoot),
 					Compose(chiefGuidance, quickCaptureGuidance),
 					agentGuidance),
+				attnMap,
 				When(Enabled(gardenAvailable), gardenGuidance),
+				queueGuidance,
 				When(Enabled(asksEnabled), askGuidance),
 				When(Enabled(ventEnabled), ventGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
 				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
 			)),
+		On("attn-map", "cli_output", "attn skill and attn --help: what attn offers and where to learn more.", attnMap),
+		On("seed-artifacts", "cli_output", "attn seed show, under a seed's artifacts.", Use("session.seed-artifacts", "content/session/seed-artifacts.md")),
 		On("garden-guidance", "message_fragment", "Garden instructions.", gardenGuidance),
 		On("codex-opened", "instructions",
 			"Developer note appended to each new shared Codex conversation. It writes the conversation to disk at once; Codex resumes only conversations on disk, so a terminal reconnecting after a restart keeps it.",

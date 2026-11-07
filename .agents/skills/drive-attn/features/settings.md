@@ -40,7 +40,7 @@ Appearance.
 ### Agents
 
 - `attn settings` (`cmd/attn/settings.go`): `list` (with `--all` and `--json`), `get <key>` (with `--json`) and `set <key> <value>`. `set` to `""` restores the default where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
-- Prompts: the attn skill tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, and that settings apply across all profiles (`internal/prompts/content/skills/attn/SKILL.md`).
+- Prompts: the attn map tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, (`internal/prompts/content/session/attn-map.md`).
 
 ## Driving it
 

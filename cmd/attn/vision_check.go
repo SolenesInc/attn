@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -125,6 +126,8 @@ func resolveClaudeBinary() (string, error) {
 	return "", fmt.Errorf("claude CLI not found on PATH, ~/.npm-global/bin, or ~/.local/bin")
 }
 
+const visionCheckUsage = "usage: attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]"
+
 func parseVisionCheckArgs(args []string) (image, question, model string, timeout time.Duration, jsonOut bool, err error) {
 	fs := flag.NewFlagSet("vision-check", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -137,7 +140,7 @@ func parseVisionCheckArgs(args []string) (image, question, model string, timeout
 		return "", "", "", 0, false, perr
 	}
 	if len(positionals) < 2 {
-		return "", "", "", 0, false, fmt.Errorf("usage: attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]")
+		return "", "", "", 0, false, errors.New(visionCheckUsage)
 	}
 	if len(positionals) > 2 {
 		return "", "", "", 0, false, fmt.Errorf("unexpected extra arguments: %v", positionals[2:])

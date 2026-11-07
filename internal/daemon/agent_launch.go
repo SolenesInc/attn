@@ -58,9 +58,6 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 	if !caps.HasResume {
 		spawn.ResumeSessionID, spawn.ResumePicker = "", false
 	}
-	if _, err := agentdriver.EnsureAttnSkillInstalled(driver.Name()); err != nil {
-		d.logf("failed to ensure %s attn skill for launch: %v", driver.Name(), err)
-	}
 	if preparer, ok := driver.(agentdriver.LaunchPreparer); ok {
 		if err := preparer.PrepareLaunch(spawn); err != nil {
 			return fmt.Errorf("prepare %s: %w", driver.Name(), err)

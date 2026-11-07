@@ -151,13 +151,13 @@ session with the Claude mod and a Codex session on the shared Codex app server
 compact, on the home machine or an outpost. attn refuses any other session. The
 refusal names the setting the user turns on, `claude_mod_enabled` for Claude and
 `codex_shared_enabled` for Codex. Compact when you will resume as yourself, as a
-seed's tender does when its standby wakes it ([Standby](garden.md#standby)). A
+seed's tender does when its standby wakes it (Standby (`attn skill --reference garden`)). A
 crew member cannot close itself, and its next wake starts a fresh session from
 its letter, so a compact before a crew sleep carries nothing over.
 
 To ask another agent to close itself, name `attn agent close --self`. When the
 user asks you to wrap up, or asks whether they can close you, follow
-[wrap-up.md](wrap-up.md) first.
+`attn skill --reference wrap-up` first.
 
 ## Receiving a message
 

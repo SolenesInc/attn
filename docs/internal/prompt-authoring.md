@@ -135,3 +135,12 @@ and `context`. To run the CI checks sooner, run `make check-prompts` and
 `make test-prompt-editor`. Update
 [compatibility fixtures](../../internal/prompttest/testdata/) only for
 intentional wording changes. Never regenerate them to make tests pass.
+
+When a change moves or cuts what agents are told, check that they still find
+each capability. `node scripts/agent-eval.mjs --attn ./attn` starts real headless
+agents with the launch instructions and a plain request, and reports whether
+each reaches the right command. It spends model tokens, so CI doesn't run it.
+Actions are recorded, not run, so a pass means the agent found the command, not
+that the command works. It logs in through the tool home that
+`app/scripts/onboarding-rehearsal` sets up, so run the rehearsal once first.
+Add a probe when you add a capability to the attn map.

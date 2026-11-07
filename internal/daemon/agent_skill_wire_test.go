@@ -1,16 +1,11 @@
 package daemon_test
 
 import (
-	"bytes"
-	"io/fs"
 	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -23,108 +18,54 @@ func installedAttnSkill(toolHome string, h fakeagent.Harness) string {
 	return filepath.Join(toolHome, attnSkillRoots[h], "skills", "attn")
 }
 
-func plantRetiredSkillFiles(t *testing.T, skill string) {
+func plantInstalledSkill(t *testing.T, skill, name string) {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(skill, "references", "retired-topic"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(skill, "references"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(skill, "references", "workflow.md"), []byte("retired guidance"), 0o644); err != nil {
+	manifest := "---\nname: " + name + "\ndescription: planted by this test\n---\n"
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(skill, "references", "delegation.md"), []byte("old guidance"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func assertShippedAttnSkill(t *testing.T, h fakeagent.Harness, skill string) {
-	t.Helper()
-	shipped := prompts.AttnSkillFiles()
-	want := map[string]bool{}
-	err := fs.WalkDir(shipped, "attn_skill", func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return err
-		}
-		relative := strings.TrimPrefix(path, "attn_skill/")
-		want[relative] = true
-		content, _ := fs.ReadFile(shipped, path)
-		if installed, err := os.ReadFile(filepath.Join(skill, relative)); err != nil || !bytes.Equal(installed, content) {
-			t.Errorf("%s's attn skill file %s is not the shipped one (%v)", h, relative, err)
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = filepath.WalkDir(skill, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || path == skill {
-			return err
-		}
-		relative, _ := filepath.Rel(skill, path)
-		if entry.IsDir() && !shipsUnder(want, relative) {
-			t.Errorf("%s's attn skill keeps the directory %s, which attn no longer ships", h, relative)
-			return fs.SkipDir
-		}
-		if !entry.IsDir() && !want[relative] {
-			t.Errorf("%s's attn skill keeps %s, which attn no longer ships", h, relative)
-		}
-		return nil
-	})
-}
-
-func shipsUnder(files map[string]bool, dir string) bool {
-	for file := range files {
-		if strings.HasPrefix(file, dir+"/") {
-			return true
-		}
-	}
-	return false
-}
-
-func TestEveryHarnessAttnRunsFindsTheShippedAttnSkillAndNothingRetired(t *testing.T) {
+func TestStartingAttnRemovesTheSkillAnEarlierVersionInstalled(t *testing.T) {
 	t.Setenv("ATTN_INSTANCE", "")
-	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
 	toolHome := os.Getenv("ATTN_TOOL_HOME")
-	app := w.App()
 	for h := range attnSkillRoots {
-		plantRetiredSkillFiles(t, installedAttnSkill(toolHome, h))
+		plantInstalledSkill(t, installedAttnSkill(toolHome, h), "attn")
 	}
+	w.start()
+	app := w.App()
+
+	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+		session := w.Spawn(app, h, w.Path(string(h)))
+		w.Launched(session)
+		if _, err := os.Stat(installedAttnSkill(toolHome, h)); !os.IsNotExist(err) {
+			t.Errorf("%s still has the attn skill an earlier version installed (%v)", h, err)
+		}
+	}
+}
+
+func TestStartingAttnLeavesASkillTheUserNamedAttnFolderAlone(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "")
+	w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
+	toolHome := os.Getenv("ATTN_TOOL_HOME")
+	for h := range attnSkillRoots {
+		plantInstalledSkill(t, installedAttnSkill(toolHome, h), "my-attention-notes")
+	}
+	w.start()
+	app := w.App()
 
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 		w.Launched(w.Spawn(app, h, w.Path(string(h))))
-		assertShippedAttnSkill(t, h, installedAttnSkill(toolHome, h))
-	}
-}
-
-func TestAgentsStillLaunchWhenTheirOptionalAttnSkillCannotBeUpdated(t *testing.T) {
-	for _, direct := range []bool{false, true} {
-		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-
-			t.Setenv("ATTN_INSTANCE", "")
-			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				skill := installedAttnSkill(os.Getenv("ATTN_TOOL_HOME"), h)
-				if err := os.RemoveAll(skill); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.MkdirAll(filepath.Dir(skill), 0o755); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.WriteFile(skill, []byte("user-owned file"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			w.start()
-			app := w.App()
-			if direct {
-				setSetting(t, app, "direct_agent_launch_enabled", "true")
-			}
-			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-				session := w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
-					m.InitialPrompt = protocol.Ptr("continue despite optional skill sync failure")
-				})
-				if prompt := w.Launched(session).Prompted(); prompt != "continue despite optional skill sync failure" {
-					t.Fatalf("%s received prompt %q", h, prompt)
-				}
-			}
-
-		})
+		if _, err := os.Stat(filepath.Join(installedAttnSkill(toolHome, h), "SKILL.md")); err != nil {
+			t.Errorf("attn removed the user's %s skill: %v", h, err)
+		}
 	}
 }
 

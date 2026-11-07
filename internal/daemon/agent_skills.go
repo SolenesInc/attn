@@ -6,16 +6,10 @@ import (
 )
 
 func (d *Daemon) ensureAvailableAgentSkills() {
-	for _, name := range agentdriver.List() {
-		driver := agentdriver.Get(name)
-		if driver == nil || !d.agentOffered(name) || d.harnessAvailability(driver) != harnessAvailable {
-			continue
-		}
-		if synced, err := agentdriver.EnsureAttnSkillInstalled(name); err != nil {
-			d.logf("failed to ensure %s attn skill: %v", name, err)
-		} else if !synced {
-			d.logf("skipping user-global %s attn skill sync for instance %q", name, config.InstanceLabel())
-		}
+	if synced, err := agentdriver.RemoveRetiredAttnSkill(); err != nil {
+		d.logf("failed to remove the retired attn skill: %v", err)
+	} else if !synced {
+		d.logf("skipping the retired attn skill's removal for instance %q", config.InstanceLabel())
 	}
 	d.ensureEnabledWorkflowSkills()
 }

@@ -47,7 +47,7 @@ closes the session.
 - `attn agent close --self -m "<reason>" --compact` and `attn seed standby <seed> -m "<note>" --close --compact` start a compacting close (`internal/daemon/agent_close_compact.go`). Through the Claude mod the compact is a `compact` request on `GET /claude/next`, answered on `POST /claude/compacted` (`internal/daemon/claude_mod.go`, `internal/claudemod/mod/hooks/register.tsx`). Through shared Codex it is `thread/compact/start` (`internal/daemon/codex_compact.go`).
 - `attn --help` lists `agent close` and `agent reload`. `attn session --help` names `attn agent close` beside reopen. Closing an unknown target prints an error that names `--self`.
 - Starting another agent is delegation ([delegation.md](delegation.md)). To open a shell beside the calling agent, use `attn terminal open` ([terminals.md](terminals.md)).
-- Prompts: the attn skill's reference on other sessions, which names `agent reload` and `agent close` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
+- Prompts: `attn skill --reference converse-and-observe`, which names `agent reload` and `agent close` (`internal/prompts/content/skills/attn/references/converse-and-observe.md`).
 
 ### Triggers
 

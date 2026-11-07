@@ -7,11 +7,11 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestTheSkillCommandPrintsTheBundledSkillAndItsReferences(t *testing.T) {
+func TestTheSkillCommandPrintsTheMapAndItsReferences(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
 
-	requireStdout(t, s.Attn("skill"), "name: attn")
+	requireStdout(t, s.Attn("skill"), "## What attn can do")
 	listed := s.Attn("skill", "--list")
 	requireStdout(t, listed, "garden\n", "delegation\n")
 	if strings.Contains(listed.Stdout, "workflow\n") {

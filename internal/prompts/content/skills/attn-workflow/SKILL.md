@@ -26,7 +26,7 @@ Match the task to one process in the table, read its reference and the principle
 | Make a kind of mistake that keeps coming back impossible to repeat in the repository | [Correction](references/correction.md) |
 | Delegate agreed work, advise implementers, and judge completion | [Orchestration](references/orchestration.md) |
 
-Work ends at delivery, within the task's authorization. Read the `attn` skill's [Delivery](../attn/references/delivery.md) reference for the repository's flow and stopping point.
+Work ends at delivery, within the task's authorization. Read `attn skill --reference delivery` for the repository's flow and stopping point.
 
 When the user asks you to work as one of these roles in the current conversation, take the role yourself, with the user present:
 
@@ -34,7 +34,7 @@ When the user asks you to work as one of these roles in the current conversation
 - **Prototyper**: follow [Prototype](references/prototype.md), and show the options, comparison, and recommendation to the user here.
 - **Orchestrator**: follow [Orchestration](references/orchestration.md) for the agreed plan, delegating Builders and reviewing their work, and bring decisions beyond the agreed scope to the user here.
 
-Independent judgment is worth more when the two sides run on different models, because each model misses different things. Independent judgment includes an Orchestrator reviewing a Builder's change, options compared side by side, and a second review. The difference in models comes from the user's delegation roles. Choose the role and its choices as the `attn` skill's delegation reference describes, including when one task runs several choices of a role. Do not override a model the user did not ask to change. When the roles put both sides on one model, say so where you report the judgment. Start a second review by a separate Reviewer delegation only when the user asks for one, as that reference says. When a change is contested or costly to reverse, you can suggest a second review as its own question. A plan or handoff the user approves is not a request for a second review, even when it mentions a Reviewer.
+Independent judgment is worth more when the two sides run on different models, because each model misses different things. Independent judgment includes an Orchestrator reviewing a Builder's change, options compared side by side, and a second review. The difference in models comes from the user's delegation roles. Choose the role and its choices as `attn skill --reference delegation` describes, including when one task runs several choices of a role. Do not override a model the user did not ask to change. When the roles put both sides on one model, say so where you report the judgment. Start a second review by a separate Reviewer delegation only when the user asks for one, as that reference says. When a change is contested or costly to reverse, you can suggest a second review as its own question. A plan or handoff the user approves is not a request for a second review, even when it mentions a Reviewer.
 
 ## Principles
 
