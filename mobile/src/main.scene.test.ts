@@ -356,7 +356,7 @@ const expectSectionHeadings = (headings: ReadonlyArray<string>) =>
   })
 
 describe('the crew stays anchored at the top', () => {
-  it('lists the Crew above Asks, the Chief first, and keeps a member in its row as its state changes', () => {
+  it('lists the Chief first and keeps a member in its row as its state changes', () => {
     Scene.scene(
       { update, view },
       Scene.given(paired(personal)),
@@ -394,6 +394,40 @@ describe('the crew stays anchored at the top', () => {
       expectSectionHeadings(['Crew · 3', 'Waiting · 1']),
       expectEntries([['Tendril'], ['Alder'], ['Keel', 'waiting', '5m'], ['plain agent']]),
       Scene.expect(Scene.text('2 waiting')).toExist(),
+    )
+  })
+
+  it('keeps the Crew above Asks', () => {
+    Scene.scene(
+      { update, view },
+      Scene.given(paired(personal)),
+      Scene.Subscription.emit(
+        Message.ReceivedSessions({
+          pairingId: personal.id,
+          sessions: [member('s-keel', 'keel', 'Keel', 'idle')],
+        }),
+      ),
+      Scene.Subscription.emit(
+        Message.ReceivedAsks({
+          pairingId: personal.id,
+          asks: [
+            {
+              id: 'a-store',
+              sessionId: 's-keel',
+              subject: 'Cache store',
+              parts: [],
+              createdAt: minutesAgo(2),
+              seedSlug: null,
+              seedTitle: null,
+              crewMember: 'keel',
+              chief: false,
+              reply: null,
+              tooLarge: null,
+            },
+          ],
+        }),
+      ),
+      expectSectionHeadings(['Crew · 1', 'Asks · 1']),
     )
   })
 
