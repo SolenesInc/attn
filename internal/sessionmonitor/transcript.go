@@ -488,6 +488,7 @@ func (w *transcriptWatcher) run() {
 		lastAssistant   string
 		assistantSeq    int64
 		classifiedSeq   int64
+		skipLoggedSeq   int64
 
 		discoveryDeadline = w.discoveryDeadline(clock.Now())
 		fallbackAttempted bool
@@ -674,7 +675,10 @@ func (w *transcriptWatcher) run() {
 				if strings.TrimSpace(reason) == "" {
 					reason = "transcript watcher: skipping classification"
 				}
-				m.logf("%s session=%s state=%s", reason, label, current)
+				if assistantSeq > skipLoggedSeq {
+					skipLoggedSeq = assistantSeq
+					m.logf("%s session=%s seq=%d state=%s", reason, label, assistantSeq, current)
+				}
 				continue
 			}
 
