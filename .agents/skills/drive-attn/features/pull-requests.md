@@ -111,6 +111,7 @@ Preconditions:
 ## Contexts
 
 - **Durability across restarts**: recorded pull requests, watches and what each watch already reported, and muted pull requests, repositories and authors are daemon records and come back after any restart. A watch made by a crew member or the chief belongs to the mailbox of the crew member or chief who made it, and outlives the session that made it. `wait-ready` keeps its cursor in the data folder's `pr-wait`, so a later run reports only what is new until `--reset` or `--since`.
+- **GitHub hosts**: a refresh or poll changes the list only for the hosts it heard from. A pull request of a host that discovery has not found yet, whose token `gh` refuses, or that `gh auth status` reports as failing keeps its row and its mute. Only a host missing from a `gh auth status` that lists other hosts loses its rows. When `gh` lists no hosts at all, the list stays as it was.
 - **Linux**: `attn pr` works the same where the daemon and CLI run on Linux. `dock.attention` is Ctrl+Alt+P and `session.refreshPRs` is Ctrl+Shift+R there (`LINUX_SHORTCUTS`).
 - **Outposts**: an agent on an outpost runs `attn pr` through its outpost daemon, and the agent's pull request links reach the home like the agent's state and cost.
 - **Profiles**: a session's pull requests belong to the session, and so to the session's profile. The GitHub list on the home screen and in the drawer, and the muted repositories and authors, belong to the daemon: every profile shows the same list. A watch reads `pull_requests.own_comments` from the profile of the session that recorded the pull request.
@@ -120,7 +121,7 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go`, `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
+- Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attn/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
 - Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `internal/hooks/pullrequest_test.go`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.

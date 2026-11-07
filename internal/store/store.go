@@ -1230,7 +1230,7 @@ const selectPRs = `SELECT id, host, repo, number, title, url, author, role, stat
 	approved_by_me, heat_state, last_heat_activity_at
 	FROM prs`
 
-func (s *Store) SetPRs(prs []*protocol.PR) error {
+func (s *Store) ReplacePRsOfHosts(prsByHost map[string][]*protocol.PR) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -1264,45 +1264,93 @@ func (s *Store) SetPRs(prs []*protocol.PR) error {
 		return err
 	}
 
-	for _, pr := range prs {
-		normalizePRIdentity(pr)
-		if ex, ok := existing[pr.ID]; ok {
-			pr.Muted = ex.Muted
-			pr.ApprovedByMe = ex.ApprovedByMe
-			if pr.Host == "" {
-				pr.Host = ex.Host
+	for _, prs := range prsByHost {
+		for _, pr := range prs {
+			normalizePRIdentity(pr)
+			if ex, ok := existing[pr.ID]; ok {
+				pr.Muted = ex.Muted
+				pr.ApprovedByMe = ex.ApprovedByMe
+				if pr.Host == "" {
+					pr.Host = ex.Host
+				}
+				if ex.DetailsFetched {
+					pr.DetailsFetched = ex.DetailsFetched
+					pr.DetailsFetchedAt = ex.DetailsFetchedAt
+					pr.Mergeable = ex.Mergeable
+					pr.MergeableState = ex.MergeableState
+					pr.CIStatus = ex.CIStatus
+					pr.ReviewStatus = ex.ReviewStatus
+				}
+				if protocol.Deref(pr.HeadSHA) == "" {
+					pr.HeadSHA = ex.HeadSHA
+				}
+				if protocol.Deref(pr.HeadBranch) == "" {
+					pr.HeadBranch = ex.HeadBranch
+				}
+				if pr.HeatState == nil || *pr.HeatState == protocol.HeatStateCold {
+					pr.HeatState = ex.HeatState
+					pr.LastHeatActivityAt = ex.LastHeatActivityAt
+				}
 			}
-			if ex.DetailsFetched {
-				pr.DetailsFetched = ex.DetailsFetched
-				pr.DetailsFetchedAt = ex.DetailsFetchedAt
-				pr.Mergeable = ex.Mergeable
-				pr.MergeableState = ex.MergeableState
-				pr.CIStatus = ex.CIStatus
-				pr.ReviewStatus = ex.ReviewStatus
-			}
-			if protocol.Deref(pr.HeadSHA) == "" {
-				pr.HeadSHA = ex.HeadSHA
-			}
-			if protocol.Deref(pr.HeadBranch) == "" {
-				pr.HeadBranch = ex.HeadBranch
-			}
-			if pr.HeatState == nil || *pr.HeatState == protocol.HeatStateCold {
-				pr.HeatState = ex.HeatState
-				pr.LastHeatActivityAt = ex.LastHeatActivityAt
-			}
-		}
 
-		if err := savePR(tx, pr); err != nil {
-			return err
+			if err := savePR(tx, pr); err != nil {
+				return err
+			}
+			delete(existing, pr.ID)
 		}
-		delete(existing, pr.ID)
 	}
-	for id := range existing {
+	for id, pr := range existing {
+		if _, observed := prsByHost[pr.Host]; !observed {
+			continue
+		}
 		if _, err := tx.Exec("DELETE FROM prs WHERE id = ?", id); err != nil {
 			return err
 		}
 	}
 	return tx.Commit()
+}
+
+func (s *Store) ForgetPRsOfHostsOtherThan(hosts map[string]bool) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return nil, nil
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.Query("SELECT id, host FROM prs")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var forgotten []string
+	for rows.Next() {
+		var id, host string
+		if err := rows.Scan(&id, &host); err != nil {
+			return nil, err
+		}
+		if !hosts[host] {
+			forgotten = append(forgotten, id)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	for _, id := range forgotten {
+		if _, err := tx.Exec("DELETE FROM prs WHERE id = ?", id); err != nil {
+			return nil, err
+		}
+	}
+	return forgotten, tx.Commit()
 }
 
 func (s *Store) AddPR(pr *protocol.PR) {

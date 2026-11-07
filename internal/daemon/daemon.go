@@ -2500,6 +2500,8 @@ func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 	if mockURL := mockGitHubURL(); mockURL != "" {
 		if err := d.registerMockClient(mockURL); err != nil {
 			d.logf("Mock GitHub client not available: %v", err)
+		} else {
+			d.forgetPRsOfHostsOtherThan(d.gitHubHosts())
 		}
 		d.broadcastGitHubHosts(hostsBefore)
 		return nil
@@ -2529,8 +2531,14 @@ func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 	}
 
 	discovered := make(map[string]bool)
+	var reported []string
 	for _, hostInfo := range hosts {
 		if hostInfo.Host == "" {
+			continue
+		}
+		reported = append(reported, hostInfo.Host)
+		if !hostInfo.Usable {
+			d.logf("GitHub host %s is signed in but gh reports it unusable", hostInfo.Host)
 			continue
 		}
 		token, err := github.GetTokenForHost(d.life.Context(), hostInfo.Host)
@@ -2545,6 +2553,7 @@ func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 		}
 		d.registerGitHubClient(hostInfo.Host, client)
 		discovered[hostInfo.Host] = true
+		pausepoint.At(pausepoint.DaemonGitHubHostRegistered)
 	}
 	// Stop cancels the token fetches; hosts it cut short are not gone.
 	if d.stopping() {
@@ -2560,9 +2569,31 @@ func (d *Daemon) discoverGitHubHosts(cliUsable bool) error {
 			d.ghRegistry.Remove(host)
 		}
 	}
+	if len(reported) > 0 {
+		d.forgetPRsOfHostsOtherThan(reported)
+	}
 
 	d.broadcastGitHubHosts(hostsBefore)
 	return nil
+}
+
+func (d *Daemon) forgetPRsOfHostsOtherThan(hosts []string) {
+	kept := make(map[string]bool, len(hosts))
+	for _, host := range hosts {
+		kept[host] = true
+	}
+	d.life.Do("forgetPRsOfHostsOtherThan", func() {
+		forgotten, err := d.store.ForgetPRsOfHostsOtherThan(kept)
+		if err != nil {
+			d.logf("Forgetting pull requests of signed-out GitHub hosts: %v", err)
+			return
+		}
+		d.coalesceSnapshots(func() {
+			for _, id := range forgotten {
+				d.publishFact(FactPRDisappeared, id, nil)
+			}
+		})
+	})
 }
 
 func (d *Daemon) registerGitHubClient(host string, client *github.Client) {
@@ -3672,9 +3703,7 @@ func (d *Daemon) doPRPoll() {
 	}
 	d.prRefreshMu.Lock()
 
-	var allPRs []*protocol.PR
 	observedByHost := make(map[string]successfulPRObservation)
-	skippedHosts := make(map[string]bool)
 	var earliestReset time.Time
 
 	for _, host := range d.ghRegistry.Hosts() {
@@ -3688,7 +3717,6 @@ func (d *Daemon) doPRPoll() {
 
 		if limited, resetAt := client.IsRateLimited("search"); limited {
 			d.logf("PR poll skipped for %s: search API rate limited until %s", host, resetAt.Format(time.RFC3339))
-			skippedHosts[host] = true
 			if earliestReset.IsZero() || resetAt.Before(earliestReset) {
 				earliestReset = resetAt
 			}
@@ -3711,15 +3739,12 @@ func (d *Daemon) doPRPoll() {
 						earliestReset = resetAt
 					}
 				}
-				skippedHosts[host] = true
 				continue
 			}
 			d.logf("PR poll error for %s: %v", host, err)
-			skippedHosts[host] = true
 			continue
 		}
 
-		allPRs = append(allPRs, prs...)
 		observedByHost[host] = successfulPRObservation{prs: prs, observedAt: observedAt}
 	}
 
@@ -3727,36 +3752,31 @@ func (d *Daemon) doPRPoll() {
 		d.broadcastRateLimited("search", earliestReset)
 	}
 
-	stored := d.life.Do("doPRPoll", func() { d.storePRPoll(allPRs, skippedHosts, observedByHost) })
+	stored := d.life.Do("doPRPoll", func() { d.storePRPoll(observedByHost) })
 	d.prRefreshMu.Unlock()
 	if stored {
 		d.doDetailRefresh()
 	}
 }
 
-func (d *Daemon) storePRPoll(allPRs []*protocol.PR, skippedHosts map[string]bool, observedByHost map[string]successfulPRObservation) {
-	if len(skippedHosts) > 0 {
-		existing := d.store.ListPRs("")
-		for _, pr := range existing {
-			host := pr.Host
-			if host == "" {
-				if parsedHost, _, _, err := protocol.ParsePRID(pr.ID); err == nil {
-					host = parsedHost
-				}
-			}
-			if host != "" && skippedHosts[host] {
-				allPRs = append(allPRs, pr)
-			}
-		}
+func (d *Daemon) saveObservedPRs(observedByHost map[string]successfulPRObservation) ([]*protocol.PR, error) {
+	prsByHost := make(map[string][]*protocol.PR, len(observedByHost))
+	for host, observation := range observedByHost {
+		prsByHost[host] = observation.prs
 	}
-
 	previousPRs := d.store.ListPRs("")
-	if err := d.store.SetPRs(allPRs); err != nil {
+	if err := d.store.ReplacePRsOfHosts(prsByHost); err != nil {
+		return nil, err
+	}
+	currentPRs := d.store.ListPRs("")
+	d.publishPRSetChanges(previousPRs, currentPRs)
+	return currentPRs, nil
+}
+
+func (d *Daemon) storePRPoll(observedByHost map[string]successfulPRObservation) {
+	if currentPRs, err := d.saveObservedPRs(observedByHost); err != nil {
 		d.logf("PR poll: saving results: %v", err)
 	} else {
-		currentPRs := d.store.ListPRs("")
-		d.publishPRSetChanges(previousPRs, currentPRs)
-
 		waiting := 0
 		for _, pr := range currentPRs {
 			if pr.State == protocol.PRStateWaiting && !pr.Muted {
@@ -3808,7 +3828,6 @@ func (d *Daemon) doDetailRefresh() {
 
 		client, ok := d.ghRegistry.Get(host)
 		if !ok {
-			d.logf("Detail refresh: no client for host %s", host)
 			continue
 		}
 
@@ -4019,11 +4038,8 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 	d.prRefreshMu.Lock()
 	defer d.prRefreshMu.Unlock()
 
-	var allPRs []*protocol.PR
 	observedByHost := make(map[string]successfulPRObservation)
-	skippedHosts := make(map[string]bool)
 	var firstErr error
-	successCount := 0
 
 	for _, host := range d.ghRegistry.Hosts() {
 		if d.stopping() {
@@ -4040,40 +4056,15 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 			if firstErr == nil {
 				firstErr = err
 			}
-			skippedHosts[host] = true
 			continue
 		}
-		successCount++
-		allPRs = append(allPRs, prs...)
 		observedByHost[host] = successfulPRObservation{prs: prs, observedAt: observedAt}
 	}
 
-	if len(skippedHosts) > 0 {
-		existing := d.store.ListPRs("")
-		for _, pr := range existing {
-			host := pr.Host
-			if host == "" {
-				if parsedHost, _, _, err := protocol.ParsePRID(pr.ID); err == nil {
-					host = parsedHost
-				}
-			}
-			if host != "" && skippedHosts[host] {
-				allPRs = append(allPRs, pr)
-			}
-		}
-	}
-
-	// The host loop stops early once stopping, so saving its set would drop the hosts it skipped.
 	var currentPRs []*protocol.PR
 	var saveErr error
 	if !d.life.Do("doRefreshPRs", func() {
-		previousPRs := d.store.ListPRs("")
-		saveErr = d.store.SetPRs(allPRs)
-		if saveErr != nil {
-			return
-		}
-		currentPRs = d.store.ListPRs("")
-		d.publishPRSetChanges(previousPRs, currentPRs)
+		currentPRs, saveErr = d.saveObservedPRs(observedByHost)
 	}) {
 		return errDaemonStopping
 	}
@@ -4088,7 +4079,7 @@ func (d *Daemon) doRefreshPRsWithResult() error {
 		return fmt.Errorf("saving PR refresh: %w", saveErr)
 	}
 
-	if successCount == 0 && firstErr != nil {
+	if len(observedByHost) == 0 && firstErr != nil {
 		return fmt.Errorf("failed to fetch PRs: %w", firstErr)
 	}
 	return nil

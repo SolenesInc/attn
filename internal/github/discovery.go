@@ -13,6 +13,7 @@ type HostInfo struct {
 	APIURL string
 	Login  string
 	Active bool
+	Usable bool
 }
 
 func DiscoverHosts(ctx context.Context) ([]HostInfo, error) {
@@ -55,7 +56,7 @@ func parseAuthStatusHosts(output []byte) ([]HostInfo, error) {
 
 	var results []HostInfo
 	for host, entries := range payload.Hosts {
-		var selected *HostInfo
+		selected := &HostInfo{Host: host, APIURL: mapHostToAPIURL(host)}
 		for _, entry := range entries {
 			state, _ := entry["state"].(string)
 			if state != "success" {
@@ -82,15 +83,14 @@ func parseAuthStatusHosts(output []byte) ([]HostInfo, error) {
 				APIURL: mapHostToAPIURL(host),
 				Login:  login,
 				Active: active,
+				Usable: true,
 			}
 
-			if selected == nil || (active && !selected.Active) {
+			if !selected.Usable || (active && !selected.Active) {
 				selected = info
 			}
 		}
-		if selected != nil {
-			results = append(results, *selected)
-		}
+		results = append(results, *selected)
 	}
 
 	return results, nil

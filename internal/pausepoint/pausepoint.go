@@ -46,6 +46,7 @@ const (
 	DaemonEnrollmentLoaded         = "daemon-enrollment-loaded"
 	DaemonStartupRecovery          = "daemon-startup-recovery"
 	DaemonGitHubHostDiscovery      = "daemon-github-host-discovery"
+	DaemonGitHubHostRegistered     = "daemon-github-host-registered"
 	AutomationRecoveryAwaitsGitHub = "automation-recovery-awaits-github"
 	RecoverableAgentsReviving      = "recoverable-agents-reviving"
 	AttachRevivePending            = "attach-revive-pending"

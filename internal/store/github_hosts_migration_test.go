@@ -14,7 +14,7 @@ func TestUpgradeRemembersEveryGitHubHostItsRowsName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.SetPRs([]*protocol.PR{{ID: "ghe-polled.test:acme/shop#1", Host: "ghe-polled.test", Repo: "acme/shop", Number: 1, URL: "https://ghe-polled.test/acme/shop/pull/1", Role: "author", State: "waiting"}}); err != nil {
+	if err := s.ReplacePRsOfHosts(map[string][]*protocol.PR{"ghe-polled.test": {{ID: "ghe-polled.test:acme/shop#1", Host: "ghe-polled.test", Repo: "acme/shop", Number: 1, URL: "https://ghe-polled.test/acme/shop/pull/1", Role: "author", State: "waiting"}}}); err != nil {
 		t.Fatal(err)
 	}
 	listedOnTheForgottenDay := time.Date(2026, 11, 3, 16, 30, 0, 0, time.UTC)
