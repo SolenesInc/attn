@@ -8,7 +8,7 @@ import (
 
 func TestTheAppIsToldEveryGitHubHostGHIsSignedInTo(t *testing.T) {
 	useSignedInGH(t)
-	hosts := awaitGitHubHosts(newWorld(t).App())
+	hosts := awaitBothGitHubHosts(newWorld(t).App())
 	if got := strings.Join(hosts, ","); got != "ghe.example.test,github.example.test" {
 		t.Fatalf("the app is told of GitHub hosts %q, want both hosts gh is signed in to", got)
 	}

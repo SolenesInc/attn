@@ -32,11 +32,11 @@ esac
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+ghWarningPath(t, ""))
 }
 
-func awaitGitHubHosts(app *testworld.Peer) []string {
+func awaitBothGitHubHosts(app *testworld.Peer) []string {
 	hosts := app.Initial.GithubHosts
-	if len(hosts) == 0 {
+	if len(hosts) < 2 {
 		hosts = testworld.Await(app, protocol.EventGitHubHostsUpdated, func(m protocol.GitHubHostsUpdatedMessage) bool {
-			return len(m.GithubHosts) > 0
+			return len(m.GithubHosts) >= 2
 		}).GithubHosts
 	}
 	slices.Sort(hosts)
@@ -69,7 +69,7 @@ func TestTheFirstScreenDoesNotWaitForGitHubHostDiscovery(t *testing.T) {
 		t.Fatalf("the first screen, sent while discovery is held, names hosts %v", app.Initial.GithubHosts)
 	}
 	discovery.Release()
-	if got := strings.Join(awaitGitHubHosts(app), ","); got != signedInHosts {
+	if got := strings.Join(awaitBothGitHubHosts(app), ","); got != signedInHosts {
 		t.Fatalf("after discovery the app is told of %q, want %q", got, signedInHosts)
 	}
 }
@@ -94,6 +94,22 @@ func TestAClientWhoseFirstScreenRacesHostDiscoveryEndsUpWithTheHosts(t *testing.
 		t.Fatalf("the paused initial_state names hosts %v, want the empty list it was built with", initial.GithubHosts)
 	}
 	testworld.AwaitSince(app, mark, protocol.EventGitHubHostsUpdated, found)
+}
+
+func TestAFirstScreenSentBetweenTwoHostRegistrationsIsFollowedByBothHosts(t *testing.T) {
+	useSignedInGH(t)
+	w := &world{World: prepareWorld(t)}
+	oneRegistered := w.PauseAt(pausepoint.DaemonGitHubHostRegistered)
+	w.start()
+	oneRegistered.Await()
+	app := w.App()
+	if len(app.Initial.GithubHosts) != 1 {
+		t.Fatalf("the first screen, sent with one host registered, names hosts %v", app.Initial.GithubHosts)
+	}
+	oneRegistered.Release()
+	if got := strings.Join(awaitBothGitHubHosts(app), ","); got != signedInHosts {
+		t.Fatalf("after discovery the app is told of %q, want %q", got, signedInHosts)
+	}
 }
 
 func TestAPendingRunThatNeedsNoGitHubIsRecoveredBeforeAFirstScreenThatDoesNotWaitForDiscovery(t *testing.T) {
