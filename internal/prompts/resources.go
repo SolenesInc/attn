@@ -38,6 +38,7 @@ func AttnWorkflowSkillFiles() fs.ReadFileFS {
 
 func skillRecipient() Recipient {
 	r := Recipient{ID: "attn-skill", Description: "References printed by attn skill --reference. Availability does not establish that the agent read them."}
+	r.Events = append(r.Events, On("retired-pointer", "available_skill", "Written over the retired attn skill that an earlier attn installed, so agents that started before the upgrade find the attn map.", Document("attn-skill", "content/skills/attn/SKILL.md")))
 	entries, err := fs.Glob(content, "content/skills/attn/references/*.md")
 	if err != nil {
 		panic(err)

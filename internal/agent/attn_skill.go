@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"crypto/sha1"
 	_ "embed"
 	"encoding/hex"
@@ -116,7 +117,7 @@ func userGlobalSkillSyncEnabled() bool {
 	return os.Getenv("ATTN_AUTOMATION") == "1" && os.Getenv(harnessSkillSyncEnv) == "1" && strings.TrimSpace(os.Getenv(toolhome.EnvVar)) != ""
 }
 
-func RemoveRetiredAttnSkill() (bool, []string, error) {
+func ReplaceRetiredAttnSkillWithPointer() (bool, []string, error) {
 	if !userGlobalSkillSyncEnabled() {
 		return false, nil, nil
 	}
@@ -124,14 +125,18 @@ func RemoveRetiredAttnSkill() (bool, []string, error) {
 	if err != nil {
 		return true, nil, fmt.Errorf("resolve home directory for the retired attn skill: %w", err)
 	}
+	pointer, err := SkillFile("SKILL.md")
+	if err != nil {
+		return true, nil, fmt.Errorf("read the attn skill pointer: %w", err)
+	}
 	var kept []string
 	for _, root := range []string{".claude", ".agents"} {
 		skillDir := filepath.Join(homeDir, root, "skills", "attn")
-		removed, err := removeSkillIfAttnInstalledAllOfIt(skillDir)
+		replaced, err := replaceSkillWithPointerIfAttnInstalledAllOfIt(skillDir, pointer)
 		if err != nil {
 			return true, kept, err
 		}
-		if !removed {
+		if !replaced {
 			kept = append(kept, skillDir)
 		}
 	}
@@ -154,7 +159,7 @@ func gitBlobID(content []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
+func replaceSkillWithPointerIfAttnInstalledAllOfIt(skillDir string, pointer []byte) (bool, error) {
 	info, err := os.Lstat(skillDir)
 	if os.IsNotExist(err) {
 		return true, nil
@@ -162,8 +167,9 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 	if err != nil || !info.IsDir() {
 		return false, nil
 	}
+	skillFile := filepath.Join(skillDir, "SKILL.md")
 	var checkedFiles, dirs []string
-	attnInstalledAll := true
+	attnInstalledAll, pointerInPlace := true, false
 	err = filepath.WalkDir(skillDir, func(file string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -184,6 +190,10 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 		if err != nil {
 			return fmt.Errorf("read %s to check whether attn installed it: %w", file, err)
 		}
+		if file == skillFile && bytes.Equal(content, pointer) {
+			pointerInPlace = true
+			return nil
+		}
 		if !retiredAttnSkillBlobs()[gitBlobID(content)+" "+filepath.ToSlash(relative)] {
 			attnInstalledAll = false
 			return fs.SkipAll
@@ -197,13 +207,24 @@ func removeSkillIfAttnInstalledAllOfIt(skillDir string) (bool, error) {
 	if !attnInstalledAll {
 		return false, nil
 	}
+	if pointerInPlace && len(checkedFiles) == 0 {
+		return true, nil
+	}
 	pausepoint.At(pausepoint.RetiredSkillChecked)
+	if !pointerInPlace {
+		if err := os.WriteFile(skillFile, pointer, 0o644); err != nil {
+			return false, fmt.Errorf("write the attn skill pointer to %s: %w", skillFile, err)
+		}
+	}
 	for _, file := range checkedFiles {
+		if file == skillFile {
+			continue
+		}
 		if err := os.Remove(file); err != nil && !os.IsNotExist(err) {
 			return false, fmt.Errorf("remove the retired attn skill file %s: %w", file, err)
 		}
 	}
-	for _, dir := range slices.Backward(dirs) {
+	for _, dir := range slices.Backward(dirs[1:]) {
 		if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
 			if entries, readErr := os.ReadDir(dir); readErr == nil && len(entries) > 0 {
 				return false, nil

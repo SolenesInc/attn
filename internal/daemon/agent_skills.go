@@ -6,10 +6,10 @@ import (
 )
 
 func (d *Daemon) ensureAvailableAgentSkills() {
-	if synced, kept, err := agentdriver.RemoveRetiredAttnSkill(); err != nil {
-		d.logf("failed to remove the retired attn skill: %v", err)
+	if synced, kept, err := agentdriver.ReplaceRetiredAttnSkillWithPointer(); err != nil {
+		d.logf("failed to replace the retired attn skill with its pointer: %v", err)
 	} else if !synced {
-		d.logf("skipping the retired attn skill's removal for instance %q", config.InstanceLabel())
+		d.logf("skipping the retired attn skill's pointer for instance %q", config.InstanceLabel())
 	} else {
 		for _, skillDir := range kept {
 			d.logf("kept the skill at %s: it holds files attn did not install", skillDir)

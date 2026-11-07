@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,7 +73,15 @@ func checkSkillUnchanged(t *testing.T, skillDir string, files map[string]string)
 	}
 }
 
-func TestStartingAttnRemovesTheSkillAnEarlierVersionInstalled(t *testing.T) {
+func frontmatter(skill string) string {
+	parts := strings.SplitN(skill, "---\n", 3)
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[1]
+}
+
+func TestStartingAttnReplacesTheSkillAnEarlierVersionInstalledWithAPointerToTheAttnMap(t *testing.T) {
 	installed := skillAnEarlierVersionInstalled(t)
 	startWithCodexUnavailable(t, func(toolHome string) {
 		for h := range attnSkillRoots {
@@ -80,8 +89,30 @@ func TestStartingAttnRemovesTheSkillAnEarlierVersionInstalled(t *testing.T) {
 		}
 	}, func(t *testing.T, toolHome string) {
 		for h := range attnSkillRoots {
-			if _, err := os.Stat(installedAttnSkill(toolHome, h)); !os.IsNotExist(err) {
-				t.Errorf("%s still has the attn skill an earlier version installed (%v)", h, err)
+			skill := installedAttnSkill(toolHome, h)
+			var files []string
+			if err := filepath.WalkDir(skill, func(file string, entry os.DirEntry, err error) error {
+				if err == nil && !entry.IsDir() {
+					files = append(files, file)
+				}
+				return err
+			}); err != nil {
+				t.Fatalf("%s has no attn skill for the agents already running: %v", h, err)
+			}
+			if want := []string{filepath.Join(skill, "SKILL.md")}; !slices.Equal(files, want) {
+				t.Errorf("%s attn skill holds %v, want only %v", h, files, want)
+			}
+			pointer, err := os.ReadFile(filepath.Join(skill, "SKILL.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got, want := frontmatter(string(pointer)), frontmatter(installed["SKILL.md"]); got != want {
+				t.Errorf("%s attn skill frontmatter = %q, want the retired skill's %q so running agents still match it", h, got, want)
+			}
+			for _, instruction := range []string{"`attn --help`", "`attn skill --reference <name>`", "Never run `attn` with no command"} {
+				if !strings.Contains(string(pointer), instruction) {
+					t.Errorf("%s attn skill pointer does not say %s:\n%s", h, instruction, pointer)
+				}
 			}
 		}
 	})
@@ -110,7 +141,7 @@ func TestStartingAttnKeepsAUserChangedCopyOfTheOldSkillWhole(t *testing.T) {
 	})
 }
 
-func TestSavingAHarnessExecutableKeepsAReferenceSavedWhileAttnRemovesTheOldSkill(t *testing.T) {
+func TestSavingAHarnessExecutableKeepsAReferenceSavedWhileAttnReplacesTheOldSkill(t *testing.T) {
 	installed := skillAnEarlierVersionInstalled(t)
 	saved := map[string]string{"references/saved-during-cleanup.md": "A reference the user saved while attn was checking the old skill.\n"}
 	for h := range attnSkillRoots {
