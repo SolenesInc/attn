@@ -493,27 +493,6 @@ func lockedSplit(existing, incoming Node, at placement) Node {
 	}
 }
 
-func MoveLeaf(node Node, leafID, anchorID, splitID string, direction Direction, before bool, ratio float64) (Node, bool) {
-	leafID = strings.TrimSpace(leafID)
-	anchorID = strings.TrimSpace(anchorID)
-	if leafID == "" || leafID == anchorID {
-		return node, false
-	}
-	moved, found := findLeaf(node, leafID)
-	if !found {
-		return node, false
-	}
-	cleaned, _ := Remove(node, leafID)
-	if cleaned.Type == "" {
-		return node, false
-	}
-	next, ok := placeLeaf(cleaned, anchorID, newPlacement(direction, before, splitID, ratio), moved)
-	if !ok {
-		return node, false
-	}
-	return next, true
-}
-
 type MoveBetweenLayoutsResult struct {
 	SourceLayout Node
 	TargetLayout Node

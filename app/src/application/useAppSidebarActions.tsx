@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import {
   NotebookIcon,
   type DockItem,
-  type SidebarHeaderAction,
+  type TitleBarAction,
 } from '../components/Sidebar';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { dockShortcutLabel } from '../shortcuts/metadata';
@@ -47,7 +47,7 @@ export function useAppSidebarActions() {
   const shownAgentId = useAgentOnScreen();
   const { currentDesktopId } = useNavigationContext();
 
-  const sidebarHeaderActions = useMemo<SidebarHeaderAction[]>(
+  const titleBarActions = useMemo<TitleBarAction[]>(
     () => [
       {
         id: 'garden',
@@ -168,5 +168,5 @@ export function useAppSidebarActions() {
     [keybindings.dock.items, keybindings.config, dockActions],
   );
 
-  return { sidebarHeaderActions, dockItems };
+  return { titleBarActions, dockItems };
 }

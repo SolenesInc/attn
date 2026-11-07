@@ -136,7 +136,7 @@ test('a usage receipt requested for a narrow tile shows the badge and opens bene
 
 for (const selection of ['rail', 'spotlight'] as const) {
   test(`inactive agent tiles dim the body and subline and keep signals lit under ${selection}`, async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.setViewportSize({ width: 480 * TILES + 200, height: 720 });
     await page.goto(`/test-harness/?component=AgentHeader&selection=${selection}`);
     await fitted(page);
     expect(await page.locator(`.session-terminal-desktop.desktop-selection--${selection}.multi-leaf`).count()).toBe(1);

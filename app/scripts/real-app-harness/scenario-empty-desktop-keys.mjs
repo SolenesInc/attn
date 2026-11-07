@@ -113,7 +113,7 @@ try {
   await runner.step('walk', async () => {
     await request('select_desktop', { desktopId: home });
     await settledOn(home);
-    await waitDom(`[data-session-terminal-desktop="${home}"].shelf-layout`);
+    await waitDom(`[data-session-terminal-desktop="${home}"]`);
     if ((await screenState()).activeTile === firstTile) await press('Right', { desktopId: home, activeTile: lastTile });
 
     await press('Right', { desktopId: empty });

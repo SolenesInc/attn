@@ -94,8 +94,8 @@ end tell
   return parseWindowBoundsOutput(output, bundleId);
 }
 
-// A split half under ATTENTION_MIN_WIDTH (480px) plus its 24px restore gutter
-// collapses; behind the 240px sidebar that floor is a 1248px window.
+// Two tiles at the 480px minimum width behind the 240px sidebar need a 1200px
+// window; this leaves room for both to be wider than that.
 export const SPLIT_FRIENDLY_WINDOW = { width: 1440, height: 900 };
 
 export async function widenWindowForSplitPanes(client, target = SPLIT_FRIENDLY_WINDOW) {

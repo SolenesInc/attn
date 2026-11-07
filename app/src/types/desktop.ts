@@ -187,7 +187,6 @@ export interface SplitDivider {
   top: number;
   right: number;
   bottom: number;
-  grabRatio?: number;
 }
 
 export function applyRatioOverrides(node: TerminalLayoutNode, overrides: ReadonlyMap<string, number>): TerminalLayoutNode {

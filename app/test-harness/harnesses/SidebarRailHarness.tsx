@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import { StandaloneSidebar } from '../../src/test/standaloneSidebar';
-import { HomeIcon } from '../../src/components/SidebarIcons';
 import { buildDesktopViewModels } from '../../src/utils/desktopViewModels';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../../src/types/generated';
 import type { HarnessProps } from '../types';
@@ -40,11 +39,7 @@ export function SidebarRailHarness({ onReady, setTriggerRerender }: HarnessProps
       <StandaloneSidebar
         collapsed surface="tree-collapsed" selectedId={null} selectedDesktopId={selected}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
-        headerActions={['Garden', 'Notebook', 'Ledger', 'Automations', 'Notifications'].map((title) => ({
-          id: title.toLowerCase(), title, icon: <HomeIcon />,
-          unread: title === 'Notifications', onClick: noop,
-        }))}
-        onOpenCommands={() => window.__HARNESS__.recordCall('commands', [])}
+        titleBarActions={[]}
         onSelectDesktop={(id) => { setSelected(id); window.__HARNESS__.recordCall('desktop', [id]); }}
         onSelectSession={noop} onNewSession={noop} onCloseSession={noop} onReloadSession={noop}
         onGoToDashboard={noop} onToggleCollapse={noop}

@@ -97,7 +97,6 @@ describe('resolveRowLayout', () => {
     expect(firsts(plan.before)).toEqual(before);
     expect(firsts(plan.after)).toEqual(after);
     expect(plan.firstColumn).toEqual({ leafId: screen[0], index: ROW.indexOf(screen[0]) });
-    expect(plan.suspendedLeafIds.size).toBe(0);
   });
 
   it.each<[string, Spec[], number, number[]]>([

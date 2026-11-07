@@ -1,7 +1,9 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
-import { StandaloneSidebar as Sidebar } from '../test/standaloneSidebar';
+import { Sidebar as SidebarSurface, SidebarProvider } from './Sidebar';
+import { TitleBar } from './TitleBar';
+import type { SidebarProps } from './sidebarTypes';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { AutomationProvenance } from '../types/generated';
@@ -21,12 +23,16 @@ interface TestSession {
   automation?: AutomationProvenance;
 }
 
+function Sidebar(props: SidebarProps) {
+  return <SidebarProvider {...props}><TitleBar /><SidebarSurface /></SidebarProvider>;
+}
+
 const baseProps = {
   selectedId: null,
   selectedDesktopId: null,
   collapsed: true,
   surface: 'queue-collapsed' as const,
-  headerActions: [],
+  titleBarActions: [],
   onSelectSession: () => {},
   onSelectDesktop: () => {},
   onNewSession: () => {},
@@ -98,24 +104,15 @@ function peekRowKeys(peek: HTMLElement) {
 }
 
 describe('the queue bar', () => {
-  it('replaces the open queue sidebar when collapsed and shows it again from ⇥', () => {
+  it('replaces the open queue sidebar when collapsed and shows it again from the title bar', () => {
     const onToggleCollapse = vi.fn();
     renderBar([owed('a', 9)], { onToggleCollapse });
 
-    expect(screen.getByTestId('queue-bar')).toBeTruthy();
+    expect(within(screen.getByTestId('title-bar')).getByTestId('queue-bar')).toBeTruthy();
     expect(screen.queryByTestId('queue-sidebar')).toBeNull();
     expect(document.querySelector('.icon-rail')).toBeNull();
-    fireEvent.click(screen.getByTestId('queue-bar-show-sidebar'));
+    fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' }));
     expect(onToggleCollapse).toHaveBeenCalledOnce();
-  });
-
-  it('names the profile and switches it', () => {
-    const onSwitchProfile = vi.fn();
-    renderBar([], { profileName: 'Work', onSwitchProfile });
-
-    fireEvent.click(screen.getByTestId('queue-profile-pill'));
-    expect(screen.getByTestId('queue-profile-pill').textContent).toContain('Work');
-    expect(onSwitchProfile).toHaveBeenCalledOnce();
   });
 });
 

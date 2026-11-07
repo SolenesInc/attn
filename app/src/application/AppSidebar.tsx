@@ -73,7 +73,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
     sendSettleTurn,
     sendWakeTurn,
   } = useDaemonApi();
-  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList, openAsk } =
+  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
   const { profileSessions } = useAppSessionsContext();
   const asks = useAskList(profileSessions);
@@ -118,11 +118,10 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   } = useLeafDragContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleRequestCloseSession, handleReloadSession, handleRequestCloseDesktop } = useSessionLifecycleContext();
-  const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
+  const { titleBarActions, dockItems } = useAppSidebarActions();
   const { desktopNavigation } = useDesktopNavigationContext();
   return (
     <SidebarProvider
-      oneToolbar
       desktops={desktopViews}
       visualIndexByDesktopId={slotIndexByDesktopId}
       selectedId={shownAgentId}
@@ -133,7 +132,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
       collapsed={sidebarCollapsed}
       surface={sidebarSurface}
       instance={BUILD_DEMO ? '' : BUILD_INSTANCE}
-      headerActions={sidebarHeaderActions}
+      titleBarActions={titleBarActions}
       criticalNotifications={criticalNotifications}
       onOpenNotifications={openNotificationsPanel}
       dockItems={dockItems}
@@ -176,7 +175,6 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
       onWalkRuns={handleNextRun}
       onJumpToWaiting={handleJumpToWaiting}
       asks={asks}
-      onOpenAsk={openAsk}
       profileName={profileName}
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}

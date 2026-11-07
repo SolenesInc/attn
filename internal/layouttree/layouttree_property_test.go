@@ -247,33 +247,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 				m.tiles[tileID] = want
 			},
 
-			"move_leaf": func(t *rapid.T) {
-				leaves := m.leafIDs()
-				if len(leaves) < 2 {
-					t.Skip("a move needs something to move against")
-				}
-				leaf := rapid.SampledFrom(leaves).Draw(t, "leaf")
-				anchor := rapid.SampledFrom(append([]string{""}, leaves...)).Draw(t, "anchor")
-				splitID := m.mint("s")
-				direction := rapid.SampledFrom(directions).Draw(t, "direction")
-				before := rapid.Bool().Draw(t, "before")
-				ratio := drawRatio(t, "ratio")
-
-				next, ok := apply(t, func(n Node) (Node, bool) {
-					return MoveLeaf(n, leaf, anchor, splitID, direction, before, ratio)
-				})
-				if leaf == anchor {
-					if ok {
-						t.Fatalf("MoveLeaf dropped leaf %q on itself and reported a change", leaf)
-					}
-					t.Skip("dropping a leaf on itself is a no-op")
-				}
-				if !ok {
-					t.Fatalf("MoveLeaf of %q against %q, both in the tree, was refused", leaf, anchor)
-				}
-				m.tree = next
-			},
-
 			"remove_leaf": func(t *rapid.T) {
 				leaves := m.leafIDs()
 				if len(leaves) < 2 {

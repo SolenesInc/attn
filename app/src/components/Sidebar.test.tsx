@@ -82,7 +82,7 @@ const baseProps = {
   selectedDesktopId: null,
   collapsed: false,
   surface: 'tree-open' as const,
-  headerActions: [],
+  titleBarActions: [],
   dockItems: undefined as DockItem[] | undefined,
   onSelectSession: () => {},
   onSelectDesktop: () => {},

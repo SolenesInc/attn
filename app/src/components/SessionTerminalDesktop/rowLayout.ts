@@ -2,25 +2,24 @@ import {
   collectLayoutLeaves,
   getNormalizedPaneBounds,
   leafSlotId,
+  type SplitDivider,
   type TerminalLayoutNode,
   type TerminalSplitDirection,
 } from '../../types/desktop';
 import {
-  ATTENTION_MIN_HEIGHT,
-  ATTENTION_MIN_WIDTH,
+  TILE_MIN_HEIGHT,
+  TILE_MIN_WIDTH,
   buildDividers,
   findLeaf,
   zoomLayoutTowardLeaf,
-  type DesktopLayoutPlan,
   type DesktopLayoutView,
-} from './attentionLayout';
+} from './desktopLayout';
 
 export const NARROWEST_STEPS = [57, 66, 76, 86, 100, 120, 150] as const;
 export const DEFAULT_NARROWEST_COLS = 66;
 
 const FIT_TOLERANCE_PX = 0.5;
 const COLUMN_WIDTH_UNCHANGED_PX = 0.25;
-const NOTHING_SUSPENDED: ReadonlySet<string> = new Set();
 
 export interface RowColumn {
   leafIds: string[];
@@ -46,7 +45,9 @@ export interface RowLayoutInput {
   view?: DesktopLayoutView;
 }
 
-export interface RowLayoutPlan extends DesktopLayoutPlan {
+export interface RowLayoutPlan {
+  renderedTree: TerminalLayoutNode;
+  dividers: SplitDivider[];
   screen: RowColumn[];
   before: RowColumn[];
   after: RowColumn[];
@@ -55,7 +56,7 @@ export interface RowLayoutPlan extends DesktopLayoutPlan {
 }
 
 export function narrowestWidthPx(cols: number, pxPerCol: number): number {
-  return Math.max(ATTENTION_MIN_WIDTH, cols * pxPerCol);
+  return Math.max(TILE_MIN_WIDTH, cols * pxPerCol);
 }
 
 export function readRow(tree: TerminalLayoutNode): RowColumn[] {
@@ -178,7 +179,6 @@ export function resolveRowLayout(input: RowLayoutInput): RowLayoutPlan {
     after: row.slice(firstAt).filter((column) => !screen.includes(column)),
     firstColumn: { leafId: screen[0].leafIds[0], index: start },
     widths,
-    suspendedLeafIds: NOTHING_SUSPENDED,
   };
   const view = input.view ?? { mode: 'normal' };
   if (view.mode === 'focused') {
@@ -188,7 +188,7 @@ export function resolveRowLayout(input: RowLayoutInput): RowLayoutPlan {
   if (view.mode === 'zoomed') {
     return { ...placed, renderedTree: zoomLayoutTowardLeaf(renderedTree, view.leafId), dividers: [] };
   }
-  return { ...placed, renderedTree, dividers: buildDividers(renderedTree, NOTHING_SUSPENDED) };
+  return { ...placed, renderedTree, dividers: buildDividers(renderedTree) };
 }
 
 export function columnDividerIndex(screen: readonly RowColumn[], splitId: string): number {
@@ -360,7 +360,7 @@ export function stepNarrowestCols(
   const asked = shown + 1;
   const askedPx = asked * narrowestPx;
   const sidebarWouldHelp = input.areaPx < windowPx && askedPx <= windowPx;
-  const narrowerWouldHelp = narrowestPx > ATTENTION_MIN_WIDTH && asked * ATTENTION_MIN_WIDTH <= input.areaPx;
+  const narrowerWouldHelp = narrowestPx > TILE_MIN_WIDTH && asked * TILE_MIN_WIDTH <= input.areaPx;
   return {
     kind: 'limit',
     message: `${asked} tiles at the narrowest width (${narrowest} cols, ${narrowestPx}px) need ${askedPx}px. Tiles have ${input.areaPx}px here.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}${narrowerWouldHelp ? ' A narrower width can be set in Settings → Appearance.' : ''}`,
@@ -369,7 +369,7 @@ export function stepNarrowestCols(
 
 export function rowDragRatioBounds(direction: TerminalSplitDirection, spanPx: number): { min: number; max: number } {
   if (spanPx <= 0) return { min: 0.1, max: 0.9 };
-  const smallest = (direction === 'vertical' ? ATTENTION_MIN_WIDTH : ATTENTION_MIN_HEIGHT) / spanPx;
+  const smallest = (direction === 'vertical' ? TILE_MIN_WIDTH : TILE_MIN_HEIGHT) / spanPx;
   return { min: Math.min(0.5, smallest), max: Math.max(0.5, 1 - smallest) };
 }
 
@@ -445,9 +445,9 @@ export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, first
 export function columnStackNeedPx(tree: TerminalLayoutNode, leafId: string): number {
   const row = readRow(tree);
   const column = row[columnIndexOf(row, leafId)];
-  if (!column) return ATTENTION_MIN_HEIGHT;
+  if (!column) return TILE_MIN_HEIGHT;
   const heights = [...getNormalizedPaneBounds(column.node).values()].map((bounds) => bounds.height);
-  return ATTENTION_MIN_HEIGHT / Math.min(...heights);
+  return TILE_MIN_HEIGHT / Math.min(...heights);
 }
 
 export function stackLimitMessage(tree: TerminalLayoutNode, anchorLeafId: string, tileHeightPx: number): string | null {
@@ -455,7 +455,7 @@ export function stackLimitMessage(tree: TerminalLayoutNode, anchorLeafId: string
   const column = row[columnIndexOf(row, anchorLeafId)];
   if (!column) return null;
   const asked = column.leafIds.length + 1;
-  const neededPx = asked * ATTENTION_MIN_HEIGHT;
+  const neededPx = asked * TILE_MIN_HEIGHT;
   if (neededPx <= tileHeightPx) return null;
-  return `${asked} stacked tiles at the ${ATTENTION_MIN_HEIGHT}px minimum need ${neededPx}px. Tiles have ${tileHeightPx}px here, so it opened beside instead.`;
+  return `${asked} stacked tiles at the ${TILE_MIN_HEIGHT}px minimum need ${neededPx}px. Tiles have ${tileHeightPx}px here, so it opened beside instead.`;
 }

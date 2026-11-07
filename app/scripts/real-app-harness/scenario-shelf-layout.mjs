@@ -99,7 +99,6 @@ async function assertScreen(name, row) {
   const start = row.indexOf(shown[0]);
   runner.assert(shown.length >= 1 && shown.length < row.length, `${name}: the screen shows part of the row`, { shown, row });
   runner.assert(shown.every((id, index) => row[start + index] === id), `${name}: the screen is neighbours in row order`, { shown, row });
-  await waitDom('[data-pane-suspended]', { absent: true });
   runner.log(name, { shown });
   return shown;
 }

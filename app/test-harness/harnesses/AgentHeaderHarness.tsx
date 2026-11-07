@@ -96,6 +96,7 @@ function AgentDesktop({ id, ids, layoutTree, selection, usageRequest }: {
 }) {
   return (
     <SessionTerminalDesktop
+      shelfNarrowestCols={57}
       desktopId={`agent-header-${id}`}
       desktopSessions={sessions}
       delegationSessions={roles}

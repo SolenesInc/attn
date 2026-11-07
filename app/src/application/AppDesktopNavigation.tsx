@@ -38,7 +38,6 @@ export function AppDesktopNavigation() {
       )}
       {profileSwitcherOpen && (
         <ProfileSwitcher
-          underTitleBarSelector
           profiles={profiles}
           selectedProfileId={selectedProfile?.id ?? null}
           onSelect={(profileId) => {

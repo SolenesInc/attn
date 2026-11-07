@@ -99,7 +99,7 @@ Preconditions:
   - Press Escape, open the drawer again, click the subject and press `o`: the drawer closes and `bridge get_state` shows `activeLeaf.sessionId` `ask-agent`.
   - Run `wsctl input --id <terminal> --text "list asks" --enter` to read the id of the `Release note` ask. Withdraw that ask with `wsctl input --id <terminal> --text "withdraw <ask>" --enter`, so only `Cache store` stays open for the queue bar.
 - **The queue bar.**
-  - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .sidebar-count-badge"}'` reads `1`.
+  - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .title-bar-count-badge"}'` reads `1`.
   - Click the asks button in `[data-testid="title-bar-right"]` natively: the drawer opens on the ask.
   - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
 - **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.

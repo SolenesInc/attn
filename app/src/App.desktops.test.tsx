@@ -50,7 +50,7 @@ vi.mock('./components/Sidebar', async () => {
     ...context
   }: {
     children: ReactNode;
-    headerActions: Array<{ id: string; disabled?: boolean }>;
+    titleBarActions: Array<{ id: string; disabled?: boolean }>;
     desktops: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
     crew?: Array<{ id: string }>;
     selectedDesktopId: string | null;
@@ -58,12 +58,12 @@ vi.mock('./components/Sidebar', async () => {
     onSelectDesktop: (id: string) => void;
     onSelectTile: (desktopId: string, tileId: string) => void;
   }) => {
-    const { desktops, crew, selectedDesktopId, selectedTile, onSelectDesktop, onSelectTile, headerActions } = context;
+    const { desktops, crew, selectedDesktopId, selectedTile, onSelectDesktop, onSelectTile, titleBarActions } = context;
     return (
     <SidebarContext.Provider value={context as never}>
     <div
       data-testid="sidebar"
-      data-editor-enabled={String(headerActions.some((action) => action.id === 'editor' && !action.disabled))}
+      data-editor-enabled={String(titleBarActions.some((action) => action.id === 'editor' && !action.disabled))}
       data-selected-desktop={selectedDesktopId ?? ''}
       data-crew={(crew ?? []).map((member) => member.id).join(',')}
       data-selected-tile={selectedTile ? `${selectedTile.desktopId}:${selectedTile.tileId}` : ''}

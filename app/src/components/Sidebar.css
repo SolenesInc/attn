@@ -22,36 +22,6 @@
   -webkit-user-select: text;
 }
 
-.sidebar-instance-marker {
-  align-self: flex-start;
-  max-width: 100%;
-  padding: 3px 7px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.035);
-  color: var(--color-text-secondary);
-  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
-  font-size: 10px;
-  line-height: 1.2;
-  letter-spacing: 0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-instance-marker strong {
-  color: var(--color-text-primary);
-  font-weight: 600;
-}
-
-.sidebar-instance-marker--collapsed {
-  box-sizing: border-box;
-  width: calc(100% - 10px);
-  margin: 6px 5px 2px;
-  padding-inline: 4px;
-  text-align: center;
-}
-
 .session-list {
   flex: 1;
   overflow-y: auto;
@@ -846,10 +816,6 @@
   flex-shrink: 0;
 }
 
-.expand-btn {
-  margin-top: auto;
-}
-
 /* Mini badge for waiting_input state */
 .mini-badge {
   position: absolute;
@@ -1063,3 +1029,5 @@
   align-items: center;
   justify-content: center;
 }
+
+.sidebar-sleeping-crew { margin-top: 8px; }

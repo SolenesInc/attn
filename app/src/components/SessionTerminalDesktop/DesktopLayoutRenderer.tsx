@@ -51,7 +51,7 @@ function renderLayoutMetadata(node: TerminalLayoutNode, path = 'root'): ReactNod
 
 function dividerStyle(divider: SplitDivider): React.CSSProperties {
   const pct = (value: number) => `${value * 100}%`;
-  const at = divider.grabRatio ?? divider.ratio;
+  const at = divider.ratio;
   if (divider.direction === 'vertical') {
     const x = divider.left + (divider.right - divider.left) * at;
     return {
@@ -98,11 +98,10 @@ export function DesktopLayoutRenderer({
       {paneIds.map((paneId) => renderPane(paneId))}
       {onDividerPointerDown && dividers.map((divider) => (
         <div
-          key={divider.grabRatio != null ? `${divider.splitId}:${divider.grabRatio}` : divider.splitId}
+          key={divider.splitId}
           className={`desktop-split-divider desktop-split-divider--${divider.direction}`}
           style={dividerStyle(divider)}
           data-split-id={divider.splitId}
-          data-split-grab={divider.grabRatio != null ? '1' : undefined}
           role="separator"
           aria-orientation={divider.direction === 'vertical' ? 'vertical' : 'horizontal'}
           onPointerDown={(event) => onDividerPointerDown(divider, event)}

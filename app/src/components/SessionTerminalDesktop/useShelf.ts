@@ -8,7 +8,6 @@ import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { deriveTileTitle } from '../../utils/tilePresentation';
 import type { SessionTerminalDesktopProps } from './desktopTypes';
 import {
-  DEFAULT_NARROWEST_COLS,
   lastUsedLeaf,
   columnIndexOf,
   firstColumnStillShows,
@@ -30,7 +29,7 @@ interface ShelfPublisherInput {
   desktopId: string;
   rowPlan: RowLayoutPlan | null;
   showShelf: boolean;
-  narrowestCols?: number;
+  narrowestCols: number;
   tileHeightPx: number;
   activeLeafId: string;
   focusOrder: readonly string[];
@@ -105,7 +104,7 @@ export function useShelfPublisher({
       screen: rowPlan.screen.map(shelfColumn),
       after: rowPlan.after.map(shelfColumn),
       activeLeafId,
-      narrowestCols: narrowestCols ?? DEFAULT_NARROWEST_COLS,
+      narrowestCols,
       tileHeightPx,
     };
   }, [activeLeafId, agentPaneById, desktopId, focusOrder, gardenSeeds, narrowestCols, rowPlan, sessionById, showShelf, tileContents, tileHeightPx, tileLeafById]);
@@ -213,7 +212,7 @@ export function useRowSettling(input: RowSettlingInput) {
 interface ShelfControlsInput {
   active: boolean;
   rowInput: Omit<RowLayoutInput, 'view'> | null;
-  narrowestCols?: number;
+  narrowestCols: number;
   onSetNarrowestCols?: (cols: number) => void;
   onClearWantedCols: (columns: readonly RowColumn[]) => void;
   onShelfLimit?: (message: string) => void;
@@ -239,7 +238,7 @@ export function useShelfControls({
   }, []);
 
   const step = (direction: 'fewer' | 'more') => {
-    if (!rowInput || narrowestCols === undefined) return;
+    if (!rowInput) return;
     const { narrowestPx: _narrowestPx, ...input } = rowInput;
     const result = stepNarrowestCols(input, narrowestCols, direction, window.innerWidth);
     if (result.kind === 'limit') {
@@ -256,7 +255,7 @@ export function useShelfControls({
 
   useShortcut('shelf.fewerTiles', () => step('fewer'), active);
   useShortcut('shelf.moreTiles', () => step('more'), active);
-  if (clearedWidths === null || !rowInput || narrowestCols === undefined) return null;
+  if (clearedWidths === null || !rowInput) return null;
   const { narrowestPx: _narrowestPx, ...input } = rowInput;
   return { clearedWidths, tileCounts: reachableTileCounts(input, narrowestCols) };
 }

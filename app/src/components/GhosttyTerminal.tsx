@@ -100,7 +100,6 @@ import {
   fitRequiresTerminalResize,
   fitShouldBailAsSuspicious,
   geometryOverflowsContainer,
-  isDesktopSuspensionAnimating,
   drawnScale,
   recoveryDelayMs,
   scaledToFitTransform,
@@ -1976,10 +1975,6 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       keepScaledPtyFitted();
       if (surfaceReleasedRef.current) {
         noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'surfaceReleased', cw: container.clientWidth, ch: container.clientHeight });
-        return;
-      }
-      if (isDesktopSuspensionAnimating(container)) {
-        noteResize(diagKeyRef.current, { session, paneKind, source: 'fit', bail: 'suspensionAnimating', cw: container.clientWidth, ch: container.clientHeight });
         return;
       }
       const dims = renderer.fitDimensions(container.clientWidth, container.clientHeight);

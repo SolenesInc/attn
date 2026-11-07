@@ -62,7 +62,7 @@ function tileDesktop(): TerminalDesktopState {
 
 function renderTileDesktop() {
   return render(
-    <SessionTerminalDesktop
+    <SessionTerminalDesktop shelfNarrowestCols={66}
       desktopId="desktop-tiles"
       terminalState={tileDesktop()}
       activePaneId="tile-readme"

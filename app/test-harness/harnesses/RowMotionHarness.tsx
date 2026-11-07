@@ -71,7 +71,7 @@ export function RowMotionHarness({ onReady, setTriggerRerender }: HarnessProps) 
   }, [onReady, setTriggerRerender]);
 
   return (
-    <div className="session-terminal-desktop shelf-layout" style={{ position: 'relative', width: WIDTH, height: HEIGHT, display: 'flex' }}>
+    <div className="session-terminal-desktop" style={{ position: 'relative', width: WIDTH, height: HEIGHT, display: 'flex' }}>
       {shown.length > 0 && (
         <div className="session-terminal-panes" ref={containerRef}>
           {shown.map((id, index) => {

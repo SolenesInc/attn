@@ -54,7 +54,7 @@ function createSplitDesktop(ratio = 0.5): TerminalDesktopState {
   };
 }
 
-function createDocumentSplitDesktop(
+function createDocumentStackDesktop(
   ratio: number,
   ratioMode: 'automatic' | 'preferred',
 ): TerminalDesktopState {
@@ -63,7 +63,7 @@ function createDocumentSplitDesktop(
     layoutTree: {
       type: 'split',
       splitId: 'root',
-      direction: 'vertical',
+      direction: 'horizontal',
       ratio,
       ratioMode,
       children: [
@@ -152,6 +152,7 @@ vi.mock('./GhosttyTerminal', () => ({
       resizeLocal: vi.fn(),
       reset: vi.fn(),
       setSurfaceReleased: mockTerminalSetSurfaceReleased,
+      captureStillFrame: vi.fn(() => null),
       scrollToTop: vi.fn(() => true),
       getText: vi.fn(() => ''),
       getSize: vi.fn(() => ({ cols: 80, rows: 24 })),
@@ -229,7 +230,7 @@ describe('SessionTerminalDesktop', () => {
 
   it('keeps the drawing buffer when a modal disables the session', () => {
     const { rerender } = render(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         {...virtualizationProps}
         terminalState={createSingleAgentDesktop()}
         isActiveSession
@@ -238,7 +239,7 @@ describe('SessionTerminalDesktop', () => {
 
     mockTerminalSetSurfaceReleased.mockClear();
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         {...virtualizationProps}
         terminalState={createSingleAgentDesktop()}
         isActiveSession
@@ -248,7 +249,7 @@ describe('SessionTerminalDesktop', () => {
     expect(mockTerminalSetSurfaceReleased.mock.calls.map(([released]) => released)).not.toContain(true);
   });
 
-  it('settles an optimistic resize when the daemon echoes it as preferred', () => {
+  it('settles an optimistic stack resize when the daemon echoes it as preferred', () => {
     const onResizeSplit = vi.fn(() => new Promise<void>(() => {}));
     const commonProps = {
       desktopId: 'desktop-session-1',
@@ -270,31 +271,31 @@ describe('SessionTerminalDesktop', () => {
       onRequestTileContent: vi.fn(),
     };
     const { container, rerender } = render(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         {...commonProps}
-        terminalState={createDocumentSplitDesktop(0.5, 'automatic')}
+        terminalState={createDocumentStackDesktop(0.5, 'automatic')}
       />,
       { wrapper: NotebookSurfaceTestWrapper },
     );
     const panes = container.querySelector('.session-terminal-panes') as HTMLElement;
     vi.spyOn(panes, 'getBoundingClientRect').mockReturnValue({
-      left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
+      left: 0, top: 0, right: 1000, bottom: 1000, width: 1000, height: 1000, x: 0, y: 0, toJSON: () => {},
     });
 
-    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
-    fireEvent.pointerUp(window, { clientX: 520, clientY: 250 });
+    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 500 });
+    fireEvent.pointerUp(window, { clientX: 500, clientY: 520 });
     expect(container.querySelector('.desktop-layout-metadata [data-split-id="root"]')).toHaveAttribute('data-split-ratio', '0.520');
 
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         {...commonProps}
-        terminalState={createDocumentSplitDesktop(0.52, 'preferred')}
+        terminalState={createDocumentStackDesktop(0.52, 'preferred')}
       />,
     );
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         {...commonProps}
-        terminalState={createDocumentSplitDesktop(0.52, 'automatic')}
+        terminalState={createDocumentStackDesktop(0.4, 'automatic')}
       />,
     );
 
@@ -303,7 +304,7 @@ describe('SessionTerminalDesktop', () => {
 
   it('releases selection locks when divider and tile drags are cancelled', () => {
     const { container, rerender } = render(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[
           { id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" },
@@ -327,10 +328,13 @@ describe('SessionTerminalDesktop', () => {
       left: 0, top: 0, right: 1000, bottom: 500, width: 1000, height: 500, x: 0, y: 0, toJSON: () => {},
     });
 
-    fireEvent.pointerDown(screen.getByRole('separator'), { button: 0, clientX: 500, clientY: 250 });
+    const separator = screen.getByRole('separator');
+    const splitId = separator.dataset.splitId;
+    fireEvent.pointerDown(separator, { button: 0, clientX: 500, clientY: 250 });
+    fireEvent.pointerMove(window, { clientX: 510, clientY: 250 });
     expect(document.body.style.userSelect).toBe('none');
-    expect(container.querySelector('.desktop-resize-shield')).toHaveAttribute('data-resizing-split-id', 'root');
-    expect(panes).toHaveAttribute('data-resizing-split-id', 'root');
+    expect(container.querySelector('.desktop-resize-shield')).toHaveAttribute('data-resizing-split-id', splitId);
+    expect(panes).toHaveAttribute('data-resizing-split-id', splitId);
     expect(document.documentElement).toHaveAttribute('data-attn-desktop-resizing', '1');
     expect(Number(document.documentElement.dataset.attnDesktopMouseSuppressUntil)).toBeGreaterThan(Date.now());
     fireEvent.pointerCancel(window);
@@ -340,7 +344,7 @@ describe('SessionTerminalDesktop', () => {
     expect(document.documentElement).not.toHaveAttribute('data-attn-desktop-resizing');
 
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" }]}
         terminalState={{
@@ -378,7 +382,7 @@ describe('SessionTerminalDesktop', () => {
 
   it('keeps the session pane mounted when the split topology changes around it', () => {
     const { rerender } = render(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[{ id: "session-1", label: "Session 1", agent: "codex", cwd: "/tmp/repo" }]}
         terminalState={{
@@ -407,7 +411,7 @@ describe('SessionTerminalDesktop', () => {
     );
 
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[{ id: "session-1", label: "Session 1", agent: "codex", cwd: "/tmp/repo" }]}
         terminalState={{
@@ -448,7 +452,7 @@ describe('SessionTerminalDesktop', () => {
     );
 
     rerender(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[{ id: "session-1", label: "Session 1", agent: "codex", cwd: "/tmp/repo" }]}
         terminalState={{
@@ -487,7 +491,7 @@ describe('SessionTerminalDesktop', () => {
     mockTerminalOverflowsContainer.mockReset().mockReturnValue(true);
 
     render(
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-session-1"
         desktopSessions={[{ id: "session-1", label: "Session 1", agent: "claude", cwd: "/tmp/repo" }]}
         terminalState={createSingleAgentDesktop()}

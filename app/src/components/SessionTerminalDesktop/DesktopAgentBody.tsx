@@ -9,10 +9,10 @@ import type { DesktopAgentProps } from './desktopTypes';
 import { sessionHasStopped, useSessionStore } from '../../store/sessions';
 
 function KeepsLastFrameForRowMotion({ paneId, children }: { paneId: string; children: ReactNode }) {
-  const { shelfOn, runtime, keepLeavingFrame } = useDesktopContext();
+  const { runtime, keepLeavingFrame } = useDesktopContext();
   const keepFrame = useRef(() => {});
   keepFrame.current = () => {
-    if (shelfOn) keepLeavingFrame(paneId, runtime.capturePaneStillFrame(paneId));
+    keepLeavingFrame(paneId, runtime.capturePaneStillFrame(paneId));
   };
   useLayoutEffect(() => {
     keepLeavingFrame(paneId, null);

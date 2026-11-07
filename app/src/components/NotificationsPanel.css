@@ -10,8 +10,8 @@
 
 .notifications-panel {
   position: fixed;
-  top: calc(var(--title-bar-height, 44px) + 8px);
-  left: var(--title-bar-lights, 64px);
+  top: calc(var(--title-bar-height) + 8px);
+  left: var(--title-bar-lights);
   z-index: 61;
   width: 360px;
   max-width: calc(100vw - 80px);

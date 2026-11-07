@@ -29,7 +29,7 @@ const QUEUE_BAR = '[data-testid="queue-bar"]';
 const present = (demo, selector) => demo.read('dom_wait', { selector, timeoutMs: 1000 }).then(() => true, () => false);
 
 export default {
-  description: 'Stills: open asks in the sidebar header, on the queue bar and its peek, in the asking agent\'s tile header, and on the collapsed desktop rail',
+  description: 'Stills: open asks in the title bar, in the asking agent\'s tile header, and on the collapsed desktop rail',
   repos: { shop: { worktrees: ['persistent-cache', 'billing-retry'] } },
   async run(demo) {
     await demo.ui('set_setting', { key: 'asks_enabled', value: 'true' });
@@ -54,7 +54,7 @@ export default {
     ));
 
     if (await present(demo, QUEUE_BAR)) await demo.ui('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
-    await demo.read('dom_wait', { selector: '[data-testid="title-bar-right"] .sidebar-count-badge', textIncludes: '2', timeoutMs: 10_000 });
+    await demo.read('dom_wait', { selector: '[data-testid="title-bar-right"] .title-bar-count-badge', textIncludes: '2', timeoutMs: 10_000 });
     await demo.still('sidebar-header-asks.png', { crop: { selector: '[data-testid="title-bar"]' } });
 
     const chip = `[data-testid="ask-chip-${cache.id}"]`;
@@ -73,7 +73,7 @@ export default {
     await demo.read('dom_wait', { selector: '.asks-drawer', absent: true, timeoutMs: 10_000 });
 
     await demo.ui('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-    await demo.read('dom_wait', { selector: '.sidebar.collapsed .sidebar-count-badge', textIncludes: '2', timeoutMs: 10_000 });
+    await demo.read('dom_wait', { selector: '.sidebar.collapsed .mini-ask-badge', timeoutMs: 10_000 });
     await demo.pause();
     await demo.still('rail-asks.png', { crop: { selector: '.sidebar.collapsed' } });
   },

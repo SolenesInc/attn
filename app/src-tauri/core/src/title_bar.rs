@@ -4,36 +4,27 @@ use crate::browser_host::TrustedMainWebview;
 pub fn set_title_bar_overlay(
     _caller: TrustedMainWebview,
     window: tauri::Window,
-    overlay: bool,
 ) -> Result<(), String> {
-    apply_overlay(&window, overlay)
+    apply_overlay(&window)
 }
 
 #[cfg(target_os = "macos")]
-fn apply_overlay(window: &tauri::Window, overlay: bool) -> Result<(), String> {
+fn apply_overlay(window: &tauri::Window) -> Result<(), String> {
     use objc2_app_kit::{NSWindow, NSWindowTitleVisibility};
     use tauri::TitleBarStyle;
 
     window
-        .set_title_bar_style(if overlay {
-            TitleBarStyle::Overlay
-        } else {
-            TitleBarStyle::Visible
-        })
+        .set_title_bar_style(TitleBarStyle::Overlay)
         .map_err(|error| format!("set title bar style: {error}"))?;
     let window_ptr = window
         .ns_window()
         .map_err(|error| format!("read the native window: {error}"))?;
     let native: &NSWindow = unsafe { &*window_ptr.cast() };
-    native.setTitleVisibility(if overlay {
-        NSWindowTitleVisibility::Hidden
-    } else {
-        NSWindowTitleVisibility::Visible
-    });
+    native.setTitleVisibility(NSWindowTitleVisibility::Hidden);
     Ok(())
 }
 
 #[cfg(not(target_os = "macos"))]
-fn apply_overlay(_window: &tauri::Window, _overlay: bool) -> Result<(), String> {
+fn apply_overlay(_window: &tauri::Window) -> Result<(), String> {
     Ok(())
 }

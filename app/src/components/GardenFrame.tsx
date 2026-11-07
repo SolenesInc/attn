@@ -1,3 +1,4 @@
+import { TITLE_BAR_HEIGHT_PX } from './TitleBar';
 import FocusTrap from './AppFocusTrap';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Seed, SeedHandoverOptions, SeedSendToChiefOptions } from '../hooks/useDaemonSocket';
@@ -61,7 +62,6 @@ export function useDockSlotRect(dockLayout: unknown) {
 export interface GardenFrameProps {
   mode: GardenMode;
   dockRect: FrameRect | null;
-  titleBarHeight: number;
   onToggleFrame: () => void;
   onEscapeFloor?: () => void;
   onClose: () => void;
@@ -97,7 +97,6 @@ export interface GardenFrameProps {
 export function GardenFrame({
   mode,
   dockRect,
-  titleBarHeight,
   onToggleFrame,
   onEscapeFloor,
   onClose,
@@ -193,10 +192,10 @@ export function GardenFrame({
   }, [mode]);
 
   const full: FrameRect = {
-    top: titleBarHeight + FULL_INSET,
+    top: TITLE_BAR_HEIGHT_PX + FULL_INSET,
     left: FULL_INSET,
     width: Math.max(0, viewport.w - FULL_INSET * 2),
-    height: Math.max(0, viewport.h - titleBarHeight - FULL_INSET * 2),
+    height: Math.max(0, viewport.h - TITLE_BAR_HEIGHT_PX - FULL_INSET * 2),
   };
   const dismissingFullscreen = mode === 'closed' && lastOpenMode.current === 'full';
   const rect = mode === 'full' || dismissingFullscreen ? full : dockRect;

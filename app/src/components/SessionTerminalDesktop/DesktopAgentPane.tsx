@@ -1,9 +1,6 @@
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
-import { SuspendedDesktopPane } from './SuspendedDesktopPane';
-import { leafShowsAsStrip } from './attentionLayout';
 import { useRef, type CSSProperties } from 'react';
-import type { NormalizedPaneBounds, TerminalDesktopState } from '../../types/desktop';
-import { StateIndicator } from '../StateIndicator';
+import type { TerminalDesktopState } from '../../types/desktop';
 import { DesktopAgentBody } from './DesktopAgentBody';
 import { DesktopAgentHeader } from './DesktopAgentHeader';
 import { useDesktopContext } from './DesktopContext';
@@ -11,50 +8,25 @@ import { useTerminalRefusals } from '../../store/terminalRefusals';
 
 export function DesktopAgentPane({
   agentPane,
-  bounds,
   path,
   frameStyle,
 }: {
   agentPane: TerminalDesktopState['agents'][number];
-  bounds: NormalizedPaneBounds;
   path: string;
   frameStyle: CSSProperties;
 }) {
   const {
     sessionById,
     activeLeafId,
-    effectivePaneId,
-    suspendedLeafIds,
     focusLeaf,
     effectiveDraggingLeafId,
-    shelfOn,
   } = useDesktopContext();
   const refusal = useTerminalRefusals((state) => state.byTerminal.get(agentPane.runtimeId));
 
   const paneSession = sessionById.get(agentPane.sessionId);
   const lastSessionName = useRef<string | null>(null);
   if (paneSession) lastSessionName.current = sessionDisplayName(paneSession);
-  const paneTitle = (shelfOn ? lastSessionName.current : paneSession && sessionDisplayName(paneSession)) ?? (agentPane.title || 'Session');
-  if (leafShowsAsStrip(agentPane.id, suspendedLeafIds, effectivePaneId)) {
-    return (
-      <SuspendedDesktopPane
-        leafId={agentPane.id}
-        title={paneTitle}
-        kind="agent"
-        offline={paneSession?.offline}
-        sessionId={agentPane.sessionId}
-        bounds={bounds}
-        path={path}
-        frameStyle={frameStyle}
-      >
-        {paneSession?.state ? (
-          <StateIndicator state={paneSession.state} offline={paneSession.offline} size="sm" seed={agentPane.sessionId} />
-        ) : (
-          <span className="desktop-suspended-state" />
-        )}
-      </SuspendedDesktopPane>
-    );
-  }
+  const paneTitle = lastSessionName.current ?? (agentPane.title || 'Session');
   return (
     <div
       key={agentPane.id}

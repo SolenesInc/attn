@@ -68,7 +68,7 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           surface={desktopFlow ? 'tree-open' : 'queue-open'}
           selectedId={null}
           selectedDesktopId="desk-1"
-          headerActions={[]}
+          titleBarActions={[]}
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
           queue={desktopFlow ? null : buildQueueBands(desktops)}

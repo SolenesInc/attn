@@ -25,7 +25,7 @@ export function OutpostTerminalLinksHarness({ onReady }: HarnessProps) {
   };
   return <div style={{ position: 'fixed', inset: 0, background: '#181818', color: '#eee' }}>
     <style>{appStyles}</style>
-    <SessionTerminalDesktop desktopId="links" terminalState={desktop} activePaneId={id}
+    <SessionTerminalDesktop shelfNarrowestCols={66} desktopId="links" terminalState={desktop} activePaneId={id}
       desktopSessions={[{ id, label: id, agent: 'shell', cwd: '/tmp/test/terminal-links', state: 'idle', host: host && 'studio', hostName: host, reach: 'reachable' }]}
       fontSize={14} enabled isActiveSession isSessionViewVisible eventRouter={router}
       onOpenMarkdown={(...args) => window.__HARNESS__.recordCall('openMarkdown', args)}

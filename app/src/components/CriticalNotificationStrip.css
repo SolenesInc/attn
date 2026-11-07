@@ -1,4 +1,4 @@
-/* The ambient critical surface: a strip under the sidebar header that stays up
+/* The ambient critical surface: a strip that stays up
    while any critical notification is unread, and the bell escalation that goes
    with it (`.sidebar-tool-btn.has-critical`, styled here so both halves of the
    surface live in one file).

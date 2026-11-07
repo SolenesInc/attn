@@ -46,6 +46,7 @@ vi.mock('../GhosttyTerminal', async () => {
         getSize: () => null,
         fit: () => {},
         setSurfaceReleased: () => {},
+        captureStillFrame: () => null,
       }), []);
       React.useImperativeHandle(ref, () => handle, [handle]);
       const onReadyRef = React.useRef(props.onReady);
@@ -69,7 +70,7 @@ function renderDesktop() {
   return render(
     <>
       <button type="button" data-testid="sidebar-row">Open shell</button>
-      <SessionTerminalDesktop
+      <SessionTerminalDesktop shelfNarrowestCols={66}
         desktopId="desktop-ready"
         desktopSessions={[{ id: 'sess-1', label: 'shell', agent: 'shell', cwd: '/tmp/project' }]}
         terminalState={paneDesktop()}

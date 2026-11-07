@@ -11,62 +11,17 @@ import { deriveTileTitle } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { clampIntoViewport } from '../utils/viewportClamp';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
-import { AskRowSummary } from './Asks/AskRowSummary';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
 import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRows';
 import './QueueBar.css';
 import { useSidebarContext } from './SidebarContext';
-import { ExpandIcon } from './SidebarIcons';
-import { FlowToggleButton } from './SidebarHeader';
 import type { LocalSession } from './sidebarTypes';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 
 const LEAD_TURNS = 3;
 const PEEK_ROWS = 16;
 
-export function QueueBar() {
-  const { instance, profileName, onSwitchProfile, onToggleCollapse } = useSidebarContext();
-
-  return (
-    <div className="queue-bar" data-testid="queue-bar" data-callout-anchor="sidebar">
-      <button
-        type="button"
-        className="queue-bar-tool"
-        data-testid="queue-bar-show-sidebar"
-        title={`Show sidebar (${formatShortcut('session.toggleSidebar')})`}
-        aria-label="Show sidebar"
-        onClick={onToggleCollapse}
-      >
-        <ExpandIcon />
-      </button>
-      <FlowToggleButton />
-      {instance && (
-        <span className="queue-bar-instance" data-testid="sidebar-instance-marker">
-          {instance}
-        </span>
-      )}
-      <button
-        type="button"
-        className="queue-bar-profile"
-        data-testid="queue-profile-pill"
-        title={`Switch profile (${formatShortcut('profile.switch')})`}
-        onClick={onSwitchProfile}
-        disabled={!onSwitchProfile}
-      >
-        <strong>{profileName ?? 'Profile'}</strong>
-        <span className="queue-bar-chevron" aria-hidden="true">▾</span>
-      </button>
-      <WaitingAnchor />
-      <AsksChip />
-      <BarCriticalStrip />
-      <span className="queue-bar-spacer" />
-      <RunsChip />
-      <DesktopChips />
-    </div>
-  );
-}
-
-export function QueueBarInTitleBar({ shelf }: { shelf: ReactNode }) {
+export function QueueBar({ shelf }: { shelf: ReactNode }) {
   const { desktops, selectedDesktopId, automationGroups, criticalNotifications } = useSidebarContext();
   const barRef = useRef<HTMLDivElement>(null);
   const hasRuns = runCount(automationGroups) > 0 || runsNeedingYouCount(automationGroups) > 0;
@@ -270,55 +225,6 @@ function PeekAnchor({
       {children}
       {hovered && !peeksSilenced && peek}
     </div>
-  );
-}
-
-function AsksChip() {
-  const { asks, onOpenAsk } = useSidebarContext();
-  if (asks.length === 0 || !onOpenAsk) return null;
-  const waiting = asks.filter((item) => item.holder?.turnOwed).length;
-  const count = `${asks.length} ${asks.length === 1 ? 'ask' : 'asks'}`;
-  return (
-    <PeekAnchor testId="queue-bar-asks-anchor" peek={<AsksPeek />}>
-      <button
-        type="button"
-        className="queue-bar-asks"
-        data-testid="queue-bar-asks"
-        data-asks={asks.length}
-        title={`${count} open · hover to look, click or ${formatShortcut('dock.asks')} to answer`}
-        onClick={() => onOpenAsk()}
-      >
-        <span className="ask-marker" aria-hidden="true">?</span>
-        {count}
-        {waiting > 0 && <span className="queue-bar-asks-waiting">· {waiting} waiting on you</span>}
-      </button>
-    </PeekAnchor>
-  );
-}
-
-function AsksPeek() {
-  const { asks, onOpenAsk } = useSidebarContext();
-  const now = useNow(TURN_AGE_TICK_MS);
-  return (
-    <QueueBarPeek testId="queue-bar-asks-peek">
-      <div className="queue-bar-peek-group">
-        <span className="queue-bar-peek-group-name">Asks</span>
-        <span className="queue-bar-peek-group-count">{asks.length} open</span>
-      </div>
-      {asks.map((item) => (
-        <button
-          key={item.ask.id}
-          type="button"
-          tabIndex={-1}
-          className="queue-bar-peek-row queue-bar-peek-ask"
-          data-testid={`queue-bar-peek-ask-${item.ask.id}`}
-          onClick={() => onOpenAsk?.(item.ask.id)}
-        >
-          <AskRowSummary item={item} now={now} />
-        </button>
-      ))}
-      <div className="queue-bar-peek-foot">{formatShortcut('dock.asks')} answers them one after another</div>
-    </QueueBarPeek>
   );
 }
 

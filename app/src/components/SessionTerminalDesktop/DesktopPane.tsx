@@ -14,7 +14,6 @@ export function DesktopPane({ paneId }: { paneId: string }) {
     return (
       <DesktopAgentPane
         agentPane={agentPane}
-        bounds={bounds}
         path={path}
         frameStyle={frameStyle}
       />

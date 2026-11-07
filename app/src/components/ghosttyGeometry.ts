@@ -2,12 +2,6 @@
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import type { TerminalDimensions } from '../utils/ghosttyResize';
 
-// A fold eases the pane frame down to its 34px sliver; a fit mid-transition
-// would shrink the PTY to a few columns and truncate every row of scrollback.
-export function isDesktopSuspensionAnimating(element: HTMLElement | null): boolean {
-  return Boolean(element?.closest('.session-terminal-panes[data-suspension-animating]'));
-}
-
 export function fitRequiresTerminalResize(
   current: TerminalDimensions,
   next: TerminalDimensions,

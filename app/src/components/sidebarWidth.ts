@@ -1,4 +1,4 @@
-import { ATTENTION_MIN_WIDTH } from './SessionTerminalDesktop/attentionLayout';
+import { TILE_MIN_WIDTH } from './SessionTerminalDesktop/desktopLayout';
 
 export const SIDEBAR_WIDTH = { min: 200, default: 240, max: 600, step: 40 } as const;
 
@@ -7,7 +7,7 @@ export function storedSidebarPx(setting: string | undefined): number {
 }
 
 export function widestSidebarPx(windowPx: number): number {
-  return Math.min(SIDEBAR_WIDTH.max, windowPx - ATTENTION_MIN_WIDTH);
+  return Math.min(SIDEBAR_WIDTH.max, windowPx - TILE_MIN_WIDTH);
 }
 
 export function clampSidebarPx(px: number, windowPx: number): number {
@@ -15,13 +15,13 @@ export function clampSidebarPx(px: number, windowPx: number): number {
 }
 
 export function renderedSidebarWidth(px: number): string {
-  return `min(${px}px, calc(100vw - ${ATTENTION_MIN_WIDTH}px))`;
+  return `min(${px}px, calc(100vw - ${TILE_MIN_WIDTH}px))`;
 }
 
 export function sidebarWidthLabel(px: number, windowPx: number): string {
   if (px <= SIDEBAR_WIDTH.min) return `${px}px is the narrowest`;
   if (px < widestSidebarPx(windowPx)) return `${px}px`;
-  return px === SIDEBAR_WIDTH.max ? `${px}px is the widest` : `${px}px is the widest: tiles keep ${ATTENTION_MIN_WIDTH}px`;
+  return px === SIDEBAR_WIDTH.max ? `${px}px is the widest` : `${px}px is the widest: tiles keep ${TILE_MIN_WIDTH}px`;
 }
 
 export type SidebarStep = { kind: 'step'; px: number } | { kind: 'limit'; message: string };
@@ -38,6 +38,6 @@ export function stepSidebarWidth(current: number, direction: 'wider' | 'narrower
     kind: 'limit',
     message: widestPx === SIDEBAR_WIDTH.max
       ? `The sidebar can't pass ${widestPx}px.`
-      : `The sidebar can't pass ${widestPx}px with the window at ${windowPx}px: tiles keep ${ATTENTION_MIN_WIDTH}px.`,
+      : `The sidebar can't pass ${widestPx}px with the window at ${windowPx}px: tiles keep ${TILE_MIN_WIDTH}px.`,
   };
 }

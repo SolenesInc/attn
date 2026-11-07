@@ -10,7 +10,7 @@ const baseProps = {
   selectedDesktopId: null,
   collapsed: false,
   surface: 'tree-open' as const,
-  headerActions: [],
+  titleBarActions: [],
   onSelectSession: vi.fn(),
   onSelectDesktop: vi.fn(),
   onNewSession: vi.fn(),

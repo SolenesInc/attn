@@ -12,7 +12,6 @@ interface ProfileSwitcherProps {
   onRename: (profileId: string, name: string) => Promise<void>;
   onDelete: (profileId: string) => Promise<void>;
   onClose: () => void;
-  underTitleBarSelector?: boolean;
 }
 
 type Mode =
@@ -35,7 +34,7 @@ function stepThrough<T extends { id: string }>(items: T[], currentId: string | n
   return items[(index + step) % items.length].id;
 }
 
-export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreate, onRename, onDelete, onClose, underTitleBarSelector = false }: ProfileSwitcherProps) {
+export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreate, onRename, onDelete, onClose }: ProfileSwitcherProps) {
   const ordered = useMemo(() => [...profiles].sort(byMostRecentUse), [profiles]);
   const [focusedId, setFocusedId] = useState(selectedProfileId);
   const focusedIndex = Math.max(0, ordered.findIndex((profile) => profile.id === focusedId));
@@ -126,7 +125,7 @@ export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onCreat
       <button type="button" className="profile-switcher-dismiss" aria-label="Close the profile list" onClick={onClose} />
       <div
         ref={menuRef}
-        className={`profile-switcher${underTitleBarSelector ? ' is-under-title-bar-selector' : ''}`}
+        className="profile-switcher"
         role="menu"
         aria-label="Switch profile"
         tabIndex={-1}

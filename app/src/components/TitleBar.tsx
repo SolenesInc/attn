@@ -2,7 +2,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { useLayoutEffect } from 'react';
 import { isMacLikePlatform } from '../shortcuts/platform';
-import { QueueBarInTitleBar } from './QueueBar';
+import { QueueBar } from './QueueBar';
 import { DesktopShelf, useDesktopHasShelf } from './SessionTerminalDesktop/DesktopShelf';
 import { useSidebarContext } from './SidebarContext';
 import {
@@ -10,33 +10,28 @@ import {
   FlowToggleButton,
   InstanceMarker,
   NewAgentButton,
+  PanelButton,
   ProfilePill,
-  SidebarPanelButton,
   SidebarToggleButton,
-} from './SidebarHeader';
+} from './TitleBarControls';
 import './TitleBar.css';
 
 export const TITLE_BAR_HEIGHT_PX = 32;
 const TRAFFIC_LIGHTS_PX = 78;
 const NO_LIGHTS_PX = 8;
 
-function useWindowTitleBar(overlay: boolean) {
+function useWindowTitleBar() {
   useLayoutEffect(() => {
     const root = document.documentElement.style;
     const showLightsSpace = (shown: boolean) =>
       root.setProperty('--title-bar-lights', `${shown ? TRAFFIC_LIGHTS_PX : NO_LIGHTS_PX}px`);
-    if (overlay) {
-      root.setProperty('--title-bar-height', `${TITLE_BAR_HEIGHT_PX}px`);
-      showLightsSpace(isMacLikePlatform());
-    } else {
-      root.removeProperty('--title-bar-height');
-      root.removeProperty('--title-bar-lights');
-    }
+    root.setProperty('--title-bar-height', `${TITLE_BAR_HEIGHT_PX}px`);
+    showLightsSpace(isMacLikePlatform());
     if (!isTauri()) return;
-    void invoke('set_title_bar_overlay', { overlay }).catch((error) => {
+    void invoke('set_title_bar_overlay').catch((error) => {
       console.warn('[TitleBar] Failed to change the window title bar:', error);
     });
-    if (!overlay || !isMacLikePlatform()) return;
+    if (!isMacLikePlatform()) return;
     let stopped = false;
     const appWindow = getCurrentWindow();
     const syncFullscreen = () => {
@@ -50,7 +45,7 @@ function useWindowTitleBar(overlay: boolean) {
       stopped = true;
       void unlisten.then((stop) => stop());
     };
-  }, [overlay]);
+  }, []);
 }
 
 function ShelfOfShownDesktop() {
@@ -60,15 +55,10 @@ function ShelfOfShownDesktop() {
 }
 
 export function TitleBar() {
-  const { oneToolbar } = useSidebarContext();
-  useWindowTitleBar(oneToolbar);
-  return oneToolbar ? <TitleBarBand /> : null;
-}
-
-function TitleBarBand() {
-  const { queue, collapsed, headerActions, windowCovered } = useSidebarContext();
-  const notifications = headerActions.filter((action) => action.id === 'notifications');
-  const others = headerActions.filter((action) => action.id !== 'notifications');
+  useWindowTitleBar();
+  const { queue, collapsed, titleBarActions, windowCovered } = useSidebarContext();
+  const notifications = titleBarActions.filter((action) => action.id === 'notifications');
+  const others = titleBarActions.filter((action) => action.id !== 'notifications');
   return (
     <div className={`title-bar${windowCovered ? ' title-bar--covered' : ''}`} data-testid="title-bar" data-tauri-drag-region="deep">
       <div className={`title-bar-left${collapsed ? '' : ' title-bar-left--beside-sidebar'}`} data-testid="title-bar-left">
@@ -76,15 +66,15 @@ function TitleBarBand() {
         <CommandsButton />
         <FlowToggleButton />
         <SidebarToggleButton />
-        {notifications.map((action) => <SidebarPanelButton key={action.id} action={action} />)}
+        {notifications.map((action) => <PanelButton key={action.id} action={action} />)}
       </div>
       {queue && collapsed ? (
-        <QueueBarInTitleBar shelf={<ShelfOfShownDesktop />} />
+        <QueueBar shelf={<ShelfOfShownDesktop />} />
       ) : (
         <div className="title-bar-middle"><ShelfOfShownDesktop /></div>
       )}
       <div className="title-bar-right" data-testid="title-bar-right">
-        {others.map((action) => <SidebarPanelButton key={action.id} action={action} />)}
+        {others.map((action) => <PanelButton key={action.id} action={action} />)}
         <InstanceMarker />
         <ProfilePill />
       </div>

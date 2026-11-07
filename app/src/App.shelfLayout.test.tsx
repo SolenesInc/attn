@@ -89,12 +89,10 @@ const mountedTerminals = () =>
   Array.from(document.querySelectorAll('[data-pane-id] [aria-label="Terminal input"]')).map((input) => input.closest<HTMLElement>('[data-pane-id]')!.dataset.paneId);
 
 describe('Shelf layout', () => {
-  it('shows the screen and the shelf instead of slivers, and unmounts off-screen terminals', async () => {
+  it('shows the screen and the shelf, and unmounts off-screen terminals', async () => {
     const daemon = await renderRow(NARROWEST_66);
 
     expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
-    expect(document.querySelector('[data-pane-suspended]')).toBeNull();
-    expect(document.querySelector('[data-suspension-animating]')).toBeNull();
     expect(mountedTerminals()).toEqual(onScreen('s1', 's2', 's3'));
     expect(chipKeys()).toEqual(['s4', 's5', 's6', 's7', 's8', 's9', 's10', 's11']);
     expect(screen.getByTestId('shelf-live-dots').querySelectorAll('.desktop-shelf-dot')).toHaveLength(3);

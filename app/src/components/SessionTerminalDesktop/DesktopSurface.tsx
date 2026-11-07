@@ -30,7 +30,6 @@ export function DesktopSurface() {
     splitDividers,
     handleRenderedDividerPointerDown,
     handleColumnDividerDoubleClick,
-    shelfOn,
     shelfWidthLabel,
   } = useDesktopContext();
   if (!renderedLayoutTree) {
@@ -50,7 +49,7 @@ export function DesktopSurface() {
 
   return (
     <div
-      className={`session-terminal-desktop desktop-selection--${desktopSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''} ${shelfOn ? 'shelf-layout' : ''}`
+      className={`session-terminal-desktop desktop-selection--${desktopSelectionStyle} ${effectivePaneId ? 'focus-mode' : ''} ${effectivePaneId && agentPaneById.has(effectivePaneId) ? 'agent-focus-mode' : ''} ${effectiveZoomedPaneId && !effectivePaneId ? 'zoom-mode' : ''} ${renderedPaneIds.length > 1 ? 'multi-leaf' : ''}`
         .trim()
         .replace(/\s+/g, ' ')}
       data-session-terminal-desktop={desktopId}
@@ -63,7 +62,7 @@ export function DesktopSurface() {
     >
       <DesktopFocusBar />
       {shelfWidthLabel && <ShelfWidthLabel desktopId={desktopId} clearedWidths={shelfWidthLabel.clearedWidths} tileCounts={shelfWidthLabel.tileCounts} />}
-      {shelfOn && <ShelfPeekPanel />}
+      <ShelfPeekPanel />
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}
         paneIds={renderedPaneIds}
@@ -71,7 +70,7 @@ export function DesktopSurface() {
         containerRef={panesContainerRef}
         dividers={splitDividers}
         onDividerPointerDown={handleRenderedDividerPointerDown}
-        onDividerDoubleClick={shelfOn ? handleColumnDividerDoubleClick : undefined}
+        onDividerDoubleClick={handleColumnDividerDoubleClick}
         overlay={
           <>
             <DesktopDragOverlays />

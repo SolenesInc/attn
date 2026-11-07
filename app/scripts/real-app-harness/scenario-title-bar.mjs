@@ -15,7 +15,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'TITLE-BAR',
   tier: 'tier1-local-shell',
   prefix: 'title-bar',
-  metadata: { agent: 'shell', focus: 'native clicks reach every control of the one toolbar, a chip opens its peek, a tile drops on the shelf, and tiles start below the band; with it off, the sidebar header is back' },
+  metadata: { agent: 'shell', focus: 'native clicks reach every control of the one toolbar, a chip opens its peek, a tile drops on the shelf, and tiles start below the band' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -63,7 +63,7 @@ const CONTROLS = [
     await driver.click(opened);
     await waitDom(opened, { absent: true });
   } },
-  { name: 'profile', button: `${RIGHT} .sidebar-profile-pill`, opened: '.profile-switcher', close: closeWithEscape },
+  { name: 'profile', button: `${RIGHT} .title-bar-profile-pill`, opened: '.profile-switcher', close: closeWithEscape },
 ];
 
 runner.registerCleanup('close_observer', () => observer.close());

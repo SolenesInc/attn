@@ -19,7 +19,7 @@ type Options = Pick<
   | 'leafDragPreview'
 >
   & { renderedPaneBounds: Map<string, NormalizedPaneBounds> }
-  & { row?: RowDragOptions };
+  & { row: RowDragOptions };
 
 interface RowDragOptions {
   desktopId: string;
@@ -68,7 +68,7 @@ export function useDesktopLeafDrag({
       container: HTMLElement,
       drop: (id: string, target: DockTarget) => void,
       wholeColumn: boolean,
-      rowDrops: RowDrops | undefined,
+      rowDrops: RowDrops,
     ) => {
       // The press only becomes a drag past startLeafDrag's activation threshold,
       // so every visual side effect is deferred to onActivate.
@@ -82,10 +82,8 @@ export function useDesktopLeafDrag({
         {
           onActivate: () => {
             releaseSelectionLock = lockTextSelection('grabbing');
-            if (rowDrops) {
-              closeShelfPeek();
-              useDesktopShelfStore.getState().setLeafDragging(true);
-            }
+            closeShelfPeek();
+            useDesktopShelfStore.getState().setLeafDragging(true);
             onLeafDragStart?.(leafId, wholeColumn);
             setDraggingLeafId(leafId);
           },
@@ -101,11 +99,9 @@ export function useDesktopLeafDrag({
           onCleanup: () => {
             releaseSelectionLock?.();
             releaseSelectionLock = null;
-            if (rowDrops) {
-              const shelf = useDesktopShelfStore.getState();
-              shelf.setLeafDragging(false);
-              shelf.setShelfDrop(null);
-            }
+            const shelf = useDesktopShelfStore.getState();
+            shelf.setLeafDragging(false);
+            shelf.setShelfDrop(null);
             setDraggingLeafId(null);
             setDockTarget(null);
             setGhostPos(null);
@@ -146,7 +142,7 @@ export function useDesktopLeafDrag({
         container,
         (id, target) => onMoveLeaf?.(id, target.anchorId, target.edge, target.ratio),
         false,
-        row && shelfDrops(row, null, () => false, row.onTileToShelf),
+        shelfDrops(row, null, () => false, row.onTileToShelf),
       );
     },
     [onMoveLeaf, row, startDrag],
@@ -154,8 +150,8 @@ export function useDesktopLeafDrag({
 
   const beginChipDrag = useCallback(
     (source: ChipDragSource, event: React.PointerEvent) => {
-      const container = row?.panesContainer();
-      if (event.button !== 0 || !row || !container) {
+      const container = row.panesContainer();
+      if (event.button !== 0 || !container) {
         return;
       }
       startDrag(source.leafId, event, container, row.onChipToTile, true, {
@@ -170,7 +166,7 @@ export function useDesktopLeafDrag({
   const effectiveDockTarget = leafDragPreview?.dockTarget ?? dockTarget;
   const effectiveGhostPos = leafDragPreview?.ghostPos ?? ghostPos;
 
-  useEscapeStack(() => tileDragCleanupRef.current?.(), Boolean(row && draggingLeafId));
+  useEscapeStack(() => tileDragCleanupRef.current?.(), draggingLeafId !== null);
   useEffect(() => () => tileDragCleanupRef.current?.(), []);
   return { beginLeafDrag, beginChipDrag, effectiveDraggingLeafId, effectiveDockTarget, effectiveGhostPos };
 }

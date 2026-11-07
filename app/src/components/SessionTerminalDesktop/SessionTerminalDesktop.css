@@ -6,7 +6,7 @@
   background: var(--color-bg-editor);
 }
 
-.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent'])),
 .session-terminal-desktop.zoom-mode .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
   opacity: 0.72;
 }
@@ -103,9 +103,6 @@
   min-height: 0;
   min-width: 0;
   position: relative;
-}
-
-.session-terminal-desktop.shelf-layout .session-terminal-panes {
   overflow: clip;
 }
 
@@ -134,7 +131,7 @@
   transition: opacity 120ms ease;
 }
 
-.desktop-pane:where(:not([data-pane-kind='agent']), .desktop-pane--suspended),
+.desktop-pane:where(:not([data-pane-kind='agent'])),
 .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
   opacity: 0.58;
 }
@@ -149,71 +146,6 @@
 
 .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) .desktop-pane-subline {
   opacity: 0.7;
-}
-
-.desktop-pane--suspended {
-  z-index: 3;
-  opacity: 1;
-  background: var(--color-bg-elevated, var(--color-bg-editor));
-}
-
-.desktop-suspended-leaf {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--color-border) 72%, transparent);
-  background: transparent;
-  color: var(--color-text-secondary);
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.desktop-suspended-leaf:hover,
-.desktop-suspended-leaf:focus-visible {
-  border-color: var(--color-border-focus);
-  color: var(--color-text-primary);
-  outline: none;
-}
-
-.desktop-pane--suspended-column .desktop-suspended-leaf {
-  flex-direction: column;
-  padding: 8px 5px;
-}
-
-.desktop-pane--suspended-column .desktop-suspended-label {
-  writing-mode: vertical-rl;
-}
-
-.desktop-suspended-label {
-  min-width: 0;
-  overflow: hidden;
-  color: inherit;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.desktop-suspended-state {
-  width: 8px;
-  height: 8px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--color-text-muted);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-text-muted) 14%, transparent);
-}
-
-.desktop-suspended-state--markdown,
-.desktop-suspended-state--seed {
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 /* The selected-leaf treatment applies only when there is another visible leaf
@@ -314,19 +246,9 @@
   }
 }
 
-.session-terminal-panes[data-suspension-animating] > .desktop-pane {
-  transition:
-    left 160ms ease,
-    top 160ms ease,
-    width 160ms ease,
-    height 160ms ease,
-    opacity 120ms ease;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .desktop-pane,
-  .desktop-pane-body,
-  .session-terminal-panes[data-suspension-animating] > .desktop-pane {
+  .desktop-pane-body {
     transition: none;
   }
 }
@@ -996,8 +918,4 @@
 @keyframes terminal-input-refused {
   from { opacity: 1; }
   to { opacity: 0; }
-}
-
-.desktop-pane--suspended[data-offline='true'] .desktop-suspended-leaf {
-  background: color-mix(in srgb, var(--color-error) 7%, transparent);
 }

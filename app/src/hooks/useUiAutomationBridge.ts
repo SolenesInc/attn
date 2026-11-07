@@ -802,13 +802,6 @@ function clickPaneElement(sessionId: string, paneId: string) {
   if (!(element instanceof HTMLElement)) {
     throw new Error(`Pane element not found for ${sessionId}:${paneId}`);
   }
-  // A folded pane is only its expand button; that button stops mousedown.
-  const expand = element.querySelector('.desktop-suspended-leaf');
-  if (element.dataset.paneSuspended === 'true' && expand instanceof HTMLElement) {
-    expand.click();
-    return;
-  }
-
   element.dispatchEvent(new MouseEvent('mousedown', {
     bubbles: true,
     cancelable: true,
@@ -2417,7 +2410,6 @@ export function useUiAutomationBridge({
             return { name: 'animationName' in animation ? animation.animationName : '', target: target?.getAttribute('class') ?? target?.tagName ?? '', playState: animation.playState };
           }),
           heldPanes: panes.filter((pane) => !pane.dataset.paneId).length,
-          suspendedLeafIds: panes.filter((pane) => pane.hasAttribute('data-pane-suspended')).map((pane) => pane.dataset.paneId),
           willChange: panes.filter((pane) => getComputedStyle(pane).willChange !== 'auto').length,
           layoutTransitions: panes.filter((pane) => getComputedStyle(pane).transitionProperty.split(',').some((part) => !['opacity', 'none'].includes(part.trim()))).length,
           reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,

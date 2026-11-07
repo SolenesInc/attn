@@ -25,7 +25,7 @@ export function useSidebarState({
   collapsed,
   surface,
   instance = '',
-  headerActions,
+  titleBarActions,
   criticalNotifications,
   onOpenNotifications,
   dockItems = EMPTY_DOCK_ITEMS,
@@ -46,7 +46,6 @@ export function useSidebarState({
   onWalkRuns,
   onJumpToWaiting,
   asks = NO_ASKS,
-  onOpenAsk,
   profileName,
   onSwitchProfile,
   onOpenCommands,
@@ -86,7 +85,6 @@ export function useSidebarState({
   onGoToDashboard,
   homeActive = false,
   onToggleCollapse,
-  oneToolbar = false,
   windowCovered = false,
 }: SidebarProps) {
   const flowButtonRef = useRef<HTMLButtonElement>(null);
@@ -259,7 +257,6 @@ export function useSidebarState({
 
   return {
     desktops,
-    oneToolbar,
     windowCovered,
     selectedId,
     selectedDesktopId,
@@ -267,7 +264,7 @@ export function useSidebarState({
     tileContents,
     collapsed,
     instance,
-    headerActions,
+    titleBarActions,
     criticalNotifications,
     onOpenNotifications,
     dockItems,
@@ -288,7 +285,6 @@ export function useSidebarState({
     onWalkRuns,
     onJumpToWaiting,
     asks,
-    onOpenAsk,
     profileName,
     onSwitchProfile,
     onOpenCommands,

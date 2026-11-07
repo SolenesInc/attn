@@ -1,16 +1,10 @@
-import { SuspendedDesktopPane } from './SuspendedDesktopPane';
 import type { CSSProperties } from 'react';
 import type { NormalizedPaneBounds, TileLeaf } from '../../types/desktop';
 import { tileContentKey } from '../../types/desktop';
 import { useDesktopContext } from './DesktopContext';
 import { DesktopDockTile } from './DesktopDockTile';
-import { leafShowsAsStrip } from './attentionLayout';
 
 const noRequestContent = () => {};
-
-function suspendedTileTitle(tileLeaf: TileLeaf): string {
-  return (tileLeaf.tileParams ?? '').split('/').filter(Boolean).pop() || tileLeaf.tileKind || 'Tile';
-}
 
 export function DesktopTilePane({
   tileLeaf,
@@ -41,8 +35,6 @@ export function DesktopTilePane({
     renamePane,
     tileSessionOptions,
     activeLeafId,
-    effectivePaneId,
-    suspendedLeafIds,
     tileBodyRefFor,
     focusDocument,
     focusLeaf,
@@ -51,23 +43,6 @@ export function DesktopTilePane({
     paneGeometry,
   } = useDesktopContext();
 
-  if (leafShowsAsStrip(tileLeaf.tileId, suspendedLeafIds, effectivePaneId)) {
-    return (
-      <SuspendedDesktopPane
-        leafId={tileLeaf.tileId}
-        title={suspendedTileTitle(tileLeaf)}
-        kind="tile"
-        tileKind={tileLeaf.tileKind}
-        bounds={bounds}
-        path={path}
-        frameStyle={frameStyle}
-      >
-        <span
-          className={`desktop-suspended-state desktop-suspended-state--${tileLeaf.tileKind}`}
-        />
-      </SuspendedDesktopPane>
-    );
-  }
   return (
     <div
       key={`tile:${tileLeaf.tileId}`}

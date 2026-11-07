@@ -6,33 +6,16 @@ import { SessionActionsPopover } from './SessionActionsPopover';
 import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
-import { ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
+import { HomeIcon } from './SidebarIcons';
 import { desktopShortcut, hasNoLeaves } from './sidebarModel';
 import { DesktopChip } from './SidebarDesktops';
 import { CrewRowView } from './QueueRows';
 import { ChiefSlot } from './ChiefSlot';
-import { CommandsButton, FlowToggleButton, SidebarPanelButtons } from './SidebarHeader';
-export { SidebarHeader } from './SidebarHeader';
 
 export function SidebarCollapsed() {
-  const {
-    instance,
-    onNewSession,
-    onGoToDashboard,
-    homeActive,
-    onToggleCollapse,
-    oneToolbar,
-  } = useSidebarContext();
+  const { onGoToDashboard, homeActive } = useSidebarContext();
   return (
     <div className="sidebar collapsed" data-callout-anchor="sidebar">
-      {instance && !oneToolbar && (
-        <div
-          className="sidebar-instance-marker sidebar-instance-marker--collapsed"
-          title={`Instance: ${instance}`}
-        >
-          {instance}
-        </div>
-      )}
       <div className="icon-rail">
         <button
           className={`icon-btn ${homeActive ? 'active' : ''}`}
@@ -44,30 +27,8 @@ export function SidebarCollapsed() {
         >
           <HomeIcon />
         </button>
-        {!oneToolbar && (
-          <>
-            <CommandsButton collapsed />
-            <FlowToggleButton />
-            <div className="icon-divider" />
-            <SidebarPanelButtons collapsed />
-          </>
-        )}
         <div className="icon-divider" />
         <RailDesktops />
-        {!oneToolbar && (
-          <>
-            <button
-              className="icon-btn"
-              onClick={onNewSession}
-              title={`New Session (${formatShortcut('session.new')})`}
-            >
-              <PlusIcon />
-            </button>
-            <button className="icon-btn expand-btn" onClick={onToggleCollapse} title="Expand sidebar">
-              <ExpandIcon />
-            </button>
-          </>
-        )}
       </div>
     </div>
   );

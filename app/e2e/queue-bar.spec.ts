@@ -21,14 +21,12 @@ test('fits the session names from the queue popup and stays within a narrow view
   }
 });
 
-test('keeps every bar control on screen at 800px with long profile, waiting and automation names', async ({ page }) => {
-  await page.setViewportSize({ width: 800, height: 600 });
+test('keeps every bar control on screen with long profile, waiting and automation names', async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 600 });
   await page.goto('/test-harness/?component=QueueBar');
   await page.evaluate(() => window.__HARNESS_READY__);
 
   const controls = [
-    'queue-bar-show-sidebar',
-    'queue-profile-pill',
     'queue-bar-pill',
     'queue-bar-runs',
     'queue-bar-desktops',
@@ -36,10 +34,15 @@ test('keeps every bar control on screen at 800px with long profile, waiting and 
   for (const testId of controls) {
     const box = (await page.getByTestId(testId).boundingBox())!;
     expect(box.x, testId).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width, testId).toBeLessThanOrEqual(800);
+    expect(box.x + box.width, testId).toBeLessThanOrEqual(1100);
+  }
+  for (const control of [page.getByRole('button', { name: 'Show sidebar' }), page.locator('.title-bar-profile-pill')]) {
+    const box = (await control.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(1100);
   }
   const truncated = await page.evaluate(() =>
-    ['.queue-bar-profile strong', '.queue-bar-crumb', '.critical-strip-text'].map((selector) => {
+    ['.title-bar-profile-pill strong', '.queue-bar-crumb', '.critical-strip-text'].map((selector) => {
       const element = document.querySelector(selector)!;
       return element.scrollWidth > element.clientWidth;
     }),
@@ -49,28 +52,10 @@ test('keeps every bar control on screen at 800px with long profile, waiting and 
   await page.getByTestId('queue-bar-runs').hover();
   const panel = (await page.locator('[data-testid=queue-bar-runs-peek] .queue-bar-peek-panel').boundingBox())!;
   expect(panel.x).toBeGreaterThanOrEqual(0);
-  expect(panel.x + panel.width).toBeLessThanOrEqual(800);
+  expect(panel.x + panel.width).toBeLessThanOrEqual(1100);
   const name = page.locator('.queue-bar-peek-group-name').first();
   expect(await name.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await expect(page.locator('.queue-bar-peek-group-count').first()).toBeInViewport();
-});
-
-test('keeps both peeks on screen when a long profile pushes the waiting pill right on a single desktop', async ({ page }) => {
-  await page.setViewportSize({ width: 800, height: 600 });
-  await page.goto('/test-harness/?component=QueueBar&oneDesktop');
-  await page.evaluate(() => window.__HARNESS_READY__);
-
-  const anchor = (await page.getByTestId('queue-bar-waiting').boundingBox())!;
-  expect(anchor.x + 420).toBeGreaterThan(800);
-
-  for (const [chip, peek] of [['queue-bar-waiting', 'queue-bar-waiting-peek'], ['queue-bar-runs', 'queue-bar-runs-peek']]) {
-    await page.getByTestId(chip).hover();
-    const panel = (await page.locator(`[data-testid=${peek}] .queue-bar-peek-panel`).boundingBox())!;
-    expect(panel.x, peek).toBeGreaterThanOrEqual(0);
-    expect(panel.x + panel.width, peek).toBeLessThanOrEqual(800);
-    await page.mouse.move(400, 500);
-    await expect(page.getByTestId(peek)).toBeHidden();
-  }
 });
 
 test('an open peek shifts back on screen when the window narrows under it', async ({ page }) => {
@@ -112,7 +97,7 @@ test('an open peek shifts back on screen when the UI scale grows under it', asyn
   }).toBeLessThanOrEqual(800);
 });
 
-test('a crowded bar in the title bar keeps its controls reachable and off the toolbar at the smallest window', async ({ page }) => {
+test('a crowded bar keeps its controls reachable and off the toolbar at the smallest window', async ({ page }) => {
   await page.setViewportSize({ width: 800, height: 600 });
   await page.goto('/test-harness/?component=QueueBar&popupNames&desktops=8&shelf=1,1,1');
   await page.evaluate(() => window.__HARNESS_READY__);

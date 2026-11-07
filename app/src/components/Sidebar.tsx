@@ -1,12 +1,11 @@
+import './Sidebar.css';
 import { useRef, type ReactNode } from 'react';
 import { useRevealSelection } from './useRevealSelection';
 import { treeSelectionKey } from './sidebarModel';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
-import { QueueBar } from './QueueBar';
 import { QueueSidebar } from './QueueSidebar';
-import './Sidebar.css';
-import { SidebarCollapsed, SidebarCrew, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarCollapsed, SidebarCrew, SidebarFooter, SidebarPopovers } from './SidebarChrome';
 import { SidebarContext, useSidebarContext } from './SidebarContext';
 import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
@@ -15,7 +14,7 @@ import {
   SidebarDesktopOverview,
 } from './SidebarDesktops';
 import { useSidebarState } from './useSidebarState';
-export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
+export type { DockItem, TitleBarAction } from './sidebarTypes';
 
 export function SidebarProvider({ children, ...props }: SidebarProps & { children: ReactNode }) {
   const state = useSidebarState(props);
@@ -23,8 +22,8 @@ export function SidebarProvider({ children, ...props }: SidebarProps & { childre
 }
 
 export function Sidebar() {
-  const { queue, collapsed, oneToolbar } = useSidebarContext();
-  if (queue && collapsed) return oneToolbar ? null : <QueueBar />;
+  const { queue, collapsed } = useSidebarContext();
+  if (queue && collapsed) return null;
   if (queue) return <QueueSidebar />;
   return collapsed ? <SidebarCollapsed /> : <SidebarExpanded />;
 }
@@ -52,7 +51,6 @@ function SidebarExpanded() {
       data-callout-anchor="sidebar"
       className={`sidebar ${harnessLogosEnabled ? '' : 'sidebar--hide-harness-logos'}`.trim()}
     >
-      <SidebarHeader />
       {/* Above Home, because it outranks it: this only exists when something is owed. */}
       {onOpenNotifications && (
         <CriticalNotificationStrip

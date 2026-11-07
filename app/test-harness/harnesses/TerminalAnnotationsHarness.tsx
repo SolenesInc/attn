@@ -111,7 +111,7 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
       };
       return <div key={id} data-testid={`desktop-${id}`}
         style={{ position: 'absolute', inset: 0, visibility: active === id ? 'visible' : 'hidden' }}>
-        <SessionTerminalDesktop desktopId={id} terminalState={desktop} activePaneId={id}
+        <SessionTerminalDesktop shelfNarrowestCols={66} desktopId={id} terminalState={desktop} activePaneId={id}
           desktopSessions={[{ id, label: `${id} ${revision}`, agent: 'claude', cwd: '/tmp/annotations', state: 'idle' }]}
           fontSize={14} enabled isActiveSession={active === id} isSessionViewVisible={active === id}
           eventRouter={router} annotationApi={api} focusRequestToken={revision}

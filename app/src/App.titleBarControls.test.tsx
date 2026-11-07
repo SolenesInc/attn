@@ -5,7 +5,7 @@ import { gesture, pressShortcut, renderApp, restartApp } from './test/renderApp'
 import { serveSettings } from './test/settings';
 import { openActionMenu } from './test/appFixtures';
 
-describe('shared toolbar and sidebar top', () => {
+describe('the title bar controls and the sidebar crew', () => {
   it.each([false, true])('opens Commands in desktop/queue flow (%s)', async (queue) => {
     const { daemon } = await renderApp({ initialState: {
       settings: { queue_mode_enabled: String(queue) },

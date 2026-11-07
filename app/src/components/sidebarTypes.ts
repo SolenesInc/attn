@@ -53,7 +53,6 @@ export interface SelectedTile {
 export type SidebarSurface = 'queue-open' | 'queue-collapsed' | 'tree-open' | 'tree-collapsed' | 'hidden';
 
 export interface SidebarProps {
-  oneToolbar?: boolean;
   windowCovered?: boolean;
   desktops: SidebarDesktop[];
   visualIndexByDesktopId: Map<string, number>;
@@ -65,7 +64,7 @@ export interface SidebarProps {
   collapsed: boolean;
   surface: SidebarSurface;
   instance?: string;
-  headerActions: SidebarHeaderAction[];
+  titleBarActions: TitleBarAction[];
   criticalNotifications?: CriticalNotificationState;
   onOpenNotifications?: () => void;
   dockItems?: DockItem[];
@@ -86,7 +85,6 @@ export interface SidebarProps {
   onWalkRuns?: () => void;
   onJumpToWaiting?: () => void;
   asks?: readonly AskListItem<AskHolderSession>[];
-  onOpenAsk?: (askId?: string) => void;
   profileName?: string;
   onSwitchProfile?: () => void;
   onOpenCommands?: () => void;
@@ -136,7 +134,7 @@ export interface SidebarProps {
   onToggleCollapse: () => void;
 }
 
-export interface SidebarHeaderAction {
+export interface TitleBarAction {
   id: string;
   title: string;
   icon: ReactNode;

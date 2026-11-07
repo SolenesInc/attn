@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { useState, type ComponentProps, type ReactNode } from 'react';
 import { SessionTerminalDesktop } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
@@ -119,8 +119,7 @@ function DaemonEcho(props: ComponentProps<typeof SessionTerminalDesktop>) {
   );
 }
 
-describe('SessionTerminalDesktop attention ring', () => {
-
+describe('SessionTerminalDesktop row measure', () => {
   it('measures the surface once leaves arrive on a desktop that mounted empty', async () => {
     const props = {
       desktopId: 'desktop-attention',
@@ -129,6 +128,7 @@ describe('SessionTerminalDesktop attention ring', () => {
         { id: 'session-b', label: 'Beta', agent: 'shell' as const, cwd: '/tmp' },
       ],
       activePaneId: 'agent-a',
+      shelfNarrowestCols: 66,
       fontSize: 13,
       enabled: true,
       isActiveSession: true,
@@ -150,7 +150,10 @@ describe('SessionTerminalDesktop attention ring', () => {
 
     rerender(<DaemonEcho {...props} terminalState={crowdedDesktop()} />);
 
-    expect(await screen.findByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
+    await waitFor(() => {
+      const shown = Array.from(document.querySelectorAll<HTMLElement>('.desktop-pane')).map((pane) => pane.dataset.paneId);
+      expect(shown).toEqual(['agent-a', 'document']);
+    });
   });
 
 });

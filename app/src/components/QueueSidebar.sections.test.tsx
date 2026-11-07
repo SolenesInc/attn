@@ -25,7 +25,7 @@ const baseProps = {
   selectedDesktopId: null,
   collapsed: false,
   surface: 'queue-open' as const,
-  headerActions: [],
+  titleBarActions: [],
   onSelectSession: () => {},
   onSelectDesktop: () => {},
   onNewSession: () => {},

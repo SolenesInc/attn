@@ -19,17 +19,11 @@
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
   display: flex;
   flex-direction: column;
-  left: 12px;
   width: 260px;
   max-width: calc(100vw - 24px);
   outline: none;
   padding: 4px;
   position: absolute;
-  top: 44px;
-}
-
-.profile-switcher.is-under-title-bar-selector {
-  left: auto;
   right: 8px;
   top: calc(var(--title-bar-height) + 4px);
 }

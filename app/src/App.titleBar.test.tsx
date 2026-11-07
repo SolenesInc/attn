@@ -29,20 +29,18 @@ const OTHER_BUTTONS = [
 ];
 
 describe('the title bar', () => {
-  it('holds one toolbar in desktop flow and takes over the sidebar header', async () => {
+  it('holds one toolbar in desktop flow', async () => {
     const daemon = await renderChrome(SETTINGS);
     expect(groupLabels('title-bar-left')).toEqual([
       'New agent', 'Commands', 'Switch to queue flow', 'Collapse sidebar', 'Show Notifications',
     ]);
     expect(groupLabels('title-bar-right')).toEqual(OTHER_BUTTONS);
-    expect(document.querySelector('.sidebar-header')).toBeNull();
     expect(document.querySelector('.sidebar:not(.collapsed)')).not.toBeNull();
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));
     const rail = document.querySelector('.icon-rail') as HTMLElement;
     expect(within(rail).getByRole('button', { name: 'Home' })).toBeVisible();
     expect(within(rail).queryByRole('button', { name: 'Commands' })).toBeNull();
-    expect(rail.querySelector('[title^="New Session"], [title="Expand sidebar"]')).toBeNull();
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' })));
     expect(document.querySelector('.sidebar:not(.collapsed)')).not.toBeNull();
   });
@@ -125,7 +123,7 @@ describe('the title bar', () => {
     const daemon = await renderChrome(SETTINGS);
     const selector = within(screen.getByTestId('title-bar-right')).getByTitle(/^Switch profile/);
     await gesture(daemon, () => fireEvent.click(selector));
-    expect(screen.getByRole('menu', { name: 'Switch profile' })).toHaveClass('is-under-title-bar-selector');
+    expect(screen.getByRole('menu', { name: 'Switch profile' })).toBeVisible();
   });
 
   it('keeps every desktop chip when they fit', async () => {

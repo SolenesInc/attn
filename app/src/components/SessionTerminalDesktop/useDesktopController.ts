@@ -29,15 +29,7 @@ import { isSuspiciousTerminalSize } from '../../utils/terminalDebug';
 import { type GhosttyTerminalHandle } from '../GhosttyTerminal';
 import { type DesktopTileSessionOption } from './DesktopDockTile';
 import { annotationSurfaceOwnsFocus } from './annotationFocus';
-import {
-  applyDragSuspension,
-  dragRatioBounds,
-  leafShowsAsStrip,
-  releaseSuspendedLeaf,
-  resolveDesktopLayout,
-  type AttentionViewport,
-  type DesktopLayoutView,
-} from './attentionLayout';
+import type { DesktopLayoutView } from './desktopLayout';
 import { fitColumnOnEdgeDrop, type DockTarget } from './dockTarget';
 import type { ShelfDropTarget } from './leafDrag';
 import {
@@ -75,8 +67,6 @@ import { FONT_FAMILY, measureCellWidth } from '../../utils/terminalSizing';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 
 const COLUMN_DRAG_ACTIVATION_PX = 4;
-
-const EMPTY_SUSPENDED_LEAF_IDS: ReadonlySet<string> = new Set();
 
 const NOTHING_HELD: readonly string[] = [];
 
@@ -210,18 +200,12 @@ export function useDesktopController(
   const [pinnedSeedPopover, dismissSeedPopover] = useSessionPopoverRequest(seedPopoverRequest);
   const [pinnedUsagePopover, dismissUsagePopover] = useSessionPopoverRequest(usagePopoverRequest);
   const [provenancePopoverOwner, setProvenancePopoverOwner] = useState<string | null>(null);
-  const [attentionViewport, setAttentionViewport] = useState<AttentionViewport>({
-    width: 0,
-    height: 0,
-  });
-  const [attentionRevision, setAttentionRevision] = useState(0);
   const [rowAreaPx, setRowAreaPx] = useState(0);
-  const shelfOn = shelfNarrowestCols !== undefined;
-  const firstColumn = useDesktopShelfStore((state) => (shelfOn ? state.firstColumnByDesktop[desktopId] ?? null : null));
-  const heldLeafIds = useDesktopShelfStore((state) => (shelfOn ? state.heldByDesktop[desktopId] ?? NOTHING_HELD : NOTHING_HELD));
-  const pxPerCol = useMemo(() => (shelfOn ? measureCellWidth(fontSize, FONT_FAMILY) : 0), [fontSize, shelfOn]);
-  const attentionFocusOrderRef = useRef<string[]>([]);
-  const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
+  const [rowAreaHeightPx, setRowAreaHeightPx] = useState(0);
+  const firstColumn = useDesktopShelfStore((state) => state.firstColumnByDesktop[desktopId] ?? null);
+  const heldLeafIds = useDesktopShelfStore((state) => state.heldByDesktop[desktopId] ?? NOTHING_HELD);
+  const pxPerCol = useMemo(() => measureCellWidth(fontSize, FONT_FAMILY), [fontSize]);
+  const focusOrderRef = useRef<string[]>([]);
   const tileBodyRefs = useRef(new Map<string, HTMLDivElement>());
   const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
   const panesContainerRef = useRef<HTMLDivElement | null>(null);
@@ -230,7 +214,6 @@ export function useDesktopController(
   const activeAgentPaneIdRef = useRef('');
   const layoutTreeRef = useRef<TerminalLayoutNode | null>(null);
   const activeLeafIdRef = useRef('');
-  const pinnedLeafIdsRef = useRef<ReadonlySet<string>>(new Set());
   const isActiveSessionRef = useRef(isActiveSession);
   const sessionViewVisibleRef = useRef(isSessionViewVisible);
 
@@ -263,19 +246,18 @@ export function useDesktopController(
   const splitLayoutActive = terminalState.layoutTree?.type === 'split';
   const showPaneHeader = paneIds.length + tileLeafById.size > 1;
   const leafIdSet = useMemo(() => new Set(leafIds), [leafIds]);
-  const attentionActiveLeafId = activeLeafId;
-  const attentionFocusOrder = useMemo(() => {
-    if (!attentionActiveLeafId) {
+  const focusOrder = useMemo(() => {
+    if (!activeLeafId) {
       return [];
     }
     return [
-      attentionActiveLeafId,
-      ...attentionFocusOrderRef.current.filter((id) => id !== attentionActiveLeafId),
+      activeLeafId,
+      ...focusOrderRef.current.filter((id) => id !== activeLeafId),
     ].filter((id) => leafIdSet.has(id));
-  }, [attentionActiveLeafId, leafIdSet]);
+  }, [activeLeafId, leafIdSet]);
   useLayoutEffect(() => {
-    attentionFocusOrderRef.current = attentionFocusOrder;
-  }, [attentionFocusOrder]);
+    focusOrderRef.current = focusOrder;
+  }, [focusOrder]);
   const selectedDesktopSessionId =
     desktopSessions.find((session) => session.isActive)?.id ?? null;
   const [effectivePaneId, setMaximizedLeafId] = useFocusedLeaf(
@@ -293,10 +275,10 @@ export function useDesktopController(
 
   const hasLayout = terminalState.layoutTree != null;
   const rowInput = useMemo<Omit<RowLayoutInput, 'view'> | null>(() => {
-    if (shelfNarrowestCols === undefined || !terminalState.layoutTree) return null;
+    if (!terminalState.layoutTree) return null;
     return {
       tree: applyRatioOverrides(terminalState.layoutTree, pendingRatioOverrides),
-      activeLeafId: attentionActiveLeafId,
+      activeLeafId,
       firstColumn,
       heldLeafIds,
       areaPx: rowAreaPx,
@@ -304,54 +286,17 @@ export function useDesktopController(
       pxPerCol,
       pendingWantedCols,
     };
-  }, [attentionActiveLeafId, firstColumn, heldLeafIds, pendingRatioOverrides, pendingWantedCols, pxPerCol, rowAreaPx, shelfNarrowestCols, terminalState.layoutTree]);
-  const layoutPlan = useMemo(() => {
-    if (!terminalState.layoutTree) {
-      return null;
-    }
+  }, [activeLeafId, firstColumn, heldLeafIds, pendingRatioOverrides, pendingWantedCols, pxPerCol, rowAreaPx, shelfNarrowestCols, terminalState.layoutTree]);
+  const rowPlan = useMemo<RowLayoutPlan | null>(() => {
+    if (!rowInput) return null;
     const view: DesktopLayoutView = effectivePaneId
       ? { mode: 'focused', leafId: effectivePaneId }
       : effectiveZoomedPaneId
         ? { mode: 'zoomed', leafId: effectiveZoomedPaneId }
         : { mode: 'normal' };
-    if (rowInput) return resolveRowLayout({ ...rowInput, view });
-    return resolveDesktopLayout({
-      sourceTree: terminalState.layoutTree,
-      viewport: attentionViewport,
-      activeLeafId: attentionActiveLeafId,
-      focusOrder: attentionFocusOrder.slice(1),
-      previousSuspendedLeafIds: suspendedLeafIdsRef.current,
-      pinnedLeafIds: pinnedLeafIdsRef.current,
-      holdRestores: resizingSplit !== null,
-      pendingRatioOverrides,
-      view,
-    });
-  }, [
-    rowInput,
-    attentionActiveLeafId,
-    attentionFocusOrder,
-    attentionViewport,
-    effectivePaneId,
-    effectiveZoomedPaneId,
-    pendingRatioOverrides,
-    attentionRevision,
-    resizingSplit,
-    terminalState.layoutTree,
-  ]);
-  const suspendedLeafIds = layoutPlan?.suspendedLeafIds ?? suspendedLeafIdsRef.current;
-  useLayoutEffect(() => {
-    if (layoutPlan) {
-      suspendedLeafIdsRef.current = layoutPlan.suspendedLeafIds;
-      const prunedPins = [...pinnedLeafIdsRef.current].filter((id) =>
-        layoutPlan.suspendedLeafIds.has(id),
-      );
-      if (prunedPins.length !== pinnedLeafIdsRef.current.size) {
-        pinnedLeafIdsRef.current = new Set(prunedPins);
-      }
-    }
-  }, [layoutPlan]);
-  const renderedLayoutTree = layoutPlan?.renderedTree ?? null;
-  const rowPlan: RowLayoutPlan | null = layoutPlan && 'screen' in layoutPlan ? (layoutPlan as RowLayoutPlan) : null;
+    return resolveRowLayout({ ...rowInput, view });
+  }, [rowInput, effectivePaneId, effectiveZoomedPaneId]);
+  const renderedLayoutTree = rowPlan?.renderedTree ?? null;
   const rowPlanRef = useRef(rowPlan);
   const rowInputRef = useRef(rowInput);
   useLayoutEffect(() => {
@@ -373,9 +318,9 @@ export function useDesktopController(
     rowPlan,
     showShelf: !effectivePaneId && isActiveSession && isSessionViewVisible,
     narrowestCols: shelfNarrowestCols,
-    tileHeightPx: attentionViewport.height,
+    tileHeightPx: rowAreaHeightPx,
     activeLeafId,
-    focusOrder: attentionFocusOrder,
+    focusOrder,
     agentPaneById,
     sessionById,
     tileLeafById,
@@ -389,9 +334,7 @@ export function useDesktopController(
       return;
     }
     const update = (width: number, height: number) => {
-      setAttentionViewport((current) =>
-        current.width === width && current.height === height ? current : { width, height },
-      );
+      setRowAreaHeightPx(height);
       if (width > 0) setRowAreaPx(width);
     };
     const rect = container.getBoundingClientRect();
@@ -487,9 +430,9 @@ export function useDesktopController(
       rowKey: [...rowPlan.before, ...rowPlan.screen, ...rowPlan.after].map((column) => column.leafIds.join('+')).join('|'),
       firstColumnIndex: rowPlan.firstColumn.index,
       widthPx: rowAreaPx,
-      heightPx: attentionViewport.height,
+      heightPx: rowAreaHeightPx,
     }
-    : null), [attentionViewport.height, renderedPaneBounds, rowAreaPx, rowPlan]);
+    : null), [rowAreaHeightPx, renderedPaneBounds, rowAreaPx, rowPlan]);
   const { keepLeavingFrame } = useRowMotion({
     containerRef: panesContainerRef,
     layout: rowMotionLayout,
@@ -509,10 +452,7 @@ export function useDesktopController(
   }, [panePaths, renderedPaneBounds]);
   const renderedPaneIds = useMemo(() => Array.from(panePaths.keys()), [panePaths]);
   const renderedPaneIdsKey = renderedPaneIds.join('|');
-  const terminalPaneIds = useMemo(
-    () => new Set(renderedPaneIds.filter((paneId) => !leafShowsAsStrip(paneId, suspendedLeafIds, effectivePaneId))),
-    [effectivePaneId, renderedPaneIds, suspendedLeafIds],
-  );
+  const terminalPaneIds = useMemo(() => new Set(renderedPaneIds), [renderedPaneIds]);
   const desktopDrawn = isActiveSession && isSessionViewVisible;
   const runtimePanes = useMemo(() => {
     const panes = [];
@@ -574,7 +514,6 @@ export function useDesktopController(
   const getPaneSize = runtime.getPaneSize;
   const setPaneSurfaceReleased = runtime.setPaneSurfaceReleased;
   const paneOverflowsContainer = runtime.paneOverflowsContainer;
-  const suspendedLeafIdsKey = [...suspendedLeafIds].sort().join('|');
   const prevPaneGeometryRef = useRef(paneGeometry);
   const sessionVisibleRef = useRef(false);
   const sessionVisible = enabled && isActiveSession && isSessionViewVisible;
@@ -769,55 +708,9 @@ export function useDesktopController(
   // modal), and declared before the refit effect so a revealed pane measures with its buffer.
   useLayoutEffect(() => {
     for (const paneId of renderedPaneIds) {
-      setPaneSurfaceReleased(paneId, !isActiveSession || suspendedLeafIds.has(paneId));
+      setPaneSurfaceReleased(paneId, !isActiveSession);
     }
-  }, [
-    isActiveSession,
-    renderedPaneIds,
-    renderedPaneIdsKey,
-    setPaneSurfaceReleased,
-    suspendedLeafIds,
-    suspendedLeafIdsKey,
-  ]);
-
-  // A fold or restore eases pane frames over 160ms; panes measure their old
-  // size mid-transition, so the settle refit below is unconditional.
-  const suspensionAnimationTimeoutRef = useRef<number | null>(null);
-  const prevSuspendedKeyRef = useRef(suspendedLeafIdsKey);
-  useLayoutEffect(() => {
-    if (prevSuspendedKeyRef.current === suspendedLeafIdsKey) {
-      return;
-    }
-    prevSuspendedKeyRef.current = suspendedLeafIdsKey;
-    const container = panesContainerRef.current;
-    if (!container || !sessionVisible) {
-      return;
-    }
-    container.dataset.suspensionAnimating = '1';
-    if (suspensionAnimationTimeoutRef.current != null) {
-      window.clearTimeout(suspensionAnimationTimeoutRef.current);
-    }
-    const visiblePaneIds = renderedPaneIds.filter((paneId) => !suspendedLeafIds.has(paneId));
-    suspensionAnimationTimeoutRef.current = window.setTimeout(() => {
-      suspensionAnimationTimeoutRef.current = null;
-      delete container.dataset.suspensionAnimating;
-      refitPanesNowAndIfStillWrong(visiblePaneIds);
-    }, 200);
-  }, [
-    refitPanesNowAndIfStillWrong,
-    renderedPaneIds,
-    sessionVisible,
-    suspendedLeafIds,
-    suspendedLeafIdsKey,
-  ]);
-  useEffect(
-    () => () => {
-      if (suspensionAnimationTimeoutRef.current != null) {
-        window.clearTimeout(suspensionAnimationTimeoutRef.current);
-      }
-    },
-    [],
-  );
+  }, [isActiveSession, renderedPaneIds, renderedPaneIdsKey, setPaneSurfaceReleased]);
 
   useLayoutEffect(() => {
     if (!sessionVisible) {
@@ -899,13 +792,6 @@ export function useDesktopController(
 
   const focusLeaf = useCallback(
     (leafId: string) => {
-      suspendedLeafIdsRef.current = releaseSuspendedLeaf(suspendedLeafIdsRef.current, leafId);
-      if (pinnedLeafIdsRef.current.has(leafId)) {
-        pinnedLeafIdsRef.current = new Set(
-          [...pinnedLeafIdsRef.current].filter((id) => id !== leafId),
-        );
-      }
-      setAttentionRevision((current) => current + 1);
       onFocusPane(leafId);
       if (tileLeafById.has(leafId)) {
         focusTile(leafId);
@@ -936,12 +822,12 @@ export function useDesktopController(
   const handleMovePane = useCallback(
     (direction: TerminalNavigationDirection) => {
       const tree = layoutTreeRef.current;
-      if (shelfOn && tree && !effectivePaneId && (direction === 'left' || direction === 'right')) {
+      if (tree && !effectivePaneId && (direction === 'left' || direction === 'right')) {
         const row = shownRow(readRow(tree), heldLeafIds, activeLeafId);
         const index = columnIndexOf(row, activeLeafId);
         const inColumn = index >= 0 ? findLeafInDirection(row[index].node, activeLeafId, direction) : null;
         const neighbour = index >= 0 ? row[index + (direction === 'left' ? -1 : 1)] : undefined;
-        const target = inColumn ?? (neighbour ? lastUsedLeaf(neighbour, attentionFocusOrderRef.current) : null);
+        const target = inColumn ?? (neighbour ? lastUsedLeaf(neighbour, focusOrderRef.current) : null);
         if (target) focusLeaf(target);
         else onNavigateOutOfSession(direction);
         return;
@@ -953,7 +839,7 @@ export function useDesktopController(
       }
       onNavigateOutOfSession(direction);
     },
-    [activeLeafId, effectivePaneId, focusLeaf, heldLeafIds, onNavigateOutOfSession, renderedLayoutTree, shelfOn],
+    [activeLeafId, effectivePaneId, focusLeaf, heldLeafIds, onNavigateOutOfSession, renderedLayoutTree],
   );
 
   const carryActiveColumn = (delta: -1 | 1) => {
@@ -977,7 +863,7 @@ export function useDesktopController(
     if (!rowInput || !rowPlan || effectivePaneId || !activeLeafId) return;
     const shelf = useDesktopShelfStore.getState();
     const report = (error: unknown) => onShelfLimit?.(`Could not send that tile to the shelf: ${error instanceof Error ? error.message : String(error)}`);
-    const send = planSendToShelf(rowInput, rowPlan.screen, attentionFocusOrderRef.current);
+    const send = planSendToShelf(rowInput, rowPlan.screen, focusOrderRef.current);
     switch (send.kind) {
       case 'alone':
         onShelfLimit?.('This is the only tile on screen.');
@@ -1054,7 +940,7 @@ export function useDesktopController(
   useShortcut('terminal.focusRight', () => handleMovePane('right'), workspaceShortcutsActive);
   useShortcut('terminal.focusUp', () => handleMovePane('up'), workspaceShortcutsActive);
   useShortcut('terminal.focusDown', () => handleMovePane('down'), workspaceShortcutsActive);
-  const shelfMovesActive = desktopDrawn && shortcutsEnabled && shelfOn;
+  const shelfMovesActive = desktopDrawn && shortcutsEnabled;
   useShortcut('shelf.carryLeft', () => carryActiveColumn(-1), shelfMovesActive);
   useShortcut('shelf.carryRight', () => carryActiveColumn(1), shelfMovesActive);
   useShortcut('shelf.sendToShelf', sendActiveToShelf, shelfMovesActive);
@@ -1083,7 +969,7 @@ export function useDesktopController(
     const plan = rowPlanRef.current;
     if (!input || !plan) return;
     if (leafId === activeLeafIdRef.current) {
-      const send = planSendToShelf(input, plan.screen, attentionFocusOrderRef.current);
+      const send = planSendToShelf(input, plan.screen, focusOrderRef.current);
       if (send.kind === 'alone') return;
       focusLeaf(send.nextLeafId);
     }
@@ -1132,20 +1018,18 @@ export function useDesktopController(
   useLayoutEffect(() => {
     rowDropsRef.current = { moveTileToShelf, reorderChip, dropChipOnTile };
   });
-  const rowDragOptions = useMemo(() => (shelfOn
-    ? {
-        desktopId,
-        panesContainer: () => panesContainerRef.current,
-        showing: () => isActiveSessionRef.current,
-        onTileToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.moveTileToShelf(leafId, target),
-        onChipToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.reorderChip(leafId, target),
-        onChipToTile: (leafId: string, target: DockTarget) => rowDropsRef.current.dropChipOnTile(leafId, target),
-        fitChipOnEdge: (leafId: string, target: DockTarget, anchorBounds: NormalizedPaneBounds, containerHeightPx: number) => {
-          const tree = layoutTreeRef.current;
-          return tree ? fitColumnOnEdgeDrop(target, anchorBounds, containerHeightPx, columnStackNeedPx(tree, leafId)) : target;
-        },
-      }
-    : undefined), [desktopId, shelfOn]);
+  const rowDragOptions = useMemo(() => ({
+    desktopId,
+    panesContainer: () => panesContainerRef.current,
+    showing: () => isActiveSessionRef.current,
+    onTileToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.moveTileToShelf(leafId, target),
+    onChipToShelf: (leafId: string, target: ShelfDropTarget) => rowDropsRef.current.reorderChip(leafId, target),
+    onChipToTile: (leafId: string, target: DockTarget) => rowDropsRef.current.dropChipOnTile(leafId, target),
+    fitChipOnEdge: (leafId: string, target: DockTarget, anchorBounds: NormalizedPaneBounds, containerHeightPx: number) => {
+      const tree = layoutTreeRef.current;
+      return tree ? fitColumnOnEdgeDrop(target, anchorBounds, containerHeightPx, columnStackNeedPx(tree, leafId)) : target;
+    },
+  }), [desktopId]);
 
   const { beginLeafDrag, beginChipDrag, effectiveDraggingLeafId, effectiveDockTarget, effectiveGhostPos } =
     useDesktopLeafDrag({
@@ -1202,7 +1086,7 @@ export function useDesktopController(
     return 'Pane';
   }, [effectiveDraggingLeafId, agentPaneById, sessionById, tileLeafById]);
 
-  const splitDividers = layoutPlan?.dividers ?? [];
+  const splitDividers = rowPlan?.dividers ?? [];
 
   const ratioRafRef = useRef<number | null>(null);
   const pendingRatioRef = useRef<{ splitId: string; ratio: number } | null>(null);
@@ -1243,41 +1127,10 @@ export function useDesktopController(
       const spanNorm = direction === 'vertical' ? right - left : bottom - top;
       const axisPx = direction === 'vertical' ? rect.width : rect.height;
       const spanPx = spanNorm * axisPx;
-      const ratioBounds = shelfOn
-        ? rowDragRatioBounds(direction, spanPx)
-        : layoutTreeRef.current
-        ? dragRatioBounds(layoutTreeRef.current, splitId, activeLeafIdRef.current, spanPx)
-        : { min: 0.1, max: 0.9 };
-      const splitBoxPx = {
-        width: (right - left) * rect.width,
-        height: (bottom - top) * rect.height,
-      };
-      const suspensionSnapshot = {
-        suspended: suspendedLeafIdsRef.current,
-        pinned: pinnedLeafIdsRef.current,
-      };
-      const updateDragSuspension = (ratio: number) => {
-        if (shelfOn || !layoutTreeRef.current) {
-          return;
-        }
-        const result = applyDragSuspension({
-          sourceTree: layoutTreeRef.current,
-          splitId,
-          ratio,
-          splitBoxPx,
-          viewport: { width: rect.width, height: rect.height },
-          suspendedLeafIds: suspendedLeafIdsRef.current,
-          pinnedLeafIds: pinnedLeafIdsRef.current,
-          protectedLeafId: activeLeafIdRef.current,
-          focusOrder: attentionFocusOrderRef.current,
-        });
-        suspendedLeafIdsRef.current = result.suspendedLeafIds;
-        pinnedLeafIdsRef.current = result.pinnedLeafIds;
-      };
+      const ratioBounds = rowDragRatioBounds(direction, spanPx);
       draggingSplitRef.current = splitId;
       setResizingSplit({ splitId, direction });
 
-      const grabOffset = divider.grabRatio != null ? divider.grabRatio - divider.ratio : 0;
       const computeRatio = (clientX: number, clientY: number): number => {
         let ratio = 0.5;
         if (spanNorm > 0) {
@@ -1286,7 +1139,6 @@ export function useDesktopController(
           } else {
             ratio = ((clientY - rect.top) / rect.height - top) / spanNorm;
           }
-          ratio -= grabOffset;
         }
         return Math.min(ratioBounds.max, Math.max(ratioBounds.min, ratio));
       };
@@ -1296,7 +1148,6 @@ export function useDesktopController(
         ev.stopPropagation();
         suppressTerminalMouseDuringResize();
         const nextRatio = computeRatio(ev.clientX, ev.clientY);
-        updateDragSuspension(nextRatio);
         pendingRatioRef.current = { splitId, ratio: nextRatio };
         if (ratioRafRef.current == null) {
           ratioRafRef.current = window.requestAnimationFrame(flushRatioOverride);
@@ -1317,8 +1168,6 @@ export function useDesktopController(
       };
       const onCancel = () => {
         teardown();
-        suspendedLeafIdsRef.current = suspensionSnapshot.suspended;
-        pinnedLeafIdsRef.current = suspensionSnapshot.pinned;
         pendingRatioRef.current = null;
         draggingSplitRef.current = null;
         clearRatioOverride(splitId);
@@ -1329,7 +1178,6 @@ export function useDesktopController(
         ev.stopPropagation();
         const ratio = computeRatio(ev.clientX, ev.clientY);
         teardown();
-        updateDragSuspension(ratio);
         pendingRatioRef.current = { splitId, ratio };
         flushRatioOverride();
         draggingSplitRef.current = null;
@@ -1345,7 +1193,7 @@ export function useDesktopController(
       window.addEventListener('pointercancel', onCancel, true);
       window.addEventListener('blur', onCancel);
     },
-    [clearRatioOverride, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize, shelfOn],
+    [clearRatioOverride, flushRatioOverride, onResizeSplit, scheduleTerminalFitAfterResize],
   );
 
   const sendWantedCols = useCallback((wanted: ReadonlyMap<string, number>) => {
@@ -1363,7 +1211,7 @@ export function useDesktopController(
   const columnDragCancelRef = useRef<(() => void) | null>(null);
   useEscapeStack(
     () => columnDragCancelRef.current?.(),
-    resizingSplit !== null && resizingSplit.direction === 'vertical' && shelfOn,
+    resizingSplit !== null && resizingSplit.direction === 'vertical',
   );
 
   const handleColumnDividerPointerDown = useCallback(
@@ -1457,7 +1305,7 @@ export function useDesktopController(
   }, [sendWantedCols]);
 
   const shelfWidthLabel = useShelfControls({
-    active: desktopDrawn && shortcutsEnabled && shelfOn,
+    active: desktopDrawn && shortcutsEnabled,
     rowInput,
     narrowestCols: shelfNarrowestCols,
     onSetNarrowestCols,
@@ -1478,7 +1326,6 @@ export function useDesktopController(
     clearWantedColsRef.current = clearWantedCols;
   });
   useLayoutEffect(() => {
-    if (!shelfOn) return;
     const shelf = useDesktopShelfStore.getState();
     shelf.setRowActions(desktopId, {
       beginChipDrag: (column, event) => beginChipDragRef.current(column, event),
@@ -1488,7 +1335,7 @@ export function useDesktopController(
       },
     });
     return () => useDesktopShelfStore.getState().setRowActions(desktopId, null);
-  }, [desktopId, shelfOn]);
+  }, [desktopId]);
 
   useEffect(
     () => () => {
@@ -1555,7 +1402,6 @@ export function useDesktopController(
     tileContents,
     onRequestTileContent,
     paneGeometry,
-    shelfOn,
     shelfWidthLabel,
     keepLeavingFrame,
     staleBuildDismissed,
@@ -1566,7 +1412,6 @@ export function useDesktopController(
     dismissUsagePopover,
     provenancePopoverOwner,
     setProvenancePopoverOwner,
-    attentionViewport,
     sessionById,
     delegationSessionById,
     delegatesByDispatcherId,
@@ -1574,7 +1419,6 @@ export function useDesktopController(
     runtime,
     terminalRefForPane,
     showPaneHeader,
-    suspendedLeafIds,
     panePaths,
     renderedPaneBounds,
     tileBodyRefFor,

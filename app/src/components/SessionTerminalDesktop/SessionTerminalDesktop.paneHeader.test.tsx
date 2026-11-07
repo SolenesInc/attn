@@ -25,7 +25,7 @@ function loneAgentDesktop(): TerminalDesktopState {
 
 function renderLonePane(props: Partial<React.ComponentProps<typeof SessionTerminalDesktop>> = {}) {
   return render(
-    <SessionTerminalDesktop
+    <SessionTerminalDesktop shelfNarrowestCols={66}
       desktopId="desktop-1"
       desktopSessions={[{ id: 'sess-1', label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project' }]}
       terminalState={loneAgentDesktop()}

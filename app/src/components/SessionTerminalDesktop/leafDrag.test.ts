@@ -1,9 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { startLeafDrag } from './leafDrag';
+import { startLeafDrag, type RowDrops } from './leafDrag';
 
 type LeafDragHandlers = Parameters<typeof startLeafDrag>[5];
 import type { DockTarget } from './dockTarget';
 import type { NormalizedPaneBounds } from '../../types/desktop';
+
+const NO_SHELF: RowDrops = {
+  centreReplaces: () => false,
+  shelfTargetAt: () => null,
+  onShelfPreview: () => {},
+  onShelfDrop: () => {},
+};
 
 function bounds(left: number, top: number, right: number, bottom: number): NormalizedPaneBounds {
   return {
@@ -83,7 +90,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
 
     window.dispatchEvent(pointer('pointermove', 900, 500));
     const preview = h.previews[h.previews.length - 1];
@@ -104,7 +111,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointerup', 900, 500));
     const previewsAfterDrop = h.previews.length;
 
@@ -119,30 +126,13 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointermove', 100, 500));
     expect(h.previews[h.previews.length - 1]).toBeNull();
 
     window.dispatchEvent(pointer('pointerup', 100, 500));
     expect(h.drops).toHaveLength(0);
     expect(h.cleanups).toBe(1);
-  });
-
-  it('docks against the whole desktop when a side holds 2+ leaves', () => {
-    const paneBounds = new Map<string, NormalizedPaneBounds>([
-      ['A', bounds(0, 0, 0.5, 0.5)],
-      ['B', bounds(0, 0.5, 0.5, 1)],
-      ['C', bounds(0.5, 0, 1, 1)],
-    ]);
-    const h = spyHandlers();
-
-    startLeafDrag('C', 750, 500, container, paneBounds, h);
-    window.dispatchEvent(pointer('pointermove', 10, 500));
-    expect(h.previews[h.previews.length - 1]).toMatchObject({ anchorId: '', edge: 'left', ratio: 0.5 });
-
-    window.dispatchEvent(pointer('pointerup', 10, 500));
-    expect(h.drops).toHaveLength(1);
-    expect(h.drops[0].target).toMatchObject({ anchorId: '', edge: 'left' });
   });
 
   it('a plain click (press + release in place) never activates, previews, or drops', () => {
@@ -152,7 +142,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('B', 750, 2, container, paneBounds, h);
+    startLeafDrag('B', 750, 2, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointerup', 750, 2));
 
     expect(h.activations).toBe(0);
@@ -168,7 +158,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('B', 750, 2, container, paneBounds, h);
+    startLeafDrag('B', 750, 2, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointermove', 752, 3));
     window.dispatchEvent(pointer('pointerup', 751, 4));
 
@@ -185,7 +175,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointermove', 400, 500));
     window.dispatchEvent(pointer('pointermove', 900, 500));
     expect(h.activations).toBe(1);
@@ -201,7 +191,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointerup', 900, 500));
 
     expect(h.activations).toBe(0);
@@ -216,7 +206,7 @@ describe('startLeafDrag — synthesized pointer gesture', () => {
     ]);
     const h = spyHandlers();
 
-    startLeafDrag('A', 250, 500, container, paneBounds, h);
+    startLeafDrag('A', 250, 500, container, paneBounds, h, undefined, NO_SHELF);
     window.dispatchEvent(pointer('pointermove', 900, 500));
     window.dispatchEvent(new Event('pointercancel'));
 

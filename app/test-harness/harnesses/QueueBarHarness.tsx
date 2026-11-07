@@ -111,18 +111,17 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
   return (
     <div className="app" style={{ height: '100vh' }}>
         <SidebarProvider
-          oneToolbar={params.has('shelf')}
           collapsed
           surface="queue-collapsed"
           selectedId={null}
           selectedDesktopId={selectedDesktopId}
-          headerActions={[]}
+          titleBarActions={[]}
           desktops={desktops}
           visualIndexByDesktopId={new Map(desktopIds.slice(0, 9).map((id, index) => [id, index]))}
           queue={buildQueueBands(desktops)}
           crew={popupNames ? [{ id: 'alder', name: 'Alder' }, { id: 'keel', name: 'Keel' }, { id: 'trellis', name: 'Trellis' }] : []}
           instance="harness"
-          profileName={popupNames ? 'Default' : long('A-very-long-profile-name-typed-without-spaces').repeat(params.has('oneDesktop') ? 6 : 1)}
+          profileName={popupNames ? 'Default' : long('A-very-long-profile-name-typed-without-spaces')}
           criticalNotifications={{ count: 3, title: long('a-critical-notification-title') }}
           onOpenNotifications={noop}
           onSelectSession={noop}

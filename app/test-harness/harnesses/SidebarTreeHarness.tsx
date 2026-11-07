@@ -36,7 +36,7 @@ export function SidebarTreeHarness({ onReady, setTriggerRerender }: HarnessProps
         collapsed={collapsed} surface={collapsed ? "tree-collapsed" : "tree-open"} selectedId={selection.session}
         selectedDesktopId={selection.desktop} selectedTile={selection.tile} homeActive={selection.home}
         desktops={arrangement} visualIndexByDesktopId={new Map(arrangement.map((desktop, index) => [desktop.id, index]))}
-        headerActions={[]}
+        titleBarActions={[]}
         onDesktopReorder={noop}
         onSelectDesktop={(id) => {
           setPending(id === selection.desktop && !selection.home

@@ -12,7 +12,7 @@ test('fits waiting rows to the available sidebar height and counts only hidden a
   await expect(toggle).toContainText('3 more agents');
   await expect(counts).toHaveText('1 working2 snoozed');
 
-  await page.setViewportSize({ width: 1200, height: 500 });
+  await page.setViewportSize({ width: 1200, height: 450 });
   await expect(lead).toHaveCount(3);
   await expect(toggle).toContainText('5 more agents');
   await expect(toggle).toBeInViewport();
@@ -41,9 +41,9 @@ test('scrolls sleeping crew and desktops together in a short desktop window', as
   await page.setViewportSize({ width: 1200, height: 500 });
   await page.goto('/test-harness/?component=QueueSidebarFit&desktop&largeCrew');
   await page.evaluate(() => window.__HARNESS_READY__);
-  const commands = page.getByRole('button', { name: 'Commands', exact: true });
-  await expect(commands).toBeInViewport({ ratio: 1 });
-  const header = await commands.boundingBox();
+  const home = page.getByTestId('sidebar-home');
+  await expect(home).toBeInViewport({ ratio: 1 });
+  const pinned = await home.boundingBox();
   const lastCrew = page.getByTestId('queue-crew-wake-sleeping-snoozed-2');
   await lastCrew.scrollIntoViewIfNeeded();
   await expect(lastCrew).toBeInViewport({ ratio: 1 });
@@ -53,5 +53,5 @@ test('scrolls sleeping crew and desktops together in a short desktop window', as
   const session = page.getByTestId('sidebar-session-snoozed-2');
   await session.scrollIntoViewIfNeeded();
   await expect(session).toBeInViewport({ ratio: 1 });
-  expect(await commands.boundingBox()).toEqual(header);
+  expect(await home.boundingBox()).toEqual(pinned);
 });

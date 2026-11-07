@@ -9,7 +9,7 @@ import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { ChiefSlot } from './ChiefSlot';
 import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
-import { SidebarHeader, SidebarPopovers } from './SidebarChrome';
+import { SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { HomeIcon } from './SidebarIcons';
@@ -81,7 +81,6 @@ export function QueueSidebar() {
       data-callout-anchor="sidebar"
       onKeyDown={onKeyDown}
     >
-      <SidebarHeader />
       {onOpenNotifications && (
         <CriticalNotificationStrip
           count={criticalNotifications?.count ?? 0}

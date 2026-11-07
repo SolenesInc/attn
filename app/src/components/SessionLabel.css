@@ -23,7 +23,7 @@
   border-radius: 0 8px 8px 0;
   background-color: var(--color-bg-elevated);
   background-image:
-    /* Brand tint bleeding out of the rail, matching .sidebar-header's own. */
+    /* Brand tint bleeding out of the rail. */
     linear-gradient(90deg, rgba(255, 107, 53, 0.13), rgba(255, 107, 53, 0) 84px),
     linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0));
   box-shadow:
