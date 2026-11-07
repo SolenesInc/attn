@@ -156,11 +156,6 @@ func runAgentDirectly(requestedAgent string) {
 	}
 
 	hasHooks := false
-	if agentdriver.EffectiveCapabilities(driver).HasLaunchInstructions {
-		if guide, err := c.NotebookGuide(sessionID); err == nil && guide != nil && guide.SessionIsChief {
-			opts.NotebookRoot = guide.Root
-		}
-	}
 	if _, err := c.SeedReady(sessionID, "", false); err == nil {
 		opts.Garden = true
 	}

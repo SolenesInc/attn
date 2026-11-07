@@ -10,7 +10,6 @@ import (
 func TestDelegationDiscoveryIsOnDemand(t *testing.T) {
 	for _, values := range []Values{
 		{"garden_available": "true"},
-		{"garden_available": "true", "notebook_root": "/tmp/notebook"},
 		{"garden_available": "true", "crew_priming": "You are a crew member."},
 	} {
 		output := RenderText("session", "launch", values)

@@ -113,11 +113,7 @@ func (c *Codex) BuildEnv(opts SpawnOpts) []string {
 	if wrapper := strings.TrimSpace(opts.WrapperPath); wrapper != "" {
 		env = append(env, "ATTN_WRAPPER_PATH="+wrapper)
 	}
-	if strings.TrimSpace(opts.NotebookRoot) != "" {
-		env = append(env, "ATTN_CHIEF_GUIDANCE=developer_instructions")
-	} else {
-		env = append(env, "ATTN_AGENT_GUIDANCE=developer_instructions")
-	}
+	env = append(env, "ATTN_AGENT_GUIDANCE=developer_instructions")
 	if opts.SocketPath != "" {
 		env = append(env, "ATTN_SOCKET_PATH="+opts.SocketPath)
 	}

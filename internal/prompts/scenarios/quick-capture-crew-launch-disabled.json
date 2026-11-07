@@ -8,6 +8,6 @@
     "quick_capture_enabled": "false"
   },
   "inputs": {
-    "crew_priming": "crew-with-handoff"
+    "crew_priming": "crew-v2-with-handoff"
   }
 }

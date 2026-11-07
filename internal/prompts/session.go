@@ -11,7 +11,6 @@ import (
 var content embed.FS
 
 var (
-	notebookRoot           = Trimmed(TextField("notebook_root", "Notebook directory; a nonempty value selects chief guidance."))
 	selfReportPullRequests = FlagField("self_report_pull_requests", "Ask the agent to record PRs when the harness cannot report them.")
 	gardenAvailable        = FlagField("garden_available", "Include Garden guidance.")
 	asksEnabled            = FlagField("asks_enabled", "Include ask guidance when the session launched with asks.")
@@ -23,10 +22,7 @@ var (
 
 var (
 	delegationBoundary = Use("delegation.boundary", "content/delegation-boundary.md")
-	chiefGuidance      = Use("session.chief", "content/chief.md",
-		Bind("notebook_root", Input(notebookRoot)),
-		Bind("delegation_boundary", delegationBoundary))
-	agentGuidance = Use("session.agent", "content/agent.md",
+	agentGuidance      = Use("session.agent", "content/agent.md",
 		Bind("delegation_boundary", delegationBoundary))
 	quickCaptureGuidance = When(Enabled(quickCaptureEnabled), Use("session.quick-capture-guidance", "content/session/quick-capture.md"))
 	crewCleared          = Use("crew.cleared", "content/crew/cleared.md")
@@ -49,16 +45,14 @@ var session = Recipient{
 		On("launch", "launch_instructions",
 			"hooks.Launch.Instructions: Claude appends system instructions; Codex sets developer instructions; capable plugins receive launch instructions. Triggering and delivery remain with the existing adapters.",
 			Compose(
-				Choose(Present(notebookRoot),
-					Compose(chiefGuidance, quickCaptureGuidance),
-					agentGuidance),
+				agentGuidance,
 				attnMap,
 				When(Enabled(gardenAvailable), gardenGuidance),
 				queueGuidance,
 				When(Enabled(asksEnabled), askGuidance),
 				When(Enabled(ventEnabled), ventGuidance),
 				When(Enabled(selfReportPullRequests), pullRequestGuidance),
-				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), Choose(Present(notebookRoot), Compose(), quickCaptureGuidance))),
+				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), quickCaptureGuidance)),
 			)),
 		On("attn-map", "cli_output", "attn skill and attn --help: what attn offers and where to learn more.", attnMap),
 		On("seed-artifacts", "cli_output", "attn seed show, under a seed's artifacts.", Use("session.seed-artifacts", "content/session/seed-artifacts.md")),
@@ -85,7 +79,6 @@ func Load(files fs.FS) (*Catalog, error) { return New(files, Definitions()...) }
 func Files() fs.FS                       { return content }
 
 type Launch struct {
-	NotebookRoot           string
 	SelfReportPullRequests bool
 	Garden                 bool
 	Asks                   bool
@@ -97,7 +90,6 @@ type Launch struct {
 
 func (l Launch) Values() Values {
 	return Values{
-		notebookRoot.Name:           l.NotebookRoot,
 		selfReportPullRequests.Name: strconv.FormatBool(l.SelfReportPullRequests),
 		gardenAvailable.Name:        strconv.FormatBool(l.Garden),
 		asksEnabled.Name:            strconv.FormatBool(l.Asks),

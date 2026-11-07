@@ -144,7 +144,7 @@ func TestCatalogDoesNotRetainMutableDeclarations(t *testing.T) {
 }
 
 func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
-	values := Values{"quick_capture_enabled": "true", "notebook_root": " /tmp/book ", "self_report_pull_requests": "false", "garden_available": "true", "crew_priming": " Crew {{literal}}. "}
+	values := Values{"quick_capture_enabled": "true", "self_report_pull_requests": "false", "garden_available": "true", "crew_priming": " Crew {{literal}}. "}
 	result, err := Builtin().Render("session", "launch", values)
 	if err != nil {
 		t.Fatal(err)
@@ -164,13 +164,13 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 		}
 	}
 	visit(result.Trace)
-	if !reflect.DeepEqual(selected, []string{"session.chief", "delegation.boundary", "session.quick-capture-guidance", "session.attn-map", "session.garden", "session.queue", "crew.cleared"}) {
+	if !reflect.DeepEqual(selected, []string{"session.agent", "delegation.boundary", "session.attn-map", "session.garden", "session.queue", "crew.cleared", "session.quick-capture-guidance"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
-	if !reflect.DeepEqual(skipped, []string{"session.agent", "delegation.boundary", "ask.guidance", "session.vent-guidance", "session.vent-tools", "session.vent-attn-only", "session.vent-rules", "session.pull-request-guidance", "session.quick-capture-guidance"}) {
+	if !reflect.DeepEqual(skipped, []string{"ask.guidance", "session.vent-guidance", "session.vent-tools", "session.vent-attn-only", "session.vent-rules", "session.pull-request-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
-	if !strings.HasSuffix(result.Text, "read\nfresh.\n\nCrew {{literal}}.") {
+	if !strings.Contains(result.Text, "read\nfresh.\n\nCrew {{literal}}.\n\nThe user can send you messages from Quick Capture") {
 		t.Fatalf("crew input was altered: %q", result.Text)
 	}
 	if values["crew_priming"] != " Crew {{literal}}. " {
@@ -179,7 +179,7 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 }
 
 func BenchmarkLaunchInstructions(b *testing.B) {
-	launch := Launch{NotebookRoot: "/tmp/notebook", Garden: true, Crew: "Crew instructions."}
+	launch := Launch{Garden: true, Crew: "Crew instructions."}
 	b.ReportAllocs()
 	for b.Loop() {
 		_ = launch.Instructions()

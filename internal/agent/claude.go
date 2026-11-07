@@ -136,11 +136,7 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	if opts.CrewPriming != "" {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
 	}
-	if strings.TrimSpace(opts.NotebookRoot) != "" {
-		env = append(env, "ATTN_CHIEF_GUIDANCE=append_system_prompt")
-	} else {
-		env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
-	}
+	env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
 	if opts.AutoCompactWindow > 0 {
 		env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.AutoCompactWindow))
 	}

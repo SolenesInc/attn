@@ -175,8 +175,6 @@ type SpawnOpts struct {
 
 	HookSettings string
 
-	NotebookRoot string
-
 	ConfigOverrides []string
 
 	Garden bool
@@ -221,7 +219,6 @@ func (o SpawnOpts) addDirArgs() []string {
 
 func (o SpawnOpts) launchSpec() hooks.Launch {
 	return hooks.Launch{
-		NotebookRoot:           o.NotebookRoot,
 		Garden:                 o.Garden,
 		Asks:                   o.Asks,
 		Vent:                   o.Vent,

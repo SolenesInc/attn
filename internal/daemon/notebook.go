@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -205,8 +204,7 @@ func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideM
 	_ = json.NewEncoder(conn).Encode(protocol.Response{
 		Ok: true,
 		NotebookGuide: &protocol.NotebookGuideResult{
-			Guidance: hooks.ChiefGuidance(root),
-			Root:     root,
+			Root: root,
 		},
 	})
 }

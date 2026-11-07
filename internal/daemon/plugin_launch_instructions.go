@@ -9,10 +9,9 @@ import (
 const pluginInstructionKindAgent = "agent"
 
 type pluginLaunchInstructions struct {
-	Kind         string `json:"kind"`
-	Content      string `json:"content"`
-	ProfileID    string `json:"profile_id,omitempty"`
-	NotebookRoot string `json:"notebook_root,omitempty"`
+	Kind      string `json:"kind"`
+	Content   string `json:"content"`
+	ProfileID string `json:"profile_id,omitempty"`
 }
 
 func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, profileID string, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
@@ -21,7 +20,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID protocol.SessionID, p
 		return nil, err
 	}
 	return &pluginLaunchInstructions{
-		Kind: pluginInstructionKindAgent, Content: launch.Instructions(), ProfileID: profileID, NotebookRoot: launch.NotebookRoot,
+		Kind: pluginInstructionKindAgent, Content: launch.Instructions(), ProfileID: profileID,
 	}, nil
 }
 

@@ -13,81 +13,17 @@
             "kind": "compose",
             "children": [
               {
-                "kind": "choose",
-                "condition": {
-                  "field": {
-                    "name": "notebook_root",
-                    "kind": "text",
-                    "description": "Notebook directory; a nonempty value selects chief guidance.",
-                    "trim_space": true
-                  },
-                  "test": "present"
-                },
-                "children": [
+                "kind": "text",
+                "id": "session.agent",
+                "source": "content/agent.md",
+                "bindings": [
                   {
-                    "kind": "compose",
-                    "children": [
-                      {
-                        "kind": "text",
-                        "id": "session.chief",
-                        "source": "content/chief.md",
-                        "bindings": [
-                          {
-                            "name": "notebook_root",
-                            "node": {
-                              "kind": "input",
-                              "field": {
-                                "name": "notebook_root",
-                                "kind": "text",
-                                "description": "Notebook directory; a nonempty value selects chief guidance.",
-                                "trim_space": true
-                              }
-                            }
-                          },
-                          {
-                            "name": "delegation_boundary",
-                            "node": {
-                              "kind": "text",
-                              "id": "delegation.boundary",
-                              "source": "content/delegation-boundary.md"
-                            }
-                          }
-                        ]
-                      },
-                      {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "quick_capture_enabled",
-                            "kind": "flag",
-                            "description": "Include Quick Capture guidance when the experimental feature is enabled."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "session.quick-capture-guidance",
-                            "source": "content/session/quick-capture.md"
-                          }
-                        ]
-                      }
-                    ]
-                  },
-                  {
-                    "kind": "text",
-                    "id": "session.agent",
-                    "source": "content/agent.md",
-                    "bindings": [
-                      {
-                        "name": "delegation_boundary",
-                        "node": {
-                          "kind": "text",
-                          "id": "delegation.boundary",
-                          "source": "content/delegation-boundary.md"
-                        }
-                      }
-                    ]
+                    "name": "delegation_boundary",
+                    "node": {
+                      "kind": "text",
+                      "id": "delegation.boundary",
+                      "source": "content/delegation-boundary.md"
+                    }
                   }
                 ]
               },
@@ -238,37 +174,20 @@
                         }
                       },
                       {
-                        "kind": "choose",
+                        "kind": "when",
                         "condition": {
                           "field": {
-                            "name": "notebook_root",
-                            "kind": "text",
-                            "description": "Notebook directory; a nonempty value selects chief guidance.",
-                            "trim_space": true
+                            "name": "quick_capture_enabled",
+                            "kind": "flag",
+                            "description": "Include Quick Capture guidance when the experimental feature is enabled."
                           },
-                          "test": "present"
+                          "test": "enabled"
                         },
                         "children": [
                           {
-                            "kind": "compose"
-                          },
-                          {
-                            "kind": "when",
-                            "condition": {
-                              "field": {
-                                "name": "quick_capture_enabled",
-                                "kind": "flag",
-                                "description": "Include Quick Capture guidance when the experimental feature is enabled."
-                              },
-                              "test": "enabled"
-                            },
-                            "children": [
-                              {
-                                "kind": "text",
-                                "id": "session.quick-capture-guidance",
-                                "source": "content/session/quick-capture.md"
-                              }
-                            ]
+                            "kind": "text",
+                            "id": "session.quick-capture-guidance",
+                            "source": "content/session/quick-capture.md"
                           }
                         ]
                       }
@@ -5764,5 +5683,5 @@
       ]
     }
   ],
-  "definitions_hash": "dd48f1f375222b9e862ce18cbc7f369b739a5d9204beb34eb3a2d8fc37099062"
+  "definitions_hash": "d29da9a75faada0f991f9a7a5e7967271df459bc015455d633c410d750f85251"
 }

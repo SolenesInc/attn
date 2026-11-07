@@ -27,13 +27,6 @@ func GardenGuidance() string { return prompts.RenderText("session", "garden-guid
 
 type Launch = prompts.Launch
 
-func ChiefGuidance(root string) string {
-	if strings.TrimSpace(root) == "" {
-		return ""
-	}
-	return (Launch{NotebookRoot: root}).Instructions()
-}
-
 func Generate(sessionID, socketPath, wrapperPath string, env map[string]string) string {
 	wrapper := strings.TrimSpace(wrapperPath)
 	if wrapper == "" {

@@ -250,7 +250,6 @@ function selectEvent(key) {
     );
     if (key === "session/launch")
       Object.assign(values, {
-        notebook_root: "/workspace/notebook",
         garden_available: "true",
       });
     state.scenarios.set(key, values);
@@ -276,17 +275,8 @@ function renderInputs() {
   if (state.key === "session/launch") {
     for (const [name, sample] of [
       [
-        "Chief",
-        {
-          notebook_root: "/workspace/notebook",
-          self_report_pull_requests: "false",
-          garden_available: "true",
-        },
-      ],
-      [
         "Workspace",
         {
-          notebook_root: "",
           self_report_pull_requests: "false",
           garden_available: "true",
         },
@@ -294,7 +284,6 @@ function renderInputs() {
       [
         "Plain session",
         {
-          notebook_root: "",
           self_report_pull_requests: "false",
           garden_available: "false",
           crew_priming: "",

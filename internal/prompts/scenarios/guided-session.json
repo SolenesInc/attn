@@ -5,7 +5,6 @@
   "recipient": "session",
   "event": "launch",
   "values": {
-    "notebook_root": "",
     "garden_available": "true",
     "crew_priming": "",
     "self_report_pull_requests": "false"
