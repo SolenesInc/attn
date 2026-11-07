@@ -40,6 +40,18 @@ func (c *Conn) dispatch(channels <-chan ssh.NewChannel, handlers Handlers) {
 }
 
 func (c *Conn) Open(ctx context.Context, kind string, payload []byte) (ssh.Channel, <-chan *ssh.Request, error) {
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	defer context.AfterFunc(c.ctx, func() { cancel(fmt.Errorf("bridge to %s ended while opening %s", c.peer.DaemonID, kind)) })()
+	channel, requests, err := openChannel(ctx, c.transport, kind, payload)
+	var rejected *ssh.OpenChannelError
+	if errors.As(err, &rejected) {
+		return nil, nil, &CallRejected{Kind: kind, Reason: rejected.Message}
+	}
+	return channel, requests, err
+}
+
+func openChannel(ctx context.Context, transport ssh.Conn, kind string, payload []byte) (ssh.Channel, <-chan *ssh.Request, error) {
 	type opened struct {
 		channel  ssh.Channel
 		requests <-chan *ssh.Request
@@ -48,15 +60,11 @@ func (c *Conn) Open(ctx context.Context, kind string, payload []byte) (ssh.Chann
 	result := make(chan opened, 1)
 	go func() {
 		pausepoint.At(pausepoint.BridgeChannelOpening)
-		channel, requests, err := c.transport.OpenChannel(kind, payload)
+		channel, requests, err := transport.OpenChannel(kind, payload)
 		result <- opened{channel, requests, err}
 	}()
 	select {
 	case r := <-result:
-		var rejected *ssh.OpenChannelError
-		if errors.As(r.err, &rejected) {
-			return nil, nil, &CallRejected{Kind: kind, Reason: rejected.Message}
-		}
 		return r.channel, r.requests, r.err
 	case <-ctx.Done():
 		go func() {
@@ -65,7 +73,7 @@ func (c *Conn) Open(ctx context.Context, kind string, payload []byte) (ssh.Chann
 				ssh.DiscardRequests(r.requests)
 			}
 		}()
-		return nil, nil, ctx.Err()
+		return nil, nil, context.Cause(ctx)
 	}
 }
 

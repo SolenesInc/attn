@@ -106,7 +106,7 @@ func handshake(handshakeCtx context.Context, cfg DialConfig) (*authenticatedPeer
 			closeTransport()
 		}
 	}()
-	control, channelRequests, err := transport.OpenChannel(controlChannel, nil)
+	control, channelRequests, err := openChannel(handshakeCtx, transport, controlChannel, nil)
 	if err != nil {
 		return nil, seen, err
 	}
