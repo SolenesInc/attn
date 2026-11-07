@@ -28,6 +28,7 @@ edit.
 | Send a whole list when one item changed | 3.92 MB per garden push against 11 KB, and 95.7 ms from message to frame against 8.7 ms | `TestGardenPushSendsOnlyWhatChanged` |
 | Reread every session's or party's state on each garden read or change | Daemon CPU per garden change of 65 ms against 31 ms | This review |
 | Send one message per output chunk instead of one per frame | About 1,450 WebSocket messages a second per terminal, against about 50 | `batches_keep_every_byte_and_go_out_at_most_once_per_tick` in `pty-host/src/output_batch.rs` |
+| Leave a full-size canvas for the garbage collector to free on each tile move | About 11.9 MB of WebContent graphics memory per move that never came back: 3,178 MB after 600 moves against 479 MB | `app/src/components/SessionTerminalDesktop/useRowMotion.test.tsx` |
 | Stream output to a pane nothing draws | 50.4% of a core for hidden panes, against 7.4% | `app/src/App.drawnStreaming.test.tsx` |
 | Add a timer, poll or repaint that runs while nothing happens | CPU burned all day. `AGENTS.md` calls this a defect | This review |
 | Add a cache to cover a slow path | A second copy of state to keep correct, with the slow path still there | This review |

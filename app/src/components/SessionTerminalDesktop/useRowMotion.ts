@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { NormalizedPaneBounds } from '../../types/desktop';
+import { freeStillFrame } from '../../utils/stillFrame';
 
 const STIFFNESS = 630;
 const DAMPING = 39;
@@ -130,9 +131,18 @@ function detachFromTheLayout(element: HTMLElement): void {
   element.setAttribute('aria-hidden', 'true');
 }
 
+function dropFrame(state: MotionState, leafId: string): void {
+  const frame = state.lastFrames.get(leafId);
+  if (frame) freeStillFrame(frame);
+  state.lastFrames.delete(leafId);
+}
+
 function holdLeaving(state: MotionState, container: HTMLElement, leafId: string, slidePx: number): void {
   const element = state.elements.get(leafId);
-  if (!element || element.isConnected || isBrowserTile(element)) return;
+  if (!element || element.isConnected || isBrowserTile(element)) {
+    dropFrame(state, leafId);
+    return;
+  }
   const lastFrame = state.lastFrames.get(leafId);
   state.lastFrames.delete(leafId);
   detachFromTheLayout(element);
@@ -152,6 +162,7 @@ function holdLeaving(state: MotionState, container: HTMLElement, leafId: string,
   state.held.set(leafId, held);
   const release = () => {
     element.remove();
+    if (lastFrame) freeStillFrame(lastFrame);
     if (state.held.get(leafId) === held) state.held.delete(leafId);
   };
   animation.onfinish = release;
@@ -162,7 +173,7 @@ function cancelAll(state: MotionState): void {
   for (const move of state.moves.values()) move.animation.cancel();
   for (const held of state.held.values()) held.animation.cancel();
   state.awaitingElement.clear();
-  state.lastFrames.clear();
+  for (const leafId of state.lastFrames.keys()) dropFrame(state, leafId);
   state.elements.clear();
 }
 
@@ -270,8 +281,10 @@ export function useRowMotion(input: {
   }, []);
 
   const keepLeavingFrame = useCallback((leafId: string, frame: HTMLCanvasElement | null) => {
-    if (frame && !prefersReducedMotion()) stateRef.current.lastFrames.set(leafId, frame);
-    else stateRef.current.lastFrames.delete(leafId);
+    dropFrame(stateRef.current, leafId);
+    if (!frame) return;
+    if (prefersReducedMotion()) freeStillFrame(frame);
+    else stateRef.current.lastFrames.set(leafId, frame);
   }, []);
   return { keepLeavingFrame };
 }

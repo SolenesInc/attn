@@ -7,3 +7,8 @@ export function stillFrameOf(canvas: HTMLCanvasElement): HTMLCanvasElement | nul
   still.getContext('2d')?.drawImage(canvas, 0, 0);
   return still;
 }
+
+export function freeStillFrame(still: HTMLCanvasElement): void {
+  still.width = 0;
+  still.height = 0;
+}
