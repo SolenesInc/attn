@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import type { SessionUsage } from '../../types/generated';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useAnchoredPopover } from '../useAnchoredPopover';
+import { usePortalTarget, useTileWindow } from '../../tileWindow';
 
 const VIEWPORT_MARGIN = 8;
 const usdFormatter = new Intl.NumberFormat('en-US', {
@@ -112,6 +113,8 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, className, onCl
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
   useEscapeStack(onClose, pinned);
 
   useLayoutEffect(() => {
@@ -122,25 +125,25 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, className, onCl
       const source = anchorRef.current?.getBoundingClientRect();
       const left = Math.max(VIEWPORT_MARGIN, Math.min(
         (source?.right ?? anchor.right) - rect.width,
-        window.innerWidth - rect.width - VIEWPORT_MARGIN,
+        tileWindow.innerWidth - rect.width - VIEWPORT_MARGIN,
       ));
       const top = Math.max(VIEWPORT_MARGIN, Math.min(
         source ? source.bottom + 4 : anchor.top,
-        window.innerHeight - rect.height - VIEWPORT_MARGIN,
+        tileWindow.innerHeight - rect.height - VIEWPORT_MARGIN,
       ));
       setPosition((previous) => previous?.top === top && previous.left === left ? previous : { top, left });
     };
     place();
-    const observer = new ResizeObserver(place);
+    const observer = new tileWindow.ResizeObserver(place);
     observer.observe(element);
-    window.addEventListener('resize', place);
-    window.addEventListener('scroll', place, true);
+    tileWindow.addEventListener('resize', place);
+    tileWindow.addEventListener('scroll', place, true);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', place);
-      window.removeEventListener('scroll', place, true);
+      tileWindow.removeEventListener('resize', place);
+      tileWindow.removeEventListener('scroll', place, true);
     };
-  }, [anchor.top, anchor.right, anchorRef]);
+  }, [anchor.top, anchor.right, anchorRef, tileWindow]);
 
   useEffect(() => {
     if (!pinned) return;
@@ -149,9 +152,10 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, className, onCl
       if (containerRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
       onClose();
     };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [pinned, onClose, anchorRef]);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('pointerdown', handlePointerDown, true);
+    return () => tileDocument.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [pinned, onClose, anchorRef, tileWindow]);
 
   const content = (
     <div
@@ -207,12 +211,12 @@ function SessionUsagePopover({ usage, anchor, anchorRef, pinned, className, onCl
         allowOutsideClick: true,
         escapeDeactivates: false,
         initialFocus: () => containerRef.current ?? false,
-        fallbackFocus: () => containerRef.current ?? document.body,
+        fallbackFocus: () => containerRef.current ?? portalTarget,
       }}
     >
       {content}
     </FocusTrap>,
-    document.body,
+    portalTarget,
   );
 }
 

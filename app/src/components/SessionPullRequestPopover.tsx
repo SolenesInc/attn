@@ -14,6 +14,7 @@ import {
   sessionPullRequestRepositoryName,
   type SessionPullRequestDescription,
 } from '../utils/sessionPullRequest';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 import './SessionPullRequestPopover.css';
 
 export interface PopoverAnchor {
@@ -60,6 +61,8 @@ export function SessionPullRequestPopover({
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(anchor);
   const [selected, setSelected] = useState(0);
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
 
   // Escape only belongs to a popover the user clicked into. A hover popover
   // that grabbed it would eat the terminal's Escape, which agents live on.
@@ -71,10 +74,10 @@ export function SessionPullRequestPopover({
     if (!card) return;
     const rect = card.getBoundingClientRect();
     setPosition({
-      top: Math.max(VIEWPORT_MARGIN, Math.min(anchor.top, window.innerHeight - rect.height - VIEWPORT_MARGIN)),
-      left: Math.max(VIEWPORT_MARGIN, Math.min(anchor.left, window.innerWidth - rect.width - VIEWPORT_MARGIN)),
+      top: Math.max(VIEWPORT_MARGIN, Math.min(anchor.top, tileWindow.innerHeight - rect.height - VIEWPORT_MARGIN)),
+      left: Math.max(VIEWPORT_MARGIN, Math.min(anchor.left, tileWindow.innerWidth - rect.width - VIEWPORT_MARGIN)),
     });
-  }, [anchor, pullRequests.length]);
+  }, [anchor, pullRequests.length, tileWindow]);
 
   // Only a click hands the popover focus. On hover the terminal keeps it, so a
   // bare `c` or `↵` still reaches the agent instead of this panel.
@@ -86,12 +89,13 @@ export function SessionPullRequestPopover({
     const handleMouseDown = (event: MouseEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node)) onClose();
     };
-    const id = window.setTimeout(() => document.addEventListener('mousedown', handleMouseDown), 0);
+    const tileDocument = tileWindow.document;
+    const id = window.setTimeout(() => tileDocument.addEventListener('mousedown', handleMouseDown), 0);
     return () => {
       window.clearTimeout(id);
-      document.removeEventListener('mousedown', handleMouseDown);
+      tileDocument.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [onClose]);
+  }, [onClose, tileWindow]);
 
   const current = pullRequests[Math.min(selected, pullRequests.length - 1)];
   if (!current) return null;
@@ -217,6 +221,6 @@ export function SessionPullRequestPopover({
         <span><kbd>c</kbd>copy url</span>
       </footer>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

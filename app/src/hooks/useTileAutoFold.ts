@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState, type RefObject } from 'react';
+import { useTileWindow } from '../tileWindow';
 
 const RAIL_FOLD_BELOW = 900;
 const TREE_FOLD_BELOW = 620;
@@ -20,6 +21,7 @@ function foldsForWidth(width: number): TileAutoFold {
 // The initial measurement runs in a layout effect, before paint, so a narrow tile never flashes open.
 export function useTileAutoFold(ref: RefObject<HTMLElement | null>, enabled: boolean): TileAutoFold {
   const [folds, setFolds] = useState<TileAutoFold>({ treeAutoFold: false, railAutoFold: false });
+  const tileWindow = useTileWindow();
 
   useLayoutEffect(() => {
     if (!enabled) {
@@ -40,15 +42,15 @@ export function useTileAutoFold(ref: RefObject<HTMLElement | null>, enabled: boo
     };
     apply(el.clientWidth);
 
-    if (typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver((entries) => {
+    if (typeof tileWindow.ResizeObserver === 'undefined') return;
+    const observer = new tileWindow.ResizeObserver((entries) => {
       for (const entry of entries) {
         apply(entry.contentRect.width);
       }
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [ref, enabled]);
+  }, [ref, enabled, tileWindow]);
 
   return folds;
 }

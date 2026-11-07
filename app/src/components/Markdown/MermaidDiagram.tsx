@@ -8,6 +8,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from 'react';
+import { useFrameScheduler, useTileWindow } from '../../tileWindow';
 import { DiagramFocusView } from './DiagramFocusView';
 import { renderMermaid, type MermaidTheme } from './mermaidRender';
 import './Markdown.css';
@@ -122,6 +123,8 @@ function RenderedMermaidDiagram({
   const idRef = useRef(`mermaid-${rawId.replace(/:/g, '')}-${renderCounter++}`);
   const viewportRef = useRef<HTMLDivElement>(null);
   const pendingFocusReturnRef = useRef<HTMLElement | null>(null);
+  const tileWindow = useTileWindow();
+  const frames = useFrameScheduler();
 
   useEffect(() => {
     let cancelled = false;
@@ -165,25 +168,25 @@ function RenderedMermaidDiagram({
     if (presentation !== 'reader' || !svg) return;
     measure();
     const viewport = viewportRef.current;
-    if (!viewport || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(measure);
+    if (!viewport || typeof tileWindow.ResizeObserver === 'undefined') return;
+    const observer = new tileWindow.ResizeObserver(measure);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [focusState, measure, presentation, svg]);
+  }, [focusState, measure, presentation, svg, tileWindow]);
 
   useLayoutEffect(() => {
     if (focusState || !pendingFocusReturnRef.current) return;
     const origin = pendingFocusReturnRef.current;
     pendingFocusReturnRef.current = null;
-    const frame = requestAnimationFrame(() => {
+    const frame = frames.request(() => {
       if (origin.isConnected) {
         origin.focus({ preventScroll: true });
       } else {
         viewportRef.current?.focus({ preventScroll: true });
       }
     });
-    return () => cancelAnimationFrame(frame);
-  }, [focusState]);
+    return () => frames.cancel(frame);
+  }, [focusState, frames]);
 
   if (error) {
     const report = (

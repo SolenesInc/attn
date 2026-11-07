@@ -6,6 +6,7 @@ import { useHarnessRoute, tierLabel, type HarnessRoute, type HarnessRouteRules, 
 import { TierMark } from './TierMark';
 import './HarnessRoute.css';
 import { isDomInstance } from '../utils/realm';
+import { usePortalTarget, useTileWindow } from '../tileWindow';
 
 function ModelList({ view, query, onChange }: { view: HarnessRouteView; query: string; onChange: (route: HarnessRoute) => void }) {
   const options = view.options(query);
@@ -52,13 +53,15 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
   const shown = preview === value.harness ? value : { harness: preview, provider: '', model: '', effort: '' };
   const view = useHarnessRoute(shown, rules, 'on-mount');
   const dialog = useRef<HTMLDialogElement>(null);
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
   const filter = useRef<HTMLInputElement>(null);
   const firstControl = () => filter.current || dialog.current?.querySelector<HTMLElement>('button:not(:disabled), input:not(:disabled)') || dialog.current;
   const restoreFocus = useRef(false);
   const toEffort = useRef(false);
   const [position, setPosition] = useState(() => ({ top: anchor.getBoundingClientRect().bottom, left: anchor.getBoundingClientRect().left }));
   const close = () => {
-    const focused = document.activeElement;
+    const focused = tileWindow.document.activeElement;
     if (isDomInstance(focused, 'HTMLElement') && dialog.current?.contains(focused)) focused.blur();
     onClose();
   };
@@ -66,20 +69,21 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
   const place = useEffectEvent(() => {
     const at = anchor.getBoundingClientRect(), bounds = dialog.current?.getBoundingClientRect();
     if (!bounds) return;
-    const left = Math.max(0, Math.min(at.left, window.innerWidth - bounds.width));
-    const top = at.bottom + bounds.height <= window.innerHeight ? at.bottom : Math.max(0, at.top - bounds.height);
+    const left = Math.max(0, Math.min(at.left, tileWindow.innerWidth - bounds.width));
+    const top = at.bottom + bounds.height <= tileWindow.innerHeight ? at.bottom : Math.max(0, at.top - bounds.height);
     setPosition(previous => previous.top === top && previous.left === left ? previous : { top, left });
   });
   useLayoutEffect(() => { place(); });
   const outside = useEffectEvent((event: MouseEvent) => { if (!dialog.current?.contains(event.target as Node) && !anchor.contains(event.target as Node)) close(); });
   useEffect(() => {
-    document.addEventListener('mousedown', outside);
-    window.addEventListener('resize', place);
-    document.addEventListener('scroll', place, true);
-    return () => { document.removeEventListener('mousedown', outside); window.removeEventListener('resize', place); document.removeEventListener('scroll', place, true); };
-  }, []);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('mousedown', outside);
+    tileWindow.addEventListener('resize', place);
+    tileDocument.addEventListener('scroll', place, true);
+    return () => { tileDocument.removeEventListener('mousedown', outside); tileWindow.removeEventListener('resize', place); tileDocument.removeEventListener('scroll', place, true); };
+  }, [tileWindow]);
   useLayoutEffect(() => {
-    if (!dialog.current?.contains(document.activeElement)) firstControl()?.focus();
+    if (!dialog.current?.contains(tileWindow.document.activeElement)) firstControl()?.focus();
   });
   const finish = () => { restoreFocus.current = true; close(); };
   const focusEffort = () => {
@@ -106,7 +110,7 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
     pickModel({ ...shown, model: manualModel, provider: manualProvider, effort: '' });
   };
   const move = (event: KeyboardEvent<HTMLDialogElement>) => {
-    const current = document.activeElement;
+    const current = tileWindow.document.activeElement;
     if (!isDomInstance(current, 'HTMLElement') || !dialog.current) return;
     const zone = current.closest<HTMLElement>('[role="listbox"], .route-effort-options');
     if (zone && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
@@ -145,5 +149,5 @@ export function HarnessRoutePopover({ value, rules, anchor, onChange, onClose }:
         {view.error && <div className="settings-warning" role="alert">{view.error}</div>}
       </> : <p className="route-detail">Choose a harness to see its models.</p>}
     </div>
-  </dialog></FocusTrap>, document.body);
+  </dialog></FocusTrap>, portalTarget);
 }

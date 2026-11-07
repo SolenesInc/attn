@@ -19,6 +19,7 @@
     }
   ],
   "rules": {
+    "attn/no-document-body-portal": "error",
     "attn/no-dom-instanceof": "error",
     "unicorn/no-thenable": "off",
     "no-control-regex": "off",

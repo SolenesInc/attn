@@ -268,7 +268,7 @@ function SessionDestinationMenu({
         const items = Array.from(
           event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]'),
         );
-        const current = items.indexOf(document.activeElement as HTMLButtonElement);
+        const current = items.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLButtonElement);
         const step = event.key === 'ArrowDown' ? 1 : -1;
         items[(current + step + items.length) % items.length]?.focus();
       }}

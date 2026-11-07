@@ -10,6 +10,7 @@ import { slotShortcut } from '../utils/desktops';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { clampIntoViewport } from '../utils/viewportClamp';
+import { ownerWindow } from '../utils/realm';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
 import { AgentRowView, AgentSessionRow, type SlotOf } from './palette/AgentRows';
 import { agentPaletteRows, type AgentPaletteRow } from './palette/agentPaletteRows';
@@ -178,7 +179,7 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
     const shiftIntoViewport = () => {
       panel.style.transform = '';
       const rect = panel.getBoundingClientRect();
-      const clamped = clampIntoViewport(rect, rect);
+      const clamped = clampIntoViewport(rect, rect, ownerWindow(panel));
       const x = clamped.left - rect.left;
       const y = clamped.top - rect.top;
       panel.style.transform = x || y ? `translate(${x}px, ${y}px)` : '';

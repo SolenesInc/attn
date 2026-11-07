@@ -30,6 +30,7 @@ import { annotationFromWire, type Annotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 import { isDomInstance } from '../../../utils/realm';
+import { useFrameScheduler, useTileWindow } from '../../../tileWindow';
 
 const ANNOTATION_SAVE_DEBOUNCE_MS = 500;
 const ANNOTATION_HYDRATE_RETRY_MS = 2000;
@@ -131,6 +132,8 @@ export function useAnnotations({
   const lastMousePosRef = useRef<{ x: number; y: number } | null>(null);
   const popoverOpenRef = useRef(false);
   const orphansRef = useRef(orphans);
+  const tileWindow = useTileWindow();
+  const frames = useFrameScheduler();
 
   const transportRef = useRef<MarkdownAnnotationsTransport | null | undefined>(transport);
   transportRef.current = transport;
@@ -246,11 +249,11 @@ export function useAnnotations({
         return;
       }
       if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
+        frames.cancel(rafRef.current);
         rafRef.current = null;
       }
       if (pendingClearRafRef.current !== null) {
-        cancelAnimationFrame(pendingClearRafRef.current);
+        frames.cancel(pendingClearRafRef.current);
         pendingClearRafRef.current = null;
       }
       // Stale Ranges reference detached nodes after the body remount: always
@@ -325,8 +328,8 @@ export function useAnnotations({
           return !!el && (el.tagName === 'PRE' || el.querySelector('pre') !== null);
         })
         .map((a) => a.id);
-      if (inPreIds.length > 0 && typeof requestAnimationFrame === 'function') {
-        rafRef.current = requestAnimationFrame(() => {
+      if (inPreIds.length > 0) {
+        rafRef.current = frames.request(() => {
           rafRef.current = null;
           // A late paint failure must publish a FRESH orphan map: mutating the
           // committed one bypasses React and hides the orphan badge.
@@ -350,7 +353,7 @@ export function useAnnotations({
         });
       }
     },
-    [ensurePainter, rootRef, scheduleSave],
+    [ensurePainter, frames, rootRef, scheduleSave],
   );
 
   useEffect(() => {
@@ -360,17 +363,17 @@ export function useAnnotations({
     refreshAndPaint(content);
     return () => {
       if (rafRef.current !== null) {
-        cancelAnimationFrame(rafRef.current);
+        frames.cancel(rafRef.current);
         rafRef.current = null;
       }
       if (pendingClearRafRef.current !== null) {
-        cancelAnimationFrame(pendingClearRafRef.current);
+        frames.cancel(pendingClearRafRef.current);
         pendingClearRafRef.current = null;
       }
       painterRef.current?.clearAll();
       rangesRef.current.clear();
     };
-  }, [content, enabled, refreshAndPaint, rootRef]);
+  }, [content, enabled, frames, refreshAndPaint, rootRef]);
 
 
   const adoptDraft = useCallback(
@@ -515,7 +518,7 @@ export function useAnnotations({
     const painter = painterRef.current;
     const clearNativeSelection = () => {
       try {
-        window.getSelection()?.removeAllRanges();
+        tileWindow.getSelection()?.removeAllRanges();
       } catch {
       }
     };
@@ -524,15 +527,15 @@ export function useAnnotations({
     setPending(null);
     clearNativeSelection();
     if (pendingClearRafRef.current !== null) {
-      cancelAnimationFrame(pendingClearRafRef.current);
+      frames.cancel(pendingClearRafRef.current);
     }
     // WKWebView can retain a same-frame selection paint until its next commit.
-    pendingClearRafRef.current = requestAnimationFrame(() => {
+    pendingClearRafRef.current = frames.request(() => {
       pendingClearRafRef.current = null;
       painter?.clear(PENDING_PAINT_ID);
       clearNativeSelection();
     });
-  }, []);
+  }, [frames, tileWindow]);
 
 
   const handleSelectionChange = useCallback(
@@ -620,7 +623,7 @@ export function useAnnotations({
       if (popoverOpenRef.current) {
         return;
       }
-      const next = handleSelectionChange(window.getSelection());
+      const next = handleSelectionChange(tileWindow.getSelection());
       if (next) {
         // WebKit does not move focus on mousedown in non-focusable content; without
         // this the terminal's hidden input keeps focus and keys leak to the shell.
@@ -632,7 +635,7 @@ export function useAnnotations({
     };
 
     const onRootClick = (event: MouseEvent) => {
-      const selection = window.getSelection?.();
+      const selection = tileWindow.getSelection?.();
       if (selection && !selection.isCollapsed) {
         return;
       }
@@ -662,15 +665,16 @@ export function useAnnotations({
       }
     };
 
-    document.addEventListener('mouseup', onDocMouseUp, true);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('mouseup', onDocMouseUp, true);
     root.addEventListener('mouseup', onRootMouseUp);
     root.addEventListener('click', onRootClick);
     return () => {
-      document.removeEventListener('mouseup', onDocMouseUp, true);
+      tileDocument.removeEventListener('mouseup', onDocMouseUp, true);
       root.removeEventListener('mouseup', onRootMouseUp);
       root.removeEventListener('click', onRootClick);
     };
-  }, [enabled, handleSelectionChange, rootRef]);
+  }, [enabled, handleSelectionChange, rootRef, tileWindow]);
 
 
   const addAnnotation = useCallback(

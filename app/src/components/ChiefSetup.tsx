@@ -8,6 +8,7 @@ import { routeFromStored, useHarnessRoute, type HarnessRoute } from '../hooks/us
 import type { ChiefView } from '../application/useChief';
 import { chiefHarnesses, chiefRouteRules } from './chiefRoute';
 import { isDomInstance } from '../utils/realm';
+import { usePortalTarget } from '../tileWindow';
 
 export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOpenSettings }: {
   chief: ChiefView;
@@ -17,6 +18,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
   onReturnFocus: () => void;
   onOpenSettings?: () => void;
 }) {
+  const portalTarget = usePortalTarget();
   const { settings, sendGetSettings } = useDaemonApi();
   const [firstRun] = useState(!chief.agent);
   const [notebookRoot, setNotebookRoot] = useState<string | null>(null);
@@ -181,5 +183,5 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
       </footer>
     </>}
     </div>
-  </div>, document.body);
+  </div>, portalTarget);
 }

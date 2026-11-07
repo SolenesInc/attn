@@ -31,6 +31,7 @@ import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import './TerminalAnnotations.css';
 import { isDomInstance } from '../../utils/realm';
+import { useFrameScheduler, usePortalTarget, useTileWindow } from '../../tileWindow';
 
 export interface SessionMessagesResult {
   messages: AnnotatableMessage[];
@@ -114,6 +115,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     { desktopId, sessionId, annotationApi, paneActive = false, unavailableReason, ...terminalProps },
     ref,
   ) {
+    const tileWindow = useTileWindow();
+    const frames = useFrameScheduler();
+    const portalTarget = usePortalTarget();
     // Built once: `useRef(new …)` would construct and discard a store per render.
     const [store] = useState(() => new TerminalAnnotationStore());
     const [version, setVersion] = useState(0);
@@ -371,9 +375,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         if (composer.writing) return;
         dismissComposer(false);
       };
-      window.addEventListener('pointerdown', onDown, true);
-      return () => window.removeEventListener('pointerdown', onDown, true);
-    }, [composer, dismissComposer, labelPickerOpen]);
+      tileWindow.addEventListener('pointerdown', onDown, true);
+      return () => tileWindow.removeEventListener('pointerdown', onDown, true);
+    }, [composer, dismissComposer, labelPickerOpen, tileWindow]);
 
     const placementOptions = useCallback((): PlaceOptions => ({
       bounds: terminalRef.current?.getBounds() ?? null,
@@ -383,9 +387,9 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
     const clampPopupToTerminal = useCallback((at: Placement, size: Size) => clampToBounds(
       at,
       size,
-      { width: window.innerWidth, height: window.innerHeight },
+      { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
       terminalRef.current?.getBounds() ?? null,
-    ), []);
+    ), [tileWindow]);
 
     const fitToPane = useCallback((
       node: HTMLElement | null,
@@ -397,10 +401,10 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       apply(placePopup(
         { x: anchor.clientX, y: anchor.clientY },
         { width: rect.width, height: rect.height },
-        { width: window.innerWidth, height: window.innerHeight },
+        { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
         placementOptions(),
       ));
-    }, [placementOptions]);
+    }, [placementOptions, tileWindow]);
 
     const composerRef = useRef<Composer | null>(null);
 
@@ -431,28 +435,28 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
 
     useEffect(() => {
       const node = popupRef.current;
-      if (!composer || !node || typeof ResizeObserver === 'undefined') return;
-      const observer = new ResizeObserver(() => repositionPopup());
+      if (!composer || !node || typeof tileWindow.ResizeObserver === 'undefined') return;
+      const observer = new tileWindow.ResizeObserver(() => repositionPopup());
       observer.observe(node);
       return () => observer.disconnect();
-    }, [composer, repositionPopup]);
+    }, [composer, repositionPopup, tileWindow]);
 
     useEffect(() => {
       if (!composer) return;
-      window.addEventListener('resize', repositionPopup);
-      return () => window.removeEventListener('resize', repositionPopup);
-    }, [composer, repositionPopup]);
+      tileWindow.addEventListener('resize', repositionPopup);
+      return () => tileWindow.removeEventListener('resize', repositionPopup);
+    }, [composer, repositionPopup, tileWindow]);
 
     useEffect(() => {
       if (!composer?.writing) return;
-      const frame = requestAnimationFrame(() => {
+      const frame = frames.request(() => {
         const box = commentRef.current;
         if (!box) return;
         box.focus();
         box.setSelectionRange(box.value.length, box.value.length);
       });
-      return () => cancelAnimationFrame(frame);
-    }, [composer?.writing, composer?.annotationId]);
+      return () => frames.cancel(frame);
+    }, [composer?.writing, composer?.annotationId, frames]);
 
     const annotations = store.list();
     const composed = composer
@@ -647,13 +651,13 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         popupGrabRef.current = null;
         setPopupDragging(false);
       };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      tileWindow.addEventListener('mousemove', onMove);
+      tileWindow.addEventListener('mouseup', onUp);
       return () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        tileWindow.removeEventListener('mousemove', onMove);
+        tileWindow.removeEventListener('mouseup', onUp);
       };
-    }, [clampPopupToTerminal, popupDragging]);
+    }, [clampPopupToTerminal, popupDragging, tileWindow]);
 
     useEffect(() => {
       if (!panelDragging) return;
@@ -665,17 +669,17 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         setPanelAt(clampToViewport(
           { left: event.clientX - grab.dx, top: event.clientY - grab.dy },
           { width: rect.width, height: rect.height },
-          { width: window.innerWidth, height: window.innerHeight },
+          { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
         ));
       };
       const onUp = () => setPanelDragging(false);
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      tileWindow.addEventListener('mousemove', onMove);
+      tileWindow.addEventListener('mouseup', onUp);
       return () => {
-        window.removeEventListener('mousemove', onMove);
-        window.removeEventListener('mouseup', onUp);
+        tileWindow.removeEventListener('mousemove', onMove);
+        tileWindow.removeEventListener('mouseup', onUp);
       };
-    }, [panelDragging]);
+    }, [panelDragging, tileWindow]);
 
     useEffect(() => {
       if (!panelAt) return;
@@ -686,12 +690,12 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
         setPanelAt((current) => (current ? clampToViewport(
           current,
           { width: rect.width, height: rect.height },
-          { width: window.innerWidth, height: window.innerHeight },
+          { width: tileWindow.innerWidth, height: tileWindow.innerHeight },
         ) : current));
       };
-      window.addEventListener('resize', onResize);
-      return () => window.removeEventListener('resize', onResize);
-    }, [panelAt]);
+      tileWindow.addEventListener('resize', onResize);
+      return () => tileWindow.removeEventListener('resize', onResize);
+    }, [panelAt, tileWindow]);
 
     const panelOpen = annotations.length > 0 || outcome?.kind === 'sent';
 
@@ -863,7 +867,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
           </dialog>
         ) : null}
           </>,
-          document.body,
+          portalTarget,
         )}
         {panelOpen ? (
           <div

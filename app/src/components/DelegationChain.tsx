@@ -16,6 +16,8 @@ import { harnessLabel } from './harnessLabel';
 import { DelegationChainController, type OpenChain } from './delegationChainController';
 import { DelegationChainContext, useDelegationChainTrigger } from './delegationChainContext';
 import { useDelegationChainPosition } from './useDelegationChainPosition';
+import { useTileWindow } from '../tileWindow';
+import { ownerWindow } from '../utils/realm';
 import './DelegationChain.css';
 
 export { useDelegationChainControl } from './delegationChainContext';
@@ -80,13 +82,14 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
   children: ReactNode;
 }>(function DelegationChainProvider({ sessions, onSelectSession, navigationKey = '', blocked = false, onRestoreFocusFallback, children }, ref) {
   const [controller] = useState(() => new DelegationChainController());
+  const tileWindow = useTileWindow();
   const open = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const sessionIds = useMemo(() => new Set(sessions.map((session) => session.id)), [sessions]);
   const visible = controller.isVisible(open, { navigationKey, blocked, sessionIds }) ? open : null;
   useLayoutEffect(() => {
     controller.configure({ navigationKey, blocked, sessionIds, onRestoreFocusFallback });
   }, [controller, navigationKey, blocked, sessionIds, onRestoreFocusFallback, open]);
-  useEffect(() => controller.connect(), [controller]);
+  useEffect(() => controller.connect(tileWindow), [controller, tileWindow]);
   useImperativeHandle(ref, () => controller, [controller]);
   const context = useMemo(() => ({ controller, open: visible }), [controller, visible]);
   return (
@@ -105,6 +108,8 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
 }) {
   const card = useRef<HTMLDivElement>(null);
   const titleId = useId();
+  const tileWindow = useTileWindow();
+  const chainWindow = open.anchor ? ownerWindow(open.anchor) : tileWindow;
   const currentSession = sessions.find((session) => session.id === open.sessionId);
   const tree = useMemo(() => delegationTree(open.sessionId, sessions), [open.sessionId, sessions]);
   const initialFocus = useCallback(() => card.current?.querySelector<HTMLElement>('[aria-current="true"]') ?? card.current!, []);
@@ -113,7 +118,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
     controller.setPopover(element);
   }, [controller]);
   useEscapeStack(() => controller.dismiss(), true);
-  useDelegationChainPosition(card, open.anchor, tree.rows.length);
+  useDelegationChainPosition(card, open.anchor, tree.rows.length, chainWindow);
   return createPortal(
     <FocusTrap focusTrapOptions={{
       initialFocus, fallbackFocus: initialFocus, escapeDeactivates: false, delayInitialFocus: false, preventScroll: true,
@@ -135,7 +140,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
           if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
           const buttons = Array.from(card.current?.querySelectorAll<HTMLButtonElement>('[data-chain-session]') ?? []);
-          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+          const index = buttons.indexOf(event.currentTarget.ownerDocument.activeElement as HTMLButtonElement);
           const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
             : Math.max(0, Math.min(buttons.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)));
           buttons[next]?.focus();
@@ -168,6 +173,6 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
         <div className="delegation-chain-footer"><span>↑ ↓ navigate</span><span>↵ open</span><span>esc close</span></div>
       </div>
     </FocusTrap>,
-    document.body,
+    chainWindow.document.body,
   );
 }

@@ -4,7 +4,9 @@ import type { Ask } from '../../types/generated';
 import { useAsksOf } from '../../store/asks';
 import { askQuestions, type AskHolderSession } from '../../utils/asks';
 import { clampIntoViewport, type ViewportPoint } from '../../utils/viewportClamp';
+import { ownerWindow } from '../../utils/realm';
 import { useAnchoredPopover } from '../useAnchoredPopover';
+import { usePortalTarget } from '../../tileWindow';
 import './Asks.css';
 
 const NOTHING_TO_RELEASE = () => {};
@@ -69,13 +71,14 @@ interface AskPreviewProps {
 function AskPreview({ asks, anchorRef, onOpen, onPointerEnter, onPointerLeave }: AskPreviewProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<ViewportPoint | null>(null);
+  const portalTarget = usePortalTarget();
   useLayoutEffect(() => {
     const panel = panelRef.current;
     const anchor = anchorRef.current;
     if (!panel || !anchor) return;
     const below = anchor.getBoundingClientRect();
     const size = panel.getBoundingClientRect();
-    setPosition(clampIntoViewport({ top: below.bottom + 4, left: below.right - size.width }, size));
+    setPosition(clampIntoViewport({ top: below.bottom + 4, left: below.right - size.width }, size, ownerWindow(panel)));
   }, [anchorRef, asks]);
   return createPortal(
     <div
@@ -111,6 +114,6 @@ function AskPreview({ asks, anchorRef, onOpen, onPointerEnter, onPointerLeave }:
         </section>
       ))}
     </div>,
-    document.body,
+    portalTarget,
   );
 }

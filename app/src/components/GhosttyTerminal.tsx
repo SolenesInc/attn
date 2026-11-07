@@ -15,6 +15,7 @@ import {
   type SnapshotHistoryDecoder,
 } from '../ghostty';
 import { loadGhostty } from '../ghostty/wasm';
+import { useFrameScheduler, useResizeWatch, useTileWindow } from '../tileWindow';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { openPath, openUrl } from '@tauri-apps/plugin-opener';
 import { exists } from '@tauri-apps/plugin-fs';
@@ -39,6 +40,7 @@ import {
 } from '../utils/terminalLinks';
 import { outpostPathRefusal } from '../utils/outpostPaths';
 import { stillFrameOf } from '../utils/stillFrame';
+import { ownerWindow } from '../utils/realm';
 import {
   initialFocusedMatch,
   startFindScan,
@@ -378,11 +380,12 @@ function sameSeedAnchor(a: TerminalSeedAnchor, b: TerminalSeedAnchor): boolean {
 
 const utf8Encoder = new TextEncoder();
 
-function isDesktopResizeActive(element: HTMLElement | null): boolean {
-  if (document.documentElement.dataset.attnDesktopResizing === '1') {
+function isDesktopResizeActive(view: Window, element: HTMLElement | null): boolean {
+  const root = view.document.documentElement;
+  if (root.dataset.attnDesktopResizing === '1') {
     return true;
   }
-  const suppressUntil = Number(document.documentElement.dataset.attnDesktopMouseSuppressUntil || 0);
+  const suppressUntil = Number(root.dataset.attnDesktopMouseSuppressUntil || 0);
   if (Number.isFinite(suppressUntil) && suppressUntil > Date.now()) {
     return true;
   }
@@ -470,7 +473,6 @@ function emptyStartup(): TerminalPerfStartupSnapshot {
 
 function createRendererEffectResources() {
   let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
-  let resizeObserver: ResizeObserver | null = null;
 
   return {
     isRecoveryScheduled: () => recoveryTimer !== null,
@@ -481,17 +483,11 @@ function createRendererEffectResources() {
         callback();
       }, delayMs);
     },
-    observeResize: (target: Element, callback: ResizeObserverCallback) => {
-      resizeObserver = new ResizeObserver(callback);
-      resizeObserver.observe(target);
-    },
     dispose: () => {
       if (recoveryTimer !== null) {
         clearTimeout(recoveryTimer);
         recoveryTimer = null;
       }
-      resizeObserver?.disconnect();
-      resizeObserver = null;
     },
   };
 }
@@ -532,6 +528,9 @@ function cellText(
 
 export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminalProps>(
   function GhosttyTerminal({ fontSize, resolvedTheme = 'dark', debugName, cwd, outpostName, runtimeLogMeta, onInput, onPointerActivity, onFocus, onOpenMarkdown, onPathRefused, gardenSeeds = EMPTY_GARDEN_SEEDS, onOpenSeed, onReady, onResize, annotations, annotationsVersion = 0, onAnnotationAnchor, onAnnotationMiss, onAnnotationActivate }, ref) {
+    const tileWindow = useTileWindow();
+    const frames = useFrameScheduler();
+    const resizeWatch = useResizeWatch();
     const containerRef = useRef<HTMLDivElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const terminalRef = useRef<GhosttyModel | null>(null);
@@ -1003,12 +1002,12 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     const cancelScheduledOutputRender = useCallback(() => {
       if (scheduledOutputRenderRef.current !== null) {
-        cancelAnimationFrame(scheduledOutputRenderRef.current);
+        frames.cancel(scheduledOutputRenderRef.current);
         scheduledOutputRenderRef.current = null;
       }
       scheduledOutputRenderForceRef.current = false;
       if (scheduledScrollRenderRef.current !== null) {
-        cancelAnimationFrame(scheduledScrollRenderRef.current);
+        frames.cancel(scheduledScrollRenderRef.current);
         scheduledScrollRenderRef.current = null;
       }
     }, []);
@@ -1017,7 +1016,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     // painting per event queues more work than the main thread can drain.
     const scheduleScrollRender = useCallback(() => {
       if (scheduledScrollRenderRef.current !== null) return;
-      scheduledScrollRenderRef.current = requestAnimationFrame(() => {
+      scheduledScrollRenderRef.current = frames.request(() => {
         scheduledScrollRenderRef.current = null;
         renderSurface(true);
       });
@@ -1037,7 +1036,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         const delayMs = terminalOutputDelayMs(timestamp, lastScheduledOutputPaintAtRef.current);
         if (delayMs > 1) {
           scheduledRenderDeferredRef.current += 1;
-          scheduledOutputRenderRef.current = requestAnimationFrame(requestPaint);
+          scheduledOutputRenderRef.current = frames.request(requestPaint);
           return;
         }
         scheduledOutputRenderRef.current = null;
@@ -1046,7 +1045,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         scheduledOutputRenderForceRef.current = false;
         renderSurface(forcePaint);
       };
-      scheduledOutputRenderRef.current = requestAnimationFrame(requestPaint);
+      scheduledOutputRenderRef.current = frames.request(requestPaint);
     }, [renderSurface]);
 
     const flushSynchronizedOutputRender = useCallback(() => {
@@ -1337,10 +1336,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const openFind = useCallback(() => {
       findOpenRef.current = true;
       setFindUi((ui) => ({ ...ui, open: true }));
-      requestAnimationFrame(() => {
+      frames.request(() => {
         const input = findInputRef.current;
         // Leave the caret alone if the user already typed: select() would replace it.
-        if (!input || document.activeElement === input) return;
+        if (!input || input.ownerDocument.activeElement === input) return;
         input.focus();
         input.select();
       });
@@ -1465,7 +1464,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       filterQueryRef.current = '';
       setFilterMatches([]);
       setFilterUi({ open: true, blockId, caseSensitive: false });
-      requestAnimationFrame(() => filterInputRef.current?.focus());
+      frames.request(() => filterInputRef.current?.focus());
     }, []);
 
     const closeBlockFilter = useCallback(() => {
@@ -1509,9 +1508,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     const scheduleCoalescedRefit = useCallback(() => {
       if (overflowRefitRafRef.current !== null) {
-        cancelAnimationFrame(overflowRefitRafRef.current);
+        frames.cancel(overflowRefitRafRef.current);
       }
-      overflowRefitRafRef.current = requestAnimationFrame(() => {
+      overflowRefitRafRef.current = frames.request(() => {
         overflowRefitRafRef.current = null;
         fitRef.current();
       });
@@ -1679,7 +1678,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         annotationsRef.current?.noteWrite();
         scheduleFindRescan();
         flushSynchronizedOutputRender();
-        requestAnimationFrame(() => {
+        frames.request(() => {
           void enqueueOperation('restoreSnapshotHistory', () => {
             if (!terminalRef.current) {
               historyDecoder.close();
@@ -2025,20 +2024,20 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       openFind,
       focus: () => {
         if (filterInputRef.current) {
-          if (document.activeElement !== filterInputRef.current) filterInputRef.current.focus();
+          if (filterInputRef.current.ownerDocument.activeElement !== filterInputRef.current) filterInputRef.current.focus();
           return true;
         }
         if (findOpenRef.current && findInputRef.current) {
-          if (document.activeElement !== findInputRef.current) findInputRef.current.focus();
+          if (findInputRef.current.ownerDocument.activeElement !== findInputRef.current) findInputRef.current.focus();
           return true;
         }
         const container = containerRef.current;
         if (!container) return false;
         container.focus();
-        return document.activeElement === container;
+        return container.ownerDocument.activeElement === container;
       },
       typeTextViaInput: (text: string) => { onInputRef.current(text.replace(/\n/g, '\r')); return true; },
-      isInputFocused: () => document.activeElement === containerRef.current,
+      isInputFocused: () => containerRef.current?.ownerDocument.activeElement === containerRef.current,
       getBounds: () => containerRef.current?.getBoundingClientRect() ?? null,
       write,
       resizeLocal,
@@ -2130,9 +2129,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
 
     useEffect(() => {
       let active = true;
-      const container = containerRef.current;
       const canvas = canvasRef.current;
-      if (!container || !canvas) return;
+      if (!canvas) return;
       let hiddenAt: number | null = null;
       const wake = (trigger: 'visible' | 'screens_did_wake' | 'did_wake') => {
         const now = Date.now();
@@ -2156,15 +2154,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         renderSurface(true);
       };
       const onVisibilityChange = () => {
-        if (document.visibilityState === 'hidden') hiddenAt = Date.now();
-        else if (document.visibilityState === 'visible') wake('visible');
+        if (tileWindow.document.visibilityState === 'hidden') hiddenAt = Date.now();
+        else if (tileWindow.document.visibilityState === 'visible') wake('visible');
       };
       const onFocus = () => {
         if (surfaceReleasedRef.current || !readyRef.current || !rendererRef.current) return;
         renderSurface(true);
       };
-      document.addEventListener('visibilitychange', onVisibilityChange);
-      window.addEventListener('focus', onFocus);
+      tileWindow.document.addEventListener('visibilitychange', onVisibilityChange);
+      tileWindow.addEventListener('focus', onFocus);
       let unlistenWake: (() => void) | undefined;
       if (isTauri()) {
         void listen<{ reason: 'screens_did_wake' | 'did_wake' }>('native-wake', (event) => {
@@ -2174,6 +2172,19 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           else unlisten();
         });
       }
+      return () => {
+        active = false;
+        tileWindow.document.removeEventListener('visibilitychange', onVisibilityChange);
+        tileWindow.removeEventListener('focus', onFocus);
+        unlistenWake?.();
+      };
+    }, [renderSurface, tileWindow]);
+
+    useEffect(() => {
+      let active = true;
+      const container = containerRef.current;
+      const canvas = canvasRef.current;
+      if (!container || !canvas) return;
       const perfId = `ghostty-${debugNameRef.current}`;
       const resources = createRendererEffectResources();
 
@@ -2295,25 +2306,25 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         startupRef.current.firstReadyCols = terminal.cols;
         startupRef.current.firstReadyRows = terminal.rows;
         // The desktop observer projects collapse/restore before the next frame.
-        resources.observeResize(container, scheduleCoalescedRefit);
+        resizeWatch.observe(container, scheduleCoalescedRefit);
         const constructionHold = holdInput();
         await onReadyRef.current({
           fit,
           openFind,
           focus: () => {
             if (filterInputRef.current) {
-              if (document.activeElement !== filterInputRef.current) filterInputRef.current.focus();
+              if (filterInputRef.current.ownerDocument.activeElement !== filterInputRef.current) filterInputRef.current.focus();
               return true;
             }
             if (findOpenRef.current && findInputRef.current) {
-              if (document.activeElement !== findInputRef.current) findInputRef.current.focus();
+              if (findInputRef.current.ownerDocument.activeElement !== findInputRef.current) findInputRef.current.focus();
               return true;
             }
             container.focus();
-            return document.activeElement === container;
+            return container.ownerDocument.activeElement === container;
           },
           typeTextViaInput: (text) => { onInputRef.current(text.replace(/\n/g, '\r')); return true; },
-          isInputFocused: () => document.activeElement === container,
+          isInputFocused: () => container.ownerDocument.activeElement === container,
           getBounds: () => container.getBoundingClientRect(),
           write,
           resizeLocal,
@@ -2421,10 +2432,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         active = false;
         inputReadyRef.current = false;
         container.dataset.terminalInputReady = '0';
-        document.removeEventListener('visibilitychange', onVisibilityChange);
-        window.removeEventListener('focus', onFocus);
-        unlistenWake?.();
         resources.dispose();
+        resizeWatch.disconnect();
         recordDiag({
           kind: 'pane_unmount',
           pane: diagKeyRef.current,
@@ -2434,7 +2443,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         });
         disposePaneDiagnostics(diagKeyRef.current);
         if (overflowRefitRafRef.current !== null) {
-          cancelAnimationFrame(overflowRefitRafRef.current);
+          frames.cancel(overflowRefitRafRef.current);
           overflowRefitRafRef.current = null;
         }
         canvas.removeEventListener('webglcontextlost', handleContextLost);
@@ -2588,7 +2597,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
               width: canvas.width,
               height: canvas.height,
             },
-            devicePixelRatio: window.devicePixelRatio,
+            devicePixelRatio: ownerWindow(canvas).devicePixelRatio,
             cellWidth: renderer.cellWidth,
             cellHeight: renderer.cellHeight,
           },
@@ -3143,13 +3152,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         if (acceleratorHeldRef.current) detectHoverLink(hoveredCellRef.current);
         updateLinkCursor(hoveredCellRef.current, acceleratorHeldRef.current);
       };
-      window.addEventListener('keydown', handleModifierChange);
-      window.addEventListener('keyup', handleModifierChange);
+      tileWindow.addEventListener('keydown', handleModifierChange);
+      tileWindow.addEventListener('keyup', handleModifierChange);
       return () => {
-        window.removeEventListener('keydown', handleModifierChange);
-        window.removeEventListener('keyup', handleModifierChange);
+        tileWindow.removeEventListener('keydown', handleModifierChange);
+        tileWindow.removeEventListener('keyup', handleModifierChange);
       };
-    }, [detectHoverLink, syncAnnotationHover, updateLinkCursor]);
+    }, [detectHoverLink, syncAnnotationHover, tileWindow, updateLinkCursor]);
 
     useEffect(() => () => {
       selectionDragCleanupRef.current?.();
@@ -3207,13 +3216,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const onCancel = () => {
         releaseTrackedMouse();
       };
-      document.addEventListener('mouseup', onUp);
-      window.addEventListener('blur', onCancel);
-      window.addEventListener('pointercancel', onCancel);
+      tileWindow.document.addEventListener('mouseup', onUp);
+      tileWindow.addEventListener('blur', onCancel);
+      tileWindow.addEventListener('pointercancel', onCancel);
       trackedMouseReleaseCleanupRef.current = () => {
-        document.removeEventListener('mouseup', onUp);
-        window.removeEventListener('blur', onCancel);
-        window.removeEventListener('pointercancel', onCancel);
+        tileWindow.document.removeEventListener('mouseup', onUp);
+        tileWindow.removeEventListener('blur', onCancel);
+        tileWindow.removeEventListener('pointercancel', onCancel);
       };
     };
 
@@ -3221,7 +3230,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       action: 'press' | 'move' | 'release',
       event: React.MouseEvent,
     ): boolean => {
-      if (isDesktopResizeActive(containerRef.current)) return false;
+      if (isDesktopResizeActive(tileWindow, containerRef.current)) return false;
       const terminal = terminalRef.current;
       if (action === 'release') {
         const released = releaseTrackedMouse(event);
@@ -3410,15 +3419,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       const onCancel = () => {
         cancelSelectionDrag();
       };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-      window.addEventListener('blur', onCancel);
-      window.addEventListener('pointercancel', onCancel);
+      tileWindow.document.addEventListener('mousemove', onMove);
+      tileWindow.document.addEventListener('mouseup', onUp);
+      tileWindow.addEventListener('blur', onCancel);
+      tileWindow.addEventListener('pointercancel', onCancel);
       selectionDragCleanupRef.current = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        window.removeEventListener('blur', onCancel);
-        window.removeEventListener('pointercancel', onCancel);
+        tileWindow.document.removeEventListener('mousemove', onMove);
+        tileWindow.document.removeEventListener('mouseup', onUp);
+        tileWindow.removeEventListener('blur', onCancel);
+        tileWindow.removeEventListener('pointercancel', onCancel);
       };
     };
 
@@ -3522,7 +3531,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         onBeforeInput={(event) => event.preventDefault()}
         onFocus={() => onFocusRef.current?.()}
         onWheel={(event) => {
-          if (isDesktopResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(tileWindow, containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3582,7 +3591,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleScrollRender();
         }}
         onMouseDown={(event) => {
-          if (isDesktopResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(tileWindow, containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3636,7 +3645,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
             lastPointerActivityAtRef.current = pointerActivityAt;
             onPointerActivityRef.current?.();
           }
-          if (isDesktopResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(tileWindow, containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -3691,7 +3700,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
         }}
         onMouseUp={(event) => {
-          if (isDesktopResizeActive(containerRef.current)) {
+          if (isDesktopResizeActive(tileWindow, containerRef.current)) {
             event.preventDefault();
             event.stopPropagation();
             return;

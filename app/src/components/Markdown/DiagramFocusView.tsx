@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
+import { usePortalTarget, useTileWindow } from '../../tileWindow';
 
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 2;
@@ -44,16 +45,18 @@ export function DiagramFocusView({
   const pendingCenterRef = useRef<{ x: number; y: number } | null>(initialCenter);
   const [scale, setScale] = useState(1);
   const [scaleMode, setScaleMode] = useState<ScaleMode>('actual');
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
 
   useEscapeStack(onClose, true);
 
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const previousOverflow = portalTarget.style.overflow;
+    portalTarget.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = previousOverflow;
+      portalTarget.style.overflow = previousOverflow;
     };
-  }, []);
+  }, [portalTarget]);
 
   const currentCenter = useCallback(() => {
     const canvas = canvasRef.current;
@@ -92,13 +95,13 @@ export function DiagramFocusView({
   }, [scale]);
 
   useEffect(() => {
-    if (scaleMode !== 'fit' || typeof ResizeObserver === 'undefined') return;
+    if (scaleMode !== 'fit' || typeof tileWindow.ResizeObserver === 'undefined') return;
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const observer = new ResizeObserver(() => fit());
+    const observer = new tileWindow.ResizeObserver(() => fit());
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fit, scaleMode]);
+  }, [fit, scaleMode, tileWindow]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -125,7 +128,7 @@ export function DiagramFocusView({
     }
 
     const canvas = canvasRef.current;
-    if (document.activeElement !== canvas || !canvas) return;
+    if (tileWindow.document.activeElement !== canvas || !canvas) return;
     const distance = event.shiftKey ? 288 : 96;
     const delta = {
       ArrowLeft: [-distance, 0],
@@ -149,7 +152,7 @@ export function DiagramFocusView({
         escapeDeactivates: false,
         returnFocusOnDeactivate: false,
         initialFocus: () => canvasRef.current ?? undefined,
-        fallbackFocus: () => canvasRef.current ?? document.body,
+        fallbackFocus: () => canvasRef.current ?? portalTarget,
       }}
     >
       <div
@@ -217,6 +220,6 @@ export function DiagramFocusView({
         </div>
       </div>
     </FocusTrap>,
-    document.body,
+    portalTarget,
   );
 }

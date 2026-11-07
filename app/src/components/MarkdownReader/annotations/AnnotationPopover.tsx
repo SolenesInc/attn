@@ -8,6 +8,7 @@ import {
   writeAnnotationDraft,
 } from './annotationDrafts';
 import { formatShortcut } from '../../../shortcuts/formatShortcut';
+import { usePortalTarget, useTileWindow } from '../../../tileWindow';
 
 export interface AnnotationPopoverProps {
   getAnchorRect: () => DOMRect | null;
@@ -23,18 +24,18 @@ const MAX_POPOVER_WIDTH = 384;
 const GAP = 8;
 const FLIP_SPACE = 280;
 
-function computePosition(anchorRect: DOMRect): {
+function computePosition(anchorRect: DOMRect, viewport: Window): {
   top: number;
   left: number;
   flipAbove: boolean;
   width: number;
 } {
-  const spaceBelow = window.innerHeight - anchorRect.bottom;
+  const spaceBelow = viewport.innerHeight - anchorRect.bottom;
   const flipAbove = spaceBelow < FLIP_SPACE;
-  const width = Math.min(MAX_POPOVER_WIDTH, window.innerWidth - 32);
+  const width = Math.min(MAX_POPOVER_WIDTH, viewport.innerWidth - 32);
   const top = flipAbove ? anchorRect.top - GAP : anchorRect.bottom + GAP;
   let left = anchorRect.left + anchorRect.width / 2 - width / 2;
-  left = Math.max(16, Math.min(left, window.innerWidth - width - 16));
+  left = Math.max(16, Math.min(left, viewport.innerWidth - width - 16));
   return { top, left, flipAbove, width };
 }
 
@@ -54,6 +55,8 @@ export function AnnotationPopover({
   const hasUnsavedContent = text.trim().length > 0;
   const hasUnsavedContentRef = useRef(hasUnsavedContent);
   hasUnsavedContentRef.current = hasUnsavedContent;
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
 
   useEffect(() => {
     if (text.trim().length > 0) {
@@ -67,17 +70,17 @@ export function AnnotationPopover({
     const update = () => {
       const rect = getAnchorRect();
       if (rect) {
-        setPosition(computePosition(rect));
+        setPosition(computePosition(rect, tileWindow));
       }
     };
     update();
-    window.addEventListener('scroll', update, true);
-    window.addEventListener('resize', update);
+    tileWindow.addEventListener('scroll', update, true);
+    tileWindow.addEventListener('resize', update);
     return () => {
-      window.removeEventListener('scroll', update, true);
-      window.removeEventListener('resize', update);
+      tileWindow.removeEventListener('scroll', update, true);
+      tileWindow.removeEventListener('resize', update);
     };
-  }, [getAnchorRect]);
+  }, [getAnchorRect, tileWindow]);
 
   // Autofocus via ref-callback + setTimeout(0) (WKWebView commit-order trap).
   const focusOnMountRef = useCallback((el: HTMLTextAreaElement | null) => {
@@ -105,9 +108,10 @@ export function AnnotationPopover({
       }
       onClose();
     };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [onClose]);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('pointerdown', handlePointerDown, true);
+    return () => tileDocument.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [onClose, tileWindow]);
 
   const handleSubmit = useCallback(() => {
     if (!hasUnsavedContentRef.current) {
@@ -172,6 +176,6 @@ export function AnnotationPopover({
         </button>
       </div>
     </div>,
-    document.body,
+    portalTarget,
   );
 }

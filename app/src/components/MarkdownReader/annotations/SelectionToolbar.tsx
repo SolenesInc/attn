@@ -9,6 +9,7 @@ import {
   type QuickLabel,
 } from './quickLabels';
 import { isDomInstance } from '../../../utils/realm';
+import { usePortalTarget, useTileWindow } from '../../../tileWindow';
 
 export type ToolbarPositionMode = 'center-above' | 'top-right';
 
@@ -61,6 +62,8 @@ export function SelectionToolbar({
   const zapButtonRef = useRef<HTMLButtonElement>(null);
   const showQuickLabelsRef = useRef(showQuickLabels);
   showQuickLabelsRef.current = showQuickLabels;
+  const tileWindow = useTileWindow();
+  const portalTarget = usePortalTarget();
 
   useEffect(() => {
     const updatePosition = () => {
@@ -68,32 +71,32 @@ export function SelectionToolbar({
       if (!rect) {
         return;
       }
-      if (closeOnScrollOut && (rect.bottom < 0 || rect.top > window.innerHeight)) {
+      if (closeOnScrollOut && (rect.bottom < 0 || rect.top > tileWindow.innerHeight)) {
         onClose();
         return;
       }
       if (positionMode === 'center-above') {
         setPosition({ top: rect.top - 48, left: rect.left + rect.width / 2 });
       } else {
-        setPosition({ top: rect.top - 40, right: window.innerWidth - rect.right });
+        setPosition({ top: rect.top - 40, right: tileWindow.innerWidth - rect.right });
       }
     };
 
     updatePosition();
-    window.addEventListener('scroll', updatePosition, true);
-    window.addEventListener('resize', updatePosition);
+    tileWindow.addEventListener('scroll', updatePosition, true);
+    tileWindow.addEventListener('resize', updatePosition);
     return () => {
-      window.removeEventListener('scroll', updatePosition, true);
-      window.removeEventListener('resize', updatePosition);
+      tileWindow.removeEventListener('scroll', updatePosition, true);
+      tileWindow.removeEventListener('resize', updatePosition);
     };
-  }, [getAnchorRect, positionMode, closeOnScrollOut, onClose]);
+  }, [getAnchorRect, positionMode, closeOnScrollOut, onClose, tileWindow]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing) {
         return;
       }
-      if (isEditableElement(e.target) || isEditableElement(document.activeElement)) {
+      if (isEditableElement(e.target) || isEditableElement(tileWindow.document.activeElement)) {
         return;
       }
       if (showQuickLabelsRef.current) {
@@ -121,9 +124,9 @@ export function SelectionToolbar({
       onRequestComment(e.key);
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onRequestComment, onQuickLabel]);
+    tileWindow.addEventListener('keydown', handleKeyDown);
+    return () => tileWindow.removeEventListener('keydown', handleKeyDown);
+  }, [onRequestComment, onQuickLabel, tileWindow]);
 
   // Registered on mount, so the picker (which mounts later) sits above and dismisses first.
   useEscapeStack(onClose, true);
@@ -141,9 +144,10 @@ export function SelectionToolbar({
       }
       onClose();
     };
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
-  }, [onClose]);
+    const tileDocument = tileWindow.document;
+    tileDocument.addEventListener('pointerdown', handlePointerDown, true);
+    return () => tileDocument.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [onClose, tileWindow]);
 
   if (!position) {
     return null;
@@ -221,7 +225,7 @@ export function SelectionToolbar({
         <CloseIcon />
       </button>
     </div>,
-    document.body,
+    portalTarget,
   );
 }
 

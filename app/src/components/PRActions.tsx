@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useDaemonContext } from '../contexts/DaemonContext';
+import { usePortalTarget } from '../tileWindow';
 import './PRActions.css';
 
 interface ActionState {
@@ -23,6 +24,7 @@ interface PRActionsProps {
 export function PRActions({ number, prId, author, compact = false, onMuted, onActionComplete, onOpen }: PRActionsProps) {
   const { sendPRAction, sendMutePR, sendMuteAuthor } = useDaemonContext();
   const [showMergeConfirm, setShowMergeConfirm] = useState(false);
+  const portalTarget = usePortalTarget();
   const [approveState, setApproveState] = useState<ActionState>({ loading: false, success: false, error: null });
   const [mergeState, setMergeState] = useState<ActionState>({ loading: false, success: false, error: null });
 
@@ -183,7 +185,7 @@ export function PRActions({ number, prId, author, compact = false, onMuted, onAc
             </div>
           </div>
         </div>,
-        document.body
+        portalTarget
       )}
     </>
   );
