@@ -29,7 +29,7 @@ missing.
 The workflow builds:
 
 - on every push to `main` that changes the phone: `mobile/**`,
-  `internal/protocol/schema/gateway.tsp`, `ghostty-vt.pin`, or a file in `app/src`
+  `internal/protocol/schema/home_gateway.tsp`, `ghostty-vt.pin`, or a file in `app/src`
   that the phone's bundle includes
 - when you start it: **Actions → TestFlight → Run workflow**, or
   `gh workflow run testflight.yml`
@@ -39,7 +39,7 @@ The workflow builds:
 One build runs at a time, and at most one waits. A push during a build replaces
 the build that waits. Each build checks out the newest `main` when it starts, so
 merges that land together become one follow-up build holding all of them, in
-whichever order GitHub queued them. Changes to the daemon's gateway code build
+whichever order GitHub queued them. Changes to the daemon's Home Gateway code build
 nothing, because they do not change the app.
 
 The workflow lists the `app/src` files by name, taken from the bundle's module

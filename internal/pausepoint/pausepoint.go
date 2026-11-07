@@ -111,7 +111,7 @@ const (
 	KittyImageRequested        = "kitty-image-requested"
 	PtySizeOwnerChecked        = "pty-size-owner-checked"
 	PtySizesReleased           = "pty-sizes-released"
-	GatewayScreenCaptured      = "gateway-screen-captured"
+	HomeGatewayScreenCaptured  = "home-gateway-screen-captured"
 )
 
 type armed struct {

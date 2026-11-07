@@ -16,7 +16,7 @@ import {
   draftAnswers,
   emptyAnswer,
   emptyDraft,
-  fromGatewayAsk,
+  fromHomeGatewayAsk,
   type Answer,
 } from './asks/ask'
 import { ImageRefused, fetchAskImage } from './asks/images'
@@ -24,7 +24,7 @@ import { keepParsed, visualsOf, type DiagramView, type ImageView } from './asks/
 import { askRow, askScreen, type AskActions, type AskRow } from './asks/view'
 import { attachZoom } from './asks/zoom'
 import { fromBase64Url } from './bytes'
-import { GardenSeed, SeedDetail, Verb, fromGatewayDetail, fromGatewaySeed } from './garden/seed'
+import { GardenSeed, SeedDetail, Verb, fromHomeGatewayDetail, fromHomeGatewaySeed } from './garden/seed'
 import { gardenScreen, seedScreen, type GardenActions } from './garden/view'
 import { deviceKeys } from './device'
 import { homeGardenApi, homeTerminalApi, pairWithHome, runLink, type Link, type LinkEvent } from './link'
@@ -39,7 +39,14 @@ import {
   savePairings,
 } from './pairing'
 import { readPushTap, registerForPush, watchPushTokens } from './push'
-import { Home, QueueSession, buildQueue, fromGatewaySession, type HomeRow, type SessionRow } from './queue'
+import {
+  Home,
+  QueueSession,
+  buildQueue,
+  fromHomeGatewaySession,
+  type HomeRow,
+  type SessionRow,
+} from './queue'
 import { activeTerminal, mountTerminal, terminalKeys, type TerminalKey } from './terminal/terminal'
 
 // MODEL
@@ -425,7 +432,7 @@ export const GetSeed = Command.define('GetSeed', {
       const reply = await linkTo(pairingId).request({ cmd: 'seed_get', seed_id: seedId })
       if (reply.event === 'seed_error') throw new Error(reply.message)
       if (reply.event !== 'seed_detail') throw new Error(`the home answered ${reply.event}`)
-      return fromGatewayDetail(reply)
+      return fromHomeGatewayDetail(reply)
     }).pipe(
       Effect.map((detail) => Message.LoadedSeed({ pairingId, seedId, detail })),
       Effect.catch(({ cause }) =>
@@ -1155,11 +1162,11 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
         profileName: event.profileName,
       })
     case 'Sessions':
-      return Message.ReceivedSessions({ pairingId, sessions: event.sessions.map(fromGatewaySession) })
+      return Message.ReceivedSessions({ pairingId, sessions: event.sessions.map(fromHomeGatewaySession) })
     case 'Asks':
-      return Message.ReceivedAsks({ pairingId, asks: event.asks.map(fromGatewayAsk) })
+      return Message.ReceivedAsks({ pairingId, asks: event.asks.map(fromHomeGatewayAsk) })
     case 'Garden':
-      return Message.ReceivedGarden({ pairingId, seeds: event.seeds.map(fromGatewaySeed) })
+      return Message.ReceivedGarden({ pairingId, seeds: event.seeds.map(fromHomeGatewaySeed) })
     case 'SeedChanged':
       return Message.ChangedSeed({ pairingId, seedId: event.seedId })
     case 'HomeOffline':

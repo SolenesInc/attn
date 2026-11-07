@@ -17,14 +17,14 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 )
 
-var recordOldPhone = flag.Int("record-old-phone", 0, "write testdata/old_phones/api-<N>.jsonl for a new gateway api; a recording that exists stays frozen")
+var recordOldPhone = flag.Int("record-old-phone", 0, "write testdata/old_phones/api-<N>.jsonl for a new Home Gateway api; a recording that exists stays frozen")
 
 const oldPhonesDir = "testdata/old_phones"
 
-// A recording freezes what a phone of one gateway api sends and the shape of what it reads back. Lines are
+// A recording freezes what a phone of one Home Gateway api sends and the shape of what it reads back. Lines are
 // {"phone": message} or {"home": shape} or {"home_output": terminal}. A $name string is one of the conversation's ids.
 type oldPhoneLine struct {
 	Phone      json.RawMessage `json:"phone,omitempty"`
@@ -290,16 +290,16 @@ func recordedOldPhones(t *testing.T) map[int]string {
 	return recorded
 }
 
-func TestAPhoneOfEveryGatewayAPIKeepsWorkingAgainstThisHome(t *testing.T) {
+func TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome(t *testing.T) {
 	if *recordOldPhone != 0 {
 		recordOldPhoneConversation(t, *recordOldPhone)
 		return
 	}
 	recorded := recordedOldPhones(t)
-	if recorded[gateway.APIVersion] == "" {
-		t.Fatalf("the gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryGatewayAPI -record-old-phone=%d", gateway.APIVersion, oldPhonesDir, gateway.APIVersion, gateway.APIVersion)
+	if recorded[homegateway.APIVersion] == "" {
+		t.Fatalf("the Home Gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryHomeGatewayAPI -record-old-phone=%d", homegateway.APIVersion, oldPhonesDir, homegateway.APIVersion, homegateway.APIVersion)
 	}
-	for api := 1; api <= gateway.APIVersion; api++ {
+	for api := 1; api <= homegateway.APIVersion; api++ {
 		path := recorded[api]
 		if path == "" {
 			t.Errorf("%s has no recording of api %d, and recordings are never removed", oldPhonesDir, api)

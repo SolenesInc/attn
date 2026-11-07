@@ -1,7 +1,12 @@
 import { concatBytes } from '@noble/hashes/utils.js'
-import { decodeGatewayEvent, type GatewayEvent } from '@attn/gateway/decode'
-import type { GatewayAsk, GatewaySeed, GatewaySession, TerminalScreen } from '@attn/types/gatewayGenerated'
-import { GATEWAY_API_VERSION } from '@attn/types/gatewayVersion'
+import { decodeHomeGatewayEvent, type HomeGatewayEvent } from '@attn/homeGateway/decode'
+import type {
+  HomeGatewayAsk,
+  HomeGatewaySeed,
+  HomeGatewaySession,
+  TerminalScreen,
+} from '@attn/types/homeGatewayGenerated'
+import { HOME_GATEWAY_API_VERSION } from '@attn/types/homeGatewayVersion'
 import { fromBase64, fromBase64Url, toBase64Url } from './bytes'
 import { relayToken, signChallenge, type DeviceKeys } from './device'
 import { HandshakeKind, startHandshake, type Transport } from './noise'
@@ -57,9 +62,9 @@ export type LinkEvent =
       readonly homeName: string
       readonly profileName: string
     }
-  | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<GatewaySession> }
-  | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<GatewayAsk> }
-  | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<GatewaySeed> }
+  | { readonly _tag: 'Sessions'; readonly sessions: ReadonlyArray<HomeGatewaySession> }
+  | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<HomeGatewayAsk> }
+  | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<HomeGatewaySeed> }
   | { readonly _tag: 'SeedChanged'; readonly seedId: string }
   | { readonly _tag: 'HomeOffline' }
   | { readonly _tag: 'Lost'; readonly reason: string }
@@ -67,9 +72,9 @@ export type LinkEvent =
 
 type Pairing = { readonly pairingId: string; readonly secret: Uint8Array }
 
-export type Reply = Extract<GatewayEvent, { request_id: string }>
+export type Reply = Extract<HomeGatewayEvent, { request_id: string }>
 
-// A request is one gateway command that the home answers with one event carrying its request_id.
+// A request is one Home Gateway command that the home answers with one event carrying its request_id.
 type Socket = {
   readonly close: () => void
   readonly request: (command: { readonly cmd: string; readonly [field: string]: unknown }) => Promise<Reply>
@@ -162,8 +167,8 @@ const openSocket = (
   let homeAnswersPing = false
   let welcomed = false
   const pending = new Map<string, Pending>()
-  const asks = new Map<string, GatewayAsk>()
-  const seeds = new Map<string, GatewaySeed>()
+  const asks = new Map<string, HomeGatewayAsk>()
+  const seeds = new Map<string, HomeGatewaySeed>()
   let deadline: ReturnType<typeof setTimeout> | undefined
   let pongDeadline: ReturnType<typeof setTimeout> | undefined
 
@@ -181,7 +186,7 @@ const openSocket = (
       () => end(`${pinged}: no answer for ${pongDeadlineMs / 1000} s; reconnecting`),
       pongDeadlineMs,
     )
-    if (transport && homeAnswersPing) inOrder(() => sendGateway({ cmd: 'ping' }))
+    if (transport && homeAnswersPing) inOrder(() => sendHomeGateway({ cmd: 'ping' }))
     else socket.send('ping')
   }, pingIntervalMs)
   const answered = () => {
@@ -216,7 +221,7 @@ const openSocket = (
   }
 
   const send = (type: number, payload: Uint8Array) => socket.send(encodeFrame(type, connId, payload))
-  const sendGateway = async (message: object) => {
+  const sendHomeGateway = async (message: object) => {
     const sending = transport
     if (!sending) return
     const sealed = await sending.send.encrypt(new TextEncoder().encode(JSON.stringify(message)))
@@ -255,7 +260,7 @@ const openSocket = (
 
   const receive = (plaintext: Uint8Array) => {
     if (plaintext[0] === outputFrame) return onTerminal(decodeOutputFrame(plaintext))
-    const event = decodeGatewayEvent(new TextDecoder().decode(plaintext))
+    const event = decodeHomeGatewayEvent(new TextDecoder().decode(plaintext))
     switch (event?.event) {
       case 'welcome':
         clearTimeout(deadline)
@@ -324,7 +329,7 @@ const openSocket = (
       const finished = await finish(payload)
       if (ended) return
       transport = finished
-      return sendGateway({ cmd: 'hello', api: GATEWAY_API_VERSION, device_id: keys.id })
+      return sendHomeGateway({ cmd: 'hello', api: HOME_GATEWAY_API_VERSION, device_id: keys.id })
     }
     if (!transport) return
     const plaintext = await transport.recv.decrypt(payload)
@@ -382,11 +387,11 @@ const openSocket = (
         if (ended || !transport || !welcomed) return reject(new Error(`${home.homeName} is not connected`))
         const requestId = crypto.randomUUID()
         pending.set(requestId, { resolve, reject })
-        inOrder(() => sendGateway({ ...command, request_id: requestId }))
+        inOrder(() => sendHomeGateway({ ...command, request_id: requestId }))
       }),
     send: (message) => {
       if (ended || !transport || !welcomed) return false
-      inOrder(() => sendGateway(message))
+      inOrder(() => sendHomeGateway(message))
       return true
     },
   }

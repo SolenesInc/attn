@@ -12,19 +12,19 @@ import (
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/store"
 )
 
-// gatewayImageChunkBytes keeps a chunk's base64 (54,616 bytes) and its fields inside one gateway message.
-const gatewayImageChunkBytes = 40 << 10
+// homeGatewayImageChunkBytes keeps a chunk's base64 (54,616 bytes) and its fields inside one Home Gateway message.
+const homeGatewayImageChunkBytes = 40 << 10
 
-const gatewayAsksAPI = 3
+const homeGatewayAsksAPI = 3
 
-const gatewayDecodedImageSourcesAPI = 5
+const homeGatewayDecodedImageSourcesAPI = 5
 
-func (d *Daemon) gatewaySendAsks(conn *gatewayConn) error {
-	if conn.api < gatewayAsksAPI {
+func (d *Daemon) homeGatewaySendAsks(conn *homeGatewayConn) error {
+	if conn.api < homeGatewayAsksAPI {
 		return nil
 	}
 	ids := []string{}
@@ -33,7 +33,7 @@ func (d *Daemon) gatewaySendAsks(conn *gatewayConn) error {
 		if !askShownIn(conn.device.ProfileID, shown.profileID) {
 			continue
 		}
-		frame, err := gatewayAskFrame(shown.wire)
+		frame, err := homeGatewayAskFrame(shown.wire)
 		if err != nil {
 			return err
 		}
@@ -53,36 +53,36 @@ func (d *Daemon) gatewaySendAsks(conn *gatewayConn) error {
 	if !changed {
 		return nil
 	}
-	if err := gatewaySend(conn, gateway.GatewayAsks{Event: "asks", Ids: ids}); err != nil {
+	if err := homeGatewaySend(conn, homegateway.HomeGatewayAsks{Event: "asks", Ids: ids}); err != nil {
 		return err
 	}
 	conn.sentAsks, conn.sentAskIDs = frames, ids
 	return nil
 }
 
-func gatewayAskFrame(wire protocol.Ask) ([]byte, error) {
-	out := gatewayAsk(wire)
-	frame, err := gatewayMarshal(gateway.GatewayAskEvent{Event: "ask", Ask: out})
+func homeGatewayAskFrame(wire protocol.Ask) ([]byte, error) {
+	out := homeGatewayAsk(wire)
+	frame, err := homeGatewayMarshal(homegateway.HomeGatewayAskEvent{Event: "ask", Ask: out})
 	if err != nil || len(frame) <= cloudlink.MaxMessageBytes {
 		return frame, err
 	}
-	return gatewayMarshal(gateway.GatewayAskEvent{Event: "ask", Ask: tooLargeAsk(out, len(frame))})
+	return homeGatewayMarshal(homegateway.HomeGatewayAskEvent{Event: "ask", Ask: tooLargeAsk(out, len(frame))})
 }
 
-// gatewayTooLargeSubjectRunes keeps the stand-in for an ask too large for a frame within a few KiB, whatever escaping
+// homeGatewayTooLargeSubjectRunes keeps the stand-in for an ask too large for a frame within a few KiB, whatever escaping
 // its subject needs.
-const gatewayTooLargeSubjectRunes = 200
+const homeGatewayTooLargeSubjectRunes = 200
 
-func tooLargeAsk(full gateway.GatewayAsk, size int) gateway.GatewayAsk {
+func tooLargeAsk(full homegateway.HomeGatewayAsk, size int) homegateway.HomeGatewayAsk {
 	subject := []rune(full.Subject)
-	if len(subject) > gatewayTooLargeSubjectRunes {
-		subject = append(subject[:gatewayTooLargeSubjectRunes-1], '…')
+	if len(subject) > homeGatewayTooLargeSubjectRunes {
+		subject = append(subject[:homeGatewayTooLargeSubjectRunes-1], '…')
 	}
-	out := gateway.GatewayAsk{
+	out := homegateway.HomeGatewayAsk{
 		ID:            full.ID,
 		SessionID:     full.SessionID,
 		Subject:       string(subject),
-		Parts:         []gateway.GatewayAskPart{},
+		Parts:         []homegateway.HomeGatewayAskPart{},
 		CreatedAt:     full.CreatedAt,
 		SeedSlug:      full.SeedSlug,
 		CrewMember:    full.CrewMember,
@@ -91,17 +91,17 @@ func tooLargeAsk(full gateway.GatewayAsk, size int) gateway.GatewayAsk {
 		MaxFrameBytes: protocol.Ptr(cloudlink.MaxMessageBytes),
 	}
 	if full.Reply != nil {
-		out.Reply = &gateway.GatewayAskReply{Answers: []gateway.GatewayAskAnswer{}, AnsweredAt: full.Reply.AnsweredAt}
+		out.Reply = &homegateway.HomeGatewayAskReply{Answers: []homegateway.HomeGatewayAskAnswer{}, AnsweredAt: full.Reply.AnsweredAt}
 	}
 	return out
 }
 
-func gatewayAsk(wire protocol.Ask) gateway.GatewayAsk {
-	out := gateway.GatewayAsk{
+func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
+	out := homegateway.HomeGatewayAsk{
 		ID:         wire.ID,
 		SessionID:  string(wire.SessionID),
 		Subject:    wire.Subject,
-		Parts:      make([]gateway.GatewayAskPart, 0, len(wire.Parts)),
+		Parts:      make([]homegateway.HomeGatewayAskPart, 0, len(wire.Parts)),
 		CreatedAt:  parseAskTime(wire.CreatedAt),
 		SeedSlug:   wire.SeedSlug,
 		SeedTitle:  wire.SeedTitle,
@@ -109,11 +109,11 @@ func gatewayAsk(wire protocol.Ask) gateway.GatewayAsk {
 		Chief:      wire.Chief,
 	}
 	for _, part := range wire.Parts {
-		out.Parts = append(out.Parts, gateway.GatewayAskPart{Markdown: part.Markdown, Question: gatewayAskQuestion(part.Question)})
+		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question)})
 	}
 	if wire.Reply != nil {
-		out.Reply = &gateway.GatewayAskReply{
-			Answers:    gatewayAskAnswers(wire.Reply.Answers),
+		out.Reply = &homegateway.HomeGatewayAskReply{
+			Answers:    homeGatewayAskAnswers(wire.Reply.Answers),
 			Note:       wire.Reply.Note,
 			AnsweredAt: parseAskTime(wire.Reply.AnsweredAt),
 		}
@@ -126,55 +126,55 @@ func parseAskTime(value string) time.Time {
 	return parsed.UTC()
 }
 
-func gatewayAskQuestion(question *protocol.AskQuestion) *gateway.GatewayAskQuestion {
+func homeGatewayAskQuestion(question *protocol.AskQuestion) *homegateway.HomeGatewayAskQuestion {
 	if question == nil {
 		return nil
 	}
-	out := &gateway.GatewayAskQuestion{
+	out := &homegateway.HomeGatewayAskQuestion{
 		Key:         question.Key,
-		Kind:        gateway.GatewayAskQuestionKind(question.Kind),
+		Kind:        homegateway.HomeGatewayAskQuestionKind(question.Kind),
 		Prompt:      question.Prompt,
 		Context:     question.Context,
-		Choices:     make([]gateway.GatewayAskChoice, 0, len(question.Choices)),
+		Choices:     make([]homegateway.HomeGatewayAskChoice, 0, len(question.Choices)),
 		Recommended: question.Recommended,
 	}
 	for _, choice := range question.Choices {
-		out.Choices = append(out.Choices, gateway.GatewayAskChoice{Label: choice.Label, Description: choice.Description})
+		out.Choices = append(out.Choices, homegateway.HomeGatewayAskChoice{Label: choice.Label, Description: choice.Description})
 	}
 	return out
 }
 
-func gatewayAskAnswers(answers []protocol.AskAnswer) []gateway.GatewayAskAnswer {
-	out := make([]gateway.GatewayAskAnswer, 0, len(answers))
+func homeGatewayAskAnswers(answers []protocol.AskAnswer) []homegateway.HomeGatewayAskAnswer {
+	out := make([]homegateway.HomeGatewayAskAnswer, 0, len(answers))
 	for _, answer := range answers {
-		out = append(out, gateway.GatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
+		out = append(out, homegateway.HomeGatewayAskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
 	}
 	return out
 }
 
-func (d *Daemon) gatewayAnswerAsk(conn *gatewayConn, command gateway.GatewayAskAnswerCommand) error {
+func (d *Daemon) homeGatewayAnswerAsk(conn *homeGatewayConn, command homegateway.HomeGatewayAskAnswerCommand) error {
 	answers := make([]protocol.AskAnswer, 0, len(command.Answers))
 	for _, answer := range command.Answers {
 		answers = append(answers, protocol.AskAnswer{Key: answer.Key, Picked: answer.Picked, Other: answer.Other, Text: answer.Text})
 	}
-	result := gateway.GatewayAskAnswerResult{Event: "ask_answer_result", RequestID: command.RequestID, AskID: command.AskID}
+	result := homegateway.HomeGatewayAskAnswerResult{Event: "ask_answer_result", RequestID: command.RequestID, AskID: command.AskID}
 	err := d.answerAsk(&protocol.AskAnswerMessage{AskID: command.AskID, Answers: answers, Note: command.Note}, conn.device.ProfileID)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
-	return gatewaySend(conn, result)
+	return homeGatewaySend(conn, result)
 }
 
-func (d *Daemon) gatewayAskImage(conn *gatewayConn, command gateway.GatewayAskImage) error {
-	mimeType, data, err := d.gatewayAskImageBytes(conn, strings.TrimSpace(command.AskID), command.Src)
+func (d *Daemon) homeGatewayAskImage(conn *homeGatewayConn, command homegateway.HomeGatewayAskImage) error {
+	mimeType, data, err := d.homeGatewayAskImageBytes(conn, strings.TrimSpace(command.AskID), command.Src)
 	if err == nil && (command.Offset < 0 || command.Offset > len(data)) {
 		err = fmt.Errorf("offset %d is outside %s, which holds %d bytes", command.Offset, command.Src, len(data))
 	}
 	if err != nil {
-		return gatewaySend(conn, gateway.GatewayAskImageError{Event: "ask_image_error", RequestID: command.RequestID, Message: err.Error()})
+		return homeGatewaySend(conn, homegateway.HomeGatewayAskImageError{Event: "ask_image_error", RequestID: command.RequestID, Message: err.Error()})
 	}
-	chunk := data[command.Offset:min(len(data), command.Offset+gatewayImageChunkBytes)]
-	return gatewaySend(conn, gateway.GatewayAskImageChunk{
+	chunk := data[command.Offset:min(len(data), command.Offset+homeGatewayImageChunkBytes)]
+	return homeGatewaySend(conn, homegateway.HomeGatewayAskImageChunk{
 		Event:      "ask_image_chunk",
 		RequestID:  command.RequestID,
 		Offset:     command.Offset,
@@ -184,12 +184,12 @@ func (d *Daemon) gatewayAskImage(conn *gatewayConn, command gateway.GatewayAskIm
 	})
 }
 
-func (d *Daemon) gatewayAskImageBytes(conn *gatewayConn, askID, src string) (string, []byte, error) {
+func (d *Daemon) homeGatewayAskImageBytes(conn *homeGatewayConn, askID, src string) (string, []byte, error) {
 	stored, err := d.askShownTo(askID, conn.device.ProfileID)
 	if err != nil {
 		return "", nil, err
 	}
-	if conn.api < gatewayDecodedImageSourcesAPI {
+	if conn.api < homeGatewayDecodedImageSourcesAPI {
 		if src, err = partlyDecodedImageSource(stored, src); err != nil {
 			return "", nil, err
 		}

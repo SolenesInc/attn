@@ -140,5 +140,5 @@ go ./cmd/attn TestUsingAPairingCodeKeepsThePhoneAndDropsOtherHoldersOfIt
 go ./cmd/attn TestEachProfileHasItsOwnPairingWindow
 go ./cmd/attn TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly
 
-group old-phones ^internal/daemon/gateway|^internal/daemon/testdata/old_phones/|^internal/protocol/(schema/gateway\.tsp|gateway/)
-go ./internal/daemon TestAPhoneOfEveryGatewayAPIKeepsWorkingAgainstThisHome
+group old-phones ^internal/daemon/home_gateway|^internal/daemon/testdata/old_phones/|^internal/protocol/(schema/home_gateway\.tsp|homegateway/)
+go ./internal/daemon TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome

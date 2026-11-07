@@ -17,7 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -405,8 +405,8 @@ func TestAPhoneThatReconnectsWhileTheHomeStartsOpensItsTerminalOnceTheHomeHasRec
 	if err := socket.Resume(qr); err != nil {
 		t.Fatal(err)
 	}
-	socket.Send(gateway.GatewayHello{Cmd: "hello", API: gateway.APIVersion, DeviceID: "phone"})
-	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	socket.Send(homegateway.HomeGatewayHello{Cmd: "hello", API: homegateway.APIVersion, DeviceID: "phone"})
+	socket.Send(homegateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
 	starting.Release()
 	ready()
 
@@ -421,7 +421,7 @@ func TestAPhoneThatReconnectsWhileTheHomeStartsOpensItsTerminalOnceTheHomeHasRec
 		_ = json.Unmarshal(raw, &head)
 		switch head.Event {
 		case "terminal_screen":
-			var screen gateway.TerminalScreen
+			var screen homegateway.TerminalScreen
 			_ = json.Unmarshal(raw, &screen)
 			ansi, _ := base64.StdEncoding.DecodeString(screen.Ansi)
 			if !strings.Contains(string(ansi), "before-2") {
@@ -485,7 +485,7 @@ func TestAPhonesOutpostTerminalComesBackWhenTheOutpostAnswersAgain(t *testing.T)
 			}
 		}
 	}
-	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	socket.Send(homegateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
 	next("terminal_screen")
 
 	mark := app.EventCount()
@@ -497,7 +497,7 @@ func TestAPhonesOutpostTerminalComesBackWhenTheOutpostAnswersAgain(t *testing.T)
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
 	next("terminal_screen")
 
-	socket.Send(gateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "printf 'back-%s\\n' again\r"})
+	socket.Send(homegateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "printf 'back-%s\\n' again\r"})
 	for !strings.Contains(output.String(), "back-again") {
 		next("")
 	}
@@ -508,7 +508,7 @@ func TestAPhonesOutpostTerminalComesBackWhenTheOutpostAnswersAgain(t *testing.T)
 		if err != nil {
 			t.Fatalf("waiting for the closed session's terminal to end: %v", err)
 		}
-		var ended gateway.TerminalEnded
+		var ended homegateway.TerminalEnded
 		if json.Unmarshal(raw, &ended) == nil && ended.Event == "terminal_ended" && ended.TerminalID == terminal {
 			return
 		}

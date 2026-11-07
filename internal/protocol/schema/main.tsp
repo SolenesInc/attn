@@ -8490,7 +8490,7 @@ model PhonePairingCode {
   qr: string;
 }
 
-// One device's access to one profile. connected: the device holds a gateway
+// One device's access to one profile. connected: the device holds a Home Gateway
 // conversation right now.
 model PhonePairing {
   device_id: string;

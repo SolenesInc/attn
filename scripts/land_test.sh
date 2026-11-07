@@ -195,9 +195,9 @@ printf 'setting\n' >internal/setting/example.txt
 land 'Settings declaration change'
 expect_checks 'check-types' sync
 
-printf 'gateway\n' >internal/protocol/schema/gateway.tsp
-land 'Gateway API change'
-expect_checks 'check-types check-gateway-compat' 'land --group old-phones' "landing-tests $selected_units" sync
+printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
+land 'HomeGateway API change'
+expect_checks 'check-types check-home-gateway-compat' 'land --group old-phones' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh

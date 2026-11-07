@@ -25,7 +25,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyhost/ptyhosttest"
 	"github.com/victorarias/attn/internal/ptyworker"
@@ -861,8 +861,8 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 	if err := socket.Resume(qr); err != nil {
 		t.Fatal(err)
 	}
-	socket.Send(gateway.GatewayHello{Cmd: "hello", API: gateway.APIVersion, DeviceID: "phone"})
-	socket.Send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
+	socket.Send(homegateway.HomeGatewayHello{Cmd: "hello", API: homegateway.APIVersion, DeviceID: "phone"})
+	socket.Send(homegateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: 256 << 10})
 	for {
 		raw, err := socket.Next()
 		if err != nil {
@@ -876,7 +876,7 @@ func TestAPhoneReattachesToAHostTerminalAndDrawsAfterAnUpdate(t *testing.T) {
 			t.Fatalf("the phone's attach after the update was refused: %s", raw)
 		}
 		if head.Event == "terminal_screen" {
-			var screen gateway.TerminalScreen
+			var screen homegateway.TerminalScreen
 			_ = json.Unmarshal(raw, &screen)
 			ansi, _ := base64.StdEncoding.DecodeString(screen.Ansi)
 			if !strings.Contains(string(ansi), "printed-2") {

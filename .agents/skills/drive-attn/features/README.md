@@ -374,7 +374,7 @@ instance. A file whose recipe ran live says so here.
 - [Keyboard shortcuts](shortcuts.md) (people): Every action has a shortcut, listed in a cheat sheet and rebindable.
 - [Profiles](profiles.md) (people): Separate worlds for the user's work. Nothing in one profile exists in another.
 - [Outposts](outposts.md) (both): Agents and terminals on other machines, driven from the home's app.
-- [Phones](phones.md) (people): A paired phone sees one profile's agents through the home's gateway.
+- [Phones](phones.md) (people): A paired phone sees one profile's agents through the Home Gateway.
 
 ### Agent toolkit and operations
 

@@ -138,7 +138,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostReach() }},
-		{filter: gatewayFacts, apply: func(d *Daemon, _ bus.Event) { d.gateway.nudge() }},
+		{filter: homeGatewayFacts, apply: func(d *Daemon, _ bus.Event) { d.homeGateway.nudge() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {
 				ProfileID string `json:"profile_id"`
@@ -301,7 +301,7 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{"garden.seed.*"},
 			apply: func(d *Daemon, ev bus.Event) {
-				d.gateway.seedChanged(ev.Subject)
+				d.homeGateway.seedChanged(ev.Subject)
 				d.projectGardenUnchanged()
 			},
 		},

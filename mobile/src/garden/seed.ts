@@ -1,4 +1,4 @@
-import type { GatewaySeed, GatewaySeedDetail } from '@attn/types/gatewayGenerated'
+import type { HomeGatewaySeed, HomeGatewaySeedDetail } from '@attn/types/homeGatewayGenerated'
 import { Schema } from 'effect'
 
 export const SeedStatus = Schema.Literals([
@@ -65,7 +65,7 @@ export const SeedDetail = Schema.Struct({
 })
 export type SeedDetail = typeof SeedDetail.Type
 
-export const fromGatewaySeed = (seed: GatewaySeed): GardenSeed => ({
+export const fromHomeGatewaySeed = (seed: HomeGatewaySeed): GardenSeed => ({
   id: seed.id,
   slug: seed.slug,
   title: seed.title,
@@ -81,8 +81,8 @@ export const fromGatewaySeed = (seed: GatewaySeed): GardenSeed => ({
   reason: seed.reason ?? null,
 })
 
-export const fromGatewayDetail = (detail: GatewaySeedDetail): SeedDetail => ({
-  seed: fromGatewaySeed(detail.seed),
+export const fromHomeGatewayDetail = (detail: HomeGatewaySeedDetail): SeedDetail => ({
+  seed: fromHomeGatewaySeed(detail.seed),
   body: detail.body,
   bodyTooLarge:
     detail.body_too_large_bytes !== undefined
@@ -94,7 +94,7 @@ export const fromGatewayDetail = (detail: GatewaySeedDetail): SeedDetail => ({
     state: check.state,
     from: check.from ?? null,
   })),
-  children: detail.children.map(fromGatewaySeed),
+  children: detail.children.map(fromHomeGatewaySeed),
   log: detail.log.map((entry) => ({
     id: entry.id,
     kind: entry.kind,

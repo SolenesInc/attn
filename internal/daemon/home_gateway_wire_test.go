@@ -18,7 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -29,9 +29,9 @@ type testPhone struct {
 	closed    chan struct{}
 	closeOnce sync.Once
 	served    chan error
-	asks      map[string]gateway.GatewayAsk
+	asks      map[string]homegateway.HomeGatewayAsk
 	askIDs    []string
-	seeds     map[string]gateway.GatewaySeed
+	seeds     map[string]homegateway.HomeGatewaySeed
 	seedIDs   []string
 }
 
@@ -62,9 +62,9 @@ func (l phoneLink) Close() error {
 
 func connectPhone(t *testing.T, w *world, deviceID, profileID string) *testPhone {
 	t.Helper()
-	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]gateway.GatewayAsk{}, seeds: map[string]gateway.GatewaySeed{}}
+	p := &testPhone{t: t, toHome: make(chan []byte), fromHome: make(chan []byte, 64), closed: make(chan struct{}), served: make(chan error, 1), asks: map[string]homegateway.HomeGatewayAsk{}, seeds: map[string]homegateway.HomeGatewaySeed{}}
 	go func() {
-		p.served <- w.daemon.ServeGateway(daemon.GatewayDevice{DeviceID: deviceID, ProfileID: profileID}, phoneLink{p})
+		p.served <- w.daemon.ServeHomeGateway(daemon.HomeGatewayDevice{DeviceID: deviceID, ProfileID: profileID}, phoneLink{p})
 	}()
 	t.Cleanup(func() {
 		phoneLink{p}.Close()
@@ -75,7 +75,7 @@ func connectPhone(t *testing.T, w *world, deviceID, profileID string) *testPhone
 
 func (p *testPhone) hello(api int) {
 	p.t.Helper()
-	frame, _ := json.Marshal(gateway.GatewayHello{Cmd: "hello", API: api, DeviceID: "phone"})
+	frame, _ := json.Marshal(homegateway.HomeGatewayHello{Cmd: "hello", API: api, DeviceID: "phone"})
 	select {
 	case p.toHome <- frame:
 	case <-p.closed:
@@ -122,26 +122,26 @@ func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
 			Event string `json:"event"`
 		}
 		if err := json.Unmarshal(frame, &head); err != nil {
-			p.t.Fatalf("the home sent %s, which is not a gateway event", frame)
+			p.t.Fatalf("the home sent %s, which is not a Home Gateway event", frame)
 		}
 		if len(frame) > cloudlink.MaxMessageBytes {
 			p.t.Fatalf("the home sent a %s event of %d bytes; a relay frame carries at most cloudlink.MaxMessageBytes=%d", head.Event, len(frame), cloudlink.MaxMessageBytes)
 		}
 		switch head.Event {
 		case "ask":
-			var message gateway.GatewayAskEvent
+			var message homegateway.HomeGatewayAskEvent
 			if err := json.Unmarshal(frame, &message); err != nil {
 				p.t.Fatalf("decode %s: %v", frame, err)
 			}
 			p.asks[message.Ask.ID] = message.Ask
 		case "asks":
-			var message gateway.GatewayAsks
+			var message homegateway.HomeGatewayAsks
 			if err := json.Unmarshal(frame, &message); err != nil {
 				p.t.Fatalf("decode %s: %v", frame, err)
 			}
 			p.askIDs = message.Ids
 		case "garden_seeds":
-			var message gateway.GatewayGardenSeeds
+			var message homegateway.HomeGatewayGardenSeeds
 			if err := json.Unmarshal(frame, &message); err != nil {
 				p.t.Fatalf("decode %s: %v", frame, err)
 			}
@@ -149,7 +149,7 @@ func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
 				p.seeds[seed.ID] = seed
 			}
 		case "garden":
-			var message gateway.GatewayGarden
+			var message homegateway.HomeGatewayGarden
 			if err := json.Unmarshal(frame, &message); err != nil {
 				p.t.Fatalf("decode %s: %v", frame, err)
 			}
@@ -162,16 +162,16 @@ func (p *testPhone) receive(guard *time.Timer, awaiting string) []byte {
 	}
 }
 
-func (p *testPhone) sessions() []gateway.GatewaySession {
+func (p *testPhone) sessions() []homegateway.HomeGatewaySession {
 	p.t.Helper()
-	var message gateway.GatewaySessions
+	var message homegateway.HomeGatewaySessions
 	p.next("sessions", &message)
 	return message.Sessions
 }
 
 func (p *testPhone) refusedWith(message string) {
 	p.t.Helper()
-	var refused gateway.GatewayRefused
+	var refused homegateway.HomeGatewayRefused
 	p.next("refused", &refused)
 	if refused.Message != message {
 		p.t.Fatalf("refused with %q, want %q", refused.Message, message)
@@ -185,7 +185,7 @@ func (p *testPhone) refusedWith(message string) {
 	}
 }
 
-func gatewaySessionIDs(sessions []gateway.GatewaySession) []string {
+func homeGatewaySessionIDs(sessions []homegateway.HomeGatewaySession) []string {
 	ids := []string{}
 	for _, session := range sessions {
 		ids = append(ids, session.ID)
@@ -195,7 +195,7 @@ func gatewaySessionIDs(sessions []gateway.GatewaySession) []string {
 
 const phoneAccessOff = "Phone access is off. Turn it on in Settings → Experimental → Phone access (phone_access_enabled)"
 
-func TestGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testing.T) {
+func TestHomeGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -209,13 +209,13 @@ func TestGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testin
 
 	phone := connectPhone(t, w, "phone-a", personal)
 	phone.hello(99)
-	var welcome gateway.GatewayWelcome
+	var welcome homegateway.HomeGatewayWelcome
 	phone.next("welcome", &welcome)
-	if welcome.API != gateway.APIVersion || welcome.Profile.ID != personal || welcome.HomeName == "" {
-		t.Fatalf("welcome = %+v, want api %d for profile %s from a named home", welcome, gateway.APIVersion, personal)
+	if welcome.API != homegateway.APIVersion || welcome.Profile.ID != personal || welcome.HomeName == "" {
+		t.Fatalf("welcome = %+v, want api %d for profile %s from a named home", welcome, homegateway.APIVersion, personal)
 	}
 	initial := phone.sessions()
-	if len(initial) != 1 || initial[0].ID != "mine" || initial[0].Title != "mine label" || initial[0].State != gateway.GatewaySessionStateLaunching || initial[0].Offline {
+	if len(initial) != 1 || initial[0].ID != "mine" || initial[0].Title != "mine label" || initial[0].State != homegateway.HomeGatewaySessionStateLaunching || initial[0].Offline {
 		t.Fatalf("sessions = %+v, want only the launching session mine", initial)
 	}
 
@@ -226,7 +226,7 @@ func TestGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testin
 		t.Fatal(err)
 	}
 	waiting := phone.sessions()
-	if len(waiting) != 1 || waiting[0].State != gateway.GatewaySessionStateNeedsApproval || waiting[0].WaitingSince == nil {
+	if len(waiting) != 1 || waiting[0].State != homegateway.HomeGatewaySessionStateNeedsApproval || waiting[0].WaitingSince == nil {
 		t.Fatalf("sessions after mine asked for approval = %+v, want mine alone, needs_approval, with waiting_since", waiting)
 	}
 
@@ -236,41 +236,41 @@ func TestGatewayServesOnlyThePairedProfilesSessionsAndKeepsThemCurrent(t *testin
 	if err := w.InjectSession("mine-too", "mine too", w.Path("mine-too"), protocol.SessionAgentCodex, personal); err != nil {
 		t.Fatal(err)
 	}
-	if ids := gatewaySessionIDs(phone.sessions()); len(ids) != 2 || ids[0] != "mine" || ids[1] != "mine-too" {
+	if ids := homeGatewaySessionIDs(phone.sessions()); len(ids) != 2 || ids[0] != "mine" || ids[1] != "mine-too" {
 		t.Fatalf("sessions after both profiles gained one = %v, want mine and mine-too", ids)
 	}
 
 	other := connectPhone(t, w, "phone-b", work.ID)
-	other.hello(gateway.APIVersion)
+	other.hello(homegateway.APIVersion)
 	other.next("welcome", &welcome)
-	if welcome.API != gateway.APIVersion || welcome.Profile.ID != work.ID || welcome.Profile.Name != "Work" {
+	if welcome.API != homegateway.APIVersion || welcome.Profile.ID != work.ID || welcome.Profile.Name != "Work" {
 		t.Fatalf("welcome for the work pairing = %+v", welcome)
 	}
-	if ids := gatewaySessionIDs(other.sessions()); len(ids) != 2 || ids[0] != "theirs" || ids[1] != "theirs-too" {
+	if ids := homeGatewaySessionIDs(other.sessions()); len(ids) != 2 || ids[0] != "theirs" || ids[1] != "theirs-too" {
 		t.Fatalf("the work pairing sees %v, want theirs and theirs-too", ids)
 	}
 }
 
-func TestGatewayRefusesAHelloItCannotServe(t *testing.T) {
+func TestHomeGatewayRefusesAHelloItCannotServe(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	profile := app.SelectedProfile()
 
 	phone := connectPhone(t, w, "phone", profile)
-	phone.hello(gateway.APIVersion)
+	phone.hello(homegateway.APIVersion)
 	phone.refusedWith(phoneAccessOff)
 
 	setSetting(t, app, "phone_access_enabled", "true")
 	tooOld := connectPhone(t, w, "phone", profile)
 	tooOld.hello(0)
-	tooOld.refusedWith(fmt.Sprintf("hello asked for api 0; this home serves api 1 to %d", gateway.APIVersion))
+	tooOld.refusedWith(fmt.Sprintf("hello asked for api 0; this home serves api 1 to %d", homegateway.APIVersion))
 
 	gone := connectPhone(t, w, "phone", "deleted-profile")
-	gone.hello(gateway.APIVersion)
+	gone.hello(homegateway.APIVersion)
 	gone.refusedWith("profile deleted-profile is gone from this home; pair the phone again")
 }
 
-func TestGatewayAnswersEachPingSoAPhoneKnowsItsHomeIsAwake(t *testing.T) {
+func TestHomeGatewayAnswersEachPingSoAPhoneKnowsItsHomeIsAwake(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -279,34 +279,34 @@ func TestGatewayAnswersEachPingSoAPhoneKnowsItsHomeIsAwake(t *testing.T) {
 		t.Fatal(err)
 	}
 	phone := connectPhone(t, w, "phone", profile)
-	phone.hello(gateway.APIVersion)
-	var welcome gateway.GatewayWelcome
+	phone.hello(homegateway.APIVersion)
+	var welcome homegateway.HomeGatewayWelcome
 	phone.next("welcome", &welcome)
 	if welcome.API < 2 {
 		t.Fatalf("welcome api = %d; a phone pings only a home that serves api 2 or later", welcome.API)
 	}
 	phone.sessions()
 
-	var pong gateway.GatewayPong
+	var pong homegateway.HomeGatewayPong
 	for range 2 {
-		phone.send(gateway.GatewayPing{Cmd: "ping"})
+		phone.send(homegateway.HomeGatewayPing{Cmd: "ping"})
 		phone.next("pong", &pong)
 	}
 	if err := cli.UpdateState(protocol.TerminalID(w.Terminal("mine")), protocol.StateWorking); err != nil {
 		t.Fatal(err)
 	}
-	if got := phone.sessions(); len(got) != 1 || got[0].State != gateway.GatewaySessionStateWorking {
+	if got := phone.sessions(); len(got) != 1 || got[0].State != homegateway.HomeGatewaySessionStateWorking {
 		t.Fatalf("sessions after pings = %+v, want mine working", got)
 	}
 }
 
-func TestGatewayDropsPhonesWhenPhoneAccessTurnsOff(t *testing.T) {
+func TestHomeGatewayDropsPhonesWhenPhoneAccessTurnsOff(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	setSetting(t, app, "phone_access_enabled", "true")
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
-	phone.hello(gateway.APIVersion)
-	var welcome gateway.GatewayWelcome
+	phone.hello(homegateway.APIVersion)
+	var welcome homegateway.HomeGatewayWelcome
 	phone.next("welcome", &welcome)
 	phone.sessions()
 
@@ -314,11 +314,11 @@ func TestGatewayDropsPhonesWhenPhoneAccessTurnsOff(t *testing.T) {
 	phone.refusedWith(phoneAccessOff)
 
 	again := connectPhone(t, w, "phone", app.SelectedProfile())
-	again.hello(gateway.APIVersion)
+	again.hello(homegateway.APIVersion)
 	again.refusedWith(phoneAccessOff)
 }
 
-func TestGatewayLetsTheDaemonStopWhileAPhoneHasNotSaidHello(t *testing.T) {
+func TestHomeGatewayLetsTheDaemonStopWhileAPhoneHasNotSaidHello(t *testing.T) {
 	w := newWorld(t)
 	phone := connectPhone(t, w, "phone", w.App().SelectedProfile())
 
@@ -329,18 +329,18 @@ func TestGatewayLetsTheDaemonStopWhileAPhoneHasNotSaidHello(t *testing.T) {
 	case err := <-phone.served:
 		phone.served <- err
 	case <-guard.C:
-		t.Fatalf("the gateway kept serving %s after the daemon stopped", fakeagent.HangGuard)
+		t.Fatalf("the Home Gateway kept serving %s after the daemon stopped", fakeagent.HangGuard)
 	}
 }
 
 // showsAsks waits until the asks the phone shows match, and returns them.
-func (p *testPhone) showsAsks(match func([]gateway.GatewayAsk) bool) []gateway.GatewayAsk {
+func (p *testPhone) showsAsks(match func([]homegateway.HomeGatewayAsk) bool) []homegateway.HomeGatewayAsk {
 	p.t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
 		if p.askIDs != nil {
-			asks := []gateway.GatewayAsk{}
+			asks := []homegateway.HomeGatewayAsk{}
 			for _, id := range p.askIDs {
 				asks = append(asks, p.asks[id])
 			}
@@ -352,23 +352,23 @@ func (p *testPhone) showsAsks(match func([]gateway.GatewayAsk) bool) []gateway.G
 	}
 }
 
-func (p *testPhone) askList() []gateway.GatewayAsk {
+func (p *testPhone) askList() []homegateway.HomeGatewayAsk {
 	p.t.Helper()
-	return p.showsAsks(func([]gateway.GatewayAsk) bool { return true })
+	return p.showsAsks(func([]homegateway.HomeGatewayAsk) bool { return true })
 }
 
 func (p *testPhone) welcomed() {
 	p.t.Helper()
-	p.hello(gateway.APIVersion)
-	var welcome gateway.GatewayWelcome
+	p.hello(homegateway.APIVersion)
+	var welcome homegateway.HomeGatewayWelcome
 	p.next("welcome", &welcome)
 }
 
-func (p *testPhone) answer(askID string, answers []gateway.GatewayAskAnswer, note string) gateway.GatewayAskAnswerResult {
+func (p *testPhone) answer(askID string, answers []homegateway.HomeGatewayAskAnswer, note string) homegateway.HomeGatewayAskAnswerResult {
 	p.t.Helper()
 	requestID := uuid.NewString()
-	p.send(gateway.GatewayAskAnswerCommand{Cmd: "ask_answer", RequestID: requestID, AskID: askID, Answers: answers, Note: &note})
-	var result gateway.GatewayAskAnswerResult
+	p.send(homegateway.HomeGatewayAskAnswerCommand{Cmd: "ask_answer", RequestID: requestID, AskID: askID, Answers: answers, Note: &note})
+	var result homegateway.HomeGatewayAskAnswerResult
 	p.next("ask_answer_result", &result)
 	if result.RequestID != requestID {
 		p.t.Fatalf("answer result %+v, want request %s", result, requestID)
@@ -376,7 +376,7 @@ func (p *testPhone) answer(askID string, answers []gateway.GatewayAskAnswer, not
 	return result
 }
 
-func TestGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *testing.T) {
+func TestHomeGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -402,7 +402,7 @@ func TestGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *test
 	if err != nil {
 		t.Fatalf("ask: %v", err)
 	}
-	asks := phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 1 })
+	asks := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 })
 	if asks[0].ID != asked.ID || asks[0].SessionID != asker || asks[0].Subject != "Which store should keep the cache?" || asks[0].Reply != nil {
 		t.Fatalf("the phone shows %+v, want the open ask %s from %s", asks, asked.ID, asker)
 	}
@@ -411,17 +411,17 @@ func TestGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *test
 		t.Fatalf("the ask reads %+v, want the prose then the question", parts)
 	}
 	question := parts[1].Question
-	if question.Kind != gateway.GatewayAskQuestionKindOne || len(question.Choices) != 2 || protocol.Deref(question.Recommended) != "Postgres" || question.Choices[0].Description == nil {
+	if question.Kind != homegateway.HomeGatewayAskQuestionKindOne || len(question.Choices) != 2 || protocol.Deref(question.Recommended) != "Postgres" || question.Choices[0].Description == nil {
 		t.Fatalf("the question reads %+v, want one of two described choices with Postgres recommended", question)
 	}
 
 	if crossed := phone.answer(sideAsk.ID, nil, "from the phone"); crossed.Error == nil {
 		t.Fatal("the phone answered an ask of another profile")
 	}
-	if result := phone.answer(asked.ID, []gateway.GatewayAskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}, "Keep it boring."); result.Error != nil {
+	if result := phone.answer(asked.ID, []homegateway.HomeGatewayAskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}, "Keep it boring."); result.Error != nil {
 		t.Fatalf("answering from the phone failed: %s", *result.Error)
 	}
-	replied := phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 1 && asks[0].Reply != nil })
+	replied := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 && asks[0].Reply != nil })
 	if !slices.Equal(replied[0].Reply.Answers[0].Picked, []string{"Postgres"}) || protocol.Deref(replied[0].Reply.Note) != "Keep it boring." || replied[0].Reply.AnsweredAt.IsZero() {
 		t.Fatalf("after the answer the phone shows %+v, want the reply with Postgres and the note", replied)
 	}
@@ -441,7 +441,7 @@ func TestGatewayShowsThePairedProfilesAsksAndAnswersThemAsTheDesktopDoes(t *test
 	}
 }
 
-func TestGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
+func TestHomeGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -462,7 +462,7 @@ func TestGatewayTellsThePhoneAnAskIsTooLargeForAFrame(t *testing.T) {
 	}
 }
 
-func TestGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {
+func TestHomeGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -479,7 +479,7 @@ func TestGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {
 	}
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
 	phone.welcomed()
-	phone.showsAsks(func(asks []gateway.GatewayAsk) bool { return len(asks) == 2 })
+	phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 2 })
 
 	angledNote := strings.Repeat("<", 11_000)
 	controlNote := strings.Repeat("\x01", 11_000)
@@ -488,22 +488,22 @@ func TestGatewayKeepsAPhoneConnectedWhateverAnAnswersNoteHolds(t *testing.T) {
 			t.Fatalf("answering %s: %s", id, *result.Error)
 		}
 	}
-	asks := phone.showsAsks(func(asks []gateway.GatewayAsk) bool {
+	asks := phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool {
 		return len(asks) == 2 && asks[0].Reply != nil && asks[1].Reply != nil
 	})
-	byID := map[string]gateway.GatewayAsk{asks[0].ID: asks[0], asks[1].ID: asks[1]}
+	byID := map[string]homegateway.HomeGatewayAsk{asks[0].ID: asks[0], asks[1].ID: asks[1]}
 	if shown := byID[angled.ID]; shown.TooLargeBytes != nil || protocol.Deref(shown.Reply.Note) != angledNote {
 		t.Fatalf("the ask answered with 11,000 '<' arrived as %+v, want it whole with its note", shown.TooLargeBytes)
 	}
 	if shown := byID[control.ID]; shown.TooLargeBytes == nil || len(shown.Parts) != 0 || shown.Reply.Note != nil || shown.Reply.AnsweredAt.IsZero() {
 		t.Fatalf("the ask whose note escapes past a frame arrived as %+v, want it answered and too large, without parts or note", shown)
 	}
-	phone.send(gateway.GatewayPing{Cmd: "ping"})
-	var pong gateway.GatewayPong
+	phone.send(homegateway.HomeGatewayPing{Cmd: "ping"})
+	var pong homegateway.HomeGatewayPong
 	phone.next("pong", &pong)
 }
 
-func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) {
+func TestHomeGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -525,7 +525,7 @@ func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) 
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
 	phone.welcomed()
 	phone.askList()
-	read := func(phone *testPhone, src string, offset int) (gateway.GatewayAskImageChunk, *gateway.GatewayAskImageError) {
+	read := func(phone *testPhone, src string, offset int) (homegateway.HomeGatewayAskImageChunk, *homegateway.HomeGatewayAskImageError) {
 		return phone.readImage(asked.ID, src, offset)
 	}
 
@@ -569,10 +569,10 @@ func TestGatewaySendsAnAsksImageInChunksAndSaysWhyOneCannotBeRead(t *testing.T) 
 	}
 }
 
-func (p *testPhone) readImage(askID, src string, offset int) (gateway.GatewayAskImageChunk, *gateway.GatewayAskImageError) {
+func (p *testPhone) readImage(askID, src string, offset int) (homegateway.HomeGatewayAskImageChunk, *homegateway.HomeGatewayAskImageError) {
 	p.t.Helper()
 	requestID := uuid.NewString()
-	p.send(gateway.GatewayAskImage{Cmd: "ask_image", RequestID: requestID, AskID: askID, Src: src, Offset: offset})
+	p.send(homegateway.HomeGatewayAskImage{Cmd: "ask_image", RequestID: requestID, AskID: askID, Src: src, Offset: offset})
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
@@ -585,8 +585,8 @@ func (p *testPhone) readImage(askID, src string, offset int) (gateway.GatewayAsk
 		if head.RequestID != requestID {
 			continue
 		}
-		var chunk gateway.GatewayAskImageChunk
-		var failed gateway.GatewayAskImageError
+		var chunk homegateway.HomeGatewayAskImageChunk
+		var failed homegateway.HomeGatewayAskImageError
 		if head.Event == "ask_image_error" {
 			_ = json.Unmarshal(frame, &failed)
 			return chunk, &failed
@@ -598,7 +598,7 @@ func (p *testPhone) readImage(askID, src string, offset int) (gateway.GatewayAsk
 	}
 }
 
-func TestGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
+func TestHomeGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -652,7 +652,7 @@ func TestGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
 	t.Run("an installed phone that leaves named references other than amp, lt, gt, quot and apos", func(t *testing.T) {
 		phone := connectPhone(t, w, "installed", app.SelectedProfile())
 		phone.hello(4)
-		var welcome gateway.GatewayWelcome
+		var welcome homegateway.HomeGatewayWelcome
 		phone.next("welcome", &welcome)
 		phone.askList()
 		reads(phone, []read{

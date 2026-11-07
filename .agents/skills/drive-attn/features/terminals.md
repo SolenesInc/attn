@@ -10,7 +10,7 @@ came back and close the shells. Terminals keep running when the app or the daemo
 
 - `terminal-input`: keys, text and paste reach the program as typed. ⌘ shortcuts stay with attn.
 - `terminal-output`: what the program prints, rendered with colors, styles and the terminal's title.
-- `size-owner`: when several clients show one terminal, such as the app and a phone, the one the user last typed in, pointed at or focused sets the terminal's size. A phone takes the size when it opens the terminal or types in it (the gateway's `terminal_focus` and `terminal_input`). The app draws a terminal another client sized smaller than its tile at that size, scaled to fit and centered.
+- `size-owner`: when several clients show one terminal, such as the app and a phone, the one the user last typed in, pointed at or focused sets the terminal's size. A phone takes the size when it opens the terminal or types in it (the Home Gateway's `terminal_focus` and `terminal_input`). The app draws a terminal another client sized smaller than its tile at that size, scaled to fit and centered.
 - `scrollback`: history above the screen, kept across relaunch.
 - `find`: search the screen and scrollback, with match case.
 - `blocks`: with shell integration, each command and its output form a block to copy, filter or scroll to.

@@ -322,7 +322,6 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - pending_approval → needs approval
 - reopen → resume
 - reporting seed → stake
-- gateway → Home Gateway
 - relay → Cloud Relay
 - device (in the relay contract) → phone
 

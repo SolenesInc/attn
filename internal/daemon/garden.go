@@ -535,7 +535,7 @@ func (d *Daemon) projectGardenSeeds() {
 		return
 	}
 	d.projectSnapshot(snapshotGarden, func() {
-		d.gateway.nudgeGarden()
+		d.homeGateway.nudgeGarden()
 		if d.wsHub == nil {
 			return
 		}

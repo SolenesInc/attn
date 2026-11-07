@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types check-gateway-compat generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-chief test-scripts test-v test-watch test-frontend test-e2e ingest-clickhouse ingest-clickhouse-stop clean generate-types ensure-go-jsonschema check-types check-home-gateway-compat generate-schema check-schema check-migrations build-app ensure-codesign-identity sign-app app-screenshot dist release
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -451,17 +451,17 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 		-o app/src/types/generated.ts
 	node scripts/generate-protocol-version.mjs
 	go run ./cmd/settingsgen app/src/types/settings.generated.ts
-	rm -rf internal/protocol/schema/tsp-output-gateway
-	cd internal/protocol/schema && pnpm exec tsp compile gateway.tsp --output-dir tsp-output-gateway
-	$(GO_JSONSCHEMA) -p gateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
-		-o internal/protocol/gateway/generated.go \
-		internal/protocol/schema/tsp-output-gateway/json-schema/*.json
+	rm -rf internal/protocol/schema/tsp-output-home-gateway
+	cd internal/protocol/schema && pnpm exec tsp compile home_gateway.tsp --output-dir tsp-output-home-gateway
+	$(GO_JSONSCHEMA) -p homegateway --only-models --tags json --resolve-extension json --capitalization ID --capitalization API \
+		-o internal/protocol/homegateway/generated.go \
+		internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json
 	npx quicktype@26.0.0 \
-		--src internal/protocol/schema/tsp-output-gateway/json-schema/*.json \
+		--src internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json \
 		--src-lang schema --lang typescript \
 		--no-prefer-unions --no-prefer-unknown \
-		-o app/src/types/gatewayGenerated.ts
-	node scripts/generate-gateway.mjs
+		-o app/src/types/homeGatewayGenerated.ts
+	node scripts/generate-home-gateway.mjs
 
 # CI check: verify generated files are up-to-date.
 #
@@ -470,11 +470,11 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/gateway app/src/types/gatewayGenerated.ts app/src/types/gatewayVersion.ts
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway app/src/types/homeGatewayGenerated.ts app/src/types/homeGatewayVersion.ts
 
-# Refuses a gateway API change that is not an addition to the schema on origin/main.
-check-gateway-compat:
-	scripts/check-gateway-compat
+# Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
+check-home-gateway-compat:
+	scripts/check-home-gateway-compat
 
 .PHONY: check-relay-privacy
 check-relay-privacy:

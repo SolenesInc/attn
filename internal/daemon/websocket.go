@@ -1371,8 +1371,8 @@ func (d *Daemon) sendTerminalRefusal(client terminalClient, cmd string, terminal
 	switch client := client.(type) {
 	case *wsClient:
 		d.sendToClient(client, &protocol.CommandErrorMessage{Event: protocol.EventCommandError, Cmd: protocol.Ptr(cmd), Error: err.Error(), TerminalID: protocol.Ptr(string(terminal))})
-	case *gatewayConn:
-		d.gatewayTerminalError(client, terminal, err.Error())
+	case *homeGatewayConn:
+		d.homeGatewayTerminalError(client, terminal, err.Error())
 	}
 }
 

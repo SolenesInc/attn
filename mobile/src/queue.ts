@@ -1,4 +1,4 @@
-import type { GatewaySession } from '@attn/types/gatewayGenerated'
+import type { HomeGatewaySession } from '@attn/types/homeGatewayGenerated'
 import { Schema } from 'effect'
 import { PhoneAsk } from './asks/ask'
 import { GardenSeed } from './garden/seed'
@@ -44,7 +44,7 @@ export const Home = Schema.Struct({
 })
 export type Home = typeof Home.Type
 
-export const fromGatewaySession = (session: GatewaySession): QueueSession => ({
+export const fromHomeGatewaySession = (session: HomeGatewaySession): QueueSession => ({
   id: session.id,
   title: session.title,
   agent: session.agent,

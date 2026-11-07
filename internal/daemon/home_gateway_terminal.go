@@ -13,28 +13,28 @@ import (
 	"github.com/victorarias/attn/internal/cloudlink"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-const gatewayTerminalAPI = 4
+const homeGatewayTerminalAPI = 4
 
-// gatewayOutputCoalesce batches PTY output so a streaming terminal sends about 60 frames a second, inside the
+// homeGatewayOutputCoalesce batches PTY output so a streaming terminal sends about 60 frames a second, inside the
 // relay's measured 4,000 messages a second for a whole home (plan F2).
-const gatewayOutputCoalesce = 16 * time.Millisecond
+const homeGatewayOutputCoalesce = 16 * time.Millisecond
 
-// gatewayPendingTripwire bounds output held for a device that stopped granting credit. Past it, a fresh screen
+// homeGatewayPendingTripwire bounds output held for a device that stopped granting credit. Past it, a fresh screen
 // replaces the backlog: a device that far behind gains nothing from replaying it.
-const gatewayPendingTripwire = 1 << 20
+const homeGatewayPendingTripwire = 1 << 20
 
-type gatewayTerminal struct {
+type homeGatewayTerminal struct {
 	id   protocol.TerminalID
-	conn *gatewayConn
+	conn *homeGatewayConn
 
 	mu         sync.Mutex
 	stream     ptybackend.Stream
-	pending    []gatewayChunk
+	pending    []homeGatewayChunk
 	pendingLen int
 	floor      uint32
 	credit     int
@@ -46,47 +46,47 @@ type gatewayTerminal struct {
 	awaitingHost   bool
 }
 
-type gatewayChunk struct {
+type homeGatewayChunk struct {
 	output []byte
 	seq    uint32
-	resize *gateway.TerminalResized
+	resize *homegateway.TerminalResized
 	ended  bool
 }
 
-func (c *gatewayConn) commandOrder() *terminalOrder { return &c.order }
+func (c *homeGatewayConn) commandOrder() *terminalOrder { return &c.order }
 
-func (d *Daemon) gatewayCommand(conn *gatewayConn, cmd string, frame []byte) bool {
+func (d *Daemon) homeGatewayCommand(conn *homeGatewayConn, cmd string, frame []byte) bool {
 	switch cmd {
 	case "terminal_attach":
-		if message, ok := decodeGatewayCommand[gateway.TerminalAttach](d, conn, frame); ok {
-			d.gatewayAttach(conn, message)
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalAttach](d, conn, frame); ok {
+			d.homeGatewayAttach(conn, message)
 		}
 	case "terminal_credit":
-		if message, ok := decodeGatewayCommand[gateway.TerminalCredit](d, conn, frame); ok {
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalCredit](d, conn, frame); ok {
 			if terminal := conn.terminal(protocol.TerminalID(message.TerminalID)); terminal != nil {
-				d.gatewayGrant(terminal, message.Bytes)
+				d.homeGatewayGrant(terminal, message.Bytes)
 			}
 		}
 	case "terminal_detach":
-		if message, ok := decodeGatewayCommand[gateway.TerminalDetach](d, conn, frame); ok {
-			d.gatewayDetach(conn, protocol.TerminalID(message.TerminalID))
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalDetach](d, conn, frame); ok {
+			d.homeGatewayDetach(conn, protocol.TerminalID(message.TerminalID))
 		}
 	case "terminal_input":
-		if message, ok := decodeGatewayCommand[gateway.TerminalInput](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
-			d.gatewayInput(conn, protocol.TerminalID(message.TerminalID), message.Data)
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalInput](d, conn, frame); ok && d.homeGatewayAttached(conn, message.TerminalID) {
+			d.homeGatewayInput(conn, protocol.TerminalID(message.TerminalID), message.Data)
 		}
 	case "terminal_resize":
-		if message, ok := decodeGatewayCommand[gateway.TerminalResize](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
-			d.gatewayRequestSize(conn, protocol.TerminalID(message.TerminalID), message.Cols, message.Rows)
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalResize](d, conn, frame); ok && d.homeGatewayAttached(conn, message.TerminalID) {
+			d.homeGatewayRequestSize(conn, protocol.TerminalID(message.TerminalID), message.Cols, message.Rows)
 		}
 	case "terminal_focus":
-		if message, ok := decodeGatewayCommand[gateway.TerminalFocus](d, conn, frame); ok && d.gatewayAttached(conn, message.TerminalID) {
+		if message, ok := decodeHomeGatewayCommand[homegateway.TerminalFocus](d, conn, frame); ok && d.homeGatewayAttached(conn, message.TerminalID) {
 			d.claimPtySize(conn, protocol.TerminalID(message.TerminalID))
 			d.noteTerminalFocus(protocol.TerminalID(message.TerminalID))
 		}
 	case "submit_prompt":
-		if message, ok := decodeGatewayCommand[gateway.SubmitPrompt](d, conn, frame); ok {
-			d.life.Go("gatewaySubmitPrompt", func() { d.gatewaySubmitPrompt(conn, message) })
+		if message, ok := decodeHomeGatewayCommand[homegateway.SubmitPrompt](d, conn, frame); ok {
+			d.life.Go("homeGatewaySubmitPrompt", func() { d.homeGatewaySubmitPrompt(conn, message) })
 		}
 	default:
 		return false
@@ -94,30 +94,30 @@ func (d *Daemon) gatewayCommand(conn *gatewayConn, cmd string, frame []byte) boo
 	return true
 }
 
-func decodeGatewayCommand[T any](d *Daemon, conn *gatewayConn, frame []byte) (T, bool) {
+func decodeHomeGatewayCommand[T any](d *Daemon, conn *homeGatewayConn, frame []byte) (T, bool) {
 	var message T
 	if err := json.Unmarshal(frame, &message); err != nil {
-		d.logf("gateway: device %s sent %s, which does not decode: %v", conn.device.DeviceID, frame, err)
+		d.logf("Home Gateway: device %s sent %s, which does not decode: %v", conn.device.DeviceID, frame, err)
 		return message, false
 	}
 	return message, true
 }
 
-func (d *Daemon) gatewayAttached(conn *gatewayConn, id string) bool {
+func (d *Daemon) homeGatewayAttached(conn *homeGatewayConn, id string) bool {
 	if conn.terminal(protocol.TerminalID(id)) != nil {
 		return true
 	}
-	d.gatewayTerminalError(conn, protocol.TerminalID(id), fmt.Sprintf("terminal %s is not open on this phone; send terminal_attach first", id))
+	d.homeGatewayTerminalError(conn, protocol.TerminalID(id), fmt.Sprintf("terminal %s is not open on this phone; send terminal_attach first", id))
 	return false
 }
 
-func (c *gatewayConn) terminal(id protocol.TerminalID) *gatewayTerminal {
+func (c *homeGatewayConn) terminal(id protocol.TerminalID) *homeGatewayTerminal {
 	c.terminalsMu.Lock()
 	defer c.terminalsMu.Unlock()
 	return c.terminals[id]
 }
 
-func (d *Daemon) gatewayTerminalOfProfile(conn *gatewayConn, terminal protocol.TerminalID) bool {
+func (d *Daemon) homeGatewayTerminalOfProfile(conn *homeGatewayConn, terminal protocol.TerminalID) bool {
 	sessionID, shown := d.shownIn(terminal)
 	if !shown {
 		return false
@@ -126,41 +126,41 @@ func (d *Daemon) gatewayTerminalOfProfile(conn *gatewayConn, terminal protocol.T
 	return session != nil && session.ProfileID == conn.device.ProfileID
 }
 
-func (d *Daemon) gatewayAttach(conn *gatewayConn, message gateway.TerminalAttach) {
+func (d *Daemon) homeGatewayAttach(conn *homeGatewayConn, message homegateway.TerminalAttach) {
 	id := protocol.TerminalID(message.TerminalID)
-	if !d.gatewayTerminalOfProfile(conn, id) {
-		d.gatewayTerminalError(conn, id, fmt.Sprintf("terminal %s is not a session terminal of this pairing's profile", id))
+	if !d.homeGatewayTerminalOfProfile(conn, id) {
+		d.homeGatewayTerminalError(conn, id, fmt.Sprintf("terminal %s is not a session terminal of this pairing's profile", id))
 		return
 	}
-	d.gatewayDetach(conn, id)
-	if !d.gatewayRequestSize(conn, id, message.Cols, message.Rows) {
+	d.homeGatewayDetach(conn, id)
+	if !d.homeGatewayRequestSize(conn, id, message.Cols, message.Rows) {
 		return
 	}
-	terminal := &gatewayTerminal{id: id, conn: conn, credit: message.Credit, screensAsked: 1}
-	stream, err := d.gatewayOpenStream(terminal)
+	terminal := &homeGatewayTerminal{id: id, conn: conn, credit: message.Credit, screensAsked: 1}
+	stream, err := d.homeGatewayOpenStream(terminal)
 	if err != nil {
-		d.gatewayTerminalError(conn, id, "could not open the terminal: "+err.Error())
-		d.gatewayReleaseSize(conn, id)
+		d.homeGatewayTerminalError(conn, id, "could not open the terminal: "+err.Error())
+		d.homeGatewayReleaseSize(conn, id)
 		return
 	}
 	terminal.stream = stream
 	conn.terminalsMu.Lock()
 	conn.terminals[id] = terminal
 	conn.terminalsMu.Unlock()
-	if !d.life.Go("gatewayTerminal", func() { d.runGatewayTerminal(terminal, stream) }) {
-		d.gatewayDetach(conn, id)
+	if !d.life.Go("homeGatewayTerminal", func() { d.runHomeGatewayTerminal(terminal, stream) }) {
+		d.homeGatewayDetach(conn, id)
 		return
 	}
-	d.gatewayFlushSoon(terminal, 0)
+	d.homeGatewayFlushSoon(terminal, 0)
 }
 
-func (d *Daemon) gatewayOpenStream(terminal *gatewayTerminal) (ptybackend.Stream, error) {
-	subscriber := fmt.Sprintf("gateway:%s:%p", terminal.conn.device.DeviceID, terminal)
+func (d *Daemon) homeGatewayOpenStream(terminal *homeGatewayTerminal) (ptybackend.Stream, error) {
+	subscriber := fmt.Sprintf("home-gateway:%s:%p", terminal.conn.device.DeviceID, terminal)
 	_, stream, err := d.router().Attach(context.Background(), terminal.id, subscriber, ptybackend.AttachOptions{OmitReplay: true})
 	return stream, err
 }
 
-func (d *Daemon) gatewayDetach(conn *gatewayConn, id protocol.TerminalID) {
+func (d *Daemon) homeGatewayDetach(conn *homeGatewayConn, id protocol.TerminalID) {
 	conn.terminalsMu.Lock()
 	terminal := conn.terminals[id]
 	delete(conn.terminals, id)
@@ -168,10 +168,10 @@ func (d *Daemon) gatewayDetach(conn *gatewayConn, id protocol.TerminalID) {
 	if terminal != nil {
 		terminal.detach()
 	}
-	d.gatewayReleaseSize(conn, id)
+	d.homeGatewayReleaseSize(conn, id)
 }
 
-func (d *Daemon) gatewayEnd(terminal *gatewayTerminal) {
+func (d *Daemon) homeGatewayEnd(terminal *homeGatewayTerminal) {
 	conn := terminal.conn
 	conn.terminalsMu.Lock()
 	current := conn.terminals[terminal.id] == terminal
@@ -181,14 +181,14 @@ func (d *Daemon) gatewayEnd(terminal *gatewayTerminal) {
 	conn.terminalsMu.Unlock()
 	terminal.detach()
 	if current {
-		d.gatewayReleaseSize(conn, terminal.id)
+		d.homeGatewayReleaseSize(conn, terminal.id)
 	}
 }
 
-func (d *Daemon) gatewayDetachAll(conn *gatewayConn) {
+func (d *Daemon) homeGatewayDetachAll(conn *homeGatewayConn) {
 	conn.terminalsMu.Lock()
 	terminals := conn.terminals
-	conn.terminals = map[protocol.TerminalID]*gatewayTerminal{}
+	conn.terminals = map[protocol.TerminalID]*homeGatewayTerminal{}
 	conn.terminalsMu.Unlock()
 	for _, terminal := range terminals {
 		terminal.detach()
@@ -196,7 +196,7 @@ func (d *Daemon) gatewayDetachAll(conn *gatewayConn) {
 	d.releasePtySizes(conn)
 }
 
-func (t *gatewayTerminal) detach() {
+func (t *homeGatewayTerminal) detach() {
 	t.mu.Lock()
 	t.detached = true
 	stream := t.stream
@@ -207,15 +207,15 @@ func (t *gatewayTerminal) detach() {
 	}
 }
 
-func (d *Daemon) gatewayReleaseSize(conn *gatewayConn, id protocol.TerminalID) {
+func (d *Daemon) homeGatewayReleaseSize(conn *homeGatewayConn, id protocol.TerminalID) {
 	if next, handedOn := d.ptySizes.release(conn, id); handedOn {
 		d.applyPtySize(next.owner, id)
 	}
 }
 
-func (d *Daemon) gatewayRequestSize(conn *gatewayConn, id protocol.TerminalID, cols, rows int) bool {
+func (d *Daemon) homeGatewayRequestSize(conn *homeGatewayConn, id protocol.TerminalID, cols, rows int) bool {
 	if cols <= 0 || rows <= 0 || cols > maxPTYDimValue || rows > maxPTYDimValue {
-		d.gatewayTerminalError(conn, id, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", cols, rows, maxPTYDimValue))
+		d.homeGatewayTerminalError(conn, id, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", cols, rows, maxPTYDimValue))
 		return false
 	}
 	if d.ptySizes.request(conn, protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: id, Cols: cols, Rows: rows}) {
@@ -224,21 +224,21 @@ func (d *Daemon) gatewayRequestSize(conn *gatewayConn, id protocol.TerminalID, c
 	return true
 }
 
-func (d *Daemon) gatewayInput(conn *gatewayConn, id protocol.TerminalID, data string) {
+func (d *Daemon) homeGatewayInput(conn *homeGatewayConn, id protocol.TerminalID, data string) {
 	d.claimPtySize(conn, id)
 	d.sendInTerminalOrder(conn, id, func(answered func()) {
 		write := protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: id, Data: data}
 		d.router().Send(write, func(err error) {
 			answered()
 			if err != nil {
-				d.gatewayTerminalError(conn, id, "the terminal refused input: "+err.Error())
+				d.homeGatewayTerminalError(conn, id, "the terminal refused input: "+err.Error())
 			}
 		})
 	})
 }
 
-func (d *Daemon) gatewaySubmitPrompt(conn *gatewayConn, message gateway.SubmitPrompt) {
-	result := gateway.SubmitResult{Event: "submit_result", RequestID: message.RequestID}
+func (d *Daemon) homeGatewaySubmitPrompt(conn *homeGatewayConn, message homegateway.SubmitPrompt) {
+	result := homegateway.SubmitResult{Event: "submit_result", RequestID: message.RequestID}
 	sessionID := protocol.SessionID(message.SessionID)
 	session := d.store.Get(sessionID)
 	switch {
@@ -254,28 +254,28 @@ func (d *Daemon) gatewaySubmitPrompt(conn *gatewayConn, message gateway.SubmitPr
 			result.Message = protocol.Ptr(attempt.Err.Error())
 		}
 	}
-	_ = gatewaySend(conn, result)
+	_ = homeGatewaySend(conn, result)
 }
 
-func (d *Daemon) gatewayTerminalError(conn *gatewayConn, id protocol.TerminalID, message string) {
-	d.logf("gateway: device %s, terminal %s: %s", conn.device.DeviceID, id, message)
-	_ = gatewaySend(conn, gateway.TerminalError{Event: "terminal_error", TerminalID: string(id), Message: message})
+func (d *Daemon) homeGatewayTerminalError(conn *homeGatewayConn, id protocol.TerminalID, message string) {
+	d.logf("Home Gateway: device %s, terminal %s: %s", conn.device.DeviceID, id, message)
+	_ = homeGatewaySend(conn, homegateway.TerminalError{Event: "terminal_error", TerminalID: string(id), Message: message})
 }
 
-func (d *Daemon) runGatewayTerminal(terminal *gatewayTerminal, stream ptybackend.Stream) {
+func (d *Daemon) runHomeGatewayTerminal(terminal *homeGatewayTerminal, stream ptybackend.Stream) {
 	for {
-		d.gatewayReadStream(terminal, stream)
+		d.homeGatewayReadStream(terminal, stream)
 		if terminal.isDetached() {
 			return
 		}
-		if d.gatewayTerminalGone(terminal.id) {
-			d.gatewayTerminalEnded(terminal)
+		if d.homeGatewayTerminalGone(terminal.id) {
+			d.homeGatewayTerminalEnded(terminal)
 			return
 		}
 		if host := d.sessionHost(d.terminals().owner(terminal.id)); host != "" {
-			next, err := d.gatewayOpenStream(terminal)
+			next, err := d.homeGatewayOpenStream(terminal)
 			if err != nil {
-				d.gatewayAwaitHost(terminal, host, err)
+				d.homeGatewayAwaitHost(terminal, host, err)
 				return
 			}
 			if !terminal.reopened(next) {
@@ -283,16 +283,16 @@ func (d *Daemon) runGatewayTerminal(terminal *gatewayTerminal, stream ptybackend
 				return
 			}
 			stream = next
-			d.gatewayFlushSoon(terminal, 0)
+			d.homeGatewayFlushSoon(terminal, 0)
 			continue
 		}
 		if !d.terminalNeedsResync(d.life.Context(), terminal.id) {
-			d.gatewayTerminalEnded(terminal)
+			d.homeGatewayTerminalEnded(terminal)
 			return
 		}
-		next, err := d.gatewayOpenStream(terminal)
+		next, err := d.homeGatewayOpenStream(terminal)
 		if err != nil {
-			d.gatewayTerminalError(terminal.conn, terminal.id, "lost the terminal and could not reopen it: "+err.Error())
+			d.homeGatewayTerminalError(terminal.conn, terminal.id, "lost the terminal and could not reopen it: "+err.Error())
 			return
 		}
 		if !terminal.reopened(next) {
@@ -300,23 +300,23 @@ func (d *Daemon) runGatewayTerminal(terminal *gatewayTerminal, stream ptybackend
 			return
 		}
 		stream = next
-		d.gatewayFlushSoon(terminal, 0)
+		d.homeGatewayFlushSoon(terminal, 0)
 	}
 }
 
-func (d *Daemon) gatewayAwaitHost(terminal *gatewayTerminal, host string, err error) {
+func (d *Daemon) homeGatewayAwaitHost(terminal *homeGatewayTerminal, host string, err error) {
 	terminal.mu.Lock()
 	terminal.stream = nil
 	terminal.awaitingHost = !terminal.detached
 	terminal.mu.Unlock()
 	_, name, _ := d.outpostConn(host)
-	d.gatewayTerminalError(terminal.conn, terminal.id, fmt.Sprintf("lost the terminal on %s (%v); it comes back when %s answers again", name, err, name))
+	d.homeGatewayTerminalError(terminal.conn, terminal.id, fmt.Sprintf("lost the terminal on %s (%v); it comes back when %s answers again", name, err, name))
 }
 
-// gatewayResumeAwaiting runs on every change the gateway hears, so a terminal whose outpost answers again resumes.
-func (d *Daemon) gatewayResumeAwaiting(conn *gatewayConn) {
+// homeGatewayResumeAwaiting runs on every change the Home Gateway hears, so a terminal whose outpost answers again resumes.
+func (d *Daemon) homeGatewayResumeAwaiting(conn *homeGatewayConn) {
 	conn.terminalsMu.Lock()
-	var resuming []*gatewayTerminal
+	var resuming []*homeGatewayTerminal
 	for _, terminal := range conn.terminals {
 		if terminal.takeAwaiting() {
 			resuming = append(resuming, terminal)
@@ -324,12 +324,12 @@ func (d *Daemon) gatewayResumeAwaiting(conn *gatewayConn) {
 	}
 	conn.terminalsMu.Unlock()
 	for _, terminal := range resuming {
-		d.life.Go("gatewayResumeTerminal", func() {
-			if d.gatewayTerminalGone(terminal.id) {
-				d.gatewayTerminalEnded(terminal)
+		d.life.Go("homeGatewayResumeTerminal", func() {
+			if d.homeGatewayTerminalGone(terminal.id) {
+				d.homeGatewayTerminalEnded(terminal)
 				return
 			}
-			stream, err := d.gatewayOpenStream(terminal)
+			stream, err := d.homeGatewayOpenStream(terminal)
 			if err != nil {
 				terminal.backToAwaiting()
 				return
@@ -338,23 +338,23 @@ func (d *Daemon) gatewayResumeAwaiting(conn *gatewayConn) {
 				_ = stream.Close()
 				return
 			}
-			d.gatewayFlushSoon(terminal, 0)
-			d.runGatewayTerminal(terminal, stream)
+			d.homeGatewayFlushSoon(terminal, 0)
+			d.runHomeGatewayTerminal(terminal, stream)
 		})
 	}
 }
 
-func (d *Daemon) gatewayTerminalGone(id protocol.TerminalID) bool {
+func (d *Daemon) homeGatewayTerminalGone(id protocol.TerminalID) bool {
 	session, shown := d.shownIn(id)
 	return !shown || d.store.GetSessionExit(session) != nil
 }
 
-func (d *Daemon) gatewayTerminalEnded(terminal *gatewayTerminal) {
-	terminal.queue(gatewayChunk{ended: true})
-	d.gatewayFlushSoon(terminal, 0)
+func (d *Daemon) homeGatewayTerminalEnded(terminal *homeGatewayTerminal) {
+	terminal.queue(homeGatewayChunk{ended: true})
+	d.homeGatewayFlushSoon(terminal, 0)
 }
 
-func (t *gatewayTerminal) takeAwaiting() bool {
+func (t *homeGatewayTerminal) takeAwaiting() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	taken := t.awaitingHost
@@ -362,13 +362,13 @@ func (t *gatewayTerminal) takeAwaiting() bool {
 	return taken
 }
 
-func (t *gatewayTerminal) backToAwaiting() {
+func (t *homeGatewayTerminal) backToAwaiting() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.awaitingHost = !t.detached
 }
 
-func (d *Daemon) gatewayReadStream(terminal *gatewayTerminal, stream ptybackend.Stream) {
+func (d *Daemon) homeGatewayReadStream(terminal *homeGatewayTerminal, stream ptybackend.Stream) {
 	defer stream.Close()
 	for event := range stream.Events() {
 		desync := event.Kind == ptybackend.OutputEventKindDesync
@@ -376,7 +376,7 @@ func (d *Daemon) gatewayReadStream(terminal *gatewayTerminal, stream ptybackend.
 		case ptybackend.OutputEventKindOutput:
 			terminal.output(event.Seq, event.Data)
 		case ptybackend.OutputEventKindResize:
-			terminal.queue(gatewayChunk{resize: &gateway.TerminalResized{Event: "terminal_resized", TerminalID: string(terminal.id), Cols: int(event.Cols), Rows: int(event.Rows)}})
+			terminal.queue(homeGatewayChunk{resize: &homegateway.TerminalResized{Event: "terminal_resized", TerminalID: string(terminal.id), Cols: int(event.Cols), Rows: int(event.Rows)}})
 		}
 		if acknowledged, ok := stream.(interface{ Acknowledge() }); ok {
 			acknowledged.Acknowledge()
@@ -384,17 +384,17 @@ func (d *Daemon) gatewayReadStream(terminal *gatewayTerminal, stream ptybackend.
 		if desync {
 			return
 		}
-		d.gatewayFlushSoon(terminal, gatewayOutputCoalesce)
+		d.homeGatewayFlushSoon(terminal, homeGatewayOutputCoalesce)
 	}
 }
 
-func (t *gatewayTerminal) isDetached() bool {
+func (t *homeGatewayTerminal) isDetached() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	return t.detached
 }
 
-func (t *gatewayTerminal) reopened(stream ptybackend.Stream) bool {
+func (t *homeGatewayTerminal) reopened(stream ptybackend.Stream) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.detached {
@@ -408,27 +408,27 @@ func (t *gatewayTerminal) reopened(stream ptybackend.Stream) bool {
 	return true
 }
 
-func (t *gatewayTerminal) output(seq uint32, data []byte) {
+func (t *homeGatewayTerminal) output(seq uint32, data []byte) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.detached || (!t.needsScreenLocked() && seq <= t.floor) {
 		return
 	}
-	if t.pendingLen+len(data) > gatewayPendingTripwire {
+	if t.pendingLen+len(data) > homeGatewayPendingTripwire {
 		t.pending = nil
 		t.pendingLen = 0
 		t.screensAsked++
 		return
 	}
-	t.pending = append(t.pending, gatewayChunk{output: data, seq: seq})
+	t.pending = append(t.pending, homeGatewayChunk{output: data, seq: seq})
 	t.pendingLen += len(data)
 }
 
-func (t *gatewayTerminal) needsScreenLocked() bool {
+func (t *homeGatewayTerminal) needsScreenLocked() bool {
 	return t.screensAsked > t.screensCovered
 }
 
-func (t *gatewayTerminal) queue(chunk gatewayChunk) {
+func (t *homeGatewayTerminal) queue(chunk homeGatewayChunk) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if !t.detached {
@@ -436,24 +436,24 @@ func (t *gatewayTerminal) queue(chunk gatewayChunk) {
 	}
 }
 
-func (d *Daemon) gatewayGrant(terminal *gatewayTerminal, bytes int) {
+func (d *Daemon) homeGatewayGrant(terminal *homeGatewayTerminal, bytes int) {
 	terminal.mu.Lock()
 	terminal.credit += bytes
 	terminal.mu.Unlock()
-	d.gatewayFlushSoon(terminal, 0)
+	d.homeGatewayFlushSoon(terminal, 0)
 }
 
-func (d *Daemon) gatewayFlushSoon(terminal *gatewayTerminal, delay time.Duration) {
+func (d *Daemon) homeGatewayFlushSoon(terminal *homeGatewayTerminal, delay time.Duration) {
 	terminal.mu.Lock()
 	defer terminal.mu.Unlock()
 	if terminal.flushing || !terminal.hasWorkLocked() {
 		return
 	}
 	terminal.flushing = true
-	d.life.AfterFunc("gatewayFlush", delay, func() { d.gatewayFlush(terminal) })
+	d.life.AfterFunc("homeGatewayFlush", delay, func() { d.homeGatewayFlush(terminal) })
 }
 
-func (t *gatewayTerminal) hasWorkLocked() bool {
+func (t *homeGatewayTerminal) hasWorkLocked() bool {
 	if t.detached {
 		return false
 	}
@@ -463,7 +463,7 @@ func (t *gatewayTerminal) hasWorkLocked() bool {
 	return t.credit > 0 && len(t.pending) > 0
 }
 
-func (d *Daemon) gatewayFlush(terminal *gatewayTerminal) {
+func (d *Daemon) homeGatewayFlush(terminal *homeGatewayTerminal) {
 	for {
 		terminal.mu.Lock()
 		if !terminal.hasWorkLocked() {
@@ -473,7 +473,7 @@ func (d *Daemon) gatewayFlush(terminal *gatewayTerminal) {
 		}
 		if terminal.needsScreenLocked() {
 			terminal.mu.Unlock()
-			if !d.gatewaySendScreen(terminal) {
+			if !d.homeGatewaySendScreen(terminal) {
 				return
 			}
 			continue
@@ -485,24 +485,24 @@ func (d *Daemon) gatewayFlush(terminal *gatewayTerminal) {
 			return
 		}
 		if ended {
-			d.gatewayEnd(terminal)
+			d.homeGatewayEnd(terminal)
 			return
 		}
 	}
 }
 
-func (t *gatewayTerminal) stopFlushing() {
+func (t *homeGatewayTerminal) stopFlushing() {
 	t.mu.Lock()
 	t.flushing = false
 	t.mu.Unlock()
 }
 
-func (t *gatewayTerminal) nextMessageLocked() ([]byte, bool) {
+func (t *homeGatewayTerminal) nextMessageLocked() ([]byte, bool) {
 	head := t.pending[0]
 	switch {
 	case head.ended:
 		t.pending = t.pending[1:]
-		frame, _ := json.Marshal(gateway.TerminalEnded{Event: "terminal_ended", TerminalID: string(t.id)})
+		frame, _ := json.Marshal(homegateway.TerminalEnded{Event: "terminal_ended", TerminalID: string(t.id)})
 		return frame, true
 	case head.resize != nil:
 		t.pending = t.pending[1:]
@@ -529,12 +529,12 @@ func (t *gatewayTerminal) nextMessageLocked() ([]byte, bool) {
 	return frame, false
 }
 
-func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
+func (d *Daemon) homeGatewaySendScreen(terminal *homeGatewayTerminal) bool {
 	terminal.mu.Lock()
 	asked := terminal.screensAsked
 	terminal.mu.Unlock()
 	snapshot, err := Call[protocol.GetScreenSnapshotResultMessage](context.Background(), d.router(), protocol.GetScreenSnapshotMessage{Cmd: protocol.CmdGetScreenSnapshot, ID: terminal.id})
-	pausepoint.At(pausepoint.GatewayScreenCaptured)
+	pausepoint.At(pausepoint.HomeGatewayScreenCaptured)
 	if err == nil && !snapshot.Success {
 		err = errors.New(protocol.Deref(snapshot.Error))
 	}
@@ -542,15 +542,15 @@ func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
 	if err == nil {
 		ansi, err = base64.StdEncoding.DecodeString(protocol.Deref(snapshot.ScreenSnapshot))
 	}
-	screen := gateway.TerminalScreen{Event: "terminal_screen", TerminalID: string(terminal.id), Cols: snapshotSize(snapshot.ScreenCols, snapshot.Cols), Rows: snapshotSize(snapshot.ScreenRows, snapshot.Rows), Ansi: protocol.Deref(snapshot.ScreenSnapshot), Seq: protocol.Deref(snapshot.LastSeq)}
+	screen := homegateway.TerminalScreen{Event: "terminal_screen", TerminalID: string(terminal.id), Cols: snapshotSize(snapshot.ScreenCols, snapshot.Cols), Rows: snapshotSize(snapshot.ScreenRows, snapshot.Rows), Ansi: protocol.Deref(snapshot.ScreenSnapshot), Seq: protocol.Deref(snapshot.LastSeq)}
 	frame, _ := json.Marshal(screen)
 	if err == nil && len(frame) > cloudlink.MaxMessageBytes {
 		err = fmt.Errorf("its screen is %d bytes as a gateway message, past the relay's %d-byte message", len(frame), cloudlink.MaxMessageBytes)
 	}
 	if err != nil {
 		terminal.stopFlushing()
-		d.gatewayTerminalError(terminal.conn, terminal.id, "could not read the terminal's screen: "+err.Error())
-		d.gatewayEnd(terminal)
+		d.homeGatewayTerminalError(terminal.conn, terminal.id, "could not read the terminal's screen: "+err.Error())
+		d.homeGatewayEnd(terminal)
 		return false
 	}
 	terminal.mu.Lock()
@@ -582,7 +582,7 @@ func (d *Daemon) gatewaySendScreen(terminal *gatewayTerminal) bool {
 
 var errTerminalDetached = errors.New("the phone closed this terminal")
 
-func (t *gatewayTerminal) send(frame []byte) error {
+func (t *homeGatewayTerminal) send(frame []byte) error {
 	t.conn.sendMu.Lock()
 	defer t.conn.sendMu.Unlock()
 	if t.isDetached() {

@@ -25,11 +25,11 @@ protocol_outputs=(
   app/src/types/generated.ts
   app/src/types/protocolVersion.ts
   app/src/types/settings.generated.ts
-  internal/protocol/gateway/generated.go
-  internal/protocol/gateway/schema.json
-  internal/protocol/gateway/version.go
-  app/src/types/gatewayGenerated.ts
-  app/src/types/gatewayVersion.ts
+  internal/protocol/homegateway/generated.go
+  internal/protocol/homegateway/schema.json
+  internal/protocol/homegateway/version.go
+  app/src/types/homeGatewayGenerated.ts
+  app/src/types/homeGatewayVersion.ts
 )
 prompt_outputs=(
   internal/prompts/catalog.generated.json
@@ -193,7 +193,7 @@ run_checks() {
     go_checks=(check-go "GO_PACKAGES=$packages")
   fi
   touches '^internal/protocol/schema/|^internal/setting/|^cmd/settingsgen/' && targets+=(check-types)
-  touches '^internal/protocol/(schema/gateway\.tsp|gateway/)' && targets+=(check-gateway-compat)
+  touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
   touches '^mobile/|^app/src/|^internal/cloudlink/testdata/' && targets+=(check-mobile)

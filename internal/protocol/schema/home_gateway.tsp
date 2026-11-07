@@ -2,16 +2,16 @@ import "@typespec/json-schema";
 
 using TypeSpec.JsonSchema;
 
-// The phone's API. It only grows: scripts/check-gateway-compat refuses any
+// The phone's API. It only grows: scripts/check-home-gateway-compat refuses any
 // change that is not a new message, a new optional field or a new enum member.
 // Clients decode an enum member they do not know as unknown.
 @jsonSchema
-namespace Gateway;
+namespace HomeGateway;
 
-const GATEWAY_API_VERSION = 7;
+const HOME_GATEWAY_API_VERSION = 7;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
-model GatewayHello {
+model HomeGatewayHello {
   cmd: "hello";
   api: int32;
   device_id: string;
@@ -19,34 +19,34 @@ model GatewayHello {
 
 // Since api 2: a device sends ping to learn that its home still answers
 // through the relay; the home answers pong.
-model GatewayPing {
+model HomeGatewayPing {
   cmd: "ping";
 }
 
-model GatewayPong {
+model HomeGatewayPong {
   event: "pong";
 }
 
-model GatewayWelcome {
+model HomeGatewayWelcome {
   event: "welcome";
-  // min(the device's api, GATEWAY_API_VERSION).
+  // min(the device's api, HOME_GATEWAY_API_VERSION).
   api: int32;
   home_name: string;
-  profile: GatewayProfile;
+  profile: HomeGatewayProfile;
 }
 
-model GatewayProfile {
+model HomeGatewayProfile {
   id: string;
   name: string;
 }
 
 // The home ends the conversation after sending refused.
-model GatewayRefused {
+model HomeGatewayRefused {
   event: "refused";
   message: string;
 }
 
-enum GatewaySessionState {
+enum HomeGatewaySessionState {
   working,
   waiting,
   needs_approval,
@@ -57,11 +57,11 @@ enum GatewaySessionState {
   state_unknown: "unknown",
 }
 
-model GatewaySession {
+model HomeGatewaySession {
   id: string;
   title: string;
   agent: string;
-  state: GatewaySessionState;
+  state: HomeGatewaySessionState;
   // When the session started waiting on you; set while waiting or needs_approval.
   waiting_since?: utcDateTime;
   // The outpost the session runs on; absent on the home.
@@ -73,97 +73,97 @@ model GatewaySession {
 }
 
 // Every session of the pairing's profile: after welcome, then on each change.
-model GatewaySessions {
+model HomeGatewaySessions {
   event: "sessions";
-  sessions: GatewaySession[];
+  sessions: HomeGatewaySession[];
 }
 
 // Since api 3: the profile's asks, one ask per frame, because an ask's markdown
 // alone may fill a frame. After welcome and on each change the home sends an
 // ask event for each ask that is new or changed, then asks with every ask's id:
 // the open asks oldest first, then the asks answered in the last day.
-model GatewayAsks {
+model HomeGatewayAsks {
   event: "asks";
   ids: string[];
 }
 
-model GatewayAskEvent {
+model HomeGatewayAskEvent {
   event: "ask";
-  ask: GatewayAsk;
+  ask: HomeGatewayAsk;
 }
 
-enum GatewayAskQuestionKind {
+enum HomeGatewayAskQuestionKind {
   one,
   any,
   text,
   kind_unknown: "unknown",
 }
 
-model GatewayAskChoice {
+model HomeGatewayAskChoice {
   label: string;
   description?: string;
 }
 
 // recommended names a choice label; on a text question it is a suggested answer.
-model GatewayAskQuestion {
+model HomeGatewayAskQuestion {
   key: string;
-  kind: GatewayAskQuestionKind;
+  kind: HomeGatewayAskQuestionKind;
   prompt: string;
   context?: string;
-  choices: GatewayAskChoice[];
+  choices: HomeGatewayAskChoice[];
   recommended?: string;
 }
 
 // An ask reads as its parts in order: markdown, or one question. Images in the
 // markdown load through ask_image with their src as written.
-model GatewayAskPart {
+model HomeGatewayAskPart {
   markdown?: string;
-  question?: GatewayAskQuestion;
+  question?: HomeGatewayAskQuestion;
 }
 
 // picked holds choice labels; other is your own choice on a one or any
 // question; text answers a text question.
-model GatewayAskAnswer {
+model HomeGatewayAskAnswer {
   key: string;
   picked: string[];
   other?: string;
   text?: string;
 }
 
-model GatewayAskReply {
-  answers: GatewayAskAnswer[];
+model HomeGatewayAskReply {
+  answers: HomeGatewayAskAnswer[];
   note?: string;
   answered_at: utcDateTime;
 }
 
 // too_large_bytes is set, and parts left empty, when the ask does not fit one
 // frame of max_frame_bytes; answer it on the computer.
-model GatewayAsk {
+model HomeGatewayAsk {
   id: string;
   session_id: string;
   subject: string;
-  parts: GatewayAskPart[];
+  parts: HomeGatewayAskPart[];
   created_at: utcDateTime;
   seed_slug?: string;
   seed_title?: string;
   crew_member?: string;
   chief?: boolean;
-  reply?: GatewayAskReply;
+  reply?: HomeGatewayAskReply;
   too_large_bytes?: int32;
   max_frame_bytes?: int32;
 }
 
 // Answers an ask through the same path as the desktop. The home answers with
 // ask_answer_result; error is absent on success.
-model GatewayAskAnswerCommand {
+model HomeGatewayAskAnswerCommand {
   cmd: "ask_answer";
   request_id: string;
   ask_id: string;
-  answers: GatewayAskAnswer[];
+  answers: HomeGatewayAskAnswer[];
   note?: string;
 }
 
-model GatewayAskAnswerResult {
+model HomeGatewayAskAnswerResult {
   event: "ask_answer_result";
   request_id: string;
   ask_id: string;
@@ -177,7 +177,7 @@ model GatewayAskAnswerResult {
 // received are its credit. Since api 5, src has each HTML character reference
 // decoded once, as the ask's markdown means it, and the home reads exactly that
 // image.
-model GatewayAskImage {
+model HomeGatewayAskImage {
   cmd: "ask_image";
   request_id: string;
   ask_id: string;
@@ -186,7 +186,7 @@ model GatewayAskImage {
 }
 
 // size is the whole image's size in bytes; data_base64 holds the chunk.
-model GatewayAskImageChunk {
+model HomeGatewayAskImageChunk {
   event: "ask_image_chunk";
   request_id: string;
   offset: int32;
@@ -195,7 +195,7 @@ model GatewayAskImageChunk {
   data_base64: string;
 }
 
-model GatewayAskImageError {
+model HomeGatewayAskImageError {
   event: "ask_image_error";
   request_id: string;
   message: string;
@@ -207,7 +207,7 @@ model GatewayAskImageError {
 // only while the device's credit allows; the device grants credit with the
 // attach and with terminal_credit as it renders. Credit counts terminal bytes:
 // a screen's decoded ANSI and each frame's output bytes. A screen waits until
-// the credit covers the largest gateway message (65,514 bytes).
+// the credit covers the largest Home Gateway message (65,514 bytes).
 model TerminalAttach {
   cmd: "terminal_attach";
   terminal_id: string;
@@ -304,17 +304,17 @@ model TerminalEnded {
 // each change the home sends garden_seeds frames holding each seed that is new
 // or changed, as many as fit a frame, then garden with every listed seed's id,
 // newest first.
-model GatewayGardenSeeds {
+model HomeGatewayGardenSeeds {
   event: "garden_seeds";
-  seeds: GatewaySeed[];
+  seeds: HomeGatewaySeed[];
 }
 
-model GatewayGarden {
+model HomeGatewayGarden {
   event: "garden";
   ids: string[];
 }
 
-enum GatewaySeedStatus {
+enum HomeGatewaySeedStatus {
   planted,
   growing,
   parked,
@@ -323,14 +323,14 @@ enum GatewaySeedStatus {
   status_unknown: "unknown",
 }
 
-model GatewayCheckTally {
+model HomeGatewayCheckTally {
   confirmed: int32;
   total: int32;
 }
 
 // How far a plot has drained: done counts harvested children, withered ones
 // count apart.
-model GatewayPlotProgress {
+model HomeGatewayPlotProgress {
   total: int32;
   done: int32;
   withered: int32;
@@ -340,11 +340,11 @@ model GatewayPlotProgress {
   blocked: int32;
 }
 
-model GatewaySeed {
+model HomeGatewaySeed {
   id: string;
   slug: string;
   title: string;
-  status: GatewaySeedStatus;
+  status: HomeGatewaySeedStatus;
   // Who the seed's claim names; claimed says whether the claim holds now.
   tender?: string;
   claimed: boolean;
@@ -355,9 +355,9 @@ model GatewaySeed {
   // The open seeds this one waits for.
   waits_for: string[];
   // Present when the seed is a plot.
-  progress?: GatewayPlotProgress;
+  progress?: HomeGatewayPlotProgress;
   // The seed's own and inherited checks; on a plot, every check below it.
-  checks?: GatewayCheckTally;
+  checks?: HomeGatewayCheckTally;
   state_changed_at: utcDateTime;
   // Why it was harvested or withered.
   reason?: string;
@@ -365,13 +365,13 @@ model GatewaySeed {
 
 // Reads one seed of the pairing's profile. The home answers seed_detail, or
 // seed_error naming the reason.
-model GatewaySeedGet {
+model HomeGatewaySeedGet {
   cmd: "seed_get";
   request_id: string;
   seed_id: string;
 }
 
-enum GatewayCheckState {
+enum HomeGatewayCheckState {
   open,
   reported,
   confirmed,
@@ -379,15 +379,15 @@ enum GatewayCheckState {
   check_unknown: "unknown",
 }
 
-model GatewaySeedCheck {
+model HomeGatewaySeedCheck {
   id: string;
   text: string;
-  state: GatewayCheckState;
+  state: HomeGatewayCheckState;
   // The plot that defines an inherited check.
   from?: string;
 }
 
-model GatewaySeedLogEntry {
+model HomeGatewaySeedLogEntry {
   id: string;
   // note, handoff, attach, detach, check, or a kind added later.
   kind: string;
@@ -401,14 +401,14 @@ model GatewaySeedLogEntry {
 // many as fit one frame; log_total counts them all. body_too_large_bytes is
 // set, and body left empty, when the body alone does not fit a frame of
 // max_frame_bytes; read it on the computer.
-model GatewaySeedDetail {
+model HomeGatewaySeedDetail {
   event: "seed_detail";
   request_id: string;
-  seed: GatewaySeed;
+  seed: HomeGatewaySeed;
   body: string;
-  checks: GatewaySeedCheck[];
-  children: GatewaySeed[];
-  log: GatewaySeedLogEntry[];
+  checks: HomeGatewaySeedCheck[];
+  children: HomeGatewaySeed[];
+  log: HomeGatewaySeedLogEntry[];
   log_total: int32;
   body_too_large_bytes?: int32;
   max_frame_bytes?: int32;
@@ -417,12 +417,12 @@ model GatewaySeedDetail {
 // Since api 7: something in a seed's detail changed, such as its body, its log,
 // its checks or its links, including changes that leave its garden_seeds copy
 // unchanged. A phone showing that seed reads it again with seed_get.
-model GatewaySeedChanged {
+model HomeGatewaySeedChanged {
   event: "seed_changed";
   seed_id: string;
 }
 
-model GatewaySeedError {
+model HomeGatewaySeedError {
   event: "seed_error";
   request_id: string;
   message: string;
@@ -430,14 +430,14 @@ model GatewaySeedError {
 
 // Adds a note to a seed's log as the user, through the desktop's note path.
 // The home answers seed_result.
-model GatewaySeedNoteCommand {
+model HomeGatewaySeedNoteCommand {
   cmd: "seed_note";
   request_id: string;
   seed_id: string;
   body: string;
 }
 
-enum GatewaySeedVerb {
+enum HomeGatewaySeedVerb {
   park,
   harvest,
   wither,
@@ -448,17 +448,17 @@ enum GatewaySeedVerb {
 // Moves a seed as the user, as the desktop's board does: harvest and wither
 // keep text as the seed's reason, park logs it with the move, and replant logs
 // it as a note first. Harvest needs text. The home answers seed_result.
-model GatewaySeedMove {
+model HomeGatewaySeedMove {
   cmd: "seed_move";
   request_id: string;
   seed_id: string;
-  verb: GatewaySeedVerb;
+  verb: HomeGatewaySeedVerb;
   text: string;
 }
 
 // error is absent on success; the seed's change reaches the device as garden
 // frames.
-model GatewaySeedResult {
+model HomeGatewaySeedResult {
   event: "seed_result";
   request_id: string;
   seed_id: string;

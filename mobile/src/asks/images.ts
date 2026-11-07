@@ -1,4 +1,4 @@
-import type { GatewayAskImageChunk } from '@attn/types/gatewayGenerated'
+import type { HomeGatewayAskImageChunk } from '@attn/types/homeGatewayGenerated'
 import type { Link } from '../link'
 
 export const chunkWindow = 4
@@ -13,7 +13,7 @@ const readChunk = async (
   askId: string,
   src: string,
   offset: number,
-): Promise<GatewayAskImageChunk> => {
+): Promise<HomeGatewayAskImageChunk> => {
   const reply = await link.request({ cmd: 'ask_image', ask_id: askId, src, offset })
   if (reply.event === 'ask_image_error') throw new ImageRefused(reply.message)
   if (reply.event !== 'ask_image_chunk') throw new Error(`the home answered ${reply.event} to ask_image`)

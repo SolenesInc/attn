@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'mobile/**'
-      - 'internal/protocol/schema/gateway.tsp'
+      - 'internal/protocol/schema/home_gateway.tsp'
       - 'ghostty-vt.pin'
       - 'app/src/components/GhosttyWebGlRenderer.ts'
       - 'app/src/components/Markdown/mermaidRender.ts'
@@ -15,7 +15,7 @@ on:
       - 'app/src/components/terminalGlyphProgram.ts'
       - 'app/src/components/terminalGraphemeMode.ts'
       - 'app/src/components/terminalVertexBuffer.ts'
-      - 'app/src/gateway/decode.ts'
+      - 'app/src/homeGateway/decode.ts'
       - 'app/src/ghostty/abi.ts'
       - 'app/src/ghostty/callback.ts'
       - 'app/src/ghostty/index.ts'
@@ -24,8 +24,8 @@ on:
       - 'app/src/ghostty/terminal.ts'
       - 'app/src/ghostty/wasm.ts'
       - 'app/src/shortcuts/platform.ts'
-      - 'app/src/types/gatewayGenerated.ts'
-      - 'app/src/types/gatewayVersion.ts'
+      - 'app/src/types/homeGatewayGenerated.ts'
+      - 'app/src/types/homeGatewayVersion.ts'
       - 'app/src/utils/ghosttyScroll.ts'
       - 'app/src/utils/kittyImageFormat.ts'
       - 'app/src/utils/supportInputTrace.ts'

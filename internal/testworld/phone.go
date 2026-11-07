@@ -20,7 +20,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 )
 
 type Phone struct {
@@ -262,14 +262,14 @@ func (s *PhoneSocket) Next() (json.RawMessage, error) {
 	}
 }
 
-func (s *PhoneSocket) Hello() gateway.GatewayWelcome {
+func (s *PhoneSocket) Hello() homegateway.HomeGatewayWelcome {
 	s.t.Helper()
-	s.Send(gateway.GatewayHello{Cmd: "hello", API: gateway.APIVersion, DeviceID: s.phone.DeviceID()})
+	s.Send(homegateway.HomeGatewayHello{Cmd: "hello", API: homegateway.APIVersion, DeviceID: s.phone.DeviceID()})
 	raw, err := s.Next()
 	if err != nil {
 		s.t.Fatalf("waiting for welcome: %v", err)
 	}
-	var welcome gateway.GatewayWelcome
+	var welcome homegateway.HomeGatewayWelcome
 	if err := json.Unmarshal(raw, &welcome); err != nil || welcome.Event != "welcome" {
 		s.t.Fatalf("home answered hello with %s", raw)
 	}

@@ -133,7 +133,7 @@ func (h phoneHome) AddPairing(p cloudlink.Pairing) error {
 func (h phoneHome) Serve(device cloudlink.Device, stream cloudlink.Stream) {
 	d := h.d
 	d.touchPhonePairing(device)
-	err := d.ServeGateway(GatewayDevice{DeviceID: device.ID, ProfileID: device.ProfileID}, stream)
+	err := d.ServeHomeGateway(HomeGatewayDevice{DeviceID: device.ID, ProfileID: device.ProfileID}, stream)
 	d.touchPhonePairing(device)
 	d.logf("phones: device %s left profile %s: %v", device.ID, device.ProfileID, err)
 }

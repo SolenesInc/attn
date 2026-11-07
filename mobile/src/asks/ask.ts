@@ -1,4 +1,4 @@
-import type { GatewayAsk, GatewayAskAnswer } from '@attn/types/gatewayGenerated'
+import type { HomeGatewayAsk, HomeGatewayAskAnswer } from '@attn/types/homeGatewayGenerated'
 import { Schema } from 'effect'
 
 export const QuestionKind = Schema.Literals(['one', 'any', 'text', 'unknown'])
@@ -44,14 +44,14 @@ export const PhoneAsk = Schema.Struct({
 })
 export type PhoneAsk = typeof PhoneAsk.Type
 
-const fromGatewayAnswer = (answer: GatewayAskAnswer): Answer => ({
+const fromHomeGatewayAnswer = (answer: HomeGatewayAskAnswer): Answer => ({
   key: answer.key,
   picked: answer.picked,
   other: answer.other ?? '',
   text: answer.text ?? '',
 })
 
-export const fromGatewayAsk = (ask: GatewayAsk): PhoneAsk => ({
+export const fromHomeGatewayAsk = (ask: HomeGatewayAsk): PhoneAsk => ({
   id: ask.id,
   sessionId: ask.session_id,
   subject: ask.subject,
@@ -78,7 +78,7 @@ export const fromGatewayAsk = (ask: GatewayAsk): PhoneAsk => ({
   chief: ask.chief ?? false,
   reply: ask.reply
     ? {
-        answers: ask.reply.answers.map(fromGatewayAnswer),
+        answers: ask.reply.answers.map(fromHomeGatewayAnswer),
         note: ask.reply.note ?? '',
         answeredAt: ask.reply.answered_at.getTime(),
       }
@@ -108,7 +108,7 @@ export const emptyDraft: Draft = { answers: {}, note: '' }
 
 export const emptyAnswer = (key: string): Answer => ({ key, picked: [], other: '', text: '' })
 
-export const draftAnswers = (ask: PhoneAsk, draft: Draft): ReadonlyArray<GatewayAskAnswer> =>
+export const draftAnswers = (ask: PhoneAsk, draft: Draft): ReadonlyArray<HomeGatewayAskAnswer> =>
   questionsOf(ask).flatMap((question) => {
     const answer = draft.answers[question.key]
     if (!answer) return []

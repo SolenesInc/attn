@@ -1,47 +1,47 @@
 // To parse this data:
 //
-//   import { Convert, GatewayAsk, GatewayAskAnswer, GatewayAskAnswerCommand, GatewayAskAnswerResult, GatewayAskChoice, GatewayAskEvent, GatewayAskImage, GatewayAskImageChunk, GatewayAskImageError, GatewayAskPart, GatewayAskQuestion, GatewayAskQuestionKind, GatewayAskReply, GatewayAsks, GatewayCheckState, GatewayCheckTally, GatewayGarden, GatewayGardenSeeds, GatewayHello, GatewayPing, GatewayPlotProgress, GatewayPong, GatewayProfile, GatewayRefused, GatewaySeed, GatewaySeedChanged, GatewaySeedCheck, GatewaySeedDetail, GatewaySeedError, GatewaySeedGet, GatewaySeedLogEntry, GatewaySeedMove, GatewaySeedNoteCommand, GatewaySeedResult, GatewaySeedStatus, GatewaySeedVerb, GatewaySession, GatewaySessionState, GatewaySessions, GatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./gatewayGenerated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./homeGatewayGenerated";
 //
-//   const gatewayAsk = Convert.toGatewayAsk(json);
-//   const gatewayAskAnswer = Convert.toGatewayAskAnswer(json);
-//   const gatewayAskAnswerCommand = Convert.toGatewayAskAnswerCommand(json);
-//   const gatewayAskAnswerResult = Convert.toGatewayAskAnswerResult(json);
-//   const gatewayAskChoice = Convert.toGatewayAskChoice(json);
-//   const gatewayAskEvent = Convert.toGatewayAskEvent(json);
-//   const gatewayAskImage = Convert.toGatewayAskImage(json);
-//   const gatewayAskImageChunk = Convert.toGatewayAskImageChunk(json);
-//   const gatewayAskImageError = Convert.toGatewayAskImageError(json);
-//   const gatewayAskPart = Convert.toGatewayAskPart(json);
-//   const gatewayAskQuestion = Convert.toGatewayAskQuestion(json);
-//   const gatewayAskQuestionKind = Convert.toGatewayAskQuestionKind(json);
-//   const gatewayAskReply = Convert.toGatewayAskReply(json);
-//   const gatewayAsks = Convert.toGatewayAsks(json);
-//   const gatewayCheckState = Convert.toGatewayCheckState(json);
-//   const gatewayCheckTally = Convert.toGatewayCheckTally(json);
-//   const gatewayGarden = Convert.toGatewayGarden(json);
-//   const gatewayGardenSeeds = Convert.toGatewayGardenSeeds(json);
-//   const gatewayHello = Convert.toGatewayHello(json);
-//   const gatewayPing = Convert.toGatewayPing(json);
-//   const gatewayPlotProgress = Convert.toGatewayPlotProgress(json);
-//   const gatewayPong = Convert.toGatewayPong(json);
-//   const gatewayProfile = Convert.toGatewayProfile(json);
-//   const gatewayRefused = Convert.toGatewayRefused(json);
-//   const gatewaySeed = Convert.toGatewaySeed(json);
-//   const gatewaySeedChanged = Convert.toGatewaySeedChanged(json);
-//   const gatewaySeedCheck = Convert.toGatewaySeedCheck(json);
-//   const gatewaySeedDetail = Convert.toGatewaySeedDetail(json);
-//   const gatewaySeedError = Convert.toGatewaySeedError(json);
-//   const gatewaySeedGet = Convert.toGatewaySeedGet(json);
-//   const gatewaySeedLogEntry = Convert.toGatewaySeedLogEntry(json);
-//   const gatewaySeedMove = Convert.toGatewaySeedMove(json);
-//   const gatewaySeedNoteCommand = Convert.toGatewaySeedNoteCommand(json);
-//   const gatewaySeedResult = Convert.toGatewaySeedResult(json);
-//   const gatewaySeedStatus = Convert.toGatewaySeedStatus(json);
-//   const gatewaySeedVerb = Convert.toGatewaySeedVerb(json);
-//   const gatewaySession = Convert.toGatewaySession(json);
-//   const gatewaySessionState = Convert.toGatewaySessionState(json);
-//   const gatewaySessions = Convert.toGatewaySessions(json);
-//   const gatewayWelcome = Convert.toGatewayWelcome(json);
+//   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
+//   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
+//   const homeGatewayAskAnswerCommand = Convert.toHomeGatewayAskAnswerCommand(json);
+//   const homeGatewayAskAnswerResult = Convert.toHomeGatewayAskAnswerResult(json);
+//   const homeGatewayAskChoice = Convert.toHomeGatewayAskChoice(json);
+//   const homeGatewayAskEvent = Convert.toHomeGatewayAskEvent(json);
+//   const homeGatewayAskImage = Convert.toHomeGatewayAskImage(json);
+//   const homeGatewayAskImageChunk = Convert.toHomeGatewayAskImageChunk(json);
+//   const homeGatewayAskImageError = Convert.toHomeGatewayAskImageError(json);
+//   const homeGatewayAskPart = Convert.toHomeGatewayAskPart(json);
+//   const homeGatewayAskQuestion = Convert.toHomeGatewayAskQuestion(json);
+//   const homeGatewayAskQuestionKind = Convert.toHomeGatewayAskQuestionKind(json);
+//   const homeGatewayAskReply = Convert.toHomeGatewayAskReply(json);
+//   const homeGatewayAsks = Convert.toHomeGatewayAsks(json);
+//   const homeGatewayCheckState = Convert.toHomeGatewayCheckState(json);
+//   const homeGatewayCheckTally = Convert.toHomeGatewayCheckTally(json);
+//   const homeGatewayGarden = Convert.toHomeGatewayGarden(json);
+//   const homeGatewayGardenSeeds = Convert.toHomeGatewayGardenSeeds(json);
+//   const homeGatewayHello = Convert.toHomeGatewayHello(json);
+//   const homeGatewayPing = Convert.toHomeGatewayPing(json);
+//   const homeGatewayPlotProgress = Convert.toHomeGatewayPlotProgress(json);
+//   const homeGatewayPong = Convert.toHomeGatewayPong(json);
+//   const homeGatewayProfile = Convert.toHomeGatewayProfile(json);
+//   const homeGatewayRefused = Convert.toHomeGatewayRefused(json);
+//   const homeGatewaySeed = Convert.toHomeGatewaySeed(json);
+//   const homeGatewaySeedChanged = Convert.toHomeGatewaySeedChanged(json);
+//   const homeGatewaySeedCheck = Convert.toHomeGatewaySeedCheck(json);
+//   const homeGatewaySeedDetail = Convert.toHomeGatewaySeedDetail(json);
+//   const homeGatewaySeedError = Convert.toHomeGatewaySeedError(json);
+//   const homeGatewaySeedGet = Convert.toHomeGatewaySeedGet(json);
+//   const homeGatewaySeedLogEntry = Convert.toHomeGatewaySeedLogEntry(json);
+//   const homeGatewaySeedMove = Convert.toHomeGatewaySeedMove(json);
+//   const homeGatewaySeedNoteCommand = Convert.toHomeGatewaySeedNoteCommand(json);
+//   const homeGatewaySeedResult = Convert.toHomeGatewaySeedResult(json);
+//   const homeGatewaySeedStatus = Convert.toHomeGatewaySeedStatus(json);
+//   const homeGatewaySeedVerb = Convert.toHomeGatewaySeedVerb(json);
+//   const homeGatewaySession = Convert.toHomeGatewaySession(json);
+//   const homeGatewaySessionState = Convert.toHomeGatewaySessionState(json);
+//   const homeGatewaySessions = Convert.toHomeGatewaySessions(json);
+//   const homeGatewayWelcome = Convert.toHomeGatewayWelcome(json);
 //   const submitPrompt = Convert.toSubmitPrompt(json);
 //   const submitResult = Convert.toSubmitResult(json);
 //   const terminalAttach = Convert.toTerminalAttach(json);
@@ -58,7 +58,7 @@
 // These functions will throw an error if the JSON doesn't
 // match the expected interface, even if the JSON is valid.
 
-export interface GatewayAsk {
+export interface HomeGatewayAsk {
     chief?:           boolean;
     created_at:       Date;
     crew_member?:     string;
@@ -84,7 +84,7 @@ export interface Question {
     choices:      ChoiceElement[];
     context?:     string;
     key:          string;
-    kind:         GatewayAskQuestionKind;
+    kind:         HomeGatewayAskQuestionKind;
     prompt:       string;
     recommended?: string;
     [property: string]: any;
@@ -96,7 +96,7 @@ export interface ChoiceElement {
     [property: string]: any;
 }
 
-export enum GatewayAskQuestionKind {
+export enum HomeGatewayAskQuestionKind {
     Any = "any",
     One = "one",
     Text = "text",
@@ -118,7 +118,7 @@ export interface AnswerElement {
     [property: string]: any;
 }
 
-export interface GatewayAskAnswer {
+export interface HomeGatewayAskAnswer {
     key:    string;
     other?: string;
     picked: string[];
@@ -126,40 +126,40 @@ export interface GatewayAskAnswer {
     [property: string]: any;
 }
 
-export interface GatewayAskAnswerCommand {
+export interface HomeGatewayAskAnswerCommand {
     answers:    AnswerElement[];
     ask_id:     string;
-    cmd:        GatewayAskAnswerCommandCmd;
+    cmd:        HomeGatewayAskAnswerCommandCmd;
     note?:      string;
     request_id: string;
     [property: string]: any;
 }
 
-export enum GatewayAskAnswerCommandCmd {
+export enum HomeGatewayAskAnswerCommandCmd {
     AskAnswer = "ask_answer",
 }
 
-export interface GatewayAskAnswerResult {
+export interface HomeGatewayAskAnswerResult {
     ask_id:     string;
     error?:     string;
-    event:      GatewayAskAnswerResultEvent;
+    event:      HomeGatewayAskAnswerResultEvent;
     request_id: string;
     [property: string]: any;
 }
 
-export enum GatewayAskAnswerResultEvent {
+export enum HomeGatewayAskAnswerResultEvent {
     AskAnswerResult = "ask_answer_result",
 }
 
-export interface GatewayAskChoice {
+export interface HomeGatewayAskChoice {
     description?: string;
     label:        string;
     [property: string]: any;
 }
 
-export interface GatewayAskEvent {
+export interface HomeGatewayAskEvent {
     ask:   Ask;
-    event: GatewayAskEventEvent;
+    event: HomeGatewayAskEventEvent;
     [property: string]: any;
 }
 
@@ -179,26 +179,26 @@ export interface Ask {
     [property: string]: any;
 }
 
-export enum GatewayAskEventEvent {
+export enum HomeGatewayAskEventEvent {
     Ask = "ask",
 }
 
-export interface GatewayAskImage {
+export interface HomeGatewayAskImage {
     ask_id:     string;
-    cmd:        GatewayAskImageCmd;
+    cmd:        HomeGatewayAskImageCmd;
     offset:     number;
     request_id: string;
     src:        string;
     [property: string]: any;
 }
 
-export enum GatewayAskImageCmd {
+export enum HomeGatewayAskImageCmd {
     AskImage = "ask_image",
 }
 
-export interface GatewayAskImageChunk {
+export interface HomeGatewayAskImageChunk {
     data_base64: string;
-    event:       GatewayAskImageChunkEvent;
+    event:       HomeGatewayAskImageChunkEvent;
     mime_type:   string;
     offset:      number;
     request_id:  string;
@@ -206,77 +206,77 @@ export interface GatewayAskImageChunk {
     [property: string]: any;
 }
 
-export enum GatewayAskImageChunkEvent {
+export enum HomeGatewayAskImageChunkEvent {
     AskImageChunk = "ask_image_chunk",
 }
 
-export interface GatewayAskImageError {
-    event:      GatewayAskImageErrorEvent;
+export interface HomeGatewayAskImageError {
+    event:      HomeGatewayAskImageErrorEvent;
     message:    string;
     request_id: string;
     [property: string]: any;
 }
 
-export enum GatewayAskImageErrorEvent {
+export enum HomeGatewayAskImageErrorEvent {
     AskImageError = "ask_image_error",
 }
 
-export interface GatewayAskPart {
+export interface HomeGatewayAskPart {
     markdown?: string;
     question?: Question;
     [property: string]: any;
 }
 
-export interface GatewayAskQuestion {
+export interface HomeGatewayAskQuestion {
     choices:      ChoiceElement[];
     context?:     string;
     key:          string;
-    kind:         GatewayAskQuestionKind;
+    kind:         HomeGatewayAskQuestionKind;
     prompt:       string;
     recommended?: string;
     [property: string]: any;
 }
 
-export interface GatewayAskReply {
+export interface HomeGatewayAskReply {
     answered_at: Date;
     answers:     AnswerElement[];
     note?:       string;
     [property: string]: any;
 }
 
-export interface GatewayAsks {
-    event: GatewayAsksEvent;
+export interface HomeGatewayAsks {
+    event: HomeGatewayAsksEvent;
     ids:   string[];
     [property: string]: any;
 }
 
-export enum GatewayAsksEvent {
+export enum HomeGatewayAsksEvent {
     Asks = "asks",
 }
 
-export interface GatewayCheckTally {
+export interface HomeGatewayCheckTally {
     confirmed: number;
     total:     number;
     [property: string]: any;
 }
 
-export interface GatewayGarden {
-    event: GatewayGardenEvent;
+export interface HomeGatewayGarden {
+    event: HomeGatewayGardenEvent;
     ids:   string[];
     [property: string]: any;
 }
 
-export enum GatewayGardenEvent {
+export enum HomeGatewayGardenEvent {
     Garden = "garden",
 }
 
-export interface GatewayGardenSeeds {
-    event: GatewayGardenSeedsEvent;
+export interface HomeGatewayGardenSeeds {
+    event: HomeGatewayGardenSeedsEvent;
     seeds: Seed[];
     [property: string]: any;
 }
 
-export enum GatewayGardenSeedsEvent {
+export enum HomeGatewayGardenSeedsEvent {
     GardenSeeds = "garden_seeds",
 }
 
@@ -290,7 +290,7 @@ export interface Seed {
     reason?:          string;
     slug:             string;
     state_changed_at: Date;
-    status:           GatewaySeedStatus;
+    status:           HomeGatewaySeedStatus;
     tender?:          string;
     title:            string;
     waits_for:        string[];
@@ -314,7 +314,7 @@ export interface Progress {
     [property: string]: any;
 }
 
-export enum GatewaySeedStatus {
+export enum HomeGatewaySeedStatus {
     Growing = "growing",
     Harvested = "harvested",
     Parked = "parked",
@@ -323,27 +323,27 @@ export enum GatewaySeedStatus {
     Withered = "withered",
 }
 
-export interface GatewayHello {
+export interface HomeGatewayHello {
     api:       number;
-    cmd:       GatewayHelloCmd;
+    cmd:       HomeGatewayHelloCmd;
     device_id: string;
     [property: string]: any;
 }
 
-export enum GatewayHelloCmd {
+export enum HomeGatewayHelloCmd {
     Hello = "hello",
 }
 
-export interface GatewayPing {
-    cmd: GatewayPingCmd;
+export interface HomeGatewayPing {
+    cmd: HomeGatewayPingCmd;
     [property: string]: any;
 }
 
-export enum GatewayPingCmd {
+export enum HomeGatewayPingCmd {
     Ping = "ping",
 }
 
-export interface GatewayPlotProgress {
+export interface HomeGatewayPlotProgress {
     blocked:  number;
     done:     number;
     growing:  number;
@@ -354,32 +354,32 @@ export interface GatewayPlotProgress {
     [property: string]: any;
 }
 
-export interface GatewayPong {
-    event: GatewayPongEvent;
+export interface HomeGatewayPong {
+    event: HomeGatewayPongEvent;
     [property: string]: any;
 }
 
-export enum GatewayPongEvent {
+export enum HomeGatewayPongEvent {
     Pong = "pong",
 }
 
-export interface GatewayProfile {
+export interface HomeGatewayProfile {
     id:   string;
     name: string;
     [property: string]: any;
 }
 
-export interface GatewayRefused {
-    event:   GatewayRefusedEvent;
+export interface HomeGatewayRefused {
+    event:   HomeGatewayRefusedEvent;
     message: string;
     [property: string]: any;
 }
 
-export enum GatewayRefusedEvent {
+export enum HomeGatewayRefusedEvent {
     Refused = "refused",
 }
 
-export interface GatewaySeed {
+export interface HomeGatewaySeed {
     checks?:          Checks;
     claimed:          boolean;
     id:               string;
@@ -389,32 +389,32 @@ export interface GatewaySeed {
     reason?:          string;
     slug:             string;
     state_changed_at: Date;
-    status:           GatewaySeedStatus;
+    status:           HomeGatewaySeedStatus;
     tender?:          string;
     title:            string;
     waits_for:        string[];
     [property: string]: any;
 }
 
-export interface GatewaySeedChanged {
-    event:   GatewaySeedChangedEvent;
+export interface HomeGatewaySeedChanged {
+    event:   HomeGatewaySeedChangedEvent;
     seed_id: string;
     [property: string]: any;
 }
 
-export enum GatewaySeedChangedEvent {
+export enum HomeGatewaySeedChangedEvent {
     SeedChanged = "seed_changed",
 }
 
-export interface GatewaySeedCheck {
+export interface HomeGatewaySeedCheck {
     from?: string;
     id:    string;
-    state: GatewayCheckState;
+    state: HomeGatewayCheckState;
     text:  string;
     [property: string]: any;
 }
 
-export enum GatewayCheckState {
+export enum HomeGatewayCheckState {
     Confirmed = "confirmed",
     Open = "open",
     Rejected = "rejected",
@@ -422,12 +422,12 @@ export enum GatewayCheckState {
     Unknown = "unknown",
 }
 
-export interface GatewaySeedDetail {
+export interface HomeGatewaySeedDetail {
     body:                  string;
     body_too_large_bytes?: number;
     checks:                CheckElement[];
     children:              Seed[];
-    event:                 GatewaySeedDetailEvent;
+    event:                 HomeGatewaySeedDetailEvent;
     log:                   LogElement[];
     log_total:             number;
     max_frame_bytes?:      number;
@@ -439,12 +439,12 @@ export interface GatewaySeedDetail {
 export interface CheckElement {
     from?: string;
     id:    string;
-    state: GatewayCheckState;
+    state: HomeGatewayCheckState;
     text:  string;
     [property: string]: any;
 }
 
-export enum GatewaySeedDetailEvent {
+export enum HomeGatewaySeedDetailEvent {
     SeedDetail = "seed_detail",
 }
 
@@ -457,29 +457,29 @@ export interface LogElement {
     [property: string]: any;
 }
 
-export interface GatewaySeedError {
-    event:      GatewaySeedErrorEvent;
+export interface HomeGatewaySeedError {
+    event:      HomeGatewaySeedErrorEvent;
     message:    string;
     request_id: string;
     [property: string]: any;
 }
 
-export enum GatewaySeedErrorEvent {
+export enum HomeGatewaySeedErrorEvent {
     SeedError = "seed_error",
 }
 
-export interface GatewaySeedGet {
-    cmd:        GatewaySeedGetCmd;
+export interface HomeGatewaySeedGet {
+    cmd:        HomeGatewaySeedGetCmd;
     request_id: string;
     seed_id:    string;
     [property: string]: any;
 }
 
-export enum GatewaySeedGetCmd {
+export enum HomeGatewaySeedGetCmd {
     SeedGet = "seed_get",
 }
 
-export interface GatewaySeedLogEntry {
+export interface HomeGatewaySeedLogEntry {
     author:     string;
     body:       string;
     created_at: Date;
@@ -488,20 +488,20 @@ export interface GatewaySeedLogEntry {
     [property: string]: any;
 }
 
-export interface GatewaySeedMove {
-    cmd:        GatewaySeedMoveCmd;
+export interface HomeGatewaySeedMove {
+    cmd:        HomeGatewaySeedMoveCmd;
     request_id: string;
     seed_id:    string;
     text:       string;
-    verb:       GatewaySeedVerb;
+    verb:       HomeGatewaySeedVerb;
     [property: string]: any;
 }
 
-export enum GatewaySeedMoveCmd {
+export enum HomeGatewaySeedMoveCmd {
     SeedMove = "seed_move",
 }
 
-export enum GatewaySeedVerb {
+export enum HomeGatewaySeedVerb {
     Harvest = "harvest",
     Park = "park",
     Replant = "replant",
@@ -509,43 +509,43 @@ export enum GatewaySeedVerb {
     Wither = "wither",
 }
 
-export interface GatewaySeedNoteCommand {
+export interface HomeGatewaySeedNoteCommand {
     body:       string;
-    cmd:        GatewaySeedNoteCommandCmd;
+    cmd:        HomeGatewaySeedNoteCommandCmd;
     request_id: string;
     seed_id:    string;
     [property: string]: any;
 }
 
-export enum GatewaySeedNoteCommandCmd {
+export enum HomeGatewaySeedNoteCommandCmd {
     SeedNote = "seed_note",
 }
 
-export interface GatewaySeedResult {
+export interface HomeGatewaySeedResult {
     error?:     string;
-    event:      GatewaySeedResultEvent;
+    event:      HomeGatewaySeedResultEvent;
     request_id: string;
     seed_id:    string;
     [property: string]: any;
 }
 
-export enum GatewaySeedResultEvent {
+export enum HomeGatewaySeedResultEvent {
     SeedResult = "seed_result",
 }
 
-export interface GatewaySession {
+export interface HomeGatewaySession {
     agent:          string;
     host?:          string;
     id:             string;
     offline:        boolean;
-    state:          GatewaySessionState;
+    state:          HomeGatewaySessionState;
     terminal_id?:   string;
     title:          string;
     waiting_since?: Date;
     [property: string]: any;
 }
 
-export enum GatewaySessionState {
+export enum HomeGatewaySessionState {
     Idle = "idle",
     Launching = "launching",
     NeedsApproval = "needs_approval",
@@ -556,13 +556,13 @@ export enum GatewaySessionState {
     Working = "working",
 }
 
-export interface GatewaySessions {
-    event:    GatewaySessionsEvent;
+export interface HomeGatewaySessions {
+    event:    HomeGatewaySessionsEvent;
     sessions: SessionElement[];
     [property: string]: any;
 }
 
-export enum GatewaySessionsEvent {
+export enum HomeGatewaySessionsEvent {
     Sessions = "sessions",
 }
 
@@ -571,22 +571,22 @@ export interface SessionElement {
     host?:          string;
     id:             string;
     offline:        boolean;
-    state:          GatewaySessionState;
+    state:          HomeGatewaySessionState;
     terminal_id?:   string;
     title:          string;
     waiting_since?: Date;
     [property: string]: any;
 }
 
-export interface GatewayWelcome {
+export interface HomeGatewayWelcome {
     api:       number;
-    event:     GatewayWelcomeEvent;
+    event:     HomeGatewayWelcomeEvent;
     home_name: string;
     profile:   Profile;
     [property: string]: any;
 }
 
-export enum GatewayWelcomeEvent {
+export enum HomeGatewayWelcomeEvent {
     Welcome = "welcome",
 }
 
@@ -737,324 +737,324 @@ export enum TerminalScreenEvent {
 // Converts JSON strings to/from your types
 // and asserts the results of JSON.parse at runtime
 export class Convert {
-    public static toGatewayAsk(json: string): GatewayAsk {
-        return cast(JSON.parse(json), r("GatewayAsk"));
+    public static toHomeGatewayAsk(json: string): HomeGatewayAsk {
+        return cast(JSON.parse(json), r("HomeGatewayAsk"));
     }
 
-    public static gatewayAskToJson(value: GatewayAsk): string {
-        return JSON.stringify(uncast(value, r("GatewayAsk")), null, 2);
+    public static homeGatewayAskToJson(value: HomeGatewayAsk): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAsk")), null, 2);
     }
 
-    public static toGatewayAskAnswer(json: string): GatewayAskAnswer {
-        return cast(JSON.parse(json), r("GatewayAskAnswer"));
+    public static toHomeGatewayAskAnswer(json: string): HomeGatewayAskAnswer {
+        return cast(JSON.parse(json), r("HomeGatewayAskAnswer"));
     }
 
-    public static gatewayAskAnswerToJson(value: GatewayAskAnswer): string {
-        return JSON.stringify(uncast(value, r("GatewayAskAnswer")), null, 2);
+    public static homeGatewayAskAnswerToJson(value: HomeGatewayAskAnswer): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskAnswer")), null, 2);
     }
 
-    public static toGatewayAskAnswerCommand(json: string): GatewayAskAnswerCommand {
-        return cast(JSON.parse(json), r("GatewayAskAnswerCommand"));
+    public static toHomeGatewayAskAnswerCommand(json: string): HomeGatewayAskAnswerCommand {
+        return cast(JSON.parse(json), r("HomeGatewayAskAnswerCommand"));
     }
 
-    public static gatewayAskAnswerCommandToJson(value: GatewayAskAnswerCommand): string {
-        return JSON.stringify(uncast(value, r("GatewayAskAnswerCommand")), null, 2);
+    public static homeGatewayAskAnswerCommandToJson(value: HomeGatewayAskAnswerCommand): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskAnswerCommand")), null, 2);
     }
 
-    public static toGatewayAskAnswerResult(json: string): GatewayAskAnswerResult {
-        return cast(JSON.parse(json), r("GatewayAskAnswerResult"));
+    public static toHomeGatewayAskAnswerResult(json: string): HomeGatewayAskAnswerResult {
+        return cast(JSON.parse(json), r("HomeGatewayAskAnswerResult"));
     }
 
-    public static gatewayAskAnswerResultToJson(value: GatewayAskAnswerResult): string {
-        return JSON.stringify(uncast(value, r("GatewayAskAnswerResult")), null, 2);
+    public static homeGatewayAskAnswerResultToJson(value: HomeGatewayAskAnswerResult): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskAnswerResult")), null, 2);
     }
 
-    public static toGatewayAskChoice(json: string): GatewayAskChoice {
-        return cast(JSON.parse(json), r("GatewayAskChoice"));
+    public static toHomeGatewayAskChoice(json: string): HomeGatewayAskChoice {
+        return cast(JSON.parse(json), r("HomeGatewayAskChoice"));
     }
 
-    public static gatewayAskChoiceToJson(value: GatewayAskChoice): string {
-        return JSON.stringify(uncast(value, r("GatewayAskChoice")), null, 2);
+    public static homeGatewayAskChoiceToJson(value: HomeGatewayAskChoice): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskChoice")), null, 2);
     }
 
-    public static toGatewayAskEvent(json: string): GatewayAskEvent {
-        return cast(JSON.parse(json), r("GatewayAskEvent"));
+    public static toHomeGatewayAskEvent(json: string): HomeGatewayAskEvent {
+        return cast(JSON.parse(json), r("HomeGatewayAskEvent"));
     }
 
-    public static gatewayAskEventToJson(value: GatewayAskEvent): string {
-        return JSON.stringify(uncast(value, r("GatewayAskEvent")), null, 2);
+    public static homeGatewayAskEventToJson(value: HomeGatewayAskEvent): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskEvent")), null, 2);
     }
 
-    public static toGatewayAskImage(json: string): GatewayAskImage {
-        return cast(JSON.parse(json), r("GatewayAskImage"));
+    public static toHomeGatewayAskImage(json: string): HomeGatewayAskImage {
+        return cast(JSON.parse(json), r("HomeGatewayAskImage"));
     }
 
-    public static gatewayAskImageToJson(value: GatewayAskImage): string {
-        return JSON.stringify(uncast(value, r("GatewayAskImage")), null, 2);
+    public static homeGatewayAskImageToJson(value: HomeGatewayAskImage): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskImage")), null, 2);
     }
 
-    public static toGatewayAskImageChunk(json: string): GatewayAskImageChunk {
-        return cast(JSON.parse(json), r("GatewayAskImageChunk"));
+    public static toHomeGatewayAskImageChunk(json: string): HomeGatewayAskImageChunk {
+        return cast(JSON.parse(json), r("HomeGatewayAskImageChunk"));
     }
 
-    public static gatewayAskImageChunkToJson(value: GatewayAskImageChunk): string {
-        return JSON.stringify(uncast(value, r("GatewayAskImageChunk")), null, 2);
+    public static homeGatewayAskImageChunkToJson(value: HomeGatewayAskImageChunk): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskImageChunk")), null, 2);
     }
 
-    public static toGatewayAskImageError(json: string): GatewayAskImageError {
-        return cast(JSON.parse(json), r("GatewayAskImageError"));
+    public static toHomeGatewayAskImageError(json: string): HomeGatewayAskImageError {
+        return cast(JSON.parse(json), r("HomeGatewayAskImageError"));
     }
 
-    public static gatewayAskImageErrorToJson(value: GatewayAskImageError): string {
-        return JSON.stringify(uncast(value, r("GatewayAskImageError")), null, 2);
+    public static homeGatewayAskImageErrorToJson(value: HomeGatewayAskImageError): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskImageError")), null, 2);
     }
 
-    public static toGatewayAskPart(json: string): GatewayAskPart {
-        return cast(JSON.parse(json), r("GatewayAskPart"));
+    public static toHomeGatewayAskPart(json: string): HomeGatewayAskPart {
+        return cast(JSON.parse(json), r("HomeGatewayAskPart"));
     }
 
-    public static gatewayAskPartToJson(value: GatewayAskPart): string {
-        return JSON.stringify(uncast(value, r("GatewayAskPart")), null, 2);
+    public static homeGatewayAskPartToJson(value: HomeGatewayAskPart): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskPart")), null, 2);
     }
 
-    public static toGatewayAskQuestion(json: string): GatewayAskQuestion {
-        return cast(JSON.parse(json), r("GatewayAskQuestion"));
+    public static toHomeGatewayAskQuestion(json: string): HomeGatewayAskQuestion {
+        return cast(JSON.parse(json), r("HomeGatewayAskQuestion"));
     }
 
-    public static gatewayAskQuestionToJson(value: GatewayAskQuestion): string {
-        return JSON.stringify(uncast(value, r("GatewayAskQuestion")), null, 2);
+    public static homeGatewayAskQuestionToJson(value: HomeGatewayAskQuestion): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskQuestion")), null, 2);
     }
 
-    public static toGatewayAskQuestionKind(json: string): GatewayAskQuestionKind {
-        return cast(JSON.parse(json), r("GatewayAskQuestionKind"));
+    public static toHomeGatewayAskQuestionKind(json: string): HomeGatewayAskQuestionKind {
+        return cast(JSON.parse(json), r("HomeGatewayAskQuestionKind"));
     }
 
-    public static gatewayAskQuestionKindToJson(value: GatewayAskQuestionKind): string {
-        return JSON.stringify(uncast(value, r("GatewayAskQuestionKind")), null, 2);
+    public static homeGatewayAskQuestionKindToJson(value: HomeGatewayAskQuestionKind): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskQuestionKind")), null, 2);
     }
 
-    public static toGatewayAskReply(json: string): GatewayAskReply {
-        return cast(JSON.parse(json), r("GatewayAskReply"));
+    public static toHomeGatewayAskReply(json: string): HomeGatewayAskReply {
+        return cast(JSON.parse(json), r("HomeGatewayAskReply"));
     }
 
-    public static gatewayAskReplyToJson(value: GatewayAskReply): string {
-        return JSON.stringify(uncast(value, r("GatewayAskReply")), null, 2);
+    public static homeGatewayAskReplyToJson(value: HomeGatewayAskReply): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskReply")), null, 2);
     }
 
-    public static toGatewayAsks(json: string): GatewayAsks {
-        return cast(JSON.parse(json), r("GatewayAsks"));
+    public static toHomeGatewayAsks(json: string): HomeGatewayAsks {
+        return cast(JSON.parse(json), r("HomeGatewayAsks"));
     }
 
-    public static gatewayAsksToJson(value: GatewayAsks): string {
-        return JSON.stringify(uncast(value, r("GatewayAsks")), null, 2);
+    public static homeGatewayAsksToJson(value: HomeGatewayAsks): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAsks")), null, 2);
     }
 
-    public static toGatewayCheckState(json: string): GatewayCheckState {
-        return cast(JSON.parse(json), r("GatewayCheckState"));
+    public static toHomeGatewayCheckState(json: string): HomeGatewayCheckState {
+        return cast(JSON.parse(json), r("HomeGatewayCheckState"));
     }
 
-    public static gatewayCheckStateToJson(value: GatewayCheckState): string {
-        return JSON.stringify(uncast(value, r("GatewayCheckState")), null, 2);
+    public static homeGatewayCheckStateToJson(value: HomeGatewayCheckState): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayCheckState")), null, 2);
     }
 
-    public static toGatewayCheckTally(json: string): GatewayCheckTally {
-        return cast(JSON.parse(json), r("GatewayCheckTally"));
+    public static toHomeGatewayCheckTally(json: string): HomeGatewayCheckTally {
+        return cast(JSON.parse(json), r("HomeGatewayCheckTally"));
     }
 
-    public static gatewayCheckTallyToJson(value: GatewayCheckTally): string {
-        return JSON.stringify(uncast(value, r("GatewayCheckTally")), null, 2);
+    public static homeGatewayCheckTallyToJson(value: HomeGatewayCheckTally): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayCheckTally")), null, 2);
     }
 
-    public static toGatewayGarden(json: string): GatewayGarden {
-        return cast(JSON.parse(json), r("GatewayGarden"));
+    public static toHomeGatewayGarden(json: string): HomeGatewayGarden {
+        return cast(JSON.parse(json), r("HomeGatewayGarden"));
     }
 
-    public static gatewayGardenToJson(value: GatewayGarden): string {
-        return JSON.stringify(uncast(value, r("GatewayGarden")), null, 2);
+    public static homeGatewayGardenToJson(value: HomeGatewayGarden): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayGarden")), null, 2);
     }
 
-    public static toGatewayGardenSeeds(json: string): GatewayGardenSeeds {
-        return cast(JSON.parse(json), r("GatewayGardenSeeds"));
+    public static toHomeGatewayGardenSeeds(json: string): HomeGatewayGardenSeeds {
+        return cast(JSON.parse(json), r("HomeGatewayGardenSeeds"));
     }
 
-    public static gatewayGardenSeedsToJson(value: GatewayGardenSeeds): string {
-        return JSON.stringify(uncast(value, r("GatewayGardenSeeds")), null, 2);
+    public static homeGatewayGardenSeedsToJson(value: HomeGatewayGardenSeeds): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayGardenSeeds")), null, 2);
     }
 
-    public static toGatewayHello(json: string): GatewayHello {
-        return cast(JSON.parse(json), r("GatewayHello"));
+    public static toHomeGatewayHello(json: string): HomeGatewayHello {
+        return cast(JSON.parse(json), r("HomeGatewayHello"));
     }
 
-    public static gatewayHelloToJson(value: GatewayHello): string {
-        return JSON.stringify(uncast(value, r("GatewayHello")), null, 2);
+    public static homeGatewayHelloToJson(value: HomeGatewayHello): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayHello")), null, 2);
     }
 
-    public static toGatewayPing(json: string): GatewayPing {
-        return cast(JSON.parse(json), r("GatewayPing"));
+    public static toHomeGatewayPing(json: string): HomeGatewayPing {
+        return cast(JSON.parse(json), r("HomeGatewayPing"));
     }
 
-    public static gatewayPingToJson(value: GatewayPing): string {
-        return JSON.stringify(uncast(value, r("GatewayPing")), null, 2);
+    public static homeGatewayPingToJson(value: HomeGatewayPing): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayPing")), null, 2);
     }
 
-    public static toGatewayPlotProgress(json: string): GatewayPlotProgress {
-        return cast(JSON.parse(json), r("GatewayPlotProgress"));
+    public static toHomeGatewayPlotProgress(json: string): HomeGatewayPlotProgress {
+        return cast(JSON.parse(json), r("HomeGatewayPlotProgress"));
     }
 
-    public static gatewayPlotProgressToJson(value: GatewayPlotProgress): string {
-        return JSON.stringify(uncast(value, r("GatewayPlotProgress")), null, 2);
+    public static homeGatewayPlotProgressToJson(value: HomeGatewayPlotProgress): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayPlotProgress")), null, 2);
     }
 
-    public static toGatewayPong(json: string): GatewayPong {
-        return cast(JSON.parse(json), r("GatewayPong"));
+    public static toHomeGatewayPong(json: string): HomeGatewayPong {
+        return cast(JSON.parse(json), r("HomeGatewayPong"));
     }
 
-    public static gatewayPongToJson(value: GatewayPong): string {
-        return JSON.stringify(uncast(value, r("GatewayPong")), null, 2);
+    public static homeGatewayPongToJson(value: HomeGatewayPong): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayPong")), null, 2);
     }
 
-    public static toGatewayProfile(json: string): GatewayProfile {
-        return cast(JSON.parse(json), r("GatewayProfile"));
+    public static toHomeGatewayProfile(json: string): HomeGatewayProfile {
+        return cast(JSON.parse(json), r("HomeGatewayProfile"));
     }
 
-    public static gatewayProfileToJson(value: GatewayProfile): string {
-        return JSON.stringify(uncast(value, r("GatewayProfile")), null, 2);
+    public static homeGatewayProfileToJson(value: HomeGatewayProfile): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayProfile")), null, 2);
     }
 
-    public static toGatewayRefused(json: string): GatewayRefused {
-        return cast(JSON.parse(json), r("GatewayRefused"));
+    public static toHomeGatewayRefused(json: string): HomeGatewayRefused {
+        return cast(JSON.parse(json), r("HomeGatewayRefused"));
     }
 
-    public static gatewayRefusedToJson(value: GatewayRefused): string {
-        return JSON.stringify(uncast(value, r("GatewayRefused")), null, 2);
+    public static homeGatewayRefusedToJson(value: HomeGatewayRefused): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayRefused")), null, 2);
     }
 
-    public static toGatewaySeed(json: string): GatewaySeed {
-        return cast(JSON.parse(json), r("GatewaySeed"));
+    public static toHomeGatewaySeed(json: string): HomeGatewaySeed {
+        return cast(JSON.parse(json), r("HomeGatewaySeed"));
     }
 
-    public static gatewaySeedToJson(value: GatewaySeed): string {
-        return JSON.stringify(uncast(value, r("GatewaySeed")), null, 2);
+    public static homeGatewaySeedToJson(value: HomeGatewaySeed): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeed")), null, 2);
     }
 
-    public static toGatewaySeedChanged(json: string): GatewaySeedChanged {
-        return cast(JSON.parse(json), r("GatewaySeedChanged"));
+    public static toHomeGatewaySeedChanged(json: string): HomeGatewaySeedChanged {
+        return cast(JSON.parse(json), r("HomeGatewaySeedChanged"));
     }
 
-    public static gatewaySeedChangedToJson(value: GatewaySeedChanged): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedChanged")), null, 2);
+    public static homeGatewaySeedChangedToJson(value: HomeGatewaySeedChanged): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedChanged")), null, 2);
     }
 
-    public static toGatewaySeedCheck(json: string): GatewaySeedCheck {
-        return cast(JSON.parse(json), r("GatewaySeedCheck"));
+    public static toHomeGatewaySeedCheck(json: string): HomeGatewaySeedCheck {
+        return cast(JSON.parse(json), r("HomeGatewaySeedCheck"));
     }
 
-    public static gatewaySeedCheckToJson(value: GatewaySeedCheck): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedCheck")), null, 2);
+    public static homeGatewaySeedCheckToJson(value: HomeGatewaySeedCheck): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedCheck")), null, 2);
     }
 
-    public static toGatewaySeedDetail(json: string): GatewaySeedDetail {
-        return cast(JSON.parse(json), r("GatewaySeedDetail"));
+    public static toHomeGatewaySeedDetail(json: string): HomeGatewaySeedDetail {
+        return cast(JSON.parse(json), r("HomeGatewaySeedDetail"));
     }
 
-    public static gatewaySeedDetailToJson(value: GatewaySeedDetail): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedDetail")), null, 2);
+    public static homeGatewaySeedDetailToJson(value: HomeGatewaySeedDetail): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedDetail")), null, 2);
     }
 
-    public static toGatewaySeedError(json: string): GatewaySeedError {
-        return cast(JSON.parse(json), r("GatewaySeedError"));
+    public static toHomeGatewaySeedError(json: string): HomeGatewaySeedError {
+        return cast(JSON.parse(json), r("HomeGatewaySeedError"));
     }
 
-    public static gatewaySeedErrorToJson(value: GatewaySeedError): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedError")), null, 2);
+    public static homeGatewaySeedErrorToJson(value: HomeGatewaySeedError): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedError")), null, 2);
     }
 
-    public static toGatewaySeedGet(json: string): GatewaySeedGet {
-        return cast(JSON.parse(json), r("GatewaySeedGet"));
+    public static toHomeGatewaySeedGet(json: string): HomeGatewaySeedGet {
+        return cast(JSON.parse(json), r("HomeGatewaySeedGet"));
     }
 
-    public static gatewaySeedGetToJson(value: GatewaySeedGet): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedGet")), null, 2);
+    public static homeGatewaySeedGetToJson(value: HomeGatewaySeedGet): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedGet")), null, 2);
     }
 
-    public static toGatewaySeedLogEntry(json: string): GatewaySeedLogEntry {
-        return cast(JSON.parse(json), r("GatewaySeedLogEntry"));
+    public static toHomeGatewaySeedLogEntry(json: string): HomeGatewaySeedLogEntry {
+        return cast(JSON.parse(json), r("HomeGatewaySeedLogEntry"));
     }
 
-    public static gatewaySeedLogEntryToJson(value: GatewaySeedLogEntry): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedLogEntry")), null, 2);
+    public static homeGatewaySeedLogEntryToJson(value: HomeGatewaySeedLogEntry): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedLogEntry")), null, 2);
     }
 
-    public static toGatewaySeedMove(json: string): GatewaySeedMove {
-        return cast(JSON.parse(json), r("GatewaySeedMove"));
+    public static toHomeGatewaySeedMove(json: string): HomeGatewaySeedMove {
+        return cast(JSON.parse(json), r("HomeGatewaySeedMove"));
     }
 
-    public static gatewaySeedMoveToJson(value: GatewaySeedMove): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedMove")), null, 2);
+    public static homeGatewaySeedMoveToJson(value: HomeGatewaySeedMove): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedMove")), null, 2);
     }
 
-    public static toGatewaySeedNoteCommand(json: string): GatewaySeedNoteCommand {
-        return cast(JSON.parse(json), r("GatewaySeedNoteCommand"));
+    public static toHomeGatewaySeedNoteCommand(json: string): HomeGatewaySeedNoteCommand {
+        return cast(JSON.parse(json), r("HomeGatewaySeedNoteCommand"));
     }
 
-    public static gatewaySeedNoteCommandToJson(value: GatewaySeedNoteCommand): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedNoteCommand")), null, 2);
+    public static homeGatewaySeedNoteCommandToJson(value: HomeGatewaySeedNoteCommand): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedNoteCommand")), null, 2);
     }
 
-    public static toGatewaySeedResult(json: string): GatewaySeedResult {
-        return cast(JSON.parse(json), r("GatewaySeedResult"));
+    public static toHomeGatewaySeedResult(json: string): HomeGatewaySeedResult {
+        return cast(JSON.parse(json), r("HomeGatewaySeedResult"));
     }
 
-    public static gatewaySeedResultToJson(value: GatewaySeedResult): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedResult")), null, 2);
+    public static homeGatewaySeedResultToJson(value: HomeGatewaySeedResult): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedResult")), null, 2);
     }
 
-    public static toGatewaySeedStatus(json: string): GatewaySeedStatus {
-        return cast(JSON.parse(json), r("GatewaySeedStatus"));
+    public static toHomeGatewaySeedStatus(json: string): HomeGatewaySeedStatus {
+        return cast(JSON.parse(json), r("HomeGatewaySeedStatus"));
     }
 
-    public static gatewaySeedStatusToJson(value: GatewaySeedStatus): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedStatus")), null, 2);
+    public static homeGatewaySeedStatusToJson(value: HomeGatewaySeedStatus): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedStatus")), null, 2);
     }
 
-    public static toGatewaySeedVerb(json: string): GatewaySeedVerb {
-        return cast(JSON.parse(json), r("GatewaySeedVerb"));
+    public static toHomeGatewaySeedVerb(json: string): HomeGatewaySeedVerb {
+        return cast(JSON.parse(json), r("HomeGatewaySeedVerb"));
     }
 
-    public static gatewaySeedVerbToJson(value: GatewaySeedVerb): string {
-        return JSON.stringify(uncast(value, r("GatewaySeedVerb")), null, 2);
+    public static homeGatewaySeedVerbToJson(value: HomeGatewaySeedVerb): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedVerb")), null, 2);
     }
 
-    public static toGatewaySession(json: string): GatewaySession {
-        return cast(JSON.parse(json), r("GatewaySession"));
+    public static toHomeGatewaySession(json: string): HomeGatewaySession {
+        return cast(JSON.parse(json), r("HomeGatewaySession"));
     }
 
-    public static gatewaySessionToJson(value: GatewaySession): string {
-        return JSON.stringify(uncast(value, r("GatewaySession")), null, 2);
+    public static homeGatewaySessionToJson(value: HomeGatewaySession): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySession")), null, 2);
     }
 
-    public static toGatewaySessionState(json: string): GatewaySessionState {
-        return cast(JSON.parse(json), r("GatewaySessionState"));
+    public static toHomeGatewaySessionState(json: string): HomeGatewaySessionState {
+        return cast(JSON.parse(json), r("HomeGatewaySessionState"));
     }
 
-    public static gatewaySessionStateToJson(value: GatewaySessionState): string {
-        return JSON.stringify(uncast(value, r("GatewaySessionState")), null, 2);
+    public static homeGatewaySessionStateToJson(value: HomeGatewaySessionState): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySessionState")), null, 2);
     }
 
-    public static toGatewaySessions(json: string): GatewaySessions {
-        return cast(JSON.parse(json), r("GatewaySessions"));
+    public static toHomeGatewaySessions(json: string): HomeGatewaySessions {
+        return cast(JSON.parse(json), r("HomeGatewaySessions"));
     }
 
-    public static gatewaySessionsToJson(value: GatewaySessions): string {
-        return JSON.stringify(uncast(value, r("GatewaySessions")), null, 2);
+    public static homeGatewaySessionsToJson(value: HomeGatewaySessions): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySessions")), null, 2);
     }
 
-    public static toGatewayWelcome(json: string): GatewayWelcome {
-        return cast(JSON.parse(json), r("GatewayWelcome"));
+    public static toHomeGatewayWelcome(json: string): HomeGatewayWelcome {
+        return cast(JSON.parse(json), r("HomeGatewayWelcome"));
     }
 
-    public static gatewayWelcomeToJson(value: GatewayWelcome): string {
-        return JSON.stringify(uncast(value, r("GatewayWelcome")), null, 2);
+    public static homeGatewayWelcomeToJson(value: HomeGatewayWelcome): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayWelcome")), null, 2);
     }
 
     public static toSubmitPrompt(json: string): SubmitPrompt {
@@ -1303,7 +1303,7 @@ function r(name: string) {
 }
 
 const typeMap: any = {
-    "GatewayAsk": o([
+    "HomeGatewayAsk": o([
         { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "created_at", js: "created_at", typ: Date },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
@@ -1325,7 +1325,7 @@ const typeMap: any = {
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "context", js: "context", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
-        { json: "kind", js: "kind", typ: r("GatewayAskQuestionKind") },
+        { json: "kind", js: "kind", typ: r("HomeGatewayAskQuestionKind") },
         { json: "prompt", js: "prompt", typ: "" },
         { json: "recommended", js: "recommended", typ: u(undefined, "") },
     ], "any"),
@@ -1344,32 +1344,32 @@ const typeMap: any = {
         { json: "picked", js: "picked", typ: a("") },
         { json: "text", js: "text", typ: u(undefined, "") },
     ], "any"),
-    "GatewayAskAnswer": o([
+    "HomeGatewayAskAnswer": o([
         { json: "key", js: "key", typ: "" },
         { json: "other", js: "other", typ: u(undefined, "") },
         { json: "picked", js: "picked", typ: a("") },
         { json: "text", js: "text", typ: u(undefined, "") },
     ], "any"),
-    "GatewayAskAnswerCommand": o([
+    "HomeGatewayAskAnswerCommand": o([
         { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
         { json: "ask_id", js: "ask_id", typ: "" },
-        { json: "cmd", js: "cmd", typ: r("GatewayAskAnswerCommandCmd") },
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayAskAnswerCommandCmd") },
         { json: "note", js: "note", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "GatewayAskAnswerResult": o([
+    "HomeGatewayAskAnswerResult": o([
         { json: "ask_id", js: "ask_id", typ: "" },
         { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GatewayAskAnswerResultEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewayAskAnswerResultEvent") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "GatewayAskChoice": o([
+    "HomeGatewayAskChoice": o([
         { json: "description", js: "description", typ: u(undefined, "") },
         { json: "label", js: "label", typ: "" },
     ], "any"),
-    "GatewayAskEvent": o([
+    "HomeGatewayAskEvent": o([
         { json: "ask", js: "ask", typ: r("Ask") },
-        { json: "event", js: "event", typ: r("GatewayAskEventEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewayAskEventEvent") },
     ], "any"),
     "Ask": o([
         { json: "chief", js: "chief", typ: u(undefined, true) },
@@ -1385,57 +1385,57 @@ const typeMap: any = {
         { json: "subject", js: "subject", typ: "" },
         { json: "too_large_bytes", js: "too_large_bytes", typ: u(undefined, 0) },
     ], "any"),
-    "GatewayAskImage": o([
+    "HomeGatewayAskImage": o([
         { json: "ask_id", js: "ask_id", typ: "" },
-        { json: "cmd", js: "cmd", typ: r("GatewayAskImageCmd") },
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayAskImageCmd") },
         { json: "offset", js: "offset", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "src", js: "src", typ: "" },
     ], "any"),
-    "GatewayAskImageChunk": o([
+    "HomeGatewayAskImageChunk": o([
         { json: "data_base64", js: "data_base64", typ: "" },
-        { json: "event", js: "event", typ: r("GatewayAskImageChunkEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewayAskImageChunkEvent") },
         { json: "mime_type", js: "mime_type", typ: "" },
         { json: "offset", js: "offset", typ: 0 },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "size", js: "size", typ: 0 },
     ], "any"),
-    "GatewayAskImageError": o([
-        { json: "event", js: "event", typ: r("GatewayAskImageErrorEvent") },
+    "HomeGatewayAskImageError": o([
+        { json: "event", js: "event", typ: r("HomeGatewayAskImageErrorEvent") },
         { json: "message", js: "message", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "GatewayAskPart": o([
+    "HomeGatewayAskPart": o([
         { json: "markdown", js: "markdown", typ: u(undefined, "") },
         { json: "question", js: "question", typ: u(undefined, r("Question")) },
     ], "any"),
-    "GatewayAskQuestion": o([
+    "HomeGatewayAskQuestion": o([
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "context", js: "context", typ: u(undefined, "") },
         { json: "key", js: "key", typ: "" },
-        { json: "kind", js: "kind", typ: r("GatewayAskQuestionKind") },
+        { json: "kind", js: "kind", typ: r("HomeGatewayAskQuestionKind") },
         { json: "prompt", js: "prompt", typ: "" },
         { json: "recommended", js: "recommended", typ: u(undefined, "") },
     ], "any"),
-    "GatewayAskReply": o([
+    "HomeGatewayAskReply": o([
         { json: "answered_at", js: "answered_at", typ: Date },
         { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
-    "GatewayAsks": o([
-        { json: "event", js: "event", typ: r("GatewayAsksEvent") },
+    "HomeGatewayAsks": o([
+        { json: "event", js: "event", typ: r("HomeGatewayAsksEvent") },
         { json: "ids", js: "ids", typ: a("") },
     ], "any"),
-    "GatewayCheckTally": o([
+    "HomeGatewayCheckTally": o([
         { json: "confirmed", js: "confirmed", typ: 0 },
         { json: "total", js: "total", typ: 0 },
     ], "any"),
-    "GatewayGarden": o([
-        { json: "event", js: "event", typ: r("GatewayGardenEvent") },
+    "HomeGatewayGarden": o([
+        { json: "event", js: "event", typ: r("HomeGatewayGardenEvent") },
         { json: "ids", js: "ids", typ: a("") },
     ], "any"),
-    "GatewayGardenSeeds": o([
-        { json: "event", js: "event", typ: r("GatewayGardenSeedsEvent") },
+    "HomeGatewayGardenSeeds": o([
+        { json: "event", js: "event", typ: r("HomeGatewayGardenSeedsEvent") },
         { json: "seeds", js: "seeds", typ: a(r("Seed")) },
     ], "any"),
     "Seed": o([
@@ -1448,7 +1448,7 @@ const typeMap: any = {
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "slug", js: "slug", typ: "" },
         { json: "state_changed_at", js: "state_changed_at", typ: Date },
-        { json: "status", js: "status", typ: r("GatewaySeedStatus") },
+        { json: "status", js: "status", typ: r("HomeGatewaySeedStatus") },
         { json: "tender", js: "tender", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waits_for", js: "waits_for", typ: a("") },
@@ -1466,15 +1466,15 @@ const typeMap: any = {
         { json: "total", js: "total", typ: 0 },
         { json: "withered", js: "withered", typ: 0 },
     ], "any"),
-    "GatewayHello": o([
+    "HomeGatewayHello": o([
         { json: "api", js: "api", typ: 0 },
-        { json: "cmd", js: "cmd", typ: r("GatewayHelloCmd") },
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayHelloCmd") },
         { json: "device_id", js: "device_id", typ: "" },
     ], "any"),
-    "GatewayPing": o([
-        { json: "cmd", js: "cmd", typ: r("GatewayPingCmd") },
+    "HomeGatewayPing": o([
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayPingCmd") },
     ], "any"),
-    "GatewayPlotProgress": o([
+    "HomeGatewayPlotProgress": o([
         { json: "blocked", js: "blocked", typ: 0 },
         { json: "done", js: "done", typ: 0 },
         { json: "growing", js: "growing", typ: 0 },
@@ -1483,18 +1483,18 @@ const typeMap: any = {
         { json: "total", js: "total", typ: 0 },
         { json: "withered", js: "withered", typ: 0 },
     ], "any"),
-    "GatewayPong": o([
-        { json: "event", js: "event", typ: r("GatewayPongEvent") },
+    "HomeGatewayPong": o([
+        { json: "event", js: "event", typ: r("HomeGatewayPongEvent") },
     ], "any"),
-    "GatewayProfile": o([
+    "HomeGatewayProfile": o([
         { json: "id", js: "id", typ: "" },
         { json: "name", js: "name", typ: "" },
     ], "any"),
-    "GatewayRefused": o([
-        { json: "event", js: "event", typ: r("GatewayRefusedEvent") },
+    "HomeGatewayRefused": o([
+        { json: "event", js: "event", typ: r("HomeGatewayRefusedEvent") },
         { json: "message", js: "message", typ: "" },
     ], "any"),
-    "GatewaySeed": o([
+    "HomeGatewaySeed": o([
         { json: "checks", js: "checks", typ: u(undefined, r("Checks")) },
         { json: "claimed", js: "claimed", typ: true },
         { json: "id", js: "id", typ: "" },
@@ -1504,27 +1504,27 @@ const typeMap: any = {
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "slug", js: "slug", typ: "" },
         { json: "state_changed_at", js: "state_changed_at", typ: Date },
-        { json: "status", js: "status", typ: r("GatewaySeedStatus") },
+        { json: "status", js: "status", typ: r("HomeGatewaySeedStatus") },
         { json: "tender", js: "tender", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waits_for", js: "waits_for", typ: a("") },
     ], "any"),
-    "GatewaySeedChanged": o([
-        { json: "event", js: "event", typ: r("GatewaySeedChangedEvent") },
+    "HomeGatewaySeedChanged": o([
+        { json: "event", js: "event", typ: r("HomeGatewaySeedChangedEvent") },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
-    "GatewaySeedCheck": o([
+    "HomeGatewaySeedCheck": o([
         { json: "from", js: "from", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
-        { json: "state", js: "state", typ: r("GatewayCheckState") },
+        { json: "state", js: "state", typ: r("HomeGatewayCheckState") },
         { json: "text", js: "text", typ: "" },
     ], "any"),
-    "GatewaySeedDetail": o([
+    "HomeGatewaySeedDetail": o([
         { json: "body", js: "body", typ: "" },
         { json: "body_too_large_bytes", js: "body_too_large_bytes", typ: u(undefined, 0) },
         { json: "checks", js: "checks", typ: a(r("CheckElement")) },
         { json: "children", js: "children", typ: a(r("Seed")) },
-        { json: "event", js: "event", typ: r("GatewaySeedDetailEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewaySeedDetailEvent") },
         { json: "log", js: "log", typ: a(r("LogElement")) },
         { json: "log_total", js: "log_total", typ: 0 },
         { json: "max_frame_bytes", js: "max_frame_bytes", typ: u(undefined, 0) },
@@ -1534,7 +1534,7 @@ const typeMap: any = {
     "CheckElement": o([
         { json: "from", js: "from", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
-        { json: "state", js: "state", typ: r("GatewayCheckState") },
+        { json: "state", js: "state", typ: r("HomeGatewayCheckState") },
         { json: "text", js: "text", typ: "" },
     ], "any"),
     "LogElement": o([
@@ -1544,54 +1544,54 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "kind", js: "kind", typ: "" },
     ], "any"),
-    "GatewaySeedError": o([
-        { json: "event", js: "event", typ: r("GatewaySeedErrorEvent") },
+    "HomeGatewaySeedError": o([
+        { json: "event", js: "event", typ: r("HomeGatewaySeedErrorEvent") },
         { json: "message", js: "message", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "GatewaySeedGet": o([
-        { json: "cmd", js: "cmd", typ: r("GatewaySeedGetCmd") },
+    "HomeGatewaySeedGet": o([
+        { json: "cmd", js: "cmd", typ: r("HomeGatewaySeedGetCmd") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
-    "GatewaySeedLogEntry": o([
+    "HomeGatewaySeedLogEntry": o([
         { json: "author", js: "author", typ: "" },
         { json: "body", js: "body", typ: "" },
         { json: "created_at", js: "created_at", typ: Date },
         { json: "id", js: "id", typ: "" },
         { json: "kind", js: "kind", typ: "" },
     ], "any"),
-    "GatewaySeedMove": o([
-        { json: "cmd", js: "cmd", typ: r("GatewaySeedMoveCmd") },
+    "HomeGatewaySeedMove": o([
+        { json: "cmd", js: "cmd", typ: r("HomeGatewaySeedMoveCmd") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "text", js: "text", typ: "" },
-        { json: "verb", js: "verb", typ: r("GatewaySeedVerb") },
+        { json: "verb", js: "verb", typ: r("HomeGatewaySeedVerb") },
     ], "any"),
-    "GatewaySeedNoteCommand": o([
+    "HomeGatewaySeedNoteCommand": o([
         { json: "body", js: "body", typ: "" },
-        { json: "cmd", js: "cmd", typ: r("GatewaySeedNoteCommandCmd") },
+        { json: "cmd", js: "cmd", typ: r("HomeGatewaySeedNoteCommandCmd") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
-    "GatewaySeedResult": o([
+    "HomeGatewaySeedResult": o([
         { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("GatewaySeedResultEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewaySeedResultEvent") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
-    "GatewaySession": o([
+    "HomeGatewaySession": o([
         { json: "agent", js: "agent", typ: "" },
         { json: "host", js: "host", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "offline", js: "offline", typ: true },
-        { json: "state", js: "state", typ: r("GatewaySessionState") },
+        { json: "state", js: "state", typ: r("HomeGatewaySessionState") },
         { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waiting_since", js: "waiting_since", typ: u(undefined, Date) },
     ], "any"),
-    "GatewaySessions": o([
-        { json: "event", js: "event", typ: r("GatewaySessionsEvent") },
+    "HomeGatewaySessions": o([
+        { json: "event", js: "event", typ: r("HomeGatewaySessionsEvent") },
         { json: "sessions", js: "sessions", typ: a(r("SessionElement")) },
     ], "any"),
     "SessionElement": o([
@@ -1599,14 +1599,14 @@ const typeMap: any = {
         { json: "host", js: "host", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "offline", js: "offline", typ: true },
-        { json: "state", js: "state", typ: r("GatewaySessionState") },
+        { json: "state", js: "state", typ: r("HomeGatewaySessionState") },
         { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
         { json: "waiting_since", js: "waiting_since", typ: u(undefined, Date) },
     ], "any"),
-    "GatewayWelcome": o([
+    "HomeGatewayWelcome": o([
         { json: "api", js: "api", typ: 0 },
-        { json: "event", js: "event", typ: r("GatewayWelcomeEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewayWelcomeEvent") },
         { json: "home_name", js: "home_name", typ: "" },
         { json: "profile", js: "profile", typ: r("Profile") },
     ], "any"),
@@ -1680,40 +1680,40 @@ const typeMap: any = {
         { json: "seq", js: "seq", typ: 0 },
         { json: "terminal_id", js: "terminal_id", typ: "" },
     ], "any"),
-    "GatewayAskQuestionKind": [
+    "HomeGatewayAskQuestionKind": [
         "any",
         "one",
         "text",
         "unknown",
     ],
-    "GatewayAskAnswerCommandCmd": [
+    "HomeGatewayAskAnswerCommandCmd": [
         "ask_answer",
     ],
-    "GatewayAskAnswerResultEvent": [
+    "HomeGatewayAskAnswerResultEvent": [
         "ask_answer_result",
     ],
-    "GatewayAskEventEvent": [
+    "HomeGatewayAskEventEvent": [
         "ask",
     ],
-    "GatewayAskImageCmd": [
+    "HomeGatewayAskImageCmd": [
         "ask_image",
     ],
-    "GatewayAskImageChunkEvent": [
+    "HomeGatewayAskImageChunkEvent": [
         "ask_image_chunk",
     ],
-    "GatewayAskImageErrorEvent": [
+    "HomeGatewayAskImageErrorEvent": [
         "ask_image_error",
     ],
-    "GatewayAsksEvent": [
+    "HomeGatewayAsksEvent": [
         "asks",
     ],
-    "GatewayGardenEvent": [
+    "HomeGatewayGardenEvent": [
         "garden",
     ],
-    "GatewayGardenSeedsEvent": [
+    "HomeGatewayGardenSeedsEvent": [
         "garden_seeds",
     ],
-    "GatewaySeedStatus": [
+    "HomeGatewaySeedStatus": [
         "growing",
         "harvested",
         "parked",
@@ -1721,54 +1721,54 @@ const typeMap: any = {
         "unknown",
         "withered",
     ],
-    "GatewayHelloCmd": [
+    "HomeGatewayHelloCmd": [
         "hello",
     ],
-    "GatewayPingCmd": [
+    "HomeGatewayPingCmd": [
         "ping",
     ],
-    "GatewayPongEvent": [
+    "HomeGatewayPongEvent": [
         "pong",
     ],
-    "GatewayRefusedEvent": [
+    "HomeGatewayRefusedEvent": [
         "refused",
     ],
-    "GatewaySeedChangedEvent": [
+    "HomeGatewaySeedChangedEvent": [
         "seed_changed",
     ],
-    "GatewayCheckState": [
+    "HomeGatewayCheckState": [
         "confirmed",
         "open",
         "rejected",
         "reported",
         "unknown",
     ],
-    "GatewaySeedDetailEvent": [
+    "HomeGatewaySeedDetailEvent": [
         "seed_detail",
     ],
-    "GatewaySeedErrorEvent": [
+    "HomeGatewaySeedErrorEvent": [
         "seed_error",
     ],
-    "GatewaySeedGetCmd": [
+    "HomeGatewaySeedGetCmd": [
         "seed_get",
     ],
-    "GatewaySeedMoveCmd": [
+    "HomeGatewaySeedMoveCmd": [
         "seed_move",
     ],
-    "GatewaySeedVerb": [
+    "HomeGatewaySeedVerb": [
         "harvest",
         "park",
         "replant",
         "unknown",
         "wither",
     ],
-    "GatewaySeedNoteCommandCmd": [
+    "HomeGatewaySeedNoteCommandCmd": [
         "seed_note",
     ],
-    "GatewaySeedResultEvent": [
+    "HomeGatewaySeedResultEvent": [
         "seed_result",
     ],
-    "GatewaySessionState": [
+    "HomeGatewaySessionState": [
         "idle",
         "launching",
         "needs_approval",
@@ -1778,10 +1778,10 @@ const typeMap: any = {
         "waiting",
         "working",
     ],
-    "GatewaySessionsEvent": [
+    "HomeGatewaySessionsEvent": [
         "sessions",
     ],
-    "GatewayWelcomeEvent": [
+    "HomeGatewayWelcomeEvent": [
         "welcome",
     ],
     "SubmitPromptCmd": [

@@ -15,16 +15,16 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 )
 
-func (p *testPhone) showsGarden(match func([]gateway.GatewaySeed) bool) []gateway.GatewaySeed {
+func (p *testPhone) showsGarden(match func([]homegateway.HomeGatewaySeed) bool) []homegateway.HomeGatewaySeed {
 	p.t.Helper()
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
 		if p.seedIDs != nil {
-			seeds := []gateway.GatewaySeed{}
+			seeds := []homegateway.HomeGatewaySeed{}
 			for _, id := range p.seedIDs {
 				seeds = append(seeds, p.seeds[id])
 			}
@@ -53,12 +53,12 @@ func (p *testPhone) request(message any, requestID string) []byte {
 	}
 }
 
-func (p *testPhone) readSeed(seedID string) (gateway.GatewaySeedDetail, string) {
+func (p *testPhone) readSeed(seedID string) (homegateway.HomeGatewaySeedDetail, string) {
 	p.t.Helper()
 	requestID := uuid.NewString()
-	frame := p.request(gateway.GatewaySeedGet{Cmd: "seed_get", RequestID: requestID, SeedID: seedID}, requestID)
-	var detail gateway.GatewaySeedDetail
-	var failed gateway.GatewaySeedError
+	frame := p.request(homegateway.HomeGatewaySeedGet{Cmd: "seed_get", RequestID: requestID, SeedID: seedID}, requestID)
+	var detail homegateway.HomeGatewaySeedDetail
+	var failed homegateway.HomeGatewaySeedError
 	_ = json.Unmarshal(frame, &detail)
 	if detail.Event == "seed_error" {
 		_ = json.Unmarshal(frame, &failed)
@@ -72,7 +72,7 @@ func (p *testPhone) readSeed(seedID string) (gateway.GatewaySeedDetail, string) 
 
 func (p *testPhone) seedCommand(message any, requestID string) string {
 	p.t.Helper()
-	var result gateway.GatewaySeedResult
+	var result homegateway.HomeGatewaySeedResult
 	if err := json.Unmarshal(p.request(message, requestID), &result); err != nil || result.Event != "seed_result" {
 		p.t.Fatalf("the home answered %+v (%v), want seed_result", result, err)
 	}
@@ -82,24 +82,24 @@ func (p *testPhone) seedCommand(message any, requestID string) string {
 func (p *testPhone) note(seedID, body string) string {
 	p.t.Helper()
 	requestID := uuid.NewString()
-	return p.seedCommand(gateway.GatewaySeedNoteCommand{Cmd: "seed_note", RequestID: requestID, SeedID: seedID, Body: body}, requestID)
+	return p.seedCommand(homegateway.HomeGatewaySeedNoteCommand{Cmd: "seed_note", RequestID: requestID, SeedID: seedID, Body: body}, requestID)
 }
 
-func (p *testPhone) move(seedID string, verb gateway.GatewaySeedVerb, text string) string {
+func (p *testPhone) move(seedID string, verb homegateway.HomeGatewaySeedVerb, text string) string {
 	p.t.Helper()
 	requestID := uuid.NewString()
-	return p.seedCommand(gateway.GatewaySeedMove{Cmd: "seed_move", RequestID: requestID, SeedID: seedID, Verb: verb, Text: text}, requestID)
+	return p.seedCommand(homegateway.HomeGatewaySeedMove{Cmd: "seed_move", RequestID: requestID, SeedID: seedID, Verb: verb, Text: text}, requestID)
 }
 
-func gardenByID(seeds []gateway.GatewaySeed) map[string]gateway.GatewaySeed {
-	out := map[string]gateway.GatewaySeed{}
+func gardenByID(seeds []homegateway.HomeGatewaySeed) map[string]homegateway.HomeGatewaySeed {
+	out := map[string]homegateway.HomeGatewaySeed{}
 	for _, seed := range seeds {
 		out[seed.ID] = seed
 	}
 	return out
 }
 
-func TestGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testing.T) {
+func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -136,14 +136,14 @@ func TestGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testin
 
 	phone := connectPhone(t, w, "phone", personal)
 	phone.welcomed()
-	seeds := gardenByID(phone.showsGarden(func(seeds []gateway.GatewaySeed) bool { return len(seeds) == 3 }))
+	seeds := gardenByID(phone.showsGarden(func(seeds []homegateway.HomeGatewaySeed) bool { return len(seeds) == 3 }))
 	if _, leaked := seeds[elsewhere]; leaked || seeds[plot].ID == "" || seeds[first].ID == "" || seeds[second].ID == "" {
 		t.Fatalf("the personal phone's garden is %v, want the plot and both children, without %s", phone.seedIDs, elsewhere)
 	}
 	if got := seeds[plot]; got.Progress == nil || got.Progress.Total != 2 || got.Progress.Growing != 1 || got.Progress.Blocked != 1 || got.Ready {
 		t.Fatalf("the plot reads %+v, want two children, one growing and one blocked", got)
 	}
-	if got := seeds[first]; got.Status != gateway.GatewaySeedStatusGrowing || !got.Claimed || protocol.Deref(got.Tender) == "" || protocol.Deref(got.PlotID) != plot {
+	if got := seeds[first]; got.Status != homegateway.HomeGatewaySeedStatusGrowing || !got.Claimed || protocol.Deref(got.Tender) == "" || protocol.Deref(got.PlotID) != plot {
 		t.Fatalf("the tended child reads %+v, want growing, claimed by mine, in the plot", got)
 	}
 	if got := seeds[second]; !slices.Equal(got.WaitsFor, []string{first}) || got.Ready {
@@ -172,49 +172,49 @@ func TestGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testin
 		t.Fatalf("the work seed's log holds %+v (%v) after the refused note, want nothing", theirs, err)
 	}
 
-	if failure := phone.move(first, gateway.GatewaySeedVerbPark, "Waiting on the phone build."); failure != "" {
+	if failure := phone.move(first, homegateway.HomeGatewaySeedVerbPark, "Waiting on the phone build."); failure != "" {
 		t.Fatalf("parking the tended seed: %s", failure)
 	}
-	seeds = gardenByID(phone.showsGarden(func(seeds []gateway.GatewaySeed) bool {
-		return gardenByID(seeds)[first].Status == gateway.GatewaySeedStatusParked
+	seeds = gardenByID(phone.showsGarden(func(seeds []homegateway.HomeGatewaySeed) bool {
+		return gardenByID(seeds)[first].Status == homegateway.HomeGatewaySeedStatusParked
 	}))
 	if got := seeds[first]; got.Claimed || got.Tender != nil {
 		t.Fatalf("the parked seed reads %+v, want its claim released", got)
 	}
 	detail, _ = phone.readSeed(first)
-	if !slices.ContainsFunc(detail.Log, func(entry gateway.GatewaySeedLogEntry) bool {
+	if !slices.ContainsFunc(detail.Log, func(entry homegateway.HomeGatewaySeedLogEntry) bool {
 		return strings.Contains(entry.Body, "Waiting on the phone build.")
 	}) {
 		t.Fatalf("the parked seed's log %+v, want the park's comment", detail.Log)
 	}
 
-	if failure := phone.move(second, gateway.GatewaySeedVerbHarvest, ""); !strings.Contains(failure, "records what got done") {
+	if failure := phone.move(second, homegateway.HomeGatewaySeedVerbHarvest, ""); !strings.Contains(failure, "records what got done") {
 		t.Fatalf("harvesting without a reason failed with %q, want the reason asked for", failure)
 	}
-	if failure := phone.move(second, gateway.GatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
+	if failure := phone.move(second, homegateway.HomeGatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
 		t.Fatalf("harvesting: %s", failure)
 	}
-	seeds = gardenByID(phone.showsGarden(func(seeds []gateway.GatewaySeed) bool {
-		return gardenByID(seeds)[second].Status == gateway.GatewaySeedStatusHarvested
+	seeds = gardenByID(phone.showsGarden(func(seeds []homegateway.HomeGatewaySeed) bool {
+		return gardenByID(seeds)[second].Status == homegateway.HomeGatewaySeedStatusHarvested
 	}))
 	if got := seeds[plot].Progress; got == nil || got.Done != 1 || got.Parked != 1 {
 		t.Fatalf("the plot after the harvest reads %+v, want one done and one parked", got)
 	}
-	if failure := phone.move(second, gateway.GatewaySeedVerbReplant, "Harvested by mistake."); failure != "" {
+	if failure := phone.move(second, homegateway.HomeGatewaySeedVerbReplant, "Harvested by mistake."); failure != "" {
 		t.Fatalf("replanting the seed closed a moment ago: %s", failure)
 	}
-	phone.showsGarden(func(seeds []gateway.GatewaySeed) bool {
-		return gardenByID(seeds)[second].Status == gateway.GatewaySeedStatusPlanted
+	phone.showsGarden(func(seeds []homegateway.HomeGatewaySeed) bool {
+		return gardenByID(seeds)[second].Status == homegateway.HomeGatewaySeedStatusPlanted
 	})
-	if failure := phone.move(second, gateway.GatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
+	if failure := phone.move(second, homegateway.HomeGatewaySeedVerbHarvest, "Moves work from the phone."); failure != "" {
 		t.Fatalf("harvesting again: %s", failure)
 	}
 	detail, _ = phone.readSeed(plot)
-	if harvested := gardenByID(detail.Children)[second]; harvested.Status != gateway.GatewaySeedStatusHarvested || protocol.Deref(harvested.Reason) != "Moves work from the phone." {
+	if harvested := gardenByID(detail.Children)[second]; harvested.Status != homegateway.HomeGatewaySeedStatusHarvested || protocol.Deref(harvested.Reason) != "Moves work from the phone." {
 		t.Fatalf("the plot's children read %+v, want the harvested one with its reason", detail.Children)
 	}
 
-	if failure := phone.move(elsewhere, gateway.GatewaySeedVerbWither, "Not mine to close."); !strings.Contains(failure, "no seed "+elsewhere) {
+	if failure := phone.move(elsewhere, homegateway.HomeGatewaySeedVerbWither, "Not mine to close."); !strings.Contains(failure, "no seed "+elsewhere) {
 		t.Fatalf("withering another profile's seed failed with %q, want it to read as absent", failure)
 	}
 	shown, err := cli.SeedShow("theirs", elsewhere)
@@ -223,7 +223,7 @@ func TestGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testin
 	}
 }
 
-func TestGatewayKeepsTheGardenFromPhonesThatDoNotKnowIt(t *testing.T) {
+func TestHomeGatewayKeepsTheGardenFromPhonesThatDoNotKnowIt(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -235,17 +235,17 @@ func TestGatewayKeepsTheGardenFromPhonesThatDoNotKnowIt(t *testing.T) {
 	}
 	phone := connectPhone(t, w, "installed", app.SelectedProfile())
 	phone.hello(5)
-	var welcome gateway.GatewayWelcome
+	var welcome homegateway.HomeGatewayWelcome
 	phone.next("welcome", &welcome)
-	phone.send(gateway.GatewayPing{Cmd: "ping"})
-	var pong gateway.GatewayPong
+	phone.send(homegateway.HomeGatewayPing{Cmd: "ping"})
+	var pong homegateway.HomeGatewayPong
 	phone.next("pong", &pong)
 	if phone.seedIDs != nil || len(phone.seeds) != 0 {
 		t.Fatalf("a phone on api 5 received the garden %v", phone.seedIDs)
 	}
 }
 
-func TestGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t *testing.T) {
+func TestHomeGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -285,7 +285,7 @@ func (p *testPhone) seedChangesUntil(seedID string) []string {
 	var changed []string
 	for {
 		frame := p.receive(guard, "seed_changed for "+seedID)
-		var message gateway.GatewaySeedChanged
+		var message homegateway.HomeGatewaySeedChanged
 		if json.Unmarshal(frame, &message) != nil || message.Event != "seed_changed" {
 			continue
 		}
@@ -296,7 +296,7 @@ func (p *testPhone) seedChangesUntil(seedID string) []string {
 	}
 }
 
-func TestGatewayTellsThePhoneWhenASeedsNotesOrBodyChange(t *testing.T) {
+func TestHomeGatewayTellsThePhoneWhenASeedsNotesOrBodyChange(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")

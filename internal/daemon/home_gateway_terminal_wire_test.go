@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/protocol/gateway"
+	"github.com/victorarias/attn/internal/protocol/homegateway"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -26,14 +26,14 @@ type phoneTerminal struct {
 	received int
 	granted  int
 	keepUp   bool
-	resized  []gateway.TerminalResized
+	resized  []homegateway.TerminalResized
 }
 
 const shownTail = 64 << 10
 
 func (p *testPhone) attach(terminal string, cols, rows, credit int) *phoneTerminal {
 	p.t.Helper()
-	p.send(gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: cols, Rows: rows, Credit: credit})
+	p.send(homegateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: cols, Rows: rows, Credit: credit})
 	return &phoneTerminal{phone: p, id: terminal, screenAt: -1, lastSeq: -1, granted: credit}
 }
 
@@ -52,7 +52,7 @@ func (p *testPhone) frame() []byte {
 
 func (pt *phoneTerminal) grant(bytes int) {
 	pt.granted += bytes
-	pt.phone.send(gateway.TerminalCredit{Cmd: "terminal_credit", TerminalID: pt.id, Bytes: bytes})
+	pt.phone.send(homegateway.TerminalCredit{Cmd: "terminal_credit", TerminalID: pt.id, Bytes: bytes})
 }
 
 // read takes the home's next message for this terminal and checks it against the promises a screen and its frames make.
@@ -92,7 +92,7 @@ func (pt *phoneTerminal) read() string {
 		case "sessions", "asks", "ask", "garden_seeds", "garden":
 			continue
 		case "terminal_screen":
-			var screen gateway.TerminalScreen
+			var screen homegateway.TerminalScreen
 			_ = json.Unmarshal(frame, &screen)
 			ansi, err := base64.StdEncoding.DecodeString(screen.Ansi)
 			if err != nil || screen.Cols <= 0 || screen.Rows <= 0 {
@@ -105,7 +105,7 @@ func (pt *phoneTerminal) read() string {
 			pt.consumed(len(ansi))
 			return "screen"
 		case "terminal_resized":
-			var resized gateway.TerminalResized
+			var resized homegateway.TerminalResized
 			_ = json.Unmarshal(frame, &resized)
 			pt.resized = append(pt.resized, resized)
 			return "resized"
@@ -146,14 +146,14 @@ func (pt *phoneTerminal) awaitResized(cols, rows int) {
 }
 
 func (pt *phoneTerminal) typeLine(text string) {
-	pt.phone.send(gateway.TerminalInput{Cmd: "terminal_input", TerminalID: pt.id, Data: text + "\r"})
+	pt.phone.send(homegateway.TerminalInput{Cmd: "terminal_input", TerminalID: pt.id, Data: text + "\r"})
 }
 
-func welcomedPhone(t *testing.T, w *world, profile string) (*testPhone, []gateway.GatewaySession) {
+func welcomedPhone(t *testing.T, w *world, profile string) (*testPhone, []homegateway.HomeGatewaySession) {
 	t.Helper()
 	phone := connectPhone(t, w, "phone", profile)
-	phone.hello(gateway.APIVersion)
-	var welcome gateway.GatewayWelcome
+	phone.hello(homegateway.APIVersion)
+	var welcome homegateway.HomeGatewayWelcome
 	phone.next("welcome", &welcome)
 	return phone, phone.sessions()
 }
@@ -180,7 +180,7 @@ func TestAPhoneOpensATerminalSeesItsScreenThenOutputAndOwnsItsSizeUntilTheDeskto
 	}
 
 	mark := len(desktop.Log())
-	phone.send(gateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal})
+	phone.send(homegateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal})
 	awaitPtyResized(desktop, mark, terminal, 50, 30)
 	opened.typeLine(`printf 'phone=%s.\n' "$(stty size)"`)
 	opened.awaitShown("phone=30 50.")
@@ -195,12 +195,12 @@ func TestAPhoneOpensATerminalSeesItsScreenThenOutputAndOwnsItsSizeUntilTheDeskto
 	desktop.AwaitScreen(session, "typed=30 50.")
 
 	mark = len(desktop.Log())
-	phone.send(gateway.TerminalDetach{Cmd: "terminal_detach", TerminalID: terminal})
+	phone.send(homegateway.TerminalDetach{Cmd: "terminal_detach", TerminalID: terminal})
 	awaitPtyResized(desktop, mark, terminal, 120, 36)
 
 	again := phone.attach(terminal, 50, 30, phoneCredit)
 	again.read()
-	phone.send(gateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal})
+	phone.send(homegateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal})
 	mark = len(desktop.Log())
 	again.typeLine(`printf 'again=%s.\n' "$(stty size)"`)
 	again.awaitShown("again=30 50.")
@@ -217,8 +217,8 @@ func TestAPhonePromptReachesTheAgentThroughTheSessionMonitor(t *testing.T) {
 	app.AwaitScreen(session, "? for shortcuts")
 
 	phone, _ := welcomedPhone(t, w, app.SelectedProfile())
-	phone.send(gateway.SubmitPrompt{Cmd: "submit_prompt", RequestID: "r1", SessionID: session, Text: "Yes, land it."})
-	var result gateway.SubmitResult
+	phone.send(homegateway.SubmitPrompt{Cmd: "submit_prompt", RequestID: "r1", SessionID: session, Text: "Yes, land it."})
+	var result homegateway.SubmitResult
 	phone.next("submit_result", &result)
 	if !result.Delivered || result.RequestID != "r1" {
 		t.Fatalf("submit_result = %+v, want r1 delivered", result)
@@ -227,7 +227,7 @@ func TestAPhonePromptReachesTheAgentThroughTheSessionMonitor(t *testing.T) {
 		t.Fatalf("the agent was prompted with %q, want the phone's text", got)
 	}
 
-	phone.send(gateway.SubmitPrompt{Cmd: "submit_prompt", RequestID: "r2", SessionID: "not-a-session", Text: "hello"})
+	phone.send(homegateway.SubmitPrompt{Cmd: "submit_prompt", RequestID: "r2", SessionID: "not-a-session", Text: "hello"})
 	phone.next("submit_result", &result)
 	if result.Delivered || result.RequestID != "r2" || protocol.Deref(result.Message) == "" {
 		t.Fatalf("submit_result for an unknown session = %+v, want r2 refused with a reason", result)
@@ -289,13 +289,13 @@ func TestAPhoneReachesOnlyTheTerminalsOfItsPairingsProfile(t *testing.T) {
 		t.Fatalf("the phone of the home profile sees %+v, want no sessions", sessions)
 	}
 	for _, command := range []any{
-		gateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: phoneCredit},
-		gateway.TerminalResize{Cmd: "terminal_resize", TerminalID: terminal, Cols: 50, Rows: 30},
-		gateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal},
-		gateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "echo from-the-phone\r"},
+		homegateway.TerminalAttach{Cmd: "terminal_attach", TerminalID: terminal, Cols: 50, Rows: 30, Credit: phoneCredit},
+		homegateway.TerminalResize{Cmd: "terminal_resize", TerminalID: terminal, Cols: 50, Rows: 30},
+		homegateway.TerminalFocus{Cmd: "terminal_focus", TerminalID: terminal},
+		homegateway.TerminalInput{Cmd: "terminal_input", TerminalID: terminal, Data: "echo from-the-phone\r"},
 	} {
 		phone.send(command)
-		var refused gateway.TerminalError
+		var refused homegateway.TerminalError
 		phone.next("terminal_error", &refused)
 		if refused.TerminalID != terminal {
 			t.Fatalf("terminal_error = %+v after %+v, want one for terminal %s", refused, command, terminal)
@@ -321,7 +321,7 @@ func TestAPhoneThatFallsBehindWhileItsScreenIsTakenGetsAScreenThatCoversWhatItMi
 	watching.keepUp = true
 	watching.read()
 
-	capturing := w.PauseAt(pausepoint.GatewayScreenCaptured)
+	capturing := w.PauseAt(pausepoint.HomeGatewayScreenCaptured)
 	behind, _ := welcomedPhone(t, w, desktop.SelectedProfile())
 	opened := behind.attach(terminal, 80, 24, phoneCredit)
 	capturing.Await()

@@ -110,7 +110,7 @@ type Daemon struct {
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
 	outpost             outpostRuntime
-	gateway             gatewayConns
+	homeGateway         homeGatewayConns
 	phones              phonesRuntime
 	senders             senderPairings
 	recentFileStat      func(string) (os.FileInfo, error)

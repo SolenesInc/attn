@@ -1,5 +1,5 @@
 {
-  "GatewayAsk": {
+  "HomeGatewayAsk": {
     "properties": {
       "chief": {
         "type": "boolean"
@@ -21,12 +21,12 @@
       },
       "parts": {
         "items": {
-          "$ref": "GatewayAskPart.json"
+          "$ref": "HomeGatewayAskPart.json"
         },
         "type": "array"
       },
       "reply": {
-        "$ref": "GatewayAskReply.json"
+        "$ref": "HomeGatewayAskReply.json"
       },
       "seed_slug": {
         "type": "string"
@@ -55,7 +55,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskAnswer": {
+  "HomeGatewayAskAnswer": {
     "properties": {
       "key": {
         "type": "string"
@@ -79,11 +79,11 @@
     ],
     "type": "object"
   },
-  "GatewayAskAnswerCommand": {
+  "HomeGatewayAskAnswerCommand": {
     "properties": {
       "answers": {
         "items": {
-          "$ref": "GatewayAskAnswer.json"
+          "$ref": "HomeGatewayAskAnswer.json"
         },
         "type": "array"
       },
@@ -109,7 +109,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskAnswerResult": {
+  "HomeGatewayAskAnswerResult": {
     "properties": {
       "ask_id": {
         "type": "string"
@@ -132,7 +132,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskChoice": {
+  "HomeGatewayAskChoice": {
     "properties": {
       "description": {
         "type": "string"
@@ -146,10 +146,10 @@
     ],
     "type": "object"
   },
-  "GatewayAskEvent": {
+  "HomeGatewayAskEvent": {
     "properties": {
       "ask": {
-        "$ref": "GatewayAsk.json"
+        "$ref": "HomeGatewayAsk.json"
       },
       "event": {
         "const": "ask",
@@ -162,7 +162,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskImage": {
+  "HomeGatewayAskImage": {
     "properties": {
       "ask_id": {
         "type": "string"
@@ -192,7 +192,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskImageChunk": {
+  "HomeGatewayAskImageChunk": {
     "properties": {
       "data_base64": {
         "type": "string"
@@ -228,7 +228,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskImageError": {
+  "HomeGatewayAskImageError": {
     "properties": {
       "event": {
         "const": "ask_image_error",
@@ -248,22 +248,22 @@
     ],
     "type": "object"
   },
-  "GatewayAskPart": {
+  "HomeGatewayAskPart": {
     "properties": {
       "markdown": {
         "type": "string"
       },
       "question": {
-        "$ref": "GatewayAskQuestion.json"
+        "$ref": "HomeGatewayAskQuestion.json"
       }
     },
     "type": "object"
   },
-  "GatewayAskQuestion": {
+  "HomeGatewayAskQuestion": {
     "properties": {
       "choices": {
         "items": {
-          "$ref": "GatewayAskChoice.json"
+          "$ref": "HomeGatewayAskChoice.json"
         },
         "type": "array"
       },
@@ -274,7 +274,7 @@
         "type": "string"
       },
       "kind": {
-        "$ref": "GatewayAskQuestionKind.json"
+        "$ref": "HomeGatewayAskQuestionKind.json"
       },
       "prompt": {
         "type": "string"
@@ -291,7 +291,7 @@
     ],
     "type": "object"
   },
-  "GatewayAskQuestionKind": {
+  "HomeGatewayAskQuestionKind": {
     "enum": [
       "one",
       "any",
@@ -300,7 +300,7 @@
     ],
     "type": "string"
   },
-  "GatewayAskReply": {
+  "HomeGatewayAskReply": {
     "properties": {
       "answered_at": {
         "format": "date-time",
@@ -308,7 +308,7 @@
       },
       "answers": {
         "items": {
-          "$ref": "GatewayAskAnswer.json"
+          "$ref": "HomeGatewayAskAnswer.json"
         },
         "type": "array"
       },
@@ -322,7 +322,7 @@
     ],
     "type": "object"
   },
-  "GatewayAsks": {
+  "HomeGatewayAsks": {
     "properties": {
       "event": {
         "const": "asks",
@@ -341,7 +341,7 @@
     ],
     "type": "object"
   },
-  "GatewayCheckState": {
+  "HomeGatewayCheckState": {
     "enum": [
       "open",
       "reported",
@@ -351,7 +351,7 @@
     ],
     "type": "string"
   },
-  "GatewayCheckTally": {
+  "HomeGatewayCheckTally": {
     "properties": {
       "confirmed": {
         "maximum": 2147483647,
@@ -370,7 +370,7 @@
     ],
     "type": "object"
   },
-  "GatewayGarden": {
+  "HomeGatewayGarden": {
     "properties": {
       "event": {
         "const": "garden",
@@ -389,7 +389,7 @@
     ],
     "type": "object"
   },
-  "GatewayGardenSeeds": {
+  "HomeGatewayGardenSeeds": {
     "properties": {
       "event": {
         "const": "garden_seeds",
@@ -397,7 +397,7 @@
       },
       "seeds": {
         "items": {
-          "$ref": "GatewaySeed.json"
+          "$ref": "HomeGatewaySeed.json"
         },
         "type": "array"
       }
@@ -408,7 +408,7 @@
     ],
     "type": "object"
   },
-  "GatewayHello": {
+  "HomeGatewayHello": {
     "properties": {
       "api": {
         "maximum": 2147483647,
@@ -430,7 +430,7 @@
     ],
     "type": "object"
   },
-  "GatewayPing": {
+  "HomeGatewayPing": {
     "properties": {
       "cmd": {
         "const": "ping",
@@ -442,7 +442,7 @@
     ],
     "type": "object"
   },
-  "GatewayPlotProgress": {
+  "HomeGatewayPlotProgress": {
     "properties": {
       "blocked": {
         "maximum": 2147483647,
@@ -491,7 +491,7 @@
     ],
     "type": "object"
   },
-  "GatewayPong": {
+  "HomeGatewayPong": {
     "properties": {
       "event": {
         "const": "pong",
@@ -503,7 +503,7 @@
     ],
     "type": "object"
   },
-  "GatewayProfile": {
+  "HomeGatewayProfile": {
     "properties": {
       "id": {
         "type": "string"
@@ -518,7 +518,7 @@
     ],
     "type": "object"
   },
-  "GatewayRefused": {
+  "HomeGatewayRefused": {
     "properties": {
       "event": {
         "const": "refused",
@@ -534,10 +534,10 @@
     ],
     "type": "object"
   },
-  "GatewaySeed": {
+  "HomeGatewaySeed": {
     "properties": {
       "checks": {
-        "$ref": "GatewayCheckTally.json"
+        "$ref": "HomeGatewayCheckTally.json"
       },
       "claimed": {
         "type": "boolean"
@@ -549,7 +549,7 @@
         "type": "string"
       },
       "progress": {
-        "$ref": "GatewayPlotProgress.json"
+        "$ref": "HomeGatewayPlotProgress.json"
       },
       "ready": {
         "type": "boolean"
@@ -565,7 +565,7 @@
         "type": "string"
       },
       "status": {
-        "$ref": "GatewaySeedStatus.json"
+        "$ref": "HomeGatewaySeedStatus.json"
       },
       "tender": {
         "type": "string"
@@ -592,7 +592,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedChanged": {
+  "HomeGatewaySeedChanged": {
     "properties": {
       "event": {
         "const": "seed_changed",
@@ -608,7 +608,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedCheck": {
+  "HomeGatewaySeedCheck": {
     "properties": {
       "from": {
         "type": "string"
@@ -617,7 +617,7 @@
         "type": "string"
       },
       "state": {
-        "$ref": "GatewayCheckState.json"
+        "$ref": "HomeGatewayCheckState.json"
       },
       "text": {
         "type": "string"
@@ -630,7 +630,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedDetail": {
+  "HomeGatewaySeedDetail": {
     "properties": {
       "body": {
         "type": "string"
@@ -642,13 +642,13 @@
       },
       "checks": {
         "items": {
-          "$ref": "GatewaySeedCheck.json"
+          "$ref": "HomeGatewaySeedCheck.json"
         },
         "type": "array"
       },
       "children": {
         "items": {
-          "$ref": "GatewaySeed.json"
+          "$ref": "HomeGatewaySeed.json"
         },
         "type": "array"
       },
@@ -658,7 +658,7 @@
       },
       "log": {
         "items": {
-          "$ref": "GatewaySeedLogEntry.json"
+          "$ref": "HomeGatewaySeedLogEntry.json"
         },
         "type": "array"
       },
@@ -676,7 +676,7 @@
         "type": "string"
       },
       "seed": {
-        "$ref": "GatewaySeed.json"
+        "$ref": "HomeGatewaySeed.json"
       }
     },
     "required": [
@@ -691,7 +691,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedError": {
+  "HomeGatewaySeedError": {
     "properties": {
       "event": {
         "const": "seed_error",
@@ -711,7 +711,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedGet": {
+  "HomeGatewaySeedGet": {
     "properties": {
       "cmd": {
         "const": "seed_get",
@@ -731,7 +731,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedLogEntry": {
+  "HomeGatewaySeedLogEntry": {
     "properties": {
       "author": {
         "type": "string"
@@ -759,7 +759,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedMove": {
+  "HomeGatewaySeedMove": {
     "properties": {
       "cmd": {
         "const": "seed_move",
@@ -775,7 +775,7 @@
         "type": "string"
       },
       "verb": {
-        "$ref": "GatewaySeedVerb.json"
+        "$ref": "HomeGatewaySeedVerb.json"
       }
     },
     "required": [
@@ -787,7 +787,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedNoteCommand": {
+  "HomeGatewaySeedNoteCommand": {
     "properties": {
       "body": {
         "type": "string"
@@ -811,7 +811,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedResult": {
+  "HomeGatewaySeedResult": {
     "properties": {
       "error": {
         "type": "string"
@@ -834,7 +834,7 @@
     ],
     "type": "object"
   },
-  "GatewaySeedStatus": {
+  "HomeGatewaySeedStatus": {
     "enum": [
       "planted",
       "growing",
@@ -845,7 +845,7 @@
     ],
     "type": "string"
   },
-  "GatewaySeedVerb": {
+  "HomeGatewaySeedVerb": {
     "enum": [
       "park",
       "harvest",
@@ -855,7 +855,7 @@
     ],
     "type": "string"
   },
-  "GatewaySession": {
+  "HomeGatewaySession": {
     "properties": {
       "agent": {
         "type": "string"
@@ -870,7 +870,7 @@
         "type": "boolean"
       },
       "state": {
-        "$ref": "GatewaySessionState.json"
+        "$ref": "HomeGatewaySessionState.json"
       },
       "terminal_id": {
         "type": "string"
@@ -892,7 +892,7 @@
     ],
     "type": "object"
   },
-  "GatewaySessionState": {
+  "HomeGatewaySessionState": {
     "enum": [
       "working",
       "waiting",
@@ -905,7 +905,7 @@
     ],
     "type": "string"
   },
-  "GatewaySessions": {
+  "HomeGatewaySessions": {
     "properties": {
       "event": {
         "const": "sessions",
@@ -913,7 +913,7 @@
       },
       "sessions": {
         "items": {
-          "$ref": "GatewaySession.json"
+          "$ref": "HomeGatewaySession.json"
         },
         "type": "array"
       }
@@ -924,7 +924,7 @@
     ],
     "type": "object"
   },
-  "GatewayWelcome": {
+  "HomeGatewayWelcome": {
     "properties": {
       "api": {
         "maximum": 2147483647,
@@ -939,7 +939,7 @@
         "type": "string"
       },
       "profile": {
-        "$ref": "GatewayProfile.json"
+        "$ref": "HomeGatewayProfile.json"
       }
     },
     "required": [
