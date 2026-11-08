@@ -23,16 +23,17 @@ import (
 )
 
 type testPhone struct {
-	t         *testing.T
-	toHome    chan []byte
-	fromHome  chan []byte
-	closed    chan struct{}
-	closeOnce sync.Once
-	served    chan error
-	asks      map[string]homegateway.HomeGatewayAsk
-	askIDs    []string
-	seeds     map[string]homegateway.HomeGatewaySeed
-	seedIDs   []string
+	t               *testing.T
+	toHome          chan []byte
+	fromHome        chan []byte
+	closed          chan struct{}
+	closeOnce       sync.Once
+	served          chan error
+	asks            map[string]homegateway.HomeGatewayAsk
+	askIDs          []string
+	seeds           map[string]homegateway.HomeGatewaySeed
+	seedIDs         []string
+	heldWakeResults [][]byte
 }
 
 type phoneLink struct{ *testPhone }
@@ -96,6 +97,14 @@ func (p *testPhone) send(message any) {
 // next skips events until one of kind event arrives, keeping the asks it passes as a phone does.
 func (p *testPhone) next(event string, out any) {
 	p.t.Helper()
+	if event == "crew_wake_result" && len(p.heldWakeResults) > 0 {
+		frame := p.heldWakeResults[0]
+		p.heldWakeResults = p.heldWakeResults[1:]
+		if err := json.Unmarshal(frame, out); err != nil {
+			p.t.Fatalf("decode %s: %v", frame, err)
+		}
+		return
+	}
 	guard := time.NewTimer(fakeagent.HangGuard)
 	defer guard.Stop()
 	for {
@@ -105,6 +114,9 @@ func (p *testPhone) next(event string, out any) {
 		}
 		_ = json.Unmarshal(frame, &head)
 		if head.Event != event {
+			if head.Event == "crew_wake_result" {
+				p.heldWakeResults = append(p.heldWakeResults, frame)
+			}
 			continue
 		}
 		if err := json.Unmarshal(frame, out); err != nil {
