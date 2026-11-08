@@ -216,7 +216,7 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	if err != nil {
 		return gardenRead{}, err
 	}
-	all, err := store.RememberDocuments(d.store, &d.gardenSeeds, *schema, d.readGardenSeeds, func(previous gardenSeeds, written []string) (gardenSeeds, error) {
+	all, err := store.RememberDocuments(d.store, &d.gardenSeeds, *schema, func() (gardenSeeds, error) { return d.readGardenSeeds(*schema) }, func(previous gardenSeeds, written []string) (gardenSeeds, error) {
 		return d.refreshGardenSeeds(*schema, previous, written)
 	})
 	if err != nil {
@@ -244,37 +244,34 @@ func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
 	return out, nil
 }
 
-func (d *Daemon) readGardenSeeds() (gardenSeeds, error) {
+func (d *Daemon) readGardenSeeds(schema docstore.CollectionSchema) (gardenSeeds, error) {
 	pausepoint.At(pausepoint.GardenSeedsReading)
-	out := gardenSeeds{docs: map[string]docstore.Document{}}
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{
-			Namespace:  garden.Namespace,
-			Collection: garden.CollectionSeeds,
-			Sort:       &docstore.Sort{Field: docstore.FieldCreatedAt, Desc: true},
-			Limit:      docstore.MaxLimit,
-			After:      after,
-		})
-		if err != nil {
-			return gardenSeeds{}, err
-		}
-		for _, doc := range read.Documents {
-			seed, err := garden.Decode(doc.Body)
-			if err != nil {
-				d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
-				continue
-			}
-			out.seeds = append(out.seeds, seed)
-			out.docs[seed.ID] = doc
-		}
-		if len(read.Documents) < docstore.MaxLimit {
-			break
-		}
-		after = read.Documents[len(read.Documents)-1].ID
+	docs, err := d.store.ReadAllDocuments(schema)
+	if err != nil {
+		return gardenSeeds{}, err
 	}
+	out := gardenSeeds{docs: make(map[string]docstore.Document, len(docs)), seeds: make([]garden.Seed, 0, len(docs))}
+	for _, doc := range docs {
+		seed, err := garden.Decode(doc.Body)
+		if err != nil {
+			d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
+			continue
+		}
+		out.seeds = append(out.seeds, seed)
+		out.docs[seed.ID] = doc
+	}
+	out.sortNewestFirst()
 	out.plots = garden.NewPlotTree(out.seeds)
 	return out, nil
+}
+
+func (s gardenSeeds) sortNewestFirst() {
+	slices.SortFunc(s.seeds, func(a, b garden.Seed) int {
+		if c := s.docs[b.ID].CreatedAt.Compare(s.docs[a.ID].CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(b.ID, a.ID)
+	})
 }
 
 func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous gardenSeeds, written []string) (gardenSeeds, error) {
@@ -309,12 +306,7 @@ func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous g
 		}
 	}
 	out.seeds = append(out.seeds, fresh...)
-	slices.SortStableFunc(out.seeds, func(a, b garden.Seed) int {
-		if c := out.docs[b.ID].CreatedAt.Compare(out.docs[a.ID].CreatedAt); c != 0 {
-			return c
-		}
-		return strings.Compare(b.ID, a.ID)
-	})
+	out.sortNewestFirst()
 	out.plots = garden.NewPlotTree(out.seeds)
 	return out, nil
 }

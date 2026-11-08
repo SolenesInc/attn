@@ -684,6 +684,32 @@ func (s *Store) ReadQuery(q docstore.Query) (QueryRead, bool, error) {
 	return QueryRead{Schema: schema, Documents: docs, AsOfSeq: asOf}, true, nil
 }
 
+func (s *Store) ReadAllDocuments(schema docstore.CollectionSchema) ([]docstore.Document, error) {
+	table, err := s.documentTable(schema)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.beginReadSnapshot()
+	if err != nil {
+		return nil, fmt.Errorf("store: reading %s/%s: %w", schema.Namespace, schema.Collection, err)
+	}
+	defer tx.end()
+	rows, err := tx.Query(`SELECT ` + documentColumns + ` FROM ` + table)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading %s/%s: %w", schema.Namespace, schema.Collection, err)
+	}
+	defer rows.Close()
+	out := []docstore.Document{}
+	for rows.Next() {
+		doc, err := scanDocument(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store: scanning a %s/%s document: %w", schema.Namespace, schema.Collection, err)
+		}
+		out = append(out, *doc)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CountDocuments(schema docstore.CollectionSchema) (int, error) {
 	table, err := s.documentTable(schema)
 	if err != nil {
