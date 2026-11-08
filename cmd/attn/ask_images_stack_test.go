@@ -120,6 +120,8 @@ func TestAnAskFromAFolderWhoseNameEndsInASpaceKeepsItsOwnImageAcrossARestart(t *
 	}
 }
 
+const aboveTheDaemonsOwnFilesBelowTheLargeImage = 9 << 19
+
 func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
@@ -128,14 +130,14 @@ func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *test
 	asker := s.Spawn(app, fakeagent.Claude, s.Path("work"))
 	s.Launched(asker)
 	small := writeImage(t, s.Path("work", "small.png"), 1024)
-	large := writeImage(t, s.Path("work", "large.png"), 4<<20)
+	large := writeImage(t, s.Path("work", "large.png"), ask.MaxImageBytes-1024)
 	earlier, err := s.Client().AskOpen(protocol.SessionID(asker), "", "![small](small.png) ![large](large.png) ![later](later.png)\n", "", s.Path("work"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	s.Stop()
-	s.StartWritingFilesOfAtMost(2 << 20)
+	s.StartWritingFilesOfAtMost(aboveTheDaemonsOwnFilesBelowTheLargeImage)
 	if partial := askImageResult(s.App(), earlier.ID, s.Path("work", "large.png")); partial.Success {
 		t.Fatalf("with the disk refusing the large copy partway, the ask shows %d base64 bytes for it, want no image", len(protocol.Deref(partial.DataBase64)))
 	}
