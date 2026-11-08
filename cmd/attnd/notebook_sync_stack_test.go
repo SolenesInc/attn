@@ -3,6 +3,7 @@ package main_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -402,7 +403,6 @@ func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletio
 
 func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
-	streamOpens := home.PauseAt(pausepoint.NotebookStreamOpen)
 	state := filepath.Join(outpost.Dir, "notebook-sync")
 	if err := os.MkdirAll(state, 0500); err != nil {
 		t.Fatal(err)
@@ -419,18 +419,14 @@ func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T)
 	}
 	home.AwaitTimer(daemon.NotebookFoldersRetryTimer)
 	home.Advance(bridge.ReconnectInterval)
-	streamOpens.Await()
-	installed, err := os.ReadFile(filepath.Join(state, "state.json"))
-	if err != nil || !strings.Contains(string(installed), notebookPath(outpost)) {
-		t.Fatalf("the Notebook stream opened before the outpost installed the folder list: %q (%v)", installed, err)
-	}
-	streamOpens.Release()
+	stopRetries := home.FireTimers(daemon.NotebookStreamRetryTimer)
 	pair.App = home.App()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
+	stopRetries()
 	copied := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
 	defer home.CloseWatchWindows()()
 	awaitOutpostFile(t, pair, filepath.Join(copied, "before-recovery.md"), "written while the outpost rejected the list", false)
-	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list before the stream opened, and before-recovery.md reached %s", rejected, copied)
+	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list, and before-recovery.md reached %s", rejected, copied)
 }
 
 func TestARejectedFolderListClearsWhenTheListRevertsToTheAcceptedOne(t *testing.T) {
@@ -592,7 +588,7 @@ func TestADeadNotebookStreamCannotOverwriteItsReplacement(t *testing.T) {
 	}
 }
 
-func TestTheNotebookStreamReopensAfterTheOutpostSendsAFolderTheHomeJustDropped(t *testing.T) {
+func TestChangingANotebookFolderWhileTheOutpostWritesToItShowsNoStreamError(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	pair.Start()
@@ -603,19 +599,29 @@ func TestTheNotebookStreamReopensAfterTheOutpostSendsAFolderTheHomeJustDropped(t
 	writeFileAt(t, filepath.Join(first, "from-outpost.md"), "the outpost sends this folder's index")
 	awaitHomeFile(t, pair.App, home, notebookPath(home, "from-outpost.md"), "the outpost sends this folder's index", false)
 
+	watcher, mark := pair.App, pair.App.EventCount()
 	resume := pair.SSH.PauseInput(pair.Destination)
 	requireStdout(t, home.Attn("settings", "set", "notebook.root", second))
-	writeFileAt(t, filepath.Join(first, "in-flight.md"), "indexed by the outpost before it hears the home dropped its folder")
-	closed := awaitNotebookError(t, pair, "Notebook stream: connection closed")
+	writeFileAt(t, filepath.Join(first, "in-flight.md"), "written before the outpost hears the folder changed")
 	resume()
-	home.FireTimers(daemon.NotebookStreamRetryTimer)
 
 	pair.App = home.App()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	moved := outpostCopyPlacement(outpost, "second", second)
-	writeFileAt(t, filepath.Join(second, "after-reopen.md"), "synced by the reopened stream")
-	awaitOutpostFile(t, pair, filepath.Join(moved, "after-reopen.md"), "synced by the reopened stream", false)
-	t.Logf("an outpost Index for the folder the home dropped closed the stream (%q); the home reopened it on the same bridge, the row returned to in sync, and after-reopen.md reached %s", closed, moved)
+	writeFileAt(t, filepath.Join(second, "after-change.md"), "synced by the same stream")
+	awaitOutpostFile(t, pair, filepath.Join(moved, "after-change.md"), "synced by the same stream", false)
+	for _, raw := range watcher.Log()[mark:] {
+		var update protocol.OutpostsUpdatedMessage
+		if json.Unmarshal(raw, &update) != nil || update.Event != protocol.EventOutpostsUpdated {
+			continue
+		}
+		for _, row := range update.Outposts {
+			if row.Notebook != nil && strings.Contains(protocol.Deref(row.Notebook.Error), "Notebook stream") {
+				t.Fatalf("the folder change showed a stream error: %s", *row.Notebook.Error)
+			}
+		}
+	}
+	t.Logf("the folder changed while the outpost wrote to the old one; the row showed no stream error, reached in sync without the retry timer firing, and after-change.md reached %s", moved)
 }
 
 func TestNotebookMarkerErrorReachesHomeBeforeOutpostBridgeRegistration(t *testing.T) {
