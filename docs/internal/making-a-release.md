@@ -60,7 +60,7 @@ Fix forward: land the fix on `main`, then release a patch version.
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
 `attn-linux-amd64`, `attn-linux-arm64`, `attn-pty-host-linux-amd64`, and
 `attn-pty-host-linux-arm64`, because an outpost install needs both binaries,
-then run `brew upgrade --cask victorarias/attn/attn` and confirm that it installs the new
+then run `brew upgrade --cask solenesinc/attn/attn` and confirm that it installs the new
 version.
 
 Open the upgraded app from Finder and confirm that this first launch starts, and
@@ -81,7 +81,7 @@ the failure, retry the tag. The retry, like every release run, refuses a tag
 that `reviewed` does not contain:
 
 ```bash
-gh api --method POST repos/victorarias/attn/dispatches \
+gh api --method POST repos/SolenesInc/attn/dispatches \
   -f event_type=release -F 'client_payload[tag]=<tag>'
 ```
 
