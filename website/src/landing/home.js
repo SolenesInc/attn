@@ -635,6 +635,7 @@ let queue, working, on, view = 'agent';
 let auto = !still, paneSeen = true, stillTimer = 0, typeTimer = 0, sending = false, steps = [];
 const main = document.querySelector('.main'), rowsEl = $('rows'), keywrap = $('keywrap'), key = $('key'), copy = $('copy');
 const phone = matchMedia('(max-width: 760px)');
+const pinnedKey = matchMedia('(max-width: 760px), (max-height: 500px)');
 
 const logoUse = (a) => `<svg class="logo" aria-hidden="true"><use href="#i-${a.harness === CLAUDE ? 'claude' : 'codex'}"/></svg>`;
 const rowFor = new Map(AGENTS.map((a) => {
@@ -679,10 +680,10 @@ function renderTerm(el, a, opts) {
 }
 
 function placeKey() {
-  const slot = phone.matches ? $('win') : document.querySelector('#f-term .cin, #f-term .cinb');
+  const slot = pinnedKey.matches ? $('hero') : document.querySelector('#f-term .cin, #f-term .cinb');
   if (slot && keywrap.parentElement !== slot) slot.append(keywrap);
 }
-phone.addEventListener('change', placeKey);
+pinnedKey.addEventListener('change', placeKey);
 
 function typeReply(a) {
   clearInterval(typeTimer);
@@ -765,18 +766,19 @@ function lightOrigin() {
 
 function flyToShelf(tile, title) {
   const from = tile.getBoundingClientRect();
+  const scale = from.width / tile.offsetWidth;
   const ghost = tile.cloneNode(true);
   ghost.removeAttribute('id');
   ghost.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
   ghost.classList.add('ghost');
-  Object.assign(ghost.style, { left: from.left + 'px', top: from.top + 'px', width: from.width + 'px', height: from.height + 'px' });
+  Object.assign(ghost.style, { left: from.left + 'px', top: from.top + 'px', width: tile.offsetWidth + 'px', height: tile.offsetHeight + 'px', transform: `scale(${scale})` });
   document.body.append(ghost);
   return () => {
     const chip = [...document.querySelectorAll('#shelf .chip')].find((c) => c.dataset.title === title);
     const to = chip && chip.offsetWidth ? chip.getBoundingClientRect() : $('shelf').getBoundingClientRect();
     if (chip) chip.style.visibility = 'hidden';
-    const move = `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`;
-    ghost.animate([{ transform: 'none', opacity: 1 }, { transform: move, opacity: .35 }], { duration: 420, easing: 'cubic-bezier(.5, 0, .75, .4)', fill: 'forwards' }).onfinish = () => {
+    const move = `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / tile.offsetWidth}, ${to.height / tile.offsetHeight})`;
+    ghost.animate([{ transform: `scale(${scale})`, opacity: 1 }, { transform: move, opacity: .35 }], { duration: 420, easing: 'cubic-bezier(.5, 0, .75, .4)', fill: 'forwards' }).onfinish = () => {
       ghost.remove();
       if (chip) { chip.style.visibility = ''; chip.classList.add('arrive'); }
     };
@@ -786,13 +788,14 @@ function flyToShelf(tile, title) {
 const ROW_EASE = 'cubic-bezier(.2, .7, .3, 1)';
 function animateRowLeaving(leaving, update) {
   const rowsBox = rowsEl.getBoundingClientRect();
+  const scale = rowsBox.width / rowsEl.offsetWidth;
   const before = new Map([...rowsEl.children].map((li) => [li, li.getBoundingClientRect()]));
   const from = before.get(leaving);
   const ghost = leaving.cloneNode(true);
   update();
   ghost.inert = true;
   ghost.classList.add('leaving');
-  Object.assign(ghost.style, { left: `${from.left - rowsBox.left}px`, top: `${from.top - rowsBox.top}px`, width: `${from.width}px` });
+  Object.assign(ghost.style, { left: `${(from.left - rowsBox.left) / scale}px`, top: `${(from.top - rowsBox.top) / scale}px`, width: `${from.width / scale}px` });
   rowsEl.append(ghost);
   ghost.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateX(-60%)', opacity: 0 }], { duration: 300, easing: 'ease-in' }).onfinish = () => ghost.remove();
   for (const li of rowsEl.children) {
@@ -800,7 +803,7 @@ function animateRowLeaving(leaving, update) {
     if (!was || li === ghost) continue;
     const now = li.getBoundingClientRect();
     if (was.left === now.left && was.top === now.top) continue;
-    li.animate([{ transform: `translate(${was.left - now.left}px, ${was.top - now.top}px)` }, { transform: 'none' }], { duration: 320, delay: 80, fill: 'backwards', easing: ROW_EASE });
+    li.animate([{ transform: `translate(${(was.left - now.left) / scale}px, ${(was.top - now.top) / scale}px)` }, { transform: 'none' }], { duration: 320, delay: 80, fill: 'backwards', easing: ROW_EASE });
   }
   document.querySelector('#count b').animate([{ transform: 'scale(1.8)', color: 'var(--green)' }, { transform: 'none' }], { duration: 480, easing: ROW_EASE });
 }
@@ -1029,6 +1032,10 @@ document.addEventListener('keydown', (e) => {
 });
 document.addEventListener('visibilitychange', applyHeld);
 new IntersectionObserver(([e]) => { paneSeen = e.intersectionRatio >= .5; applyHeld(); root.classList.toggle('past', e.intersectionRatio < .15); }, { threshold: [0, .15, .5, 1] }).observe($('win'));
+
+const fitWindow = new ResizeObserver(() => { root.style.setProperty('--fit', $('winfit').clientWidth / win.offsetWidth); });
+fitWindow.observe($('winfit'));
+fitWindow.observe(win);
 
 reset();
 render();

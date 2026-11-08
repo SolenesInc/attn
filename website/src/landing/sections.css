@@ -40,7 +40,7 @@
 
 @media (max-width:720px){
   .attn-sections{--as-gut:16px;--as-col:calc(100vw - 32px)}
-  .attn-sections .as-media{aspect-ratio:4/5;object-fit:cover;object-position:var(--as-pos,50%) 50%;border-radius:10px}
+  .attn-sections .as-media{border-radius:10px}
   .attn-sections .as-corners{--l:16px}
 }
 @media (prefers-reduced-motion:reduce){

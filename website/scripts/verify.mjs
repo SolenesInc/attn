@@ -28,6 +28,7 @@ const distRoot = join(websiteRoot, 'dist');
 const VIEWPORTS = [
   { name: '1440x900', width: 1440, height: 900 },
   { name: '390x844', width: 390, height: 844 },
+  { name: '320x568', width: 320, height: 568 },
 ];
 const PAGES = [
   { path: '/', headline: 'Agents scale. Your attention doesn’t.', text: ['brew install --cask solenesinc/attn/attn', 'brew tap solenesinc/attn https://github.com/SolenesInc/attn'] },
@@ -142,7 +143,30 @@ async function checkContent(page, { path, headline, text }, label) {
     if (!facts.body.includes(wanted)) problems.push(`${label}: missing "${wanted}"`);
   }
   if (facts.overflow) problems.push(`${label}: sideways scroll, ${facts.overflow}`);
+  if (path === '/') await checkHeroFits(page, label);
   passes.push(`${label}: content checked${path === '/' ? ', install command present' : ''}`);
+}
+
+async function checkHeroFits(page, label) {
+  const facts = await page.evaluate(() => {
+    const box = (selector) => {
+      const { left, top, right, bottom } = document.querySelector(selector).getBoundingClientRect();
+      return { left, top, right, bottom };
+    };
+    return {
+      window: box('#win'),
+      key: box('#key'),
+      viewport: { right: innerWidth, bottom: innerHeight },
+      videoFit: getComputedStyle(document.querySelector('video.as-media')).objectFit,
+    };
+  });
+  const { window: win, key, viewport, videoFit } = facts;
+  if (win.left < 0 || win.top < 0 || win.right > viewport.right || win.bottom > viewport.bottom) {
+    problems.push(`${label}: hero window is not fully on screen: ${JSON.stringify(win)} in ${JSON.stringify(viewport)}`);
+  }
+  if (key.top < win.bottom - 1 && key.bottom > win.top + 1 && viewport.right <= 760) problems.push(`${label}: the key covers the hero window`);
+  if (key.bottom > viewport.bottom) problems.push(`${label}: the key is below the screen`);
+  if (videoFit === 'cover') problems.push(`${label}: videos are cropped`);
 }
 
 async function checkLinks(page, base, { path }, checked) {
