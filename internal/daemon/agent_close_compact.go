@@ -34,19 +34,18 @@ type compactionLedger struct {
 }
 
 type pendingCompactClose struct {
-	session    protocol.SessionID
-	monitor    *sessionmonitor.Monitor
-	reason     string
-	userInputs uint64
-	onStandby  []string
-	key        string
-	retries    int
-	placing    bool
-	again      bool
-	placed     bool
-	busy       bool
-	outcome    *compactOutcome
-	tripwire   stepclock.Timer
+	session   protocol.SessionID
+	monitor   *sessionmonitor.Monitor
+	reason    string
+	onStandby []string
+	key       string
+	retries   int
+	placing   bool
+	again     bool
+	placed    bool
+	busy      bool
+	outcome   *compactOutcome
+	tripwire  stepclock.Timer
 }
 
 func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal {
@@ -77,12 +76,11 @@ func (d *Daemon) beginCompactingClose(_ context.Context, msg protocol.Compacting
 		return struct{}{}, fmt.Errorf("session %s: no monitor runs it", session)
 	}
 	p := &pendingCompactClose{
-		session:    session,
-		monitor:    monitor,
-		reason:     msg.Reason,
-		userInputs: monitor.UserInputs(),
-		onStandby:  msg.OnStandby,
-		key:        fmt.Sprintf("%s-%s", session, uuid.NewString()),
+		session:   session,
+		monitor:   monitor,
+		reason:    msg.Reason,
+		onStandby: msg.OnStandby,
+		key:       fmt.Sprintf("%s-%s", session, uuid.NewString()),
 	}
 	l := &d.compactions
 	l.mu.Lock()
@@ -291,16 +289,6 @@ func (d *Daemon) compactingCloseCanceledHere(p *pendingCompactClose) string {
 	if d.sessionMonitor(p.session) != p.monitor {
 		return "the session it was asked in is gone"
 	}
-	return userInputCancelsClose(p.monitor, p.userInputs)
-}
-
-func userInputCancelsClose(monitor *sessionmonitor.Monitor, userInputsWhenAsked uint64) string {
-	switch {
-	case monitor.UserInputs() != userInputsWhenAsked:
-		return "the user gave it input after the close was asked"
-	case monitor.HasUserDraft():
-		return "the user has an unsent draft in its terminal"
-	}
 	return ""
 }
 
@@ -337,7 +325,7 @@ func (d *Daemon) closeAfterCompact(p *pendingCompactClose) {
 		if p.outcome.failed != "" {
 			reason = garden.TrimReason(fmt.Sprintf("%s (the compact did not run: %s)", reason, p.outcome.failed))
 		}
-		verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseFinishMessage{Cmd: protocol.CmdCompactingCloseFinish, SessionID: p.session, Reason: reason, OnStandby: p.onStandby, UserInputs: int(p.userInputs)})
+		verdict, err := callHome[protocol.CompactingCloseVerdict](d, protocol.CompactingCloseFinishMessage{Cmd: protocol.CmdCompactingCloseFinish, SessionID: p.session, Reason: reason, OnStandby: p.onStandby})
 		switch {
 		case errors.Is(err, errDaemonStopping):
 			return
@@ -362,7 +350,7 @@ func (d *Daemon) finishCompactingClose(ctx context.Context, msg protocol.Compact
 	}
 	target := d.store.Get(msg.SessionID)
 	pausepoint.At(pausepoint.CompactingCloseFinishing)
-	teardown, err := d.prepareSessionTeardown(target.ID, &msg.UserInputs)
+	teardown, err := d.prepareSessionTeardown(target.ID)
 	if err != nil {
 		return compactingCloseVerdict(fmt.Sprintf("it is still running: %v", err)), nil
 	}

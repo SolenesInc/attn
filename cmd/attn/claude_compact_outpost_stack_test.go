@@ -181,30 +181,21 @@ func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndWakesOnSeedMailWithItsC
 	})
 }
 
-func TestARealClaudeDraftOnAnOutpostKeepsTheSessionAndTheDraftThroughACompactingClose(t *testing.T) {
+func TestARealClaudeDraftOnAnOutpostDoesNotStopACompactingClose(t *testing.T) {
 	t.Parallel()
 	c := newRealOutpostClaude(t, false)
 	app := c.pair.App
-	const draft = "please keep this draft"
 	c.model.RunBashAfter(outpostCompactRing, outpostCompactRing)
 	c.model.RunBashAfter(outpostCompactAsked, `attn agent close --self --compact -m "`+outpostCompactReason+`"`)
 
-	app.Type(c.session, draft, "keyboard")
-	mark := c.model.Mark()
+	app.Type(c.session, "please do not keep this draft", "keyboard")
 	c.mail(t, c.session, outpostCompactAsked)
-	c.model.AwaitPromptSince(t, mark, "once its conversation is compacted")
-	testworld.AwaitSession(app, c.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	mark = c.model.Mark()
-	c.mail(t, c.session, "the review is in")
-	c.model.AwaitPromptSince(t, mark, outpostCompactRing)
-	testworld.AwaitSession(app, c.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	if peek := c.home.Attn("agent", "peek", c.session).Stdout; !strings.Contains(peek, draft) {
-		t.Fatalf("the composer lost the draft; the screen shows:\n%s", peek)
+	closed := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == c.session
+	})
+	if got := protocol.Deref(closed.SessionLedgerEntry.CloseReason); got != outpostCompactReason {
+		t.Errorf("the session closed with reason %q, want %q", got, outpostCompactReason)
 	}
-	mark = c.model.Mark()
-	app.Type(c.session, "\r", "keyboard")
-	c.model.AwaitPromptSince(t, mark, draft)
 }
 
 func (m *outpostMod) closeCompacting(t *testing.T) {
@@ -261,21 +252,7 @@ func TestACompactOnAnOutpostThatMeetsARunningTurnLetsMailThroughAndRetriesAtTheN
 	}
 }
 
-func (m *outpostMod) keepsItsDraftAndTakesMail(t *testing.T, draft string) {
-	t.Helper()
-	m.sendMail(t, m.session, "the review is in")
-	if got := m.run.Prompted(); !m.run.ThroughMod || !strings.Contains(got, outpostCompactRing) {
-		t.Fatalf("the agent took %q (through the mod: %t), want the ring of the mail", got, m.run.ThroughMod)
-	}
-	m.run.Reply(outpostCompactReply)
-	testworld.AwaitSession(m.app, m.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	m.app.Type(m.session, "\r", "keyboard")
-	if got := m.run.Prompted(); got != draft {
-		t.Fatalf("the agent took %q when the user sent the draft, want %q", got, draft)
-	}
-}
-
-func TestADraftTypedWhileAnOutpostsFinishedCompactWaitsForTheHomeKeepsTheSessionAndTheDraft(t *testing.T) {
+func TestADraftTypedWhileAnOutpostsFinishedCompactWaitsForTheHomeDoesNotStopTheClose(t *testing.T) {
 	m := newOutpostMod(t)
 	m.workingOn(t, m.app, "write the essay")
 	arrived, release := m.run.ModHoldNextCompact()
@@ -297,50 +274,9 @@ func TestADraftTypedWhileAnOutpostsFinishedCompactWaitsForTheHomeKeepsTheSession
 	m.app.AwaitScreen(m.session, draft)
 
 	m.outpost.FirePending(daemon.ClaudeModReportRetryTimer)
-	m.keepsItsDraftAndTakesMail(t, draft)
-}
-
-func TestADraftTypedWhileAnOutpostsCompactWaitsToStartKeepsTheSessionUncompacted(t *testing.T) {
-	m := newOutpostMod(t)
-	m.workingOn(t, m.app, "write the essay")
-	m.closeCompacting(t)
-
-	m.pair.Disconnect()
-	outpostReachSince(m.app, 0, "outpost", protocol.OutpostReachUnreachable)
-	mark := len(m.app.Log())
-	m.run.Reply(outpostCompactReply)
-	m.outpost.AwaitTimer(daemon.ClaudeModReportRetryTimer)
-
-	m.pair.Reconnect()
-	defer m.home.FireTimers(bridge.RetryTimer)()
-	outpostReachSince(m.app, mark, "outpost", protocol.OutpostReachReachable)
-	const draft = "please keep this draft"
-	m.app.Type(m.session, draft, "keyboard")
-	m.app.AwaitScreen(m.session, draft)
-
-	m.outpost.FirePending(daemon.ClaudeModReportRetryTimer)
-	m.keepsItsDraftAndTakesMail(t, draft)
-	if got := m.run.ModCompactions(); got != 0 {
-		t.Errorf("the mod compacted the conversation %d times, want never", got)
+	if reason := m.closeReason(m.app); reason != compactOutpostReason {
+		t.Fatalf("the session closed for %q, want %q", reason, compactOutpostReason)
 	}
-}
-
-func TestADraftTypedWhileTheHomeHandlesAnOutpostsFinishedCompactKeepsTheSessionAndTheDraft(t *testing.T) {
-	var finishing *testworld.Pause
-	m := newOutpostModPrepared(t, func(home, _ *testworld.Stack) {
-		finishing = home.PauseAt(pausepoint.CompactingCloseFinishing)
-	})
-	m.workingOn(t, m.app, "write the essay")
-	m.closeCompacting(t)
-	m.run.Reply(outpostCompactReply)
-	finishing.Await()
-
-	const draft = "please keep this draft"
-	m.app.Type(m.session, draft, "keyboard")
-	m.app.AwaitScreen(m.session, draft)
-
-	finishing.Release()
-	m.keepsItsDraftAndTakesMail(t, draft)
 }
 
 func TestAnOutpostSessionWhoseSeedLeftStandbyStaysOpenInsteadOfCompacting(t *testing.T) {

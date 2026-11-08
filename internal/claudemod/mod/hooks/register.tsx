@@ -116,8 +116,7 @@ async function submit($: EngineInterface, text: string): Promise<string | undefi
 
 async function refuseStopped($: EngineInterface, message: Message): Promise<void> {
   await listWaiting($, [message])
-  const composer = await $.prompt.read()
-  await post($, '/claude/ack', { id: message.id, outcome: 'stopped', composer_empty: composer.text === '' })
+  await post($, '/claude/ack', { id: message.id, outcome: 'stopped' })
 }
 
 async function place($: EngineInterface, message: Message): Promise<void> {

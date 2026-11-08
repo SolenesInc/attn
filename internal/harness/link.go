@@ -29,12 +29,11 @@ type Input struct {
 
 // Custody is a delivery's only result: whether the harness took the input, and when.
 type Custody struct {
-	Taken         bool
-	At            time.Time
-	Reason        string
-	Stopped       bool
-	ComposerEmpty bool
-	Held          bool
+	Taken   bool
+	At      time.Time
+	Reason  string
+	Stopped bool
+	Held    bool
 }
 
 // Link delivers input to a harness without going through its terminal.

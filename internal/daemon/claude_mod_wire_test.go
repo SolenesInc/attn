@@ -298,7 +298,7 @@ func TestHeldAnnotationsReturnInTheOrderTheModAcceptedThem(t *testing.T) {
 	}
 }
 
-func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
+func TestAReturnedAnnotationIsSubmittedWithTheDraftInTheComposer(t *testing.T) {
 	for draftName, keys := range map[string][]string{
 		"typed text":                 {"unsent draft"},
 		"Shift+Enter after the text": {"unsent draft", "\n"},
@@ -328,39 +328,15 @@ func TestAReturnedAnnotationNeverSubmitsAnUnsentDraft(t *testing.T) {
 				}
 				app.AwaitTerminalScreen(terminal, "unsent draft")
 
-				waited := w.PauseAt(pausepoint.ClaudeModReturnWaits)
 				returnIt(t, w, app, run, session)
-				waited.Await()
-				waited.Release()
 
-				app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "\r"})
-				if got := strings.TrimSpace(run.Prompted()); got != "unsent draft" {
-					t.Fatalf("the agent took %q, want the user's draft alone when the user sent it", got)
-				}
-				run.Reply("Done. <!-- attn:state=waiting_input -->")
-				if got := run.Prompted(); got != "check the rounding" {
-					t.Fatalf("the agent took %q, want the returned annotation after the user's turn", got)
+				got := run.Prompted()
+				if !strings.Contains(got, "unsent draft") || !strings.Contains(got, "check the rounding") {
+					t.Fatalf("the agent took %q, want the returned annotation submitted with the draft", got)
 				}
 			})
 		}
 	}
-}
-
-func TestAKeyThatLeavesTheComposerEmptyDoesNotHoldBackAnAnnotationReturnedAtEsc(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	session, run := moddedClaude(t, w, app)
-	workingOn(t, app, run, session, "write the essay")
-	delivered(t, app, session, "check the rounding")
-	modEvent(t, run, fakeagent.ModEventHeld, "check the rounding")
-
-	const leftArrow = "\x1b[D"
-	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(session)), Data: leftArrow, ProbeID: protocol.Ptr("left-arrow")},
-		protocol.EventPtyInputProbeResult, func(r protocol.PtyInputProbeResultMessage) bool { return r.ProbeID == "left-arrow" })
-	stoppedByEsc(t, app, run, session)
-
-	modEvent(t, run, fakeagent.ModEventRefusedStop, "check the rounding")
-	typedOnce(t, app, run, session, "check the rounding")
 }
 
 func TestAHeldAnnotationSurvivesClaudeExitingWhileItIsTyped(t *testing.T) {

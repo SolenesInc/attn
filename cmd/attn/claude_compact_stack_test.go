@@ -133,35 +133,28 @@ func TestARealClaudeSessionThatClosesCompactingWhileAShellRunsInTheBackgroundCom
 	}
 }
 
-func TestARealClaudeDraftTypedBeforeACompactingCloseKeepsTheSessionAndTheDraft(t *testing.T) {
+func TestARealClaudeDraftDoesNotStopACompactingClose(t *testing.T) {
 	t.Parallel()
 	s, app, worker, model, _ := realModdedClaude(t)
-	const ring = "attn agent inbox"
 	const asked = "wrap up the checkout fix"
-	const draft = "please keep this draft"
+	const reason = "the checkout fix landed"
+	const ring = "attn agent inbox"
 	model.RunBashAfter(ring, ring)
-	model.RunBashAfter(asked, `attn agent close --self --compact -m "the checkout fix landed"`)
+	model.RunBashAfter(asked, `attn agent close --self --compact -m "`+reason+`"`)
 
-	app.Type(worker, draft, "keyboard")
-	mark := model.Mark()
+	app.Type(worker, "please do not keep this draft", "keyboard")
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, asked}, Session: closingReviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
-	model.AwaitPromptSince(t, mark, "once its conversation is compacted")
-	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	mark = model.Mark()
-	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", worker, "the review is in"}, Session: closingReviewer}); sent.Code != 0 {
-		t.Fatalf("attn agent msg to the session with the draft exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
+	closed := testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
+		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == worker
+	})
+	if got := protocol.Deref(closed.SessionLedgerEntry.CloseReason); got != reason {
+		t.Errorf("the session closed with reason %q, want %q", got, reason)
 	}
-	model.AwaitPromptSince(t, mark, ring)
-	testworld.AwaitSession(app, worker, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	if peek := s.Attn("agent", "peek", worker).Stdout; !strings.Contains(peek, draft) {
-		t.Fatalf("the composer lost the draft; the screen shows:\n%s", peek)
+	if got := model.CompactCount(); got != 1 {
+		t.Errorf("the model was asked for %d compact summaries, want one", got)
 	}
-	mark = model.Mark()
-	app.Type(worker, "\r", "keyboard")
-	model.AwaitPromptSince(t, mark, draft)
 }
 
 func TestARealClaudePromptTheUserTypedBeforeACompactingCloseDoesNotKeepTheSessionOpen(t *testing.T) {

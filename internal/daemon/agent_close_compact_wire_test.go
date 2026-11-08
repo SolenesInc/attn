@@ -68,31 +68,6 @@ func TestASharedCodexSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenCl
 	}
 }
 
-func TestUserInputAfterACompactingCloseKeepsTheSharedCodexSessionOpenUncompacted(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	session, codex := sharedCodexInATurn(t, w, app)
-	conversation := codex.ConversationID
-
-	closeCompacting(t, cli, session)
-	if sent := submitSessionAnnotationFeedback(app, session, "also cover the tax lookup"); !sent.success {
-		t.Fatalf("the user's notes to the working session = %+v", sent)
-	}
-	if got := w.CodexServer().Prompted(conversation); got != "also cover the tax lookup" {
-		t.Fatalf("the running turn received %q", got)
-	}
-	codex.Reply("Covered. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	nothingElsePrompted(t, app, codex, session)
-	codex.Reply("Done. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	stillOpen(t, cli, session, "after the user typed past the compacting close")
-	if got := w.CodexServer().Compactions(conversation); got != 0 {
-		t.Errorf("the conversation compacted %d times after the user typed, want none", got)
-	}
-}
-
 func TestSeedStandbyCloseCompactCompactsTheSharedCodexTenderBeforeItCloses(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -235,28 +210,6 @@ func TestARingThatWinsTheTurnsEndIsReadBeforeTheCompactingCloseCompactsAtTheNext
 	}
 }
 
-func TestUserInputDuringTheCompactKeepsTheSharedCodexSessionOpen(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	session, codex := sharedCodexInATurn(t, w, app)
-	arrived, release := w.CodexServer().HoldNextCompaction()
-
-	closeCompacting(t, cli, session)
-	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
-	arrived()
-	app.Type(session, "wait, one more thing\r", userKeystroke)
-	release()
-	if got := codex.Prompted(); got != "wait, one more thing" {
-		t.Fatalf("after the compact the conversation received %q, want what the user typed", got)
-	}
-	codex.Reply("Sure. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if got := w.CodexServer().Compactions(codex.ConversationID); got != 1 {
-		t.Errorf("the conversation compacted %d times, want once", got)
-	}
-	stillOpen(t, cli, session, "after the user typed during the compact")
-}
-
 func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -291,26 +244,4 @@ func TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactC
 	if got := w.CodexServer().Compactions(conversation); got != 1 {
 		t.Errorf("the conversation compacted %d times by the second close, want once: closing the session archived the conversation and ended the first compact", got)
 	}
-}
-
-func TestInputTheUserSendsThroughAttnDuringTheCompactIsRefusedAndKeepsTheSessionOpen(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "sender")
-	session, codex := sharedCodexInATurn(t, w, app)
-	arrived, release := w.CodexServer().HoldNextCompaction()
-
-	closeCompacting(t, cli, session)
-	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
-	arrived()
-	sent := submitSessionAnnotationFeedback(app, session, "wait, one more thing")
-	if sent.success || !strings.Contains(sent.err, "send it again") {
-		t.Fatalf("the user's notes during the compact = %+v, want them refused, asking to send them again", sent)
-	}
-	sendAgentMessage(t, cli, "sender", session, "the review is in")
-	release()
-	if rang := w.CodexServer().Prompted(codex.ConversationID); rang == "" {
-		t.Fatal("mail held during the compact reached no turn after the close was cancelled")
-	}
-	stillOpen(t, cli, session, "after the user sent notes during the compact")
 }

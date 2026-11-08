@@ -14,7 +14,7 @@ func (delivery Delivery) Message(session protocol.SessionID) protocol.SessionPla
 	if delivery.origin.kind == originUserConversation {
 		origin = protocol.SessionPlaceOriginUserConversation
 	}
-	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer), RequireEmptyComposer: protocol.Ptr(delivery.RequireEmptyComposer), Compact: protocol.Ptr(delivery.Compact), Ring: delivery.Ring}
+	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer), Compact: protocol.Ptr(delivery.Compact), Ring: delivery.Ring}
 }
 
 func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
@@ -24,7 +24,7 @@ func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
 	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
 		origin.kind = originUserConversation
 	}
-	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), RequireEmptyComposer: protocol.Deref(msg.RequireEmptyComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring}
+	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring}
 }
 
 func (attempt Attempt) Result() protocol.SessionPlaceResult {
@@ -46,7 +46,7 @@ func (attempt Attempt) Result() protocol.SessionPlaceResult {
 	}{
 		{ErrLaneClosed, protocol.SessionPlaceErrorKindLaneClosed},
 		{ErrBlockedByApproval, protocol.SessionPlaceErrorKindBlockedByApproval},
-		{ErrComposerDirty, protocol.SessionPlaceErrorKindComposerDirty},
+		{ErrUserTyping, protocol.SessionPlaceErrorKindUserTyping},
 		{errInitialPrompt, protocol.SessionPlaceErrorKindInitialPrompt},
 		{errHarnessStarting, protocol.SessionPlaceErrorKindHarnessStarting},
 		{ErrSessionStopped, protocol.SessionPlaceErrorKindSessionStopped},
@@ -77,11 +77,11 @@ func AttemptFromResult(result protocol.SessionPlaceResult) Attempt {
 		attempt.Err = ErrLaneClosed
 	case protocol.SessionPlaceErrorKindBlockedByApproval:
 		attempt.Err = ErrBlockedByApproval
-	case protocol.SessionPlaceErrorKindComposerDirty:
+	case protocol.SessionPlaceErrorKindUserTyping:
 		if result.RetryAfterMs != nil {
 			attempt.Err = &quietError{retryAfter: time.Duration(*result.RetryAfterMs) * time.Millisecond}
 		} else {
-			attempt.Err = ErrComposerDirty
+			attempt.Err = ErrUserTyping
 		}
 	case protocol.SessionPlaceErrorKindInitialPrompt:
 		attempt.Err = errInitialPrompt

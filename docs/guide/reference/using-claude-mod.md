@@ -32,9 +32,8 @@ back to typing as soon as you turn the setting off.
   stopped stays stopped. The band lists them under "Waiting in attn — sent with
   your next prompt", and they go out after your next prompt. Your own words, such
   as annotations and phone prompts, are typed into the terminal, which counts as
-  your next prompt. If the mod was holding your words when you pressed Esc and
-  the prompt has an unsent draft, Attn leaves the draft alone, and your words go
-  out after you send your next prompt.
+  your next prompt. If the mod was holding your words when you pressed Esc, Attn
+  types and submits them, along with anything already in the prompt.
 - **Claude asks permission during a turn.** The mod takes the message. Claude
   draws no band while the question replaces the prompt, so nothing shows in the
   terminal until you answer. If you approve, the message follows the rules for a
@@ -66,8 +65,7 @@ standby. Attn waits for the mod's first connection and delivers through it, as
 An agent can compact its conversation through the mod just before it closes
 itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. Claude
 compacts in its own way, as `/compact` does. A Claude session without the mod
-can't. If you type into the session while it compacts, Attn cancels the close and
-Claude runs your prompt after the compact.
+can't. Typing into the session while it compacts does not stop the close.
 
 ## Sessions on an outpost
 

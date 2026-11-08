@@ -142,8 +142,7 @@ tend is on standby and has unread mail, and names `attn agent inbox`.
 
 To compact your conversation first, add `--compact`. attn waits for your turn to
 end, has the harness compact the conversation, then closes you, so end your turn
-right after the command. You get no turn after the compact. Input the user types
-before you close cancels the close, and you stay open. If the compact
+right after the command. You get no turn after the compact. If the compact
 fails, you still close, and the reason says the compact did not run. The harness
 decides what the compact keeps, so put what your next turn needs in a seed note
 or the standby note. `--compact` goes only with `--self`. Only a Claude Code

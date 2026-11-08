@@ -88,6 +88,14 @@ future flexibility, leave it out. Add an abstraction only when it removes
 complexity from today's code; moving complexity behind a new name does not
 count. Preserve the full requested behavior.
 
+attn never determines whether the composer holds text, and no behavior depends
+on it. Over a PTY attn can't reliably tell whether the user cleared the
+composer. With the Claude mod attn could read it, but holding things back still
+makes no sense, because the user is in front of the agent and triggering the
+behavior: asking an agent to close and then starting to annotate does not hold
+the close, and submitting an annotation with something else in the composer
+submits it. Detecting activity, meaning when the user last typed, is fine.
+
 During design and review, ask: what could we remove from this design and still
 satisfy the full requirement?
 

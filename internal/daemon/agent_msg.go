@@ -182,8 +182,8 @@ func agentMessageQueuedDetail(err error) string {
 	if errors.Is(err, sessionmonitor.ErrBlockedByApproval) {
 		return "queued (target is waiting on an approval — lands when the approval clears)"
 	}
-	if errors.Is(err, sessionmonitor.ErrComposerDirty) {
-		return "queued (the user typed in the target moments ago; lands once the composer has been quiet for a while)"
+	if errors.Is(err, sessionmonitor.ErrUserTyping) {
+		return "queued (the user typed in the target moments ago; lands once they have stopped typing for a while)"
 	}
 	if errors.Is(err, sessionmonitor.ErrSessionStopped) {
 		return "queued (the user stopped the target; lands after the user's next prompt there)"

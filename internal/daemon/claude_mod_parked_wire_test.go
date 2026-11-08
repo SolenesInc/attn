@@ -60,37 +60,6 @@ func TestAnAnnotationReturnedWhileWorkingReachesTheAgentWhenItParks(t *testing.T
 	}
 }
 
-func TestAnAnnotationReturnedWhileWorkingStaysBehindADraftWhenTheAgentParks(t *testing.T) {
-	w := newTitlingWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	session, run := moddedClaudeWithVerdicts(t, w, app)
-	terminal := protocol.TerminalID(app.Terminal(session))
-	app.Watch(session)
-	workingOn(t, app, run, session, "deploy to staging")
-	delivered(t, app, session, "check the rollout")
-	modEvent(t, run, fakeagent.ModEventHeld, "check the rollout")
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "unsent draft"})
-	app.AwaitTerminalScreen(string(terminal), "unsent draft")
-	waits := w.PauseEvery(pausepoint.ClaudeModReturnWaits)
-	run.ModReload()
-	waits.Await()
-	waits.Release()
-
-	parkOnBackgroundWork(t, w, cli, run, session)
-	waits.Await()
-	waits.Release()
-
-	app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "\r"})
-	if got := run.Prompted(); got != "unsent draft" {
-		t.Fatalf("the agent took %q, want the user's draft alone when the user sent it", got)
-	}
-	run.Reply("Done. <!-- attn:state=waiting_input -->")
-	answerTurnVerdict(t, w, "WAITING")
-	if got := run.Prompted(); got != "check the rollout" {
-		t.Fatalf("the agent took %q, want the returned annotation after the user's turn", got)
-	}
-}
-
 func TestAnAnnotationReturnedWhileWorkingWaitsOutAnApprovalThenReachesTheParkedAgent(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()

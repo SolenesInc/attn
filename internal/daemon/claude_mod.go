@@ -439,13 +439,12 @@ func heldIDs(t *claudeModTerminal) []string {
 }
 
 type claudeModAck struct {
-	Terminal      harness.TerminalID        `json:"terminal"`
-	Instance      string                    `json:"instance"`
-	ID            string                    `json:"id"`
-	Outcome       string                    `json:"outcome"`
-	Reason        string                    `json:"reason"`
-	ComposerEmpty bool                      `json:"composer_empty"`
-	Ring          *protocol.InboxRingRecord `json:"ring"`
+	Terminal harness.TerminalID        `json:"terminal"`
+	Instance string                    `json:"instance"`
+	ID       string                    `json:"id"`
+	Outcome  string                    `json:"outcome"`
+	Reason   string                    `json:"reason"`
+	Ring     *protocol.InboxRingRecord `json:"ring"`
 }
 
 func (m *claudeMod) serveAck(w http.ResponseWriter, r *http.Request) {
@@ -498,7 +497,7 @@ func (m *claudeMod) acknowledge(ack claudeModAck) {
 	case claudeModOutcomeAppended:
 		m.typedLocked(t, ack.ID)
 	case claudeModOutcomeStopped:
-		answer(harness.Custody{Stopped: true, ComposerEmpty: ack.ComposerEmpty})
+		answer(harness.Custody{Stopped: true})
 	case claudeModOutcomeRefused:
 		answer(harness.Custody{Reason: "claude mod: Claude refused input " + ack.ID + ": " + ack.Reason})
 	}

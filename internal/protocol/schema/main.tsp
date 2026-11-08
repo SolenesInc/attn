@@ -3360,7 +3360,6 @@ model AgentLaunchCloseMessage {
   profile?: string;
   conversation?: string;
   archive?: boolean;
-  unless_user_input_since?: safeint;
 }
 model AgentLaunchCloseResult {
   driver?: string;
@@ -8821,7 +8820,7 @@ enum MonitorCommandKind { Settle: "settle", HandBack: "hand_back", Snooze: "snoo
 enum SessionPlacePhase { PromptReady: "prompt_ready", WorkingOrPromptReady: "working_or_prompt_ready", TurnBoundary: "turn_boundary" }
 enum SessionPlaceOrigin { Maintenance: "maintenance", UserConversation: "user_conversation" }
 enum SessionPlaceStage { Placed: "placed", Deferred: "deferred", Failed: "failed" }
-enum SessionPlaceErrorKind { LaneClosed: "lane_closed", BlockedByApproval: "blocked_by_approval", ComposerDirty: "composer_dirty", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped", SessionClosing: "session_closing", HarnessStarting: "harness_starting" }
+enum SessionPlaceErrorKind { LaneClosed: "lane_closed", BlockedByApproval: "blocked_by_approval", UserTyping: "user_typing", InitialPrompt: "initial_prompt", SessionStopped: "session_stopped", SessionClosing: "session_closing", HarnessStarting: "harness_starting" }
 enum PullRequestLinkKind { Record: "record", Forget: "forget" }
 enum TranscriptActivityKind { Modified: "modified", Head: "head", Events: "events" }
 enum MonitorReadErrorKind { TranscriptUnavailable: "transcript_unavailable", InvalidCursor: "invalid_cursor", CursorMismatch: "cursor_mismatch", CursorPastEnd: "cursor_past_end", DeltaTooLarge: "delta_too_large" }
@@ -8851,7 +8850,6 @@ model SessionPlaceMessage {
   source?: string;
   bypass_initial_gate?: boolean;
   allow_user_composer?: boolean;
-  require_empty_composer?: boolean;
   compact?: boolean;
   ring?: InboxRingRecord;
 }
@@ -8927,7 +8925,6 @@ model CompactingCloseFinishMessage {
   session_id: SessionID;
   reason: string;
   on_standby?: string[];
-  user_inputs: safeint;
 }
 
 model CompactingCloseVerdict { stays_open?: string; }

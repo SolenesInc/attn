@@ -74,15 +74,14 @@ func (id AttemptID) String() string {
 }
 
 type Delivery struct {
-	ID                   AttemptID
-	Text                 string
-	origin               inputOrigin
-	Placement            Placement
-	AllowUserComposer    bool
-	BypassInitialGate    bool
-	RequireEmptyComposer bool
-	Compact              bool
-	Ring                 *protocol.InboxRingRecord
+	ID                AttemptID
+	Text              string
+	origin            inputOrigin
+	Placement         Placement
+	AllowUserComposer bool
+	BypassInitialGate bool
+	Compact           bool
+	Ring              *protocol.InboxRingRecord
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -119,7 +118,6 @@ func ReturnedUserInput(key string, text string) Delivery {
 	delivery := UserConversationInput(key, text, WhenPromptReady)
 	delivery.ID = NewAttemptID("claude-return", key)
 	delivery.AllowUserComposer = true
-	delivery.RequireEmptyComposer = true
 	return delivery
 }
 
@@ -169,21 +167,20 @@ type lane struct {
 	stoppedAfterNotification bool
 	epoch                    uint64
 	userSubmit               bool
-	userDraft                bool
 	phase                    protocol.SessionState
 	stopped                  bool
 	closing                  bool
 }
 
 var (
-	ErrBlockedByApproval = errors.New("session input blocked by pending approval")
-	ErrComposerDirty     = errors.New("session input blocked by the user's composer")
-	ErrLaneClosed        = errors.New("the session's input lane is closed")
-	ErrSessionStopped    = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
-	ErrSessionClosing    = errors.New("the session is compacting before it closes; attn's input waits until it has closed")
-	ErrInputCancelsClose = errors.New("not sent: the session was compacting before it closed; the close is cancelled, so send it again once it is idle")
-	errInitialPrompt     = errors.New("session input blocked while the initial prompt is pending")
-	errHarnessStarting   = errors.New("session input waits for the harness to start")
+	ErrBlockedByApproval       = errors.New("session input blocked by pending approval")
+	ErrUserTyping              = errors.New("session input waits because the user typed in the session moments ago")
+	ErrLaneClosed              = errors.New("the session's input lane is closed")
+	ErrSessionStopped          = errors.New("the user stopped the session; attn's input waits for the user's next prompt")
+	ErrSessionClosing          = errors.New("the session is compacting before it closes; attn's input waits until it has closed")
+	ErrClosingRefusesUserInput = errors.New("not sent: the session is compacting and closes when that finishes")
+	errInitialPrompt           = errors.New("session input blocked while the initial prompt is pending")
+	errHarnessStarting         = errors.New("session input waits for the harness to start")
 )
 
 var QuietWindow = 30 * time.Second
@@ -191,10 +188,10 @@ var QuietWindow = 30 * time.Second
 type quietError struct{ retryAfter time.Duration }
 
 func (e *quietError) Error() string {
-	return fmt.Sprintf("%v (retry in %s)", ErrComposerDirty, e.retryAfter)
+	return fmt.Sprintf("%v (retry in %s)", ErrUserTyping, e.retryAfter)
 }
 
-func (e *quietError) Unwrap() error { return ErrComposerDirty }
+func (e *quietError) Unwrap() error { return ErrUserTyping }
 
 const MaxPlacedDeliveries = 65_536
 
@@ -208,7 +205,7 @@ func RetryDelay(err error) (time.Duration, bool) {
 
 func DeferredError(err error) bool {
 	return errors.Is(err, ErrBlockedByApproval) ||
-		errors.Is(err, ErrComposerDirty) ||
+		errors.Is(err, ErrUserTyping) ||
 		errors.Is(err, errInitialPrompt) ||
 		errors.Is(err, errHarnessStarting) ||
 		errors.Is(err, ErrSessionStopped) ||
@@ -292,8 +289,7 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return deferred(ErrLaneClosed)
 	}
 	if l.closing && delivery.origin.kind == originUserConversation {
-		m.userInputs++
-		return Attempt{Stage: Failed, Err: ErrInputCancelsClose}, runRef{}
+		return Attempt{Stage: Failed, Err: ErrClosingRefusesUserInput}, runRef{}
 	}
 	if l.closing {
 		return deferred(ErrSessionClosing)
@@ -336,7 +332,6 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		l.closing = true
 	}
 	if delivery.origin.kind == originUserConversation {
-		m.userInputs++
 		m.runHeardUserLocked(time.Now())
 	}
 	if steering {
@@ -396,7 +391,6 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	}
 	if custody.Stopped {
 		if voice == harness.VoiceUser {
-			l.userDraft = !custody.ComposerEmpty
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
@@ -472,9 +466,6 @@ func (m *Monitor) ObservePromptSubmitted(at time.Time) (typed bool) {
 	l := m.input
 	typed = l.userSubmit
 	l.userSubmit = false
-	if typed {
-		l.userDraft = false
-	}
 	current := l.ensureRunLocked()
 	if l.claimNextLocked() || typed {
 		current.credited = true
@@ -547,24 +538,6 @@ func (m *Monitor) ReopenInput() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.input.closing = false
-}
-
-func (m *Monitor) UserInputs() uint64 {
-	if m == nil {
-		return 0
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.userInputs
-}
-
-func (m *Monitor) HasUserDraft() bool {
-	if m == nil {
-		return false
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.input.userDraft
 }
 
 func (m *Monitor) LatestRun() uint64 {

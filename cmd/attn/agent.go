@@ -527,7 +527,7 @@ func outliveTheCloseOfOwnSession() {
 func printAgentClose(w io.Writer, result *protocol.AgentCloseResult) {
 	if protocol.Deref(result.PendingCompact) {
 		fmt.Fprintf(w, "session %s (%s) closes after this turn, once its conversation is compacted: %s\n", agentShortID(string(result.TargetSessionID)), result.Label, result.Reason)
-		fmt.Fprintf(w, "end your turn now; input the user types before the session closes keeps it open\n")
+		fmt.Fprintf(w, "end your turn now\n")
 		return
 	}
 	fmt.Fprintf(w, "closed session %s (%s): %s\n", agentShortID(string(result.TargetSessionID)), result.Label, result.Reason)
@@ -802,8 +802,7 @@ commands:
         --compact goes only with --self. attn waits for your turn to end,
         compacts your conversation through the harness, then closes the session.
         End your turn right after the command: you get no turn after the compact.
-        Input the user types before the session closes cancels the close, and
-        the session stays open. When the compact fails, the session still
+        When the compact fails, the session still
         closes, and the reason says the compact did not run. Only a Claude
         session with the Claude mod and a Codex session on the shared Codex app
         server compact, on the home machine or an outpost. attn refuses any other

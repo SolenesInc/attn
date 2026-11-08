@@ -280,12 +280,6 @@ func (t *terminal) insert(text string) {
 	t.write(onScreen(text))
 }
 
-func (t *terminal) composerEmpty() bool {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return len(t.line) == 0
-}
-
 func (t *terminal) take() string {
 	t.mu.Lock()
 	defer t.mu.Unlock()

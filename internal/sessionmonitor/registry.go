@@ -88,7 +88,6 @@ type Monitor struct {
 	driver               DriverMetadata
 	turn                 TurnStamps
 	lastModelRequestAt   time.Time
-	userInputs           uint64
 	firstReportAt        time.Time
 	awaitingHarness      bool
 	folderTrustRead      stepclock.Timer

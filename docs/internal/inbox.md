@@ -277,7 +277,7 @@ connected:
   Claude exits or the mod reloads before the mod has handed it back, as an upgrade
   that changes the mod does. The ring's user input is then lost and its attempt
   stays spent. A restart also loses the user's words the mod gave back that wait
-  for an empty composer or a prompt, because the daemon keeps those in memory. A
+  for a prompt, because the daemon keeps those in memory. A
   "placed" report waiting at a restart is lost too, so a seed on standby stays on
   standby until the tender next reads its mail.
 - A ring taken before the Chief became a crew member keeps the old Chief address
@@ -441,8 +441,9 @@ state changes, so the close still waits for the turn that asked for it. A
 failure once the session is prompt-ready closes it. A ring placed before the
 compact starts a turn, and the compact waits for that turn's end. Once the compact is
 placed and taken, the lane holds every later item until the session has closed,
-and seed mail that arrives then wakes the closed tender as above. User input
-before the close cancels it and opens the lane again.
+and seed mail that arrives then wakes the closed tender as above. Nothing the
+user types or sends stops the close. User input that attn would place while the
+lane is held fails and tells the sender that the session is closing.
 If no outcome arrives within `compact_outcome_tripwire`, the session closes with
 a reason that says so.
 
@@ -453,8 +454,7 @@ this means:
 - A home that is unreachable or restarting loses nothing. The outpost asks again
   until the home answers, and the session stays open until then. A compact whose
   turn ended while the home was away waits for the home, which decides whether
-  the close still stands. Input typed on the outpost while it waits still cancels
-  the close.
+  the close still stands.
 - A restart of the machine that runs the session drops the close, as a home
   restart does for a session on the home. The session stays open with its lane
   open and takes later items, and a compact already running still finishes. The

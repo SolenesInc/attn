@@ -329,11 +329,9 @@ the close. Mail the
 agent reads before the compact ends the standby, and the session stays open.
 Mail the agent hasn't read doesn't cancel the close: the session compacts and
 closes, and the unread mail wakes it again. Mail that arrives during the compact
-waits until the session has closed, then wakes the agent. If you type into the
-session before it closes, even without pressing Enter, Attn cancels the close
-and the session stays open with what you typed.
-Notes you send from the app or a phone while the compact runs are not delivered:
-Attn cancels the close and asks you to send them again. If the compact fails,
+waits until the session has closed, then wakes the agent. Nothing you type or
+send stops the close. Notes you send from the app or a phone while the compact
+runs are not delivered, and Attn tells you that the session is closing. If the compact fails,
 the session still closes once the turn ends, and its reason says the compact did
 not run.
 Restarting the daemon on the machine that runs the session drops a close that

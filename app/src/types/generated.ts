@@ -1119,16 +1119,15 @@ export enum AgentInboxMessageCmd {
 }
 
 export interface AgentLaunchCloseMessage {
-    archive?:                 boolean;
-    cmd:                      AgentLaunchCloseMessageCmd;
-    conversation?:            string;
-    driver?:                  string;
-    phase:                    Phase;
-    profile?:                 string;
-    session_id:               string;
-    signal?:                  string;
-    terminal_id?:             string;
-    unless_user_input_since?: number;
+    archive?:      boolean;
+    cmd:           AgentLaunchCloseMessageCmd;
+    conversation?: string;
+    driver?:       string;
+    phase:         Phase;
+    profile?:      string;
+    session_id:    string;
+    signal?:       string;
+    terminal_id?:  string;
     [property: string]: any;
 }
 
@@ -2782,7 +2781,6 @@ export interface CompactingCloseFinishMessage {
     on_standby?: string[];
     reason:      string;
     session_id:  string;
-    user_inputs: number;
     [property: string]: any;
 }
 
@@ -11658,18 +11656,17 @@ export enum SessionMessageWindowStatus {
 }
 
 export interface SessionPlaceMessage {
-    allow_user_composer?:    boolean;
-    bypass_initial_gate?:    boolean;
-    cmd:                     SessionPlaceMessageCmd;
-    compact?:                boolean;
-    delivery_id:             string;
-    origin:                  SessionPlaceOrigin;
-    phase:                   SessionPlacePhase;
-    require_empty_composer?: boolean;
-    ring?:                   Ring;
-    session_id:              string;
-    source?:                 string;
-    text:                    string;
+    allow_user_composer?: boolean;
+    bypass_initial_gate?: boolean;
+    cmd:                  SessionPlaceMessageCmd;
+    compact?:             boolean;
+    delivery_id:          string;
+    origin:               SessionPlaceOrigin;
+    phase:                SessionPlacePhase;
+    ring?:                Ring;
+    session_id:           string;
+    source?:              string;
+    text:                 string;
     [property: string]: any;
 }
 
@@ -11700,12 +11697,12 @@ export interface SessionPlaceResult {
 
 export enum SessionPlaceErrorKind {
     BlockedByApproval = "blocked_by_approval",
-    ComposerDirty = "composer_dirty",
     HarnessStarting = "harness_starting",
     InitialPrompt = "initial_prompt",
     LaneClosed = "lane_closed",
     SessionClosing = "session_closing",
     SessionStopped = "session_stopped",
+    UserTyping = "user_typing",
 }
 
 export enum SessionPlaceStage {
@@ -20735,7 +20732,6 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "signal", js: "signal", typ: u(undefined, "") },
         { json: "terminal_id", js: "terminal_id", typ: u(undefined, "") },
-        { json: "unless_user_input_since", js: "unless_user_input_since", typ: u(undefined, 0) },
     ], "any"),
     "AgentLaunchCloseResult": o([
         { json: "driver", js: "driver", typ: u(undefined, "") },
@@ -21737,7 +21733,6 @@ const typeMap: any = {
         { json: "on_standby", js: "on_standby", typ: u(undefined, a("")) },
         { json: "reason", js: "reason", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
-        { json: "user_inputs", js: "user_inputs", typ: 0 },
     ], "any"),
     "CompactingCloseVerdict": o([
         { json: "stays_open", js: "stays_open", typ: u(undefined, "") },
@@ -27389,7 +27384,6 @@ const typeMap: any = {
         { json: "delivery_id", js: "delivery_id", typ: "" },
         { json: "origin", js: "origin", typ: r("SessionPlaceOrigin") },
         { json: "phase", js: "phase", typ: r("SessionPlacePhase") },
-        { json: "require_empty_composer", js: "require_empty_composer", typ: u(undefined, true) },
         { json: "ring", js: "ring", typ: u(undefined, r("Ring")) },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "source", js: "source", typ: u(undefined, "") },
@@ -30052,12 +30046,12 @@ const typeMap: any = {
     ],
     "SessionPlaceErrorKind": [
         "blocked_by_approval",
-        "composer_dirty",
         "harness_starting",
         "initial_prompt",
         "lane_closed",
         "session_closing",
         "session_stopped",
+        "user_typing",
     ],
     "SessionPlaceStage": [
         "deferred",

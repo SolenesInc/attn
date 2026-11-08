@@ -173,7 +173,7 @@ func TestACompactThatMeetsARunningTurnCompactsAtTheNextIdleAndThenCloses(t *test
 	}
 }
 
-func TestUserInputAfterABusyCompactKeepsTheModdedClaudeSessionOpen(t *testing.T) {
+func TestAPromptTheUserSendsAfterABusyCompactDoesNotStopTheClose(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	session, run := moddedClaudeInATurn(t, w, app)
@@ -187,14 +187,12 @@ func TestUserInputAfterABusyCompactKeepsTheModdedClaudeSessionOpen(t *testing.T)
 		t.Fatalf("the agent took %q, want what the user typed", got)
 	}
 	run.Reply("Sure. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	nothingElsePrompted(t, app, run, session)
-	run.Reply("Done. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	stillOpen(t, cli, session, "after the user typed past the busy compact")
-	if got := run.ModCompactions(); got != 0 {
-		t.Errorf("the mod compacted the conversation %d times, want never", got)
+	if closed := awaitClosed(app, session); protocol.Deref(closed.CloseReason) != compactReason {
+		t.Errorf("the session closed for %q, want %q", protocol.Deref(closed.CloseReason), compactReason)
+	}
+	if got := run.ModCompactions(); got != 1 {
+		t.Errorf("the mod compacted the conversation %d times, want once", got)
 	}
 }
 
@@ -210,32 +208,6 @@ func TestAModReloadDuringTheCompactClosesTheClaudeSessionSayingTheCompactDidNotR
 	run.ModReload()
 	compactDidNotRun(t, awaitClosed(app, session), "reloaded")
 	run.AwaitGone()
-}
-
-func TestUserInputDuringTheCompactKeepsTheModdedClaudeSessionOpen(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "sender")
-	session, run := moddedClaudeInATurn(t, w, app)
-	arrived, release := run.ModHoldNextCompact()
-
-	closeCompactingDuringTheTurn(t, cli, run, session)
-	run.Reply(compactingClaudeReply)
-	arrived()
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateWorking && protocol.Deref(s.StateReason) == "compacting"
-	})
-	app.TypeLine(session, "wait, one more thing")
-	if got := run.Prompted(); got != "wait, one more thing" || run.ThroughMod {
-		t.Fatalf("the agent took %q (through the mod: %t), want what the user typed", got, run.ThroughMod)
-	}
-	mailBehindTheCompact(t, cli, session)
-	release()
-	awaitCompactReport(t, run, fakeagent.ModCompactCompacted)
-
-	run.Reply("Sure. <!-- attn:state=idle -->")
-	ringOfTheMailBehindTheCompact(t, run)
-	stillOpen(t, cli, session, "after the user typed during the compact")
 }
 
 func TestACompactingCloseOfAClaudeSessionWithoutTheModIsRefusedNamingTheModSetting(t *testing.T) {

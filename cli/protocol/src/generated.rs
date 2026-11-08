@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b3e50118f795";
+pub const PROTOCOL_VERSION: &str = "787cd7cd3899";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -219,8 +219,6 @@ pub struct AgentLaunchCloseMessage {
     pub signal: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_id: Option<TerminalID>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub unless_user_input_since: Option<i64>,
 }
 
 impl AgentLaunchCloseMessage {
@@ -1994,7 +1992,6 @@ pub struct CompactingCloseFinishMessage {
     pub on_standby: Option<Vec<String>>,
     pub reason: String,
     pub session_id: SessionID,
-    pub user_inputs: i64,
 }
 
 impl CompactingCloseFinishMessage {
@@ -11155,8 +11152,6 @@ pub struct SessionPlaceMessage {
     pub delivery_id: String,
     pub origin: SessionPlaceOrigin,
     pub phase: SessionPlacePhase,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub require_empty_composer: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ring: Option<InboxRingRecord>,
     pub session_id: SessionID,

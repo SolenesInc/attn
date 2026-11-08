@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -16,11 +15,6 @@ func (d *Daemon) closeAgentMachine(_ context.Context, msg protocol.AgentLaunchCl
 	result := protocol.AgentLaunchCloseResult{}
 	switch msg.Phase {
 	case "prepare":
-		if msg.UnlessUserInputSince != nil {
-			if why := userInputCancelsClose(monitor, uint64(*msg.UnlessUserInputSince)); why != "" {
-				return result, errors.New(why)
-			}
-		}
 		monitor.MarkForcedStop()
 		driver := monitor.EndDriverRun()
 		raw, err := json.Marshal(driver)

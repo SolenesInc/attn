@@ -22,7 +22,7 @@ func (d *Daemon) beginSessionCloseAsUser(sessionID protocol.SessionID, closed st
 func (d *Daemon) beginSessionClose(
 	sessionID protocol.SessionID, closed store.SessionClose, client *wsClient,
 ) (sessionCloseInFlight, error) {
-	teardown, err := d.prepareSessionTeardown(sessionID, nil)
+	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
 		return sessionCloseInFlight{}, err
 	}
