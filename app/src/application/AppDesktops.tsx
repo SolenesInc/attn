@@ -227,7 +227,7 @@ export function AppDesktops() {
             sendDesktopSetSplitRatio(desktop.id, splitId, ratio)
           }
           onFocusPane={(paneId) => {
-            if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId, undefined, true);
+            if (paneId !== desktop.active_pane_id || !isCurrent) selectLeaf(desktop.id, paneId);
           }}
           zoomActive={Boolean(zoomModeBySessionId[desktop.id])}
           onSetZoomActive={(active) => {

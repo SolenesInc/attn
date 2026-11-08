@@ -81,7 +81,7 @@ function ColumnChip({ column, desktopId, onGo, inMenu = false }: { column: Shelf
         if (pressedAt && Math.hypot(event.clientX - pressedAt.x, event.clientY - pressedAt.y) >= DRAG_ACTIVATION_PX) return;
         closeShelfPeek();
         onGo?.();
-        useSessionStore.getState().selectLeaf(desktopId, column.goLeafId);
+        useSessionStore.getState().bringLeaf(desktopId, column.goLeafId);
       }}
     >
       {column.tiles.map((tile) => (
@@ -221,7 +221,7 @@ export function DesktopShelf({ desktopId }: { desktopId: string }) {
             data-testid={`shelf-dot-${column.key}`}
             title={column.label}
             onMouseDown={(event) => event.preventDefault()}
-            onClick={() => useSessionStore.getState().selectLeaf(desktopId, column.goLeafId)}
+            onClick={() => useSessionStore.getState().bringLeaf(desktopId, column.goLeafId)}
           >
             {column.tiles.map((tile) => <TileMark key={tile.leafId} tile={tile} />)}
           </button>

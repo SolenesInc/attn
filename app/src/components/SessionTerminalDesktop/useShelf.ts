@@ -11,7 +11,7 @@ import {
   lastUsedLeaf,
   columnIndexOf,
   droppedBeside,
-  firstColumnStillShows,
+  columnsFitTogether,
   readRow,
   resolveRowLayout,
   revealDrop,
@@ -30,6 +30,7 @@ type DesktopSession = NonNullable<SessionTerminalDesktopProps['desktopSessions']
 interface ShelfPublisherInput {
   desktopId: string;
   rowPlan: RowLayoutPlan | null;
+  rowInput: Omit<RowLayoutInput, 'view'> | null;
   showShelf: boolean;
   narrowestCols: number;
   tileHeightPx: number;
@@ -50,6 +51,7 @@ function columnTitle(titles: readonly string[]): string {
 export function useShelfPublisher({
   desktopId,
   rowPlan,
+  rowInput,
   showShelf,
   narrowestCols,
   tileHeightPx,
@@ -62,7 +64,8 @@ export function useShelfPublisher({
   gardenSeeds,
 }: ShelfPublisherInput) {
   const shelf = useMemo<PublishedShelf | null>(() => {
-    if (!rowPlan || !showShelf) return null;
+    if (!rowPlan || !rowInput || !showShelf) return null;
+    const activeColumn = rowPlan.screen.find((column) => column.leafIds.includes(activeLeafId));
     const seedTitle = (id: string) => gardenSeeds.find((seed) => seed.id === id)?.title;
     const shelfColumn = (column: RowColumn): ShelfColumn => {
       const tiles: ShelfTile[] = [];
@@ -99,6 +102,7 @@ export function useShelfPublisher({
         goLeafId: lastUsedLeaf(column, focusOrder),
         label: columnTitle(titles),
         tiles,
+        fitsBesideActive: activeColumn !== undefined && columnsFitTogether(activeColumn, column, rowInput),
       };
     };
     return {
@@ -109,7 +113,7 @@ export function useShelfPublisher({
       narrowestCols,
       tileHeightPx,
     };
-  }, [activeLeafId, agentPaneById, desktopId, focusOrder, gardenSeeds, narrowestCols, rowPlan, sessionById, showShelf, tileContents, tileHeightPx, tileLeafById]);
+  }, [activeLeafId, agentPaneById, desktopId, focusOrder, gardenSeeds, narrowestCols, rowInput, rowPlan, sessionById, showShelf, tileContents, tileHeightPx, tileLeafById]);
 
   useLayoutEffect(() => {
     useDesktopShelfStore.getState().publishShelf(desktopId, shelf);
@@ -176,8 +180,8 @@ export function useRowSettling(input: RowSettlingInput) {
         if (row.has(leafId) || !documentReturn || previousFirstColumn.leafId !== documentReturn.shownAtLeafId) continue;
         if (columnIndexOf(readRow(rowInput.tree), documentReturn.firstColumn.leafId) < 0) continue;
         firstColumn = documentReturn.firstColumn;
-        if (previous.activeLeafId === leafId && row.has(documentReturn.activeLeafId) && !firstColumnStillShows(rowInput, firstColumn)) {
-          useSessionStore.getState().selectLeaf(desktopId, documentReturn.activeLeafId, undefined, true);
+        if (previous.activeLeafId === leafId && row.has(documentReturn.activeLeafId) && activeLeafId !== documentReturn.activeLeafId) {
+          useSessionStore.getState().selectLeaf(desktopId, documentReturn.activeLeafId);
         }
       }
 

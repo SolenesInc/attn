@@ -21,6 +21,7 @@ export interface ShelfColumn {
   goLeafId: string;
   label: string;
   tiles: ShelfTile[];
+  fitsBesideActive: boolean;
 }
 
 export interface PublishedShelf {
@@ -271,20 +272,19 @@ useProfilesStore.subscribe((state, previous) => {
 export interface BringPlacement {
   anchorId: string;
   edge: 'left' | 'right';
-  anchorStaysOnScreen: boolean;
 }
 
 export function bringPlacement(leaf: { desktopId: string; leafId: string }): BringPlacement | null {
   const shelf = useDesktopShelfStore.getState().shelfByDesktop[leaf.desktopId];
   if (!shelf?.activeLeafId) return null;
   const hasLeaf = (column: ShelfColumn, leafId: string) => column.tiles.some((tile) => tile.leafId === leafId);
-  if (![...shelf.before, ...shelf.after].some((column) => hasLeaf(column, leaf.leafId))) return null;
+  const brought = [...shelf.before, ...shelf.after].find((column) => hasLeaf(column, leaf.leafId));
+  if (!brought?.fitsBesideActive || shelf.screen.length < 2) return null;
   const activeSlot = shelf.screen.findIndex((column) => hasLeaf(column, shelf.activeLeafId));
   const rightmost = activeSlot === shelf.screen.length - 1;
   return {
     anchorId: shelf.activeLeafId,
-    edge: rightmost && activeSlot > 0 ? 'left' : 'right',
-    anchorStaysOnScreen: shelf.screen.length > 1,
+    edge: rightmost ? 'left' : 'right',
   };
 }
 

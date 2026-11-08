@@ -22,7 +22,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-MOVES',
   tier: 'tier1-local-shell',
   prefix: 'shelf-moves',
-  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, and while its desktop is unmounted, opening it again from the shelf, and bringing it with the jump key, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
+  metadata: { agent: 'shell', focus: 'opening at capacity, closing, carrying, sending to the shelf, an agent opening a document while the user types, across a width change, and while its desktop is unmounted, opening it again from the shelf, and jumping to it with the jump key, jumping from the sidebar and from a chip with one tile on screen, and how chips that need the user look beside plain ones, through AppKit keys with real terminals' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -213,7 +213,7 @@ try {
     await hold();
   });
 
-  await runner.step('cmd_j_brings_an_unseen_document_and_closing_restores_the_screen', async () => {
+  await runner.step('cmd_j_jumps_to_an_unseen_document_and_closing_restores_the_screen', async () => {
     await slideTo((await shownLeaves()).at(-1));
     const row = await readRow();
     const shownBefore = await shownLeaves();
@@ -233,10 +233,10 @@ try {
     await hold();
     await shot('document-waiting-on-the-shelf');
 
+    const rowBeforeJump = await readRow();
     await press('session.jumpToWaiting');
     await waitForActive(documentLeaf);
-    const brought = await shownLeaves();
-    runner.assert(brought.includes(active) && brought.includes(documentLeaf), '⌘J brings the document beside the active tile', { brought, active, documentLeaf });
+    await assertJumpedTo(documentLeaf, rowBeforeJump);
     await waitDom(`[data-testid="shelf-chip-${documentLeaf}"]`, { absent: true });
     await hold();
     await shot('document-brought');
@@ -273,10 +273,10 @@ try {
     await hold();
     await shot('document-waiting-again');
 
+    const rowBeforeJump = await readRow();
     await press('session.jumpToWaiting');
     await waitForActive(documentLeaf);
-    const brought = await shownLeaves();
-    runner.assert(brought.includes(active) && brought.includes(documentLeaf), '⌘J brings the document beside the active tile', { brought, active, documentLeaf });
+    await assertJumpedTo(documentLeaf, rowBeforeJump);
     await press('terminal.close');
     await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
     await waitForActive(active);
@@ -322,10 +322,10 @@ try {
     await waitForChip(documentLeaf, '.is-needs');
     await hold();
     await shot('document-waiting-after-unmount');
+    const rowBeforeJump = await readRow();
     await press('session.jumpToWaiting');
     await waitForActive(documentLeaf);
-    const brought = await shownLeaves();
-    runner.assert(brought.includes(active) && brought.includes(documentLeaf), '⌘J brings the document beside the active tile', { brought, active, documentLeaf });
+    await assertJumpedTo(documentLeaf, rowBeforeJump);
     await hold();
     await shot('document-brought-after-unmount');
     await press('terminal.close');
@@ -388,6 +388,33 @@ try {
     const documentMark = await looks.centerOf(`${unseenChip} .desktop-shelf-mark`);
     runner.assert(sameColor(documentMark, WARNING_RGB), 'an unseen document shows through its mark', { documentMark });
     runner.assert(await looks.hasColorIn(needingCap, WARNING_RGB), 'a cap holding one shows through its text', {});
+  });
+
+  await runner.step('going_to_a_tile_moves_the_user_and_leaves_the_row', async () => {
+    const rowBeforeSidebar = await readRow();
+    const fromSidebar = await offScreenLeaf();
+    await shot('jump-from-sidebar-before');
+    await driver.click(`[data-testid="sidebar-session-${await sessionOf(fromSidebar)}"] [aria-label^="Open"]`);
+    await assertActiveHasInput(fromSidebar);
+    await assertJumpedTo(fromSidebar, rowBeforeSidebar);
+    await hold();
+    await shot('jump-from-sidebar-after');
+
+    await request('set_window_bounds', { logicalBounds: { ...(await request('get_window_bounds')).logicalBounds, width: 1100 } });
+    for (let shown = (await shownLeaves()).length; shown > 1; shown -= 1) {
+      await press('shelf.fewerTiles');
+      await waitForShownCount((count) => count === shown - 1);
+    }
+    const rowBeforeChip = await readRow();
+    const [onlyShown] = await shownLeaves();
+    const fromChip = rowBeforeChip[rowBeforeChip.indexOf(onlyShown) + 1] ?? rowBeforeChip[rowBeforeChip.indexOf(onlyShown) - 1];
+    await shot('jump-from-chip-with-one-tile-before');
+    await driver.click(`[data-testid="shelf-chip-${fromChip}"]`);
+    await assertActiveHasInput(fromChip);
+    await assertJumpedTo(fromChip, rowBeforeChip);
+    runner.assert((await shownLeaves()).join() === fromChip, 'a chip with one tile on screen shows only that tile', { fromChip });
+    await hold();
+    await shot('jump-from-chip-with-one-tile-after');
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
@@ -455,6 +482,12 @@ async function narrowScreenToTwoTiles() {
     await press('shelf.fewerTiles');
     await waitForShownCount((count) => count === shown - 1);
   }
+}
+
+async function assertJumpedTo(leafId, rowBefore) {
+  const [shown, row] = await Promise.all([shownLeaves(), readRow()]);
+  runner.assert(shown.includes(leafId), 'the row slides to show the tile', { shown, leafId });
+  runner.assert(row.join() === rowBefore.join(), 'going to the tile leaves the row order alone', { row, rowBefore });
 }
 
 async function offScreenLeaf() {

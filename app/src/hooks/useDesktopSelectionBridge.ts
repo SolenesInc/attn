@@ -153,8 +153,8 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
     const show = () => target.kind === 'session'
       ? sendDesktopShowSession(target.sessionId)
       : sendDesktopShowLeaf(target.desktopId, target.leafId);
-    const beside = bring?.anchorStaysOnScreen ? { leafId: bring.leafId, anchorId: bring.anchorId, edge: bring.edge, bringsWholeColumn: true } : null;
-    if (bring && beside) useDesktopShelfStore.getState().setDropBeside(bring.desktopId, beside);
+    const beside = bring && { leafId: bring.leafId, anchorId: bring.anchorId, edge: bring.edge, bringsWholeColumn: true };
+    if (bring) useDesktopShelfStore.getState().setDropBeside(bring.desktopId, beside);
     const request: Promise<unknown> = bring
       ? sendDesktopMoveLeaf({
         sourceDesktopId: bring.desktopId,

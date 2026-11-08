@@ -334,6 +334,7 @@ export function useDesktopController(
   });
   useShelfPublisher({
     desktopId,
+    rowInput,
     rowPlan,
     showShelf: !effectivePaneId && isActiveSession && isSessionViewVisible,
     narrowestCols: shelfNarrowestCols,

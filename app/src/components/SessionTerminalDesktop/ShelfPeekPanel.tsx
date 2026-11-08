@@ -94,7 +94,7 @@ function OpenPeek({ tile, anchor }: { tile: ShelfTile; anchor: ShelfPeekAnchor }
   const open = () => {
     if (terminalId) keepReplyAcrossOpening(terminalId, blockedReason !== undefined);
     closeShelfPeek();
-    useSessionStore.getState().selectLeaf(desktopId, tile.leafId);
+    useSessionStore.getState().bringLeaf(desktopId, tile.leafId);
   };
 
   return (

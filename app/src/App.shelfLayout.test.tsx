@@ -444,7 +444,7 @@ describe('Shelf layout', () => {
     describe('with two tiles on screen', () => {
       const TWO_FIT = { narrowest_tile_cols: '100' };
 
-      it('keeps a dragged width that holds the brought tile apart, and shows that tile alone', async () => {
+      it('jumps to a chip whose dragged width cannot fit beside the active tile', async () => {
         const daemon = await renderRow(TWO_FIT, { root: rightChain([pane('s1'), pane('s2'), pane('s3'), wanted('s4', FILLS_THE_AREA)]) });
         expect(paneIds()).toEqual(onScreen('s1', 's2'));
 
@@ -452,6 +452,8 @@ describe('Shelf layout', () => {
 
         expect(paneIds()).toEqual(onScreen('s4'));
         expect(active()).toBe('pane-s4');
+        expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
+        expect(rowOf(daemon)).toEqual(['s1', 's2', 's3', 's4']);
         expect(daemon.sentOf('desktop_set_wanted_cols')).toEqual([]);
       });
 
@@ -493,17 +495,32 @@ describe('Shelf layout', () => {
       });
     });
 
-    it('brings an off-screen tile from the sidebar and the agent palette', async () => {
+    it('jumps to a chip with one tile on screen, and reorders nothing', async () => {
+      const daemon = await renderRow({ narrowest_tile_cols: '150' }, { root: rightChain(IDS.slice(0, 3).map(pane)) });
+      expect(paneIds()).toEqual(onScreen('s1'));
+
+      await gesture(daemon, () => fireEvent.click(chip('s3')));
+
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
+      expect(rowOf(daemon)).toEqual(['s1', 's2', 's3']);
+      expect(active()).toBe('pane-s3');
+      expect(paneIds()).toEqual(onScreen('s3'));
+    });
+
+    it('jumps to an off-screen tile from the sidebar and the agent palette, and reorders nothing', async () => {
       const daemon = await renderRow(NARROWEST_66);
+      const row = rowOf(daemon);
       await openSession(daemon, 's9');
-      expect(lastMove(daemon)).toMatchObject({ leaf_id: 'pane-s9', anchor_id: 'pane-s1', whole_column: true });
-      expect(paneIds()).toEqual(onScreen('s1', 's9', 's2'));
+      expect(active()).toBe('pane-s9');
+      expect(paneIds()).toContain('pane-s9');
 
       await gesture(daemon, () => pressShortcut('ui.actionMenu'));
-      const option = within(screen.getByRole('dialog', { name: 'Agents' })).getAllByRole('option').find((entry) => entry.textContent?.includes('s7'));
+      const option = within(screen.getByRole('dialog', { name: 'Agents' })).getAllByRole('option').find((entry) => entry.textContent?.includes('s1'));
       await gesture(daemon, () => fireEvent.mouseDown(option!));
-      expect(lastMove(daemon)).toMatchObject({ leaf_id: 'pane-s7', anchor_id: 'pane-s9', whole_column: true });
-      expect(paneIds()).toEqual(onScreen('s1', 's9', 's7'));
+      expect(active()).toBe('pane-s1');
+      expect(paneIds()).toContain('pane-s1');
+      expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
+      expect(rowOf(daemon)).toEqual(row);
     });
 
     it('keeps typing for the brought terminal while the daemon answers, and reports it when the bring fails', async () => {
@@ -730,14 +747,14 @@ describe('Shelf layout', () => {
 
         await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
 
-        expect(lastMove(daemon)).toMatchObject({ leaf_id: 'doc', anchor_id: 'pane-s3', edge: 'left', whole_column: true });
+        expect(daemon.sentOf('desktop_move_leaf')).toEqual([]);
         expect(active()).toBe('doc');
-        expect(paneIds()).toEqual(['doc', 'pane-s3']);
+        expect(paneIds()).toEqual(['doc', 'pane-s2']);
 
         daemon.on('desktop_remove_leaf', (command) => {
           const desktop = daemon.arrangement.desktop('ws')!;
           const placed = daemon.arrangement.withTree(desktop, JSON.parse(JSON.stringify(rightChain(IDS.slice(0, 4).map(pane)))));
-          daemon.arrangement.replace({ ...placed, active_pane_id: 'pane-s4' });
+          daemon.arrangement.replace({ ...placed, active_pane_id: 'pane-s2' });
           return [daemon.arrangement.answer(command), { event: 'profile_action_result', action: command.cmd, success: true, request_id: command.request_id ?? '' }];
         });
         await closeDocument(daemon);
@@ -773,17 +790,15 @@ describe('Shelf layout', () => {
           await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
           await agentOpens(daemon, 's1');
           await gesture(daemon, () => pressShortcut('session.jumpToWaiting'));
-          expect(paneIds()).toEqual(['doc', 'pane-s3']);
-          await gesture(daemon, () => pressShortcut('shelf.carryRight'));
-          expect(paneIds()).toEqual(['pane-s3', 'doc']);
-          await slideTo(daemon, 'terminal.focusLeft', 'terminal.focusLeft');
+          expect(paneIds()).toEqual(['doc', 'pane-s2']);
+          await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight', 'terminal.focusLeft');
           expect(active()).toBe('pane-s2');
           expect(paneIds()).toEqual(onScreen('s2', 's3'));
           expect(screen.getByTestId('shelf-chip-doc')).not.toHaveClass('is-needs');
           return daemon;
         };
 
-        it('counts as waiting once however often it asks, and ⌘J brings it', async () => {
+        it('counts as waiting once however often it asks, and ⌘J goes to it', async () => {
           const daemon = await documentViewedThenLeft();
 
           await agentOpensAgain(daemon, 's1');

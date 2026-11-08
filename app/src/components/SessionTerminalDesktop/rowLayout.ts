@@ -104,6 +104,10 @@ function columnNeedPx(column: RowColumn, measures: RowMeasures): number {
   return Math.max(measures.narrowestPx, wantedPxWithRoom(column, measures) ?? 0);
 }
 
+export function columnsFitTogether(first: RowColumn, second: RowColumn, measures: RowMeasures): boolean {
+  return fitsArea(columnNeedPx(first, measures) + columnNeedPx(second, measures), measures);
+}
+
 function fillFrom(row: readonly RowColumn[], start: number, measures: RowMeasures): { end: number; sum: number } {
   let end = start + 1;
   let sum = columnNeedPx(row[start], measures);
@@ -453,7 +457,7 @@ export function revealDrop(input: Omit<RowLayoutInput, 'view'>, drop: ShelfDrop,
   const widened = [drop.anchorId, drop.leafId]
     .map((leafId) => row[columnIndexOf(row, leafId)])
     .filter((column) => column && wantedPxWithRoom(column, input) !== null);
-  const attempts = drop.bringsWholeColumn ? [[]] : [[], ...widened.map((column) => [column]), ...(widened.length > 1 ? [widened] : [])];
+  const attempts = [[], ...widened.map((column) => [column]), ...(widened.length > 1 ? [widened] : [])];
   for (const widthsToClear of attempts) {
     const pendingWantedCols = widthsToClear.length === 0
       ? input.pendingWantedCols
@@ -478,13 +482,6 @@ export function droppedBeside(input: Pick<RowLayoutInput, 'tree' | 'activeLeafId
   const beside = anchorAt < 0 ? undefined : row[anchorAt + (drop.edge === 'left' ? -1 : 1)];
   if (input.activeLeafId !== drop.leafId || !beside?.leafIds.includes(drop.leafId)) return false;
   return drop.bringsWholeColumn || beside.leafIds.length === 1;
-}
-
-export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, firstColumn: FirstColumn): boolean {
-  const shown = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId);
-  const start = columnIndexOf(shown, firstColumn.leafId);
-  const activeAt = columnIndexOf(shown, input.activeLeafId);
-  return start >= 0 && activeAt >= start && activeAt < fillFrom(shown, start, input).end;
 }
 
 export function columnStackNeedPx(tree: TerminalLayoutNode, leafId: string): number {

@@ -46,7 +46,7 @@ export interface Intent {
   focusOwner: Element | null;
   previousView: AppView;
   focusRequested: boolean;
-  slides: boolean;
+  brings: boolean;
   bring: LeafBring | null;
 }
 
@@ -55,7 +55,6 @@ export interface LeafBring {
   leafId: string;
   anchorId: string;
   edge: 'left' | 'right';
-  anchorStaysOnScreen: boolean;
   sessionId: string | null;
 }
 
@@ -110,13 +109,13 @@ export function beginIntent(
   profileId: string,
   target: IntentTarget,
   focusOwner: Element | null,
-  { sendsShow = false, announce = false, historyCursor = null, slides = false }: { sendsShow?: boolean; announce?: boolean; historyCursor?: number | null; slides?: boolean } = {},
+  { sendsShow = false, announce = false, historyCursor = null, brings = false }: { sendsShow?: boolean; announce?: boolean; historyCursor?: number | null; brings?: boolean } = {},
 ): SessionNavigationState {
   const id = state.intentSequence + 1;
   return {
     ...state,
     followNextTurn: false,
-    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner, previousView: state.intent?.previousView ?? state.view, focusRequested: false, slides, bring: null },
+    intent: { id, profileId, target, sendsShow, announce, historyCursor, focusOwner, previousView: state.intent?.previousView ?? state.view, focusRequested: false, brings, bring: null },
     focusRequest: null,
     intentSequence: id,
   };
@@ -129,9 +128,9 @@ export function requestShow(
   focusOwner: Element | null,
   historyCursor: number | null = null,
   announce = true,
-  slides = historyCursor !== null,
+  brings = false,
 ): SessionNavigationState {
-  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, announce, historyCursor, slides });
+  return beginIntent(state, profileId, target, focusOwner, { sendsShow: true, announce, historyCursor, brings });
 }
 
 export function selectAgent(
@@ -244,13 +243,13 @@ export function displayedArrangement(arrangement: Arrangement, intent: Intent | 
 export function focusIntent(
   state: SessionNavigationState,
   arrangement: Arrangement,
-  placementOfBring: (leaf: ActiveLeaf) => Pick<LeafBring, 'anchorId' | 'edge' | 'anchorStaysOnScreen'> | null,
+  placementOfBring: (leaf: ActiveLeaf) => Pick<LeafBring, 'anchorId' | 'edge'> | null,
 ): SessionNavigationState {
   const intent = state.intent;
   if (!intent || intent.focusRequested) return state;
   const leaf = intentLeaf(arrangement, intent);
   if (!leaf) return state;
-  const placement = intent.sendsShow && !intent.slides ? placementOfBring(leaf) : null;
+  const placement = intent.brings ? placementOfBring(leaf) : null;
   const bring = placement ? { ...placement, desktopId: leaf.desktopId, leafId: leaf.leafId, sessionId: leaf.kind === 'agent' ? leaf.sessionId : null } : null;
   return claimFocus({ ...state, view: 'session', intent: { ...intent, focusRequested: true, bring } }, leaf, intent.focusOwner, intent.announce);
 }

@@ -39,7 +39,8 @@ import { bringPlacement } from './desktopShelf';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
-  selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null, slides?: boolean) => void;
+  selectLeaf: (desktopId: string, leafId: string, focusOwner?: Element | null) => void;
+  bringLeaf: (desktopId: string, leafId: string) => void;
   beginIntent: (target: IntentTarget) => number;
   commandSent: (cmd: string, body: Record<string, unknown>, requestId: string) => number | null;
   commandSettled: (requestId: string) => void;
@@ -128,8 +129,10 @@ export function createSessionNavigationActions(
       set((state) => selectAgent(state, state.navigationProfileId, sessionId, owner, announce));
       return true;
     },
-    selectLeaf: (desktopId, leafId, owner = focusOwner(), slides = false) =>
-      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner, null, true, slides)),
+    selectLeaf: (desktopId, leafId, owner = focusOwner()) =>
+      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, owner)),
+    bringLeaf: (desktopId, leafId) =>
+      set((state) => requestShow(state, state.navigationProfileId, { kind: 'leaf', desktopId, leafId }, focusOwner(), null, true, true)),
     beginIntent: (target) => {
       set((state) => beginIntent(state, target.kind === 'profile' ? target.profileId : state.navigationProfileId, target, focusOwner()));
       return get().intentSequence;
