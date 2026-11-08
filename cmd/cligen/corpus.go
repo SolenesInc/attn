@@ -26,10 +26,15 @@ func writeCorpus(directory string) error {
 	if err := os.WriteFile(filepath.Join(directory, "flag_spec.json"), append(spec, '\n'), 0o644); err != nil {
 		return err
 	}
+	instanceTable, err := instanceCases()
+	if err != nil {
+		return err
+	}
 	for _, table := range []struct {
 		file  string
 		cases []any
 	}{
+		{"instance.jsonl", instanceTable},
 		{"flag.jsonl", flagCases(random)},
 		{"tabwriter.jsonl", tabwriterCases(random)},
 		{"quote.jsonl", quoteCases(random)},

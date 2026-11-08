@@ -1,3 +1,8 @@
+mod client;
+mod hooks;
+mod instance;
+mod invocation;
+mod paths;
 mod route;
 
 use std::process::ExitCode;

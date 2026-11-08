@@ -7,17 +7,17 @@ import (
 
 const CodexSharedProfileEnv = "ATTN_CODEX_SHARED_PROFILE"
 
-const codexThreadPrefix = "codex:"
+const CodexThreadPrefix = "codex:"
 
 func CodexThreadTerminal(profile, thread string) TerminalID {
 	if thread = strings.TrimSpace(thread); thread == "" {
 		return ""
 	}
-	return TerminalID(codexThreadPrefix + profile + ":" + thread)
+	return TerminalID(CodexThreadPrefix + profile + ":" + thread)
 }
 
 func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(string(t)), codexThreadPrefix)
+	rest, ok := strings.CutPrefix(strings.TrimSpace(string(t)), CodexThreadPrefix)
 	if !ok {
 		return "", "", false
 	}
@@ -28,17 +28,17 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
-const nisseConversationPrefix = "nisse:"
+const NisseConversationPrefix = "nisse:"
 
 func NisseConversationTerminal(conversation string) TerminalID {
 	if conversation = strings.TrimSpace(conversation); conversation == "" {
 		return ""
 	}
-	return TerminalID(nisseConversationPrefix + conversation)
+	return TerminalID(NisseConversationPrefix + conversation)
 }
 
 func ParseNisseConversationTerminal(t TerminalID) (conversation string, ok bool) {
-	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), nisseConversationPrefix)
+	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), NisseConversationPrefix)
 	return conversation, ok && conversation != ""
 }
 

@@ -23,7 +23,6 @@ const (
 
 type invocationRecord struct {
 	path       string
-	caller     protocol.TerminalID
 	session    protocol.SessionID
 	usageError string
 	unrecorded bool
@@ -33,10 +32,6 @@ var invocation = invocationRecord{path: "attn"}
 
 func setCommandPath(path string) {
 	invocation.path = path
-}
-
-func actAsCaller(terminal protocol.TerminalID) {
-	invocation.caller = terminal
 }
 
 func recordAsClosedSession(session protocol.SessionID) {
@@ -67,11 +62,7 @@ func recordInvocation(code int) {
 			props["refusal"] = refusal
 		}
 	}
-	c := client.New("")
-	if invocation.caller != "" {
-		c = c.WithCaller(invocation.caller)
-	}
-	_ = c.RecordAnalytics("cli", invocation.path, invocation.session, props)
+	_ = client.New("").RecordAnalytics("cli", invocation.path, invocation.session, props)
 }
 
 func invocationError(code int) (kind, refusal string) {

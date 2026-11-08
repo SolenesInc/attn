@@ -43,7 +43,7 @@ requests and review requests from GitHub, with approve, merge and mute.
 
 ### Triggers
 
-- When a Claude Code or Codex agent runs `gh pr create`, attn records the URL in the command's output on the agent's session (`internal/hooks/pullrequest.go`).
+- When a Claude Code or Codex agent runs `gh pr create`, attn records the URL in the command's output on the agent's session (`cli/attn/src/hooks/detect.rs`).
 - Recorded pull requests refresh on a 30-second tick: every 30 seconds while watched or recently active, then every 2 and 10 minutes as they cool. When a watched pull request changes readiness or gets new feedback, attn creates an inbox notice, and the notice rings the agent. Feedback that the GitHub account attn uses for the host wrote, and reopened threads that account started on its own pull request, make no notice unless the watching session's profile sets `pull_requests.own_comments` to `ring`. State changes always make one. attn also checks a codex-mode watch again at the watch's settling deadline (`internal/daemon/session_pull_request_refresh.go`).
 - The daemon polls GitHub for the user's pull requests every 90 seconds, on a named instance only with the mock GitHub or `ATTN_GITHUB_POLLING=on` (`internal/daemon/daemon.go`, `internal/daemon/github_polling.go`).
 
@@ -123,7 +123,7 @@ Preconditions:
 
 - Wire: `internal/daemon/session_pull_request*_wire_test.go`, `internal/daemon/pr_*_wire_test.go` (`pr_host_discovery_wire_test.go` for several hosts), `internal/daemon/github_polling_wire_test.go`, `internal/daemon/gh_warning_wire_test.go`. Shared with [automations.md](automations.md): `internal/daemon/automation_review_demand_wire_test.go`, `internal/daemon/automation_review_origin_wire_test.go`.
 - Stack: `cmd/attnd/pr_stack_test.go`, `app/e2e/pr-actions.spec.ts`.
-- Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `internal/hooks/pullrequest_test.go`.
+- Kernel: `internal/github/*_test.go`, `internal/prreadiness/*_test.go`, `cli/attn/src/hooks/detect.rs`.
 - App: `app/src/App.dashboardPRs.test.tsx`, `app/src/App.openPullRequest.test.tsx`, `app/src/App.sessionProvenance.test.tsx`, `app/src/components/SettingsModal.agents.test.tsx`.
 
 ## Gotchas

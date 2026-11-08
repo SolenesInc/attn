@@ -33,6 +33,16 @@ pub const REFUSAL_NOT_FOUND: &str = "not_found";
 pub const REFUSAL_NOT_TENDER: &str = "not_tender";
 pub const REFUSAL_UNCLASSIFIED: &str = "unclassified";
 pub const REFUSAL_WRONG_STATE: &str = "wrong_state";
+pub const STATE_LAUNCHING: &str = "launching";
+pub const STATE_WORKING: &str = "working";
+pub const STATE_PENDING_APPROVAL: &str = "pending_approval";
+pub const STATE_WAITING_INPUT: &str = "waiting_input";
+pub const STATE_IDLE: &str = "idle";
+pub const STATE_UNKNOWN: &str = "unknown";
+pub const STATE_SCHEDULED: &str = "scheduled";
+pub const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
+pub const CODEX_THREAD_PREFIX: &str = "codex:";
+pub const NISSE_CONVERSATION_PREFIX: &str = "nisse:";
 
 pub const MAX_SOCKET_FRAME_BYTES: i64 = 8388608;
 pub const AGENT_MESSAGE_MAX_CHARS: i64 = 32768;

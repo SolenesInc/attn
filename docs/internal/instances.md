@@ -44,8 +44,9 @@ that gap would add friction to source installs, so it stays open on purpose.
 
 An install holds two programs side by side. `attn` is the Rust CLI, and hook
 paths and `ATTN_WRAPPER_PATH` name it. `attnd` is the Go program that runs the
-daemon and PTY workers. `attn` starts the `attnd` beside its own resolved path,
-so never copy one without the other. `make build` writes both, and
+daemon and PTY workers. `attn` runs agent hooks itself and starts the `attnd`
+beside its own resolved path for every other command, so never copy one without
+the other. `make build` writes both, and
 `DAEMON_OUTPUT` moves `attnd` away from `OUTPUT`. The `appDaemon` field resolves
 to `attnd` and `appCli` to `attn`.
 

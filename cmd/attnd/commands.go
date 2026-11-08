@@ -130,14 +130,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"pty-worker"}, run: runPTYWorker, unrecorded: true},
 		{names: []string{"_outpost-install"}, run: runOutpostInstall},
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
-		{names: []string{"_hook-stop"}, run: runHookStop},
-		{names: []string{"_hook-session-start"}, run: runHookSessionStart},
-		{names: []string{"_hook-notification"}, run: runHookNotification},
-		{names: []string{"_hook-stop-failure"}, run: runHookStopFailure},
-		{names: []string{"_hook-compact"}, run: runHookCompact},
-		{names: []string{"_hook-state"}, run: runHookState},
-		{names: []string{"_hook-todo"}, run: runRetiredTodoHook},
-		{names: []string{"_hook-tool-use"}, run: runHookToolUse},
 		{names: []string{"_probe-tui"}, run: runProbeTUI},
 	}
 }
@@ -241,8 +233,6 @@ func runCheckSchema() {
 		exit(1)
 	}
 }
-
-func runRetiredTodoHook() {}
 
 func writePluginHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn plugin <command>

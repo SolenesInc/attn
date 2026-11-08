@@ -22,6 +22,8 @@ Read in the source at openai/codex 60947e2341.
 - `/multi-agents` switches between this session's subagents. Subagent threads
   fire no SessionStart or SessionEnd. A spawned subagent thread fires
   SubagentStart (`core/src/hook_runtime.rs`).
+- Codex supports only `command` and `mcp_tool` hooks; `prompt` and `agent`
+  parse but are skipped (0.164, `codex-rs/config/src/hook_config.rs`).
 - Hooks run in the process that runs the turn. For a PTY launch, that process
   is the terminal's own Codex process, so `ATTN_TERMINAL_ID` names the terminal
   (older launches use `ATTN_SESSION_ID` with the same meaning). For a

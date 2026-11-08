@@ -38,7 +38,7 @@ Agents read the state of every session with `attn agent list` and
 
 ### Triggers
 
-- The harness reports through hidden verbs its hooks call: `attn _hook-session-start`, `_hook-state`, `_hook-notification`, `_hook-stop`, `_hook-stop-failure`, `_hook-compact` and `_hook-tool-use` (`cmd/attnd/main.go`, and Claude Code's hook settings in `internal/hooks/hooks.go`). Codex under shared Codex reports through its app-server.
+- The harness reports through hidden verbs its hooks call: `attn _hook-session-start`, `_hook-state`, `_hook-notification`, `_hook-stop`, `_hook-stop-failure`, `_hook-compact` and `_hook-tool-use` (`cli/attn/src/hooks/mod.rs`, and Claude Code's hook settings in `internal/hooks/hooks.go`). Codex under shared Codex reports through its app-server.
 - Each session's monitor watches the agent on the machine where the agent runs and keeps the agent's state (`internal/daemon/monitors.go`, `internal/daemon/session_state.go`).
 - When a turn ends, a background model judges from the last message whether the agent waits for the user (`internal/daemon/turn.go`, prompt `internal/prompts/content/turn-classifier/classify.md`, run by `internal/daemon/headless_tasks.go`).
 - With activity lines on, a background model writes each agent's line while someone can see it (`internal/daemon/activity.go`, prompts in `internal/prompts/content/activity/`).
@@ -97,7 +97,7 @@ Preconditions:
 
 - Wire: `internal/daemon/session_state_edge_wire_test.go`, `internal/daemon/session_state_evidence_wire_test.go`, `internal/daemon/state_explain_wire_test.go`, `internal/daemon/stop_verdict_wire_test.go`, `internal/daemon/stop_yield_wire_test.go`, `internal/daemon/stop_outcomes_wire_test.go`, `internal/daemon/halt_replay_wire_test.go`, `internal/daemon/session_halt_wire_test.go`, `internal/daemon/session_approval_wire_test.go`, `internal/daemon/claude_stop_wire_test.go`, `internal/daemon/classifier_race_wire_test.go`, `internal/daemon/monitor_*_wire_test.go`, `internal/daemon/activity_*wire_test.go`, `internal/daemon/agent_peek_wire_test.go`, `internal/daemon/presence_wire_test.go`, `internal/daemon/program_status_wire_test.go`, `internal/daemon/transcript_binding_wire_test.go`, `internal/daemon/transcript_commentary_wire_test.go`, `internal/daemon/headless_launch_wire_test.go`, `internal/daemon/headless_tasks_wire_test.go`.
 - Stack: `cmd/attnd/state_explain_stack_test.go`, `cmd/attnd/agent_stack_test.go`, `cmd/attnd/transcript_stack_test.go`, `cmd/attnd/shell_program_status_stack_test.go`, `internal/daemon/monitor_restart_stack_test.go`, `internal/daemon/monitor_conversation_stack_test.go`, `app/e2e/session-states.spec.ts`, `scripts/verify-monitor-routing.sh`.
-- Kernel: `internal/sessionstate/*_test.go`, `internal/classifier/*_test.go`, `internal/sessionmonitor/*_test.go`, `internal/transcript/*_test.go`, `internal/activity/*_test.go`, `internal/statemarker/*_test.go`, `internal/hooks/*_test.go`, `internal/daemon/stop_terminality_test.go`.
+- Kernel: `internal/sessionstate/*_test.go`, `internal/classifier/*_test.go`, `internal/sessionmonitor/*_test.go`, `internal/transcript/*_test.go`, `internal/activity/*_test.go`, `internal/statemarker/*_test.go`, `cli/attn/src/hooks/`, `internal/daemon/stop_terminality_test.go`.
 - App: `app/src/App.arrivalPulse.test.tsx`, `app/src/App.sessionActivitySettings.test.tsx`, `app/src/components/Sidebar.harnessIcons.test.tsx`.
 
 ## Gotchas

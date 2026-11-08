@@ -17,6 +17,8 @@ Probed on 2.1.288 with a mock API.
 
 - SessionStart blocks Claude until the hook exits. SessionEnd is cut off
   after about 1.5 s and may never arrive.
+- Claude runs `command` hooks under `/bin/sh`, whatever `$SHELL` is. A hook's
+  parent was `sh` with fish, zsh and bash (2.1.319, `s-f2ke65`).
 - Claude also compacts by itself while it sits at its prompt. Probed with Opus
   5.5 and subscription logins, without attn, in seven conversations on the
   1-hour prompt cache: two on 2.1.318, and five on 2.1.319 behind a recording

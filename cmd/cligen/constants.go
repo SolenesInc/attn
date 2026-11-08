@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
@@ -50,6 +51,16 @@ func writeConstants(out *strings.Builder) {
 		{"REFUSAL_NOT_TENDER", string(protocol.RefusalNotTender)},
 		{"REFUSAL_UNCLASSIFIED", string(protocol.RefusalUnclassified)},
 		{"REFUSAL_WRONG_STATE", string(protocol.RefusalWrongState)},
+		{"STATE_LAUNCHING", protocol.StateLaunching},
+		{"STATE_WORKING", protocol.StateWorking},
+		{"STATE_PENDING_APPROVAL", protocol.StatePendingApproval},
+		{"STATE_WAITING_INPUT", protocol.StateWaitingInput},
+		{"STATE_IDLE", protocol.StateIdle},
+		{"STATE_UNKNOWN", protocol.StateUnknown},
+		{"STATE_SCHEDULED", protocol.StateScheduled},
+		{"CODEX_SHARED_PROFILE_ENV", harness.CodexSharedProfileEnv},
+		{"CODEX_THREAD_PREFIX", harness.CodexThreadPrefix},
+		{"NISSE_CONVERSATION_PREFIX", harness.NisseConversationPrefix},
 	} {
 		fmt.Fprintf(out, "pub const %s: &str = %s;\n", c.rust, rustString(c.value))
 	}
