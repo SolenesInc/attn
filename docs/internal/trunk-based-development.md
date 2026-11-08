@@ -137,11 +137,12 @@ the work and the session behind a commit.
 
 ## Review on main
 
-A scheduled review automation runs Codex over the commits `main` has gained
-since the `reviewed` branch, grouped by seed, and judges each seed's commits
-against its plan. For each finding, the automation messages the session named by
-`Attn-Session:` while that session is live, and otherwise dispatches an agent
-to fix the finding. Then the automation moves `reviewed` forward. The
+A scheduled review automation delegates attn agents to review the commits `main`
+has gained since the `reviewed` branch, grouped by seed. Each reviewer judges a
+seed's commits against its plan. The automation sends each confirmed finding to
+the session named by `Attn-Session:` while that session is live, or to the agent
+tending the commit's seed or plot. Otherwise the reviewer fixes the finding. Once
+every finding has reached someone, the automation moves `reviewed` forward. The
 `review-main` skill is the automation's procedure.
 
 When an Orchestrator coordinates Builders, the Orchestrator reviews their work
