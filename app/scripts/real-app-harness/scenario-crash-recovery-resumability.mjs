@@ -77,7 +77,9 @@ function killInstanceRuntimeLikeACrash(dataDir, log) {
       const registryDir = path.join(ownerRoot, daemonInstance, 'registry');
       if (!fs.existsSync(registryDir)) continue;
       for (const entry of fs.readdirSync(registryDir)) {
-        const raw = fs.readFileSync(path.join(registryDir, entry), 'utf8');
+        const registryFile = path.join(registryDir, entry);
+        if (!fs.existsSync(registryFile)) continue;
+        const raw = fs.readFileSync(registryFile, 'utf8');
         const record = JSON.parse(raw);
         const pid = Number(record.pid ?? record.Pid ?? record.worker_pid);
         if (!Number.isInteger(pid) || pid <= 1 || seen.has(pid)) continue;

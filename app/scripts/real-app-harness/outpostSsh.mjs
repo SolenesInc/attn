@@ -25,7 +25,10 @@ export async function outpostSsh(root) {
       const machineRoot = path.join(root, `machine-${servers.length}`); fs.mkdirSync(machineRoot);
       const installRoot = path.join(machineRoot, 'home');
       const target = path.join(installRoot, '.local/share/attn-outpost-instances', remoteEnv.ATTN_INSTANCE, 'attn');
-      fs.mkdirSync(path.dirname(target), { recursive: true }); fs.copyFileSync(installedBinary, target); fs.chmodSync(target, 0o700);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      const installedDaemon = path.join(path.dirname(installedBinary), 'attnd');
+      if (fs.existsSync(installedDaemon)) { fs.copyFileSync(installedDaemon, path.join(path.dirname(target), 'attnd')); fs.chmodSync(path.join(path.dirname(target), 'attnd'), 0o700); }
+      fs.copyFileSync(installedBinary, target); fs.chmodSync(target, 0o700);
       fs.writeFileSync(path.join(path.dirname(target), 'attn-pty-host'), '#!/bin/sh\nexit 1\n', { mode: 0o700 });
       const machineBin = path.join(machineRoot, 'bin'); fs.mkdirSync(machineBin);
       for (const [name, answer] of Object.entries({ uname: 'Linux x86_64', busctl: 'b false' })) fs.writeFileSync(path.join(machineBin, name), `#!/bin/sh\necho ${answer}\n`, { mode: 0o700 });
