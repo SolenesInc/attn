@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"github.com/victorarias/attn/internal/garden"
 	"slices"
 	"testing"
 
@@ -158,5 +159,26 @@ func TestGardenPushAfterAProfileSwitchSendsOnlyWhatChangedInTheNewProfile(t *tes
 		if got := lifeSeedIDs(changed.Seeds); !slices.Equal(got, []string{step.moved}) {
 			t.Errorf("after switching to %s, the change carries %v, want only %s", step.profile, got, step.moved)
 		}
+	}
+}
+
+func TestGardenPushCarriesBodies(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	planted, err := cli.SeedPlant("", "Body travels", "first body", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := w.App()
+	if len(app.Initial.Seeds) != 1 || app.Initial.Seeds[0].Body != "first body" {
+		t.Fatalf("initial state carries %+v, want the seed's body", app.Initial.Seeds)
+	}
+
+	if _, err := cli.SeedEdit(planted.Seed.ID, "second body", garden.BodySHA256("first body"), ""); err != nil {
+		t.Fatal(err)
+	}
+	changed := nextGardenChange(app)
+	if len(changed.Seeds) != 1 || changed.Seeds[0].Body != "second body" {
+		t.Fatalf("the change after a body edit carries %+v, want the new body", changed.Seeds)
 	}
 }

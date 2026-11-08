@@ -85,9 +85,11 @@ func (d *Daemon) sendGardenChanges(client *wsClient, window gardenWindow) {
 	if client.selectedProfile() != window.held.profileID {
 		return
 	}
-	var message any = window.full()
+	var message any
 	if client.gardenHeld != nil {
 		message = window.changedSince(client.gardenHeld)
+	} else {
+		message = window.full()
 	}
 	if d.sendToClient(client, message) {
 		client.gardenHeld = &window.held
