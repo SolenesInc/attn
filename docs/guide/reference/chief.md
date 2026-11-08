@@ -28,14 +28,28 @@ attn crew wake chief
 
 ## Where the Chief works
 
-The Chief's home is `crew/chief/` in your profile's Notebook, and it works
-there. Its charter is the place for how you want to be supported, how you make
-decisions and how you want delegations proposed. The Chief writes the charter
-with you on its first day, and you can edit it anytime.
+The Chief's home holds its charter and letters, in a folder under `crew/` in
+your profile's Notebook named after the Chief. A new Chief's folder is
+`crew/chief/`, or `crew/chief-2/` when that folder is taken, as it is for a
+second profile sharing the same Notebook. Renaming the Chief, on its first day
+or later, moves the home to a folder with the new name. Changing the Notebook
+folder later leaves the home where it is, until you
+[move it](crew.md#move-a-members-home). `attn crew list` shows where your
+Chief's home is. Profiles that share a Notebook can see each other's homes, so
+check that path before you open a folder under `crew/` yourself.
 
-To run the Chief in a folder of your own, such as a repository of plans and
-knowledge that span your projects, run `attn crew set chief --cwd <dir>`. The
-folder's `AGENTS.md` or `CLAUDE.md` then applies as it does for any agent.
+The charter is the place for how you want to be supported, how you make
+decisions and how you want delegations proposed. The Chief writes the charter
+with you on its first day. To edit it anytime, choose "Edit charter" from the
+Chief's menu, which always opens your Chief's `CHARTER.md`.
+
+A new Chief works in its home. A Chief that [took over from a
+session](#if-a-session-was-your-chief) keeps its home in the Notebook and works
+in that session's folder. To run the Chief in a folder of your own, such as a
+repository of plans and knowledge that span your projects, run
+`attn crew set chief --cwd <dir>`. The folder's `AGENTS.md` or `CLAUDE.md` then
+applies as it does for any agent. To return the Chief to its home, run
+`attn crew set chief --cwd ""`.
 
 ## How the Chief differs from other members
 
