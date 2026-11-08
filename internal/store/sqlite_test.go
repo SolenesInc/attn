@@ -91,7 +91,6 @@ func TestMigrations_MigratedColumnsExist(t *testing.T) {
 		{"session_runtime", "agent_driver_plugin_name"},
 		{"session_runtime", "agent_driver_run_id"},
 		{"session_runtime", "agent_driver_report_seq"},
-		{"chief_of_staff_dispatches", "structured_report_json"},
 		{"sessions", "closed_intentionally_at"},
 		{"automation_definitions", "spec_json"},
 	}

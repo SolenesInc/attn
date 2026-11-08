@@ -1,0 +1,3 @@
+ALTER TABLE delegation_operations DROP COLUMN handover_tender_session;
+ALTER TABLE delegation_operations DROP COLUMN handover_tender_member;
+DROP TABLE chief_of_staff_dispatches;
