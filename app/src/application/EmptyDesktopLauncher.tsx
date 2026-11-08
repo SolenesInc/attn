@@ -7,7 +7,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
 } from './AppContexts';
 import './EmptyDesktopLauncher.css';
@@ -41,7 +40,6 @@ export function EmptyDesktopLauncher({
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
   const experimental = isOn(settings, BoolSetting.newSessionLauncherEnabled);
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const [launching, setLaunching] = useState<string | null>(null);
   // The dialog unmounts after a pick; the inline picker starts over instead.
@@ -70,10 +68,9 @@ export function EmptyDesktopLauncher({
       path: string,
       agent: SessionAgent,
       yoloMode?: boolean,
-      chiefOfStaff?: boolean,
     ) => {
       setLaunching(path.split('/').pop() || path);
-      void launchLocation(path, agent, yoloMode, chiefOfStaff, desktopId).finally(() =>
+      void launchLocation(path, agent, yoloMode, desktopId).finally(() =>
         setLaunching(null),
       );
     },
@@ -81,14 +78,13 @@ export function EmptyDesktopLauncher({
   );
   const handleCreateWorktree = useCallback(
     (...pick: Parameters<typeof handleCreateWorktreeSession>) => {
-      const [mainRepo, branch, startingFrom, agent, yoloMode, chiefOfStaff] = pick;
+      const [mainRepo, branch, startingFrom, agent, yoloMode] = pick;
       handleCreateWorktreeSession(
         mainRepo,
         branch,
         startingFrom,
         agent,
         yoloMode,
-        chiefOfStaff,
         desktopId,
       );
     },
@@ -115,7 +111,6 @@ export function EmptyDesktopLauncher({
           onDeleteWorktree={sendDeleteWorktree}
           onError={showError}
           agentAvailability={agentAvailability}
-          chiefExists={hasChiefOfStaff}
         />
       ) : launching ? (
         <div className="empty-desktop-launcher-starting" role="status">
@@ -140,7 +135,6 @@ export function EmptyDesktopLauncher({
           onError={showError}
           projectsDirectory={settings.projects_directory}
           agentAvailability={agentAvailability}
-          chiefExists={hasChiefOfStaff}
         />
       )}
     </div>

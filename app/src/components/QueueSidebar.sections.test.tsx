@@ -80,7 +80,7 @@ function queueRowIds(container: HTMLElement) {
 }
 
 const sessions: TestSession[] = [
-  { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true },
+  { id: 'chief', label: 'chief', state: 'idle', desktopId: 'ws-a', chiefOfStaff: true, crewMember: 'chief-key' },
   { id: 'newer', label: 'newer', state: 'waiting_input', desktopId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
   { id: 'older', label: 'older', state: 'working', desktopId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
   { id: 'settled', label: 'settled', state: 'waiting_input', desktopId: 'ws-b' },

@@ -86,13 +86,16 @@ function saveNativeTrace(name) {
 const state = (payload = {}) => client.request('capture_state', payload, payload.staged ? { timeoutMs: 120_000 } : {});
 const hidden = () => state({ visible: false });
 const key = (key, modifiers = []) => driver.runInputDriver(['global_key', '--key', key, ...(modifiers.length ? ['--modifiers', modifiers.join(',')] : [])]);
+const crewRoster = () => JSON.parse(runAttn(['crew', 'list', '--json'])).sort((a, b) => Number(Boolean(b.chief)) - Number(Boolean(a.chief)));
+const chiefMailbox = () => crewRoster()[0].id;
 const rosterPosition = () => {
-  const position = 1 + JSON.parse(runAttn(['crew', 'list', '--json'])).findIndex(member => member.id === mailbox);
-  assert.ok(position >= 1 && position <= 8, `crew member ${mailbox} is at Quick Capture roster position ${position}, beyond ⌘2-⌘9`);
+  const roster = crewRoster();
+  const position = 1 + roster.findIndex(member => member.id === mailbox);
+  assert.ok(position >= 1 && position <= 9, `crew member ${mailbox} is at Quick Capture roster position ${position}, beyond ⌘1-⌘9`);
   return position;
 };
-const pickMailbox = () => key(String(rosterPosition() + 1), ['command']);
-const arrowToMailbox = async () => { for (let step = rosterPosition(); step > 0; step--) await key('arrowdown'); };
+const pickMailbox = () => key(String(rosterPosition()), ['command']);
+const arrowToMailbox = async () => { for (let step = rosterPosition() - 1; step > 0; step--) await key('arrowdown'); };
 async function captureStack() {
   const id = await driver.mainWindowId({ windowTitle: 'Quick Capture' });
   const stack = JSON.parse(await driver.runInputDriverCapture(['windowstack']));
@@ -521,7 +524,7 @@ try {
     await pickMailbox();
     assert.equal((await state({ mailbox })).mailbox, mailbox);
     await key('1', ['command']);
-    assert.equal((await state({ mailbox: 'chief' })).mailbox, 'chief');
+    assert.equal((await state({ mailbox: chiefMailbox() })).mailbox, chiefMailbox());
     await key('k', ['command']);
     await arrowToMailbox();
     await key('enter');
@@ -542,7 +545,7 @@ try {
     assert.equal(actual.saved[0].files.length, 2);
     assert.equal(actual.visible, false);
     assert.equal(actual.text, '');
-    assert.equal(actual.mailbox, 'chief');
+    assert.equal(actual.mailbox, chiefMailbox());
     await fixture.runInputDriver(['wait_frontmost']);
     assert.equal(await fixture.frontmostBundleId(), fixtureId);
   });

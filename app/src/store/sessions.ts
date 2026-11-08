@@ -200,7 +200,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     providedId: string | undefined,
     agent: SessionAgent | undefined,
     yoloMode: boolean | undefined,
-    chiefOfStaff?: boolean,
   ) => {
     const id = providedId || crypto.randomUUID();
     const resolvedAgent: SessionAgent = agent ?? 'claude';
@@ -213,7 +212,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       desktopId: '',
       agent: resolvedAgent,
       yoloMode: yoloMode ?? false,
-      chiefOfStaff: chiefOfStaff ?? false,
       transcriptMatched: resolvedAgent !== 'codex',
       creating: true,
       desktop: createDefaultDesktopState(),
@@ -259,7 +257,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       agent: session.agent,
       resume_session_id: null,
       yolo_mode: session.yoloMode ?? null,
-      ...(session.chiefOfStaff ? { chief_of_staff: true } : {}),
     };
   },
 

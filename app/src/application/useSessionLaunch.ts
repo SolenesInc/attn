@@ -120,7 +120,6 @@ export function useSessionLaunch({
       cwd: string;
       agent: SessionAgent;
       yoloMode?: boolean;
-      chiefOfStaff?: boolean;
       direction: TerminalSplitDirection;
       anchorPaneId?: string;
       spawnedFrom?: string;
@@ -145,7 +144,6 @@ export function useSessionLaunch({
           spawn.sessionId,
           spawn.agent,
           spawn.agent === 'shell' ? false : spawn.yoloMode,
-          spawn.chiefOfStaff,
         );
         const spawnArgs = takeSessionSpawnArgs(spawn.sessionId, 80, 24);
         if (!spawnArgs) {
@@ -180,7 +178,6 @@ export function useSessionLaunch({
       providedSessionId?: string,
       agent: SessionAgent = 'claude',
       yoloMode = false,
-      options?: { chiefOfStaff?: boolean; desktopId?: string; host?: string },
     ) =>
       spawnOnCurrentDesktop({
         sessionId: providedSessionId || crypto.randomUUID(),
@@ -188,10 +185,7 @@ export function useSessionLaunch({
         cwd,
         agent,
         yoloMode,
-        chiefOfStaff: options?.chiefOfStaff,
         direction: 'vertical',
-        desktopId: options?.desktopId,
-        host: options?.host,
       }),
     [spawnOnCurrentDesktop],
   );
@@ -259,38 +253,25 @@ export function useSessionLaunch({
       cwd: string;
       agent: SessionAgent;
       yoloMode: boolean;
-      chiefOfStaff: boolean;
       desktopId?: string;
       host?: string;
     }): Promise<string | null> => {
-      if (!pick.chiefOfStaff) {
-        const desktop = currentDesktopForLaunch();
-        const direction = locationPickerSessionDirection.current;
-        const baseId = activeLocalSession?.id ?? launchTarget(desktop, direction).focusedSessionId;
-        return await spawnOnCurrentDesktop({
-          sessionId: crypto.randomUUID(),
-          label: pick.label,
-          cwd: pick.cwd,
-          agent: pick.agent,
-          yoloMode: pick.yoloMode,
-          chiefOfStaff: false,
-          direction,
-          spawnedFrom: baseId || undefined,
-          desktopId: pick.desktopId,
-          host: pick.host,
-        });
-      }
-      const sessionId = await launchAgent(
-        pick.label,
-        pick.cwd,
-        undefined,
-        pick.agent,
-        pick.yoloMode,
-        { chiefOfStaff: true, desktopId: pick.desktopId, host: pick.host },
-      );
-      return sessionId;
+      const desktop = currentDesktopForLaunch();
+      const direction = locationPickerSessionDirection.current;
+      const baseId = activeLocalSession?.id ?? launchTarget(desktop, direction).focusedSessionId;
+      return await spawnOnCurrentDesktop({
+        sessionId: crypto.randomUUID(),
+        label: pick.label,
+        cwd: pick.cwd,
+        agent: pick.agent,
+        yoloMode: pick.yoloMode,
+        direction,
+        spawnedFrom: baseId || undefined,
+        desktopId: pick.desktopId,
+        host: pick.host,
+      });
     },
-    [activeLocalSession, spawnOnCurrentDesktop, launchAgent],
+    [activeLocalSession, spawnOnCurrentDesktop],
   );
 
   const startLocation = useCallback(
@@ -298,7 +279,6 @@ export function useSessionLaunch({
       path: string,
       agent: SessionAgent,
       yoloMode = false,
-      chiefOfStaff = false,
       { desktopId, host }: { desktopId?: string; host?: string } = {},
     ) => {
       if (!host && agent !== TERMINAL_AGENT && !hasAvailableAgents)
@@ -312,7 +292,6 @@ export function useSessionLaunch({
         cwd: path,
         agent: selectedAgent,
         yoloMode,
-        chiefOfStaff,
         desktopId,
         host,
       });
@@ -325,11 +304,8 @@ export function useSessionLaunch({
       path: string,
       agent: SessionAgent,
       yoloMode = false,
-      chiefOfStaff = false,
       desktopId?: string,
     ) => {
-      const jobId = sessionCreationJobIdRef.current + 1;
-      sessionCreationJobIdRef.current = jobId;
       if (agent !== TERMINAL_AGENT && !hasAvailableAgents) {
         showError('No supported agent CLI found in PATH.');
         return;
@@ -338,39 +314,16 @@ export function useSessionLaunch({
         agent === TERMINAL_AGENT
           ? TERMINAL_AGENT
           : resolvePreferredAgent(agent, agentAvailability, 'codex');
-      const folderName = path.split('/').pop() || 'session';
-      const pick = {
-        label: selectedAgent === TERMINAL_AGENT ? '' : folderName,
-        cwd: path,
-        agent: selectedAgent,
-        yoloMode,
-        chiefOfStaff,
-        desktopId,
-      };
-      if (!chiefOfStaff) {
-        try {
-          await launchPicked(pick);
-        } catch (error) {
-          showError(error instanceof Error ? error.message : 'Failed to start the agent');
-        }
-        return;
-      }
-      setSessionCreationJob({
-        id: jobId,
-        label: folderName,
-        path,
-        phase: 'starting_session',
-        error: null,
-      });
       try {
-        await launchPicked(pick);
-        setSessionCreationJob((current) => (current?.id === jobId ? null : current));
-      } catch (err) {
-        setSessionCreationJob((current) =>
-          current?.id === jobId
-            ? { ...current, error: err instanceof Error ? err.message : 'Failed to create session' }
-            : current,
-        );
+        await launchPicked({
+          label: selectedAgent === TERMINAL_AGENT ? '' : path.split('/').pop() || 'session',
+          cwd: path,
+          agent: selectedAgent,
+          yoloMode,
+          desktopId,
+        });
+      } catch (error) {
+        showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
     },
     [agentAvailability, hasAvailableAgents, launchPicked, showError],
@@ -383,7 +336,6 @@ export function useSessionLaunch({
       startingFrom: string,
       agent: SessionAgent,
       yoloMode: boolean,
-      chiefOfStaff = false,
       {
         desktopId,
         host,
@@ -395,7 +347,7 @@ export function useSessionLaunch({
       if (!result.success || !result.path)
         throw new Error(result.error || 'Failed to create worktree');
       onCreated?.(result.path);
-      return startLocation(result.path, agent, yoloMode, chiefOfStaff, {
+      return startLocation(result.path, agent, yoloMode, {
         desktopId: pickedDesktopId,
         host,
       });
@@ -410,7 +362,6 @@ export function useSessionLaunch({
       startingFrom: string,
       agent: SessionAgent,
       yoloMode: boolean,
-      chiefOfStaff = false,
       pickedOnDesktopId?: string,
     ) => {
       if (worktreeSessionCreatingRef.current) {
@@ -433,7 +384,6 @@ export function useSessionLaunch({
           startingFrom,
           agent,
           yoloMode,
-          chiefOfStaff,
           {
             desktopId: pickedOnDesktopId,
             onCreated: (path) => {

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { QuickCapture } from './components/QuickCapture';
 import { QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST } from './quickCapture/client';
-import { DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop } from './test/daemonFixtures';
+import { crewMember, DEFAULT_PROFILE_ID, defaultProfile, emptyDesktop } from './test/daemonFixtures';
 import type { CachedQuickCaptureDraft } from './quickCapture/draft';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import { serveSettings } from './test/settings';
@@ -129,7 +129,7 @@ async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options:
   const hidden = new Promise<void>(resolve => { native.onHide = resolve; });
   const initial = options.initialState || {};
   const settings = { quick_capture_enabled: 'true', ...initial.settings };
-  const view = await renderApp({ ...options, initialState: { ...initial, settings } });
+  const view = await renderApp({ ...options, initialState: { crew: [crewMember('chief-key', { chief: true, name: 'Chief' })], ...initial, settings } });
   serveSettings(view.daemon, settings);
   configure?.(view.daemon);
   const capture = render(<QuickCapture />);
@@ -142,7 +142,7 @@ async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options:
 const editor = () => screen.getByRole('textbox', { name: 'Message' });
 type WireRecord = NonNullable<NonNullable<EventMessage<'quick_capture_result'>['result']>['record']>;
 function record(command: { capture_id: string; content?: string; mailbox?: WireRecord['mailbox'] }): WireRecord {
-  return { id: command.capture_id, content: command.content ?? 'saved message', mailbox: command.mailbox ?? { kind: 'chief' },
+  return { id: command.capture_id, content: command.content ?? 'saved message', mailbox: command.mailbox ?? { kind: 'crew_member', member_id: 'chief-key' },
     attachments: [], created_at: '2026-10-01T12:00:00Z' };
 }
 function quickCaptureTraffic(daemon: ScriptedDaemon) { return daemon.sent.filter(command => command.cmd.startsWith('quick_capture_')); }
@@ -446,7 +446,7 @@ describe('Quick Capture app wire behavior', () => {
     await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Keep the launch note' } }));
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const request = await daemon.received('quick_capture_send');
-    expect(request).toMatchObject({ mailbox: { kind: 'chief' }, content: 'Keep the launch note', attachment_ids: [] });
+    expect(request).toMatchObject({ mailbox: { kind: 'crew_member', member_id: 'chief-key' }, content: 'Keep the launch note', attachment_ids: [] });
     expect(editor()).toHaveValue('Keep the launch note');
     expect(screen.getByRole('button', { name: /^Retry/ })).toBeDisabled();
     expect(native.draft).toMatchObject({ id: request.capture_id, uncertain: true });
@@ -626,7 +626,7 @@ describe('Quick Capture app wire behavior', () => {
     await daemon.idle();
     await hideCapture(daemon);
     const attachmentId = daemon.sentOf('quick_capture_attachment_put')[0].attachment_id;
-    expect(native.draft).toEqual({ id: expect.any(String), text: '', mailbox: 'chief', uncertain: false, files: [{ id: attachmentId, name: 'large.bin' }] });
+    expect(native.draft).toEqual({ id: expect.any(String), text: '', mailbox: 'chief-key', uncertain: false, files: [{ id: attachmentId, name: 'large.bin' }] });
     await gesture(daemon, () => fireEvent.keyDown(editor(), { key: 'Enter' }));
     const uploads = daemon.sentOf('quick_capture_attachment_put');
     expect(uploads.map(command => [command.offset, atob(command.data_base64).length, command.final])).toEqual([
@@ -1076,7 +1076,7 @@ describe('Quick Capture app wire behavior', () => {
       if (command === 'quick_capture_draft_file_copy') throw new Error('Synthetic drop read failure');
       return originalInvoke(command, args);
     });
-    const { daemon } = await captureApp(daemon => {
+    const { daemon, capture } = await captureApp(daemon => {
       daemon.on('quick_capture_list', () => ({ event: 'quick_capture_result', profile_id: DEFAULT_PROFILE_ID, success: true, result: { list: { items: [],
         draft_assets: [{ capture_id: captureId, attachment_id: imageId, name: 'saved.png', state: 'ready', next_offset: 8 }] } } }));
     });
@@ -1086,7 +1086,7 @@ describe('Quick Capture app wire behavior', () => {
       else return native.onDrop!({ payload: { type: 'drop', paths: ['/synthetic/new.png'], position: { x: 0, y: 0 } } });
     });
     expect(screen.getByRole('alert')).toHaveTextContent('Draft is still loading');
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    expect(within(capture.container).queryByRole('img')).not.toBeInTheDocument();
     expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'quick_capture_draft_file_copy')).toHaveLength(0);
     expect(daemon.sentOf('quick_capture_attachment_put')).toEqual([]);
     await act(async () => finishRead(stored)); await daemon.idle();

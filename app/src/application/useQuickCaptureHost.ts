@@ -8,7 +8,6 @@ import { quickCaptureDaemonClient } from '../quickCapture/daemonClient';
 import { isMacLikePlatform } from '../shortcuts/platform';
 import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_FONT,
-  EMPTY_HOST_STATE,
   type QuickCaptureHostState, type QuickCaptureRequest,
 } from '../quickCapture/client';
 import { BoolSetting, isOn } from '../utils/settings';
@@ -28,9 +27,9 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const state: QuickCaptureHostState = {
     enabled: isOn(settings, BoolSetting.quickCaptureEnabled),
     profileId, connected: !!profileId && daemon.isReady,
-    mailboxes: [EMPTY_HOST_STATE.mailboxes[0], ...crew.filter(member => member.profile_id === profileId).map(member => ({
+    mailboxes: crew.filter(member => member.profile_id === profileId).sort((a, b) => Number(Boolean(b.chief)) - Number(Boolean(a.chief))).map(member => ({
       id: member.id, name: member.name, detail: member.binding_session ? 'Awake' : 'Asleep',
-    }))],
+    })),
     connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,
     fontScale: Number(settings.uiScale) || 1, keybindings: settings.keybindings_config,

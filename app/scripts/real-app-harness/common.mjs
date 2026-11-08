@@ -186,16 +186,6 @@ export async function sweepStaleHarnessSessions(observer, {
 
   const staleIds = new Set(stale.map((session) => session.id));
 
-  // The daemon refuses to unregister a chief-of-staff session, so demote first;
-  // demoting a non-chief is a no-op.
-  for (const id of staleIds) {
-    try {
-      observer.send({ cmd: 'set_chief_of_staff', session_id: id, chief_of_staff: false });
-    } catch (error) {
-      log(`demote (set_chief_of_staff) for ${id} failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
-
   await observer.unregisterMatchingSessions((session) => staleIds.has(session.id), timeoutMs);
 
   return { swept: stale.length };

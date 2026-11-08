@@ -141,5 +141,6 @@ export function useAppSessions({
     visibleEnrichedSessions,
     delegationSessions,
     notebookChiefActive,
+    chiefAvailable: selectedProfileChiefId !== undefined,
   };
 }

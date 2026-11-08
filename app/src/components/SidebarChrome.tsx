@@ -177,7 +177,6 @@ export function SidebarPopovers() {
     onRenameDesktop,
     onTogglePriority,
     desktops,
-    onChangeChiefOfStaff,
     onCloseSession,
     onReloadSession,
     renameTarget,
@@ -220,8 +219,6 @@ export function SidebarPopovers() {
           memberDetailsLabel={chiefSession ? 'Edit charter' : undefined}
           priority={actionsSession?.priority}
           onTogglePriority={onTogglePriority && actionsSession ? () => onTogglePriority(actionsSession) : undefined}
-          chiefOfStaff={sessionActionsTarget.chiefOfStaff}
-          host={actionsSession?.host}
           anchor={sessionActionsTarget.anchor}
           canRename={Boolean(onRenameSession)}
           onRename={() => {
@@ -233,9 +230,6 @@ export function SidebarPopovers() {
               anchor: sessionActionsTarget.anchor,
             });
           }}
-          onChangeChiefOfStaff={chiefSession ? undefined : (enabled) =>
-            onChangeChiefOfStaff?.(sessionActionsTarget.id, enabled)
-          }
           ending={chiefSession && chief && chiefActions
             ? { kind: 'sleep', name: chief.name, run: chiefActions.sleep }
             : { kind: 'close', run: () => onCloseSession(sessionActionsTarget.id) }}

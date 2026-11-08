@@ -49,7 +49,6 @@ export function AppDashboard() {
           onOpenSettings={() => setSettingsOpen(true)}
           asks={asks}
           onOpenAsk={openAsk}
-          chiefOfStaffCard={false}
           introBanner={whatsNew.bannerVisible ? { onReplay: whatsNew.open, onDismiss: whatsNew.dismissBanner } : undefined}
         />
       </div>

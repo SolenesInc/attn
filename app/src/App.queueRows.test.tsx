@@ -50,7 +50,6 @@ describe('App queue rows', () => {
 
     expect(screen.queryByTestId('queue-chief-coordinator')).toBeNull();
     expect(within(screen.getByTestId('queue-settled-coordinator')).getByText('Profiles epic coordinator')).toBeInTheDocument();
-    expect(daemon.sentOf('set_chief_of_staff')).toEqual([]);
   });
 
   it('keeps a snoozed agent name beside its wake time', async () => {

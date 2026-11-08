@@ -53,9 +53,11 @@ export type QuickCaptureRequest = { profileId: string } & (
   | { id: string; action: 'font'; change: 'increase' | 'decrease' | 'reset' });
 export interface QuickCaptureResult { id: string; value?: unknown; error?: string }
 
+export const CHIEF_MAILBOX = 'chief';
+
 export const EMPTY_HOST_STATE: QuickCaptureHostState = {
   enabled: false,
-  profileId: '', connected: false, mailboxes: [{ id: 'chief', name: 'Chief', detail: 'Chief of staff' }],
+  profileId: '', connected: false, mailboxes: [],
   binding: null, activeBinding: null,
 };
 

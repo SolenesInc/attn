@@ -15,7 +15,6 @@ import {
   useAppPanelsContext,
   useAppSessionsContext,
   useAppShell,
-  useChiefOfStaffContext,
   useNavigationContext,
   useSessionLifecycleContext,
 } from './AppContexts';
@@ -99,10 +98,9 @@ export function AppLibrarySurfaces() {
   const { handleReopenSession } = useSessionLifecycleContext();
   const { notificationsChangeSignal } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
-  const { notebookChiefActive } = useAppSessionsContext();
+  const { notebookChiefActive, chiefAvailable } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);
-  const { hasChiefOfStaff } = useChiefOfStaffContext();
   return (
     <>
       <LedgerSurface
@@ -181,7 +179,7 @@ export function AppLibrarySurfaces() {
           onResumeSeed={handleResumeSeed}
           onHandoverSeed={handleHandoverSeed}
           onSendSeedToChief={handleSendSeedToChief}
-          chiefAvailable={hasChiefOfStaff}
+          chiefAvailable={chiefAvailable}
           reviewOverview={seedReviewOverview}
           showReview={sendSeedReviewShow}
           startReview={sendSeedReviewStart}

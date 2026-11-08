@@ -1243,22 +1243,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'chief_of_staff_result': {
-            if (typeof data.session_id === 'string') {
-              const key = `chief_of_staff:${data.session_id}`;
-              const pending = pendingActionsRef.current.get(key);
-              if (pending) {
-                pendingActionsRef.current.delete(key);
-                if (data.success) {
-                  pending.resolve(undefined);
-                } else {
-                  pending.reject(new Error(data.error || 'Chief of staff update failed'));
-                }
-              }
-            }
-            break;
-          }
-
           case 'session_context_window_cap_result': {
             if (typeof data.session_id === 'string') {
               const key = `session_context_cap:${data.session_id}`;
@@ -2477,12 +2461,11 @@ export function useDaemonSocket({
       ...(args.resume_session_id && { resume_session_id: args.resume_session_id }),
       ...(args.resume_picker && { resume_picker: args.resume_picker }),
       ...(args.yolo_mode && { yolo_mode: args.yolo_mode }),
-      ...(args.chief_of_staff && { chief_of_staff: args.chief_of_staff }),
       ...(args.spawned_from && { spawned_from: args.spawned_from }),
       ...(args.executable && { executable: args.executable }),
       ...(args.claude_executable && { claude_executable: args.claude_executable }),
       ...(args.codex_executable && { codex_executable: args.codex_executable }),
-    }, 'Spawn session timed out', args.chief_of_staff ? MODEL_DISCOVERY_TIMEOUT_MS : 30000);
+    }, 'Spawn session timed out', 30000);
   }, [sendKeyedRequest]);
 
   const sendReloadSession = useCallback((id: string, cols: number, rows: number): Promise<void> => {
@@ -3114,20 +3097,6 @@ export function useDaemonSocket({
     );
   }, [sendKeyedRequest]);
 
-
-  const sendSetChiefOfStaff = useCallback((sessionId: string, chiefOfStaff: boolean): Promise<void> => {
-    if (!sessionId) {
-      return Promise.reject(new Error('Session is required'));
-    }
-    if (!hasReceivedInitialStateRef.current) {
-      return Promise.reject(new Error('WebSocket not connected'));
-    }
-    return sendKeyedRequest(
-      `chief_of_staff:${sessionId}`,
-      { cmd: 'set_chief_of_staff', session_id: sessionId, chief_of_staff: chiefOfStaff },
-      `Chief of staff update timed out for session ${sessionId}`,
-    ).then(() => {});
-  }, [sendKeyedRequest]);
 
   const sendSetSessionContextWindowCap = useCallback((sessionId: string, cap: number): Promise<void> => {
     if (!sessionId) {
@@ -4313,7 +4282,6 @@ export function useDaemonSocket({
     sendFetchPRDetails,
     sendUnregisterSession,
     sendRenameSession,
-    sendSetChiefOfStaff,
     sendSetSessionContextWindowCap,
     sendPRVisited,
     sendListWorktrees,

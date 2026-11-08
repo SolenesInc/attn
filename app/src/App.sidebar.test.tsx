@@ -181,14 +181,10 @@ describe('App sidebar', () => {
       expect(row('s2').queryByLabelText('Delegated from chief of staff')).toBeNull();
     });
 
-    it('marks the chief and takes the role away from its menu', async () => {
-      const { daemon } = await launch({ sessions: [daemonSession('chief', { chief_of_staff: true })] });
+    it('marks the chief', async () => {
+      await launch({ sessions: [daemonSession('chief', { chief_of_staff: true })] });
 
       expect(row('chief').getByLabelText('Chief of staff')).toBeInTheDocument();
-      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Actions for chief' })));
-      await gesture(daemon, () => fireEvent.click(screen.getByTestId('chief-of-staff-session-action')));
-
-      expect(daemon.sentOf('set_chief_of_staff')).toEqual([{ cmd: 'set_chief_of_staff', session_id: 'chief', chief_of_staff: false }]);
     });
   });
 

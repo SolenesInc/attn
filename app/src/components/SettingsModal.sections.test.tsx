@@ -174,7 +174,6 @@ describe('SettingsModal sections', () => {
     expect(screen.getByRole('heading', { name: 'Agents and models', level: 1 })).toBeInTheDocument();
     expect(screen.queryByLabelText('Reviewer model')).toBeNull();
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('settings-nav-backgroundAgents')));
-    expect(screen.getByTestId('settings-section-backgroundAgents')).toHaveTextContent('attn crew set chief');
     expect(screen.queryByTestId('settings-chief-route-claude')).toBeNull();
     expect(screen.getByTestId('settings-garden-advisor-route')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull();

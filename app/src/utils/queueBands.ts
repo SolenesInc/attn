@@ -82,23 +82,16 @@ export function sessionParticipatesInQueue(
   return !session.commandTerminal && !session.automation && (!session.crewMember || crewInQueue);
 }
 
-/** A chief of staff session from before the Chief was a crew member: the crew
- * setting cannot bring it into the queue. A chief that is a crew member follows
- * the crew's rule. */
-function isLegacyChief(session: Pick<QueueBandSession, 'chiefOfStaff' | 'crewMember'>): boolean {
-  return Boolean(session.chiefOfStaff) && !session.crewMember;
-}
-
 export interface QueueActions {
   settle: boolean;
   snooze: boolean;
 }
 
 export function queueActions(
-  session: Pick<QueueBandSession, 'offline' | 'automation' | 'crewMember' | 'chiefOfStaff' | 'turnOwed' | 'turnSnoozedUntil'>,
+  session: Pick<QueueBandSession, 'offline' | 'automation' | 'crewMember' | 'turnOwed' | 'turnSnoozedUntil'>,
   { queueMode, crewInQueue, now }: { queueMode: boolean; crewInQueue: boolean; now: number },
 ): QueueActions {
-  if (session.offline || isLegacyChief(session) || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
+  if (session.offline || isSnoozed(session.turnSnoozedUntil, now)) return { settle: false, snooze: false };
   const inQueue = queueMode && sessionParticipatesInQueue(session, crewInQueue);
   return { settle: Boolean(session.turnOwed) && (inQueue || Boolean(session.automation)), snooze: inQueue };
 }
@@ -204,9 +197,6 @@ export function buildQueueBands<TSession extends QueueBandSession>(
         if (!chief) {
           chief = row;
         }
-      }
-      if (isLegacyChief(session)) {
-        continue;
       }
       if (session.automation) {
         continue;

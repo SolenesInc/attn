@@ -14,7 +14,7 @@ opens on home.
 - `dashboard`: the Sessions card, grouped by state. In queue flow, "Your turn" comes first, then "Settled".
 - `all-settled`: queue flow's "All settled" banner, with what still runs and "Take me to the next agent that needs you".
 - `snoozed-group`: snoozed agents, soonest first, each with its due time and an unsnooze button.
-- `home-cards`: the Asks group, the Chief of Staff card and the Pull Requests card. [asks.md](asks.md), [crew.md](crew.md) and [pull-requests.md](pull-requests.md) own their content.
+- `home-cards`: the Asks group and the Pull Requests card. [asks.md](asks.md) and [pull-requests.md](pull-requests.md) own their content.
 - `notifications`: the popover of attn's own notifications, newest first. Unread rows are marked, a row expands to its detail and actions, and "Mark all read" clears the marks.
 - `critical-strip`: an unread critical notification shows as a strip at the top of the sidebar.
 - `whats-new`: the intro that opens on a new release, and the home banner that replays it.

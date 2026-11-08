@@ -17,7 +17,6 @@ import {
   useAppShell,
   useAttentionQueueContext,
   useChiefContext,
-  useChiefOfStaffContext,
   useCrewPanelContext,
   useDesktopNavigationContext,
   useDesktopResidencyContext,
@@ -82,7 +81,6 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   const { keybindings } = useAppAppearanceContext();
   const { criticalNotifications, settings } = useAppInputs();
   const { setSettingsOpen, settingsModalRef, setSidebarCollapsed } = useAppPanelsContext();
-  const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const chief = useChiefContext();
   useEffect(() => {
     if (chief.view?.phase === 'unconfigured') setSidebarCollapsed(false);
@@ -149,7 +147,6 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
         })
       }
       onTogglePriority={togglePriority}
-      onChangeChiefOfStaff={handleChangeChiefOfStaff}
       crew={crew}
       chief={chief.view}
       chiefActions={chief.actions}

@@ -1,5 +1,4 @@
 import { DesktopClosePrompt } from '../components/DesktopClosePrompt';
-import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
 import { NewSessionLauncher } from '../components/NewSessionLauncher';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
@@ -11,7 +10,6 @@ import {
   useAppErrorsContext,
   useAppInputs,
   useAppShell,
-  useChiefOfStaffContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
 } from './AppContexts';
@@ -43,13 +41,6 @@ export function AppSessionPrompts() {
   const { agentAvailability, contextCapPromptSession, setContextCapPromptSession } = useAppShell();
   const { showError } = useAppErrorsContext();
   const { settings } = useAppInputs();
-  const {
-    hasChiefOfStaff,
-    chiefTransferTarget,
-    chiefTransferSaving,
-    handleConfirmChiefTransfer,
-    setChiefTransferTarget,
-  } = useChiefOfStaffContext();
   const experimental = isOn(settings, BoolSetting.newSessionLauncherEnabled);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const pickerProps = {
@@ -65,7 +56,6 @@ export function AppSessionPrompts() {
     onError: showError,
     projectsDirectory: settings.projects_directory,
     agentAvailability,
-    chiefExists: hasChiefOfStaff,
   };
   return (
     <>
@@ -98,18 +88,6 @@ export function AppSessionPrompts() {
         phase={sessionCreationJob?.phase || 'starting_session'}
         error={sessionCreationJob?.error}
         onDismiss={() => setSessionCreationJob(null)}
-      />
-      <ChiefOfStaffTransferPrompt
-        isVisible={chiefTransferTarget !== null}
-        currentLabel={chiefTransferTarget?.currentLabel ?? ''}
-        targetLabel={chiefTransferTarget?.targetLabel ?? ''}
-        isSaving={chiefTransferSaving}
-        onConfirm={() => void handleConfirmChiefTransfer()}
-        onCancel={() => {
-          if (!chiefTransferSaving) {
-            setChiefTransferTarget(null);
-          }
-        }}
       />
       {contextCapPromptSession && (
         <SessionContextCapPrompt

@@ -9,11 +9,10 @@ import {
 import { QUICK_CAPTURE_CHUNK_BYTES, type QuickCaptureDeliveryClient, type QuickCaptureItem } from './client';
 
 function wireMailbox(mailbox: string) {
-  return mailbox === 'chief' ? { kind: QuickCaptureMailboxKind.Chief }
-    : { kind: QuickCaptureMailboxKind.CrewMember, member_id: mailbox };
+  return { kind: QuickCaptureMailboxKind.CrewMember, member_id: mailbox };
 }
 function item(record: QuickCaptureRecord): QuickCaptureItem {
-  return { id: record.id, text: record.content, mailbox: record.mailbox.kind === 'chief' ? 'chief' : record.mailbox.member_id!,
+  return { id: record.id, text: record.content, mailbox: record.mailbox.member_id!,
     createdAt: record.created_at, readAt: record.read_at, files: record.attachments.map(({ id, name, media_type, bytes }) => ({ id, name, mediaType: media_type, bytes })) };
 }
 function saved(result: QuickCaptureResultObject) {

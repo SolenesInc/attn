@@ -31,7 +31,6 @@ import { useAsksAvailable } from '../store/asks';
 import type { SidebarSurface } from '../components/sidebarTypes';
 import { useAppSessions } from './useAppSessions';
 import { useAttentionQueue } from './useAttentionQueue';
-import { useChiefOfStaff } from './useChiefOfStaff';
 import { useChief } from './useChief';
 import { usePRLauncher } from './usePRLauncher';
 import { useSessionLaunch } from './useSessionLaunch';
@@ -292,8 +291,6 @@ export function useAppController({
   });
   const { diagnosticCapture, setDiagnosticCapture, paletteOriginRef } = appDiagnostics;
 
-  const chiefOfStaff = useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError });
-  const { chiefTransferTarget, setChiefTransferTarget } = chiefOfStaff;
 
   const [contextCapPromptSession, setContextCapPromptSession] = useState<{
     id: string;
@@ -321,7 +318,6 @@ export function useAppController({
     closeLocationPicker();
     setSnoozeMenu(null);
     delegationChainRef.current?.dismiss();
-    setChiefTransferTarget(null);
     setContextCapPromptSession(null);
     setSessionCreationJob(null);
     setOpenPRLauncherJob(null);
@@ -331,7 +327,7 @@ export function useAppController({
     setProfileSwitcherOpen(false);
   }), [closeCrewPanel, setNotebookOpen, setSessionsOpen, setPalette, closeGarden, gardenHoldsWindow,
     settingsOpen, settingsModalRef, setShortcutsOpen, setShortcutEditorOpen, whatsNewOpen, dismissWhatsNew,
-    closeLocationPicker, setSnoozeMenu, delegationChainRef, setChiefTransferTarget, setSessionCreationJob,
+    closeLocationPicker, setSnoozeMenu, delegationChainRef, setSessionCreationJob,
     setOpenPRLauncherJob, setDiagnosticCapture, setMarkdownOpenerOpen]);
 
   const calloutOpen = useCalloutStore((state) => state.callout !== null);
@@ -351,7 +347,6 @@ export function useAppController({
     notebookOpen,
     crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
-    chiefTransferOpen: Boolean(chiefTransferTarget),
     desktopCloseOpen: sessionLifecycle.desktopClosePrompt !== null,
     sharedCodexConfirmOpen,
     contextCapOpen: Boolean(contextCapPromptSession),
@@ -705,7 +700,6 @@ export function useAppController({
       sessionLaunch,
       prLauncher,
       sessionLifecycle,
-      chiefOfStaff,
       chief,
     },
     attention: {

@@ -66,6 +66,11 @@ runner.registerCleanup('restore_profile', async () => {
   }
 });
 
+const assertNothingMarksASessionChief = async (where) => {
+  const { text } = await client.request('dom_text', { selector: 'body' });
+  runner.assert(!/chief of staff/i.test(text), `no Chief of Staff control on the ${where}`, { text: text.slice(0, 2000) });
+};
+
 try {
   await runner.step('fresh_profile_opens_setup', async () => {
     await launchFreshAppAndConnect(client, observer);
@@ -86,6 +91,15 @@ try {
     await waitDom(wake, { focused: true });
     await assertFits('first-run setup', 'setup-fit.json');
     await screenshot('01-chief-setup');
+    await pressShortcutKeys(client, driver, 'session.goToDashboard');
+    await waitDom('[data-testid="chief-slot"]');
+    await assertNothingMarksASessionChief('home');
+    await screenshot('01b-home-without-todays-chief');
+    await pressShortcutKeys(client, driver, 'session.new');
+    await waitDom('[data-testid="location-picker-overlay"]');
+    await assertNothingMarksASessionChief('new session dialog');
+    await screenshot('01c-new-session-without-chief-toggle');
+    await driver.pressKey('Escape');
   });
 
   await runner.step('keyboard_only_setup_wakes_the_chief', async () => {

@@ -777,16 +777,6 @@ export function BackgroundAgentSettings({
       <GardenAdvisorSettings settings={settings} agents={gardenAdvisorAgents} onSetSetting={onSetSetting} />
       <section className="settings-block">
         <div className="settings-block-intro">
-          <h3>Chief</h3>
-          <p className="settings-description">
-            The Chief is a crew member, so its harness, model and effort are its own launch settings. Change them
-            from the command palette by searching for “harness and model”, or with <code>attn crew set chief</code>.
-            It compacts at its harness’s default threshold.
-          </p>
-        </div>
-      </section>
-      <section className="settings-block">
-        <div className="settings-block-intro">
           <h3>Compaction</h3>
           <p className="settings-description">
             Token threshold for background runs. An empty value uses the default of{' '}

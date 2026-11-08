@@ -135,11 +135,10 @@ export async function submitPath(daemon: ScriptedDaemon, path: string) {
 }
 
 export function launchedAt(daemon: ScriptedDaemon) {
-  return daemon.sentOf('spawn_session').map(({ cwd, agent, yolo_mode, chief_of_staff }) => ({
+  return daemon.sentOf('spawn_session').map(({ cwd, agent, yolo_mode }) => ({
     cwd,
     agent,
     ...(yolo_mode !== undefined ? { yolo_mode } : {}),
-    ...(chief_of_staff !== undefined ? { chief_of_staff } : {}),
   }));
 }
 

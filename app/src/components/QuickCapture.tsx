@@ -6,7 +6,7 @@ import { hideBootSplash } from '../utils/bootSplash';
 import { QuickCaptureAttachmentPreview, type QuickCaptureAttachment, type AttachmentOrigin, type AttachmentMotion } from './QuickCaptureAttachmentPreview';
 import './QuickCapture.css';
 import { QuickCaptureHistory } from './QuickCaptureHistory';
-import { createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ_STATE, type QuickCaptureReadState, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft, type StoredDraftFile } from '../quickCapture/client';
+import { CHIEF_MAILBOX, createQuickCaptureBridge, EMPTY_HOST_STATE, QUICK_CAPTURE_READ_STATE, type QuickCaptureReadState, type QuickCaptureClient, type QuickCaptureHostState, type QuickCaptureItem, type QuickCaptureDraft, type StoredDraftFile } from '../quickCapture/client';
 import { QuickCaptureWorkQueue } from '../quickCapture/workQueue';
 import { useQuickCaptureHistory } from '../quickCapture/useQuickCaptureHistory';
 import { quickCaptureDraftCache, newQuickCaptureDraft } from '../quickCapture/draft';
@@ -56,9 +56,10 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
   const [recent, setRecent] = useState(false);
   const [saved, setSaved] = useState<QuickCaptureItem[]>([]);
   const roster = host.mailboxes;
-  const label = (id: string) => roster.find(item => item.id === id)?.name ?? id;
+  const label = (id: string) => roster.find(item => item.id === id)?.name ?? (id === CHIEF_MAILBOX ? 'Chief' : id);
   const [text, setText] = useState('');
-  const [mailbox, setMailbox] = useState('chief');
+  const [chosenMailbox, setMailbox] = useState(CHIEF_MAILBOX);
+  const mailbox = chosenMailbox === CHIEF_MAILBOX ? roster[0]?.id ?? CHIEF_MAILBOX : chosenMailbox;
   const [files, setFiles] = useState<Attachment[]>([]);
   const [error, setError] = useState('');
   const { history, nextCursor, loading: loadingRecent, error: historyError, refresh: refreshRecent, applyReadState } = useQuickCaptureHistory(client.current, recent, host.connected);
@@ -195,7 +196,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
     draftGeneration.current++; ownedFiles.current.clear(); stagedFiles.current.clear();
     setSaved([accepted]);
     void refreshRecent();
-    setText(''); setFiles([]); setMailbox('chief'); setUncertain(false); setError('');
+    setText(''); setFiles([]); setMailbox(CHIEF_MAILBOX); setUncertain(false); setError('');
     if (hide && mounted.current) await invoke('capture_hide');
   }
   async function resolveSubmission() {
@@ -221,7 +222,7 @@ function QuickCaptureForProfile({ client: suppliedClient, hostState: host, workQ
       stagedFiles.current.clear();
       await cache.current.save(next);
       draftGeneration.current++; ownedFiles.current.clear();
-      if (mounted.current) { setFiles([]); setText(''); setMailbox('chief'); setError(''); }
+      if (mounted.current) { setFiles([]); setText(''); setMailbox(CHIEF_MAILBOX); setError(''); }
       void client.current!.discard(discarded.id, discarded.files.map(file => file.id)).catch(() => {
         if (mounted.current) setError('Draft discarded. Uploaded files could not be cleaned up.');
       });

@@ -17,7 +17,7 @@ function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSessio
 
 function team(): DaemonSession[] {
   return [
-    agent('chief', { chief_of_staff: true }),
+    agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER }),
     agent('newer', { state: 'waiting_input', turn_owed: true, turn_opened_at: ago(HOUR) }),
     agent('older', { state: 'working', turn_owed: true, turn_opened_at: ago(3 * HOUR) }),
     agent('settled', { state: 'waiting_input' }),
@@ -147,7 +147,7 @@ describe('the Chief member in the queue', () => {
 describe('App queue', () => {
   it('keeps pinned crew out of the hidden count when crew also joins the queue', async () => {
     const sessions = [
-      agent('chief', { chief_of_staff: true }),
+      agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER }),
       ...[4, 3, 2].map((n) => agent(`owed-${n}`, { turn_owed: true, turn_opened_at: ago(n * HOUR) })),
       agent('crew-owed', { crew_member: 'alder', turn_owed: true, turn_opened_at: ago(HOUR) }),
       agent('working'),
@@ -218,7 +218,7 @@ describe('App queue', () => {
 
     try {
       const sessions = [
-        agent('chief', { chief_of_staff: true }),
+        agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER }),
         ...[1, 2, 3, 4, 5].map((n) => agent(`owed-${n}`, { turn_owed: true, turn_opened_at: ago(n * HOUR) })),
         agent('crew-awake', { crew_member: 'alder' }),
         agent('working'),
@@ -299,7 +299,7 @@ describe('App queue', () => {
   });
 
   it('says so when nothing is owed', async () => {
-    await launch({ sessions: [agent('chief', { chief_of_staff: true }), agent('settled', { state: 'waiting_input' })] });
+    await launch({ sessions: [agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER }), agent('settled', { state: 'waiting_input' })] });
 
     expect(queue().getByText('Nothing owed')).toBeInTheDocument();
   });

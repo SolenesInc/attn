@@ -1,10 +1,10 @@
 import { invoke } from '@tauri-apps/api/core';
-import { QUICK_CAPTURE_CHUNK_BYTES, type QuickCaptureDraft, type StoredDraftFile } from './client';
+import { CHIEF_MAILBOX, QUICK_CAPTURE_CHUNK_BYTES, type QuickCaptureDraft, type StoredDraftFile } from './client';
 
 export type CachedQuickCaptureDraft = QuickCaptureDraft;
 
 export function newQuickCaptureDraft(): QuickCaptureDraft {
-  return { id: crypto.randomUUID(), text: '', mailbox: 'chief', files: [], uncertain: false };
+  return { id: crypto.randomUUID(), text: '', mailbox: CHIEF_MAILBOX, files: [], uncertain: false };
 }
 
 const writesByProfile = new Map<string, Promise<void>>();

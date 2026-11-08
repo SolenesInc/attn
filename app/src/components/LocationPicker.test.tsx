@@ -97,7 +97,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onInspectPath).toHaveBeenCalledWith('/tmp/project');
-      expect(onSelect).toHaveBeenCalledWith('/tmp/project', 'claude', false, false);
+      expect(onSelect).toHaveBeenCalledWith('/tmp/project', 'claude', false);
     });
   });
 
@@ -151,7 +151,7 @@ describe('LocationPicker', () => {
 
     await waitFor(() => {
       expect(onError).toHaveBeenCalledWith('unborn HEAD');
-      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin', 'claude', false, false);
+      expect(onSelect).toHaveBeenCalledWith('/home/dev/projects/exsin', 'claude', false);
     });
   });
 });

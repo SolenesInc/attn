@@ -480,7 +480,7 @@ describe('Chief slot in desktop flow', () => {
 });
 
 describe('Chief slot on Home', () => {
-  it("shows the Chief slot on Home instead of today's Chief of Staff card", async () => {
+  it("shows the Chief slot on Home and no Chief of Staff card", async () => {
     await renderApp({ initialState: { settings: { ...available, queue_mode_enabled: 'true' }, crew: [member()] } });
     expect(screen.getByTestId('chief-slot')).toBeInTheDocument();
     expect(screen.queryByTestId('chief-of-staff-card')).toBeNull();
