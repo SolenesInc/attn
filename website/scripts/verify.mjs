@@ -265,6 +265,42 @@ async function checkReducedMotion(browser, base, viewport, { path }) {
   await context.close();
 }
 
+function fieldSize() {
+  const field = document.getElementById('field');
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  return { shown: Math.round(field.getBoundingClientRect().height), drawn: Math.round(field.height / dpr), hero: document.getElementById('hero').offsetHeight };
+}
+
+function fieldIsDrawnAtItsSize() {
+  const field = document.getElementById('field');
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  return Math.round(field.height / dpr) === Math.round(field.getBoundingClientRect().height);
+}
+
+async function checkToolbarCollapse(browser, base, path) {
+  const label = `${path} toolbar collapse`;
+  const { context, page } = await openPage(browser, base, path, { width: 390, height: 744 }, label, { hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  await page.waitForFunction(fieldIsDrawnAtItsSize);
+  const before = await page.evaluate(fieldSize);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const during = await page.evaluate(fieldSize);
+  if (during.hero !== before.hero) problems.push(`${label}: hero height went from ${before.hero} to ${during.hero}`);
+  if (during.shown !== during.drawn) problems.push(`${label}: headline stretched, drawn for ${during.drawn}px and shown at ${during.shown}px`);
+  passes.push(`${label}: checked`);
+  await context.close();
+}
+
+async function checkDesktopHeightRedraws(browser, base, path) {
+  const label = `${path} desktop height change`;
+  const { context, page } = await openPage(browser, base, path, { width: 1280, height: 720 }, label);
+  await page.waitForFunction(fieldIsDrawnAtItsSize);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.waitForFunction(() => document.getElementById('field').getBoundingClientRect().height === 900);
+  await page.waitForFunction(fieldIsDrawnAtItsSize);
+  passes.push(`${label}: checked`);
+  await context.close();
+}
+
 async function verify(base) {
   const browser = await chromium.launch();
   const linkStatus = new Map();
@@ -279,6 +315,10 @@ async function verify(base) {
         await checkReducedMotion(browser, base, viewport, entry);
       }
       await checkVideos(browser, base, viewport);
+    }
+    for (const path of ['/', '/guide/']) {
+      await checkToolbarCollapse(browser, base, path);
+      await checkDesktopHeightRedraws(browser, base, path);
     }
   } finally {
     await browser.close();

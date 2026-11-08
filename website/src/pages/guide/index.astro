@@ -2,6 +2,7 @@
 import '../../landing/fonts.css';
 import '../../landing/coming-soon.css';
 import comingSoonScript from '../../landing/coming-soon.js?raw';
+import screenHeightScript from '../../landing/screen-height.js?raw';
 ---
 
 <!doctype html>
@@ -26,6 +27,7 @@ import comingSoonScript from '../../landing/coming-soon.js?raw';
   </header>
   <h1>Coming soon</h1>
 </main>
+<script is:inline set:html={screenHeightScript}></script>
 <script is:inline set:html={comingSoonScript}></script>
 </body>
 </html>

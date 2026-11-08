@@ -559,7 +559,11 @@ const Field = (() => {
   let resizeTimer = 0;
   addEventListener('resize', () => {
     clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => { revealDone = true; build(); paint(performance.now()); drawLights(); }, 160);
+    resizeTimer = setTimeout(() => {
+      const hero = $('hero');
+      if (hero.clientWidth === W && hero.clientHeight === H) return;
+      revealDone = true; build(); paint(performance.now()); drawLights();
+    }, 160);
   }, { passive: true });
 
   return {
