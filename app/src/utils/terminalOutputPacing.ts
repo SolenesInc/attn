@@ -8,6 +8,7 @@ const TERMINAL_OUTPUT_IDLE_RESET_MS = TERMINAL_OUTPUT_FRAME_MS * 2;
 export function terminalOutputDelayMs(now: number, lastPaintAt: number | null): number {
   if (lastPaintAt === null) return 0;
   const elapsed = now - lastPaintAt;
-  if (elapsed >= TERMINAL_OUTPUT_IDLE_RESET_MS) return 0;
+  const frameFromAnotherClock = elapsed < 0;
+  if (frameFromAnotherClock || elapsed >= TERMINAL_OUTPUT_IDLE_RESET_MS) return 0;
   return Math.max(0, TERMINAL_OUTPUT_FRAME_MS - elapsed);
 }
