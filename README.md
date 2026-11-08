@@ -49,12 +49,12 @@ There are more features, but those are the ones I use every day and am proud abo
 On a Mac (Apple Silicon), with Homebrew:
 
 ```bash
-brew tap victorarias/attn https://github.com/victorarias/attn
-brew install --cask victorarias/attn/attn
+brew tap solenesinc/attn https://github.com/SolenesInc/attn
+brew install --cask solenesinc/attn/attn
 ```
 
 Or grab the DMG from the
-[latest release](https://github.com/victorarias/attn/releases/latest), open it
+[latest release](https://github.com/SolenesInc/attn/releases/latest), open it
 and drag attn to Applications. The app tells you when a new release is out.
 
 The Linux app is still in progress; build it from source as

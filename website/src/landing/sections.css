@@ -1,0 +1,48 @@
+.attn-sections{
+  --as-ink:#f1efe9;--as-muted:#9b9a95;--as-faint:#5d5c61;--as-line:#26262b;--as-panel:#111114;
+  --as-accent:#ff6b35;--as-wait:#f59e0b;--as-work:#3fb950;--as-calm:#78c88c;
+  --as-gut:24px;
+  --as-col:min(1120px,calc(100vw - 2 * var(--as-gut)),calc((100svh - 230px) * 1.5));
+  position:relative;display:block;box-sizing:border-box;padding:0 var(--as-gut);
+  color:var(--as-ink);font-family:Mona,-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:clip;isolation:isolate
+}
+.attn-sections *{box-sizing:border-box}
+.attn-sections kbd{font-family:JBM,ui-monospace,Menlo,monospace;font-size:.84em;font-weight:500;color:var(--as-ink);padding:.08em .4em .12em;border:1px solid #3a3a40;border-bottom-width:2px;border-radius:6px;background:#17171b}
+
+.attn-sections .as-field{position:sticky;top:0;height:100vh;height:100svh;margin:0 calc(-1 * var(--as-gut)) -100vh;margin-bottom:-100svh;z-index:-1;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(50% - var(--as-col) / 2 - 8px),rgba(0,0,0,.18) calc(50% - var(--as-col) / 2 + 60px),rgba(0,0,0,.18) calc(50% + var(--as-col) / 2 - 60px),#000 calc(50% + var(--as-col) / 2 + 8px));
+          mask-image:linear-gradient(90deg,#000 0,#000 calc(50% - var(--as-col) / 2 - 8px),rgba(0,0,0,.18) calc(50% - var(--as-col) / 2 + 60px),rgba(0,0,0,.18) calc(50% + var(--as-col) / 2 - 60px),#000 calc(50% + var(--as-col) / 2 + 8px))}
+.attn-sections .as-field canvas{display:block;width:100%;height:100%}
+
+
+.attn-sections .as-sec{--as-pad:clamp(88px,12vh,150px);position:relative;width:var(--as-col);margin:0 auto;padding:var(--as-pad) 0 0;text-align:center;scroll-margin-top:calc(72px - var(--as-pad))}
+.attn-sections .as-sec:last-of-type{padding-bottom:clamp(96px,14vh,170px)}
+.attn-sections h2{margin:0;font-size:clamp(32px,4vw,58px);line-height:1;letter-spacing:-.03em;font-weight:760;font-stretch:100%;color:var(--as-ink);text-wrap:balance}
+.attn-sections .as-line{margin:14px auto 0;max-width:36em;font-size:clamp(17px,1.5vw,21px);line-height:1.35;font-weight:500;letter-spacing:-.012em;color:var(--as-muted);text-wrap:balance}
+
+.attn-sections .as-shot{position:relative;margin:clamp(28px,3.4vw,44px) 0 0;transition:opacity .5s ease,filter .5s ease}
+.attn-sections .as-media{display:block;width:100%;height:auto;aspect-ratio:3/2;border-radius:12px;background:var(--as-panel);border:1px solid #2a2a30;box-shadow:0 40px 90px -20px rgba(0,0,0,.75),0 0 0 1px rgba(0,0,0,.6)}
+.attn-sections .as-corners{position:absolute;inset:-10px;pointer-events:none;opacity:0;--c:var(--as-accent);--l:22px;--w:2px;
+  background:
+    linear-gradient(var(--c),var(--c)) top left/var(--l) var(--w),linear-gradient(var(--c),var(--c)) top left/var(--w) var(--l),
+    linear-gradient(var(--c),var(--c)) top right/var(--l) var(--w),linear-gradient(var(--c),var(--c)) top right/var(--w) var(--l),
+    linear-gradient(var(--c),var(--c)) bottom left/var(--l) var(--w),linear-gradient(var(--c),var(--c)) bottom left/var(--w) var(--l),
+    linear-gradient(var(--c),var(--c)) bottom right/var(--l) var(--w),linear-gradient(var(--c),var(--c)) bottom right/var(--w) var(--l);
+  background-repeat:no-repeat;transition:inset .45s cubic-bezier(.2,.8,.2,1),opacity .3s}
+.attn-sections:not([data-live]) .as-corners{opacity:.9}
+.attn-sections[data-live] .as-sec{transition:opacity .5s}
+.attn-sections[data-live] .as-sec:not([data-focus]) .as-shot{opacity:.42;filter:saturate(.55) brightness(.85)}
+.attn-sections[data-live] .as-sec:not([data-focus]) h2,.attn-sections[data-live] .as-sec:not([data-focus]) .as-line{opacity:.55}
+.attn-sections[data-live] .as-sec h2,.attn-sections[data-live] .as-sec .as-line{transition:opacity .5s}
+.attn-sections[data-live] .as-sec[data-focus] .as-corners{opacity:1;inset:-12px}
+.attn-sections[data-live] .as-sec:not([data-focus]) .as-corners{inset:-30px}
+
+@media (max-width:720px){
+  .attn-sections{--as-gut:16px;--as-col:calc(100vw - 32px)}
+  .attn-sections .as-media{aspect-ratio:4/5;object-fit:cover;object-position:var(--as-pos,50%) 50%;border-radius:10px}
+  .attn-sections .as-corners{--l:16px}
+}
+@media (prefers-reduced-motion:reduce){
+  .attn-sections *,.attn-sections *::before,.attn-sections *::after{transition:none!important}
+}

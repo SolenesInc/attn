@@ -18,18 +18,18 @@ You need:
 Use Homebrew or the DMG. We recommend Homebrew.
 
 ```bash
-brew tap victorarias/attn https://github.com/victorarias/attn
-brew install --cask victorarias/attn/attn
+brew tap solenesinc/attn https://github.com/SolenesInc/attn
+brew install --cask solenesinc/attn/attn
 ```
 
 Or download the DMG from the
-[latest release](https://github.com/victorarias/attn/releases/latest), open it
+[latest release](https://github.com/SolenesInc/attn/releases/latest), open it
 and drag Attn to Applications.
 
 To update:
 
 ```bash
-brew update && brew upgrade --cask victorarias/attn/attn
+brew update && brew upgrade --cask attn
 ```
 
 The app tells you when a new release is out. When a new version needs to
@@ -54,7 +54,7 @@ sudo apt install build-essential pkg-config libwebkit2gtk-4.1-dev \
 Then clone the repository and build:
 
 ```bash
-git clone https://github.com/victorarias/attn.git && cd attn
+git clone https://github.com/SolenesInc/attn.git && cd attn
 make
 ```
 

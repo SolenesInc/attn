@@ -1,9 +1,31 @@
 ---
-import { getEntry } from 'astro:content';
-import GuidePage from '../../layouts/GuidePage.astro';
-
-const entry = await getEntry('guide', 'README');
-if (!entry) throw new Error('docs/guide/README.md is missing from the guide collection');
+import '../../landing/fonts.css';
+import '../../landing/coming-soon.css';
+import comingSoonScript from '../../landing/coming-soon.js?raw';
 ---
 
-<GuidePage entry={entry} />
+<!doctype html>
+<html lang="en" class="nojs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guide coming soon</title>
+<meta name="description" content="The attn guide is coming soon.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<script is:inline>document.documentElement.className = 'js'</script>
+</head>
+<body>
+<main id="hero">
+  <canvas id="lights" aria-hidden="true"></canvas>
+  <canvas id="field" aria-hidden="true"></canvas>
+  <header class="bar">
+    <a class="mark" href="/">attn</a>
+    <a href="/">Home</a>
+    <a href="https://github.com/SolenesInc/attn">GitHub</a>
+  </header>
+  <h1>Coming soon</h1>
+</main>
+<script is:inline set:html={comingSoonScript}></script>
+</body>
+</html>

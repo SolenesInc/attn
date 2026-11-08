@@ -1,0 +1,36 @@
+---
+import '../../landing/fonts.css';
+import '../../landing/about.css';
+
+const REPO = 'https://github.com/SolenesInc/attn';
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>About attn</title>
+<meta name="description" content="Why attn exists, and a note about the project.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+<body>
+<header class="bar">
+  <a class="mark" href="/">attn</a>
+  <a href="/">Home</a>
+  <a href="/guide/">Guide</a>
+  <a href={REPO}>GitHub</a>
+</header>
+<main>
+  <h1>Why I built it</h1>
+  <p>I built attn after noticing a pattern: I'd start the day sharp, spin up 4-5 AI agents across different repos, and by mid-afternoon my brain was soup. Not from the coding, from the <em>managing</em>. Which terminal has the agent that's stuck? Did that one finish? Wait, who asked me a question 20 minutes ago? Alt-tab, alt-tab, alt-tab, scroll, squint, repeat.</p>
+
+  <h2>A note about this project</h2>
+  <p>I built attn because I needed it. Managing multiple agents was the bottleneck, not the coding itself.</p>
+  <p>Alpha. I use it every day. It's rough around the edges, but it works really well once you get going.</p>
+  <p>I work full time, and I have 2 dogs and 4 cats at home. Free time is not abundant. attn is open source, but if you need changes I can't get to, <a href={REPO}><strong>fork it</strong></a>. That's encouraged, not rude.</p>
+  <p>Licensed under <a href={`${REPO}/blob/main/LICENSE`}>GPL-3.0</a>.</p>
+</main>
+</body>
+</html>

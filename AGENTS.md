@@ -194,9 +194,9 @@ system.
 - `make test-scripts`: Shell script tests
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
-- `pnpm --dir website dev`: Runs the website with live guide edits;
-  `pnpm --dir website verify` checks the landing page and every guide and
-  feature page in a build, or on a running server with `--url <base>`
+- `pnpm --dir website dev`: Runs the website; `pnpm --dir website verify` checks
+  the landing page, the guide placeholder and the About page in a build, or on a
+  running server with `--url <base>`
 
 Before landing or reporting done, run targeted tests for what you changed and
 check the affected surface. Do not run `make test`, `make lint`,

@@ -1,6 +1,7 @@
 {
   "name": "attn-website",
   "private": true,
+  "packageManager": "pnpm@10.24.0",
   "type": "module",
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",

@@ -1,162 +1,119 @@
 ---
-import '../styles/features.css';
-import '../styles/landing.css';
-import FeatureList from '../components/FeatureList.astro';
-import QueueDemo from '../components/QueueDemo.astro';
-import Recording from '../components/Recording.astro';
-import Base from '../layouts/Base.astro';
-
-const INSTALL = [
-  'brew tap victorarias/attn https://github.com/victorarias/attn',
-  'brew install --cask victorarias/attn/attn',
-];
-const REPO = 'https://github.com/SolenesInc/attn';
-
-const doing = [
-  {
-    title: 'Durability',
-    guide: '/guide/sessions#durability',
-    text: 'Restart the attn app, its daemon, even your computer. Open attn again and your agents and terminals are still there, waiting for you.',
-  },
-  {
-    title: 'Bring your own harness',
-    guide: '/guide/getting-started#before-you-install',
-    text: "attn runs Claude Code and Codex as they are, and other CLI agents through plugins. You get their native experience, but better. A big lab ships a fancy new feature? You get it immediately, as they designed it. Tired of attn? Just use the harness in the terminal.",
-  },
-  {
-    title: 'The queue mode',
-    guide: '/guide/queue',
-    text: 'A (currently non-default) mode for running many agents at once with lower cognitive overload. Agents are either "waiting for you" or "busy"; after every prompt attn moves you to the next one that needs you, so you don\'t waste cycles picking. Simple, very powerful. Trust me, you want to try it.',
-  },
-  {
-    title: 'The Garden',
-    guide: '/guide/delegation#the-garden',
-    text: "attn's own task tracking. Work items are seeds you plant, agents tend them, and they get harvested. Like beads, but inside attn.",
-  },
-  {
-    title: 'Visible orchestration',
-    guide: '/guide/delegation',
-    text: 'Agents delegate to other full-blown agents (not subagents) that you can inspect and steer, from any harness to any harness. Plan with Fable in Claude Code, implement in Codex with Sol, review back in Claude Code with Opus. Agents can even message each other and arrange a party.',
-  },
-  {
-    title: 'Crew members',
-    guide: '/guide/crew',
-    text: "Custom permanent agents, each with its own charter. There's also the Chief that keeps track of your agents and helps you delegate, the executive assistant for your neurospicy brain.",
-  },
-  {
-    title: 'Automations',
-    guide: '/guide/automations',
-    text: 'Start a steerable agent on a schedule or on an event (a review request on a PR, say) and get back a ready review guide + assessment.',
-  },
-  {
-    title: 'Annotate anything, send it to the agent',
-    guide: '/guide/annotations',
-    text: 'Opt/alt-select text in a live terminal, or in a markdown file attn renders natively, leave your comments, and send the whole batch to the agent as one message.',
-  },
-];
+import LandingSections from '../components/LandingSections.astro';
+import '../landing/fonts.css';
+import '../landing/sections.css';
+import '../landing/home.css';
+import homeScript from '../landing/home.js?raw';
+import sectionsScript from '../landing/sections.js?raw';
 ---
 
-<Base
-  title="attn: attention hub for AI agents"
-  description="attn is an attention hub for AI agents. It runs Claude Code and Codex as they are, and after every prompt it moves you to the next agent that needs you."
->
-  <main id="main" class="landing">
-    <section class="hero">
-      <div class="hero-words">
-        <h1>your head shouldn't feel like concrete by 3pm</h1>
-        <p class="hero-lede">
-          attn is an attention hub for AI agents. It runs Claude Code and Codex as they are, and after every prompt it moves you
-          to the next agent that needs you, so you don't waste cycles picking.
-        </p>
-        <div class="install" data-install>
-          <p class="install-where">On a Mac (Apple Silicon), with Homebrew</p>
-          <pre class="install-commands"><code>{INSTALL.map((command) => <span>{command}</span>)}</code></pre>
-          <button class="install-copy" type="button" data-copy={INSTALL.join('\n')}>Copy</button>
+<!doctype html>
+<html lang="en" class="nojs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>attn</title>
+<meta name="description" content="Agents scale. Your attention doesn’t. A terminal multiplexer for orchestrating Claude Code and Codex.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+<script is:inline>document.documentElement.className = 'js'</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-claude" viewBox="0 0 1200 1200"><path d="M 233.959793 800.214905 L 468.644287 668.536987 L 472.590637 657.100647 L 468.644287 650.738403 L 457.208069 650.738403 L 417.986633 648.322144 L 283.892639 644.69812 L 167.597321 639.865845 L 54.926208 633.825623 L 26.577238 627.785339 L 3.3e-05 592.751709 L 2.73832 575.27533 L 26.577238 559.248352 L 60.724873 562.228149 L 136.187973 567.382629 L 249.422867 575.194763 L 331.570496 580.026978 L 453.261841 592.671082 L 472.590637 592.671082 L 475.328857 584.859009 L 468.724915 580.026978 L 463.570557 575.194763 L 346.389313 495.785217 L 219.543671 411.865906 L 153.100723 363.543762 L 117.181267 339.060425 L 99.060455 316.107361 L 91.248367 266.01355 L 123.865784 230.093994 L 167.677887 233.073853 L 178.872513 236.053772 L 223.248367 270.201477 L 318.040283 343.570496 L 441.825592 434.738342 L 459.946411 449.798706 L 467.194672 444.64447 L 468.080597 441.020203 L 459.946411 427.409485 L 392.617493 305.718323 L 320.778564 181.932983 L 288.80542 130.630859 L 280.348999 99.865845 C 277.369171 87.221436 275.194641 76.590698 275.194641 63.624268 L 312.322174 13.20813 L 332.8591 6.604126 L 382.389313 13.20813 L 403.248352 31.328979 L 434.013519 101.71814 L 483.865753 212.537048 L 561.181274 363.221497 L 583.812134 407.919434 L 595.892639 449.315491 L 600.40271 461.959839 L 608.214783 461.959839 L 608.214783 454.711609 L 614.577271 369.825623 L 626.335632 265.61084 L 637.771851 131.516846 L 641.718201 93.745117 L 660.402832 48.483276 L 697.530334 24.000122 L 726.52356 37.852417 L 750.362549 72 L 747.060486 94.067139 L 732.886047 186.201416 L 705.100708 330.52356 L 686.979919 427.167847 L 697.530334 427.167847 L 709.61084 415.087341 L 758.496704 350.174561 L 840.644348 247.490051 L 876.885925 206.738342 L 919.167847 161.71814 L 946.308838 140.29541 L 997.61084 140.29541 L 1035.38269 196.429626 L 1018.469849 254.416199 L 965.637634 321.422852 L 921.825562 378.201538 L 859.006714 462.765259 L 819.785278 530.41626 L 823.409424 535.812073 L 832.75177 534.92627 L 974.657776 504.724915 L 1051.328979 490.872559 L 1142.818848 475.167786 L 1184.214844 494.496582 L 1188.724854 514.147644 L 1172.456421 554.335693 L 1074.604126 578.496765 L 959.838989 601.449829 L 788.939636 641.879272 L 786.845764 643.409485 L 789.261841 646.389343 L 866.255127 653.637634 L 899.194702 655.409424 L 979.812134 655.409424 L 1129.932861 666.604187 L 1169.154419 692.537109 L 1192.671265 724.268677 L 1188.724854 748.429688 L 1128.322144 779.194641 L 1046.818848 759.865845 L 856.590759 714.604126 L 791.355774 698.335754 L 782.335693 698.335754 L 782.335693 703.731567 L 836.69812 756.885986 L 936.322205 846.845581 L 1061.073975 962.81897 L 1067.436279 991.490112 L 1051.409424 1014.120911 L 1034.496704 1011.704712 L 924.885986 929.234924 L 882.604126 892.107544 L 786.845764 811.48999 L 780.483276 811.48999 L 780.483276 819.946289 L 802.550415 852.241699 L 919.087341 1027.409424 L 925.127625 1081.127686 L 916.671204 1098.604126 L 886.469849 1109.154419 L 853.288696 1103.114136 L 785.073914 1007.355835 L 714.684631 899.516785 L 657.906067 802.872498 L 650.979858 806.81897 L 617.476624 1167.704834 L 601.771851 1186.147705 L 565.530212 1200 L 535.328857 1177.046997 L 519.302124 1139.919556 L 535.328857 1066.550537 L 554.657776 970.792053 L 570.362488 894.68457 L 584.536926 800.134277 L 592.993347 768.724976 L 592.429626 766.630859 L 585.503479 767.516968 L 514.22821 865.369263 L 405.825531 1011.865906 L 320.053711 1103.677979 L 299.516815 1111.812256 L 263.919525 1093.369263 L 267.221497 1060.429688 L 287.114136 1031.114136 L 405.825531 880.107361 L 477.422913 786.52356 L 523.651062 732.483276 L 523.328918 724.671265 L 520.590698 724.671265 L 205.288605 929.395935 L 149.154434 936.644409 L 124.993355 914.01355 L 127.973183 876.885986 L 139.409409 864.80542 L 234.201385 799.570435 L 233.879227 799.8927 Z"/></symbol>
+  <symbol id="i-codex" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M8.086.457a6.105 6.105 0 013.046-.415c1.333.153 2.521.72 3.564 1.7a.117.117 0 00.107.029c1.408-.346 2.762-.224 4.061.366l.063.03.154.076c1.357.703 2.33 1.77 2.918 3.198.278.679.418 1.388.421 2.126a5.655 5.655 0 01-.18 1.631.167.167 0 00.04.155 5.982 5.982 0 011.578 2.891c.385 1.901-.01 3.615-1.183 5.14l-.182.22a6.063 6.063 0 01-2.934 1.851.162.162 0 00-.108.102c-.255.736-.511 1.364-.987 1.992-1.199 1.582-2.962 2.462-4.948 2.451-1.583-.008-2.986-.587-4.21-1.736a.145.145 0 00-.14-.032c-.518.167-1.04.191-1.604.185a5.924 5.924 0 01-2.595-.622 6.058 6.058 0 01-2.146-1.781c-.203-.269-.404-.522-.551-.821a7.74 7.74 0 01-.495-1.283 6.11 6.11 0 01-.017-3.064.166.166 0 00.008-.074.115.115 0 00-.037-.064 5.958 5.958 0 01-1.38-2.202 5.196 5.196 0 01-.333-1.589 6.915 6.915 0 01.188-2.132c.45-1.484 1.309-2.648 2.577-3.493.282-.188.55-.334.802-.438.286-.12.573-.22.861-.304a.129.129 0 00.087-.087A6.016 6.016 0 015.635 2.31C6.315 1.464 7.132.846 8.086.457zm-.804 7.85a.848.848 0 00-1.473.842l1.694 2.965-1.688 2.848a.849.849 0 001.46.864l1.94-3.272a.849.849 0 00.007-.854l-1.94-3.393zm5.446 6.24a.849.849 0 000 1.695h4.848a.849.849 0 000-1.696h-4.848z"/></symbol>
+  <symbol id="i-enter" viewBox="0 0 24 24"><path d="M20 5v8a3 3 0 0 1-3 3H5"/><path d="m9 11-5 5 5 5"/></symbol>
+</svg>
+
+<section id="hero">
+  <svg id="edge" aria-hidden="true"></svg>
+  <canvas id="lights" aria-hidden="true"></canvas>
+  <canvas id="field" aria-hidden="true"></canvas>
+  <header class="bar">
+    <a class="mark" href="/">attn</a>
+    <a data-wide href="/guide/">Guide</a>
+    <a data-wide href="https://github.com/SolenesInc/attn">GitHub</a>
+    <a class="install" href="#homepane" id="jump">Install</a>
+  </header>
+  <div id="spot"></div>
+  <h1 id="h1">Agents scale. Your attention doesn’t.</h1>
+  <p class="sub">A terminal multiplexer for orchestrating <span class="cc"><svg class="logo" aria-hidden="true"><use href="#i-claude"/></svg>Claude Code</span> and <span class="cx"><svg class="logo" aria-hidden="true"><use href="#i-codex"/></svg>Codex.</span></p>
+
+  <div class="win" id="win" aria-label="A working miniature of attn, with agents waiting for you">
+    <div class="tb" aria-hidden="true">
+      <span class="left">
+        <span class="lights"><i></i><i></i><i></i></span>
+        <span class="tool new">New</span>
+        <span class="tool bolt"><svg viewBox="0 0 16 16"><path d="M9.5 1.5 3 9h4l-.5 5.5L13 7H9z"/></svg></span>
+        <span class="tool"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="9" rx="1.5"/><path d="M8 11v3M5.500 14h5"/></svg></span>
+        <span class="tool"><svg viewBox="0 0 16 16"><path d="m10 3-5 5 5 5"/></svg></span>
+        <span class="tool"><svg viewBox="0 0 16 16"><path d="M4 7a4 4 0 0 1 8 0c0 4 1.500 5 1.500 5h-11S4 11 4 7M6.800 14a1.400 1.400 0 0 0 2.400 0"/></svg></span>
+      </span>
+      <span class="shelf" id="shelf"></span>
+      <span class="end">
+        <span class="plain"><svg viewBox="0 0 16 16"><path d="M8 14V7M8 7c0-2.500-1.800-4-4.500-4 0 2.500 1.800 4 4.500 4ZM8 9c0-2.200 1.700-3.500 4.500-3.500C12.500 7.700 10.800 9 8 9Z"/></svg></span>
+        <span class="plain"><svg viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1"/><path d="M6 2v12M8.500 5.500h2M8.500 8h2"/></svg></span>
+        <span class="plain"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.500"/><path d="m5 6.500 2 1.500-2 1.500M8.500 10H11"/></svg></span>
+        <span class="plain"><svg viewBox="0 0 16 16"><path d="m8 2 1.800 3.800 4.200.6-3 2.900.7 4.200L8 11.500l-3.700 2 .7-4.200-3-2.900 4.200-.6z"/></svg></span>
+        <span class="profile">Default<span>▾</span></span>
+      </span>
+    </div>
+    <aside class="sb" id="sb">
+      <button class="homebtn" id="homebtn" type="button" aria-label="Home">
+        <svg class="home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8M5 9.500V21h5v-6h4v6h5V9.500"/></svg><span>Home</span><kbd>⌘⇧H</kbd>
+      </button>
+      <p class="count" id="count"></p>
+      <ul id="rows"></ul>
+      <p class="more" id="more"></p>
+      <p class="nworking" id="nworking"></p>
+      <div class="keywrap" id="keywrap">
+        <button class="key" id="key" type="button">
+          <svg class="enter" aria-hidden="true"><use href="#i-enter"/></svg>
+          <span>Send and go to next</span>
+          <span class="fill" id="fill"></span>
+        </button>
+      </div>
+      <div class="strip" aria-hidden="true">
+        <div class="dchips"><span class="cur">1<i id="dwait"></i></span><span>⊞</span></div>
+        <p>Desktop 1<kbd>⌘G</kbd></p>
+      </div>
+    </aside>
+    <div class="main">
+      <section class="tile" id="side" aria-hidden="true">
+        <div class="head"><div><i class="light"></i><b id="s-name"></b></div><small id="s-h"></small></div>
+        <div class="term" id="s-term"></div>
+      </section>
+      <section class="tile" id="front">
+        <span class="corner a"></span><span class="corner b"></span>
+        <div class="head"><div><i class="light"></i><b id="f-name"></b></div><small id="f-h"></small></div>
+        <div class="term" id="f-term"></div>
+      </section>
+      <div id="homepane">
+        <p class="settled"><i></i><span id="state">All caught up</span></p>
+        <div class="cmds">
+          <pre><span><i>$ </i>brew tap solenesinc/attn https://github.com/SolenesInc/attn</span><span><i>$ </i>brew install --cask solenesinc/attn/attn</span></pre>
+          <button class="key" id="copy" type="button">
+            <span id="copylabel">Copy</span>
+            <svg class="enter" aria-hidden="true"><use href="#i-enter"/></svg>
+          </button>
         </div>
-        <p class="hero-links">
-          <a href="/guide/">Read the guide</a>
-          <a href="#install">Other ways to install</a>
-        </p>
+        <div class="homelinks">
+          <a href="/guide/">Guide</a>
+          <a href="https://github.com/SolenesInc/attn">GitHub</a>
+          <button id="again" type="button"></button>
+        </div>
       </div>
-      <QueueDemo />
-    </section>
+    </div>
+  </div>
+  <div id="endstage"></div>
+</section>
 
-    <section class="story">
-      <h2>Why I built it</h2>
-      <p>
-        I built attn after noticing a pattern: I'd start the day sharp, spin up 4-5 AI agents across different repos, and by
-        mid-afternoon my brain was soup. Not from the coding, from the <em>managing</em>. Which terminal has the agent that's
-        stuck? Did that one finish? Wait, who asked me a question 20 minutes ago? Alt-tab, alt-tab, alt-tab, scroll, squint,
-        repeat.
-      </p>
-    </section>
 
-    <section class="loop">
-      <h2>The queue in the real app</h2>
-      <p>
-        Open the command palette with Cmd+Shift+K (Ctrl+Alt+K on Linux) and run "Turn on the agent queue". <a href="/guide/queue">The queue guide</a> has the rest.
-      </p>
-      <Recording id="queue-loop" />
-    </section>
+<div id="sections"><LandingSections /></div>
+<footer class="foot"><a href="/about/">About</a><span>GPL-3.0</span></footer>
+<p class="sr" id="status" role="status"></p>
 
-    <section class="doing">
-      <h2>What attn does</h2>
-      <div class="doing-grid">
-        {
-          doing.map((item) => (
-            <div class="doing-item">
-              <h3><a href={item.guide}>{item.title}</a></h3>
-              <p>{item.text}</p>
-            </div>
-          ))
-        }
-      </div>
-      <p class="doing-more">There are more features, but those are the ones I use every day and am proud about.</p>
-    </section>
-
-    <section class="new">
-      <h2>What's new</h2>
-      <FeatureList />
-    </section>
-
-    <section class="note">
-      <div class="note-words">
-        <h2>A note about this project</h2>
-        <p>I built attn because I needed it. Managing multiple agents was the bottleneck, not the coding itself.</p>
-        <p>Alpha. I use it every day. It's rough around the edges, but it works really well once you get going.</p>
-        <p>
-          I work full time, and I have 2 dogs and 4 cats at home. Free time is not abundant. attn is open source, but if you need
-          changes I can't get to, <a href={REPO}><strong>fork it</strong></a>. That's encouraged, not rude.
-        </p>
-        <p>Licensed under <a href={`${REPO}/blob/main/LICENSE`}>GPL-3.0</a>.</p>
-      </div>
-      <div class="note-install" id="install">
-        <h2>Install</h2>
-        <p>On a Mac (Apple Silicon), use the Homebrew commands at the top of this page.</p>
-        <p>
-          Or grab the DMG from the <a href={`${REPO}/releases/latest`}>latest release</a>, open it and drag attn to Applications. The
-          app tells you when a new release is out.
-        </p>
-        <p>
-          The Linux app is still in progress; build it from source as <a href="/guide/getting-started#linux">getting started</a> describes. The daemon and CLI run on Linux too.
-        </p>
-      </div>
-    </section>
-  </main>
-</Base>
-
-<script>
-  const box = document.querySelector<HTMLElement>('[data-install]')!;
-  const button = box.querySelector<HTMLButtonElement>('[data-copy]')!;
-  const commands = box.querySelector('code')!;
-
-  button.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(button.dataset.copy!);
-      button.textContent = 'Copied';
-    } catch {
-      getSelection()?.selectAllChildren(commands);
-      button.textContent = 'Selected, press Cmd+C';
-    }
-  });
-</script>
+<script is:inline set:html={homeScript}></script>
+<script is:inline set:html={sectionsScript}></script>
+</body>
+</html>
