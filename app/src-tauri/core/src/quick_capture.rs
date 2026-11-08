@@ -206,20 +206,11 @@ mod mac {
             if app.get_webview_window("capture").is_none() {
                 create_panel(app).map_err(|error| error.to_string())?;
             }
-            set_menu_enabled(app, true)
+            enable_menu_item(app)
         })
     }
 
-    pub fn disable(app: &tauri::AppHandle) -> Result<(), String> {
-        crate::hotkeys::on_main(app, |app| {
-            if app.get_webview_window("capture").is_some() {
-                hide_on_main(app)?;
-            }
-            set_menu_enabled(app, false)
-        })
-    }
-
-    fn set_menu_enabled(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    fn enable_menu_item(app: &tauri::AppHandle) -> Result<(), String> {
         app.menu()
             .expect("app menu")
             .items()
@@ -229,7 +220,7 @@ mod mac {
             .expect("capture menu item")
             .as_menuitem()
             .expect("capture menu item")
-            .set_enabled(enabled)
+            .set_enabled(true)
             .map_err(|error| error.to_string())
     }
 
@@ -307,17 +298,6 @@ mod mac {
 pub fn capture_enable(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     return mac::enable(&app);
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = app;
-        Err("Quick Capture is available on macOS".into())
-    }
-}
-
-#[tauri::command]
-pub fn capture_disable(app: AppHandle) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    return mac::disable(&app);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = app;

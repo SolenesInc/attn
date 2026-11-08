@@ -43,7 +43,7 @@ impl CaptureBridge {
             Ok(())
         } else {
             Err(format!(
-                "Quick Capture automation bridge did not report ready within {}s; enable Quick Capture before sending capture_* requests",
+                "Quick Capture automation bridge did not report ready within {}s",
                 CAPTURE_READY_TRIPWIRE.as_secs()
             ))
         }

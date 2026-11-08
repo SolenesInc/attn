@@ -7,7 +7,6 @@ export const QUICK_CAPTURE_READ_STATE = 'attn://capture/read-state';
 export const QUICK_CAPTURE_READY = 'attn://capture/ready';
 export const QUICK_CAPTURE_FONT = 'attn:capture-font';
 export const QUICK_CAPTURE_SHORTCUT_SETTING = 'capture.shortcut';
-export const QUICK_CAPTURE_ENABLED_SETTING = 'quick_capture_enabled';
 export const DEFAULT_QUICK_CAPTURE_SHORTCUT = 'Control+Alt+Super+Space';
 
 export const QUICK_CAPTURE_CHUNK_BYTES = 524288;
@@ -22,7 +21,6 @@ export interface QuickCaptureItem {
   files: { id: string; name: string; mediaType?: string; bytes: number }[];
 }
 export interface QuickCaptureHostState {
-  enabled: boolean;
   profileId: string; connected: boolean; mailboxes: QuickCaptureMailbox[]; binding: string | null;
   activeBinding: string | null; shortcutError?: string; connectionError?: string;
   fontScale?: number; keybindings?: string;
@@ -56,7 +54,6 @@ export interface QuickCaptureResult { id: string; value?: unknown; error?: strin
 export const CHIEF_MAILBOX = 'chief';
 
 export const EMPTY_HOST_STATE: QuickCaptureHostState = {
-  enabled: false,
   profileId: '', connected: false, mailboxes: [],
   binding: null, activeBinding: null,
 };

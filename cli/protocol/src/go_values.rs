@@ -72,7 +72,6 @@ pub struct Feature {
 
 pub const SETTINGS: &[Setting] = &[
     Setting { key: "asks_enabled", machine: false },
-    Setting { key: "quick_capture_enabled", machine: false },
     Setting { key: "nisse_enabled", machine: false },
     Setting { key: "claude_mod_enabled", machine: false },
     Setting { key: "codex_shared_enabled", machine: false },
@@ -163,7 +162,6 @@ pub const SETTINGS: &[Setting] = &[
 
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", stage: "on by default", applies: "New agents" },
-    Feature { key: "quick_capture_enabled", name: "Quick Capture", stage: "experimental", applies: "Now" },
     Feature { key: "nisse_enabled", name: "Nisse", stage: "experimental", applies: "New agents" },
     Feature { key: "claude_mod_enabled", name: "Claude mod", stage: "experimental", applies: "On: new agents. Off: now" },
     Feature { key: "codex_shared_enabled", name: "Shared Codex", stage: "experimental", applies: "New agents" },

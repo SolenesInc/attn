@@ -4,6 +4,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import App from './App';
 import { PROTOCOL_VERSION } from './types/protocolVersion';
 import { initialState, installScriptedDaemon } from './test/scriptedDaemon';
+import { answerQuickCaptureStatus } from './test/renderApp';
 
 const ensureCalls = () => vi.mocked(invoke).mock.calls.filter(([command]) => command === 'ensure_daemon').length;
 
@@ -22,6 +23,7 @@ describe('App daemon ensure', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const daemon = installScriptedDaemon();
+    answerQuickCaptureStatus();
     render(<App />);
     await act(() => vi.advanceTimersByTimeAsync(0));
 
@@ -44,6 +46,7 @@ describe('App daemon ensure', () => {
       ensuresBeforeHandshake = ensureCalls();
       return initialState({ protocol_version: protocolVersion });
     });
+    answerQuickCaptureStatus();
     render(<App />);
     await act(() => daemon.connected());
     await daemon.idle();

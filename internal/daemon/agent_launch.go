@@ -26,7 +26,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		if launch.Crew != "" {
 			opts.AgentEnv = append(opts.AgentEnv, "ATTN_CREW_MEMBER=1")
 		}
-		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_QUICK_CAPTURE_ENABLED=%t", launch.QuickCapture), fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents))
+		opts.AgentEnv = append(opts.AgentEnv, fmt.Sprintf("ATTN_VENT_ENABLED=%t", launch.Vent), fmt.Sprintf("ATTN_TOOL_VENTS_ENABLED=%t", launch.ToolVents))
 		return nil
 	}
 	caps := agentdriver.EffectiveCapabilities(driver)
@@ -46,7 +46,6 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		Garden:      launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents,
 		CrewPriming: launch.Crew, AwarenessDirs: awareness,
 		SelfReportPullRequests: launch.SelfReportPullRequests,
-		QuickCapture:           launch.QuickCapture,
 		CodexRemote:            opts.CodexRemote,
 		ClaudeMod:              claudeMod,
 	}

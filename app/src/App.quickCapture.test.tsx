@@ -75,11 +75,6 @@ beforeEach(() => {
     const values = args as Record<string, any> | undefined;
     if (command === 'get_client_token') return 'test-token';
     if (command === 'capture_hide') { native.onHide?.(); return; }
-    if (command === 'capture_disable') {
-      native.visible = false;
-      for (const listener of native.listeners.get('capture-hidden') ?? []) await listener({ payload: undefined });
-      return;
-    }
     if (command === 'capture_status') return { binding: native.binding, active: native.active };
     if (command === 'capture_bind') { native.active = values!.binding; return; }
     if (command === 'capture_cache') { native.binding = values!.binding; return; }
@@ -128,7 +123,7 @@ beforeEach(() => {
 async function captureApp(configure?: (daemon: ScriptedDaemon) => void, options: Parameters<typeof renderApp>[0] = {}) {
   const hidden = new Promise<void>(resolve => { native.onHide = resolve; });
   const initial = options.initialState || {};
-  const settings = { quick_capture_enabled: 'true', ...initial.settings };
+  const settings = { ...initial.settings };
   const view = await renderApp({ ...options, initialState: { crew: [crewMember('chief-key', { chief: true, name: 'Chief' })], ...initial, settings } });
   serveSettings(view.daemon, settings);
   configure?.(view.daemon);
@@ -155,19 +150,6 @@ async function hideCapture(daemon: ScriptedDaemon) {
 
 describe('Quick Capture app wire behavior', () => {
   afterEach(() => { vi.useRealTimers(); });
-
-  it('creates no capture panel and hides its shortcut editor until the experiment is enabled', async () => {
-    const { daemon } = await renderApp();
-    serveSettings(daemon);
-    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'capture_enable')).toEqual([]);
-    await gesture(daemon, () => pressShortcut('ui.showShortcuts'));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Edit shortcuts' })));
-    expect(screen.queryByRole('region', { name: 'Global Quick Capture shortcut' })).toBeNull();
-    await act(async () => daemon.emit({ event: 'settings_updated', settings: { quick_capture_enabled: 'true' } }));
-    await daemon.idle();
-    expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toContain('capture_enable');
-    expect(screen.getByRole('region', { name: 'Global Quick Capture shortcut' })).toBeInTheDocument();
-  });
 
   it.each([
     { binding: 'Control+Alt+Super+Space', setting: undefined, active: 'Control+Alt+Super+Space' },
@@ -221,18 +203,6 @@ describe('Quick Capture app wire behavior', () => {
       for (const listener of native.listeners.get('capture-hidden') ?? []) await listener({ payload: undefined });
     });
     expect(savedTexts()).toEqual(['Continuous 9', 'Flush on hide']);
-  });
-
-  it('retains the draft when disabled and re-enabled', async () => {
-    const { daemon } = await captureApp();
-    await gesture(daemon, () => fireEvent.change(editor(), { target: { value: 'Keep through disable' } }));
-    await act(async () => daemon.emit({ event: 'settings_updated', settings: { quick_capture_enabled: 'false' } }));
-    await daemon.idle();
-    expect(native.draft).toMatchObject({ text: 'Keep through disable' });
-    expect(native.active).toBeNull();
-    await act(async () => daemon.emit({ event: 'settings_updated', settings: { quick_capture_enabled: 'true' } }));
-    await daemon.idle();
-    expect(editor()).toHaveValue('Keep through disable');
   });
 
   it('connects when the capture starts before the main ready listener is registered', async () => {

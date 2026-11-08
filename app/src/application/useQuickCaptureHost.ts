@@ -10,7 +10,6 @@ import {
   QUICK_CAPTURE_READY, QUICK_CAPTURE_REQUEST, QUICK_CAPTURE_RESULT, QUICK_CAPTURE_STATE, QUICK_CAPTURE_SHORTCUT_SETTING, QUICK_CAPTURE_FONT,
   type QuickCaptureHostState, type QuickCaptureRequest,
 } from '../quickCapture/client';
-import { BoolSetting, isOn } from '../utils/settings';
 
 interface NativeStatus { binding: string | null; active: string | null; error?: string }
 
@@ -25,7 +24,6 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const current = useRef({ daemon, settings, delivery, profileId });
   useLayoutEffect(() => { current.current = { daemon, settings, delivery, profileId }; }, [daemon, settings, delivery, profileId]);
   const state: QuickCaptureHostState = {
-    enabled: isOn(settings, BoolSetting.quickCaptureEnabled),
     profileId, connected: !!profileId && daemon.isReady,
     mailboxes: crew.filter(member => member.profile_id === profileId).sort((a, b) => Number(Boolean(b.chief)) - Number(Boolean(a.chief))).map(member => ({
       id: member.id, name: member.name, detail: member.binding_session ? 'Awake' : 'Asleep',
@@ -63,13 +61,13 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   useLayoutEffect(() => { bindingRef.current = setBinding; });
 
   useEffect(() => {
-    if (!supported || !state.enabled || nativeReady) return;
+    if (!supported || nativeReady) return;
     let disposed = false;
     void invoke<NativeStatus>('capture_status')
       .then(native => { if (!disposed) { setNative(native); setNativeReady(true); } })
       .catch(error => { if (!disposed) setNative(previous => ({ ...previous, error: String(error) })); });
     return () => { disposed = true; };
-  }, [supported, state.enabled, nativeReady]);
+  }, [supported, nativeReady]);
 
   useEffect(() => {
     if (!supported) return;
@@ -104,21 +102,20 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   }, []);
 
   const rawBinding = settings[QUICK_CAPTURE_SHORTCUT_SETTING];
-  const binding = state.enabled ? rawBinding === undefined ? native.binding : rawBinding || null : null;
+  const binding = rawBinding === undefined ? native.binding : rawBinding || null;
   useEffect(() => {
     if (!supported || !nativeReady || !state.connected) return;
     void serial(async () => {
       try {
-        if (state.enabled) await invoke('capture_enable');
-        else await invoke('capture_disable');
+        await invoke('capture_enable');
         await invoke('capture_bind', { binding });
-        if (state.enabled) await invoke('capture_cache', { binding });
+        await invoke('capture_cache', { binding });
         await status();
       } catch (error) { setNative(previous => ({ ...previous, binding, error: String(error) })); }
     });
-  }, [binding, state.enabled, nativeReady, state.connected]);
+  }, [binding, nativeReady, state.connected]);
   useEffect(() => {
     if (supported) void emitTo('capture', QUICK_CAPTURE_STATE, state);
-  }, [profileId, state.enabled, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings]);
-  return { state, setBinding };
+  }, [profileId, state.connected, state.connectionError, crew, native, state.fontScale, state.keybindings]);
+  return { supported, state, setBinding };
 }

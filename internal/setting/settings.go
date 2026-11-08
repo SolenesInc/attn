@@ -11,15 +11,6 @@ var (
 		Since:   "2026-10-18",
 		Search:  "questions answer decisions drawer",
 	})
-	QuickCaptureEnabled = feature("quick_capture_enabled", "Enable the experimental Quick Capture panel: true or false. Changes to agent guidance apply at their next launch.", Info{
-		Name:    "Quick Capture",
-		Summary: "Send messages and files to Chief or a crew member from any app.",
-		Group:   Agents,
-		Applies: Now,
-		Stage:   Experimental,
-		Since:   "2026-10-19",
-		Search:  "global shortcut panel",
-	})
 	NisseEnabled = feature("nisse_enabled", "Offer Nisse as a harness: true or false.", Info{
 		Name:    "Nisse",
 		Summary: "Offer Nisse as a harness.",

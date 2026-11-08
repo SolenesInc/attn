@@ -144,7 +144,6 @@ func runAgentDirectly(requestedAgent string) {
 		SocketPath:      config.SocketPath(),
 		WrapperPath:     resolveWrapperPath(),
 		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
-		QuickCapture:    consumeOneShotEnv("ATTN_QUICK_CAPTURE_ENABLED") == "true",
 		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
 		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
 		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},

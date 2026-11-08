@@ -1,3 +1,5 @@
+import { invoke } from '@tauri-apps/api/core';
+import { vi } from 'vitest';
 import { act, fireEvent, render, type RenderResult } from '@testing-library/react';
 import App from '../App';
 import { defaultShortcut, type ShortcutId } from '../shortcuts/registry';
@@ -8,8 +10,17 @@ export interface AppRender extends RenderResult {
   daemon: ScriptedDaemon;
 }
 
+export function answerQuickCaptureStatus() {
+  const answer = vi.mocked(invoke).getMockImplementation();
+  vi.mocked(invoke).mockImplementation(async (command, ...rest) => {
+    const value = await answer?.(command, ...rest);
+    return command === 'capture_status' && value === undefined ? { binding: null, active: null } : value;
+  });
+}
+
 export async function renderApp(options: ScriptedDaemonOptions = {}): Promise<AppRender> {
   const daemon = installScriptedDaemon(options);
+  answerQuickCaptureStatus();
   const result = render(<App />);
   await act(() => daemon.connected());
   return { daemon, ...result };

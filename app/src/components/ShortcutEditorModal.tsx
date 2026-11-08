@@ -78,10 +78,6 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
   const recording = isOpen && recordingId !== null;
 
   useEffect(() => {
-    if (!capture?.state.enabled) setRecordingId(id => id === 'quickCapture' ? null : id);
-  }, [capture?.state.enabled]);
-
-  useEffect(() => {
     setShortcutCaptureSuspended(recording);
     return () => setShortcutCaptureSuspended(false);
   }, [recording]);
@@ -202,7 +198,7 @@ export function ShortcutEditorModal({ isOpen, onClose }: ShortcutEditorModalProp
           </div>
 
           <div className="shortcut-editor-body">
-            {capture?.state.enabled && (q === '' || 'quick capture system-wide'.includes(q)) && (
+            {capture?.supported && (q === '' || 'quick capture system-wide'.includes(q)) && (
               <QuickCaptureShortcutEditor
                 recording={recordingId === 'quickCapture'}
                 onStart={() => {

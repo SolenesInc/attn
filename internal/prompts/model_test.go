@@ -144,7 +144,7 @@ func TestCatalogDoesNotRetainMutableDeclarations(t *testing.T) {
 }
 
 func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
-	values := Values{"quick_capture_enabled": "true", "self_report_pull_requests": "false", "garden_available": "true", "crew_priming": " Crew {{literal}}. "}
+	values := Values{"self_report_pull_requests": "false", "garden_available": "true", "crew_priming": " Crew {{literal}}. "}
 	result, err := Builtin().Render("session", "launch", values)
 	if err != nil {
 		t.Fatal(err)

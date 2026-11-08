@@ -1,5 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { isTauri } from '@tauri-apps/api/core';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
@@ -23,8 +24,8 @@ interface Launch {
 
 async function renderKeybindings({ platform, config, withSession = false, quickCapture = false }: Launch = {}) {
   if (platform) onTestFinished(stubNavigatorPlatform(platform));
+  if (quickCapture) vi.mocked(isTauri).mockReturnValue(true);
   const settings: Record<string, string> = config ? { [KEY]: JSON.stringify({ version: 1, overrides: {}, ...config }) } : {};
-  if (quickCapture) settings.quick_capture_enabled = 'true';
   const view = await renderApp({
     initialState: {
       settings,
@@ -302,21 +303,6 @@ describe('App shortcut editor', () => {
 
     expect(capture.getByRole('button', { name: 'Change' })).toBeInTheDocument();
     expect(keybindingWrites(daemon)).toEqual([]);
-  });
-
-  it('releases Quick Capture recording when the experiment is disabled', async () => {
-    const { daemon } = await renderEditor({ quickCapture: true });
-    const capture = within(screen.getByRole('region', { name: 'Global Quick Capture shortcut' }));
-    fireEvent.click(capture.getByRole('button', { name: 'Change' }));
-    expect(capture.getByRole('button', { name: 'Press shortcut…' })).toHaveFocus();
-
-    await act(async () => daemon.emit({ event: 'settings_updated', settings: { quick_capture_enabled: 'false' } }));
-
-    expect(screen.queryByRole('region', { name: 'Global Quick Capture shortcut' })).toBeNull();
-    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' }));
-    expect(screen.queryByRole('dialog', { name: 'Customize Shortcuts' })).toBeNull();
-    await gesture(daemon, () => pressShortcut('ui.actionMenu'));
-    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
   });
 
   it('warns about a shortcut without an accelerator', async () => {

@@ -4,18 +4,10 @@ Quick Capture sends a message and files to the Chief or a crew member from any
 app. A small panel opens over the app you are using. You write and press Enter.
 The panel hides, and you are back where you were.
 
-Quick Capture runs on macOS and is experimental.
+Quick Capture runs on macOS.
 
-## Turn it on
-
-**Quick Capture** in **Settings → Experimental** is off by default. While the
-setting is off, the shortcut does nothing and the **File → Quick Capture** menu
-item is disabled.
-
-Chief and crew sessions that start after you turn the setting on also get a
-short instruction: treat each capture like a note given to an assistant. A
-session that was already running still receives your messages, and picks up the
-instruction the next time it launches.
+Chief and crew sessions start with a short instruction: treat each capture like
+a note given to an assistant.
 
 ## Open the panel
 
@@ -85,8 +77,7 @@ Each message shows one of two marks:
 
 The panel reaches only the Chief and crew. To send to any running agent, or from
 a script, see [Send files to an agent from outside
-Attn](sessions.md#send-files-to-an-agent-from-outside-attn). That path does not
-need the Quick Capture setting.
+Attn](sessions.md#send-files-to-an-agent-from-outside-attn).
 
 ## Details
 

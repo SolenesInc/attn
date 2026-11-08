@@ -36,7 +36,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		return m.Settings["theme"] == "dark" && protocol.Deref(m.ChangedKey) == "theme"
 	})
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
-	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "quick_capture_enabled"} {
+	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "new_session_launcher_enabled"} {
 		requireStdout(t, s.Attn("settings", "set", key, "true"), key+" = true")
 		requireStdout(t, s.Attn("settings", "get", key), "true")
 	}
@@ -60,7 +60,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		t.Fatalf("usage: %+v", r)
 	}
 	plain := s.Attn("settings", "list")
-	requireStdout(t, plain, "home", "theme", "App color theme", "quick_capture_enabled")
+	requireStdout(t, plain, "home", "theme", "App color theme", "new_session_launcher_enabled")
 	if strings.Contains(plain.Stdout, "pty_backend_mode") {
 		t.Fatal("list includes read-only values")
 	}
@@ -87,8 +87,8 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 	s.Stop()
 	s.Start()
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
-	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
-	requireStdout(t, s.Attn("settings", "list", "--features"), "quick_capture_enabled", "experimental", "Now", "Quick Capture")
+	requireStdout(t, s.Attn("settings", "get", "new_session_launcher_enabled"), "true")
+	requireStdout(t, s.Attn("settings", "list", "--features"), "new_session_launcher_enabled", "experimental", "Now", "Launcher 2.0")
 	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", "false"), "false")
 	requireStdout(t, s.Attn("settings", "list"), "this machine")
 	requireStdout(t, s.Attn("settings", "set", "worktree_sweep_enabled", ""))
@@ -113,20 +113,20 @@ func TestABooleanStoredByAnOlderVersionReadsTheSameEverywhere(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.SetSettingChecked("quick_capture_enabled", "TRUE"); err != nil {
+	if err := db.SetSettingChecked("new_session_launcher_enabled", "TRUE"); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
 	s.Start()
-	if got := s.App().Initial.Settings["quick_capture_enabled"]; got != "true" {
+	if got := s.App().Initial.Settings["new_session_launcher_enabled"]; got != "true" {
 		t.Errorf("the app reads %v, want true", got)
 	}
-	requireStdout(t, s.Attn("settings", "get", "quick_capture_enabled"), "true")
+	requireStdout(t, s.Attn("settings", "get", "new_session_launcher_enabled"), "true")
 	var row string
 	for _, line := range strings.Split(s.Attn("settings", "list", "--features").Stdout, "\n") {
-		if strings.HasPrefix(line, "quick_capture_enabled ") {
+		if strings.HasPrefix(line, "new_session_launcher_enabled ") {
 			row = line
 		}
 	}

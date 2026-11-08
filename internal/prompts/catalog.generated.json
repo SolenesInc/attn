@@ -44,22 +44,9 @@
                         }
                       },
                       {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "quick_capture_enabled",
-                            "kind": "flag",
-                            "description": "Include Quick Capture guidance when the experimental feature is enabled."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "session.quick-capture-guidance",
-                            "source": "content/session/quick-capture.md"
-                          }
-                        ]
+                        "kind": "text",
+                        "id": "session.quick-capture-guidance",
+                        "source": "content/session/quick-capture.md"
                       }
                     ]
                   }
@@ -5726,5 +5713,5 @@
       ]
     }
   ],
-  "definitions_hash": "bd6a362a14292d94f90940dd1332307d613d4b753b48b7da889a2422de19180f"
+  "definitions_hash": "5f4a323ad8a97b91351a0783e606a15e6789a2811966edb466173d78157479e6"
 }

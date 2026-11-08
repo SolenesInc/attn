@@ -1,0 +1,4 @@
+kind: changed
+area: quick capture
+change: Quick Capture is always available on macOS, and Ctrl+Option+Cmd+Space opens it from any app. Rebind or clear the shortcut with "Customize keyboard shortcuts".
+notes: The quick_capture_enabled setting is gone. Chief and crew sessions start with its guidance at their next launch.

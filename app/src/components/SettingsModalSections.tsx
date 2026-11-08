@@ -4,8 +4,7 @@ import { useHarnesses } from '../hooks/useHarnesses';
 import { HarnessRouteChip } from './HarnessRouteChip';
 import { HarnessRouteBadge } from './HarnessRouteBadge';
 import { routeFromStored } from '../hooks/useHarnessRoute';
-import { formatShortcut, keyCombo } from '../shortcuts/formatShortcut';
-import { DEFAULT_QUICK_CAPTURE_SHORTCUT } from '../quickCapture/client';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 import { HarnessCheckingMark } from './HarnessCheckingMark';
 import { agentCapabilityLabel, agentLabel, checkingForHarnessLabel, harnessAvailability, type HarnessAvailability } from '../utils/agentAvailability';
 import { AUTO_SETTLE_ARM_SETTING, AUTO_SETTLE_COUNTDOWN_SETTING } from '../utils/queueBands';
@@ -646,10 +645,6 @@ export function PluginSettings({
 }
 
 function featureShortcut(key: BoolSettingKey): ReactNode {
-  if (key === BoolSetting.quickCaptureEnabled) {
-    const modifiers: Record<string, string> = { Control: 'ctrl', Alt: 'alt', Super: 'accel' };
-    return <>Default shortcut <kbd>{keyCombo(...DEFAULT_QUICK_CAPTURE_SHORTCUT.split('+').map(part => modifiers[part] ?? part))}</kbd>.</>;
-  }
   if (key === BoolSetting.asksEnabled) {
     return <>Open it with <kbd>{formatShortcut('dock.asks')}</kbd>.</>;
   }

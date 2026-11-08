@@ -112,21 +112,15 @@ func TestACodexDefaultContextWindowCapBecomesItsCompactLimit(t *testing.T) {
 	}
 }
 
-func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
+func TestCrewLaunchesWithQuickCaptureGuidance(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Codex)
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			for i, enabled := range []bool{false, true, false} {
-				if i > 0 {
-					setSetting(t, app, "quick_capture_enabled", strconv.FormatBool(enabled))
-				}
-				member := []string{"alder", "keel", "trellis"}[i]
-				day := w.Launched(string(wakeCrew(t, w.Client(), member, "codex").SessionID))
-				if got := strings.Contains(launchGuidance(t, day), "The user can send you messages from Quick Capture"); got != enabled {
-					t.Fatalf("crew Quick Capture guidance=%v, enabled=%v", got, enabled)
-				}
+			day := w.Launched(string(wakeCrew(t, w.Client(), "alder", "codex").SessionID))
+			if !strings.Contains(launchGuidance(t, day), "The user can send you messages from Quick Capture") {
+				t.Fatal("a crew member launched without the Quick Capture guidance")
 			}
 		})
 	}

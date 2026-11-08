@@ -47,19 +47,6 @@ describe('SettingsModal sections', () => {
     ]);
   });
 
-  it('keeps Quick Capture off until enabled in Experimental and can turn it off again', async () => {
-    const daemon = await openSection('experimental');
-    const toggle = () => screen.getByRole('switch', { name: 'Quick Capture' });
-    expect(toggle()).toHaveAccessibleDescription(expect.stringMatching(/^Send messages and files to Chief or a crew member from any app\. Default shortcut ⌃⌥⌘Space/));
-    expect(toggle()).toHaveAttribute('aria-checked', 'false');
-    await gesture(daemon, () => fireEvent.click(toggle()));
-    expect(savedSettings(daemon)).toEqual([['quick_capture_enabled', 'true']]);
-    expect(toggle()).toHaveAttribute('aria-checked', 'true');
-    await gesture(daemon, () => fireEvent.click(toggle()));
-    expect(savedSettings(daemon)).toEqual([['quick_capture_enabled', 'true'], ['quick_capture_enabled', 'false']]);
-    expect(toggle()).toHaveAttribute('aria-checked', 'false');
-  });
-
   it('exposes theme selection and the projects directory through accessible controls', async () => {
     const daemon = await openSection('general', { settings: { theme: 'system' } });
     expect(screen.getByRole('button', { name: 'System', pressed: true })).toBeInTheDocument();
@@ -145,7 +132,7 @@ describe('SettingsModal sections', () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });
     const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    for (const query of ['Quick Capture', 'Claude mod', 'Nisse', 'Outposts', 'Phone access', 'Shared Codex', 'Usage analytics']) {
+    for (const query of ['Claude mod', 'Nisse', 'Outposts', 'Phone access', 'Shared Codex', 'Usage analytics']) {
       await gesture(daemon, () => fireEvent.change(search, { target: { value: query } }));
       expect(navigation.getByRole('button', { name: 'Experimental' })).toBeInTheDocument();
     }

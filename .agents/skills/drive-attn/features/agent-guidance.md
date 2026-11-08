@@ -29,7 +29,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 
 ### People
 
-- Nothing in the app shows what agents are told. The settings that change it belong to their features: asks, usage analytics, Quick Capture and the attn-workflow skill.
+- Nothing in the app shows what agents are told. The settings that change it belong to their features: asks, usage analytics and the attn-workflow skill.
 - Their own shell: `attn skill` and `attn prompts`, below, print what agents are told. Neither needs a daemon.
 
 ### Agents

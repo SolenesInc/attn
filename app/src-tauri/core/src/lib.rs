@@ -1197,7 +1197,6 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             get_app_pid,
             quick_capture::capture_hide,
             quick_capture::capture_enable,
-            quick_capture::capture_disable,
             quick_capture::capture_bind,
             quick_capture::capture_status,
             quick_capture::capture_cache,

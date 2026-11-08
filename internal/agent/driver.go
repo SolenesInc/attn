@@ -194,8 +194,7 @@ type SpawnOpts struct {
 
 	ToolVents bool
 
-	CrewPriming  string
-	QuickCapture bool
+	CrewPriming string
 
 	AwarenessDirs []string
 
@@ -233,7 +232,6 @@ func (o SpawnOpts) launchSpec() hooks.Launch {
 		Vent:                   o.Vent,
 		ToolVents:              o.ToolVents,
 		Crew:                   o.CrewPriming,
-		QuickCapture:           o.QuickCapture,
 		SelfReportPullRequests: o.SelfReportPullRequests,
 	}
 }
