@@ -1,5 +1,0 @@
-kind: fixed
-area: annotations
-change: >
-  Two tiles showing the same seed now share its marks. A mark saved in one tile
-  stays, and appears in the other, when either tile sends or clears its marks.

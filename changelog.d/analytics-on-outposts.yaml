@@ -1,3 +1,0 @@
-kind: changed
-area: analytics
-change: Usage analytics now follows the home. Each outpost records its own usage and sends it to the home, which shows it in Settings → Analytics and is the only machine that uploads. Records name the outpost as a hash.

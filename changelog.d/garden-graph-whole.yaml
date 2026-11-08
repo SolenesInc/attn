@@ -1,3 +1,0 @@
-kind: fixed
-area: garden
-change: Garden relations, ready flags, plot progress, and stale listings include seeds older than the newest 1000.

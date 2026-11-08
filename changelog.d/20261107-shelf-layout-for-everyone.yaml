@@ -1,7 +1,0 @@
-kind: changed
-area: desktops
-change: >
-  Every desktop is now one row of tiles with a shelf for the ones that don't
-  fit, and the window's title bar is one toolbar. The setting is gone. Desktops
-  you already have open as a row with every tile and session intact. The
-  narrowest tile width and the sidebar width moved to Settings → Appearance.

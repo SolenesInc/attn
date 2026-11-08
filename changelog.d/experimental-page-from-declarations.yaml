@@ -1,3 +1,0 @@
-kind: changed
-area: settings
-change: Settings → Experimental now groups its switches, says when a change applies, and finds every feature by name. The palette can turn each one on and off, attn settings list --features lists them, and attn settings set <key> "" returns a true or false setting to its default.

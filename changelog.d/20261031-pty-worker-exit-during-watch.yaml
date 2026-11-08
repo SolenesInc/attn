@@ -1,3 +1,0 @@
-kind: fixed
-area: terminals
-change: A session whose agent exits just as a restarted daemon starts watching its PTY worker no longer stays running forever.

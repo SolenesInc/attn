@@ -1,3 +1,0 @@
-kind: fixed
-area: queue
-change: Waiting Claude sessions keep their state and place in the queue after a daemon restart.

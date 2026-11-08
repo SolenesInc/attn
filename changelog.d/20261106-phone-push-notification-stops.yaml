@@ -1,7 +1,0 @@
-kind: changed
-area: phone
-change: >
-  A stop that one of attn's own notifications started, such as a delegate's
-  message or a pull request update, no longer notifies your phone, in any flow.
-  You still get a notification when an agent stops after your prompt or a Quick
-  Capture, needs an approval, or opened its turn with `attn turn open`.

@@ -1,3 +1,0 @@
-kind: changed
-area: agents
-change: Asks are on by default, so new agents send you their questions with `attn ask` and carry on while you answer from the Asks drawer. Settings → Agents and models → Asks turns them off, and a stored value still wins. Agents keep the setting they launched with.

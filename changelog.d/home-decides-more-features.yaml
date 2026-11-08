@@ -1,3 +1,0 @@
-kind: changed
-area: outposts
-change: Outposts, the shelf layout, its narrowest tile width and the background login environment now follow the home on every outpost, so turning one on in the app applies everywhere. An outpost that had its own value uses the home value until it leaves the home.

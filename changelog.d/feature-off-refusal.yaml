@@ -1,3 +1,0 @@
-kind: changed
-area: settings
-change: When a feature is off, Attn says so the same way everywhere and names the switch and its setting, as in "Tile windows is off. Turn it on in Settings → Experimental → Tile windows (tile_popout_enabled)".
