@@ -28,6 +28,9 @@ func TestImagePathsResolveEachImageOnceAsTheAppShowsIt(t *testing.T) {
 		"an escaped bracket and parentheses":  {`\![no](no.png) ![a\]b](esc.png) ![p](paren\(1\).png)`, []string{"/work/esc.png", "/work/paren(1).png"}},
 		"an image inside a link":              {"[![a](linked.png)](https://example.com)", []string{"/work/linked.png"}},
 		"table cells":                         {"| a | b |\n|---|---|\n| ![c](cell.png) | <img src=\"html.png\"> |\n| ![p](a\\|b.png) | `![s](span.png)` |", []string{"/work/cell.png", "/work/html.png", "/work/a|b.png"}},
+		"no span across table cells":          {"| Key | Shot | Fallback |\n| --- | --- | --- |\n| ` | ![s](shot.png) | `Esc` |\n| ` | ![e](extra.png) |", []string{"/work/shot.png", "/work/extra.png"}},
+		"a table after a paragraph line":      {"Keys:\n| a | b |\n| - | - |\n| ` | ![t](after.png) ` |", []string{"/work/after.png"}},
+		"no cell past the delimiter row":      {"| a | b |\n| :-: | --: |\n| x | y | ![e](excess.png) |", nil},
 		"an html img across lines":            {"<img\n  src=\"wrapped.png\">", []string{"/work/wrapped.png"}},
 		"markdown inside an html block":       {"<details>\n\n![d](details.png)\n\n</details>", []string{"/work/details.png"}},
 	} {

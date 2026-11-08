@@ -40,8 +40,90 @@ func ImageType(imagePath string) (string, bool) {
 var imageMarkdown = parser.NewParser(
 	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
 	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
-	parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
+	parser.WithParagraphTransformers(append(parser.DefaultParagraphTransformers(), util.Prioritized(tableCells{}, 200))...),
 )
+
+// tableCells splits a GFM table into one paragraph per cell, as the app's renderer does, so no
+// inline span crosses a cell boundary. goldmark's table extension does the same, but importing it
+// runs the init of its HTML renderers on every CLI start.
+type tableCells struct{}
+
+func (tableCells) Transform(paragraph *ast.Paragraph, reader text.Reader, _ parser.Context) {
+	source := reader.Source()
+	lines := paragraph.Lines()
+	for i := 1; i < lines.Len(); i++ {
+		delimiter := lines.At(i)
+		columns := delimiterRowColumns(delimiter.Value(source))
+		if columns == 0 {
+			continue
+		}
+		header := rowCells(lines.At(i-1), source)
+		if len(header) != columns {
+			return
+		}
+		cells := header
+		for j := i + 1; j < lines.Len(); j++ {
+			row := rowCells(lines.At(j), source)
+			cells = append(cells, row[:min(len(row), columns)]...)
+		}
+		parent := paragraph.Parent()
+		after := ast.Node(paragraph)
+		for _, cell := range cells {
+			cellParagraph := ast.NewParagraph()
+			cellParagraph.Lines().Append(cell)
+			parent.InsertAfter(parent, after, cellParagraph)
+			after = cellParagraph
+		}
+		lines.SetSliced(0, i-1)
+		if lines.Len() == 0 {
+			parent.RemoveChild(parent, paragraph)
+		}
+		return
+	}
+}
+
+func delimiterRowColumns(line []byte) int {
+	if width, _ := util.IndentWidth(line, 0); width > 3 {
+		return 0
+	}
+	columns := bytes.Split(line, []byte("|"))
+	if util.IsBlank(columns[0]) {
+		columns = columns[1:]
+	}
+	if len(columns) > 0 && util.IsBlank(columns[len(columns)-1]) {
+		columns = columns[:len(columns)-1]
+	}
+	for _, column := range columns {
+		dashes := bytes.TrimSuffix(bytes.TrimPrefix(bytes.TrimSpace(column), []byte(":")), []byte(":"))
+		if len(dashes) == 0 || len(bytes.Trim(dashes, "-")) != 0 {
+			return 0
+		}
+	}
+	return len(columns)
+}
+
+func rowCells(line text.Segment, source []byte) []text.Segment {
+	line = line.TrimLeftSpace(source)
+	line = line.TrimRightSpace(source)
+	value := line.Value(source)
+	start, stop := 0, len(value)
+	if stop > 0 && value[0] == '|' {
+		start++
+	}
+	if stop > start && value[stop-1] == '|' && (stop < 2 || value[stop-2] != '\\') {
+		stop--
+	}
+	var cells []text.Segment
+	for cellStart, i := start, start; i <= stop; i++ {
+		if i == stop || value[i] == '|' && (i == 0 || value[i-1] != '\\') {
+			cell := text.NewSegment(line.Start+cellStart, line.Start+i)
+			cell = cell.TrimLeftSpace(source)
+			cells = append(cells, cell.TrimRightSpace(source))
+			cellStart = i + 1
+		}
+	}
+	return cells
+}
 
 // ImagePaths lists the local images the ask's parts show, as the app resolves them against
 // baseDir: absolute paths with an image extension, each once, in reading order.

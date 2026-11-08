@@ -56,9 +56,10 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	beside := writeImage(t, filepath.Join(work, "beside.png"), 1024)
 	nested := writeImage(t, filepath.Join(work, "notes", "nested.webp"), 512)
 	escaped := writeImage(t, filepath.Join(work, "a(b)&c.png"), 256)
+	inTable := writeImage(t, filepath.Join(work, "esc-key.png"), 128)
 	writeAskFile(t, filepath.Join(work, "notes", "ask.md"), "From the file: ![nested](nested.webp)\n")
 	stdinAsk := "Plain ![beside](beside.png), escaped ![escaped](a\\(b\\)&amp;c.png), remote ![remote](https://example.com/r.png), in code `![no](absent.png)`.\n\n" +
-		"```\n![no](also-absent.png)\n```\n\n:::question\nWhich?\n<img src=\"beside.png\">\n- [ ] One\n- [ ] Two\n:::\n"
+		"```\n![no](also-absent.png)\n```\n\n" + escKeyTable("esc-key.png") + "\n:::question\nWhich?\n<img src=\"beside.png\">\n- [ ] One\n- [ ] Two\n:::\n"
 	fromStdin := askAs(t, s, asker, work, stdinAsk)
 	fromFile := askAs(t, s, asker, work, "", "--file", filepath.Join(work, "notes", "ask.md"))
 	removeAll(t, work)
@@ -68,6 +69,9 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	if got := askImage(t, app, fromStdin.ID, filepath.Join(work, "a(b)&c.png")); !bytes.Equal(got, escaped) {
 		t.Fatalf("the stdin ask shows %d bytes for a(b)&c.png, written with markdown escapes, want its %d", len(got), len(escaped))
 	}
+	if got := askImage(t, app, fromStdin.ID, filepath.Join(work, "esc-key.png")); !bytes.Equal(got, inTable) {
+		t.Fatalf("the stdin ask shows %d bytes for esc-key.png, in a table cell after one holding a lone backtick, want its %d", len(got), len(inTable))
+	}
 	if got := askImage(t, app, fromFile.ID, filepath.Join(work, "notes", "nested.webp")); !bytes.Equal(got, nested) {
 		t.Fatalf("the file ask shows %d bytes for nested.webp after it was deleted, want its %d, resolved beside the file", len(got), len(nested))
 	}
@@ -75,6 +79,11 @@ func TestAnAsksImagesStayWithItAndOnesOverTheLimitAreRefused(t *testing.T) {
 	missing := s.Run(testworld.Invocation{Session: asker, Dir: s.Path(), Stdin: "Look: ![gone](work/beside.png)\n", Args: []string{"ask"}})
 	if missing.Code == 0 || !strings.Contains(missing.Stderr, s.Path("work", "beside.png")) {
 		t.Fatalf("an ask showing a missing image: %+v, want a refusal naming the path", missing)
+	}
+
+	missingInTable := s.Run(testworld.Invocation{Session: asker, Dir: s.Path(), Stdin: escKeyTable("work/esc-key.png"), Args: []string{"ask"}})
+	if missingInTable.Code == 0 || !strings.Contains(missingInTable.Stderr, s.Path("work", "esc-key.png")) {
+		t.Fatalf("an ask showing a missing image in a table cell: %+v, want a refusal naming the path", missingInTable)
 	}
 
 	writeImage(t, s.Path("big", "a.png"), ask.MaxImageBytes/2)
@@ -147,6 +156,10 @@ func TestAnImageCopyThatFailsPartwayIsNotShownAndIsRetriedOnTheNextStart(t *test
 	if got := askImage(t, s.App(), earlier.ID, s.Path("work", "later.png")); !bytes.Equal(got, later) {
 		t.Fatalf("an image that appeared after a start shows %d bytes after the next, want its %d", len(got), len(later))
 	}
+}
+
+func escKeyTable(screenshot string) string {
+	return "| Key | Screenshot | Fallback |\n| --- | --- | --- |\n| ` | ![Screenshot](" + screenshot + ") | `Esc` |\n"
 }
 
 func turnAsksOn(app *testworld.Peer) {
