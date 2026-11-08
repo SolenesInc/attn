@@ -479,6 +479,18 @@ describe('Shelf layout', () => {
         expect(paneIds()).toEqual(onScreen('s4', 's2'));
         expect(active()).toBe('pane-s4');
       });
+
+      it('brings a whole stack next to the active tile on the right', async () => {
+        const stack = split('stack', 'horizontal', [pane('s4'), pane('s5')]);
+        const daemon = await renderRow(TWO_FIT, { root: rightChain([pane('s1'), pane('s2'), pane('s3'), stack]) });
+        await slideTo(daemon, 'terminal.focusRight');
+        expect(paneIds()).toEqual(onScreen('s1', 's2'));
+
+        await gesture(daemon, () => fireEvent.click(chip('s4')));
+
+        expect(lastMove(daemon)).toMatchObject({ anchor_id: 'pane-s2', edge: 'left', whole_column: true });
+        expect(paneIds()).toEqual(onScreen('s4', 's5', 's2'));
+      });
     });
 
     it('brings an off-screen tile from the sidebar and the agent palette', async () => {
@@ -1181,6 +1193,32 @@ describe('Shelf layout', () => {
       expect(rowOf(daemon)).toEqual(['s1', 's2', 's4', 's3']);
       expect(paneIds()).toEqual(onScreen('s4', 's3'));
       expect(active()).toBe('pane-s3');
+    });
+
+    it.each(['immediately', 'after a held reply'] as const)('keeps the selected stacked tile beside the chip when the daemon answers %s', async (answer) => {
+      const stack = split('stack', 'horizontal', [pane('s2'), pane('s3')]);
+      const daemon = await renderRow({ narrowest_tile_cols: '86' }, { root: rightChain([pane('s1'), stack, pane('s4')]) });
+      await slideTo(daemon, 'terminal.focusRight');
+      await gesture(daemon, () => pressShortcut('terminal.focusDown'));
+      expect(active()).toBe('pane-s3');
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      const held: CommandMessage<'desktop_move_leaf'>[] = [];
+      if (answer === 'after a held reply') daemon.on('desktop_move_leaf', (command) => { held.push(command); });
+
+      await drag(daemon, header('s3'), { clientX: 1400, clientY: 600 }, anchorPoint('shelf-chip-pane-s4', LEFT_HALF));
+      expect(moves(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s3', anchor_id: 'pane-s4', edge: 'left' })]);
+      expect(moves(daemon)[0].whole_column).toBeUndefined();
+      if (answer === 'after a held reply') {
+        await gesture(daemon, () => {
+          relayOut({ arrange: (change) => { daemon.arrangement.desktops = change(daemon.arrangement.desktops); } }, rightChain(['s1', 's2', 's3', 's4'].map(pane)), IDS.slice(0, 4), { active: 'pane-s3' });
+          daemon.emit(daemon.arrangement.answer(held[0]));
+          daemon.replyTo(held[0], { event: 'profile_action_result', action: held[0].cmd, request_id: held[0].request_id, success: true });
+        });
+      }
+
+      expect(rowOf(daemon)).toEqual(['s1', 's2', 's3', 's4']);
+      expect(active()).toBe('pane-s3');
+      expect(paneIds()).toEqual(onScreen('s3', 's4'));
     });
 
     it('gives the tile back and names the failure when the daemon refuses a shelf drop', async () => {

@@ -439,7 +439,7 @@ export interface ShelfDrop {
   leafId: string;
   anchorId: string;
   edge: 'left' | 'right';
-  keepsDraggedWidths?: boolean;
+  bringsWholeColumn?: boolean;
 }
 
 export interface DropReveal {
@@ -453,7 +453,7 @@ export function revealDrop(input: Omit<RowLayoutInput, 'view'>, drop: ShelfDrop,
   const widened = [drop.anchorId, drop.leafId]
     .map((leafId) => row[columnIndexOf(row, leafId)])
     .filter((column) => column && wantedPxWithRoom(column, input) !== null);
-  const attempts = drop.keepsDraggedWidths ? [[]] : [[], ...widened.map((column) => [column]), ...(widened.length > 1 ? [widened] : [])];
+  const attempts = drop.bringsWholeColumn ? [[]] : [[], ...widened.map((column) => [column]), ...(widened.length > 1 ? [widened] : [])];
   for (const widthsToClear of attempts) {
     const pendingWantedCols = widthsToClear.length === 0
       ? input.pendingWantedCols
@@ -476,7 +476,8 @@ export function droppedBeside(input: Pick<RowLayoutInput, 'tree' | 'activeLeafId
   const row = readRow(input.tree);
   const anchorAt = columnIndexOf(row, drop.anchorId);
   const beside = anchorAt < 0 ? undefined : row[anchorAt + (drop.edge === 'left' ? -1 : 1)];
-  return input.activeLeafId === drop.leafId && beside !== undefined && beside.leafIds.includes(drop.leafId);
+  if (input.activeLeafId !== drop.leafId || !beside?.leafIds.includes(drop.leafId)) return false;
+  return drop.bringsWholeColumn || beside.leafIds.length === 1;
 }
 
 export function firstColumnStillShows(input: Omit<RowLayoutInput, 'view'>, firstColumn: FirstColumn): boolean {

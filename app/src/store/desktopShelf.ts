@@ -84,7 +84,7 @@ export interface ShelfDropBeside {
   leafId: string;
   anchorId: string;
   edge: 'left' | 'right';
-  keepsDraggedWidths?: boolean;
+  bringsWholeColumn?: boolean;
 }
 
 export interface DesktopRowActions {

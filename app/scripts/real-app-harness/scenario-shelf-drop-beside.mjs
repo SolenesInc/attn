@@ -155,6 +155,21 @@ try {
     await shot('saved-width-cleared-pair-shown');
   });
 
+  await runner.step('a_selected_stacked_tile_dropped_on_the_next_chip_shows_beside_it', async () => {
+    const [first, second, third, last] = await readRow();
+    await dropBeside(last, first, LEFT_HALF);
+    await press('terminal.focusRight');
+    await waitDom(`${surface()}[data-active-leaf-id="${first}"]`);
+    await press('terminal.splitHorizontal');
+    const stacked = await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.length === 5 && current.panes.every((pane) => pane.runtimeId) && current.desktop.daemonActivePaneId !== first, 'a shell stacked under the active tile', 30_000);
+    sessions.push(...stacked.panes.map((pane) => pane.sessionId).filter((id) => !sessions.includes(id)));
+    const tile = stacked.desktop.daemonActivePaneId;
+    runner.assert(sameList(await shownLeaves(), [last, first, tile]), 'the stack sits just before the chip', { last, first, tile });
+    await dropBeside(tile, second, LEFT_HALF);
+    runner.assert(sameList(await readRow(), [last, first, tile, second, third]), 'the stacked tile has its own column before the chip', { tile, second });
+    await shot('stacked-tile-beside-chip');
+  });
+
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));
 } catch (error) {
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
