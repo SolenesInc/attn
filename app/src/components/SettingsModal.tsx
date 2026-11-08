@@ -241,11 +241,7 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           activityAgents={state.activityAgents}
           onSetSetting={state.onSetSetting}
           gardenAdvisorAgents={state.gardenAdvisorAgents}
-          chiefOverrideAgentList={state.chiefOverrideAgentList}
-          chiefModelDrafts={state.chiefModelDrafts}
-          chiefEffortDrafts={state.chiefEffortDrafts}
           savedFlash={state.savedFlash}
-          chiefContextCapDraft={state.chiefContextCapDraft}
           headlessContextCapDraft={state.headlessContextCapDraft}
         />
       );

@@ -24,7 +24,7 @@ session holds it reads.
 |---|---|---|
 | session | that session | The item waits, and attn never resumes a closed session to deliver an item. A seed update is the exception: attn withdraws it when the session closes (see [Seed updates](#seed-updates)). |
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
-| chief | the profile's current chief session | The item waits for the next chief. attn never wakes a chief. The Chief is a crew member, so new items for it use the Chief's member address instead. |
+| chief | the session of the profile's Chief member | attn wakes the Chief member, as for its member address. New items use the member address; the chief address remains for items saved before the Chief became a crew member. |
 | seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. A closed session tender is resumed only when the seed is on standby (see [Wakes](#wakes)). |
 
 An item follows its mailbox. When a member's session ends, their next session
@@ -359,8 +359,8 @@ session, attn resumes that session and rings it instead of starting a new one.
 - attn wakes a member again when the member goes back to sleep with unread
   items that have attempts left. The wake comes 5 minutes after the last
   attempt, or at once for user input and for seed mail.
-- attn never wakes a chief address. attn wakes the Chief member like any
-  member.
+- attn wakes the Chief member like any member, for its member address and for
+  its chief address.
 - A manual wake does not ring for items that have no attempts left. The agent
   still finds those items with `attn agent inbox`. attn types user input
   regardless of their attempts.

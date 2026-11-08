@@ -181,14 +181,4 @@ describe('SettingsModal drafts', () => {
     expect(savedSettings(daemon)).toEqual([['new_session_agent', 'codex'], ['new_session_agent', 'claude']]);
     expect(screen.getByRole('button', { name: 'Claude' })).toHaveAttribute('aria-pressed', 'true');
   });
-
-  it('writes an effort override on change, under the model field’s mark', async () => {
-    const daemon = await openSection('backgroundAgents');
-
-    await openRoute(daemon, 'Claude Chief model');
-    await pickEffort(daemon, 'high');
-
-    expect(savedSettings(daemon)).toEqual([['chief_effort_claude', 'high']]);
-    expect(screen.getByTestId('settings-chief-model-saved-claude')).toBeInTheDocument();
-  });
 });

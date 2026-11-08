@@ -26,15 +26,15 @@ const crewWakeAgent = crew.DefaultAgent
 const crewWakeFallbackModel = "fable"
 
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
-	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
-		if model := strings.TrimSpace(member.Model); model != "" {
-			return protocol.Ptr(model)
-		}
+	ownHarness := strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent())
+	chosen := strings.TrimSpace(member.Model)
+	if ownHarness && chosen != "" && chosen != crew.HarnessDefaultModel {
+		return protocol.Ptr(chosen)
 	}
 	if model := d.defaultLaunchModel(agent); model != "" {
 		return protocol.Ptr(model)
 	}
-	if strings.TrimSpace(strings.ToLower(agent)) == crewWakeAgent {
+	if strings.TrimSpace(strings.ToLower(agent)) == crewWakeAgent && !(ownHarness && chosen == crew.HarnessDefaultModel) {
 		return protocol.Ptr(crewWakeFallbackModel)
 	}
 	return nil

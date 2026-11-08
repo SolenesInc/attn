@@ -34,6 +34,8 @@ const ChiefName = "Chief"
 
 const ChiefAlias = "chief"
 
+const HarnessDefaultModel = "default"
+
 type Member struct {
 	ID             string             `json:"id"`
 	Key            who.MemberKey      `json:"-"`

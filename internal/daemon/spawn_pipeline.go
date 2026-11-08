@@ -125,8 +125,11 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue
+	if protocol.Deref(msg.ChiefOfStaff) {
+		return nil, &spawnRejection{err: errChiefIsCrewMember}
+	}
 	if host := protocol.Deref(msg.Host); host != "" {
-		if protocol.Deref(msg.ChiefOfStaff) || (policy.launchPlacement != nil && policy.launchPlacement.kind == "crew") || d.crewMemberBoundTo(msg.ID) != "" {
+		if (policy.launchPlacement != nil && policy.launchPlacement.kind == "crew") || d.crewMemberBoundTo(msg.ID) != "" {
 			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: the chief and crew run only at the home, not on %s", host)}
 		}
 		if !d.outpostsEnabled() {
@@ -314,9 +317,6 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	plan.spawnOpts = ptybackend.SpawnOptions{CWD: req.cwd, Agent: req.agent, Label: req.label, Cols: uint16(msg.Cols), Rows: uint16(msg.Rows), ResumeSessionID: req.resumeSessionID, ResumePicker: protocol.Deref(msg.ResumePicker), YoloMode: protocol.Deref(msg.YoloMode), Theme: d.currentTerminalTheme(), Executable: strings.TrimSpace(configuredExecutable), ClaudeExecutable: protocol.Deref(msg.ClaudeExecutable), CodexExecutable: protocol.Deref(msg.CodexExecutable), AutoApprove: autoApprove, Model: strings.TrimSpace(protocol.Deref(msg.Model)), Effort: strings.TrimSpace(protocol.Deref(msg.Effort))}
 	if req.policy.command != nil {
 		plan.spawnOpts.AgentArgv = append([]string(nil), req.policy.command.Argv...)
-	}
-	if protocol.Deref(msg.ChiefOfStaff) {
-		d.logf("create-as-chief: the Chief is a crew member; session %s starts as an ordinary agent", msg.ID)
 	}
 	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.spawnOpts.Model)
 	if err := ctx.Err(); err != nil {

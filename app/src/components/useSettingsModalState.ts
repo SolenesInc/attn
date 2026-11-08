@@ -148,7 +148,6 @@ export function useSettingsModalState({
   const actualAgentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
   const actualEditorExecutable = settings.editor_executable || '';
   const actualDefaultAgent = normalizeSessionAgent(settings.new_session_agent, 'claude');
-  const actualChiefContextCap = settings.chief_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const actualHeadlessContextCap = settings.headless_context_window_cap || String(DEFAULT_CONTEXT_WINDOW_CAP);
   const autoSettleEnabled = isAutoSettleEnabled(settings);
   const analyticsEnabled = isOn(settings, BoolSetting.analyticsEnabled);
@@ -165,35 +164,6 @@ export function useSettingsModalState({
     () => orderedAgentList.filter((agent) => ['codex', 'claude'].includes(agent)),
     [orderedAgentList],
   );
-  const chiefOverrideAgentList = useMemo(() => {
-    const list = orderedAgentList.filter(
-      (agent) => ['codex', 'claude'].includes(agent) && isAgentSelectable(agentAvailability, agent),
-    );
-    for (const agent of ['claude', 'codex'] as const) {
-      if (
-        !list.includes(agent) &&
-        ((settings[`chief_model_${agent}`] || '').trim() !== '' ||
-          (settings[`chief_effort_${agent}`] || '').trim() !== '')
-      ) {
-        list.push(agent);
-      }
-    }
-    return list;
-  }, [orderedAgentList, agentAvailability, settings]);
-  const actualChiefModels = useMemo(() => {
-    const out = {} as Record<SessionAgent, string>;
-    for (const agent of chiefOverrideAgentList) {
-      out[agent] = settings[`chief_model_${agent}`] || '';
-    }
-    return out;
-  }, [settings, chiefOverrideAgentList]);
-  const actualChiefEfforts = useMemo(() => {
-    const out = {} as Record<SessionAgent, string>;
-    for (const agent of chiefOverrideAgentList) {
-      out[agent] = settings[`chief_effort_${agent}`] || '';
-    }
-    return out;
-  }, [settings, chiefOverrideAgentList]);
   const defaultOverrideAgentList = useMemo(() => {
     const list = orderedAgentList.filter(
       (agent) => ['codex', 'claude'].includes(agent) && isAgentSelectable(agentAvailability, agent),
@@ -277,12 +247,6 @@ export function useSettingsModalState({
     actual: actualEditorExecutable,
     settingKey: 'editor_executable',
   });
-  const chiefContextCapDraft = useSettingDraft({
-    ...draftDeps,
-    actual: actualChiefContextCap,
-    settingKey: 'chief_context_window_cap',
-    trim: true,
-  });
   const narrowestTileColsDraft = useSettingDraft({
     ...draftDeps,
     actual: settings.narrowest_tile_cols ?? '',
@@ -320,18 +284,6 @@ export function useSettingsModalState({
     actual: actualAgentExecutables,
     settingKey: (agent) => `${agent}_executable`,
   });
-  const chiefModelDrafts = useAgentSettingDrafts({
-    ...draftDeps,
-    actual: actualChiefModels,
-    settingKey: (agent) => `chief_model_${agent}`,
-    trim: true,
-  });
-  const chiefEffortDrafts = useAgentSettingDrafts({
-    ...draftDeps,
-    actual: actualChiefEfforts,
-    settingKey: (agent) => `chief_effort_${agent}`,
-    flashKey: (agent) => `chief_model_${agent}`,
-  });
   const defaultModelDrafts = useAgentSettingDrafts({
     ...draftDeps,
     actual: actualDefaultModels,
@@ -344,8 +296,7 @@ export function useSettingsModalState({
     settingKey: (agent) => `default_effort_${agent}`,
     flashKey: (agent) => `default_model_${agent}`,
   });
-  // Per-agent context-window cap; a chief launch still takes the chief cap above.
-  // Blank => uncapped, unlike the chief and headless caps whose blank means the default.
+  // Blank => uncapped, unlike the headless cap whose blank means the default.
   const defaultContextCapDrafts = useAgentSettingDrafts({
     ...draftDeps,
     actual: actualDefaultContextCaps,
@@ -694,10 +645,6 @@ export function useSettingsModalState({
     settings,
     activityAgents,
     gardenAdvisorAgents,
-    chiefOverrideAgentList,
-    chiefModelDrafts,
-    chiefEffortDrafts,
-    chiefContextCapDraft,
     headlessContextCapDraft,
     hasAvailableAgents,
     orderedAgentList,

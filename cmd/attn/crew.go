@@ -118,7 +118,9 @@ commands:
         --launch-desktop selects own, a desktop digit (an empty slot gets a new desktop), name or id.
         --cwd sets the working directory; --model selects the model.
         --agent accepts claude, codex, or an installed plugin driver.
-        --agent "" restores the crew default; --model "" the harness default.
+        --agent "" restores the crew default.
+        --model "" restores default_model_<harness>, else fable on Claude;
+        --model default runs on the harness's own default.
         --effort selects effort; the harness reports its levels in Settings.
         --effort "" restores the harness default.
         --awareness-dir sets context dirs. Repeat to replace the saved list.

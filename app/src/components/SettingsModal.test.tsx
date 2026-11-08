@@ -1,4 +1,4 @@
-import { openRoute, pickModel, pickEffort, enterModel, routeDialog } from '../test/harnessRoute';
+import { openRoute, pickModel, pickEffort, routeDialog } from '../test/harnessRoute';
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { describe, expect, it, vi } from 'vitest';
@@ -225,7 +225,7 @@ describe('SettingsModal notebook folder', () => {
   });
 });
 
-describe('SettingsModal chief settings', () => {
+describe('SettingsModal agent settings', () => {
   const agentSection = (section: string, settings: Record<string, string>) =>
     openSection(section, { settings: { claude_available: 'true', codex_available: 'true', ...settings } });
 
@@ -267,9 +267,9 @@ describe('SettingsModal chief settings', () => {
     ]);
   });
 
-  it.each(['chief', 'default'] as const)('uses discovered %s model and effort controls with a fixed harness', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', {});
-    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+  it('uses discovered default model and effort controls with a fixed harness', async () => {
+    const daemon = await agentSection('agents', {});
+    const label = 'Claude default model';
     const field = within(screen.getByRole('button', { name: label }));
     expect(field.getByText('Harness')).toBeInTheDocument();
     expect(field.getByText('Claude')).toBeInTheDocument();
@@ -277,53 +277,35 @@ describe('SettingsModal chief settings', () => {
     expect(routeDialog().queryByRole('listbox', { name: 'Harness' })).toBeNull();
     await pickModel(daemon, 'Opus 5.5');
     await pickEffort(daemon, 'high');
-    expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, 'opus'], [`${kind}_effort_claude`, 'high']]);
+    expect(savedSettings(daemon)).toEqual([['default_model_claude', 'opus'], ['default_effort_claude', 'high']]);
   });
 
-  it.each(['chief', 'default'] as const)('keeps a missing stored %s model visible and does not write on open', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'retired-model', [`${kind}_effort_claude`]: 'future-effort' });
-    const label = kind === 'chief' ? 'Claude Chief model' : 'Claude default model';
+  it('keeps a missing stored default model visible and does not write on open', async () => {
+    const daemon = await agentSection('agents', { default_model_claude: 'retired-model', default_effort_claude: 'future-effort' });
+    const label = 'Claude default model';
     await openRoute(daemon, label);
     expect(routeDialog().getByRole('option', { name: /retired-model/ })).toHaveAttribute('aria-selected', 'true');
     expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('future-effort');
     expect(savedSettings(daemon)).toEqual([]);
   });
 
-  it.each(['chief', 'default'] as const)('clears a %s model override through its default row', async (kind) => {
-    const daemon = await agentSection(kind === 'chief' ? 'backgroundAgents' : 'agents', { [`${kind}_model_claude`]: 'opus' });
-    await openRoute(daemon, kind === 'chief' ? 'Claude Chief model' : 'Claude default model');
-    await pickModel(daemon, kind === 'chief' ? 'Deep default → Opus 5.5' : 'Claude default');
-    expect(savedSettings(daemon)).toEqual([[`${kind}_model_claude`, '']]);
+  it('clears a default model override through its default row', async () => {
+    const daemon = await agentSection('agents', { default_model_claude: 'opus' });
+    await openRoute(daemon, 'Claude default model');
+    await pickModel(daemon, 'Claude default');
+    expect(savedSettings(daemon)).toEqual([['default_model_claude', '']]);
   });
 
-  it('shows deep at low as the unset Chief route and can pin a manual model ID', async () => {
-    const daemon = await agentSection('backgroundAgents', {});
-    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('Deep default → gpt-6.1-sol');
-    expect(screen.getByTestId('settings-chief-route-codex')).toHaveTextContent('low');
-    await openRoute(daemon, 'Codex Chief model');
-    await enterModel(daemon, 'custom-model');
-    expect(savedSettings(daemon)).toEqual([['chief_model_codex', 'custom-model']]);
-  });
+  it('shows the effective headless context-window cap', async () => {
+    await agentSection('backgroundAgents', { headless_context_window_cap: '90000' });
 
-  it('shows the effective context-window caps', async () => {
-    await agentSection('backgroundAgents', { chief_context_window_cap: '120000', headless_context_window_cap: '90000' });
-
-    expect(screen.getByTestId('settings-chief-context-cap')).toHaveValue(120000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(90000);
   });
 
-  it('defaults both context-window caps to 128000 when unset', async () => {
+  it('defaults the headless context-window cap to 128000 when unset', async () => {
     await agentSection('backgroundAgents', {});
 
-    expect(screen.getByTestId('settings-chief-context-cap')).toHaveValue(128000);
     expect(screen.getByTestId('settings-headless-context-cap')).toHaveValue(128000);
-  });
-
-  it('commits a changed chief context-window cap on blur', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_context_window_cap: '128000' });
-
-    await commitField(daemon, 'settings-chief-context-cap', '100000');
-    expect(savedSettings(daemon)).toEqual([['chief_context_window_cap', '100000']]);
   });
 
   it('commits a changed headless context-window cap on blur', async () => {
@@ -334,9 +316,9 @@ describe('SettingsModal chief settings', () => {
   });
 
   it('does not re-commit an unchanged context-window cap on blur', async () => {
-    const daemon = await agentSection('backgroundAgents', { chief_context_window_cap: '128000' });
+    const daemon = await agentSection('backgroundAgents', { headless_context_window_cap: '128000' });
 
-    await commitField(daemon, 'settings-chief-context-cap');
+    await commitField(daemon, 'settings-headless-context-cap');
     expect(savedSettings(daemon)).toEqual([]);
   });
 

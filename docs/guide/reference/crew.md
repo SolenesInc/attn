@@ -159,7 +159,7 @@ It never touches the member's markdown files.
 | `--launch-desktop <own\|digit\|name\|id>` | Where sessions start. `own` or an empty desktop digit creates a new desktop, and `--desktop-name` names the desktop. |
 | `--cwd <dir>` | The working folder. Without it, the member works in its home. |
 | `--agent <name>` | `claude`, `codex` or an installed plugin harness. `""` goes back to the crew default, Claude Code. |
-| `--model <name>`, `--effort <level>` | The model and effort. `""` goes back to the harness default. |
+| `--model <name>`, `--effort <level>` | The model and effort. `--model ""` goes back to `default_model_<harness>`, or `fable` on Claude Code when that is empty; `--model default` runs on the harness's own default. `--effort ""` goes back to the harness default. |
 | `--awareness-dir <dir>` | A folder the charter is about, which the member can reach. Repeat to set several. `""` clears them. |
 | `--home <dir>` | Where the member's home is now, after you moved or renamed its folder. See [Move a member's home](#move-a-members-home). |
 

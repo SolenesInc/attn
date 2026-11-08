@@ -53,6 +53,9 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if err != nil {
 		return nil, err
 	}
+	if err := refuseRetiredChiefSetting(spec, msg.Key); err != nil {
+		return nil, err
+	}
 	if err := validateSetting(d, spec, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
@@ -299,7 +302,6 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	if raw, ok := headless.Override(); ok {
 		settings[setting.HeadlessTasksEnabledOverride.Key] = raw
 	}
-	settings[setting.ChiefContextWindowCap.Key] = strconv.Itoa(resolveContextWindowCap(stored[setting.ChiefContextWindowCap.Key]))
 	settings[setting.HeadlessContextWindowCap.Key] = strconv.Itoa(resolveContextWindowCap(stored[setting.HeadlessContextWindowCap.Key]))
 	settings[setting.ActivityPresenceIdleSeconds.Key] = strconv.Itoa(int(d.presenceIdleLimit() / time.Second))
 	if intervals, err := parseActivityIntervals(stored[setting.ActivityIntervals.Key]); err == nil {

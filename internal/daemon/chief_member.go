@@ -79,7 +79,10 @@ func (d *Daemon) prefillChiefFromLegacySession(member *crew.Member) {
 	member.FirstDay.PreviousChief = previous
 	member.Agent = session.Agent
 	if intent, ok := d.store.LaunchIntent(previous); ok {
-		member.Model, member.Effort = intent.Model, intent.Effort
+		member.Model, member.Effort = strings.TrimSpace(intent.Model), intent.Effort
+	}
+	if member.Model == "" && member.LaunchAgent() == crew.DefaultAgent {
+		member.Model = crew.HarnessDefaultModel
 	}
 	if info, err := os.Stat(session.Directory); err == nil && info.IsDir() {
 		member.CWD = session.Directory

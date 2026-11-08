@@ -2,12 +2,24 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/who"
 )
 
 var errChiefIsCrewMember = errors.New("the Chief is a crew member, so no session can be marked Chief; wake it with `attn crew wake chief`")
+
+func refuseRetiredChiefSetting(spec *setting.Setting, key string) error {
+	switch spec {
+	case setting.ChiefModel, setting.ChiefEffort:
+		return fmt.Errorf("%s no longer controls the Chief: the Chief is a crew member, so set its harness, model and effort with `attn crew set chief --agent <harness> --model <model> --effort <level>`", key)
+	case setting.ChiefContextWindowCap:
+		return fmt.Errorf("%s no longer controls the Chief: the Chief is a crew member and compacts at default_context_window_cap_<harness>", key)
+	}
+	return nil
+}
 
 func (d *Daemon) profileChiefs() map[string]protocol.SessionID {
 	if d.store == nil {

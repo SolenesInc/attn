@@ -98,15 +98,17 @@ func (d *Daemon) inboxRecipient(a who.Address) (*protocol.Session, string, error
 			memberID = member.ID
 		}
 	}
+	if profileID, chief := a.Chief(); chief {
+		if member, found := d.chiefMember(profileID); found && !member.Retired {
+			memberID = member.ID
+		}
+	}
 	if memberID != "" {
 		var err error
 		id, err = d.crewSessionBoundTo(memberID)
 		if err != nil {
 			return nil, "", err
 		}
-	}
-	if profileID, chief := a.Chief(); chief {
-		id = d.chiefOfProfile(profileID)
 	}
 	return d.store.Get(id), memberID, nil
 }
