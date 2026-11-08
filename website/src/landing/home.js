@@ -783,6 +783,28 @@ function flyToShelf(tile, title) {
   };
 }
 
+const ROW_EASE = 'cubic-bezier(.2, .7, .3, 1)';
+function animateRowLeaving(leaving, update) {
+  const rowsBox = rowsEl.getBoundingClientRect();
+  const before = new Map([...rowsEl.children].map((li) => [li, li.getBoundingClientRect()]));
+  const from = before.get(leaving);
+  const ghost = leaving.cloneNode(true);
+  update();
+  ghost.inert = true;
+  ghost.classList.add('leaving');
+  Object.assign(ghost.style, { left: `${from.left - rowsBox.left}px`, top: `${from.top - rowsBox.top}px`, width: `${from.width}px` });
+  rowsEl.append(ghost);
+  ghost.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateX(-60%)', opacity: 0 }], { duration: 300, easing: 'ease-in' }).onfinish = () => ghost.remove();
+  for (const li of rowsEl.children) {
+    const was = before.get(li);
+    if (!was || li === ghost) continue;
+    const now = li.getBoundingClientRect();
+    if (was.left === now.left && was.top === now.top) continue;
+    li.animate([{ transform: `translate(${was.left - now.left}px, ${was.top - now.top}px)` }, { transform: 'none' }], { duration: 320, delay: 80, fill: 'backwards', easing: ROW_EASE });
+  }
+  document.querySelector('#count b').animate([{ transform: 'scale(1.8)', color: 'var(--green)' }, { transform: 'none' }], { duration: 480, easing: ROW_EASE });
+}
+
 function press() {
   if (sending || on === null) return;
   const prev = on, i = AGENTS.indexOf(prev);
@@ -809,8 +831,7 @@ function press() {
   });
   later(650, () => {
     const fly = flyToShelf($('front'), prev.title);
-    settleOn();
-    render({ type: false });
+    animateRowLeaving(rowFor.get(prev), () => { settleOn(); render({ type: false }); });
     $('front').style.opacity = '0';
     fly();
   });

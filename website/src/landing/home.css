@@ -179,7 +179,16 @@ kbd { font: 400 10px/15px var(--mono); color: #555; }
 .term .cinb { padding-left: 10px; text-indent: 0; }
 .cin::before, .term .cinb::before { flex: none; white-space: pre; }
 .cin .typed, .cinb .typed { white-space: pre; overflow: hidden; }
-#front.done .head .light, li.done .logo { background: var(--green); color: var(--green); transition: background .2s, color .2s; }
+#front.done .head .light { background: var(--green); transition: background .2s; }
+li.done .logo { color: var(--green); transition: color .2s; }
+.sb ul { position: relative; }
+.sb .count b { display: inline-block; }
+.sb li button { position: relative; }
+.sb li button::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: rgb(63 185 80 / .3); transform: scaleX(0); transform-origin: left; pointer-events: none; transition: transform .28s cubic-bezier(.2, .7, .3, 1); }
+.sb li.done button::after { transform: none; }
+.sb li.done .name { color: var(--green); transition: color .2s; }
+.sb li.done button.on::before { background: var(--green); }
+.sb li.leaving { position: absolute; pointer-events: none; }
 .ghost { position: fixed; z-index: 30; margin: 0; overflow: hidden; border-radius: 6px; pointer-events: none; transform-origin: 0 0; box-shadow: 0 10px 30px rgb(0 0 0 / .5); }
 .chip.arrive { animation: arrive 900ms ease-out 1; }
 @keyframes arrive { 0%, 60% { border-color: var(--accent); color: #e8e8e8; } }
