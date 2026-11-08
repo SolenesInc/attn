@@ -62,7 +62,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 		t.Fatalf("cancel = %+v, %v; want the review canceled", canceled, err)
 	}
 	w.restart()
-	app, cli = w.App(), w.Client()
+	cli = w.Client()
 	if after := gardenReviewShow(t, cli, first.Run.ID); after.Review == nil || after.Review.Run.Status != "canceled" {
 		t.Fatalf("after a restart the canceled review is %+v", after.Review)
 	}

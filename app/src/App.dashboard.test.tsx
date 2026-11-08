@@ -78,27 +78,6 @@ describe('App dashboard', () => {
     expect(row('review-1')).toHaveTextContent('Fix validation race');
   });
 
-  it('marks the chief of staff and takes the user to it from its summary', async () => {
-    const { daemon } = await renderHome([
-      agent('chief-1', { label: 'planner', state: 'waiting_input', chief_of_staff: true }),
-      agent('worker-1', { label: 'parser-worker' }),
-    ]);
-    expect(within(row('chief-1')!).getByLabelText('Chief of staff')).toBeInTheDocument();
-    const summary = screen.getByTestId('chief-session-summary');
-    expect(summary).toHaveTextContent('Session: waiting input');
-
-    await gesture(daemon, () => fireEvent.click(within(summary).getByRole('button', { name: /planner/ })));
-
-    expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'chief-1' });
-  });
-
-  it('asks for a chief when none is set', async () => {
-    await renderHome([agent('worker')]);
-
-    expect(screen.getByText('Assign a session as chief to track delegated work.')).toBeInTheDocument();
-    expect(screen.queryByTestId('chief-session-summary')).toBeNull();
-  });
-
   describe('activity', () => {
     it('shows what the agent is doing beside its name, and marks it stale once it stops being refreshed', async () => {
       await renderHome([agent('s1', { activity: 'running the frontend test suite', activity_at: fromNow(0) })]);

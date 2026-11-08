@@ -281,7 +281,6 @@ describe('App desktop layout', () => {
       desktops: [daemonDesktop('ws', { root: { type: 'tile', tile_id: 'notes', tile_kind: 'markdown', tile_params: '/notes.md' } }, { shortcut_slot: 1, active_pane_id: 'notes' })],
     } });
     await gesture(daemon, () => pressShortcut('desktop.select1'));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Show sidebar' })));
     const held: Array<Extract<(typeof daemon.sent)[number], { cmd: 'desktop_move_leaf' }>> = [];
     daemon.on('desktop_move_leaf', (command) => { held.push(command); });
 

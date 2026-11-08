@@ -29,7 +29,7 @@ go ./internal/daemon TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnc
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
 go ./internal/daemon TestSendingASeedToASleepingChiefMemberWakesIt
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
-go ./internal/daemon TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins
+go ./internal/daemon TestAReloadedPluginSessionResumesWithItsPins
 go ./internal/daemon TestAChiefCannotCloseAnAgentOfAnotherProfile
 go ./internal/daemon TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook
 go ./internal/daemon TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne
@@ -100,7 +100,7 @@ go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndI
 group prompts \.go$|^go\.(mod|sum)$|^internal/prompts/
 go ./internal/daemon TestLegacyPromptCompatibility
 go ./cmd/attn TestLegacyPromptCompatibility
-go ./internal/crew TestLegacyPromptCompatibility
+go ./internal/crew TestPrimingPromptCompatibility
 go ./internal/transcript TestLegacyPromptCompatibility
 go ./internal/activity TestLegacyPromptCompatibility
 go ./internal/classifier TestLegacyPromptCompatibility
