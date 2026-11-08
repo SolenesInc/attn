@@ -1,0 +1,50 @@
+[
+  {
+    "name": "all",
+    "kind": "bool",
+    "default": "false",
+    "usage": "show every seed"
+  },
+  {
+    "name": "json",
+    "kind": "bool",
+    "default": "false",
+    "usage": "print JSON"
+  },
+  {
+    "name": "on",
+    "kind": "bool",
+    "default": "true",
+    "usage": "starts enabled"
+  },
+  {
+    "name": "m",
+    "kind": "string",
+    "default": "",
+    "usage": "the message"
+  },
+  {
+    "name": "plot",
+    "kind": "string",
+    "default": "fallback",
+    "usage": "the `name` of the plot"
+  },
+  {
+    "name": "limit",
+    "kind": "int",
+    "default": "20",
+    "usage": "how many"
+  },
+  {
+    "name": "since",
+    "kind": "int64",
+    "default": "0",
+    "usage": "a bookmark"
+  },
+  {
+    "name": "timeout",
+    "kind": "duration",
+    "default": "1m30s",
+    "usage": "how long to wait"
+  }
+]

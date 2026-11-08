@@ -123,6 +123,15 @@ jobs:
               - 'cmd/settingsgen/**'
               - 'app/src/types/settings.generated.ts'
               - 'scripts/generate-protocol-version.mjs'
+              - 'scripts/generate-rust-protocol.mjs'
+              - 'cmd/cligen/**'
+              - 'cli/**'
+              - 'internal/protocol/constants.go'
+              - 'internal/garden/**'
+              - 'internal/prompts/**'
+              - 'internal/ask/**'
+              - 'internal/inbox/**'
+              - 'go.mod'
               - 'Makefile'
               - '.github/workflows/ci.yml'
               - '.tool-versions'
@@ -130,6 +139,7 @@ jobs:
             tauri:
               - 'app/src-tauri/**'
               - 'pty-host/**'
+              - 'cli/**'
               - 'internal/ptyhost/**'
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
@@ -728,6 +738,7 @@ jobs:
           workspaces: |
             app/src-tauri
             pty-host
+            cli
           # Saving on PRs too would copy this cache into every branch scope and
           # evict the rest of the repo's entries.
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -753,6 +764,13 @@ jobs:
           cargo fmt --manifest-path pty-host/Cargo.toml -- --check
           cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path pty-host/Cargo.toml
+
+      - name: CLI fmt, clippy, and test
+        run: |
+          cd ../..
+          cargo fmt --manifest-path cli/Cargo.toml --all -- --check
+          cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path cli/Cargo.toml --locked
 
       - name: Cargo fmt
         run: cargo fmt -- --check

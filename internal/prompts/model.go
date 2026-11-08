@@ -430,13 +430,7 @@ func (c *Catalog) render(n Node, values Values, selected bool, reason string) (T
 			bound[binding.Name] = child.Text
 		}
 		if selected {
-			source := c.templates[n.Source]
-			if n.Part != nil {
-				source = strings.SplitN(source, n.Part.Marker, 2)[n.Part.Index]
-			}
-			if !n.KeepFinalNewline {
-				source = strings.TrimSuffix(source, "\n")
-			}
+			source := c.TextTemplate(n)
 			t.Text = source
 			if !n.Verbatim {
 				t.Text = placeholder().ReplaceAllStringFunc(source, func(token string) string {
@@ -491,6 +485,27 @@ func (c *Catalog) render(n Node, values Values, selected bool, reason string) (T
 		t.Text = strings.TrimSpace(t.Text)
 	}
 	return t, nil
+}
+
+func (c *Catalog) TextTemplate(n Node) string {
+	source := c.templates[n.Source]
+	if n.Part != nil {
+		source = strings.SplitN(source, n.Part.Marker, 2)[n.Part.Index]
+	}
+	if !n.KeepFinalNewline {
+		source = strings.TrimSuffix(source, "\n")
+	}
+	return source
+}
+
+func SplitPlaceholders(template string) (literals []string, names []string) {
+	last := 0
+	for _, span := range placeholder().FindAllStringIndex(template, -1) {
+		literals = append(literals, template[last:span[0]])
+		names = append(names, template[span[0]+2:span[1]-2])
+		last = span[1]
+	}
+	return append(literals, template[last:]), names
 }
 
 func (c *Catalog) Sources() map[string]string {

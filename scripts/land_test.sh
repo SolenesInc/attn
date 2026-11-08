@@ -166,7 +166,7 @@ expect_checks 'check-go GO_PACKAGES=./internal/example' "${go_choice[@]}" sync
 
 printf '\n' >>go.mod
 land 'Module change'
-expect_checks 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
+expect_checks 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts

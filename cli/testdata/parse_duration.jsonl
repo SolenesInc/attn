@@ -1,0 +1,342 @@
+{"input":"","nanos":0,"error":"time: invalid duration \"\""}
+{"input":"0","nanos":0,"error":""}
+{"input":"+0","nanos":0,"error":""}
+{"input":"-0","nanos":0,"error":""}
+{"input":"1","nanos":0,"error":"time: missing unit in duration \"1\""}
+{"input":"s","nanos":0,"error":"time: invalid duration \"s\""}
+{"input":"1s","nanos":1000000000,"error":""}
+{"input":"+1s","nanos":1000000000,"error":""}
+{"input":"-1s","nanos":-1000000000,"error":""}
+{"input":"1.5h","nanos":5400000000000,"error":""}
+{"input":".5s","nanos":500000000,"error":""}
+{"input":"5.s","nanos":5000000000,"error":""}
+{"input":".","nanos":0,"error":"time: invalid duration \".\""}
+{"input":".s","nanos":0,"error":"time: invalid duration \".s\""}
+{"input":"1h2m3s","nanos":3723000000000,"error":""}
+{"input":"1h 2m","nanos":0,"error":"time: unknown unit \"h \" in duration \"1h 2m\""}
+{"input":"1ns","nanos":1,"error":""}
+{"input":"1us","nanos":1000,"error":""}
+{"input":"1µs","nanos":1000,"error":""}
+{"input":"1μs","nanos":1000,"error":""}
+{"input":"1ms","nanos":1000000,"error":""}
+{"input":"1m","nanos":60000000000,"error":""}
+{"input":"1h","nanos":3600000000000,"error":""}
+{"input":"1d","nanos":0,"error":"time: unknown unit \"d\" in duration \"1d\""}
+{"input":"1H","nanos":0,"error":"time: unknown unit \"H\" in duration \"1H\""}
+{"input":"2562047h47m16.854775807s","nanos":9223372036854775807,"error":""}
+{"input":"-2562047h47m16.854775808s","nanos":-9223372036854775808,"error":""}
+{"input":"2562047h47m16.854775808s","nanos":0,"error":"time: invalid duration \"2562047h47m16.854775808s\""}
+{"input":"9223372036854775807ns","nanos":9223372036854775807,"error":""}
+{"input":"9223372036854775808ns","nanos":0,"error":"time: invalid duration \"9223372036854775808ns\""}
+{"input":"99999999999h","nanos":0,"error":"time: invalid duration \"99999999999h\""}
+{"input":"0.000000001s","nanos":1,"error":""}
+{"input":"0.0000000001s","nanos":0,"error":""}
+{"input":"1.00000000000000000000001s","nanos":1000000000,"error":""}
+{"input":"1s1s","nanos":2000000000,"error":""}
+{"input":"1h1h","nanos":7200000000000,"error":""}
+{"input":" 1s","nanos":0,"error":"time: invalid duration \" 1s\""}
+{"input":"1s ","nanos":0,"error":"time: unknown unit \"s \" in duration \"1s \""}
+{"input":"--1s","nanos":0,"error":"time: invalid duration \"--1s\""}
+{"input":"1e3s","nanos":0,"error":"time: unknown unit \"e\" in duration \"1e3s\""}
+{"input":"\"1s","nanos":0,"error":"time: invalid duration \"\\\"1s\""}
+{"input":"é","nanos":0,"error":"time: invalid duration \"\\xc3\\xa9\""}
+{"input":"-98.9200086.53689h","nanos":0,"error":"time: missing unit in duration \"-98.9200086.53689h\""}
+{"input":"68295ns37547us.855ms.638ns","nanos":38470295,"error":""}
+{"input":"-45.60639m27.86190us52.58933ns","nanos":-2736383427913,"error":""}
+{"input":"68926h82579ns26758μs","nanos":248133600026840579,"error":""}
+{"input":"+73.50621s78.1122m64.68094µs","nanos":4760238274680,"error":""}
+{"input":"-55222d96.84500h","nanos":0,"error":"time: unknown unit \"d\" in duration \"-55222d96.84500h\""}
+{"input":".95s63586μs","nanos":1013586000,"error":""}
+{"input":"-.426μs80.64600us29.64742h.755µs","nanos":-106730712081827,"error":""}
+{"input":"+.321ns32.54768h57068ms","nanos":117228716000000,"error":""}
+{"input":"-95500h","nanos":-343800000000000000,"error":""}
+{"input":".135h.921ms92253µs65763s","nanos":66249093174000,"error":""}
+{"input":"+.162s16780d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+.162s16780d\""}
+{"input":"-17.60889μs","nanos":-17608,"error":""}
+{"input":".204ns92.46825d","nanos":0,"error":"time: unknown unit \"d\" in duration \".204ns92.46825d\""}
+{"input":"44543ns15.46496μs.949ms0.90924s","nanos":910249007,"error":""}
+{"input":"+63933d11240µs","nanos":0,"error":"time: unknown unit \"d\" in duration \"+63933d11240\\xc2\\xb5s\""}
+{"input":"+71.25958ms60327µs21973s","nanos":21973131586580,"error":""}
+{"input":"+65.93199ns","nanos":65,"error":""}
+{"input":"+40.73476d88147ns","nanos":0,"error":"time: unknown unit \"d\" in duration \"+40.73476d88147ns\""}
+{"input":"46.8d.211ms.605d","nanos":0,"error":"time: unknown unit \"d\" in duration \"46.8d.211ms.605d\""}
+{"input":"+.564μs3875m","nanos":232500000000564,"error":""}
+{"input":"95.17205ms61.31829μs.712","nanos":0,"error":"time: missing unit in duration \"95.17205ms61.31829\\xce\\xbcs.712\""}
+{"input":"-4.72535m7674369.7783µs23.73161µs","nanos":-291195393509,"error":""}
+{"input":"75926ms67.41261s31.93859","nanos":0,"error":"time: missing unit in duration \"75926ms67.41261s31.93859\""}
+{"input":"8530s","nanos":8530000000000,"error":""}
+{"input":"+.601us","nanos":601,"error":""}
+{"input":"-94896us","nanos":-94896000,"error":""}
+{"input":"+32.17470ns","nanos":32,"error":""}
+{"input":"+.294ns.855s","nanos":855000000,"error":""}
+{"input":"56.92274h","nanos":204921864000000,"error":""}
+{"input":"11.45233ns.326s","nanos":326000011,"error":""}
+{"input":".722m41.25754µs.267µs","nanos":43320041524,"error":""}
+{"input":"+73.87040d85.84818.97d.150h","nanos":0,"error":"time: unknown unit \"d\" in duration \"+73.87040d85.84818.97d.150h\""}
+{"input":"43.49813d38.1510ms85.83624ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"43.49813d38.1510ms85.83624ms\""}
+{"input":".737s","nanos":737000000,"error":""}
+{"input":"-40511ns4.85741µs95427h77434","nanos":0,"error":"time: missing unit in duration \"-40511ns4.85741\\xc2\\xb5s95427h77434\""}
+{"input":"35.8292576.81351m.681m.858ns","nanos":0,"error":"time: missing unit in duration \"35.8292576.81351m.681m.858ns\""}
+{"input":"-29.51576s99.49086d65675m","nanos":0,"error":"time: unknown unit \"d\" in duration \"-29.51576s99.49086d65675m\""}
+{"input":"55.25301ms63.74953d","nanos":0,"error":"time: unknown unit \"d\" in duration \"55.25301ms63.74953d\""}
+{"input":"16.19296h","nanos":58294656000000,"error":""}
+{"input":"-.77.995.259ms","nanos":0,"error":"time: missing unit in duration \"-.77.995.259ms\""}
+{"input":"+.648","nanos":0,"error":"time: missing unit in duration \"+.648\""}
+{"input":"+69.70040us","nanos":69700,"error":""}
+{"input":"86.99174m43.26907m27.71116s82.64116ms","nanos":7843442401160,"error":""}
+{"input":"+.363d70457s64802ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"+.363d70457s64802ms\""}
+{"input":"27.23845μs.404us84.71111h.151ms","nanos":304959996178642,"error":""}
+{"input":"+.19223.52827d57884s.820m","nanos":0,"error":"time: missing unit in duration \"+.19223.52827d57884s.820m\""}
+{"input":"+1.27382.544s","nanos":0,"error":"time: missing unit in duration \"+1.27382.544s\""}
+{"input":"+36711d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+36711d\""}
+{"input":"37.75000ms32.2600h33877m80157us","nanos":2148756117907000,"error":""}
+{"input":"+50.41072μs.700us59.1155498.87288d","nanos":0,"error":"time: missing unit in duration \"+50.41072\\xce\\xbcs.700us59.1155498.87288d\""}
+{"input":"+45.31974h81649d.367ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"+45.31974h81649d.367ms\""}
+{"input":"+68.10161s6.24348μs.91μs","nanos":68101617153,"error":""}
+{"input":"-15.37624µs","nanos":-15376,"error":""}
+{"input":"+46056μs.83µs","nanos":46056830,"error":""}
+{"input":"16522µs","nanos":16522000,"error":""}
+{"input":".8299336us.557s66.77063m","nanos":4006794800829,"error":""}
+{"input":"-.196ns","nanos":0,"error":""}
+{"input":"+19608d49.43551µs50.2033μs.255s","nanos":0,"error":"time: unknown unit \"d\" in duration \"+19608d49.43551\\xc2\\xb5s50.2033\\xce\\xbcs.255s\""}
+{"input":"-.35614.81609s19.16174µs.326µs","nanos":0,"error":"time: missing unit in duration \"-.35614.81609s19.16174\\xc2\\xb5s.326\\xc2\\xb5s\""}
+{"input":"-.15ns.37","nanos":0,"error":"time: missing unit in duration \"-.15ns.37\""}
+{"input":".597d81.80940ns","nanos":0,"error":"time: unknown unit \"d\" in duration \".597d81.80940ns\""}
+{"input":"17649ns","nanos":17649,"error":""}
+{"input":"89.78402μs40.50240µs61195ms.386s","nanos":61581130286,"error":""}
+{"input":"73.53412µs.474h51.23062h77861d","nanos":0,"error":"time: unknown unit \"d\" in duration \"73.53412\\xc2\\xb5s.474h51.23062h77861d\""}
+{"input":"-99.37992h","nanos":-357767712000000,"error":""}
+{"input":"97814μs","nanos":97814000,"error":""}
+{"input":"-6.26709.856ns.868h","nanos":0,"error":"time: missing unit in duration \"-6.26709.856ns.868h\""}
+{"input":"-57.63730ms.78μs","nanos":-57638080,"error":""}
+{"input":"99.772d97.29838m.614us37.55478h","nanos":0,"error":"time: unknown unit \"d\" in duration \"99.772d97.29838m.614us37.55478h\""}
+{"input":"+62.23594ns95.44465ns73949d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+62.23594ns95.44465ns73949d\""}
+{"input":"31738h50990ms.344ns.492μs","nanos":114256850990000492,"error":""}
+{"input":"82.8716ns.173s97117d40.80440m","nanos":0,"error":"time: unknown unit \"d\" in duration \"82.8716ns.173s97117d40.80440m\""}
+{"input":".48197776h28.27807d","nanos":0,"error":"time: unknown unit \"d\" in duration \".48197776h28.27807d\""}
+{"input":"69.12913ns66.40460us74.14037d","nanos":0,"error":"time: unknown unit \"d\" in duration \"69.12913ns66.40460us74.14037d\""}
+{"input":"33.57665ns.505µs","nanos":538,"error":""}
+{"input":"+.676s.434.482us","nanos":0,"error":"time: missing unit in duration \"+.676s.434.482us\""}
+{"input":".469μs42.90278d66529s.107h","nanos":0,"error":"time: unknown unit \"d\" in duration \".469\\xce\\xbcs42.90278d66529s.107h\""}
+{"input":"+42.98805ms.991m","nanos":59502988050,"error":""}
+{"input":"-5505d47601d25.36976m","nanos":0,"error":"time: unknown unit \"d\" in duration \"-5505d47601d25.36976m\""}
+{"input":"+.587m40.85930s","nanos":76079300000,"error":""}
+{"input":"-91250ns.233d79.50405ms.243ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"-91250ns.233d79.50405ms.243ms\""}
+{"input":".907us63810m71.60390m28370us","nanos":3832896262370907,"error":""}
+{"input":"-.976us","nanos":-976,"error":""}
+{"input":"-71.23456μs40195us.831μs57.25795h","nanos":-206128660267065,"error":""}
+{"input":"57.91883s.841d","nanos":0,"error":"time: unknown unit \"d\" in duration \"57.91883s.841d\""}
+{"input":"-83584ns","nanos":-83584,"error":""}
+{"input":"+.343.132ns","nanos":0,"error":"time: missing unit in duration \"+.343.132ns\""}
+{"input":"+77559s758513.25281d70.72199","nanos":0,"error":"time: unknown unit \"d\" in duration \"+77559s758513.25281d70.72199\""}
+{"input":".403µs.725ns","nanos":403,"error":""}
+{"input":"57803s21.96715µs53.24867ns","nanos":57803000022020,"error":""}
+{"input":".1104.56365m","nanos":0,"error":"time: missing unit in duration \".1104.56365m\""}
+{"input":"28325μs9.63615ms64.68967d.921μs","nanos":0,"error":"time: unknown unit \"d\" in duration \"28325\\xce\\xbcs9.63615ms64.68967d.921\\xce\\xbcs\""}
+{"input":"-31.97511ms43.3387us880665.53664ns","nanos":-32899113,"error":""}
+{"input":"-42.43056d97083s65688m","nanos":0,"error":"time: unknown unit \"d\" in duration \"-42.43056d97083s65688m\""}
+{"input":"-87.32739us.205μs33683","nanos":0,"error":"time: missing unit in duration \"-87.32739us.205\\xce\\xbcs33683\""}
+{"input":".996ns.765us","nanos":765,"error":""}
+{"input":"+.74µs.797m65677s","nanos":65724820000740,"error":""}
+{"input":".416μs","nanos":416,"error":""}
+{"input":"+.602d50.78235us52675.843ns","nanos":0,"error":"time: unknown unit \"d\" in duration \"+.602d50.78235us52675.843ns\""}
+{"input":"66214m22.82753m9555μs61887d","nanos":0,"error":"time: unknown unit \"d\" in duration \"66214m22.82753m9555\\xce\\xbcs61887d\""}
+{"input":".854ns66861μs.71μs","nanos":66861710,"error":""}
+{"input":".368m","nanos":22080000000,"error":""}
+{"input":"-81.76654h","nanos":-294359544000000,"error":""}
+{"input":"-70475ns.3028.4068h","nanos":0,"error":"time: missing unit in duration \"-70475ns.3028.4068h\""}
+{"input":"-10344s.531m7983d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-10344s.531m7983d\""}
+{"input":"53.42404d","nanos":0,"error":"time: unknown unit \"d\" in duration \"53.42404d\""}
+{"input":"+58898","nanos":0,"error":"time: missing unit in duration \"+58898\""}
+{"input":"-.885us","nanos":-885,"error":""}
+{"input":"51.66616ms.797us","nanos":51666957,"error":""}
+{"input":"29.62766s","nanos":29627660000,"error":""}
+{"input":"96.71519h","nanos":348174684000000,"error":""}
+{"input":".723µs.557μs48.4191ns75947ns","nanos":77275,"error":""}
+{"input":"-.480h17003m","nanos":-1021908000000000,"error":""}
+{"input":"-.254d.651us27.86054us85716m","nanos":0,"error":"time: unknown unit \"d\" in duration \"-.254d.651us27.86054us85716m\""}
+{"input":"+16450ms.869us28748ns40728µs","nanos":16490757617,"error":""}
+{"input":"+37694s","nanos":37694000000000,"error":""}
+{"input":"-46657m.416ns34107ns.131µs","nanos":-2799420000034238,"error":""}
+{"input":".353h89.53487s","nanos":1360334870000,"error":""}
+{"input":"-46015µs80.84189ns47.11159d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-46015\\xc2\\xb5s80.84189ns47.11159d\""}
+{"input":".877s5333μs60.81512ms","nanos":943148120,"error":""}
+{"input":"12872s40348ns57.29168d68.77411µs","nanos":0,"error":"time: unknown unit \"d\" in duration \"12872s40348ns57.29168d68.77411\\xc2\\xb5s\""}
+{"input":"82.99254us73978h.668h.727d","nanos":0,"error":"time: unknown unit \"d\" in duration \"82.99254us73978h.668h.727d\""}
+{"input":"-81.13569ns.995µs87879s.719d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-81.13569ns.995\\xc2\\xb5s87879s.719d\""}
+{"input":".641μs.532m12.63924d","nanos":0,"error":"time: unknown unit \"d\" in duration \".641\\xce\\xbcs.532m12.63924d\""}
+{"input":"9317215007s","nanos":0,"error":"time: invalid duration \"9317215007s\""}
+{"input":"-31689ns65160m80.96767d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-31689ns65160m80.96767d\""}
+{"input":"+64.41079ms54329ms36.93155µs.554d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+64.41079ms54329ms36.93155\\xc2\\xb5s.554d\""}
+{"input":"-.222μs.780m.142µs","nanos":-46800000364,"error":""}
+{"input":".222m11.29102μs","nanos":13320011291,"error":""}
+{"input":"7.86066m47.25096µs","nanos":471639647250,"error":""}
+{"input":"-64.76674µs33227µs","nanos":-33291766,"error":""}
+{"input":".724ms","nanos":724000,"error":""}
+{"input":"90248ms42804µs.555m38.87561m","nanos":2456127404000,"error":""}
+{"input":".713","nanos":0,"error":"time: missing unit in duration \".713\""}
+{"input":"59835s54766h89.6145μs","nanos":197217435000089614,"error":""}
+{"input":".29m78960µs.9s","nanos":18378960000,"error":""}
+{"input":"+47.18833µs5152h14328s15919us","nanos":18561528015966188,"error":""}
+{"input":".712d41079s","nanos":0,"error":"time: unknown unit \"d\" in duration \".712d41079s\""}
+{"input":"+76.83112μs.221h6.22623us","nanos":795600083057,"error":""}
+{"input":".373μs702205684m38.95415d","nanos":0,"error":"time: invalid duration \".373\\xce\\xbcs702205684m38.95415d\""}
+{"input":".284h24.61177ns","nanos":1022400000024,"error":""}
+{"input":"-.433d.654μs.124µs","nanos":0,"error":"time: unknown unit \"d\" in duration \"-.433d.654\\xce\\xbcs.124\\xc2\\xb5s\""}
+{"input":".307h90482ms88.66554ns.625µs","nanos":1195682000713,"error":""}
+{"input":"+29767h.207ns84526d36.61077µs","nanos":0,"error":"time: unknown unit \"d\" in duration \"+29767h.207ns84526d36.61077\\xc2\\xb5s\""}
+{"input":"-93.78538m14967s46571","nanos":0,"error":"time: missing unit in duration \"-93.78538m14967s46571\""}
+{"input":"92.20898m14391ns","nanos":5532538814391,"error":""}
+{"input":".575μs77351ns","nanos":77926,"error":""}
+{"input":"9008ms50.15151us36086","nanos":0,"error":"time: missing unit in duration \"9008ms50.15151us36086\""}
+{"input":".970ns2.90838m61935d","nanos":0,"error":"time: unknown unit \"d\" in duration \".970ns2.90838m61935d\""}
+{"input":"13351h.955ns","nanos":48063600000000000,"error":""}
+{"input":".47794.12207ns52747us","nanos":0,"error":"time: missing unit in duration \".47794.12207ns52747us\""}
+{"input":"+.811d35085d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+.811d35085d\""}
+{"input":"30.93204us21452ms","nanos":21452030932,"error":""}
+{"input":"+.669d89.40471d90938μs","nanos":0,"error":"time: unknown unit \"d\" in duration \"+.669d89.40471d90938\\xce\\xbcs\""}
+{"input":".979us","nanos":979,"error":""}
+{"input":"61142μs70.67013μs","nanos":61212670,"error":""}
+{"input":"-.771ns.703s","nanos":-703000000,"error":""}
+{"input":"70073h","nanos":252262800000000000,"error":""}
+{"input":"32.30272us.331ns3569μs","nanos":3601302,"error":""}
+{"input":"-.624h67258ns","nanos":-2246400067258,"error":""}
+{"input":"82.62931s","nanos":82629310000,"error":""}
+{"input":"60.50175s32.47122.274d","nanos":0,"error":"time: missing unit in duration \"60.50175s32.47122.274d\""}
+{"input":"+32188s","nanos":32188000000000,"error":""}
+{"input":"22133s45501ns.862h19.93616μs","nanos":25236200065437,"error":""}
+{"input":"-18.71146d72.25731ns46453h","nanos":0,"error":"time: unknown unit \"d\" in duration \"-18.71146d72.25731ns46453h\""}
+{"input":".119μs58.13112ms21.5145us.205s","nanos":263152753,"error":""}
+{"input":".245h.836h9.56202μs96514d","nanos":0,"error":"time: unknown unit \"d\" in duration \".245h.836h9.56202\\xce\\xbcs96514d\""}
+{"input":"30505us.891h65.98606us","nanos":3207630570986,"error":""}
+{"input":"99362.547h932μs","nanos":357705169200932000,"error":""}
+{"input":"+10.25071d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+10.25071d\""}
+{"input":"+22577d88.1793µs.887ns","nanos":0,"error":"time: unknown unit \"d\" in duration \"+22577d88.1793\\xc2\\xb5s.887ns\""}
+{"input":".670h68.64298us.532h21142s","nanos":25469200068642,"error":""}
+{"input":".455μs","nanos":455,"error":""}
+{"input":".771ns93717µs37246ms19776d","nanos":0,"error":"time: unknown unit \"d\" in duration \".771ns93717\\xc2\\xb5s37246ms19776d\""}
+{"input":"-51.63416s","nanos":-51634160000,"error":""}
+{"input":"5.21887m.548µs","nanos":313132200548,"error":""}
+{"input":"12.19381ns21285ms","nanos":21285000012,"error":""}
+{"input":".695s77.11898ms","nanos":772118980,"error":""}
+{"input":"-39.31046ns45.3060ns","nanos":-84,"error":""}
+{"input":"27.98153h","nanos":100733508000000,"error":""}
+{"input":"+27188ms.28us","nanos":27188000280,"error":""}
+{"input":"63121d60.42994μs15.76114μs40.91874ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"63121d60.42994\\xce\\xbcs15.76114\\xce\\xbcs40.91874ms\""}
+{"input":"84.8613h","nanos":305500680000000,"error":""}
+{"input":"43753","nanos":0,"error":"time: missing unit in duration \"43753\""}
+{"input":"77105m59.4158m11899","nanos":0,"error":"time: missing unit in duration \"77105m59.4158m11899\""}
+{"input":"87394μs.352s53.9224d","nanos":0,"error":"time: unknown unit \"d\" in duration \"87394\\xce\\xbcs.352s53.9224d\""}
+{"input":"+38606ms.950us38289ns","nanos":38606039239,"error":""}
+{"input":".170µs22424µs.70d","nanos":0,"error":"time: unknown unit \"d\" in duration \".170\\xc2\\xb5s22424\\xc2\\xb5s.70d\""}
+{"input":"-88854h","nanos":-319874400000000000,"error":""}
+{"input":"+.667µs29952s.134μs","nanos":29952000000801,"error":""}
+{"input":"-.694us97755m.198ms","nanos":-5865300000198694,"error":""}
+{"input":"-86.47902h.705m54.31946ms","nanos":-311366826319460,"error":""}
+{"input":"-34.13624ms52963ms","nanos":-52997136240,"error":""}
+{"input":"+74095h.857m33742ns","nanos":266742051420033742,"error":""}
+{"input":"-25.47958us","nanos":-25479,"error":""}
+{"input":"37041s.88μs","nanos":37041000000880,"error":""}
+{"input":"54763ns.976ms","nanos":1030763,"error":""}
+{"input":".647ms","nanos":647000,"error":""}
+{"input":"-67.64265m.787ms.708","nanos":0,"error":"time: missing unit in duration \"-67.64265m.787ms.708\""}
+{"input":"-6618h","nanos":-23824800000000000,"error":""}
+{"input":".135h86500d.928μs95.85368m","nanos":0,"error":"time: unknown unit \"d\" in duration \".135h86500d.928\\xce\\xbcs95.85368m\""}
+{"input":"-4455724713us","nanos":-4455724713000,"error":""}
+{"input":"57239µs.816m.742ns","nanos":49017239000,"error":""}
+{"input":"+.638m75.16765ms","nanos":38355167650,"error":""}
+{"input":"26.48418m.156ms","nanos":1589050956000,"error":""}
+{"input":"47.86629us70303d79.97391ns27.63358","nanos":0,"error":"time: unknown unit \"d\" in duration \"47.86629us70303d79.97391ns27.63358\""}
+{"input":"70318µs.449µs.441m","nanos":26530318449,"error":""}
+{"input":".827us20310µs","nanos":20310827,"error":""}
+{"input":"78.41974us13375ns54.26559m.15µs","nanos":3255935491944,"error":""}
+{"input":"-.895ms34.1481h","nanos":-122933160895000,"error":""}
+{"input":"+9768d.172s.53620.54440ns","nanos":0,"error":"time: unknown unit \"d\" in duration \"+9768d.172s.53620.54440ns\""}
+{"input":".496µs16602s34.91062h.55s","nanos":142280782000496,"error":""}
+{"input":"23043us27287us.563h","nanos":2026850330000,"error":""}
+{"input":"-26.64627ns","nanos":-26,"error":""}
+{"input":"65.89269ns.630ms","nanos":630065,"error":""}
+{"input":"+47076s","nanos":47076000000000,"error":""}
+{"input":".5us24.64771s","nanos":24647710500,"error":""}
+{"input":"83994d88953d","nanos":0,"error":"time: unknown unit \"d\" in duration \"83994d88953d\""}
+{"input":"-32.82804.864d6094937.56745d","nanos":0,"error":"time: missing unit in duration \"-32.82804.864d6094937.56745d\""}
+{"input":".516s97.94803.909d","nanos":0,"error":"time: missing unit in duration \".516s97.94803.909d\""}
+{"input":"66.42191s.1μs","nanos":66421910100,"error":""}
+{"input":"48.71975us54120h54807h.822s","nanos":392137200822048719,"error":""}
+{"input":"33347us.411h","nanos":1479633347000,"error":""}
+{"input":"+.528ms15.579us6.28576us69.16113µs","nanos":619025,"error":""}
+{"input":"+54075ms.122h","nanos":493275000000,"error":""}
+{"input":"66.30511s","nanos":66305110000,"error":""}
+{"input":"-80874us","nanos":-80874000,"error":""}
+{"input":"31519ns","nanos":31519,"error":""}
+{"input":"-85.2164ms20.6805h46519d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-85.2164ms20.6805h46519d\""}
+{"input":"91.15220","nanos":0,"error":"time: missing unit in duration \"91.15220\""}
+{"input":"25.7056s","nanos":25705600000,"error":""}
+{"input":"+29.77538s8731378.72300μs72781us","nanos":38579539723,"error":""}
+{"input":"-.155us","nanos":-155,"error":""}
+{"input":"2.45056m.490ms","nanos":147034090000,"error":""}
+{"input":"50.57358ms","nanos":50573580,"error":""}
+{"input":"+37426µs27.65590ns7076d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+37426\\xc2\\xb5s27.65590ns7076d\""}
+{"input":"-91.4715µs92.52583μs61137µs","nanos":-61320996,"error":""}
+{"input":".399us","nanos":399,"error":""}
+{"input":"15.49956ns67495μs17.60205s58268s","nanos":58285669545015,"error":""}
+{"input":"-.874s","nanos":-874000000,"error":""}
+{"input":"-.992s4.49404ns7.40953µs15689d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-.992s4.49404ns7.40953\\xc2\\xb5s15689d\""}
+{"input":".81s64.5713938.79556h18.59792s","nanos":0,"error":"time: missing unit in duration \".81s64.5713938.79556h18.59792s\""}
+{"input":"14889h37793m.402us","nanos":55867980000000402,"error":""}
+{"input":"+56.9468h.93s4.93241ms","nanos":205009414932410,"error":""}
+{"input":"-.51µs32835m57078ms69726µs","nanos":-1970157147726510,"error":""}
+{"input":"-86.64690us","nanos":-86646,"error":""}
+{"input":"91446µs48.58643ns.189h","nanos":680491446048,"error":""}
+{"input":".866h.921ms","nanos":3117600921000,"error":""}
+{"input":"38915m76.69503d.984s65.21489d","nanos":0,"error":"time: unknown unit \"d\" in duration \"38915m76.69503d.984s65.21489d\""}
+{"input":"35.97078µs","nanos":35970,"error":""}
+{"input":"+61640h57513ns","nanos":221904000000057513,"error":""}
+{"input":"46579s58890s79018µs","nanos":105469079018000,"error":""}
+{"input":"83918us","nanos":83918000,"error":""}
+{"input":"+94342µs","nanos":94342000,"error":""}
+{"input":"-2.52265μs18974μs.44ns","nanos":-18976522,"error":""}
+{"input":"-84.71696µs","nanos":-84716,"error":""}
+{"input":".976d58.86362","nanos":0,"error":"time: unknown unit \"d\" in duration \".976d58.86362\""}
+{"input":"+37.70573s50039ms","nanos":87744730000,"error":""}
+{"input":"13032s.981ns.591m","nanos":13067460000000,"error":""}
+{"input":"-26289ms","nanos":-26289000000,"error":""}
+{"input":"+.509ms96.80289h60.65099μs21.64825","nanos":0,"error":"time: missing unit in duration \"+.509ms96.80289h60.65099\\xce\\xbcs21.64825\""}
+{"input":"84959s8814ns","nanos":84959000008814,"error":""}
+{"input":"-67868s73983h44.22993ms60269µs","nanos":-266406668104498930,"error":""}
+{"input":".800h40121m71.81663ns69585us","nanos":2410140069585071,"error":""}
+{"input":"43.90621ns","nanos":43,"error":""}
+{"input":"+83.52107us47.1488m.951μs","nanos":2828928084472,"error":""}
+{"input":"+2070μs81614us.320d21404ms","nanos":0,"error":"time: unknown unit \"d\" in duration \"+2070\\xce\\xbcs81614us.320d21404ms\""}
+{"input":"992433107ms41.73493ms9310d","nanos":0,"error":"time: unknown unit \"d\" in duration \"992433107ms41.73493ms9310d\""}
+{"input":"-83361h23.64130.752ms.461ns","nanos":0,"error":"time: missing unit in duration \"-83361h23.64130.752ms.461ns\""}
+{"input":".919ms97.33094m.747ms","nanos":5839858066000,"error":""}
+{"input":"+8840319.77649d23.86445d37.67941h","nanos":0,"error":"time: unknown unit \"d\" in duration \"+8840319.77649d23.86445d37.67941h\""}
+{"input":"-75.6784ms","nanos":-75678400,"error":""}
+{"input":"-81.36311ms37665d.835d.591µs","nanos":0,"error":"time: unknown unit \"d\" in duration \"-81.36311ms37665d.835d.591\\xc2\\xb5s\""}
+{"input":"+21600us72264h9.91916us24.66355m","nanos":260151879834609919,"error":""}
+{"input":"22285ms61.83576h","nanos":222631021000000,"error":""}
+{"input":"8.63583µs.899h23895us","nanos":3236423903635,"error":""}
+{"input":".936µs.595m","nanos":35700000936,"error":""}
+{"input":"-91672s7466872.15842h","nanos":0,"error":"time: invalid duration \"-91672s7466872.15842h\""}
+{"input":".921s","nanos":921000000,"error":""}
+{"input":".897ns","nanos":0,"error":""}
+{"input":"+.10130.14443µs62825μs.279s","nanos":0,"error":"time: missing unit in duration \"+.10130.14443\\xc2\\xb5s62825\\xce\\xbcs.279s\""}
+{"input":"+31252s29960h.579ms86908d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+31252s29960h.579ms86908d\""}
+{"input":"+217m26472ns","nanos":13020000026472,"error":""}
+{"input":".565h40.26523ns","nanos":2034000000040,"error":""}
+{"input":"83.25987h27.57664m.67μs","nanos":301390130400670,"error":""}
+{"input":"+9989d","nanos":0,"error":"time: unknown unit \"d\" in duration \"+9989d\""}
+{"input":"-.386μs.345m","nanos":-20700000386,"error":""}
+{"input":".51692.18422d.636μs","nanos":0,"error":"time: missing unit in duration \".51692.18422d.636\\xce\\xbcs\""}
+{"input":"-.648.278h.479h15979µs","nanos":0,"error":"time: missing unit in duration \"-.648.278h.479h15979\\xc2\\xb5s\""}
+{"input":".477m4820m","nanos":289228620000000,"error":""}
+{"input":"68.86565μs29.3636530.51071h.341ms","nanos":0,"error":"time: missing unit in duration \"68.86565\\xce\\xbcs29.3636530.51071h.341ms\""}
+{"input":".201us68722μs.73μs13274s","nanos":13274068722931,"error":""}
+{"input":"99.78650h67938ns.958d12.27235h","nanos":0,"error":"time: unknown unit \"d\" in duration \"99.78650h67938ns.958d12.27235h\""}
+{"input":"+24.71044ms5.18544","nanos":0,"error":"time: missing unit in duration \"+24.71044ms5.18544\""}
+{"input":".856d91.29927m70191ms57.84674d","nanos":0,"error":"time: unknown unit \"d\" in duration \".856d91.29927m70191ms57.84674d\""}
+{"input":".377µs","nanos":377,"error":""}
+{"input":"98746us64.41428s.381ms","nanos":64513407000,"error":""}
+{"input":"-54.4246ns.444us98.5191m72130d","nanos":0,"error":"time: unknown unit \"d\" in duration \"-54.4246ns.444us98.5191m72130d\""}
+{"input":"-7413m.757h.53μs.955h","nanos":-450943200000530,"error":""}

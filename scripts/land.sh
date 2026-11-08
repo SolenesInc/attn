@@ -30,6 +30,16 @@ protocol_outputs=(
   internal/protocol/homegateway/version.go
   app/src/types/homeGatewayGenerated.ts
   app/src/types/homeGatewayVersion.ts
+  cli/protocol/src/generated.rs
+  cli/protocol/src/go_values.rs
+  cli/testdata/duration_string.jsonl
+  cli/testdata/flag.jsonl
+  cli/testdata/flag_spec.json
+  cli/testdata/json_indent.jsonl
+  cli/testdata/local_time.jsonl
+  cli/testdata/parse_duration.jsonl
+  cli/testdata/quote.jsonl
+  cli/testdata/tabwriter.jsonl
 )
 prompt_outputs=(
   internal/prompts/catalog.generated.json
@@ -192,7 +202,7 @@ run_checks() {
     fi
     go_checks=(check-go "GO_PACKAGES=$packages")
   fi
-  touches '^internal/protocol/schema/|^internal/setting/|^cmd/settingsgen/' && targets+=(check-types)
+  touches '^internal/protocol/(schema/|constants\.go)|^internal/(setting|garden|prompts|ask|inbox)/|^cmd/(settingsgen|cligen)/|^cli/|^scripts/generate-rust-protocol\.mjs|^go\.mod$' && targets+=(check-types)
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)

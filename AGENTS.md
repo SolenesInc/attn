@@ -302,8 +302,11 @@ the generated files. This also writes the protocol schema hash into
 `internal/protocol/protocol_version.go` and `app/src/types/protocolVersion.ts`.
 `make check-types` checks that all generated files are current.
 
-Never hand-edit `internal/protocol/generated.go` or
-`app/src/types/generated.ts`.
+Never hand-edit `internal/protocol/generated.go`,
+`app/src/types/generated.ts`, `cli/protocol/src/generated.rs`,
+`cli/protocol/src/go_values.rs`, or `cli/testdata/`. The last two come from
+`cmd/cligen`, which reads Go constants, settings and prompts the CLI uses, so
+changing one of those also needs `make generate-types`.
 
 ## Event bus
 

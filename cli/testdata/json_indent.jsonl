@@ -1,0 +1,325 @@
+{"input":"{}","output":"{}"}
+{"input":"[]","output":"[]"}
+{"input":"null","output":"null"}
+{"input":"true","output":"true"}
+{"input":"0","output":"0"}
+{"input":"-1.5e+3","output":"-1.5e+3"}
+{"input":"\"\"","output":"\"\""}
+{"input":"[[]]","output":"[\n  []\n]"}
+{"input":"[{}]","output":"[\n  {}\n]"}
+{"input":"{\"a\":{}}","output":"{\n  \"a\": {}\n}"}
+{"input":"{\"a\":[]}","output":"{\n  \"a\": []\n}"}
+{"input":"[1,2,3]","output":"[\n  1,\n  2,\n  3\n]"}
+{"input":"{\"a\":1,\"b\":[true,null,{\"c\":\"d\"}]}","output":"{\n  \"a\": 1,\n  \"b\": [\n    true,\n    null,\n    {\n      \"c\": \"d\"\n    }\n  ]\n}"}
+{"input":" { \"a\" : 1 , \"b\" : [ 1 , 2 ] } ","output":"{\n  \"a\": 1,\n  \"b\": [\n    1,\n    2\n  ]\n} "}
+{"input":"{\n\"a\":\t1\r\n}","output":"{\n  \"a\": 1\n}"}
+{"input":"{\"z\":1,\"a\":2}","output":"{\n  \"z\": 1,\n  \"a\": 2\n}"}
+{"input":"\"<>&\"","output":"\"<>&\""}
+{"input":"\"<>&\"","output":"\"<>&\""}
+{"input":"\"éé😀\"","output":"\"éé😀\""}
+{"input":"\"\\\\\\\"\\/\\n\"","output":"\"\\\\\\\"\\/\\n\""}
+{"input":"{\"\":\"\"}","output":"{\n  \"\": \"\"\n}"}
+{"input":"1E400","output":"1E400"}
+{"input":"[ ]","output":"[]"}
+{"input":"{ }","output":"{}"}
+{"input":"[ [ ] , { } ]","output":"[\n  [],\n  {}\n]"}
+{"input":"609853.3242275299","output":"609853.3242275299"}
+{"input":"\"\\t\\n\"","output":"\"\\t\\n\""}
+{"input":"null","output":"null"}
+{"input":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"","output":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\""}
+{"input":"true","output":"true"}
+{"input":"true","output":"true"}
+{"input":"{}","output":"{}"}
+{"input":"null","output":"null"}
+{"input":"53925526049","output":"53925526049"}
+{"input":"\"日本語\"","output":"\"日本語\""}
+{"input":"763576","output":"763576"}
+{"input":"566347.1204979832","output":"566347.1204979832"}
+{"input":"983946.0504884658","output":"983946.0504884658"}
+{"input":"676583.5557570122","output":"676583.5557570122"}
+{"input":"737298.9828103848","output":"737298.9828103848"}
+{"input":"7872262194779","output":"7872262194779"}
+{"input":"{\"\":true}","output":"{\n  \"\": true\n}"}
+{"input":"null","output":"null"}
+{"input":"1000447585","output":"1000447585"}
+{"input":"187777.69216913308","output":"187777.69216913308"}
+{"input":"{\"\\t\\n\":{\"null\":false,\"\\u2028\":true,\"😀\":{\"\\t\\n\":{\"\":null,\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":null,\"{\\\"not\\\":\\\"json\\\"}\":\"plain\"},\"plain\":[323702.3807927207]}},\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":{\"\":{\"plain\":null,\"😀\":true},\"\\t\\n\":[21609.880747077594,416293.54336697643,131590638],\"plain\":null}}","output":"{\n  \"\\t\\n\": {\n    \"null\": false,\n    \"\\u2028\": true,\n    \"😀\": {\n      \"\\t\\n\": {\n        \"\": null,\n        \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": null,\n        \"{\\\"not\\\":\\\"json\\\"}\": \"plain\"\n      },\n      \"plain\": [\n        323702.3807927207\n      ]\n    }\n  },\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": {\n    \"\": {\n      \"plain\": null,\n      \"😀\": true\n    },\n    \"\\t\\n\": [\n      21609.880747077594,\n      416293.54336697643,\n      131590638\n    ],\n    \"plain\": null\n  }\n}"}
+{"input":"false","output":"false"}
+{"input":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"","output":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\""}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"[false,\"\\t\\n\"]","output":"[\n  false,\n  \"\\t\\n\"\n]"}
+{"input":"\"😀\"","output":"\"😀\""}
+{"input":"366","output":"366"}
+{"input":"112162.93834822344","output":"112162.93834822344"}
+{"input":"856474.2062452094","output":"856474.2062452094"}
+{"input":"773280.1077983085","output":"773280.1077983085"}
+{"input":"[]","output":"[]"}
+{"input":"3015377","output":"3015377"}
+{"input":"null","output":"null"}
+{"input":"[\"日本語\",null,[]]","output":"[\n  \"日本語\",\n  null,\n  []\n]"}
+{"input":"255797189489858","output":"255797189489858"}
+{"input":"[[],null]","output":"[\n  [],\n  null\n]"}
+{"input":"[565902.9665683676,589685.3314046728,169653.15347311928]","output":"[\n  565902.9665683676,\n  589685.3314046728,\n  169653.15347311928\n]"}
+{"input":"321826.6197275673","output":"321826.6197275673"}
+{"input":"675993.8010815617","output":"675993.8010815617"}
+{"input":"null","output":"null"}
+{"input":"5181271658","output":"5181271658"}
+{"input":"526088.5980762913","output":"526088.5980762913"}
+{"input":"\"plain\"","output":"\"plain\""}
+{"input":"25452879676348","output":"25452879676348"}
+{"input":"null","output":"null"}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"5413135510276","output":"5413135510276"}
+{"input":"\"plain\"","output":"\"plain\""}
+{"input":"3","output":"3"}
+{"input":"{\"{\\\"not\\\":\\\"json\\\"}\":\"{\\\"not\\\":\\\"json\\\"}\",\"é\":\"\\t\\n\"}","output":"{\n  \"{\\\"not\\\":\\\"json\\\"}\": \"{\\\"not\\\":\\\"json\\\"}\",\n  \"é\": \"\\t\\n\"\n}"}
+{"input":"2075","output":"2075"}
+{"input":"413893.53969595424","output":"413893.53969595424"}
+{"input":"882669.3830643301","output":"882669.3830643301"}
+{"input":"250010","output":"250010"}
+{"input":"false","output":"false"}
+{"input":"\"😀\"","output":"\"😀\""}
+{"input":"null","output":"null"}
+{"input":"false","output":"false"}
+{"input":"{\"{\\\"not\\\":\\\"json\\\"}\":true}","output":"{\n  \"{\\\"not\\\":\\\"json\\\"}\": true\n}"}
+{"input":"true","output":"true"}
+{"input":"true","output":"true"}
+{"input":"355279801","output":"355279801"}
+{"input":"\"é\"","output":"\"é\""}
+{"input":"false","output":"false"}
+{"input":"[{\"\":null,\"\\t\\n\":356337.0668983775},855678.9138336622]","output":"[\n  {\n    \"\": null,\n    \"\\t\\n\": 356337.0668983775\n  },\n  855678.9138336622\n]"}
+{"input":"true","output":"true"}
+{"input":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"","output":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\""}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":[35310.157649151464,true],\"é\":true,\"😀\":{\"\\t\\n\":true}}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": [\n    35310.157649151464,\n    true\n  ],\n  \"é\": true,\n  \"😀\": {\n    \"\\t\\n\": true\n  }\n}"}
+{"input":"419718.8175734621","output":"419718.8175734621"}
+{"input":"\"{\\\"not\\\":\\\"json\\\"}\"","output":"\"{\\\"not\\\":\\\"json\\\"}\""}
+{"input":"false","output":"false"}
+{"input":"{}","output":"{}"}
+{"input":"932209.3470755174","output":"932209.3470755174"}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":557314.8198245097,\"{\\\"not\\\":\\\"json\\\"}\":[]}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": 557314.8198245097,\n  \"{\\\"not\\\":\\\"json\\\"}\": []\n}"}
+{"input":"926556.7990744854","output":"926556.7990744854"}
+{"input":"{\"\":23185917119799,\"日本語\":true}","output":"{\n  \"\": 23185917119799,\n  \"日本語\": true\n}"}
+{"input":"{\"{\\\"not\\\":\\\"json\\\"}\":true,\"é\":[null],\"日本語\":[257215,4787759,550500.915106217]}","output":"{\n  \"{\\\"not\\\":\\\"json\\\"}\": true,\n  \"é\": [\n    null\n  ],\n  \"日本語\": [\n    257215,\n    4787759,\n    550500.915106217\n  ]\n}"}
+{"input":"21991144773901293","output":"21991144773901293"}
+{"input":"8313622","output":"8313622"}
+{"input":"true","output":"true"}
+{"input":"true","output":"true"}
+{"input":"[{}]","output":"[\n  {}\n]"}
+{"input":"[945425.296923118,null]","output":"[\n  945425.296923118,\n  null\n]"}
+{"input":"798898.4770096834","output":"798898.4770096834"}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":[[212925.3970704018,[],[330743.15424228593,220382]]],\"null\":[]}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": [\n    [\n      212925.3970704018,\n      [],\n      [\n        330743.15424228593,\n        220382\n      ]\n    ]\n  ],\n  \"null\": []\n}"}
+{"input":"null","output":"null"}
+{"input":"9798988547","output":"9798988547"}
+{"input":"[45895799]","output":"[\n  45895799\n]"}
+{"input":"401331.9918405263","output":"401331.9918405263"}
+{"input":"null","output":"null"}
+{"input":"null","output":"null"}
+{"input":"30","output":"30"}
+{"input":"[true]","output":"[\n  true\n]"}
+{"input":"{\"plain\":177389.95356999486}","output":"{\n  \"plain\": 177389.95356999486\n}"}
+{"input":"28695719943781095","output":"28695719943781095"}
+{"input":"{\"😀\":true}","output":"{\n  \"😀\": true\n}"}
+{"input":"[840168.5737615419,[false,3,27],406108]","output":"[\n  840168.5737615419,\n  [\n    false,\n    3,\n    27\n  ],\n  406108\n]"}
+{"input":"{\"null\":\"\",\"\\u2028\":true}","output":"{\n  \"null\": \"\",\n  \"\\u2028\": true\n}"}
+{"input":"null","output":"null"}
+{"input":"8916.390080424551","output":"8916.390080424551"}
+{"input":"{}","output":"{}"}
+{"input":"{\"\\u2028\":[56099374311683,15]}","output":"{\n  \"\\u2028\": [\n    56099374311683,\n    15\n  ]\n}"}
+{"input":"{\"null\":true,\"plain\":[]}","output":"{\n  \"null\": true,\n  \"plain\": []\n}"}
+{"input":"[null,[false,13026292326,172332379036800369],{\"\\t\\n\":7351.391091398041,\"\\u2028\":null,\"😀\":396870.12972045765}]","output":"[\n  null,\n  [\n    false,\n    13026292326,\n    172332379036800369\n  ],\n  {\n    \"\\t\\n\": 7351.391091398041,\n    \"\\u2028\": null,\n    \"😀\": 396870.12972045765\n  }\n]"}
+{"input":"\"\"","output":"\"\""}
+{"input":"\"😀\"","output":"\"😀\""}
+{"input":"null","output":"null"}
+{"input":"28","output":"28"}
+{"input":"{}","output":"{}"}
+{"input":"[]","output":"[]"}
+{"input":"null","output":"null"}
+{"input":"\"plain\"","output":"\"plain\""}
+{"input":"false","output":"false"}
+{"input":"{\"\":16768820590185809,\"日本語\":{}}","output":"{\n  \"\": 16768820590185809,\n  \"日本語\": {}\n}"}
+{"input":"true","output":"true"}
+{"input":"235415.1577156296","output":"235415.1577156296"}
+{"input":"47962267000590","output":"47962267000590"}
+{"input":"\"é\"","output":"\"é\""}
+{"input":"false","output":"false"}
+{"input":"{\"\":\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"}","output":"{\n  \"\": \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"\n}"}
+{"input":"295855.9712689591","output":"295855.9712689591"}
+{"input":"555401.1619363669","output":"555401.1619363669"}
+{"input":"1070853656326286341","output":"1070853656326286341"}
+{"input":"false","output":"false"}
+{"input":"336","output":"336"}
+{"input":"null","output":"null"}
+{"input":"false","output":"false"}
+{"input":"33308","output":"33308"}
+{"input":"672176940003","output":"672176940003"}
+{"input":"852448.0398531733","output":"852448.0398531733"}
+{"input":"[[null]]","output":"[\n  [\n    null\n  ]\n]"}
+{"input":"4632812756689","output":"4632812756689"}
+{"input":"false","output":"false"}
+{"input":"null","output":"null"}
+{"input":"[7]","output":"[\n  7\n]"}
+{"input":"null","output":"null"}
+{"input":"{\"日本語\":true,\"😀\":[{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":\"\",\"null\":487142.5881521422,\"\\u2028\":false}]}","output":"{\n  \"日本語\": true,\n  \"😀\": [\n    {\n      \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": \"\",\n      \"null\": 487142.5881521422,\n      \"\\u2028\": false\n    }\n  ]\n}"}
+{"input":"414423.87316667027","output":"414423.87316667027"}
+{"input":"null","output":"null"}
+{"input":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"","output":"\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\""}
+{"input":"null","output":"null"}
+{"input":"{\"plain\":\"\",\"{\\\"not\\\":\\\"json\\\"}\":null,\"😀\":9}","output":"{\n  \"plain\": \"\",\n  \"{\\\"not\\\":\\\"json\\\"}\": null,\n  \"😀\": 9\n}"}
+{"input":"[true,\"{\\\"not\\\":\\\"json\\\"}\"]","output":"[\n  true,\n  \"{\\\"not\\\":\\\"json\\\"}\"\n]"}
+{"input":"{}","output":"{}"}
+{"input":"{\"{\\\"not\\\":\\\"json\\\"}\":{\"\\t\\n\":[[]],\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":null},\"\\u2028\":[[]]}","output":"{\n  \"{\\\"not\\\":\\\"json\\\"}\": {\n    \"\\t\\n\": [\n      []\n    ],\n    \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": null\n  },\n  \"\\u2028\": [\n    []\n  ]\n}"}
+{"input":"{\"\\t\\n\":{\"😀\":\"😀\"},\"é\":{\"plain\":{\"\":68166507804,\"日本語\":[]},\"😀\":null}}","output":"{\n  \"\\t\\n\": {\n    \"😀\": \"😀\"\n  },\n  \"é\": {\n    \"plain\": {\n      \"\": 68166507804,\n      \"日本語\": []\n    },\n    \"😀\": null\n  }\n}"}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"376714062","output":"376714062"}
+{"input":"[null,\"日本語\"]","output":"[\n  null,\n  \"日本語\"\n]"}
+{"input":"[]","output":"[]"}
+{"input":"{\"null\":[801108.4471656817]}","output":"{\n  \"null\": [\n    801108.4471656817\n  ]\n}"}
+{"input":"[{\"é\":{\"null\":\"\\u2028\",\"plain\":[null,false,657212.5858590878]},\"日本語\":null},[],true]","output":"[\n  {\n    \"é\": {\n      \"null\": \"\\u2028\",\n      \"plain\": [\n        null,\n        false,\n        657212.5858590878\n      ]\n    },\n    \"日本語\": null\n  },\n  [],\n  true\n]"}
+{"input":"[50481,\"😀\",[13994826836488,null]]","output":"[\n  50481,\n  \"😀\",\n  [\n    13994826836488,\n    null\n  ]\n]"}
+{"input":"{\"\":821005.8347471963,\"{\\\"not\\\":\\\"json\\\"}\":99164017394947,\"é\":528667.4547640921}","output":"{\n  \"\": 821005.8347471963,\n  \"{\\\"not\\\":\\\"json\\\"}\": 99164017394947,\n  \"é\": 528667.4547640921\n}"}
+{"input":"[{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":1839463,\"plain\":{}},{\"\\t\\n\":true,\"日本語\":[]},80096.48802114034]","output":"[\n  {\n    \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": 1839463,\n    \"plain\": {}\n  },\n  {\n    \"\\t\\n\": true,\n    \"日本語\": []\n  },\n  80096.48802114034\n]"}
+{"input":"{\"plain\":25202.28611494135,\"\\u2028\":{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":\"😀\"},\"😀\":\"plain\"}","output":"{\n  \"plain\": 25202.28611494135,\n  \"\\u2028\": {\n    \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": \"😀\"\n  },\n  \"😀\": \"plain\"\n}"}
+{"input":"null","output":"null"}
+{"input":"[[],658616.1686180712,2]","output":"[\n  [],\n  658616.1686180712,\n  2\n]"}
+{"input":"[]","output":"[]"}
+{"input":"null","output":"null"}
+{"input":"null","output":"null"}
+{"input":"{\"é\":true}","output":"{\n  \"é\": true\n}"}
+{"input":"292417.3354633217","output":"292417.3354633217"}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":null,\"plain\":[438834.9650490455,{},null]}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": null,\n  \"plain\": [\n    438834.9650490455,\n    {},\n    null\n  ]\n}"}
+{"input":"992670.4164682395","output":"992670.4164682395"}
+{"input":"{\"\":[[64437,13],null,false],\"é\":5140352,\"😀\":20}","output":"{\n  \"\": [\n    [\n      64437,\n      13\n    ],\n    null,\n    false\n  ],\n  \"é\": 5140352,\n  \"😀\": 20\n}"}
+{"input":"\"\"","output":"\"\""}
+{"input":"{\"é\":\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\",\"日本語\":599716.1372013269}","output":"{\n  \"é\": \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\",\n  \"日本語\": 599716.1372013269\n}"}
+{"input":"19","output":"19"}
+{"input":"{}","output":"{}"}
+{"input":"426007.4365336214","output":"426007.4365336214"}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"\"{\\\"not\\\":\\\"json\\\"}\"","output":"\"{\\\"not\\\":\\\"json\\\"}\""}
+{"input":"{\"日本語\":\"😀\"}","output":"{\n  \"日本語\": \"😀\"\n}"}
+{"input":"true","output":"true"}
+{"input":"null","output":"null"}
+{"input":"false","output":"false"}
+{"input":"null","output":"null"}
+{"input":"2178","output":"2178"}
+{"input":"{\"\\t\\n\":113,\"😀\":false}","output":"{\n  \"\\t\\n\": 113,\n  \"😀\": false\n}"}
+{"input":"11","output":"11"}
+{"input":"[null,252997.5116553208]","output":"[\n  null,\n  252997.5116553208\n]"}
+{"input":"\"日本語\"","output":"\"日本語\""}
+{"input":"\"{\\\"not\\\":\\\"json\\\"}\"","output":"\"{\\\"not\\\":\\\"json\\\"}\""}
+{"input":"false","output":"false"}
+{"input":"2593","output":"2593"}
+{"input":"\"é\"","output":"\"é\""}
+{"input":"4224227877524","output":"4224227877524"}
+{"input":"\"😀\"","output":"\"😀\""}
+{"input":"130226880079005678","output":"130226880079005678"}
+{"input":"532948.5219816483","output":"532948.5219816483"}
+{"input":"null","output":"null"}
+{"input":"28160322756819444","output":"28160322756819444"}
+{"input":"null","output":"null"}
+{"input":"\"é\"","output":"\"é\""}
+{"input":"\"é\"","output":"\"é\""}
+{"input":"null","output":"null"}
+{"input":"107643.93583753207","output":"107643.93583753207"}
+{"input":"true","output":"true"}
+{"input":"null","output":"null"}
+{"input":"null","output":"null"}
+{"input":"{}","output":"{}"}
+{"input":"\"\"","output":"\"\""}
+{"input":"350515.00581066095","output":"350515.00581066095"}
+{"input":"5","output":"5"}
+{"input":"false","output":"false"}
+{"input":"504519.21198414016","output":"504519.21198414016"}
+{"input":"{\"\\t\\n\":false,\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":[\"é\",205824.60236524048,7097],\"é\":null}","output":"{\n  \"\\t\\n\": false,\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": [\n    \"é\",\n    205824.60236524048,\n    7097\n  ],\n  \"é\": null\n}"}
+{"input":"190766087615795080","output":"190766087615795080"}
+{"input":"267762.61137945","output":"267762.61137945"}
+{"input":"\"null\"","output":"\"null\""}
+{"input":"369394.3367669656","output":"369394.3367669656"}
+{"input":"471239.21091694664","output":"471239.21091694664"}
+{"input":"671818.7021506971","output":"671818.7021506971"}
+{"input":"{\"\\u2028\":209758668349}","output":"{\n  \"\\u2028\": 209758668349\n}"}
+{"input":"861778.7934295126","output":"861778.7934295126"}
+{"input":"357786.2957973144","output":"357786.2957973144"}
+{"input":"20770871283819799","output":"20770871283819799"}
+{"input":"53864026950","output":"53864026950"}
+{"input":"false","output":"false"}
+{"input":"[951364.4191924626,\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"]","output":"[\n  951364.4191924626,\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"\n]"}
+{"input":"31573813316","output":"31573813316"}
+{"input":"false","output":"false"}
+{"input":"{\"é\":5965161906046}","output":"{\n  \"é\": 5965161906046\n}"}
+{"input":"null","output":"null"}
+{"input":"54278.61098995701","output":"54278.61098995701"}
+{"input":"\"日本語\"","output":"\"日本語\""}
+{"input":"861766.5073052285","output":"861766.5073052285"}
+{"input":"\"null\"","output":"\"null\""}
+{"input":"false","output":"false"}
+{"input":"\"plain\"","output":"\"plain\""}
+{"input":"false","output":"false"}
+{"input":"[true,43203]","output":"[\n  true,\n  43203\n]"}
+{"input":"142361678929296409","output":"142361678929296409"}
+{"input":"341507","output":"341507"}
+{"input":"954578.809170162","output":"954578.809170162"}
+{"input":"\"\"","output":"\"\""}
+{"input":"[7898,[154888.101105494,null,[\"é\",1446413576699,[false,255480294929,true]]],null]","output":"[\n  7898,\n  [\n    154888.101105494,\n    null,\n    [\n      \"é\",\n      1446413576699,\n      [\n        false,\n        255480294929,\n        true\n      ]\n    ]\n  ],\n  null\n]"}
+{"input":"true","output":"true"}
+{"input":"63439313003721737","output":"63439313003721737"}
+{"input":"[\"plain\"]","output":"[\n  \"plain\"\n]"}
+{"input":"13405","output":"13405"}
+{"input":"[308737.07624924404,{\"null\":{\"\\t\\n\":\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"},\"plain\":296422.6055572935,\"{\\\"not\\\":\\\"json\\\"}\":null}]","output":"[\n  308737.07624924404,\n  {\n    \"null\": {\n      \"\\t\\n\": \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\"\n    },\n    \"plain\": 296422.6055572935,\n    \"{\\\"not\\\":\\\"json\\\"}\": null\n  }\n]"}
+{"input":"218616.6121457399","output":"218616.6121457399"}
+{"input":"[56569.49369678943]","output":"[\n  56569.49369678943\n]"}
+{"input":"102","output":"102"}
+{"input":"1211985","output":"1211985"}
+{"input":"null","output":"null"}
+{"input":"[]","output":"[]"}
+{"input":"false","output":"false"}
+{"input":"null","output":"null"}
+{"input":"144161","output":"144161"}
+{"input":"null","output":"null"}
+{"input":"[]","output":"[]"}
+{"input":"29003547023360597","output":"29003547023360597"}
+{"input":"false","output":"false"}
+{"input":"211141.24581094497","output":"211141.24581094497"}
+{"input":"\"plain\"","output":"\"plain\""}
+{"input":"{}","output":"{}"}
+{"input":"793279386493771875","output":"793279386493771875"}
+{"input":"830234.0350379305","output":"830234.0350379305"}
+{"input":"869168.9582645469","output":"869168.9582645469"}
+{"input":"false","output":"false"}
+{"input":"839806.8022784544","output":"839806.8022784544"}
+{"input":"{}","output":"{}"}
+{"input":"\"日本語\"","output":"\"日本語\""}
+{"input":"[\"😀\",9111561882612]","output":"[\n  \"😀\",\n  9111561882612\n]"}
+{"input":"null","output":"null"}
+{"input":"[815007.9904394532]","output":"[\n  815007.9904394532\n]"}
+{"input":"44519.650123901796","output":"44519.650123901796"}
+{"input":"null","output":"null"}
+{"input":"false","output":"false"}
+{"input":"null","output":"null"}
+{"input":"{}","output":"{}"}
+{"input":"[true,405415.40894403885]","output":"[\n  true,\n  405415.40894403885\n]"}
+{"input":"{}","output":"{}"}
+{"input":"2497441004015424","output":"2497441004015424"}
+{"input":"null","output":"null"}
+{"input":"null","output":"null"}
+{"input":"true","output":"true"}
+{"input":"[]","output":"[]"}
+{"input":"{\"日本語\":true,\"😀\":null}","output":"{\n  \"日本語\": true,\n  \"😀\": null\n}"}
+{"input":"true","output":"true"}
+{"input":"false","output":"false"}
+{"input":"\"\\t\\n\"","output":"\"\\t\\n\""}
+{"input":"null","output":"null"}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":13046919556757014,\"{\\\"not\\\":\\\"json\\\"}\":null}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": 13046919556757014,\n  \"{\\\"not\\\":\\\"json\\\"}\": null\n}"}
+{"input":"\"\"","output":"\"\""}
+{"input":"true","output":"true"}
+{"input":"{\"{\\\"not\\\":\\\"json\\\"}\":429699.0563761983,\"\\u2028\":null}","output":"{\n  \"{\\\"not\\\":\\\"json\\\"}\": 429699.0563761983,\n  \"\\u2028\": null\n}"}
+{"input":"{\"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\":\"é\",\"null\":\"{\\\"not\\\":\\\"json\\\"}\"}","output":"{\n  \"\\u003ca href=\\\"x\\\"\\u003e\\u0026\\u003c/a\\u003e\": \"é\",\n  \"null\": \"{\\\"not\\\":\\\"json\\\"}\"\n}"}
+{"input":"[]","output":"[]"}
+{"input":"[[\"日本語\",false,\"{\\\"not\\\":\\\"json\\\"}\"],true,{}]","output":"[\n  [\n    \"日本語\",\n    false,\n    \"{\\\"not\\\":\\\"json\\\"}\"\n  ],\n  true,\n  {}\n]"}
+{"input":"\"\\u2028\"","output":"\"\\u2028\""}
+{"input":"\"\\t\\n\"","output":"\"\\t\\n\""}
+{"input":"{\"\\t\\n\":\"\\u2028\",\"plain\":\"\\u2028\"}","output":"{\n  \"\\t\\n\": \"\\u2028\",\n  \"plain\": \"\\u2028\"\n}"}
+{"input":"[38135.27981005971,true]","output":"[\n  38135.27981005971,\n  true\n]"}
+{"input":"633404.0944703929","output":"633404.0944703929"}
+{"input":"504","output":"504"}
