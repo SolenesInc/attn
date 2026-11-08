@@ -17,7 +17,7 @@ const desktopCount = params.has('oneDesktop') ? 1 : Number(params.get('desktops'
 const desktopIds = Array.from({ length: desktopCount }, (_, index) => `desk-${index + 1}`);
 
 const sessions = popupNames ? [
-  { id: 'chief', label: 'Chief', state: 'idle' as const, chiefOfStaff: true, desktopId: desktopIds[0] },
+  { id: 'chief', label: 'Chief', state: 'idle' as const, chiefOfStaff: true, crewMember: 'chief', desktopId: desktopIds[0] },
   ...[
     'sidebar-scroll', 'fam-v1', 'Sidebar header', 'palette-order-0095', 'priority-queue',
     'sidebar-scroll-01b9', 'tile-close-focus', 'capture-orch', 'typed-ids', 'fam-backup',

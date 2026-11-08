@@ -136,7 +136,7 @@ function daemonStartDebugInfo(tempDir: string, stdout: string, stderr: string): 
 
 function finishChiefSetup(attnPath: string, tempDir: string, socketPath: string, dbPath: string) {
   execFileSync(attnPath, ['crew', 'set', 'chief', '--agent', 'codex'], {
-    env: { ...process.env, ATTN_INSTANCE: '', ATTN_DATA_DIR: tempDir, ATTN_SOCKET_PATH: socketPath, ATTN_DB_PATH: dbPath },
+    env: { ...process.env, ATTN_INSTANCE: '', ATTN_TERMINAL_ID: '', ATTN_DATA_DIR: tempDir, ATTN_SOCKET_PATH: socketPath, ATTN_DB_PATH: dbPath },
     stdio: 'pipe',
   });
 }

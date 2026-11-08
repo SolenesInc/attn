@@ -9,7 +9,7 @@ import '../../src/App.css';
 
 const noop = () => {};
 const sessions = [
-  { id: 'chief', label: 'chief', state: 'idle' as const, chiefOfStaff: true },
+  { id: 'chief', label: 'chief', state: 'idle' as const, chiefOfStaff: true, crewMember: 'chief' },
   { id: 'crew-awake', label: 'awake crew', state: 'working' as const, crewMember: 'alder' },
   ...Array.from({ length: 5 }, (_, index) => ({
     id: `owed-${index + 1}`,
