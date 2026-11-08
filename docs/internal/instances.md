@@ -28,7 +28,8 @@ faster, less optimized shell. Set `ATTN_APP_CARGO_PROFILE=release` to build the
 shipping profile. Run full macOS installs outside the sandbox. Signing then finds
 the machine's code-signing identity with `security find-identity` and does not
 fall back to an ad-hoc signature, so macOS privacy grants such as Screen
-Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md).
+Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md);
+for a macOS VM, see [macOS VM](macos-vm.md).
 
 ## GitHub polling
 

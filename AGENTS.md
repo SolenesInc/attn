@@ -57,6 +57,10 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Production ~/.attn is read-only. Copy data out; never run a test daemon
   against it, open it read-write, or clean it.
 - You may use the attn CLI to work with ~/.attn.
+- Open, drive, screenshot and record Mac app windows in a macOS VM, not on the
+  user's screen, and run `macvm down` as soon as you are done.
+  [macOS VM](docs/internal/macos-vm.md) says how, and which work still runs on
+  the host.
 - You may build, install, launch and restart non-production instances without
   asking. Production `make`, `make install`, and `make install-daemon` need
   Victor's explicit approval.
