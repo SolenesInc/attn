@@ -21,6 +21,9 @@ for (const terminal of [false, true]) {
     git('worktree', 'add', '-b', 'feature', worktree);
     try {
       await daemon.start();
+      await page.exposeFunction('__TEST_ON_MOCK_PTY_SPAWN', (args: { id: string; label: string; cwd: string }) =>
+        daemon.injectSession({ id: args.id, label: args.label, state: 'idle', directory: args.cwd }),
+      );
       await page.goto('/');
       await page.waitForSelector('.dashboard');
       await page.keyboard.press('Meta+,');
@@ -51,7 +54,8 @@ for (const terminal of [false, true]) {
       }
       await page.keyboard.press('Enter');
       await expect(page.locator('[data-testid="location-picker-overlay"]')).not.toBeVisible();
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-pane-session-id]')).toBeVisible();
+      await expect(page.getByRole('group', { name: 'shop-feature' })).toBeVisible();
     } finally {
       fs.rmSync(parent, { recursive: true, force: true });
     }

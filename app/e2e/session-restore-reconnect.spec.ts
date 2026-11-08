@@ -86,7 +86,7 @@ test.describe('Session restore and reconnect harness', () => {
       state: 'idle',
       directory: '/tmp/reconnect/s2',
     });
-    await expect(page.locator('[data-testid="session-reconnect-s2"][data-state="idle"]')).toBeVisible();
+    await expect(page.locator('[data-testid="sidebar-session-reconnect-s2"][data-state="idle"]')).toBeVisible();
     await expect(page.locator('[data-testid="session-reconnect-s2"]')).toHaveCount(1);
   });
 });

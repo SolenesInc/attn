@@ -125,6 +125,7 @@ export function emitPtyEvent(payload: PtyEventPayload) {
 declare global {
   interface Window {
     __TEST_EMIT_PTY_DATA?: (id: string, data: string) => void;
+    __TEST_ON_MOCK_PTY_SPAWN?: (args: PtySpawnArgs) => Promise<void>;
   }
 }
 
@@ -152,6 +153,7 @@ export async function ptySpawn(request: { args: PtySpawnArgs }): Promise<void> {
   if (mockEnabled()) {
     const id = request.args.id;
     mockSessions.add(id);
+    await window.__TEST_ON_MOCK_PTY_SPAWN?.(request.args);
     const banner = `attn mock pty: ${id}\r\n`;
     setTimeout(() => {
       emitPtyEvent({ event: 'data', id, data: encodeBase64(banner) });
