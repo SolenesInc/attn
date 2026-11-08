@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat >&2 <<'EOF'
+scripts/vm: run this checkout's attn in a shared macOS VM.
+
+  scripts/vm up                     build if stale, get a VM, install, open, wait until ready
+  scripts/vm drive ACTION [JSON]    send one automation-bridge action to the app
+  scripts/vm record SECONDS OUT.mp4 record the app's window; one recording at a time per VM
+  scripts/vm shot OUT.png           screenshot the app's window
+  scripts/vm down                   quit and clean this instance and release the VM
+
+--instance NAME, before or right after the command, selects another instance of
+this checkout. The default is vm-<worktree name>. macvm ls shows every VM.
+EOF
+    exit 2
+}
+
+die() {
+    printf 'scripts/vm: %s\n' "$*" >&2
+    exit 1
+}
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$root"
+command -v macvm >/dev/null || die "macvm is not on PATH; it comes from shell-config (run: shell-config apply)"
+
+READY_LIMIT_SECONDS=600
+
+default_instance() {
+    local name
+    name="$(basename "$root" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')"
+    name="vm-${name#attn--}"
+    if [ "${#name}" -gt 16 ]; then
+        name="${name:0:11}-$(printf '%s' "$root" | shasum | cut -c1-4)"
+    fi
+    printf '%s' "$name"
+}
+
+instance=""
+command=""
+args=()
+while [ $# -gt 0 ]; do
+    if [ "$1" = --instance ] && [ -z "$instance" ] && [ ${#args[@]} -eq 0 ]; then
+        [ $# -ge 2 ] || usage
+        instance="$2"
+        shift 2
+    elif [ -z "$command" ]; then
+        command="$1"
+        shift
+    else
+        args+=("$1")
+        shift
+    fi
+done
+[ -n "$command" ] || usage
+instance="${instance:-$(default_instance)}"
+attn instance resolve --instance "$instance" --field wsPort >/dev/null ||
+    die "instance name '$instance' was refused by attn; pass another with --instance"
+
+app="attn-$instance"
+bundle="app/src-tauri/target/staged/$app.app"
+guest_app="Applications/$app.app"
+guest_bin="/Users/admin/$guest_app/Contents/MacOS/attn"
+harness="h/$instance"
+export MACVM_LABEL="scripts/vm $instance"
+
+bundle_fingerprint() { jq -r .sourceFingerprint "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
+guest_fingerprint() {
+    macvm exec cat "$guest_app/Contents/Resources/build-identity.json" 2>/dev/null | jq -r .sourceFingerprint 2>/dev/null || true
+}
+
+bridge() {
+    macvm exec env ATTN_HARNESS_INSTANCE="$instance" ATTN_HARNESS_BIN="$guest_bin" \
+        node "$harness/app/scripts/real-app-harness/ui-automation-cli.mjs" "$@"
+}
+
+wait_ready() {
+    local started=$SECONDS deadline=$((SECONDS + READY_LIMIT_SECONDS))
+    until bridge ping 2>/dev/null | grep -q '"frontendReady": true'; do
+        [ "$SECONDS" -lt "$deadline" ] ||
+            die "$app did not report frontendReady within ${READY_LIMIT_SECONDS}s (READY_LIMIT_SECONDS in scripts/vm); inspect it with: macvm exec cat .attn-$instance/daemon.log"
+        sleep 2
+    done
+    echo "scripts/vm: $app ready after $((SECONDS - started))s" >&2
+}
+
+cmd_up() {
+    [ -e app/node_modules/ws ] || pnpm --dir app install --frozen-lockfile
+    if [ "$(bundle_fingerprint)" != "$(bash scripts/source-fingerprint.sh --field fingerprint)" ]; then
+        make build-app INSTANCE="$instance" DEMO=1
+    fi
+    local vm
+    vm="$(macvm up)"
+    if [ "$(guest_fingerprint)" != "$(bundle_fingerprint)" ]; then
+        macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
+        macvm install-app "$bundle"
+    fi
+    macvm exec /bin/rm -rf "$harness"
+    macvm push "$harness/app/scripts" app/scripts/real-app-harness
+    macvm push "$harness/app/node_modules" "$(readlink -f app/node_modules/ws)"
+    macvm exec open -g "$guest_app"
+    wait_ready
+    bridge dismiss_whats_new '{}' >/dev/null
+    echo "scripts/vm: $app is ready in $vm. When done: scripts/vm down${instance:+ --instance $instance}"
+}
+
+cmd_record() {
+    [ $# -eq 2 ] || usage
+    local seconds="$1" out="$2" guest="clips/$instance-$$.mp4" pulled
+    macvm exec mkdir -p clips
+    macvm exec macvm-record "$app" "$seconds" "$guest"
+    pulled="$(mktemp -d)"
+    macvm pull "$guest" "$pulled"
+    mkdir -p "$(dirname "$out")"
+    mv "$pulled/$(basename "$guest")" "$out"
+    macvm exec /bin/rm -f "$guest"
+    echo "scripts/vm: wrote $out"
+}
+
+cmd_shot() {
+    [ $# -eq 1 ] || usage
+    local out="$1" guest="shots/$instance-$$.png" pulled
+    macvm exec mkdir -p shots
+    bridge capture_native_window_screenshot "{\"path\":\"/Users/admin/$guest\"}" >/dev/null
+    pulled="$(mktemp -d)"
+    macvm pull "$guest" "$pulled"
+    mkdir -p "$(dirname "$out")"
+    mv "$pulled/$(basename "$guest")" "$out"
+    macvm exec /bin/rm -f "$guest"
+    echo "scripts/vm: wrote $out"
+}
+
+cmd_down() {
+    if macvm exec /usr/bin/true 2>/dev/null; then
+        macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
+        macvm exec "$guest_bin" instance clean "$instance" 2>/dev/null || true
+        macvm exec /bin/rm -rf "$harness" "$guest_app"
+    fi
+    macvm down
+}
+
+case "$command" in
+up) cmd_up ;;
+drive)
+    [ ${#args[@]} -ge 1 ] || usage
+    bridge "${args[@]}"
+    ;;
+record) cmd_record "${args[@]}" ;;
+shot) cmd_shot "${args[@]}" ;;
+down) cmd_down ;;
+*) usage ;;
+esac

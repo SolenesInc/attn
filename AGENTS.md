@@ -64,10 +64,10 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
   check, so never start a daemon that way.
   [Instances](docs/internal/instances.md#starting-a-daemon-from-inside-a-session)
   has the rule.
-- Open, drive, screenshot and record Mac app windows in a macOS VM, not on the
-  user's screen, and run `macvm down` as soon as you are done.
-  [macOS VM](docs/internal/macos-vm.md) says how, and which work still runs on
-  the host.
+- Open, drive, screenshot and record Mac app windows in a macOS VM with
+  `scripts/vm`, not on the user's screen, and run `scripts/vm down` when you are
+  done. [macOS VM](docs/internal/macos-vm.md) says how, and which work still
+  runs on the host.
 - You may build, install, launch and restart non-production instances without
   asking. Production `make`, `make install`, and `make install-daemon` need
   Victor's explicit approval.
