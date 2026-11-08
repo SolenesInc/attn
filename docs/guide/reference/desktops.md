@@ -91,7 +91,7 @@ On Ubuntu 24.04, GNOME's default keys move a window between workspaces with Ctrl
 - **Going to a tile.** A chip, Cmd+J (Ctrl+Shift+J on Linux), the palette, a sidebar click and queue steps bring an off-screen tile beside the active tile. Cmd+[ and Cmd+] (Ctrl+Shift+[ and ] on Linux) slide to it and leave the row's order alone. A tile on another desktop switches desktop and reorders nothing.
 - **Closing a tile.** Attn goes to the next tile in the stack, or else the previous one. If the column was a single tile, Attn goes to the next column, or else the previous one. Entering a stack lands on its most recently used tile.
 - **Sending to the shelf.** A stacked tile leaves its stack for the row's end. A single tile moves past the screen's far side. If nothing else is off screen, the tile stays on the shelf although it would fit. It comes back with its chip, Cmd+J (Ctrl+Shift+J on Linux) or an app restart.
-- **Peeking.** Hover a chip to read the terminal's latest text. Type in the box and press Enter to reply without moving anything.
+- **Peeking.** Hover a chip to read the terminal's latest text. A stack's chip shows one mark per tile: hover a mark to read that tile; the rest of the chip shows the tile you used last. Type in the box and press Enter to reply without moving anything.
 - **Motion.** Tiles move on one spring. A browser tile snaps into place and keeps its page when it returns to the screen. With **Reduce motion** on in your system settings, nothing animates.
 
 ### Widths

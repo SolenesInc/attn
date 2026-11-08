@@ -31,7 +31,7 @@ function answerInput(daemon: ScriptedDaemon, refuse: (data: string) => string | 
   });
 }
 
-async function renderRow(settings: Record<string, string>, { screens = (id: string) => `screen of ${id}\n\n`, tiles = [] as Record<string, string>[], targetFields = {} as Record<string, unknown>, outposts = [] as (typeof CONNECTED | typeof CONNECTING)[] } = {}) {
+async function renderRow(settings: Record<string, string>, { screens = (id: string) => `screen of ${id}\n\n`, tiles = [] as Record<string, string>[], targetFields = {} as Record<string, unknown>, outposts = [] as (typeof CONNECTED | typeof CONNECTING)[], stacked = [] as string[] } = {}) {
   sizeTerminals((terminal) => ({
     clientWidth: (PANES_WIDTH * parseFloat(terminal.closest<HTMLElement>('[data-pane-id]')?.style.width || '100')) / 100,
     clientHeight: PANES_HEIGHT,
@@ -41,7 +41,8 @@ async function renderRow(settings: Record<string, string>, { screens = (id: stri
     if (element.classList.contains('desktop-shelf')) return new DOMRect(0, 0, PANES_WIDTH, 30);
     return null;
   });
-  const root = rightChain([...IDS.map(pane), ...tiles.map((tile) => ({ type: 'tile', ...tile }))]);
+  const columns = IDS.filter((id) => !stacked.slice(1).includes(id)).map((id) => (id === stacked[0] ? split('stack', 'horizontal', stacked.map(pane)) : pane(id)));
+  const root = rightChain([...columns, ...tiles.map((tile) => ({ type: 'tile', ...tile }))]);
   const desktop = { ...laidOutDesktop(root, IDS), active_pane_id: 'pane-s1' };
   const { daemon } = await renderApp({
     initialState: {
@@ -218,6 +219,38 @@ describe('Shelf peek', () => {
     expect(screen.getByTestId('shelf-peek-kind')).toBeInTheDocument();
     expect(screen.queryByTestId('shelf-peek-input')).toBeNull();
     expect(daemon.sentOf('terminal_read_text')).toEqual([]);
+  });
+
+  it('peeks each tile of an off-screen stack from its own mark on the chip', async () => {
+    const daemon = await renderRow(NARROWEST_66, { stacked: ['s5', 's6'] });
+    const layoutBefore = layoutTraffic(daemon).length;
+    const member = (id: string) => chip('s5').querySelector<HTMLElement>(`[data-shelf-member="pane-${id}"]`)!;
+
+    fireEvent.pointerEnter(chip('s5'));
+    fireEvent.pointerMove(member('s6'));
+    await advance(180);
+    await daemon.idle();
+    expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s6');
+    expect(screen.getByTestId('shelf-peek-screen').textContent).toBe('screen of s6');
+    expect(member('s6')).toHaveClass('is-peeked');
+
+    fireEvent.pointerMove(chip('s5').querySelector<HTMLElement>('.desktop-shelf-chip-label')!);
+    await advance(1000);
+    expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s6');
+
+    fireEvent.pointerMove(member('s5'));
+    await advance(60);
+    await daemon.idle();
+    expect(screen.getByTestId('shelf-peek')).toHaveAttribute('data-leaf-id', 'pane-s5');
+    expect(screen.getByTestId('shelf-peek-screen').textContent).toBe('screen of s5');
+
+    const input = screen.getByTestId('shelf-peek-input');
+    fireEvent.change(input, { target: { value: 'go on' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await daemon.idle();
+    expect(repliesTo(daemon, 's5').join('')).toContain('go on');
+    expect(repliesTo(daemon, 's6')).toEqual([]);
+    expect(layoutTraffic(daemon)).toHaveLength(layoutBefore);
   });
 
   it('says why when the text cannot be read', async () => {

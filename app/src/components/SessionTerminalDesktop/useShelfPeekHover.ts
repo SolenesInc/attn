@@ -42,23 +42,28 @@ export function offScreenColumns(shelf: PublishedShelf | undefined): ShelfColumn
   return shelf ? [...shelf.before, ...shelf.after] : [];
 }
 
-function hoverHandlers(desktopId: string, leafId: string) {
-  let arrived = false;
+function memberUnder(event: ReactPointerEvent<HTMLElement>): string | undefined {
+  return (event.target as Element).closest<HTMLElement>('[data-shelf-member]')?.dataset.shelfMember;
+}
+
+function hoverHandlers(desktopId: string, defaultLeafId: string) {
+  let arrivedAt: string | null = null;
   return {
     onPointerEnter: () => {
-      arrived = false;
+      arrivedAt = null;
     },
     onPointerMove: (event: ReactPointerEvent<HTMLElement>) => {
-      if (arrived) return;
-      arrived = true;
-      arriveAtAnchor(desktopId, leafId, event.currentTarget);
+      const member = memberUnder(event);
+      if (arrivedAt !== null && (member === undefined || member === arrivedAt)) return;
+      arrivedAt = member ?? defaultLeafId;
+      arriveAtAnchor(desktopId, arrivedAt, event.currentTarget);
     },
     onPointerLeave: leaveShelfPeek,
   };
 }
 
-export function useShelfPeekHover(desktopId: string, leafId: string) {
+export function useShelfPeekHover(desktopId: string, defaultLeafId: string) {
   const offScreen = useDesktopShelfStore((state) =>
-    offScreenColumns(state.shelfByDesktop[desktopId]).some((column) => column.tiles.some((tile) => tile.leafId === leafId)));
-  return useMemo(() => (offScreen ? hoverHandlers(desktopId, leafId) : undefined), [desktopId, leafId, offScreen]);
+    offScreenColumns(state.shelfByDesktop[desktopId]).some((column) => column.tiles.some((tile) => tile.leafId === defaultLeafId)));
+  return useMemo(() => (offScreen ? hoverHandlers(desktopId, defaultLeafId) : undefined), [desktopId, defaultLeafId, offScreen]);
 }

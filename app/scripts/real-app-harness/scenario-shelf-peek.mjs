@@ -20,7 +20,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-PEEK',
   tier: 'tier1-local-shell',
   prefix: 'shelf-peek',
-  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, a browser tile hides and returns, a chip that reflows under a still pointer opens nothing, and a stopped terminal keeps the reply' },
+  metadata: { agent: 'shell', focus: 'hovering a chip shows a live terminal in a panel, a reply reaches it without resizing it or moving the layout, a browser tile hides and returns, a chip that reflows under a still pointer opens nothing, each tile of a stacked chip peeks from its own mark, and a stopped terminal keeps the reply' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -211,6 +211,38 @@ try {
     await request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
     await waitDom('.sidebar:not(.collapsed)');
     await waitDom('[data-testid="title-bar"] [data-testid="desktop-shelf"]');
+  });
+
+  await runner.step('each_tile_of_an_off_screen_stack_peeks_from_its_mark', async () => {
+    await focusLeaf(target);
+    await request('dispatch_shortcut', { shortcutId: 'terminal.splitHorizontal' });
+    const state = await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.length === TILES + 1 && current.panes.every((pane) => pane.runtimeId), 'a shell stacked below the target', 30_000);
+    const below = state.panes.find((pane) => !row.includes(pane.paneId));
+    sessions.push(below.sessionId);
+    await waitDom(`${surface()}[data-active-leaf-id="${below.paneId}"]`);
+    await request('dispatch_shortcut', { shortcutId: 'terminal.focusLeft' });
+    await waitDom(`${surface()}[data-active-leaf-id="${row.at(-2)}"]`);
+    await focusLeaf(row[0]);
+    await waitDom(chip(target));
+    const shown = await shownLeaves();
+    const member = (leafId) => `${chip(target)} [data-shelf-member="${leafId}"]`;
+
+    await driver.hover(member(below.paneId));
+    await waitDom(`${PEEK}[data-leaf-id="${below.paneId}"]`);
+    await waitDom(`${member(below.paneId)}.is-peeked`);
+    await shot('peek-stack-lower');
+    await driver.hover(member(target));
+    await waitDom(`${PEEK}[data-leaf-id="${target}"]`);
+    await shot('peek-stack-upper');
+    await assertNothingMoved('peeking a stack', shown, row[0]);
+    await driver.pressKey('Escape');
+    await waitDom(PEEK, { absent: true });
+    await hoverAway();
+
+    await request('close_session', { sessionId: below.sessionId });
+    sessions.splice(sessions.indexOf(below.sessionId), 1);
+    await waitForSessionDesktop(client, firstSession, (current) => current?.panes?.length === TILES, 'the stacked shell closed', 15_000);
+    await waitDom(`${member(below.paneId)}`, { absent: true });
   });
 
   await runner.step('a_browser_tile_hides_for_the_panel_and_returns', async () => {

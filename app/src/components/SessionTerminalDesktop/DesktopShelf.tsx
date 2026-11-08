@@ -59,6 +59,8 @@ function ColumnChip({ column, desktopId, onGo, inMenu = false }: { column: Shelf
   const marks = useChipMarks(desktopId)([column]);
   const dropMark = useDropMark(desktopId, column.key);
   const press = useRef<{ x: number; y: number } | null>(null);
+  const peekedLeafId = useDesktopShelfStore((state) => (state.peek?.desktopId === desktopId ? state.peek.leafId : null));
+  const stacked = column.tiles.length > 1;
   return (
     <button
       type="button"
@@ -82,7 +84,16 @@ function ColumnChip({ column, desktopId, onGo, inMenu = false }: { column: Shelf
         useSessionStore.getState().selectLeaf(desktopId, column.goLeafId);
       }}
     >
-      {column.tiles.map((tile) => <TileMark key={tile.leafId} tile={tile} />)}
+      {column.tiles.map((tile) => (
+        <span
+          key={tile.leafId}
+          className={`desktop-shelf-chip-member${stacked && tile.leafId === peekedLeafId ? ' is-peeked' : ''}`}
+          title={stacked ? tile.title : undefined}
+          data-shelf-member={tile.leafId}
+        >
+          <TileMark tile={tile} />
+        </span>
+      ))}
       <span className="desktop-shelf-chip-label">{column.label}</span>
       {column.tiles.map((tile) => (tile.askHolder ? <AskMark key={tile.leafId} session={tile.askHolder} /> : null))}
     </button>
