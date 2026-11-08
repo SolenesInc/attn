@@ -283,7 +283,11 @@ func (c *Client) send(msg interface{}) (*protocol.Response, error) {
 	_, writeErr := conn.Write(frame)
 
 	var resp protocol.Response
-	if err := json.NewDecoder(conn).Decode(&resp); err != nil {
+	reply, err := readReply(conn)
+	if err == nil {
+		err = json.Unmarshal(reply, &resp)
+	}
+	if err != nil {
 		if writeErr != nil {
 			return nil, fmt.Errorf("send message: %w", writeErr)
 		}

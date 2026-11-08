@@ -280,41 +280,48 @@ func PlotHeaders(seeds []Seed, selected map[string]bool) []Seed {
 	return out
 }
 
+type TreeNode struct {
+	ID     string
+	Parent string
+}
+
 type TreeRow struct {
-	Seed  Seed
+	Index int
 	Depth int
 }
 
-func Tree(seeds []Seed) []TreeRow {
-	children := map[string][]Seed{}
-	roots := make([]Seed, 0, len(seeds))
-	present := byID(seeds)
-	for _, seed := range seeds {
-		parent, ok := ParentOf(seed)
-		if _, inScope := present[parent]; ok && inScope {
-			children[parent] = append(children[parent], seed)
+func Tree(nodes []TreeNode) []TreeRow {
+	index := make(map[string]int, len(nodes))
+	for i, node := range nodes {
+		index[node.ID] = i
+	}
+	children := map[int][]int{}
+	roots := make([]int, 0, len(nodes))
+	for i, node := range nodes {
+		if parent, inScope := index[node.Parent]; node.Parent != "" && inScope {
+			children[parent] = append(children[parent], i)
 			continue
 		}
-		roots = append(roots, seed)
+		roots = append(roots, i)
 	}
-	rows := make([]TreeRow, 0, len(seeds))
-	placed := map[string]bool{}
-	var place func(seed Seed, depth int)
-	place = func(seed Seed, depth int) {
-		if placed[seed.ID] {
+	rows := make([]TreeRow, 0, len(nodes))
+	placed := make([]bool, len(nodes))
+	var place func(i, depth int)
+	place = func(i, depth int) {
+		if placed[i] {
 			return
 		}
-		placed[seed.ID] = true
-		rows = append(rows, TreeRow{Seed: seed, Depth: depth})
-		for _, child := range children[seed.ID] {
+		placed[i] = true
+		rows = append(rows, TreeRow{Index: i, Depth: depth})
+		for _, child := range children[i] {
 			place(child, depth+1)
 		}
 	}
 	for _, root := range roots {
 		place(root, 0)
 	}
-	for _, seed := range seeds {
-		place(seed, 0)
+	for i := range nodes {
+		place(i, 0)
 	}
 	return rows
 }

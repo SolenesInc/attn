@@ -344,11 +344,16 @@ func TestTree(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			rows := Tree(test.seeds)
+			nodes := make([]TreeNode, 0, len(test.seeds))
+			for _, seed := range test.seeds {
+				parent, _ := ParentOf(seed)
+				nodes = append(nodes, TreeNode{ID: seed.ID, Parent: parent})
+			}
+			rows := Tree(nodes)
 			got := make([]string, 0, len(rows))
 			depths := make([]int, 0, len(rows))
 			for _, row := range rows {
-				got = append(got, row.Seed.ID)
+				got = append(got, nodes[row.Index].ID)
 				depths = append(depths, row.Depth)
 			}
 			if !equal(got, test.rows) {

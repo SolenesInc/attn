@@ -848,10 +848,10 @@ func runSeedList(args []string) {
 	}
 	w := newTableWriter(os.Stdout)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
-	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
+	for _, row := range seedRows(f.flat || plotID != "", result.Seeds) {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
 			row.seed.ID, row.seed.StepSlug, row.seed.Status, orDash(partyLabel(row.seed.Tender)),
-			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, seedRowSuffix(row.seed))
+			shortStamp(row.seed.CreatedAt), strings.Repeat("  ", row.depth), row.seed.Title, seedRowSuffix(*row.seed))
 	}
 	w.Flush()
 	if result.Total > len(result.Seeds) {
@@ -1154,11 +1154,21 @@ func readPlotPayload(path string) []byte {
 }
 
 type seedRow struct {
-	seed  protocol.SeedRow
+	seed  *protocol.SeedRow
 	depth int
 }
 
-func seedRows(seeds []protocol.SeedRow, flat bool) []seedRow {
+func seedRows(flat bool, groups ...[]protocol.SeedRow) []seedRow {
+	total := 0
+	for _, group := range groups {
+		total += len(group)
+	}
+	seeds := make([]*protocol.SeedRow, 0, total)
+	for _, group := range groups {
+		for i := range group {
+			seeds = append(seeds, &group[i])
+		}
+	}
 	rows := make([]seedRow, 0, len(seeds))
 	if flat {
 		for _, seed := range seeds {
@@ -1166,16 +1176,23 @@ func seedRows(seeds []protocol.SeedRow, flat bool) []seedRow {
 		}
 		return rows
 	}
-	byID := make(map[string]protocol.SeedRow, len(seeds))
-	domain := make([]garden.Seed, 0, len(seeds))
+	nodes := make([]garden.TreeNode, 0, len(seeds))
 	for _, seed := range seeds {
-		byID[seed.ID] = seed
-		domain = append(domain, gardenSeedFromRow(seed))
+		nodes = append(nodes, garden.TreeNode{ID: seed.ID, Parent: seedRowParent(seed)})
 	}
-	for _, row := range garden.Tree(domain) {
-		rows = append(rows, seedRow{seed: byID[row.Seed.ID], depth: row.Depth})
+	for _, row := range garden.Tree(nodes) {
+		rows = append(rows, seedRow{seed: seeds[row.Index], depth: row.Depth})
 	}
 	return rows
+}
+
+func seedRowParent(seed *protocol.SeedRow) string {
+	for _, edge := range seed.Edges {
+		if edge.Kind == garden.EdgePartOf {
+			return edge.To
+		}
+	}
+	return ""
 }
 
 func shortStamp(stamp string) string {
@@ -1845,13 +1862,11 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	handoffs := freshestHandoffs(result.Handoffs)
 	w := newTableWriter(out)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tPLANTED\tTITLE")
-	rows := make([]seedRow, 0, len(result.Plots)+len(result.Seeds))
+	var rows []seedRow
 	if result.Scope == "garden" && len(result.Plots) > 0 {
-		rows = seedRows(append(slices.Clone(result.Plots), result.Seeds...), false)
+		rows = seedRows(false, result.Plots, result.Seeds)
 	} else {
-		for _, seed := range result.Seeds {
-			rows = append(rows, seedRow{seed: seed})
-		}
+		rows = seedRows(true, result.Seeds)
 	}
 	plotIDs := make(map[string]bool, len(result.Plots))
 	for _, plot := range result.Plots {
@@ -1863,7 +1878,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 			status = "plot"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s%s%s\n", seed.ID, seed.StepSlug, status, shortStamp(seed.CreatedAt),
-			strings.Repeat("  ", row.depth), seed.Title, seedRowSuffix(seed))
+			strings.Repeat("  ", row.depth), seed.Title, seedRowSuffix(*seed))
 		if handoff, ok := handoffs[seed.ID]; ok {
 			fmt.Fprintf(w, "\t\t\t\t↳ %s: %s\n",
 				orDash(actorLabel(handoff.Author)), firstLine(handoff.Body))
@@ -2421,17 +2436,6 @@ func runSeedExport(args []string) {
 		return
 	}
 	fmt.Printf("wrote %s; edit it with any tool, keep its first line, then: attn seed edit %s -m - < %s\n", absolute, result.Seed.ID, absolute)
-}
-
-func gardenSeedFromRow(seed protocol.SeedRow) garden.Seed {
-	out := garden.Seed{
-		ID: seed.ID, Title: seed.Title, Status: seed.Status,
-		Edges: make([]garden.Edge, 0, len(seed.Edges)),
-	}
-	for _, edge := range seed.Edges {
-		out.Edges = append(out.Edges, garden.Edge{Kind: edge.Kind, To: edge.To})
-	}
-	return out
 }
 
 func conversationDate(stamp string) string {
