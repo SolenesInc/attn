@@ -1,0 +1,19 @@
+read agent
+read agent --help
+read agent no-such-verb
+usage agent list
+usage agent peek
+usage agent msg
+usage agent close
+usage agent inbox
+usage agent reload
+usage agent attachment
+usage agent msg-status
+read agent list
+read agent list --json
+read agent peek no-such-session
+read agent msg no-such-session "text"
+read agent msg
+read agent close no-such-session -m "reason"
+read agent close no-such-session
+read agent inbox

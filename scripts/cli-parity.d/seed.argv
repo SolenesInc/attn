@@ -1,0 +1,67 @@
+read seed
+read seed --help
+read seed --no-such-flag
+read seed no-such-verb
+usage seed plant
+usage seed plot
+usage seed ls
+usage seed search
+usage seed show
+usage seed review
+usage seed edit
+usage seed rollback
+usage seed authorization
+usage seed remind
+usage seed standby
+usage seed send-to-chief
+usage seed export
+usage seed tend
+usage seed park
+usage seed harvest
+usage seed wither
+usage seed replant
+usage seed note
+usage seed check
+usage seed watch
+usage seed unwatch
+usage seed attach
+usage seed detach
+usage seed notes
+usage seed link
+usage seed unlink
+usage seed ready
+usage seed prime
+usage seed guide
+read seed ready
+read seed ready --json
+read seed ready --all
+read seed ls
+read seed ls --json
+read seed search garden
+read seed show s-000000
+read seed show no-such-slug --json
+read seed notes s-000000
+read seed tend s-000000
+read seed harvest s-000000
+read seed harvest s-000000 -m "done"
+read seed note s-000000
+read seed note s-000000 -m "text"
+read seed park s-000000 -m "text"
+read seed wither s-000000 -m "text"
+read seed replant s-000000
+read seed plant
+read seed link s-000000 s-000001 --blocks s-000002
+read seed ready extra-argument
+write seed plant "cli parity probe" -m "a body" --check "C1=the probe holds" => $probe
+write seed show $probe
+write seed show $probe --json
+write seed note $probe -m "a note"
+write seed notes $probe
+write seed edit $probe -m "a new body"
+write seed plant "cli parity child" -m "child body" --part-of $probe => $child
+write seed ls --plot $probe
+write seed show $child --json
+write seed link $child $probe --blocks
+write seed wither $child -m "probe finished"
+write seed harvest $probe -m "probe finished"
+write seed show $probe --json

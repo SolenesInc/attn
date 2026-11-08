@@ -1,0 +1,53 @@
+read --no-such-flag
+read no-such-command
+read version
+read version --json
+read presence
+read presence --session-id
+usage presence
+usage ask
+usage turn
+usage vent
+usage handoff
+usage onboarding
+usage skill
+usage guide
+usage list
+usage activity
+usage state
+usage conversation
+usage worktree
+usage preflight
+usage plugin
+usage debug
+usage db
+usage bus
+usage enrollment
+usage doc
+usage crew
+usage automation
+usage settings
+usage terminal
+usage open
+usage callout
+usage browser
+usage journal
+usage delegate
+usage pr
+read list
+read list --json
+read crew list
+read crew list --json
+read settings list
+read automation list
+read turn no-such-verb
+read vent
+read ask list
+read state explain no-such-session
+read worktree list
+read bus status
+read doc list
+read conversation list
+read journal
+read callout
+read terminal ls

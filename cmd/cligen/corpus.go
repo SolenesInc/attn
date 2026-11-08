@@ -37,6 +37,7 @@ func writeCorpus(directory string) error {
 		{"duration_string.jsonl", durationStringCases(random)},
 		{"local_time.jsonl", localTimeCases(random)},
 		{"json_indent.jsonl", jsonIndentCases(random)},
+		{"json_encode.jsonl", jsonEncodeCases(random)},
 	} {
 		var out bytes.Buffer
 		encoder := json.NewEncoder(&out)
@@ -321,10 +322,12 @@ func durationStringCases(random *rand.Rand) []any {
 }
 
 type localTimeCase struct {
-	Input   string            `json:"input"`
-	Zone    string            `json:"zone"`
-	Formats map[string]string `json:"formats"`
-	Error   string            `json:"error"`
+	Input        string            `json:"input"`
+	Zone         string            `json:"zone"`
+	Formats      map[string]string `json:"formats"`
+	OwnFormats   map[string]string `json:"own_formats"`
+	Error        string            `json:"error"`
+	RFC3339Error string            `json:"rfc3339_error"`
 }
 
 var localTimeZones = []string{"UTC", "America/New_York", "America/Sao_Paulo", "Europe/Stockholm", "Asia/Kolkata", "Asia/Tokyo", "Australia/Lord_Howe"}
@@ -359,7 +362,10 @@ func runLocalTime(input, zone string) localTimeCase {
 	if err != nil {
 		fatal(err)
 	}
-	result := localTimeCase{Input: input, Zone: zone, Formats: map[string]string{}}
+	result := localTimeCase{Input: input, Zone: zone, Formats: map[string]string{}, OwnFormats: map[string]string{}}
+	if _, err := time.Parse(time.RFC3339, input); err != nil {
+		result.RFC3339Error = err.Error()
+	}
 	at, err := time.Parse(time.RFC3339Nano, input)
 	if err != nil {
 		result.Error = err.Error()
@@ -368,6 +374,7 @@ func runLocalTime(input, zone string) localTimeCase {
 	local := at.In(location)
 	for _, layout := range localTimeLayouts {
 		result.Formats[layout] = local.Format(layout)
+		result.OwnFormats[layout] = at.Format(layout)
 	}
 	return result
 }
@@ -431,4 +438,29 @@ func randomJSONValue(random *rand.Rand, depth int) any {
 		}
 		return values
 	}
+}
+
+var jsonEncodeTables = []string{"<a href=\"x\">&</a>", "\u2028\u2029", "\x00\x1f\x7f", "\b\f\n\r\t", `back\slash`, "é日本語\U0001f600"}
+
+func jsonEncodeCases(random *rand.Rand) []any {
+	var cases []any
+	for _, input := range append(jsonEncodeTables, jsonStrings...) {
+		cases = append(cases, runJSONEncode(input))
+	}
+	for range generatedCasesPerTable {
+		var input strings.Builder
+		for range random.IntN(12) {
+			input.WriteRune(pick(random, []rune{'<', '>', '&', '"', '\\', '\n', '\t', 0x1, 0x7f, 'a', 'é', 0x2028, 0x2029, 0x1f600}))
+		}
+		cases = append(cases, runJSONEncode(input.String()))
+	}
+	return cases
+}
+
+func runJSONEncode(input string) textCase {
+	output, err := json.Marshal(input)
+	if err != nil {
+		fatal(fmt.Errorf("json encode of %q: %w", input, err))
+	}
+	return textCase{input, string(output)}
 }

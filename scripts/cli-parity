@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""Compare the Rust attn CLI against an attnd built before a port.
+
+Runs every line of scripts/cli-parity.d/*.argv through both binaries, on
+copies of a real garden, and compares stdout, stderr and exit code.
+
+A line is one of:
+  read <argv>          both binaries on one daemon, compared byte for byte
+  write <argv>         each binary on its own copy, compared after replacing
+                       captured ids, note ids, timestamps from this run, bookmarks and
+                       instance names; the copied garden's stay as they are
+  write <argv> => $x   also stores the first id on stdout as $x for later lines
+  usage <argv>         read of <argv> --help, <argv> -h and <argv> --no-such-flag
+Lines are split like a shell. Blank lines and lines starting with # are skipped.
+"""
+
+import argparse
+import difflib
+import os
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+ARGV_DIR = REPO / "scripts" / "cli-parity.d"
+ID_PATTERN = re.compile(r"(?<![\w-])[a-z]-[0-9a-z]{6}(?![\w-])")
+NOTE_ID_PATTERN = re.compile(r"(?<![\w-])n-[0-9a-z]{6}(?![\w-])")
+TIME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?")
+BOOKMARK_PATTERN = re.compile(r'("bookmark": |--since )\d+')
+MAX_REPORTED_DIFF_LINES = 40
+
+
+@dataclass
+class Instance:
+    name: str
+    data_dir: str
+    ws_port: str
+
+
+@dataclass
+class Result:
+    exit_code: int
+    stdout: str
+    stderr: str
+
+
+def isolated_env(instance_name):
+    env = {key: value for key, value in os.environ.items() if not key.startswith("ATTN_")}
+    env["ATTN_INSTANCE"] = instance_name
+    return env
+
+
+def run(binary, argv, instance_name, cwd):
+    completed = subprocess.run(
+        ["attn", *argv],
+        executable=binary,
+        env=isolated_env(instance_name),
+        cwd=cwd,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=False,
+    )
+    return Result(
+        completed.returncode,
+        completed.stdout.decode("utf-8", "backslashreplace"),
+        completed.stderr.decode("utf-8", "backslashreplace"),
+    )
+
+
+def checked(binary, argv, instance_name, cwd):
+    result = run(binary, argv, instance_name, cwd)
+    if result.exit_code != 0:
+        sys.exit(f"cli-parity: attn {shlex.join(argv)} exited {result.exit_code}:\n{result.stderr}")
+    return result
+
+
+def copy_garden(go_binary, name, source_db, cwd):
+    subprocess.run(
+        [str(REPO / "scripts/gardenpushperf/copy-production.sh"), name, source_db],
+        env={**isolated_env(name), "ATTN": go_binary},
+        cwd=cwd,
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
+    resolve = lambda field: checked(go_binary, ["instance", "resolve", "--field", field], name, cwd).stdout.strip()
+    return Instance(name, resolve("dataDir"), resolve("wsPort"))
+
+
+def normalize(text, instance, variables, run_started):
+    def run_generated_time(match):
+        return "<time>" if match.group(0)[:10] >= run_started else match.group(0)
+
+    text = text.replace(instance.data_dir, "<data>").replace(instance.name, "<instance>")
+    text = text.replace(f"port={instance.ws_port}", "port=<port>")
+    for name, value in variables.items():
+        text = text.replace(value, name)
+    note_ids = {}
+    text = NOTE_ID_PATTERN.sub(lambda match: note_ids.setdefault(match.group(0), f"<note{len(note_ids) + 1}>"), text)
+    text = BOOKMARK_PATTERN.sub(r"\1<bookmark>", text)
+    return TIME_PATTERN.sub(run_generated_time, text)
+
+
+def expand(path):
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        mode, _, rest = line.partition(" ")
+        words = shlex.split(rest)
+        if mode == "usage":
+            for suffix in ("--help", "-h", "--no-such-flag"):
+                yield "read", [*words, suffix], None
+        elif mode == "read":
+            yield "read", words, None
+        elif mode == "write":
+            capture = None
+            if len(words) >= 2 and words[-2] == "=>":
+                capture = words[-1]
+                words = words[:-2]
+            yield "write", words, capture
+        else:
+            sys.exit(f"cli-parity: {path.name}: unknown mode {mode!r} in: {line}")
+
+
+def bind(argv, variables):
+    return [variables.get(word, word) for word in argv]
+
+
+def first_id(result, argv):
+    match = ID_PATTERN.search(result.stdout)
+    if match is None:
+        sys.exit(f"cli-parity: attn {shlex.join(argv)} printed no id to capture:\n{result.stdout}")
+    return match.group(0)
+
+
+def report(argv, go, rust):
+    print(f"DIFF attn {shlex.join(argv)}")
+    if go.exit_code != rust.exit_code:
+        print(f"  exit code: go {go.exit_code}, rust {rust.exit_code}")
+    for stream, left, right in (("stdout", go.stdout, rust.stdout), ("stderr", go.stderr, rust.stderr)):
+        if left == right:
+            continue
+        diff = list(difflib.unified_diff(left.splitlines(), right.splitlines(), f"go {stream}", f"rust {stream}", lineterm="", n=0))
+        for line in diff[:MAX_REPORTED_DIFF_LINES]:
+            print(f"  {line!r}")
+        if len(diff) > MAX_REPORTED_DIFF_LINES:
+            print(f"  ... {len(diff) - MAX_REPORTED_DIFF_LINES} more diff lines")
+
+
+def normalized(result, instance, variables, run_started):
+    return Result(
+        result.exit_code,
+        normalize(result.stdout, instance, variables, run_started),
+        normalize(result.stderr, instance, variables, run_started),
+    )
+
+
+def compare_group(path, args, go_instance, rust_instance, cwd):
+    compared = differences = 0
+    go_vars, rust_vars = {}, {}
+    for mode, words, capture in expand(path):
+        compared += 1
+        if mode == "read":
+            argv = bind(words, go_vars)
+            go = run(args.go, argv, go_instance.name, cwd)
+            rust = run(args.rust, argv, go_instance.name, cwd)
+        else:
+            argv = bind(words, go_vars)
+            go = run(args.go, argv, go_instance.name, cwd)
+            rust = run(args.rust, bind(words, rust_vars), rust_instance.name, cwd)
+            if capture:
+                go_vars[capture] = first_id(go, argv)
+                rust_vars[capture] = first_id(rust, argv)
+            go = normalized(go, go_instance, go_vars, args.run_started)
+            rust = normalized(rust, rust_instance, rust_vars, args.run_started)
+        if (go.exit_code, go.stdout, go.stderr) != (rust.exit_code, rust.stdout, rust.stderr):
+            differences += 1
+            report(argv, go, rust)
+    print(f"{path.stem}: {compared} commands, {differences} differ")
+    return differences
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--go", required=True, help="attnd built from the commit before the port")
+    parser.add_argument("--rust", required=True, help="the Rust attn, with its attnd beside it")
+    parser.add_argument("--source-db", default=str(Path.home() / ".attn" / "attn.db"), help="garden to copy, read-only")
+    parser.add_argument("--group", action="append", help="argv file stem to run; repeats; default every file")
+    args = parser.parse_args()
+    args.run_started = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+    args.go = str(Path(args.go).resolve())
+    args.rust = str(Path(args.rust).resolve())
+    paths = sorted(ARGV_DIR.glob("*.argv"))
+    if args.group:
+        paths = [ARGV_DIR / f"{group}.argv" for group in args.group]
+
+    suffix = os.getpid()
+    instances = []
+    cwd = tempfile.mkdtemp(prefix="cli-parity-")
+    differences = 0
+    try:
+        go_name, rust_name = f"cpg{suffix}", f"cpr{suffix}"
+        instances = [go_name, rust_name]
+        go_instance = copy_garden(args.go, go_name, args.source_db, cwd)
+        rust_instance = copy_garden(args.go, rust_name, str(Path(go_instance.data_dir) / "attn.db"), cwd)
+        checked(args.go, ["daemon", "ensure"], go_name, cwd)
+        checked(args.go, ["daemon", "ensure"], rust_name, cwd)
+        ready = checked(args.go, ["seed", "ready"], go_name, cwd)
+        if "nothing is ready" in ready.stdout:
+            sys.exit(f"cli-parity: the garden copied from {args.source_db} has nothing ready; pass --source-db with a copy of a real garden")
+        print(f"go seed ready prints {len(ready.stdout.encode())} bytes")
+        for path in paths:
+            differences += compare_group(path, args, go_instance, rust_instance, cwd)
+    finally:
+        for name in instances:
+            subprocess.run([args.go, "instance", "clean", name], env=isolated_env(name), cwd=cwd, check=False, stdout=subprocess.DEVNULL)
+        shutil.rmtree(cwd, ignore_errors=True)
+    if differences:
+        print(f"{differences} commands differ")
+        return 1
+    print("every command matches")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

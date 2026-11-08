@@ -16,6 +16,7 @@ func main() {
 	writeConstants(&out)
 	writeSettings(&out)
 	writePrompts(&out)
+	writePrintableRanges(&out)
 	if err := os.WriteFile(os.Args[1], []byte(out.String()), 0o644); err != nil {
 		fatal(err)
 	}

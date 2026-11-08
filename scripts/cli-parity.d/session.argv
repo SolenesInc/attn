@@ -1,0 +1,22 @@
+read session
+read session --help
+read session no-such-verb
+usage session instructions
+usage session transcript
+usage session list
+usage session show
+usage session priority
+usage session snooze
+usage session unsnooze
+usage session reopen
+usage session rename
+read session list
+read session list --json
+read session list --limit 3 --closed
+read session list --tree
+read session list --limit x
+read session list --last forever
+read session show no-such-session
+read session snooze no-such-session --until 30m
+read session snooze no-such-session --until never
+read session priority maybe

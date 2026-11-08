@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/victorarias/attn/internal/ask"
@@ -98,4 +99,23 @@ func writeSettings(out *strings.Builder) {
 			rustString(s.Key), rustString(s.Name), rustString(s.Stage.String()), rustString(string(s.Applies)))
 	}
 	out.WriteString("];\n\n")
+}
+
+func writePrintableRanges(out *strings.Builder) {
+	var ranges [][2]rune
+	for r := rune(0); r <= 0x10ffff; r++ {
+		if !strconv.IsPrint(r) {
+			continue
+		}
+		if last := len(ranges) - 1; last >= 0 && ranges[last][1] == r-1 {
+			ranges[last][1] = r
+			continue
+		}
+		ranges = append(ranges, [2]rune{r, r})
+	}
+	out.WriteString("pub const GO_PRINTABLE_RANGES: &[(u32, u32)] = &[\n")
+	for _, printable := range ranges {
+		fmt.Fprintf(out, "    (0x%x, 0x%x),\n", printable[0], printable[1])
+	}
+	out.WriteString("];\n")
 }
