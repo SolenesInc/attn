@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -102,6 +103,23 @@ func TestAModdedClaudeSessionThatClosesCompactingWhileBackgroundWorkRunsCompacts
 	if protocol.Deref(closed.CloseReason) != compactReason {
 		t.Errorf("the session closed for %q, want %q", protocol.Deref(closed.CloseReason), compactReason)
 	}
+}
+
+func TestACompactingCloseWhoseModWasLostMidTurnClosesOnceTheTurnParksOnBackgroundWork(t *testing.T) {
+	w := newTitlingWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	session, run := moddedClaudeWithVerdicts(t, w, app)
+	workingOn(t, app, run, session, "deploy to staging")
+
+	closeCompactingDuringTheTurn(t, cli, run, session)
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.advance(claudeModReachWindow)
+	stillOpen(t, cli, session, "after the mod was lost during the turn that asked to close")
+
+	parkOnBackgroundWork(t, w, cli, run, session)
+
+	compactDidNotRun(t, awaitClosed(app, session), "no link that compacts")
 }
 
 func TestACompactThatClaudeSkipsStillClosesTheModdedSessionSayingSo(t *testing.T) {
