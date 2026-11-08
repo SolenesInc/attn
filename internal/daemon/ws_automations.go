@@ -11,6 +11,10 @@ func (d *Daemon) handleAutomationDefinitionsGetWS(client *wsClient, msg *protoco
 	d.sendToClient(client, result)
 }
 
+func (d *Daemon) handleAutomationSchedulePreviewWS(client *wsClient, msg *protocol.AutomationSchedulePreviewMessage) {
+	d.sendToClient(client, d.actionAutomationSchedulePreview(msg))
+}
+
 func (d *Daemon) handleAutomationRunsGetWS(client *wsClient, msg *protocol.AutomationRunsGetMessage) {
 	result := d.actionAutomationRunsGet(msg, client.selectedProfile())
 	d.sendToClient(client, result)

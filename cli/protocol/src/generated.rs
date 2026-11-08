@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "787cd7cd3899";
+pub const PROTOCOL_VERSION: &str = "7a1bb8eb60b5";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -957,6 +957,8 @@ pub struct AutomationDefinitionSummary {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub launch_desktop: Option<LaunchDesktopSetting>,
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_run_at: Option<String>,
     pub profile_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub profile_name: Option<String>,
@@ -1176,6 +1178,45 @@ impl AutomationRunsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "automation_runs_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationSchedulePreviewMessage {
+    pub cmd: String,
+    pub cron: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub time_zone: String,
+}
+
+impl AutomationSchedulePreviewMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "automation_schedule_preview".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationSchedulePreviewResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub times: Option<Vec<String>>,
+}
+
+impl AutomationSchedulePreviewResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "automation_schedule_preview_result".to_string(),
             ..Self::default()
         }
     }

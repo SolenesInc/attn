@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAScheduledAutomationFiresOncePerDueInstantWhileEnabled(t *testing.T) {
@@ -46,6 +48,98 @@ func TestAScheduledAutomationFiresOncePerDueInstantWhileEnabled(t *testing.T) {
 		}
 		if paused := automationRuns(t, cli, definitions["paused"]); len(paused) != 0 {
 			t.Errorf("the paused automation fired %v, want nothing", automationOccurrenceKeys(paused))
+		}
+	})
+}
+
+func TestAScheduleWithoutRunsPreviewsTheTimesTheSchedulerWouldUse(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app := w.App()
+		preview := func(cron, timeZone string) protocol.AutomationSchedulePreviewResultMessage {
+			t.Helper()
+			id := cron + " " + timeZone
+			return testworld.Request(app, protocol.AutomationSchedulePreviewMessage{Cmd: protocol.CmdAutomationSchedulePreview, Cron: cron, TimeZone: timeZone, RequestID: protocol.Ptr(id)},
+				protocol.EventAutomationSchedulePreviewResult, automationAnswer[protocol.AutomationSchedulePreviewResultMessage](id))
+		}
+
+		hourly := preview("0 * * * *", "UTC")
+		if want := []string{"2000-01-01T01:00:00Z", "2000-01-01T02:00:00Z", "2000-01-01T03:00:00Z", "2000-01-01T04:00:00Z", "2000-01-01T05:00:00Z"}; !hourly.Success || !slices.Equal(hourly.Times, want) {
+			t.Errorf("hourly preview = %+v, want %v", hourly, want)
+		}
+		if zoned := preview("30 9 * * *", "Europe/Stockholm"); !zoned.Success || len(zoned.Times) != 5 || zoned.Times[0] != "2000-01-01T09:30:00+01:00" {
+			t.Errorf("zoned preview = %+v, want five times starting at 09:30 Stockholm time", zoned)
+		}
+		for _, tc := range []struct{ name, cron, timeZone, want string }{
+			{"an invalid cron", "99 99 99 99 99", "UTC", "must be a valid cron expression"},
+			{"a cron that never occurs", "0 0 31 2 *", "UTC", "never occurs"},
+			{"an unknown time zone", "0 * * * *", "Mars/Olympus", "must be an IANA timezone"},
+		} {
+			refused := preview(tc.cron, tc.timeZone)
+			if refused.Success || len(refused.Times) != 0 || !strings.Contains(protocol.Deref(refused.Error), tc.want) {
+				t.Errorf("%s previewed as %+v, want an error containing %q", tc.name, refused, tc.want)
+			}
+		}
+	})
+}
+
+func TestAutomationSummariesNameTheNextRunOnlyWhileAScheduleIsEnabled(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		next := func(name string) string {
+			t.Helper()
+			result, err := cli.AutomationDefinitions()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, definition := range result.Definitions {
+				if definition.Name == name {
+					return protocol.Deref(definition.NextRunAt)
+				}
+			}
+			t.Fatalf("no automation named %s in %+v", name, result.Definitions)
+			return ""
+		}
+		spec := func(name, cron string) string {
+			return fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: %s
+trigger: {type: scheduled, schedule: {cron: %q, time_zone: UTC}, continuity: fresh, catch_up: latest}
+prompt: Check.
+launch: {driver: codex}
+location: {type: directory, path: %q}
+`, name, cron, w.Path("gone"))
+		}
+		var hourly protocol.AutomationDefinitionSummary
+		var interval int
+		automationUnreachableFolder(t, w, "gone", func() {
+			hourly = applyAutomation(t, cli, spec("hourly", "0 * * * *"))
+			interval = applyAutomation(t, cli, spec("interval", "@every 90m")).ID
+		})
+		if got := protocol.Deref(hourly.NextRunAt); got != "2000-01-01T01:00:00Z" {
+			t.Errorf("apply reported next run %q, want 01:00", got)
+		}
+		applyAutomation(t, cli, manualAutomation(w, "Check locally."))
+
+		w.advance(30 * time.Minute)
+
+		predicted := next("interval")
+		if got := next("hourly"); got != "2000-01-01T01:00:00Z" {
+			t.Errorf("hourly next run = %q, want 01:00", got)
+		}
+		w.advance(time.Hour + 2*time.Minute)
+		if got := automationOccurrenceKeys(automationRuns(t, cli, interval)); !slices.Equal(got, []string{"scheduled:" + predicted}) {
+			t.Errorf("@every fired %v, but its next run read %s an hour earlier", got, predicted)
+		}
+		if got := next("Manual check"); got != "" {
+			t.Errorf("a manual automation has next run %q", got)
+		}
+		if disabled := setAutomationEnabled(t, cli, hourly.ID, false); disabled.NextRunAt != nil {
+			t.Errorf("a disabled schedule has next run %q", *disabled.NextRunAt)
+		}
+		if got := next("hourly"); got != "" {
+			t.Errorf("a disabled schedule lists next run %q", got)
 		}
 	})
 }

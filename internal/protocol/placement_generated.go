@@ -48,6 +48,7 @@ var Placements = map[string][]Placement{
 	"automation_delete":                {Placement{LocatorHome, ""}},
 	"automation_run":                   {Placement{LocatorHome, ""}},
 	"automation_runs_get":              {Placement{LocatorHome, ""}},
+	"automation_schedule_preview":      {Placement{LocatorHome, ""}},
 	"automation_set_enabled":           {Placement{LocatorHome, ""}},
 	"automation_validate":              {Placement{LocatorHome, ""}},
 	"browse_directory":                 {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -509,6 +510,18 @@ func (m AutomationRunsGetMessage) Placement() Placement {
 }
 
 func (m AutomationRunsGetMessage) Locate() string {
+	return ""
+}
+
+func (AutomationSchedulePreviewMessage) CommandName() string {
+	return "automation_schedule_preview"
+}
+
+func (m AutomationSchedulePreviewMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m AutomationSchedulePreviewMessage) Locate() string {
 	return ""
 }
 

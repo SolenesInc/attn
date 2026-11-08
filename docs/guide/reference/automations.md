@@ -102,7 +102,7 @@ current profile.
 
 | Command | What it does |
 |---|---|
-| `attn automation list` | Lists the automations as JSON. |
+| `attn automation list` | Lists the automations as JSON. An enabled schedule includes `next_run_at`. |
 | `attn automation show <id>` | Prints the definition, its profile, launch desktop, last run and guard check. |
 | `attn automation apply --file <yaml>` | Creates an automation, or updates the one whose `id` the file names. `--launch-desktop` sets where runs start. |
 | `attn automation validate --file <yaml>` | Checks a definition without saving it. |

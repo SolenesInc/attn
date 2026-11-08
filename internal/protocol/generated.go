@@ -1083,6 +1083,9 @@ type AutomationDefinitionSummary struct {
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 
+	// NextRunAt corresponds to the JSON schema field "next_run_at".
+	NextRunAt *string `json:"next_run_at,omitempty,omitzero"`
+
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
 
@@ -1317,6 +1320,37 @@ type AutomationRunsResultMessage struct {
 
 	// Truncated corresponds to the JSON schema field "truncated".
 	Truncated *bool `json:"truncated,omitempty,omitzero"`
+}
+
+type AutomationSchedulePreviewMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cron corresponds to the JSON schema field "cron".
+	Cron string `json:"cron"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// TimeZone corresponds to the JSON schema field "time_zone".
+	TimeZone string `json:"time_zone"`
+}
+
+type AutomationSchedulePreviewResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Times corresponds to the JSON schema field "times".
+	Times []string `json:"times,omitempty,omitzero"`
 }
 
 type AutomationSetEnabledMessage struct {

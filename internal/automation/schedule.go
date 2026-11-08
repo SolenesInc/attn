@@ -55,6 +55,20 @@ func (s CompiledSchedule) DueInstants(cursor, now time.Time, limit int) (instant
 	return instants, false
 }
 
+func (s CompiledSchedule) Upcoming(after time.Time, n int) []time.Time {
+	var times []time.Time
+	at := after.In(s.location)
+	for len(times) < n {
+		next := s.cron.Next(at)
+		if next.IsZero() {
+			break
+		}
+		times = append(times, next)
+		at = next
+	}
+	return times
+}
+
 func ScheduledOccurrenceKey(intended time.Time) string {
 	return "scheduled:" + intended.UTC().Format(time.RFC3339)
 }

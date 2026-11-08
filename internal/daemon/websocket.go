@@ -1241,6 +1241,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutomationApplyWS(client, apply)
 	case protocol.CmdAutomationValidate:
 		d.handleAutomationValidateWS(client, msg.(*protocol.AutomationValidateMessage))
+	case protocol.CmdAutomationSchedulePreview:
+		d.handleAutomationSchedulePreviewWS(client, msg.(*protocol.AutomationSchedulePreviewMessage))
 	case protocol.CmdAutomationDelete:
 		d.handleAutomationDeleteWS(client, msg.(*protocol.AutomationDeleteMessage))
 	case protocol.CmdAutomationCleanup:

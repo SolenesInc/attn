@@ -28,6 +28,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdAutomationDefinitionsGet:      decodeInto[AutomationDefinitionsGetMessage],
 	CmdAutomationDefinitionGet:       decodeInto[AutomationDefinitionGetMessage],
 	CmdAutomationValidate:            decodeInto[AutomationValidateMessage],
+	CmdAutomationSchedulePreview:     decodeInto[AutomationSchedulePreviewMessage],
 	CmdAutomationRunsGet:             decodeInto[AutomationRunsGetMessage],
 	CmdAutomationSetEnabled:          decodeInto[AutomationSetEnabledMessage],
 	CmdAutomationDelete:              decodeInto[AutomationDeleteMessage],

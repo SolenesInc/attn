@@ -246,6 +246,7 @@ const (
 	CmdAutomationDelete              = "automation_delete"
 	CmdAutomationCleanup             = "automation_cleanup"
 	CmdAutomationValidate            = "automation_validate"
+	CmdAutomationSchedulePreview     = "automation_schedule_preview"
 	CmdSpawnSession                  = "spawn_session"
 	CmdAttachSession                 = "attach_session"
 	CmdDetachSession                 = "detach_session"
@@ -367,15 +368,16 @@ const (
 )
 
 const (
-	EventAutomationApplyResult       = "automation_apply_result"
-	EventAutomationValidateResult    = "automation_validate_result"
-	EventAutomationDefinitionsResult = "automation_definitions_result"
-	EventAutomationDefinitionResult  = "automation_definition_result"
-	EventAutomationRunsResult        = "automation_runs_result"
-	EventAutomationRunResult         = "automation_run_result"
-	EventAutomationSetEnabledResult  = "automation_set_enabled_result"
-	EventAutomationDeleteResult      = "automation_delete_result"
-	EventAutomationCleanupResult     = "automation_cleanup_result"
+	EventAutomationApplyResult           = "automation_apply_result"
+	EventAutomationValidateResult        = "automation_validate_result"
+	EventAutomationSchedulePreviewResult = "automation_schedule_preview_result"
+	EventAutomationDefinitionsResult     = "automation_definitions_result"
+	EventAutomationDefinitionResult      = "automation_definition_result"
+	EventAutomationRunsResult            = "automation_runs_result"
+	EventAutomationRunResult             = "automation_run_result"
+	EventAutomationSetEnabledResult      = "automation_set_enabled_result"
+	EventAutomationDeleteResult          = "automation_delete_result"
+	EventAutomationCleanupResult         = "automation_cleanup_result"
 )
 
 const EventAutomationsChanged = "automations_changed"

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/protocol"
@@ -148,6 +149,27 @@ func (d *Daemon) actionAutomationValidate(msg *protocol.AutomationValidateMessag
 		return result
 	}
 	result.Success = true
+	return result
+}
+
+const automationSchedulePreviewRuns = 5
+
+func (d *Daemon) actionAutomationSchedulePreview(msg *protocol.AutomationSchedulePreviewMessage) protocol.AutomationSchedulePreviewResultMessage {
+	result := protocol.AutomationSchedulePreviewResultMessage{
+		Event:     protocol.EventAutomationSchedulePreviewResult,
+		RequestID: msg.RequestID,
+	}
+	compiled, err := automation.CompileSchedule(automation.ScheduleSpec{Cron: msg.Cron, TimeZone: msg.TimeZone})
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+		return result
+	}
+	upcoming := compiled.Upcoming(d.clock.Now(), automationSchedulePreviewRuns)
+	result.Success = true
+	result.Times = make([]string, len(upcoming))
+	for i, at := range upcoming {
+		result.Times[i] = at.Format(time.RFC3339)
+	}
 	return result
 }
 
@@ -312,8 +334,36 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 	if spec.Trigger.Schedule != nil {
 		summary.ScheduleCron = protocol.Ptr(spec.Trigger.Schedule.Cron)
 		summary.ScheduleTimeZone = protocol.Ptr(spec.Trigger.Schedule.TimeZone)
+		if def.Enabled {
+			summary.NextRunAt = d.automationNextRunAt(def.ID, *spec.Trigger.Schedule)
+		}
 	}
 	return summary
+}
+
+func (d *Daemon) automationNextRunAt(definitionID int, schedule automation.ScheduleSpec) *string {
+	compiled, err := automation.CompileSchedule(schedule)
+	if err != nil {
+		d.logf("automation next run compile %d: %v", definitionID, err)
+		return nil
+	}
+	cursor, ok, err := d.store.GetAutomationScheduleCursor(definitionID)
+	if err != nil {
+		d.logf("automation next run cursor %d: %v", definitionID, err)
+		return nil
+	}
+	now := d.clock.Now()
+	if !ok {
+		cursor = now
+	}
+	upcoming := compiled.Upcoming(cursor, 1)
+	if len(upcoming) == 1 && !upcoming[0].After(now) {
+		upcoming = compiled.Upcoming(now, 1)
+	}
+	if len(upcoming) == 0 {
+		return nil
+	}
+	return protocol.Ptr(upcoming[0].Format(time.RFC3339))
 }
 
 func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) protocol.AutomationRunSummary {

@@ -2124,6 +2124,14 @@ model AutomationValidateMessage {
   request_id?: string;
 }
 
+@extension("x-on", #{ home: true })
+model AutomationSchedulePreviewMessage {
+  cmd: "automation_schedule_preview";
+  request_id?: string;
+  cron: string;
+  time_zone: string;
+}
+
 // Dual-surface (unix-socket/CLI + WS), unlike automation_set_enabled below:
 // mirrors automation_apply/automation_run's shape. request_id is optional
 // because the WS path uses it for correlation but the socket/CLI path
@@ -4615,6 +4623,7 @@ model AutomationDefinitionSummary {
   trigger_type: string;
   schedule_cron?: string;
   schedule_time_zone?: string;
+  next_run_at?: string;
   updated_at: string;
   last_run?: AutomationRunSummary;
   guard_check?: AutomationGuardCheck;
@@ -4670,6 +4679,14 @@ model AutomationValidateResultMessage {
   request_id?: string;
   success: boolean;
   error?: string;
+}
+
+model AutomationSchedulePreviewResultMessage {
+  event: "automation_schedule_preview_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  times?: string[];
 }
 
 model AutomationDefinitionsResultMessage {
