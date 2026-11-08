@@ -157,5 +157,39 @@ as attn-b up --instance failed >/dev/null
 expect "the starter's down frees the name" live failed
 as attn-b down --instance failed >/dev/null
 
+# An instance from a script that wrote no owner link, still held by its agent.
+start_unowned() {
+  touch "$guest/.claim-$1"
+  mkdir -p "$guest/.attn-$2" "$guest/Applications/attn-$2.app" "$guest/running"
+  touch "$guest/running/attn-$2"
+}
+
+start_unowned attn-earlier earlier
+out="$(as attn-b up --instance earlier)"
+status=$?
+expect "up on an unowned instance fails" [ "$status" -ne 0 ]
+expect "the refusal says how its owner takes it" says "$out" "scripts/vm adopt --instance earlier"
+expect "a refused up leaves the unowned app and data" live earlier
+out="$(as attn-b down --instance earlier)"
+expect "down says the unowned instance stays" says "$out" "left in place"
+expect "another agent's down leaves the unowned app and data" live earlier
+expect "another agent's down releases its VM claim" absent "$guest/.claim-attn-b"
+as attn-earlier adopt --instance earlier >/dev/null
+expect "the owner's adopt keeps the app and data" live earlier
+expect "the owner can drive after adopting" says "$(as attn-earlier drive --instance earlier ping)" frontendReady
+out="$(as attn-b up --instance earlier)"
+expect "an adopted name is refused to others" says "$out" "belongs to attn-earlier"
+expect "that refusal leaves the adopted app and data" live earlier
+out="$(as attn-b adopt --instance earlier)"
+expect "adopt refuses an owned instance" says "$out" "belongs to attn-earlier"
+as attn-b down --instance earlier >/dev/null
+as attn-earlier down --instance earlier >/dev/null
+expect "the owner's down cleans the adopted instance" gone earlier
+touch "$guest/.claim-attn-b"
+out="$(as attn-b adopt --instance nothing)"
+expect "adopt names a missing instance" says "$out" "no instance 'nothing'"
+expect "adopt on a missing instance takes nothing" absent "$guest/vm-instance-owners/nothing"
+as attn-b down --instance nothing >/dev/null
+
 echo "vm_test: $pass passed, $fail failed"
 [ "$fail" -eq 0 ]

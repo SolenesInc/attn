@@ -69,6 +69,11 @@ An instance belongs to the agent that brought it up in that VM. Another agent's
 pick a different `--instance`. Its `down` releases only its own hold on the VM
 and leaves the owner's app and data alone.
 
+An instance started by a `scripts/vm` from before owners has no owner, and its
+agent may still be using it. `up` on that name is refused, and `down` leaves it
+in place. If the instance is yours, `scripts/vm adopt --instance NAME` makes you
+its owner, and `drive`, `record`, `shot` and `down` then work as usual.
+
 When both VMs are full, `up` prints who holds them and waits up to 30 minutes.
 
 For a guest with one app in front, as scenarios that need real focus or system

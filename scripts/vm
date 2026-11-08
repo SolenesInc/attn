@@ -10,10 +10,12 @@ scripts/vm: run this checkout's attn in a shared macOS VM.
   scripts/vm record SECONDS OUT.mp4 record the app's window; one recording at a time per VM
   scripts/vm shot OUT.png           screenshot the app's window
   scripts/vm down                   quit and clean this instance and release the VM
+  scripts/vm adopt                  take an instance with no owner, started by an earlier
+                                    scripts/vm, when it is yours
 
 Each agent gets its own instance by default, vm-<worktree name>-<hash>. --instance
 NAME, before or right after the command, selects another; a name another agent is
-using in the VM is refused. macvm ls shows every VM.
+using in the VM is refused, and so is one that has no owner. macvm ls shows every VM.
 EOF
     exit 2
 }
@@ -79,11 +81,33 @@ bridge() {
 
 instance_owner() { macvm exec readlink "$owner_link" 2>/dev/null || true; }
 
+link_owner_when_app_is() {
+    macvm exec /bin/sh -c '
+        mkdir -p "$(dirname "$1")"
+        if [ -e "$3" ]; then app=installed; else app=absent; fi
+        [ "$app" != "$4" ] || ln -s "$2" "$1" 2>/dev/null
+        readlink "$1"
+        exit 0' sh "$owner_link" "$holder" "$guest_app" "$1"
+}
+
+refuse_taken() {
+    die "instance '$instance' in this VM belongs to $1; pass another with --instance. Release this VM with: scripts/vm down --instance $instance"
+}
+
 claim_instance() {
     local owner
-    owner="$(macvm exec /bin/sh -c 'mkdir -p "$(dirname "$1")"; ln -s "$2" "$1" 2>/dev/null; readlink "$1"' sh "$owner_link" "$holder")"
-    [ "$owner" = "$holder" ] ||
-        die "instance '$instance' in this VM belongs to $owner; pass another with --instance. Release this VM with: scripts/vm down --instance $instance"
+    owner="$(link_owner_when_app_is absent)"
+    [ -n "$owner" ] ||
+        die "instance '$instance' is in this VM with no owner, so an earlier scripts/vm may still be using it; pass another with --instance. Only if it is yours: scripts/vm adopt --instance $instance"
+    [ "$owner" = "$holder" ] || refuse_taken "$owner"
+}
+
+cmd_adopt() {
+    local owner
+    owner="$(link_owner_when_app_is installed)"
+    [ -n "$owner" ] || die "no instance '$instance' in this VM; start one with: scripts/vm up --instance $instance"
+    [ "$owner" = "$holder" ] || refuse_taken "$owner"
+    echo "scripts/vm: $app is yours. When done: scripts/vm down --instance $instance"
 }
 
 require_own_instance() {
@@ -155,6 +179,8 @@ cmd_down() {
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm exec "$guest_bin" instance clean "$instance" 2>/dev/null || true
         macvm exec /bin/rm -rf "$harness" "$guest_app" "$owner_link"
+    elif [ -z "$(instance_owner)" ] && macvm exec /bin/test -e "$guest_app"; then
+        echo "scripts/vm: instance '$instance' has no owner, so it was left in place; it goes when the VM stops" >&2
     fi
     macvm down
 }
@@ -175,5 +201,6 @@ shot)
     cmd_shot "${args[@]}"
     ;;
 down) cmd_down ;;
+adopt) cmd_adopt ;;
 *) usage ;;
 esac
