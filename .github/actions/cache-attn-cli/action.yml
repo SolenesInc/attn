@@ -1,0 +1,58 @@
+name: Ensure the attn CLI binary
+description: >-
+  Put the Rust CLI for this runner at the given path from a cache keyed by its
+  build inputs. Installs a Rust toolchain only when the cache misses.
+inputs:
+  out:
+    description: Where to put the binary.
+    required: true
+outputs:
+  key:
+    description: The CLI key of this checkout.
+    value: ${{ steps.resolve.outputs.key }}
+  channel:
+    description: The Rust channel rust-toolchain.toml pins.
+    value: ${{ steps.resolve.outputs.channel }}
+runs:
+  using: composite
+  steps:
+    - name: Resolve CLI key
+      id: resolve
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: |
+        entry="$(scripts/rust-cli.sh entry)"
+        key="$(basename "$entry")"
+        triple="$(basename "$(dirname "$entry")")"
+        channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+        {
+          echo "entry=$entry"
+          echo "key=$key"
+          echo "cache-key=attn-cli-$triple-$key"
+          echo "channel=$channel"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore CLI binary
+      id: binary
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.resolve.outputs.entry }}
+        key: ${{ steps.resolve.outputs.cache-key }}
+
+    - name: Set up Rust for a CLI cache miss
+      if: steps.binary.outputs.cache-hit != 'true'
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ steps.resolve.outputs.channel }}
+
+    - name: Place CLI binary
+      working-directory: ${{ github.workspace }}
+      shell: bash
+      run: scripts/rust-cli.sh build --out "${{ inputs.out }}"
+
+    - name: Save CLI binary
+      if: steps.binary.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.resolve.outputs.entry }}
+        key: ${{ steps.resolve.outputs.cache-key }}

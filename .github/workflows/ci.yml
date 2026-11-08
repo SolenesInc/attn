@@ -139,7 +139,6 @@ jobs:
             tauri:
               - 'app/src-tauri/**'
               - 'pty-host/**'
-              - 'cli/**'
               - 'internal/ptyhost/**'
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
@@ -738,7 +737,6 @@ jobs:
           workspaces: |
             app/src-tauri
             pty-host
-            cli
           # Saving on PRs too would copy this cache into every branch scope and
           # evict the rest of the repo's entries.
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -765,13 +763,6 @@ jobs:
           cargo clippy --manifest-path pty-host/Cargo.toml --all-targets -- -D warnings
           cargo test --manifest-path pty-host/Cargo.toml
 
-      - name: CLI fmt, clippy, and test
-        run: |
-          cd ../..
-          cargo fmt --manifest-path cli/Cargo.toml --all -- --check
-          cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
-          cargo test --manifest-path cli/Cargo.toml --locked
-
       - name: Cargo fmt
         run: cargo fmt -- --check
 
@@ -783,6 +774,69 @@ jobs:
 
       - name: Cargo test
         run: cargo test
+
+  attn-cli:
+    name: CLI (${{ matrix.os }})
+    permissions:
+      contents: read
+    runs-on: ${{ matrix.runs_on }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            runs_on: macos-15
+          - os: ubuntu-24.04
+            runs_on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Ensure CLI binary
+        id: cli
+        uses: ./.github/actions/cache-attn-cli
+        with:
+          out: ${{ runner.temp }}/attn-cli-out/attn
+
+      - name: Look up CLI verification
+        id: verified
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/attn-cli-verified
+          key: attn-cli-verified-${{ steps.cli.outputs.key }}
+          lookup-only: true
+
+      - name: Set up Rust for CLI verification
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.cli.outputs.channel }}
+          components: clippy, rustfmt
+
+      - name: Cache CLI test builds
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: cli
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: CLI fmt, clippy, and test
+        if: steps.verified.outputs.cache-hit != 'true'
+        run: |
+          cargo fmt --manifest-path cli/Cargo.toml --all -- --check
+          cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
+          cargo test --manifest-path cli/Cargo.toml --locked
+          mkdir -p "$RUNNER_TEMP/attn-cli-verified"
+          echo "${{ steps.cli.outputs.key }}" > "$RUNNER_TEMP/attn-cli-verified/key"
+
+      - name: Save CLI verification
+        if: steps.verified.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/attn-cli-verified
+          key: attn-cli-verified-${{ steps.cli.outputs.key }}
 
   app-acceptance-build:
     name: App acceptance build
@@ -1159,6 +1213,7 @@ jobs:
       - mobile
       - frontend-e2e
       - rust
+      - attn-cli
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
@@ -1193,6 +1248,7 @@ jobs:
       - mobile
       - frontend-e2e
       - rust
+      - attn-cli
       - app-acceptance-build
       - app-acceptance-shard
       - app-acceptance-macos
