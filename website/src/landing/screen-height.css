@@ -1,0 +1,4 @@
+:root { --screen-height: 100vh; }
+@supports (height: 100svh) {
+  :root { --screen-height: 100svh; }
+}

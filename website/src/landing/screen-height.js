@@ -4,7 +4,7 @@
 
   function smallViewportHeight() {
     const probe = document.createElement('div');
-    probe.style.cssText = 'position:fixed;top:0;width:0;height:100svh;visibility:hidden';
+    probe.style.cssText = 'position:fixed;top:0;width:0;height:100vh;height:100svh;visibility:hidden';
     document.body.append(probe);
     const height = probe.offsetHeight;
     probe.remove();

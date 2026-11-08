@@ -4,7 +4,7 @@ html { background: var(--ground); -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--ground); color: var(--ink); font-family: var(--sans); overflow-x: clip; -webkit-font-smoothing: antialiased; }
 a { color: inherit; text-decoration: none; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
-#hero { position: relative; isolation: isolate; height: var(--screen-height, 100svh); overflow: clip; padding: 0 var(--gutter); touch-action: none; }
+#hero { position: relative; isolation: isolate; height: var(--screen-height); overflow: clip; padding: 0 var(--gutter); touch-action: none; }
 #field, #lights { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 .bar { width: 100%; max-width: var(--col); height: 56px; margin: 0 auto; display: flex; align-items: center; gap: 26px; font-size: 15px; font-weight: 500; }
 .mark { margin-right: auto; font: 700 20px/1 var(--mono); letter-spacing: -.02em; color: var(--accent); }
