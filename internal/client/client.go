@@ -940,21 +940,6 @@ func (c *Client) AskClose(sessionID protocol.SessionID, askID string) error {
 	return err
 }
 
-func (c *Client) NotebookGuide(sessionID protocol.SessionID) (*protocol.NotebookGuideResult, error) {
-	msg := protocol.NotebookGuideMessage{Cmd: protocol.CmdNotebookGuide}
-	if sessionID != "" {
-		msg.SessionID = protocol.Ptr(sessionID)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.NotebookGuide == nil {
-		return nil, errors.New("daemon returned no notebook guide result")
-	}
-	return resp.NotebookGuide, nil
-}
-
 func (c *Client) AppendJournal(sourceSessionID protocol.SessionID, date string, entry string) (*protocol.JournalAppendResult, error) {
 	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
 	if sourceSessionID != "" {
