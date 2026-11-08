@@ -86,6 +86,13 @@ function saveNativeTrace(name) {
 const state = (payload = {}) => client.request('capture_state', payload, payload.staged ? { timeoutMs: 120_000 } : {});
 const hidden = () => state({ visible: false });
 const key = (key, modifiers = []) => driver.runInputDriver(['global_key', '--key', key, ...(modifiers.length ? ['--modifiers', modifiers.join(',')] : [])]);
+const rosterPosition = () => {
+  const position = 1 + JSON.parse(runAttn(['crew', 'list', '--json'])).findIndex(member => member.id === mailbox);
+  assert.ok(position >= 1 && position <= 8, `crew member ${mailbox} is at Quick Capture roster position ${position}, beyond ⌘2-⌘9`);
+  return position;
+};
+const pickMailbox = () => key(String(rosterPosition() + 1), ['command']);
+const arrowToMailbox = async () => { for (let step = rosterPosition(); step > 0; step--) await key('arrowdown'); };
 async function captureStack() {
   const id = await driver.mainWindowId({ windowTitle: 'Quick Capture' });
   const stack = JSON.parse(await driver.runInputDriverCapture(['windowstack']));
@@ -511,12 +518,12 @@ try {
   await runner.step('remove_image_and_keyboard_mailbox', async () => {
     await driver.click({ webview: 'capture', selector: '.capture-files button' }, { windowTitle: 'Quick Capture' });
     assert.equal((await state({ attachmentCount: 2 })).files.length, 2);
-    await key('2', ['command']);
+    await pickMailbox();
     assert.equal((await state({ mailbox })).mailbox, mailbox);
     await key('1', ['command']);
     assert.equal((await state({ mailbox: 'chief' })).mailbox, 'chief');
     await key('k', ['command']);
-    await key('arrowdown');
+    await arrowToMailbox();
     await key('enter');
     assert.equal((await state({ mailbox })).mailbox, mailbox);
     await fixtureSignal('mailbox-image-receipt.json', () => key('enter'));
@@ -567,7 +574,7 @@ try {
       await dropFiles([walkthroughPdf]);
       await state({ imageCount: 1, attachmentCount: 2, settled: true, staged: true });
       await key('k', ['command']);
-      await key('arrowdown'); await key('enter');
+      await arrowToMailbox(); await key('enter');
       await state({ mailbox });
       await screenshot('walkthrough-compose.png');
       await fixtureSignal('mailbox-image-receipt.json', () => key('enter'));
@@ -627,7 +634,7 @@ try {
     assert.equal(restored.text, 'Retained after restart plus dropped image');
     assert.equal(restored.binding, testBinding);
     await screenshot('restored-draft.png');
-    await key('2', ['command']); await state({ mailbox });
+    await pickMailbox(); await state({ mailbox });
     await fixtureSignal('mailbox-image-receipt.json', () => key('enter')); await hidden();
     const restoredReceipt = JSON.parse(fs.readFileSync(path.join(runner.runDir, 'mailbox-image-receipt.json'))).find(file => file.mediaType === 'application/pdf');
     assert.equal(restoredReceipt.sha256, crypto.createHash('sha256').update(fs.readFileSync(pdfPath)).digest('hex'));
