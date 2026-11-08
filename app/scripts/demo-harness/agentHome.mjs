@@ -28,7 +28,7 @@ function writeClaudeHome(dir, trustedFolders) {
     projects: Object.fromEntries(trustedFolders.map((folder) => [folder, { hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true }])),
   };
   fs.writeFileSync(path.join(dir, '.claude.json'), `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
-  fs.writeFileSync(path.join(dir, 'settings.json'), `${JSON.stringify({ permissions: { allow: ['Bash', 'Edit', 'Read', 'Write'] } }, null, 2)}\n`);
+  fs.writeFileSync(path.join(dir, 'settings.json'), `${JSON.stringify({ permissions: { allow: ['Bash', 'Edit', 'Read', 'Write'], disableAutoMode: 'disable' } }, null, 2)}\n`);
 }
 
 function codexProvider(origin) {

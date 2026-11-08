@@ -431,6 +431,11 @@ Measured on 2.1.318 through attn's mod, with the real binary and a mock API:
   permission mode?". attn reports the session as needing approval until the user
   answers, so a delivery waits. `hasSeenAutoDefaultNotice` alone does not skip it
   with `permissions.defaultMode` set to `default`.
+- On 2.1.319 under `--permission-mode auto`, a blanket `Bash` allow rule does not
+  approve `npm test`. Against a stub model the command opens a dialog, "Auto mode
+  can't check actions in this session and needs your choice". With
+  `permissions.disableAutoMode` set to `disable`, the same launch starts, and the
+  allow rule approves the command.
 - In a folder with no trust recorded, `claude` makes its first poll only after
   the user answers the trust question: 0.3 to 1.4 s after the answer in 4 runs,
   and never before it. In a trusted folder, launched by attn, the first poll
