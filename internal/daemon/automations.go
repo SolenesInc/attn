@@ -43,16 +43,17 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID int, requestID,
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
 		return nil, err
 	}
-	if spec.Trigger.Type != "manual" {
-		return nil, fmt.Errorf("automation %d is provider-driven and cannot be run manually yet", definitionID)
-	}
 	snapshot, err := automation.Effective(spec, def.Revision)
 	if err != nil {
 		return nil, err
 	}
+	snapshot = snapshot.OnDemand()
 	subjectKey := ""
 	canonicalInput := input
 	if spec.Location.Type == "repository_worktree" {
+		if input == "{}" {
+			return nil, fmt.Errorf("automation %d works on a pull request; give it one with --pr-url <url>", definitionID)
+		}
 		pr, err := automation.ParsePullRequestInput(json.RawMessage(input))
 		if err != nil {
 			return nil, err

@@ -138,7 +138,7 @@ trigger:
   catch_up: latest
 prompt: |
   Slice 6 non-manual trigger fixture. Never fires during the scenario window
-  (once-a-year cron); exists only to prove the panel hides run-now for a
+  (once-a-year cron); exists only to prove the panel offers run-now for a
   non-manual trigger.
 launch:
   driver: codex
@@ -365,7 +365,7 @@ async function main() {
       }, `scheduled definition ${scheduledID} to appear in the panel`, PANEL_APPEAR_TIMEOUT_MS);
       const scheduledRow = findDefinitionRow(withScheduled, scheduledID);
       runner.assert(scheduledRow.trigger.startsWith('Scheduled'), 'non-manual definition renders a Scheduled trigger label', scheduledRow);
-      runner.assert(scheduledRow.canRunNow === false, 'non-manual definition has no run-now affordance', scheduledRow);
+      runner.assert(scheduledRow.canRunNow === true, 'non-manual definition renders the run-now affordance', scheduledRow);
 
       await client.request('automations_toggle_enabled', { definitionId: manualID });
       await poll(async () => {

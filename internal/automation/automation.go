@@ -482,6 +482,11 @@ func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
 	return Snapshot{APIVersion: APIVersion, DefinitionRevision: revision, Prompt: spec.Prompt, Launch: launch, Location: spec.Location, Continuity: continuity, CatchUp: catchUp}, nil
 }
 
+func (s Snapshot) OnDemand() Snapshot {
+	s.Continuity, s.CatchUp = "fresh", ""
+	return s
+}
+
 type ContinuationContract struct {
 	Prompt   string
 	Launch   EffectiveLaunch

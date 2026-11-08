@@ -10,13 +10,15 @@ of every pull request you are asked to look at.
 
 An automation has one trigger:
 
-- **Manual**. It runs when you click **Run now** or run
-  `attn automation run <id>`.
+- **Manual**. It runs only when you start it.
 - **Scheduled**. It runs on a schedule, such as every weekday at 9:00, in the
   time zone you pick.
 - **PR review requested**. It runs when someone asks you to review an open,
   non-draft pull request on GitHub. Attn sees these through the accounts
   you are logged into with `gh`.
+
+You can start any automation yourself with **Run now** or
+`attn automation run <id>`.
 
 Each time a trigger fires is an occurrence, and each occurrence gets one run.
 
@@ -122,7 +124,7 @@ current profile.
 | `attn automation show <id>` | Prints the definition, its profile, launch desktop, last run and guard check. |
 | `attn automation apply --file <yaml>` | Creates an automation, or updates the one whose `id` the file names. `--launch-desktop` sets where runs start. |
 | `attn automation validate --file <yaml>` | Checks a definition without saving it. |
-| `attn automation run <id>` | Runs a manual automation now. |
+| `attn automation run <id>` | Runs an automation now. An automation that works on a pull request takes `--pr-url <url>`. |
 | `attn automation runs <id>` | Lists its runs as JSON. |
 | `attn automation enable <id>`, `disable <id>` | Turns it on or off. |
 | `attn automation set <id> --launch-desktop <own\|digit\|name\|id>` | Sets where its runs start. |
@@ -154,7 +156,9 @@ location:
 <details>
 <summary>Can I run a scheduled or review automation by hand?</summary>
 
-No. Only manual automations run on demand. For a review on demand, write a manual definition with a `repository_worktree` location and run it with `attn automation run <id> --pr-url <url>`.
+Yes. Click **Run now** or run `attn automation run <id>`. A review automation asks for the pull request; on the command line, pass `--pr-url <url>`.
+
+A run you start stands apart from the trigger, so you can test without changing what happens next. It skips the guard, starts its own session even when the automation continues one, and leaves the guard's record of what it last handled alone.
 </details>
 
 <details>

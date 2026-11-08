@@ -266,8 +266,8 @@ func TestRunRequestsAnAutomationCannotServeAreRefusedWithoutARun(t *testing.T) {
 		t.Fatal(err)
 	}
 	applyAutomation(t, cli, manualAutomation(w, "Check locally."))
-	applyAutomation(t, cli, automationScheduleSpec(w, "nightly", "check", "fresh", "latest"))
 	applyAutomation(t, cli, automationReviewSpec("manual-review", "manual", ""))
+	applyAutomation(t, cli, automationReviewSpec("requested-review", "github_review_requested", ""))
 
 	for _, tc := range []struct {
 		name       string
@@ -275,9 +275,9 @@ func TestRunRequestsAnAutomationCannotServeAreRefusedWithoutARun(t *testing.T) {
 		input, pr  string
 		wantErr    string
 	}{
-		{"a scheduled automation", 2, "", "", "cannot be run manually"},
+		{"a review with no pull request", 3, "", "", "--pr-url"},
 		{"both a pull request and an input", 1, "{}", "https://github.test/acme/shop/pull/1", "mutually exclusive"},
-		{"a pull request GitHub cannot resolve", 3, "", "https://github.test/acme/shop/pull/1", "github.test is not authenticated"},
+		{"a pull request GitHub cannot resolve", 2, "", "https://github.test/acme/shop/pull/1", "github.test is not authenticated"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			run := protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: tc.definition, RequestID: "refused " + tc.name}
@@ -295,9 +295,6 @@ func TestRunRequestsAnAutomationCannotServeAreRefusedWithoutARun(t *testing.T) {
 				t.Errorf("the refused request left runs %+v", runs)
 			}
 		})
-	}
-	if _, err := cli.AutomationRun(2, "from the CLI", ""); err == nil || !strings.Contains(err.Error(), "cannot be run manually") {
-		t.Errorf("running the scheduled automation from the CLI = %v, want it refused", err)
 	}
 }
 

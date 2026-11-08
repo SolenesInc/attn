@@ -155,3 +155,91 @@ location: {type: directory, path: %q}
 	t.Logf("same output retried after failed run: %s and %s", runs[1].ID, runs[0].ID)
 	setAutomationEnabled(t, cli, id, false)
 }
+
+func TestARunStartedByHandLeavesTheScheduleAlone(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	dir := w.Path("guarded")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(value string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "state.txt"), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("red")
+	id := applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
+name: Guarded
+trigger:
+  type: scheduled
+  schedule: {cron: "@every 3s", time_zone: UTC}
+  guard: 'touch checked; cat state.txt'
+  continuity: singleton
+  catch_up: latest
+prompt: Inspect the guard output.
+launch: {driver: claude}
+location: {type: directory, path: %q}
+`, dir)).ID
+	delivered := func(run protocol.AutomationRunSummary) bool { return run.State == "delivered" }
+	runByHand := func(requestID string) protocol.AutomationRunSummary {
+		t.Helper()
+		started, err := cli.AutomationRun(id, requestID, "")
+		if err != nil {
+			t.Fatalf("run %s: %v", requestID, err)
+		}
+		return awaitRunState(t, w, app, started.Run.ID, delivered)
+	}
+	awaitCheck := func(outcome string) protocol.AutomationDefinitionSummary {
+		t.Helper()
+		var found protocol.AutomationDefinitionSummary
+		w.tickSchedulesUntil("guard check "+outcome, func() bool {
+			result, err := cli.AutomationDefinitions()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, def := range result.Definitions {
+				if def.ID == id && def.GuardCheck != nil && def.GuardCheck.Outcome == outcome && (outcome != "launched" || def.LastRun != nil && def.LastRun.State == "delivered") {
+					found = def
+					return true
+				}
+			}
+			return false
+		})
+		return found
+	}
+
+	before := runByHand("before the schedule")
+	if _, err := os.Stat(filepath.Join(dir, "checked")); !os.IsNotExist(err) {
+		t.Errorf("the run started by hand ran the guard (stat: %v)", err)
+	}
+	result, err := cli.AutomationDefinitions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if check := result.Definitions[0].GuardCheck; check != nil {
+		t.Errorf("the run started by hand recorded guard check %+v", check)
+	}
+	if before.Automation == nil || protocol.Deref(before.Automation.Superseded) {
+		t.Errorf("the run started by hand reads as a superseded singleton: %+v", before.Automation)
+	}
+
+	scheduled := awaitCheck("launched")
+	session := protocol.Deref(scheduled.LastRun.SessionID)
+	if session == protocol.Deref(before.SessionID) {
+		t.Fatalf("the schedule's first run took over session %s of the run started by hand", session)
+	}
+
+	during := runByHand("during the schedule")
+	if protocol.Deref(during.SessionID) == session || protocol.Deref(during.SeedID) == protocol.Deref(scheduled.LastRun.SeedID) {
+		t.Errorf("the run started by hand joined the singleton: %+v", during)
+	}
+
+	awaitCheck("unchanged")
+	write("blue")
+	continued := awaitCheck("launched")
+	if protocol.Deref(continued.LastRun.SessionID) != session {
+		t.Errorf("after a run by hand the schedule ran on session %s, want its own %s", protocol.Deref(continued.LastRun.SessionID), session)
+	}
+}

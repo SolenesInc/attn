@@ -101,7 +101,8 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 		t.Fatal("replacement did not start with the updated launch contract")
 	}
 	for _, run := range automationRuns(t, cli, id) {
-		if run.Automation == nil || protocol.Deref(run.Automation.Superseded) != (protocol.Deref(run.SessionID) != protocol.Deref(runs[0].SessionID)) {
+		wantSuperseded := !strings.HasPrefix(protocol.Deref(run.OccurrenceKey), "manual:") && protocol.Deref(run.SessionID) != protocol.Deref(runs[0].SessionID)
+		if run.Automation == nil || protocol.Deref(run.Automation.Superseded) != wantSuperseded {
 			t.Fatalf("run history disagrees about the current session: %+v", run.Automation)
 		}
 	}
@@ -115,8 +116,8 @@ func TestSingletonContractEditsSupersedeSessionsWithoutStoppingThem(t *testing.T
 			current++
 		}
 	}
-	if current != 1 {
-		t.Fatalf("three open sessions show %d current singletons, want one", current)
+	if current != 2 {
+		t.Fatalf("three open sessions show %d not superseded, want the run started by hand and the current singleton", current)
 	}
 	t.Logf("legacy manual %s; rename and harvest reused %s; effort edit preserved its busy agent; replacement %s launched with high effort; three sessions show one current singleton", legacySession, session, protocol.Deref(runs[0].SessionID))
 }

@@ -66,7 +66,7 @@ describe('App automations panel', () => {
     expect(screen.getByTestId('automation-new-empty')).toBeInTheDocument();
   });
 
-  it('lists each definition with what triggers it, offering Run now only for manual ones', async () => {
+  it('lists each definition with what triggers it, offering Run now for each trigger', async () => {
     await openAutomations({
       definitions: [
         definition(1, 'PR reviewer'),
@@ -79,8 +79,8 @@ describe('App automations panel', () => {
     expect(screen.getByText('Scheduled — 0 9 * * * (UTC)')).toBeInTheDocument();
     expect(screen.getByText('GitHub')).toBeInTheDocument();
     expect(screen.getByTestId('automation-run-now-1')).toBeInTheDocument();
-    expect(screen.queryByTestId('automation-run-now-2')).toBeNull();
-    expect(screen.queryByTestId('automation-run-now-3')).toBeNull();
+    expect(screen.getByTestId('automation-run-now-2')).toBeInTheDocument();
+    expect(screen.getByTestId('automation-run-now-3')).toBeInTheDocument();
   });
 
   it('marks a definition whose last run failed, with the reason', async () => {
@@ -183,6 +183,22 @@ describe('App automations panel', () => {
   });
 
   describe('Run now', () => {
+    it('starts a scheduled automation at once and asks a review automation for its pull request first', async () => {
+      const daemon = await openAutomations({
+        definitions: [
+          definition(2, 'Nightly digest', { trigger_type: 'scheduled', location_type: 'directory' }),
+          definition(3, 'Recurring reviewer', { trigger_type: 'github_review_requested', location_type: 'repository_worktree' }),
+        ],
+      });
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-run-now-2')));
+      expect(runRequestIds(daemon)).toHaveLength(1);
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-run-now-3')));
+      expect(screen.getByTestId('automation-pr-prompt-3')).toBeInTheDocument();
+      expect(runRequestIds(daemon)).toHaveLength(1);
+    });
+
     it('asks for a new run after the daemon refuses one', async () => {
       const daemon = await openAutomations({ definitions: [definition(1, 'PR reviewer')] }, (scripted) => refuseRuns(scripted, 'automation is disabled'));
 

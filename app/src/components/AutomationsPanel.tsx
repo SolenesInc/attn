@@ -346,23 +346,21 @@ export function AutomationsPanel({
                   <span>{definition.enabled ? 'Enabled' : 'Disabled'}</span>
                 </label>
 
-                {definition.trigger_type === 'manual' && (
-                  <button
-                    type="button"
-                    className="automations-panel__run-now"
-                    disabled={Boolean(runInFlight[definition.id])}
-                    onClick={() => {
-                      if (definition.location_type === 'repository_worktree') {
-                        setPullRequestPrompt({ definitionId: definition.id, url: '', missing: false });
-                      } else {
-                        handleRunNow(definition.id);
-                      }
-                    }}
-                    data-testid={`automation-run-now-${definition.id}`}
-                  >
-                    Run now
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="automations-panel__run-now"
+                  disabled={Boolean(runInFlight[definition.id])}
+                  onClick={() => {
+                    if (definition.location_type === 'repository_worktree') {
+                      setPullRequestPrompt({ definitionId: definition.id, url: '', missing: false });
+                    } else {
+                      handleRunNow(definition.id);
+                    }
+                  }}
+                  data-testid={`automation-run-now-${definition.id}`}
+                >
+                  Run now
+                </button>
 
                 <button
                   type="button"

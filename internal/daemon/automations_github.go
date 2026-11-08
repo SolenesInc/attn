@@ -40,9 +40,6 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID int,
 	if err := json.Unmarshal([]byte(def.SpecJSON), &spec); err != nil {
 		return nil, err
 	}
-	if spec.Trigger.Type != "manual" {
-		return nil, fmt.Errorf("automation %d is provider-driven and cannot be run manually yet", definitionID)
-	}
 	if spec.Location.Type != "repository_worktree" {
 		return nil, errors.New("--pr-url requires a repository_worktree automation")
 	}
