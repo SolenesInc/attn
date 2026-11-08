@@ -170,7 +170,7 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 	if !reflect.DeepEqual(skipped, []string{"ask.guidance", "session.vent-guidance", "session.vent-tools", "session.vent-attn-only", "session.vent-rules", "session.pull-request-guidance"}) {
 		t.Fatalf("skipped sources: %v", skipped)
 	}
-	if !strings.Contains(result.Text, "read\nfresh.\n\nCrew {{literal}}.\n\nThe user can send you messages from Quick Capture") {
+	if !strings.Contains(result.Text, "read fresh.\n\nCrew {{literal}}.\n\nThe user can send you messages from Quick Capture") {
 		t.Fatalf("crew input was altered: %q", result.Text)
 	}
 	if values["crew_priming"] != " Crew {{literal}}. " {
