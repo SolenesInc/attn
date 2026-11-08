@@ -401,32 +401,33 @@ func (m *claudeMod) armReachLocked(t *claudeModTerminal) {
 }
 
 func (m *claudeMod) reachLost(t *claudeModTerminal, timer *stepclock.Timer) {
-	for _, session := range m.dropUnreachable(t, timer) {
+	if !m.dropUnreachable(t, timer) {
+		return
+	}
+	if session, ok := m.d.shownIn(t.id); ok {
 		m.reportReachChanged(session)
 		m.placeReturned(session)
 	}
 }
 
-func (m *claudeMod) dropUnreachable(t *claudeModTerminal, timer *stepclock.Timer) []protocol.SessionID {
+func (m *claudeMod) dropUnreachable(t *claudeModTerminal, timer *stepclock.Timer) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.terminals[t.id] != t || t.reach != *timer || t.poll != nil {
-		return nil
+		return false
 	}
 	if len(t.handed) > 0 {
 		m.armReachLocked(t)
-		return nil
+		return false
 	}
 	delete(m.terminals, t.id)
-	sessions := make([]protocol.SessionID, 0, len(t.queued))
 	for _, delivery := range t.queued {
 		delivery.answer <- harness.Custody{Reason: "claude mod: reach_window=" + claudeModReachWindow.String() + "; the mod stopped polling before taking input " + delivery.input.ID + ", send it again"}
-		sessions = append(sessions, delivery.session)
 	}
 	t.queued = nil
 	m.returnHeldLocked(t, heldIDs(t))
 	m.failCompactingLocked(t, "the Claude mod stopped polling before it reported the compact")
-	return sessions
+	return true
 }
 
 func heldIDs(t *claudeModTerminal) []string {
