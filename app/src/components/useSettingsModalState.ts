@@ -449,8 +449,8 @@ export function useSettingsModalState({
           {
             id: 'general',
             label: 'Appearance',
-            description: 'Theme, text size and layout widths, for the app and for the garden.',
-            keywords: 'theme appearance dark light system font size text scale zoom garden layout narrowest tile width columns sidebar width',
+            description: 'Theme, text size, layout widths and callouts, for the app and for the garden.',
+            keywords: 'theme appearance dark light system font size text scale zoom garden layout narrowest tile width columns sidebar width callouts agent callouts point guided steps tour',
           },
           {
             id: 'desktop',

@@ -95,6 +95,7 @@ type Info struct {
 	Group   Group
 	Applies Applies
 	Stage   Stage
+	Where   string
 	Since   string
 	Search  string
 }
@@ -135,6 +136,9 @@ func add(s *Setting) *Setting {
 func feature(key, description string, info Info) *Setting {
 	s := &Setting{Info: info, Key: key, Class: Home, Kind: Bool, Description: description}
 	if info.Stage == OnByDefault {
+		if info.Where == "" {
+			panic(key + " is on by default and must say where its switch lives")
+		}
 		s.Default = On
 	}
 	return add(s)
@@ -153,7 +157,11 @@ func Features() []*Setting {
 }
 
 func (s *Setting) Refusal() error {
-	return fmt.Errorf("%s is off. Turn it on in Settings → Experimental → %s (%s)", s.Name, s.Name, s.Key)
+	page := "Experimental"
+	if s.Stage == OnByDefault {
+		page = s.Where
+	}
+	return fmt.Errorf("%s is off. Turn it on in Settings → %s → %s (%s)", s.Name, page, s.Name, s.Key)
 }
 
 func (s *Setting) String() string { return s.Key }

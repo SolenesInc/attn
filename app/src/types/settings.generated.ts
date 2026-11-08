@@ -36,6 +36,7 @@ export type BoolSettingKey = (typeof BoolSetting)[keyof typeof BoolSetting];
 
 export const DEFAULT_ON_SETTINGS: ReadonlySet<string> = new Set([
   "asks_enabled",
+  "callouts_enabled",
   "direct_agent_launch_enabled",
   "pty_shared_host_enabled",
   "queue_show_hidden_sessions",
@@ -68,7 +69,7 @@ export const FEATURES: readonly Feature[] = [
   { key: "claude_mod_enabled", name: "Claude mod", summary: "Deliver messages to Claude through a Claude Code mod instead of typing.", note: "", group: "Agents", timing: "Starts with the next agent you open. Turning it off applies at once.", stage: "experimental", since: "2026-11-04", search: "delivery typing standby compact" },
   { key: "codex_shared_enabled", name: "Shared Codex", summary: "Codex terminals share one Codex server per profile, using less memory.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "experimental", since: "2026-10-16", search: "app server memory" },
   { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-10-16", search: "one-screen one screen new-session new session project path" },
-  { key: "callouts_enabled", name: "Agent callouts", summary: "Let agents point at parts of the app, step by step.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-10-18", search: "point guided steps tour" },
+  { key: "callouts_enabled", name: "Agent callouts", summary: "Let agents point at parts of the app, step by step.", note: "", group: "Interface", timing: "", stage: "on by default", since: "2026-10-18", search: "point guided steps tour" },
   { key: "tile_popout_enabled", name: "Tile windows", summary: "Pop a tile out of the main window into its own window, and bring it back to its column.", note: "", group: "Interface", timing: "", stage: "experimental", since: "2026-11-07", search: "pop out popout window tile detach bring back" },
   { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", since: "2026-10-27", search: "remote computers bridge ssh" },
   { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", since: "2026-11-02", search: "mobile iphone pair" },

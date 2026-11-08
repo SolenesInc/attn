@@ -7,6 +7,7 @@ var (
 		Group:   Agents,
 		Applies: NewAgents,
 		Stage:   OnByDefault,
+		Where:   "Agents and models → Session defaults",
 		Since:   "2026-10-18",
 		Search:  "questions answer decisions drawer",
 	})
@@ -55,12 +56,13 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
-	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false.", Info{
+	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false. On by default.", Info{
 		Name:    "Agent callouts",
 		Summary: "Let agents point at parts of the app, step by step.",
 		Group:   Interface,
 		Applies: Now,
-		Stage:   Experimental,
+		Stage:   OnByDefault,
+		Where:   "Appearance",
 		Since:   "2026-10-18",
 		Search:  "point guided steps tour",
 	})
@@ -108,6 +110,7 @@ var (
 		Group:   UnderTheHood,
 		Applies: NewAgents,
 		Stage:   OnByDefault,
+		Where:   "Agents and models → Session defaults",
 		Since:   "2026-10-15",
 		Search:  "memory launcher",
 	})
@@ -117,6 +120,7 @@ var (
 		Group:   UnderTheHood,
 		Applies: NewTerminals,
 		Stage:   OnByDefault,
+		Where:   "Agents and models → Session defaults",
 		Since:   "2026-09-04",
 		Search:  "terminal hosting pty backend rust workers memory",
 	})

@@ -61,11 +61,10 @@ try {
   await runner.step('prepare_real_shell_sessions', async () => {
     await launchFreshAppAndConnect(client, observer);
     await driver.activateApp();
-    const saved = ['callouts_enabled', 'queue_mode_enabled', 'auto_settle_enabled'].map((key) => [key, observer.getSetting(key)]);
+    const saved = ['queue_mode_enabled', 'auto_settle_enabled'].map((key) => [key, observer.getSetting(key)]);
     runner.registerCleanup('restore_settings', async () => {
       for (const [key, value] of saved) await client.request('set_setting', { key, value });
     });
-    await client.request('set_setting', { key: 'callouts_enabled', value: 'true' });
     await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
     await client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' });
     for (const label of ['pointing', 'target']) {

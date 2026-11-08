@@ -152,7 +152,7 @@ pub const FEATURES: &[Feature] = &[
     Feature { key: "claude_mod_enabled", name: "Claude mod", stage: "experimental", applies: "On: new agents. Off: now" },
     Feature { key: "codex_shared_enabled", name: "Shared Codex", stage: "experimental", applies: "New agents" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", stage: "experimental", applies: "Now" },
-    Feature { key: "callouts_enabled", name: "Agent callouts", stage: "experimental", applies: "Now" },
+    Feature { key: "callouts_enabled", name: "Agent callouts", stage: "on by default", applies: "Now" },
     Feature { key: "tile_popout_enabled", name: "Tile windows", stage: "experimental", applies: "Now" },
     Feature { key: "outposts_enabled", name: "Outposts", stage: "experimental", applies: "Now" },
     Feature { key: "phone_access_enabled", name: "Phone access", stage: "experimental", applies: "Now" },

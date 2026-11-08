@@ -4,9 +4,11 @@ Point at the attn app when the user asks where something is, during a guided
 first day, or when you name another agent the user should go to. A callout is
 short text beside a named part of the app window. The user steps through it.
 
-Callouts are experimental and off unless the user turns them on in
-**Settings → Experimental → Agent callouts**. `attn callout anchors` and `attn callout show` check that setting each time, except when the Chief runs them while the Chief's onboarding is
-pending. A refusal names the toggle. Let the user decide whether to enable it.
+Callouts are on unless the user turned them off in
+**Settings → Appearance → Agent callouts**. `attn callout anchors` and
+`attn callout show` check that setting each time, except when the Chief runs
+them while the Chief's onboarding is pending. A refusal names the toggle. Let
+the user decide whether to turn it back on.
 
 List the anchors first, then point:
 

@@ -293,10 +293,10 @@ describe('App callouts', () => {
     expect(updates().slice(-1)[0]).toMatchObject({ geometry: { visible: false } });
   });
 
-  it('saves the Experimental opt-in', async () => {
+  it('turns callouts off from Appearance', async () => {
     const { daemon } = await launch();
     await gesture(daemon, () => pressShortcut('ui.openSettings'));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Experimental/ })));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Appearance/ })));
     const toggle = screen.getByRole('switch', { name: 'Agent callouts' });
     expect(toggle).toHaveAttribute('aria-checked', 'true');
     await gesture(daemon, () => fireEvent.click(toggle));

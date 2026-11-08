@@ -15,8 +15,6 @@ A callout is short text from an agent, shown beside a named part of the app wind
 
 ## How you use it
 
-Turn on **Agent callouts** in Settings first.
-
 You step through a callout with the keyboard:
 
 - Enter or → moves to the next step.

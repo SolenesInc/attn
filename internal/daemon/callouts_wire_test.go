@@ -12,12 +12,14 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestCalloutsCheckTheLiveSettingAndRefuseInvalidSteps(t *testing.T) {
+func TestCalloutsAreOnUntilTurnedOffAndRefuseInvalidSteps(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
 	step := []protocol.CalloutShowStep{{Anchor: "garden", Text: "Work you and your agents track"}}
+	_, untouchedErr := cli.CalloutShow(session.ID, step)
+	calloutRefused(t, untouchedErr, "the attn app is not showing your profile")
 	for _, enabled := range []string{"false", "true", "false"} {
 		setSetting(t, app, "callouts_enabled", enabled)
 		_, showErr := cli.CalloutShow(session.ID, step)
@@ -29,7 +31,7 @@ func TestCalloutsCheckTheLiveSettingAndRefuseInvalidSteps(t *testing.T) {
 			}
 		} else {
 			for _, err := range []error{showErr, anchorsErr} {
-				calloutRefused(t, err, "Settings → Experimental → Agent callouts")
+				calloutRefused(t, err, "Settings → Appearance → Agent callouts")
 			}
 		}
 	}
