@@ -108,7 +108,7 @@ Settling takes you to the agent after the one you settled, in queue order, and w
 <details>
 <summary>What stays out of the queue?</summary>
 
-Shells are never owed a turn. Crew members stay in the Crew section until you turn on "Put the crew in the queue", a switch in Settings → Attention queue (search "crew") that the command palette also offers. A member that is owed a turn then waits in the queue too and keeps its row. Turning it off, or running "Take the crew out of the queue", undoes that. The Chief keeps its own slot in the Crew section. The [Chief](chief.md#the-chief-as-a-crew-member) is a crew member and follows the same switch. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that is owed a turn. Delegates are full agents, so they queue like any other.
+Shells are never owed a turn. Crew members stay in the Crew section until you turn on "Put the crew in the queue", a switch in Settings → Attention queue (search "crew") that the command palette also offers. A member that is owed a turn then waits in the queue too and keeps its row. Turning it off, or running "Take the crew out of the queue", undoes that. The Chief keeps its own slot in the Crew section. The [Chief](chief.md#how-the-chief-differs-from-other-members) is a crew member and follows the same switch. Automation runs get their own group in the sidebar, and Cmd+Shift+J (Ctrl+Alt+J on Linux) takes you to the next run that is owed a turn. Delegates are full agents, so they queue like any other.
 </details>
 
 <details>

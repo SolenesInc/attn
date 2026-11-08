@@ -7,8 +7,8 @@ guide:
     label: Crew, the full guide
   - link: crew#waking-a-member
     label: What wakes a member
-  - link: chief#the-chief-as-a-crew-member
-    label: The Chief as a crew member
+  - link: chief#how-the-chief-differs-from-other-members
+    label: How the Chief differs from other members
 ---
 
 ## What it does for you

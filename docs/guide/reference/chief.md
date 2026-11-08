@@ -1,118 +1,70 @@
 # The Chief
 
 The Chief is the agent that looks after your other agents. You shape work with
-it and decide what gets delegated. The Chief follows what each agent reports, brings
-you blockers, collisions and the decisions that need you, and journals your day
-in the Notebook. Ask the Chief where things stand, or go straight to an agent and work beside that agent.
+it and decide what gets delegated. The Chief follows what each agent reports,
+brings you blockers, collisions and the decisions that need you, and journals
+your day in the Notebook. Ask the Chief where things stand, or go straight to
+an agent and work beside that agent.
 
-Each profile has at most one Chief. Make any agent your Chief with **Make chief
-of staff** in its ••• menu, or turn **Chief of Staff** on when you start one.
-**Remove chief role** takes the role away. The home screen's Chief of Staff
-card shows the Chief.
+The Chief is a [crew member](crew.md). Every profile has exactly one, named
+Chief, from the start. It has a charter and letters like any member, and sleeps
+and wakes like one.
 
-Attn refuses to close the Chief's session. Put the
-[Chief](#the-chief-as-a-crew-member) to sleep instead.
+## Set up the Chief
 
-## Give the Chief a folder
+The Chief has its own row at the top of the sidebar's Crew section. A new Chief
+has no harness, so it stays asleep and keeps its mail. Until you set it up, its
+row opens the setup: pick Claude Code or Codex, the model and effort, and the
+profile's Notebook folder, then press Enter to wake the Chief. The Chief's home
+moves into the folder you pick. If neither harness is installed, the setup says
+so. Install one and choose "Check again".
 
-Start the Chief in a folder of its own, where you describe how you work and
-keep the plans and knowledge that span your repos:
+From a shell:
 
-```text
-chief-of-staff/
-├── AGENTS.md          how you want to be supported, decide and delegate
-├── CLAUDE.md          -> AGENTS.md, for Claude Code
-├── projects/          active efforts and why they matter
-├── areas/             ongoing responsibilities and standards
-├── resources/         reference material
-└── archive/           finished work
+```sh
+attn crew set chief --agent <harness> --model <model>
+attn crew wake chief
 ```
 
-In `AGENTS.md`, describe what good support looks like, how you make decisions, when to explore and when to act, how to propose delegations, and where your important code and systems live. A starter:
+## Where the Chief works
 
-```md
-# My chief of staff
+The Chief's home is `crew/chief/` in your profile's Notebook, and it works
+there. Its charter is the place for how you want to be supported, how you make
+decisions and how you want delegations proposed. The Chief writes the charter
+with you on its first day, and you can edit it anytime.
 
-This is my coordination and knowledge workspace. Help me manage my agents and
-act as my thinking partner.
+To run the Chief in a folder of your own, such as a repository of plans and
+knowledge that span your projects, run `attn crew set chief --cwd <dir>`. The
+folder's `AGENTS.md` or `CLAUDE.md` then applies as it does for any agent.
 
-## Working relationship
+## How the Chief differs from other members
 
-- Reduce my cognitive load. Surface what matters and make the next move clear.
-- Gather evidence before recommending action.
-- When a choice is ambiguous, frame the decision and its tradeoffs.
+The [crew guide](crew.md) covers waking, sleeping, letters and launch settings.
+The Chief follows it, with these differences:
 
-## Delegation
-
-- I decide every delegation. A goal is not approval to run it end to end.
-- Propose a delegation, harness, and model when a separate specialist would
-  help.
-- Give each agent a clear outcome, context, constraints, and handoff.
-- Track what the agents report and bring me blockers, collisions, and
-  consequential decisions.
-
-## Organization
-
-- Read projects/index.md before discussing priorities or incoming work.
-- projects/ holds time-bound efforts with a clear outcome.
-- areas/ holds ongoing responsibilities and standards.
-- resources/ holds reference material useful across projects.
-- archive/ holds inactive material. Move completed projects here.
-
-## Boundaries
-
-- Planning, research, decisions, and coordination live here.
-- Implementation, tests, commits, and pull requests live in the owning repo.
-```
-
-To keep the Notebook in the same folder, open **Settings → Notebook Folder**
-and point **Notebook folder** at `chief-of-staff/notebook`. Add
-`notebook/.attn/` to `.gitignore` if the folder is a repository, because
-`notebook/.attn/` holds machine state. Changing a
-Notebook folder doesn't move existing notes.
-
-Then press Cmd+N (Ctrl+Shift+N on Linux), pick a harness, select the
-`chief-of-staff` folder, turn **Chief of Staff** on, and give the Chief a mission,
-such as: "We need to ship the new import flow this week. Help me understand
-what's already in flight, suggest how to break it down, and prepare delegation
-options."
-
-## The Chief as a crew member
-
-The Chief is a [crew member](crew.md) instead of a session you mark, and every
-profile has one, named Chief:
-
-- `chief` always names the Chief in `attn agent msg`, `attn crew` and the other commands that take a member, even after you rename the Chief. You can rename the Chief like any member.
+- `chief` always names the Chief in `attn agent msg`, `attn crew` and the other
+  commands that take a member, even after you rename the Chief.
 - The Chief can sleep, but it can't be closed or retired, and Attn never sends
-  it heartbeats or puts it to sleep on its own. Deleting a profile needs its Chief
-  asleep, and retires the Chief.
-- The Chief has its own row at the top of the sidebar's Crew section. A Chief with
-  nothing to start from has no harness and stays asleep, keeping its mail.
-  Until you set up the Chief, its row opens the setup: pick Claude Code or Codex,
-  the model and effort, and the profile's Notebook folder, then press Enter to
-  wake the Chief. The Chief's home moves into the folder you pick. If neither
-  harness is installed, the setup says so. Install one and choose "Check again".
-  From a shell, `attn crew set chief --agent <harness> --model <model>` sets up
-  the Chief, and `attn crew wake chief` wakes the Chief.
-- The Chief follows the crew's queue rule. With "Put the crew in the queue" on in
-  Settings → Attention queue, a Chief that is owed a turn waits in the queue and
-  keeps its row, and you settle or snooze it like any agent. When a delegate
-  reports, the Chief asks you for a decision only you can make, opens its turn for
-  a result you should read, and otherwise only records the report. Answering its
-  ask takes it out of the queue.
+  it heartbeats or puts it to sleep on its own. Deleting a profile needs its
+  Chief asleep, and retires the Chief.
 - The Chief's menus offer "Harness and model…" to change what it runs on for
   its next wake, "Edit charter", and Sleep in place of Close. The Chief wakes
   with one click. The command palette has the same actions.
-- The Chief runs on its own launch settings (`attn crew set chief`). The Chief's
-  model, effort and context budget in **Settings → Background agents**, and
-  the Chief of Staff card on the home screen, belonged to the Chief session that
-  came before the Chief member, and no longer apply.
-- If a session was your Chief, the new Chief starts with that session's
-  harness, model, effort and folder, and the session becomes an ordinary session.
-  On its first day the new Chief can message that session for its open work
-  and context.
+- With "Put the crew in the queue" on in Settings → Attention queue, a Chief
+  that is owed a turn waits in the queue and keeps its row, and you settle or
+  snooze it like any agent. When a delegate reports, the Chief asks you for a
+  decision only you can make, opens its turn for a result you should read, and
+  otherwise only records the report. Answering its ask takes it out of the
+  queue.
 
-### The Chief's first day
+## If a session was your Chief
+
+Earlier versions of Attn made a session the Chief. When you upgrade, the new
+Chief starts with that session's harness, model, effort and folder, and the
+session becomes an ordinary session. On its first day the new Chief can message
+that session for its open work and context.
+
+## The Chief's first day
 
 On its first day the Chief introduces itself, agrees its name and charter with
 you, and onboards you, one question at a time. Skip anything you don't want.

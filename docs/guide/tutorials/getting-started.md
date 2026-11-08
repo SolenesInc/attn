@@ -73,7 +73,7 @@ Ctrl+Alt+K on Linux).
 Then you see your home screen. Cmd+Shift+H (Ctrl+Alt+H on Linux) brings you
 back to it at any time.
 
-![The home screen, with the sidebar on the left, then your sessions grouped by state, the Chief of Staff card and your pull requests](../images/home-screen.png)
+![The home screen, with the Chief at the top of the sidebar's Crew section, then your sessions grouped by state and your pull requests](../images/home-screen.png)
 
 This is where you watch all your agents and your open PRs:
 

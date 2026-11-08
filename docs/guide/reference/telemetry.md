@@ -134,7 +134,7 @@ no content:
 ```json
 {"stream":"vent","seq":4,"name":"vent","at":"2026-10-24T14:02:11Z",
  "props":{"text":"...","harness":"claude","harness_version":"2.1.3","model":"claude-opus-5-5",
-          "model_requested":"opus","turn":"...","experimental":["crew_v2_enabled"],"build":{...}}}
+          "model_requested":"opus","turn":"...","experimental":["pty_shared_host_enabled"],"build":{...}}}
 ```
 
 The session title, machine, repository, worktree, stake seed and transcript
