@@ -28,6 +28,7 @@ func (d *Daemon) ensureGardenCollections() {
 	}
 	for _, schema := range []docstore.CollectionSchema{
 		garden.SeedsSchema(),
+		garden.SeedBodiesSchema(),
 		garden.NotesSchema(),
 		garden.BodyVersionsSchema(),
 		garden.DispatchesSchema(),
@@ -55,34 +56,38 @@ func (d *Daemon) seedsCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionSeeds)
 }
 
-func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
-	docs, err := d.plantSeeds(schema, []garden.Seed{seed})
+func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed, body string) (docstore.Document, error) {
+	docs, err := d.plantSeeds(schema, []garden.Seed{seed}, []string{body})
 	if err != nil {
 		return docstore.Document{}, err
 	}
 	return docs[0], nil
 }
 
-func (d *Daemon) plantSeeds(schema docstore.CollectionSchema, seeds []garden.Seed) ([]docstore.Document, error) {
+func (d *Daemon) plantSeeds(schema docstore.CollectionSchema, seeds []garden.Seed, bodies []string) ([]docstore.Document, error) {
 	var docs []docstore.Document
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var plantErr error
-		docs, plantErr = d.plantSeedsProtected(protection, schema, seeds)
+		docs, plantErr = d.plantSeedsProtected(protection, schema, seeds, bodies)
 		return plantErr
 	})
 	return docs, err
 }
 
-func (d *Daemon) plantSeedProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
-	docs, err := d.plantSeedsProtected(protection, schema, []garden.Seed{seed})
+func (d *Daemon) plantSeedProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed, body string) (docstore.Document, error) {
+	docs, err := d.plantSeedsProtected(protection, schema, []garden.Seed{seed}, []string{body})
 	if err != nil {
 		return docstore.Document{}, err
 	}
 	return docs[0], nil
 }
 
-func (d *Daemon) plantSeedsProtected(_ foregroundCleanupProtection, schema docstore.CollectionSchema, seeds []garden.Seed) ([]docstore.Document, error) {
-	commits := make([]store.DocumentCommit, len(seeds))
+func (d *Daemon) plantSeedsProtected(_ foregroundCleanupProtection, schema docstore.CollectionSchema, seeds []garden.Seed, bodies []string) ([]docstore.Document, error) {
+	bodySchema, err := d.seedBodiesCollection()
+	if err != nil {
+		return nil, err
+	}
+	commits := make([]store.DocumentCommit, len(seeds), 2*len(seeds))
 	born := make([]string, len(seeds))
 	var occurrences []seedEvents.Occurrence
 	for i, seed := range seeds {
@@ -97,6 +102,11 @@ func (d *Daemon) plantSeedsProtected(_ foregroundCleanupProtection, schema docst
 		if err != nil {
 			return nil, err
 		}
+		bodyCommit, err := seedBodyCommit(*bodySchema, seed.ID, bodies[i], true)
+		if err != nil {
+			return nil, err
+		}
+		commits = append(commits, bodyCommit)
 		expected := docstore.ExpectAbsent
 		commits[i] = store.DocumentCommit{
 			Write: store.DocumentWrite{Schema: schema, ID: seed.ID, Body: body, Expected: &expected},
@@ -336,9 +346,13 @@ func (s gardenSeeds) inProfile(profileID string) gardenSeeds {
 }
 
 func (g gardenRead) wire(seeds []garden.Seed) []protocol.Seed {
+	return g.daemon.withSeedBodies(g.wireWithoutBodies(seeds))
+}
+
+func (g gardenRead) wireWithoutBodies(seeds []garden.Seed) []protocol.Seed {
 	out := make([]protocol.Seed, 0, len(seeds))
 	for _, seed := range seeds {
-		out = append(out, g.seed(seed, g.docs[seed.ID]))
+		out = append(out, g.seedWithoutBody(seed, g.docs[seed.ID]))
 	}
 	return out
 }
@@ -379,6 +393,11 @@ func (g gardenRead) row(seed garden.Seed, doc docstore.Document) protocol.SeedRo
 }
 
 func (g gardenRead) seed(seed garden.Seed, doc docstore.Document) protocol.Seed {
+	wire := g.seedWithoutBody(seed, doc)
+	return g.daemon.withSeedBodies([]protocol.Seed{wire})[0]
+}
+
+func (g gardenRead) seedWithoutBody(seed garden.Seed, doc docstore.Document) protocol.Seed {
 	wire := g.seedToProtocol(seed, doc)
 	wire.PlotProgress = g.progress(seed.ID)
 	wire.Checks = g.checks(seed.ID)
@@ -426,7 +445,6 @@ func (g gardenRead) seedToProtocol(seed garden.Seed, doc docstore.Document) prot
 		ID:                  seed.ID,
 		ProfileID:           seed.ProfileID,
 		Title:               seed.Title,
-		Body:                seed.Body,
 		Status:              seed.Status,
 		StepSlug:            seed.StepSlug,
 		Planter:             g.parties.actor(seed.Planter),
@@ -525,7 +543,7 @@ func (d *Daemon) seedsForBroadcast(profileID ...string) (seeds []protocol.Seed, 
 		}
 		return nil, 0
 	}
-	return read.wire(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)]), len(read.seeds)
+	return read.wireWithoutBodies(read.seeds[:min(len(read.seeds), gardenSnapshotLimit)]), len(read.seeds)
 }
 
 func (d *Daemon) projectGardenSeeds() {
@@ -595,7 +613,6 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 	seed := garden.Seed{
 		ProfileID: protocol.Deref(msg.ProfileID),
 		Title:     title,
-		Body:      body,
 		Status:    garden.StatusPlanted,
 		StepSlug:  garden.StepSlug(title),
 		Planter:   d.actorOfSession(sessionID),
@@ -632,7 +649,7 @@ func (d *Daemon) plantSeedRequest(msg *protocol.SeedPlantMessage) (protocol.Seed
 		}
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgeDiscoveredFrom, To: origin})
 	}
-	seed, doc, err := d.mintAndPlant(*schema, seed)
+	seed, doc, err := d.mintAndPlant(*schema, seed, body)
 	if err != nil {
 		return protocol.Seed{}, gardenRead{}, err
 	}
@@ -682,7 +699,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 		return
 	}
 	source := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
-	seeds, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), d.actorOfSession(source))
+	seeds, bodies, err := d.plotSeeds(*schema, spec, protocol.Deref(msg.ProfileID), d.actorOfSession(source))
 	if err != nil {
 		d.sendGardenError(conn, "plot", err)
 		return
@@ -691,7 +708,7 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	var result protocol.SeedPlotResult
 	var plotErr error
 	d.coalesceSnapshots(func() {
-		docs, err := d.plantSeeds(*schema, seeds)
+		docs, err := d.plantSeeds(*schema, seeds, bodies)
 		if err != nil {
 			plotErr = err
 			return
@@ -719,11 +736,12 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, SeedPlotResult: &result})
 }
 
-func (d *Daemon) plotSeeds(schema docstore.CollectionSchema, spec garden.PlotSpec, profileID string, planter who.Actor) ([]garden.Seed, error) {
+func (d *Daemon) plotSeeds(schema docstore.CollectionSchema, spec garden.PlotSpec, profileID string, planter who.Actor) ([]garden.Seed, []string, error) {
 	seeds := make([]garden.Seed, 1+len(spec.Children))
+	bodies := make([]string, len(seeds))
 	ids, err := d.mintSeedIDsInPlantingOrder(schema, len(seeds))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	bySlug := make(map[string]*garden.Seed, len(spec.Children))
 	for i, id := range ids {
@@ -732,8 +750,9 @@ func (d *Daemon) plotSeeds(schema docstore.CollectionSchema, spec garden.PlotSpe
 			child := spec.Children[i-1]
 			title, body, checks = child.Title, child.Body, child.Checks
 		}
+		bodies[i] = body
 		seeds[i] = garden.Seed{
-			ID: id, ProfileID: profileID, Title: title, Body: body, Status: garden.StatusPlanted,
+			ID: id, ProfileID: profileID, Title: title, Status: garden.StatusPlanted,
 			StepSlug: garden.StepSlug(title), Planter: planter,
 			Edges: []garden.Edge{}, Vars: []garden.Var{}, Checks: checks,
 		}
@@ -754,14 +773,14 @@ func (d *Daemon) plotSeeds(schema docstore.CollectionSchema, spec garden.PlotSpe
 			first.Edges = append(first.Edges, garden.Edge{Kind: garden.EdgeBlocks, To: seeds[i+1].ID})
 		}
 	}
-	return seeds, nil
+	return seeds, bodies, nil
 }
 
 func (d *Daemon) similarSeeds(read gardenRead, titles, excluded []string) ([]garden.SimilarHit, error) {
 	rows := make([][]docstore.TextMatch, len(titles))
 	for i, title := range titles {
 		var err error
-		rows[i], err = d.store.MatchText(garden.SeedsSchema(), docstore.Words(title), "")
+		rows[i], err = d.matchSeedText(docstore.Words(title))
 		if err != nil {
 			return nil, err
 		}
@@ -781,18 +800,18 @@ func similarWire(read gardenRead, hits []garden.SimilarHit, planted []string) []
 	return out
 }
 
-func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
+func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed, body string) (garden.Seed, docstore.Document, error) {
 	var planted garden.Seed
 	var doc docstore.Document
 	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var plantErr error
-		planted, doc, plantErr = d.mintAndPlantProtected(protection, schema, seed)
+		planted, doc, plantErr = d.mintAndPlantProtected(protection, schema, seed, body)
 		return plantErr
 	})
 	return planted, doc, err
 }
 
-func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
+func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed, body string) (garden.Seed, docstore.Document, error) {
 	var profileErr error
 	seed.ProfileID, profileErr = d.seedBirthProfile(seed)
 	if profileErr != nil {
@@ -807,7 +826,7 @@ func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, s
 			return seed, docstore.Document{}, err
 		}
 		seed.ID = id
-		doc, err := d.plantSeedProtected(protection, schema, seed)
+		doc, err := d.plantSeedProtected(protection, schema, seed, body)
 		if err == nil {
 			return seed, doc, nil
 		}
@@ -1109,8 +1128,12 @@ func parentOutline(read gardenRead, seed garden.Seed) []protocol.SeedOutlinePart
 	if i < 0 {
 		return nil
 	}
+	body, err := read.daemon.readSeedBody(parentID)
+	if err != nil {
+		read.daemon.logf("garden: reading the body of %s: %v", parentID, err)
+	}
 	var outline []protocol.SeedOutlinePart
-	for _, part := range garden.Outline(read.seeds[i].Body) {
+	for _, part := range garden.Outline(body) {
 		outline = append(outline, protocol.SeedOutlinePart{Heading: part.Heading, Bytes: part.Bytes, Ids: part.IDs})
 	}
 	return outline

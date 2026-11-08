@@ -214,11 +214,15 @@ func (capture gardenReviewCapture) reviewItem(candidate garden.ReviewCandidate) 
 		return garden.ReviewItem{}, fmt.Errorf("review candidate %s has no source seed", candidate.SeedID)
 	}
 	evidence := capture.reviewEvidence(candidate)
+	body, err := capture.read.daemon.readSeedBody(candidate.SeedID)
+	if err != nil {
+		return garden.ReviewItem{}, err
+	}
 	item := garden.ReviewItem{
 		SeedID:     candidate.SeedID,
 		SeedRev:    capture.read.docs[candidate.SeedID].Rev,
 		Title:      seed.Seed.Title,
-		Body:       seed.Seed.Body,
+		Body:       body,
 		Evidence:   evidence,
 		Actions:    gardenReviewActions(candidate),
 		Status:     garden.ReviewItemStatusQueued,
@@ -310,9 +314,13 @@ func (capture gardenReviewCapture) reviewEvidence(candidate garden.ReviewCandida
 		limit := min(len(children), gardenReviewChildEvidenceLimit)
 		for _, id := range children[:limit] {
 			child := capture.observations[id].Seed
+			body, err := capture.read.daemon.readSeedBody(id)
+			if err != nil {
+				capture.read.daemon.logf("garden review: reading the body of %s: %v", id, err)
+			}
 			evidence = append(evidence, garden.ReviewEvidence{
 				Label: "Related seed " + id,
-				Text:  fmt.Sprintf("%s (%s)\n%s", child.Title, child.Status, child.Body),
+				Text:  fmt.Sprintf("%s (%s)\n%s", child.Title, child.Status, body),
 			})
 		}
 		if len(children) > limit {

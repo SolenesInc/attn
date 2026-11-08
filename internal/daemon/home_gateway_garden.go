@@ -139,7 +139,7 @@ var homeGatewaySeedStatuses = map[string]homegateway.HomeGatewaySeedStatus{
 }
 
 func (g gardenRead) homeGatewaySeed(seed garden.Seed) homegateway.HomeGatewaySeed {
-	wire := g.seed(seed, g.docs[seed.ID])
+	wire := g.seedWithoutBody(seed, g.docs[seed.ID])
 	status, ok := homeGatewaySeedStatuses[wire.Status]
 	if !ok {
 		status = homegateway.HomeGatewaySeedStatusUnknown
@@ -218,11 +218,15 @@ func (d *Daemon) homeGatewaySeedDetail(conn *homeGatewayConn, command homegatewa
 	if err != nil {
 		return homegateway.HomeGatewaySeedDetail{}, err
 	}
+	body, err := d.readSeedBody(seed.ID)
+	if err != nil {
+		return homegateway.HomeGatewaySeedDetail{}, err
+	}
 	detail := homegateway.HomeGatewaySeedDetail{
 		Event:     "seed_detail",
 		RequestID: command.RequestID,
 		Seed:      read.homeGatewaySeed(seed),
-		Body:      seed.Body,
+		Body:      body,
 		Checks:    []homegateway.HomeGatewaySeedCheck{},
 		Children:  []homegateway.HomeGatewaySeed{},
 		Log:       make([]homegateway.HomeGatewaySeedLogEntry, 0, len(notes)),

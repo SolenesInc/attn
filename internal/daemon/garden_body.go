@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 
 	"github.com/victorarias/attn/internal/docstore"
@@ -21,6 +22,78 @@ func (e seedBodyConflictError) Error() string { return string(e) }
 
 func (d *Daemon) bodyVersionsCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(garden.Namespace, garden.CollectionBodyVersions)
+}
+
+func (d *Daemon) seedBodiesCollection() (*docstore.CollectionSchema, error) {
+	if d.store == nil {
+		return nil, errors.New("no database")
+	}
+	return d.collectionFor(garden.Namespace, garden.CollectionSeedBodies)
+}
+
+func seedBodyCommit(schema docstore.CollectionSchema, id, body string, planting bool) (store.DocumentCommit, error) {
+	encoded, err := garden.EncodeSeedBody(body)
+	if err != nil {
+		return store.DocumentCommit{}, err
+	}
+	write := store.DocumentWrite{Schema: schema, ID: id, Body: encoded}
+	if planting {
+		absent := docstore.ExpectAbsent
+		write.Expected = &absent
+	}
+	return store.DocumentCommit{Write: write, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeedBodies, id, false)}, nil
+}
+
+func (d *Daemon) readSeedBody(id string) (string, error) {
+	schema, err := d.seedBodiesCollection()
+	if err != nil {
+		return "", err
+	}
+	doc, found, err := d.store.GetDocument(*schema, id)
+	if err != nil || !found {
+		return "", err
+	}
+	return garden.DecodeSeedBody(doc.Body)
+}
+
+func (d *Daemon) withSeedBodies(seeds []protocol.Seed) []protocol.Seed {
+	out := slices.Clone(seeds)
+	schema, err := d.seedBodiesCollection()
+	if err != nil {
+		d.logf("garden: reading seed bodies: %v", err)
+		return out
+	}
+	ids := make([]string, len(out))
+	for i, seed := range out {
+		ids[i] = seed.ID
+	}
+	docs, err := d.store.ReadDocumentsByID(*schema, ids)
+	if err != nil {
+		d.logf("garden: reading %d seed bodies: %v", len(ids), err)
+		return out
+	}
+	for i := range out {
+		doc, found := docs[out[i].ID]
+		if !found {
+			continue
+		}
+		if out[i].Body, err = garden.DecodeSeedBody(doc.Body); err != nil {
+			d.logf("garden: seed %s has an unreadable body document: %v", out[i].ID, err)
+		}
+	}
+	return out
+}
+
+func (d *Daemon) matchSeedText(words []string) ([]docstore.TextMatch, error) {
+	titles, err := d.store.MatchText(garden.SeedsSchema(), words, "")
+	if err != nil {
+		return nil, err
+	}
+	bodies, err := d.store.MatchText(garden.SeedBodiesSchema(), words, "")
+	if err != nil {
+		return nil, err
+	}
+	return garden.JoinSeedText(titles, bodies, len(words)), nil
 }
 
 func (d *Daemon) latestSeedBodyVersion(id string) (garden.BodyVersion, error) {
@@ -89,9 +162,13 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 	if err != nil {
 		return nil, err
 	}
+	body, err := d.readSeedBody(seed.ID)
+	if err != nil {
+		return nil, err
+	}
 	pausepoint.At(pausepoint.SeedRollbackRead)
 	edit, err := d.applySeedBodyEdit(&protocol.SeedEditMessage{
-		SeedID: seed.ID, Body: target.Body, BaseBodySHA256: garden.BodySHA256(seed.Body),
+		SeedID: seed.ID, Body: target.Body, BaseBodySHA256: garden.BodySHA256(body),
 		SourceSessionID: msg.SourceSessionID, Note: protocol.Ptr(fmt.Sprintf("rollback to v%d", version)),
 	})
 	if err != nil {
@@ -133,13 +210,21 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 	if err != nil {
 		return nil, err
 	}
+	bodySchema, err := d.seedBodiesCollection()
+	if err != nil {
+		return nil, err
+	}
 	const attempts = 3
 	for range attempts {
 		seed, doc, err := d.readSeed(msg.SeedID)
 		if err != nil {
 			return nil, err
 		}
-		if msg.BaseBodySHA256 != garden.BodySHA256(seed.Body) {
+		current, err := d.readSeedBody(seed.ID)
+		if err != nil {
+			return nil, err
+		}
+		if msg.BaseBodySHA256 != garden.BodySHA256(current) {
 			return nil, seedBodyConflictError(fmt.Sprintf("%s's body changed before it could be saved", seed.ID))
 		}
 		latest, err := d.latestSeedBodyVersion(seed.ID)
@@ -148,13 +233,12 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 		}
 		versions := []garden.BodyVersion{}
 		if latest.Version == 0 {
-			latest = garden.BodyVersion{Seed: seed.ID, Version: 1, Body: seed.Body}
+			latest = garden.BodyVersion{Seed: seed.ID, Version: 1, Body: current}
 			versions = append(versions, latest)
 		}
 		version := garden.BodyVersion{Seed: seed.ID, Version: latest.Version + 1, Body: msg.Body}
 		versions = append(versions, version)
-		previousBytes := len(seed.Body)
-		seed.Body = msg.Body
+		previousBytes := len(current)
 		seedBody, err := seed.Encode()
 		if err != nil {
 			return nil, err
@@ -179,6 +263,11 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 		commits := append([]store.DocumentCommit{
 			{Write: store.DocumentWrite{Schema: *seedSchema, ID: seed.ID, Body: seedBody, Expected: &doc.Rev}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
 		}, log.commits...)
+		bodyCommit, err := seedBodyCommit(*bodySchema, seed.ID, msg.Body, false)
+		if err != nil {
+			return nil, err
+		}
+		commits = append(commits, bodyCommit)
 		for _, saved := range versions {
 			body, err := saved.Encode()
 			if err != nil {

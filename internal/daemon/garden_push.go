@@ -18,8 +18,9 @@ type gardenHeld struct {
 }
 
 type gardenWindow struct {
-	seeds []protocol.Seed
-	held  gardenHeld
+	daemon *Daemon
+	seeds  []protocol.Seed
+	held   gardenHeld
 }
 
 func (d *Daemon) gardenWindow(profileID string) gardenWindow {
@@ -36,13 +37,17 @@ func (d *Daemon) gardenWindow(profileID string) gardenWindow {
 		held.order = append(held.order, seed.ID)
 		held.prints[seed.ID] = sha256.Sum256(data)
 	}
-	return gardenWindow{seeds: seeds, held: held}
+	return gardenWindow{daemon: d, seeds: seeds, held: held}
+}
+
+func (w gardenWindow) withBodies() []protocol.Seed {
+	return w.daemon.withSeedBodies(w.seeds)
 }
 
 func (w gardenWindow) full() *protocol.GardenSeedsUpdatedMessage {
 	return &protocol.GardenSeedsUpdatedMessage{
 		Event: protocol.EventGardenSeedsUpdated, ProfileID: w.held.profileID,
-		Seeds: w.seeds, Total: w.held.total,
+		Seeds: w.withBodies(), Total: w.held.total,
 	}
 }
 
@@ -54,7 +59,7 @@ func (w gardenWindow) changedSince(held *gardenHeld) *protocol.GardenSeedsChange
 		}
 	}
 	message := w.held.unchanged()
-	message.Seeds = changed
+	message.Seeds = w.daemon.withSeedBodies(changed)
 	return message
 }
 

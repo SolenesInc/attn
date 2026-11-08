@@ -52,7 +52,7 @@ func TestDocumentTextMigrationIndexesExistingGarden(t *testing.T) {
 		schema        docstore.CollectionSchema
 		word, id, key string
 	}{
-		{garden.SeedsSchema(), "obsidian", "s-oldold", ""},
+		{garden.SeedBodiesSchema(), "obsidian", "s-oldold", ""},
 		{garden.NotesSchema(), "chrysoprase", "n-oldold", "seed"},
 	} {
 		if _, err := s.DefineDocumentCollection(tc.schema, time.Now()); err != nil {

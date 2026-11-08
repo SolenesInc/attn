@@ -66,6 +66,31 @@ type rankedSeed struct {
 	position       int
 }
 
+func JoinSeedText(titleRows, bodyRows []docstore.TextMatch, words int) []docstore.TextMatch {
+	byID := make(map[string]int, len(titleRows)+len(bodyRows))
+	out := make([]docstore.TextMatch, 0, len(titleRows)+len(bodyRows))
+	row := func(match docstore.TextMatch) *docstore.TextMatch {
+		at, seen := byID[match.ID]
+		if !seen {
+			at = len(out)
+			byID[match.ID] = at
+			out = append(out, docstore.TextMatch{
+				ID: match.ID, Key: match.Key, CreatedAt: match.CreatedAt,
+				Score:   make([]float64, 2),
+				Carries: [][]bool{make([]bool, words), make([]bool, words)},
+			})
+		}
+		return &out[at]
+	}
+	for field, rows := range [][]docstore.TextMatch{titleRows, bodyRows} {
+		for _, match := range rows {
+			joined := row(match)
+			joined.Score[field], joined.Carries[field] = match.Score[0], match.Carries[0]
+		}
+	}
+	return out
+}
+
 func Rank(words []string, seedRows, noteRows []docstore.TextMatch, seeds []Seed) Ranked {
 	byID := map[string]*rankedSeed{}
 	for _, seed := range seeds {
@@ -87,7 +112,7 @@ func Rank(words []string, seedRows, noteRows []docstore.TextMatch, seeds []Seed)
 			}
 			if count > r.quotedCoverage {
 				r.quotedCoverage = count
-				r.hit.Quoted = SearchQuote{SeedsSchema(), row.ID, field}
+				r.hit.Quoted = SearchQuote{[]docstore.CollectionSchema{SeedsSchema(), SeedBodiesSchema()}[field], row.ID, 0}
 				r.hit.Where = []string{MatchTitle, MatchBody}[field]
 			}
 		}

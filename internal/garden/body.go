@@ -40,6 +40,22 @@ func BodyVersionsSchema() docstore.CollectionSchema {
 	}
 }
 
+func SeedBodiesSchema() docstore.CollectionSchema {
+	return docstore.CollectionSchema{Namespace: Namespace, Collection: CollectionSeedBodies, Text: []string{"body"}}
+}
+
+type seedBodyDocument struct {
+	Body string `json:"body"`
+}
+
+func EncodeSeedBody(body string) ([]byte, error) { return json.Marshal(seedBodyDocument{body}) }
+
+func DecodeSeedBody(data []byte) (string, error) {
+	var document seedBodyDocument
+	err := json.Unmarshal(data, &document)
+	return document.Body, err
+}
+
 func BodySHA256(body string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(body))) }
 
 func Stamp(id, body string) string {

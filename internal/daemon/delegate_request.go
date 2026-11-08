@@ -160,7 +160,11 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		if garden.Closed(seed.Status) {
 			return nil, fmt.Errorf("seed %s is %s; replant it before delegating", seedID, seed.Status)
 		}
-		runtime.Brief = protocol.Ptr(seed.Body)
+		body, err := d.readSeedBody(seed.ID)
+		if err != nil {
+			return nil, err
+		}
+		runtime.Brief = protocol.Ptr(body)
 		runtime.SeedTitle = seed.Title
 		runtime.Plot = protocol.Ptr(seedID)
 		if msg.Assignment.Handover != nil {

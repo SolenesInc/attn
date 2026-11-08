@@ -503,7 +503,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 			return false, nil, schemaErr
 		}
 		seed := d.initializeSeedLifecycle(garden.Seed{
-			ProfileID: req.IDs.ProfileID, ID: req.IDs.SeedID, Title: title, Body: body,
+			ProfileID: req.IDs.ProfileID, ID: req.IDs.SeedID, Title: title,
 			Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: who.Attn(), Edges: []garden.Edge{}, Vars: []garden.Var{},
 		})
 		automation := who.Session(req.IDs.SessionID)
@@ -513,7 +513,7 @@ func (d *Daemon) ensureAutomationSeed(req automation.WorkRequest) (bool, func() 
 		}
 		seed = outcome.Seed
 		seed.LastExecutionID = req.IDs.SessionID
-		if _, err := d.plantSeed(*schema, seed); err != nil {
+		if _, err := d.plantSeed(*schema, seed, body); err != nil {
 			return false, nil, err
 		}
 	}

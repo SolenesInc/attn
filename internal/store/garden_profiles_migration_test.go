@@ -3,6 +3,7 @@ package store
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,8 +68,11 @@ func TestGardenProfileMigrationUsesTheConvertedDefaultIdentity(t *testing.T) {
 				t.Fatalf("migrated seed: %+v %v", doc, err)
 			}
 			seed, err := garden.Decode(doc.Body)
-			if err != nil || seed.ProfileID != profile.ID || seed.Status != state || seed.Body != "keep this" {
+			if err != nil || seed.ProfileID != profile.ID || seed.Status != state {
 				t.Fatalf("migration changed work: %+v %v", seed, err)
+			}
+			if !strings.Contains(string(doc.Body), "keep this") {
+				t.Fatalf("migration lost the body: %s", doc.Body)
 			}
 			var requestJSON, state string
 			if err := migrated.db.QueryRow(`SELECT request_json,state FROM delegation_operations WHERE request_id='old-request'`).Scan(&requestJSON, &state); err != nil {

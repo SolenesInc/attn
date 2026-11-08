@@ -15,6 +15,7 @@ import (
 const (
 	Namespace             = "core/garden"
 	CollectionSeeds       = "seeds"
+	CollectionSeedBodies  = "seed_bodies"
 	CollectionNotes       = "notes"
 	CollectionDispatches  = "dispatches"
 	CollectionReviewRuns  = "review-runs"
@@ -51,7 +52,6 @@ type Seed struct {
 	ID              string             `json:"id"`
 	ProfileID       string             `json:"profile_id"`
 	Title           string             `json:"title"`
-	Body            string             `json:"body"`
 	Status          string             `json:"status"`
 	StepSlug        string             `json:"step_slug"`
 	Planter         who.Actor          `json:"planter,omitzero"`
@@ -147,7 +147,7 @@ func SeedsSchema() docstore.CollectionSchema {
 	return docstore.CollectionSchema{
 		Namespace:  Namespace,
 		Collection: CollectionSeeds,
-		Text:       []string{"title", "body"},
+		Text:       []string{"title"},
 		Fields: []docstore.FieldSpec{
 			{Name: "profile_id", Type: docstore.FieldString},
 			{Name: "status", Type: docstore.FieldString},

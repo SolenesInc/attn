@@ -48,7 +48,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		if strings.TrimSpace(seedID) == "" {
 			return "", fmt.Errorf("new delegation seed identity was not reserved")
 		}
-		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Body: body, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: d.actorOfSession(plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
+		seed = garden.Seed{ProfileID: firstProfile(profileID), ID: seedID, Title: title, Status: garden.StatusPlanted, StepSlug: garden.StepSlug(title), Planter: d.actorOfSession(plannerSessionID), Edges: []garden.Edge{}, Vars: []garden.Var{}}
 		if parent := strings.TrimSpace(parentSeedID); parent != "" {
 			seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 		}
@@ -102,6 +102,15 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	}
 	occurrences := []seedEvents.Occurrence{}
 	if createSeed {
+		bodySchema, bodyErr := d.seedBodiesCollection()
+		if bodyErr != nil {
+			return "", bodyErr
+		}
+		bodyCommit, bodyErr := seedBodyCommit(*bodySchema, seed.ID, strings.TrimSpace(brief), true)
+		if bodyErr != nil {
+			return "", bodyErr
+		}
+		commits = append(commits, bodyCommit)
 		planted, eventErr := seedEvents.Occur(
 			gardenSeedEventModel(), gardenSeedEventVocabulary().Planted, seed.ID,
 			seedEvents.CausePayload{CausedBySessionID: plannerSessionID, CausedBy: dispatch.Dispatcher.String()},

@@ -159,7 +159,7 @@ func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.Initia
 	client.gardenMu.Lock()
 	defer client.gardenMu.Unlock()
 	garden := d.gardenWindow(client.selectedProfile())
-	event.Seeds = garden.seeds
+	event.Seeds = garden.withBodies()
 	event.SeedsTotal = protocol.Ptr(garden.held.total)
 	data, err := json.Marshal(event)
 	if err != nil {

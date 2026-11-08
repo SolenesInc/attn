@@ -27,7 +27,7 @@ func TestUpgradedGardenIndexesParkedSeedsAsParked(t *testing.T) {
 		t.Fatal(err)
 	}
 	for id, status := range map[string]string{"s-pause1": "dormant", "s-open01": "planted"} {
-		body, err := garden.Seed{ID: id, Title: "Malachite " + id, Body: "keep this", Status: status, ProfileID: view.Manifest.ProfileID}.Encode()
+		body, err := garden.Seed{ID: id, Title: "Malachite " + id, Status: status, ProfileID: view.Manifest.ProfileID}.Encode()
 		if err != nil {
 			t.Fatal(err)
 		}

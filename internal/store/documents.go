@@ -710,6 +710,34 @@ func (s *Store) ReadAllDocuments(schema docstore.CollectionSchema) ([]docstore.D
 	return out, rows.Err()
 }
 
+func (s *Store) ReadDocumentsByID(schema docstore.CollectionSchema, ids []string) (map[string]docstore.Document, error) {
+	table, err := s.documentTable(schema)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]docstore.Document, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := s.db.Query(`SELECT `+documentColumns+` FROM `+table+` WHERE id IN (`+strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")+`)`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading %s/%s by id: %w", schema.Namespace, schema.Collection, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		doc, err := scanDocument(rows)
+		if err != nil {
+			return nil, fmt.Errorf("store: scanning a %s/%s document: %w", schema.Namespace, schema.Collection, err)
+		}
+		out[doc.ID] = *doc
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CountDocuments(schema docstore.CollectionSchema) (int, error) {
 	table, err := s.documentTable(schema)
 	if err != nil {

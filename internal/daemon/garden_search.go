@@ -33,7 +33,7 @@ func (d *Daemon) handleSeedSearch(conn net.Conn, msg *protocol.SeedSearchMessage
 		d.sendGardenError(conn, "search", err)
 		return
 	}
-	seedRows, err := d.store.MatchText(garden.SeedsSchema(), words, "")
+	seedRows, err := d.matchSeedText(words)
 	if err != nil {
 		d.sendGardenError(conn, "search", err)
 		return

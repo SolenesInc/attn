@@ -28,7 +28,7 @@ func TestMigrationNamesPausedSeedsParked(t *testing.T) {
 		t.Fatal(err)
 	}
 	for id, status := range map[string]string{"s-pause1": "dormant", "s-open01": "planted"} {
-		body, err := garden.Seed{ID: id, Title: id, Body: "keep this", Status: status, ProfileID: view.Manifest.ProfileID}.Encode()
+		body, err := garden.Seed{ID: id, Title: id, Status: status, ProfileID: view.Manifest.ProfileID}.Encode()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -55,8 +55,8 @@ func TestMigrationNamesPausedSeedsParked(t *testing.T) {
 		t.Fatal(err)
 	}
 	paused, migratedRev, migratedAt := read("s-pause1")
-	if paused.Status != garden.StatusParked || paused.Body != "keep this" {
-		t.Fatalf("the paused seed is %q with body %q, want parked and its body kept", paused.Status, paused.Body)
+	if paused.Status != garden.StatusParked {
+		t.Fatalf("the paused seed is %q, want parked", paused.Status)
 	}
 	if migratedRev <= pausedRev {
 		t.Fatalf("rev stayed at %d although the status changed; stale writes and resuming watchers decide by rev", migratedRev)
