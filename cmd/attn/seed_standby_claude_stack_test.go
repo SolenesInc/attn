@@ -74,8 +74,10 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", seed.ID, approved}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg %s exited %d: %s%s", seed.ID, sent.Code, sent.Stdout, sent.Stderr)
 	}
-	testworld.AwaitSessionSince(app, mark, tender, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	atPrompt := testworld.AwaitSessionSince(app, mark, tender, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
+	wakeTurn := testworld.AwaitStateAfter(app, atPrompt, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	model.AwaitPrompt(t, approved)
+	testworld.AwaitStateAfter(app, wakeTurn, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
 
 	if transcripts, _ := filepath.Glob(filepath.Join(configDir, "projects", "*", "*.jsonl")); len(transcripts) != 1 {
 		t.Fatalf("Claude wrote transcripts %q, want the woken tender to resume its one conversation", transcripts)
