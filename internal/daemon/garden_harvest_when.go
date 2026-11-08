@@ -139,7 +139,7 @@ func (d *Daemon) armHarvestWhenMerged(
 			change.events = append(change.events, seedEvent{occurrence: parked})
 		}
 		configured, eventErr := seedEvents.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
+			gardenSeedEventModel(), gardenSeedEventVocabulary().HarvestWhenConfigured, seed.ID,
 			seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest, CausedBySessionID: sessionID, CausedBy: ask.Actor.String()},
 		)
 		if eventErr != nil {
@@ -301,7 +301,7 @@ func (d *Daemon) clearHarvestWhen(
 			cause, _ = d.sessionOfActor(actor)
 		}
 		cleared, eventErr := seedEvents.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, seed.ID,
+			gardenSeedEventModel(), gardenSeedEventVocabulary().HarvestWhenCleared, seed.ID,
 			seedEvents.HarvestWhenPayload{
 				PullRequestID: seed.HarvestWhen.PullRequest, CausedBySessionID: cause, CausedBy: actor.String(),
 			},

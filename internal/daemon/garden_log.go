@@ -57,7 +57,7 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 	occurrences := make([]seedEvents.Occurrence, 0, len(change.events)+len(entries))
 	for _, event := range change.events {
 		occurrences = append(occurrences, event.occurrence)
-		rendered, err := gardenSeedEventModel.Entries(event.occurrence, event.detail)
+		rendered, err := gardenSeedEventModel().Entries(event.occurrence, event.detail)
 		if err != nil {
 			return seedChangeLog{}, err
 		}
@@ -112,7 +112,7 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 			Fact:  documentChangedFact(garden.Namespace, garden.CollectionNotes, entry.ID, false),
 		}
 		log.entries[i] = entry.Note
-		added, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, entry.Seed, seedEvents.NoteAddedPayload{
+		added, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().NoteAdded, entry.Seed, seedEvents.NoteAddedPayload{
 			NoteID: entry.ID, AttentionRequested: entry.AttentionRequested, CausedBySessionID: protocol.TrimID(entry.CausedBySessionID), CausedBy: entry.Author.String(),
 		})
 		if err != nil {
@@ -122,7 +122,7 @@ func (d *Daemon) seedChangeLog(change seedChange) (seedChangeLog, error) {
 	}
 	log.events = make([]store.BusEvent, len(occurrences))
 	for i, occurrence := range occurrences {
-		event, err := gardenSeedEventModel.Encode(occurrence)
+		event, err := gardenSeedEventModel().Encode(occurrence)
 		if err != nil {
 			return seedChangeLog{}, err
 		}

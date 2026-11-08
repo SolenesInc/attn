@@ -144,7 +144,7 @@ func (d *Daemon) plantSeedsProtected(_ foregroundCleanupProtection, schema docst
 func (d *Daemon) seedPlantingOccurrences(seed garden.Seed) ([]seedEvents.Occurrence, error) {
 	planter, _ := d.sessionOfActor(seed.Planter)
 	occurrences := make([]seedEvents.Occurrence, 0, len(seed.Edges)+2)
-	planted, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID, seedEvents.CausePayload{
+	planted, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Planted, seed.ID, seedEvents.CausePayload{
 		CausedBySessionID: planter, CausedBy: seed.Planter.String(),
 	})
 	if err != nil {
@@ -160,7 +160,7 @@ func (d *Daemon) seedPlantingOccurrences(seed garden.Seed) ([]seedEvents.Occurre
 		occurrences = append(occurrences, tended)
 	}
 	for _, edge := range seed.Edges {
-		linked, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID, seedEvents.EdgePayload{
+		linked, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().EdgeLinked, seed.ID, seedEvents.EdgePayload{
 			EdgeKind: edge.Kind, TargetSeedID: edge.To, CausedBySessionID: planter, CausedBy: seed.Planter.String(),
 		})
 		if err != nil {
@@ -1193,9 +1193,9 @@ func (d *Daemon) handleSeedLink(conn net.Conn, msg *protocol.SeedLinkMessage) {
 			EdgeKind: kind, TargetSeedID: to, CausedBySessionID: source, CausedBy: d.actorOfSession(source).String(),
 		}
 		if verb == "unlink" {
-			occurrence, err = seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeUnlinked, next.ID, payload)
+			occurrence, err = seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().EdgeUnlinked, next.ID, payload)
 		} else {
-			occurrence, err = seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, next.ID, payload)
+			occurrence, err = seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().EdgeLinked, next.ID, payload)
 		}
 		if err != nil {
 			d.sendGardenError(conn, verb, err)
@@ -1830,7 +1830,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 		change := seedChange{author: ask.Actor, cause: cause, events: []seedEvent{{occurrence: lifecycle, detail: detail}}}
 		if seed.HarvestWhen != nil && next.HarvestWhen == nil {
 			cleared, eventErr := seedEvents.Occur(
-				gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenCleared, next.ID,
+				gardenSeedEventModel(), gardenSeedEventVocabulary().HarvestWhenCleared, next.ID,
 				seedEvents.HarvestWhenPayload{
 					PullRequestID: seed.HarvestWhen.PullRequest, CausedBySessionID: cause, CausedBy: ask.Actor.String(),
 				},
@@ -1854,7 +1854,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
 			if !ask.SuppressNotification {
 				for _, freed := range garden.Unblocks(read.seeds, next.ID) {
 					unblocked, eventErr := seedEvents.Occur(
-						gardenSeedEventModel, gardenSeedEventVocabulary.Unblocked, freed.ID,
+						gardenSeedEventModel(), gardenSeedEventVocabulary().Unblocked, freed.ID,
 						seedEvents.UnblockedPayload{BlockerSeedID: next.ID, CausedBySessionID: cause, CausedBy: ask.Actor.String()},
 					)
 					if eventErr != nil {

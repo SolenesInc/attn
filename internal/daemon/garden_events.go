@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,14 +20,22 @@ import (
 
 const gardenSeedBellConsumer = "garden-seed-bells"
 
-var gardenSeedEventModel, gardenSeedEventVocabulary = mustBuildGardenSeedEvents()
-
-func mustBuildGardenSeedEvents() (*events.Model, events.Vocabulary) {
+var gardenSeedEvents = sync.OnceValues(func() (*events.Model, events.Vocabulary) {
 	model, vocabulary, err := events.BuildGardenModel()
 	if err != nil {
 		panic(err)
 	}
 	return model, vocabulary
+})
+
+func gardenSeedEventModel() *events.Model {
+	model, _ := gardenSeedEvents()
+	return model
+}
+
+func gardenSeedEventVocabulary() events.Vocabulary {
+	_, vocabulary := gardenSeedEvents()
+	return vocabulary
 }
 
 func announceGardenSeedEvents(d *Daemon, seqs []int64) {
@@ -149,15 +158,15 @@ func gardenSeedLifecycleOccurrenceWithAttention(attentionRequested bool, verb ga
 	}
 	switch verb {
 	case garden.VerbTend:
-		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Tended, seedID, payload)
+		return events.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Tended, seedID, payload)
 	case garden.VerbPark:
-		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Parked, seedID, payload)
+		return events.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Parked, seedID, payload)
 	case garden.VerbHarvest:
-		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Harvested, seedID, payload)
+		return events.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Harvested, seedID, payload)
 	case garden.VerbWither:
-		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Withered, seedID, payload)
+		return events.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Withered, seedID, payload)
 	case garden.VerbReplant:
-		return events.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.Replanted, seedID, payload)
+		return events.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().Replanted, seedID, payload)
 	default:
 		return events.Occurrence{}, fmt.Errorf("no Garden seed lifecycle event is declared for %q", verb)
 	}
@@ -189,7 +198,7 @@ func (d *Daemon) validatePendingGardenSeedBells() error {
 		return err
 	}
 	for _, name := range names {
-		if err := gardenSeedEventModel.ValidatePendingBell(name); err != nil {
+		if err := gardenSeedEventModel().ValidatePendingBell(name); err != nil {
 			return fmt.Errorf("garden seed mailbox cannot start: %w", err)
 		}
 	}
@@ -208,7 +217,7 @@ type gardenSeedEventAudience struct {
 }
 
 func (d *Daemon) gardenSeedEventRecipients(name, subject string, payload []byte) (gardenSeedEventAudience, error) {
-	decision, err := gardenSeedEventModel.Interpret(name, subject, payload)
+	decision, err := gardenSeedEventModel().Interpret(name, subject, payload)
 	if err != nil {
 		return gardenSeedEventAudience{}, err
 	}
@@ -220,7 +229,7 @@ func (d *Daemon) gardenSeedEventRecipients(name, subject string, payload []byte)
 	if err != nil {
 		return gardenSeedEventAudience{}, err
 	}
-	audience.addresses, err = gardenSeedEventModel.Recipients(subject, decision, resolver)
+	audience.addresses, err = gardenSeedEventModel().Recipients(subject, decision, resolver)
 	return audience, err
 }
 
@@ -390,7 +399,7 @@ func (d *Daemon) discardIneligibleGardenSeedBellsLocked(to who.Address) error {
 	}
 	var discarded []string
 	for _, item := range items {
-		eligible, err := gardenSeedEventModel.RecipientEligible(item.BellName, item.SeedID, to.String(), resolver)
+		eligible, err := gardenSeedEventModel().RecipientEligible(item.BellName, item.SeedID, to.String(), resolver)
 		if err != nil {
 			return err
 		}

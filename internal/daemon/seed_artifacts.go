@@ -300,7 +300,7 @@ func (d *Daemon) recordObservedSeedArtifacts(seedID string) error {
 		return err
 	}
 	occurrence, err := seedEvents.Occur(
-		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		gardenSeedEventModel(), gardenSeedEventVocabulary().ArtifactChanged, seedID,
 		seedEvents.CausePayload{CausedBy: who.Attn().String()},
 	)
 	if err != nil {
@@ -574,7 +574,7 @@ func (d *Daemon) observeSeedArtifactTransfer(msg *protocol.SeedArtifactTransferM
 		}
 	}
 	changedEvent, err := seedEvents.Occur(
-		gardenSeedEventModel, gardenSeedEventVocabulary.ArtifactChanged, seedID,
+		gardenSeedEventModel(), gardenSeedEventVocabulary().ArtifactChanged, seedID,
 		seedEvents.CausePayload{CausedBySessionID: protocol.Deref(msg.SourceSessionID), CausedBy: d.actorOfSession(protocol.Deref(msg.SourceSessionID)).String()},
 	)
 	if err != nil {

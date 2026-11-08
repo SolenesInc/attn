@@ -273,7 +273,7 @@ func markEvidenceChangedSinceReport(checks []protocol.SeedCheck, artifacts []pro
 const ringAudienceProbeNoteID = "n-probe"
 
 func (d *Daemon) seedParties(seedID string, cause protocol.SessionID) ([]string, error) {
-	occurrence, err := seedEvents.Occur(gardenSeedEventModel, gardenSeedEventVocabulary.NoteAdded, seedID, seedEvents.NoteAddedPayload{
+	occurrence, err := seedEvents.Occur(gardenSeedEventModel(), gardenSeedEventVocabulary().NoteAdded, seedID, seedEvents.NoteAddedPayload{
 		NoteID: ringAudienceProbeNoteID, AttentionRequested: true, CausedBySessionID: cause,
 	})
 	if err != nil {
@@ -285,7 +285,7 @@ func (d *Daemon) seedParties(seedID string, cause protocol.SessionID) ([]string,
 func (d *Daemon) seedOccurrenceRecipients(occurrences ...seedEvents.Occurrence) ([]string, error) {
 	var out []string
 	for _, occurrence := range occurrences {
-		event, err := gardenSeedEventModel.Encode(occurrence)
+		event, err := gardenSeedEventModel().Encode(occurrence)
 		if err != nil {
 			return nil, err
 		}

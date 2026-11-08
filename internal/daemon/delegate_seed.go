@@ -103,7 +103,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 	occurrences := []seedEvents.Occurrence{}
 	if createSeed {
 		planted, eventErr := seedEvents.Occur(
-			gardenSeedEventModel, gardenSeedEventVocabulary.Planted, seed.ID,
+			gardenSeedEventModel(), gardenSeedEventVocabulary().Planted, seed.ID,
 			seedEvents.CausePayload{CausedBySessionID: plannerSessionID, CausedBy: dispatch.Dispatcher.String()},
 		)
 		if eventErr != nil {
@@ -112,7 +112,7 @@ func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection
 		occurrences = append(occurrences, planted)
 		for _, edge := range seed.Edges {
 			linked, eventErr := seedEvents.Occur(
-				gardenSeedEventModel, gardenSeedEventVocabulary.EdgeLinked, seed.ID,
+				gardenSeedEventModel(), gardenSeedEventVocabulary().EdgeLinked, seed.ID,
 				seedEvents.EdgePayload{
 					EdgeKind: edge.Kind, TargetSeedID: edge.To,
 					CausedBySessionID: plannerSessionID, CausedBy: dispatch.Dispatcher.String(),
