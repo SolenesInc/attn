@@ -30,12 +30,11 @@ function tendsSeed(session: AskHolderSession, seedId: string, seeds: readonly Se
 export function askBelongsTo(ask: Ask, session: AskHolderSession, seeds: readonly Seed[]): boolean {
   if (ask.seed_id) return tendsSeed(session, ask.seed_id, seeds);
   if (ask.crew_member) return session.crewMember === ask.crew_member;
-  if (ask.chief) return Boolean(session.chiefOfStaff);
   return ask.session_id === session.id;
 }
 
 export function askFrom(ask: Ask, holder: (AskHolderSession & { label: string }) | undefined): string {
-  if (holder?.chiefOfStaff || ask.chief) return 'Chief';
+  if (holder?.chiefOfStaff) return 'Chief';
   if (ask.crew_member) return holder ? crewDisplayName(ask.crew_member) : `${crewDisplayName(ask.crew_member)} (asleep)`;
   if (!holder && ask.seed_id) return `waiting for the next tender of ${ask.seed_title || ask.seed_id}`;
   return holder?.label ?? 'Closed agent';

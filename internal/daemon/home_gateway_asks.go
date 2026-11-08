@@ -86,7 +86,6 @@ func tooLargeAsk(full homegateway.HomeGatewayAsk, size int) homegateway.HomeGate
 		CreatedAt:     full.CreatedAt,
 		SeedSlug:      full.SeedSlug,
 		CrewMember:    full.CrewMember,
-		Chief:         full.Chief,
 		TooLargeBytes: protocol.Ptr(size),
 		MaxFrameBytes: protocol.Ptr(cloudlink.MaxMessageBytes),
 	}
@@ -106,7 +105,6 @@ func homeGatewayAsk(wire protocol.Ask) homegateway.HomeGatewayAsk {
 		SeedSlug:   wire.SeedSlug,
 		SeedTitle:  wire.SeedTitle,
 		CrewMember: wire.CrewMember,
-		Chief:      wire.Chief,
 	}
 	for _, part := range wire.Parts {
 		out.Parts = append(out.Parts, homegateway.HomeGatewayAskPart{Markdown: part.Markdown, Question: homeGatewayAskQuestion(part.Question)})

@@ -563,9 +563,6 @@ type Ask struct {
 	// BaseDir corresponds to the JSON schema field "base_dir".
 	BaseDir string `json:"base_dir"`
 
-	// Chief corresponds to the JSON schema field "chief".
-	Chief *bool `json:"chief,omitempty,omitzero"`
-
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
 
@@ -14045,9 +14042,6 @@ type WebSocketEvent struct {
 	// BaseRef corresponds to the JSON schema field "base_ref".
 	BaseRef *string `json:"base_ref,omitempty,omitzero"`
 
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
-
 	// Cloned corresponds to the JSON schema field "cloned".
 	Cloned *bool `json:"cloned,omitempty,omitzero"`
 
@@ -14127,9 +14121,6 @@ type WebSocketEvent struct {
 
 	// Plugins corresponds to the JSON schema field "plugins".
 	Plugins []PluginInfo `json:"plugins,omitempty,omitzero"`
-
-	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
 
 	// Priority corresponds to the JSON schema field "priority".
 	Priority *int `json:"priority,omitempty,omitzero"`

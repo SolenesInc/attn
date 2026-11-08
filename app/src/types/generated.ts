@@ -1395,7 +1395,6 @@ export enum ApprovePRMessageCmd {
 
 export interface Ask {
     base_dir:     string;
-    chief?:       boolean;
     created_at:   string;
     crew_member?: string;
     id:           string;
@@ -1553,7 +1552,6 @@ export interface AskListResult {
 
 export interface AskOpenResultElement {
     base_dir:     string;
-    chief?:       boolean;
     created_at:   string;
     crew_member?: string;
     id:           string;
@@ -13046,7 +13044,6 @@ export interface WebSocketEvent {
     action?:                          string;
     authors?:                         AuthorElement[];
     base_ref?:                        string;
-    chief_of_staff?:                  boolean;
     cloned?:                          boolean;
     cmd?:                             string;
     cols?:                            number;
@@ -13073,7 +13070,6 @@ export interface WebSocketEvent {
     pid?:                             number;
     plugin_issues?:                   IssueElement[];
     plugins?:                         PluginElement[];
-    previous_session_id?:             string;
     priority?:                        number;
     probe_id?:                        string;
     protocol_version?:                string;
@@ -20884,7 +20880,6 @@ const typeMap: any = {
     ], "any"),
     "Ask": o([
         { json: "base_dir", js: "base_dir", typ: "" },
-        { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -20980,7 +20975,6 @@ const typeMap: any = {
     ], "any"),
     "AskOpenResultElement": o([
         { json: "base_dir", js: "base_dir", typ: "" },
-        { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
@@ -28211,7 +28205,6 @@ const typeMap: any = {
         { json: "action", js: "action", typ: u(undefined, "") },
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
         { json: "base_ref", js: "base_ref", typ: u(undefined, "") },
-        { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "cloned", js: "cloned", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: u(undefined, "") },
         { json: "cols", js: "cols", typ: u(undefined, 0) },
@@ -28238,7 +28231,6 @@ const typeMap: any = {
         { json: "pid", js: "pid", typ: u(undefined, 0) },
         { json: "plugin_issues", js: "plugin_issues", typ: u(undefined, a(r("IssueElement"))) },
         { json: "plugins", js: "plugins", typ: u(undefined, a(r("PluginElement"))) },
-        { json: "previous_session_id", js: "previous_session_id", typ: u(undefined, "") },
         { json: "priority", js: "priority", typ: u(undefined, 0) },
         { json: "probe_id", js: "probe_id", typ: u(undefined, "") },
         { json: "protocol_version", js: "protocol_version", typ: u(undefined, "") },

@@ -141,7 +141,6 @@
     "session_id": "string"
   },
   "session.branch.changed": null,
-  "session.chief_role.changed": null,
   "session.closed": {
     "agent": "string",
     "branch": "string",

@@ -53,7 +53,6 @@ var homeGatewayFacts = bus.Filter{
 	FactCrewBound,
 	FactCrewReleased,
 	FactCrewUpdated,
-	FactSessionChiefRoleChanged,
 }
 
 var homeGatewayStates = map[protocol.SessionState]homegateway.HomeGatewaySessionState{

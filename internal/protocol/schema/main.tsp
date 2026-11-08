@@ -3964,14 +3964,13 @@ model AskPart {
 // named. It is addressed to the seed's tender, so whoever tends the seed next
 // holds it, and harvest or wither closes it. The answer is a note on the seed.
 // An agent that tends no seed asks without one: the ask is addressed to its
-// crew member or chief mailbox, or else to its session, and the answer is
-// user input in that inbox.
+// crew member, or else to its session, and the answer is user input in that
+// inbox.
 // base_dir is where the agent asked from; relative image paths resolve there.
 model Ask {
   id: string;
   session_id: SessionID;
   crew_member?: string;
-  chief?: boolean;
   seed_id?: string;
   seed_title?: string;
   seed_slug?: string;
@@ -8343,8 +8342,6 @@ model WebSocketEvent {
   content?: string;
   runtime_id?: TerminalID;
   session_id?: SessionID;
-  chief_of_staff?: boolean;
-  previous_session_id?: SessionID;
   session?: Session;
   sessions?: Session[];
   prs?: PR[];
