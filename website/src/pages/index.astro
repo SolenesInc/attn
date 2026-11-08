@@ -4,6 +4,7 @@ import '../landing/fonts.css';
 import '../landing/sections.css';
 import '../landing/home.css';
 import homeScript from '../landing/home.js?raw';
+import screenHeightScript from '../landing/screen-height.js?raw';
 import sectionsScript from '../landing/sections.js?raw';
 ---
 
@@ -115,6 +116,7 @@ import sectionsScript from '../landing/sections.js?raw';
 <footer class="foot"><a href="/about/">About</a><span>GPL-3.0</span></footer>
 <p class="sr" id="status" role="status"></p>
 
+<script is:inline set:html={screenHeightScript}></script>
 <script is:inline set:html={homeScript}></script>
 <script is:inline set:html={sectionsScript}></script>
 </body>

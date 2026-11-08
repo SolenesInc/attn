@@ -26,7 +26,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .sr { position: fixed; top: 0; margin: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .logo { flex: none; width: 1em; height: 1em; fill: currentColor; }
 
-#hero { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; height: 100vh; height: 100svh; min-height: 640px; overflow: clip; padding: 0 var(--gutter) clamp(24px, 4.6vh, 56px); }
+#hero { position: relative; isolation: isolate; display: flex; flex-direction: column; align-items: center; height: var(--screen-height, 100svh); min-height: 640px; overflow: clip; padding: 0 var(--gutter) clamp(24px, 4.6vh, 56px); }
 #field, #lights { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; }
 .bar { flex: none; width: 100%; max-width: var(--col); height: 56px; display: flex; align-items: center; gap: 26px; font-size: 15px; font-weight: 500; }
 .mark { margin-right: auto; font: 700 20px/1 var(--mono); letter-spacing: -.02em; color: var(--accent); }
