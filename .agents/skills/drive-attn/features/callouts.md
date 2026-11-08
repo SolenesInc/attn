@@ -64,7 +64,7 @@ Preconditions:
 
 ## Contexts
 
-- **Durability across restarts**: the setting is kept, but a callout is not. A showing callout ends when the app relaunches, and attn does not tell the agent.
+- **Durability across restarts**: a showing callout ends when the app relaunches, and attn does not tell the agent.
 - **Linux**: `attn callout` works the same where the daemon and CLI run on Linux. It needs an app showing the profile, wherever that app runs.
 - **Profiles**: a callout reaches only an app showing the caller's profile. `agent:` and `desktop:` resolve only in that profile, so another profile's agent is refused as `is not an agent in your profile`. A profile switch ends the callout.
 - **Performance and idle cost**: an open card runs no animations once placed (`callouts` checks it). A browser tile hides while a callout shows and returns when the callout ends.

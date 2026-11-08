@@ -31,7 +31,7 @@ decision for the user. If the request did not say, ask with `attn ask`.
 1. In the `feature(...)` entry, set `Stage: OnByDefault` and `Where` to the
    Settings page that holds the switch. The feature then leaves the
    Experimental page, and a stored `false` keeps working.
-2. Render a `FeatureSwitch` on that page, as Callouts does in
+2. Render a `FeatureSwitch` on that page, as Asks does in
    `SettingsModalSections.tsx`. A feature with its own page in
    `useSettingsModalState.ts` keeps that page and its switch.
 3. Remove "experimental" and "off by default" from `Description`, `Summary` and
