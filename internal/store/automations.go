@@ -1356,7 +1356,7 @@ func (s *Store) MarkAutomationRunDeliveredWithEvent(
 	stamp := formatStoredTime(now)
 	result, err := tx.Exec(`
 		UPDATE automation_runs
-		SET state=?, last_error='', fix_agent='', fix_directory='', resolved_location_json=?, updated_at=?, delivered_at=?
+		SET state=?, last_error='', resolved_location_json=?, updated_at=?, delivered_at=?
 		WHERE id=? AND state=?
 	`, AutomationRunStateDelivered, resolved, stamp, stamp, id, AutomationRunStatePending)
 	if err != nil {
