@@ -59,6 +59,11 @@ func (t PlotTree) descendants(crownID string) []Seed {
 	return out
 }
 
+func (t PlotTree) Seed(id string) (Seed, bool) {
+	seed, ok := t.byID[id]
+	return seed, ok
+}
+
 func (t PlotTree) Children(plotID string) []Seed {
 	return t.children[plotID]
 }

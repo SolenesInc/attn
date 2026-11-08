@@ -110,31 +110,25 @@ func (d *Daemon) setSeedWatch(sessionID protocol.SessionID, seedID string, watch
 }
 
 type gardenSubscriptions struct {
-	parents map[string]string
-	seeds   map[string]garden.Seed
+	plots   garden.PlotTree
 	watches map[string][]store.SeedWatch
 }
 
-func newGardenSubscriptions(seeds []garden.Seed, watches []store.SeedWatch) gardenSubscriptions {
-	subscriptions := gardenSubscriptions{
-		parents: make(map[string]string, len(seeds)),
-		seeds:   make(map[string]garden.Seed, len(seeds)),
-		watches: map[string][]store.SeedWatch{},
-	}
-	for _, seed := range seeds {
-		subscriptions.seeds[seed.ID] = seed
-		subscriptions.parents[seed.ID] = ""
-		for _, edge := range seed.Edges {
-			if edge.Kind == garden.EdgePartOf {
-				subscriptions.parents[seed.ID] = edge.To
-				break
-			}
-		}
-	}
+func newGardenSubscriptions(plots garden.PlotTree, watches []store.SeedWatch) gardenSubscriptions {
+	subscriptions := gardenSubscriptions{plots: plots, watches: map[string][]store.SeedWatch{}}
 	for _, watch := range watches {
 		subscriptions.watches[watch.SeedID] = append(subscriptions.watches[watch.SeedID], watch)
 	}
 	return subscriptions
+}
+
+func (s gardenSubscriptions) parent(seedID string) (string, bool) {
+	seed, known := s.plots.Seed(seedID)
+	if !known {
+		return "", false
+	}
+	parent, _ := garden.ParentOf(seed)
+	return parent, true
 }
 
 func (s gardenSubscriptions) coverage(seedID string) map[who.Party][]string {
@@ -149,7 +143,7 @@ func (s gardenSubscriptions) coverageChecked(seedID string) (map[who.Party][]str
 		if seen[at] {
 			return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
 		}
-		parent, known := s.parents[at]
+		parent, known := s.parent(at)
 		if !known {
 			break
 		}
@@ -165,12 +159,21 @@ func (s gardenSubscriptions) coverageChecked(seedID string) (map[who.Party][]str
 	return covered, nil
 }
 
-func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
-	read, err := d.readGarden()
+func (d *Daemon) readGardenSubscriptions(seedIDs ...string) (gardenSubscriptions, error) {
+	all, err := d.rememberedGardenSeeds()
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
-	watches, err := d.store.GardenSeedWatches()
+	subscriptions := newGardenSubscriptions(all.plots, nil)
+	var lineage []string
+	seen := map[string]bool{}
+	for _, seedID := range seedIDs {
+		for at, known := seedID, true; at != "" && known && !seen[at]; at, known = subscriptions.parent(at) {
+			seen[at] = true
+			lineage = append(lineage, at)
+		}
+	}
+	watches, err := d.store.GardenSeedWatches(lineage...)
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
@@ -184,25 +187,21 @@ func (d *Daemon) readGardenSubscriptions() (gardenSubscriptions, error) {
 	if err != nil {
 		return gardenSubscriptions{}, err
 	}
-	seedProfiles := make(map[string]string, len(read.seeds))
-	for _, seed := range read.seeds {
-		seedProfiles[seed.ID] = seed.ProfileID
-	}
 	eligible := watches[:0]
 	for _, watch := range watches {
-		seedProfile, ok := seedProfiles[watch.SeedID]
-		if ok && d.watcherProfileID(watch.Watcher, sessionProfiles) == seedProfile {
+		seed, ok := all.plots.Seed(watch.SeedID)
+		if ok && d.watcherProfileID(watch.Watcher, sessionProfiles) == seed.ProfileID {
 			eligible = append(eligible, watch)
 		}
 	}
-	return newGardenSubscriptions(read.seeds, eligible), nil
+	return newGardenSubscriptions(all.plots, eligible), nil
 }
 
 func (d *Daemon) seedWatchCoverage(sessionID protocol.SessionID, seedID string) ([]string, error) {
 	if protocol.TrimID(sessionID) == "" {
 		return []string{}, nil
 	}
-	subscriptions, err := d.readGardenSubscriptions()
+	subscriptions, err := d.readGardenSubscriptions(seedID)
 	if err != nil {
 		return nil, err
 	}

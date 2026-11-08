@@ -196,7 +196,7 @@ INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES
 		t.Fatal(err)
 	}
 	defer upgraded.Close()
-	watches, err := upgraded.GardenSeedWatches()
+	watches, err := upgraded.GardenSeedWatches("s-aaaaaa", "s-bbbbbb")
 	if err != nil {
 		t.Fatal(err)
 	}

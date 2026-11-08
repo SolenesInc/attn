@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -86,11 +87,15 @@ func (s *Store) GardenSeedWatching(watcher who.Party, seedID string) (bool, erro
 	return watching, nil
 }
 
-func (s *Store) GardenSeedWatches() ([]SeedWatch, error) {
+func (s *Store) GardenSeedWatches(seedIDs ...string) ([]SeedWatch, error) {
+	ids, err := json.Marshal(seedIDs)
+	if err != nil {
+		return nil, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.Query(`SELECT watcher, seed_id FROM garden_seed_watches`)
+	rows, err := s.db.Query(`SELECT watcher, seed_id FROM garden_seed_watches WHERE seed_id IN (SELECT value FROM json_each(?))`, string(ids))
 	if err != nil {
 		return nil, fmt.Errorf("list garden seed watches: %w", err)
 	}

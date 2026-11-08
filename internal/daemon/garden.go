@@ -211,14 +211,18 @@ type gardenSeeds struct {
 	plots garden.PlotTree
 }
 
-func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
+func (d *Daemon) rememberedGardenSeeds() (gardenSeeds, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
-		return gardenRead{}, err
+		return gardenSeeds{}, err
 	}
-	all, err := store.RememberDocuments(d.store, &d.gardenSeeds, *schema, func() (gardenSeeds, error) { return d.readGardenSeeds(*schema) }, func(previous gardenSeeds, written []string) (gardenSeeds, error) {
+	return store.RememberDocuments(d.store, &d.gardenSeeds, *schema, func() (gardenSeeds, error) { return d.readGardenSeeds(*schema) }, func(previous gardenSeeds, written []string) (gardenSeeds, error) {
 		return d.refreshGardenSeeds(*schema, previous, written)
 	})
+}
+
+func (d *Daemon) readGarden(profileID ...string) (gardenRead, error) {
+	all, err := d.rememberedGardenSeeds()
 	if err != nil {
 		return gardenRead{}, err
 	}

@@ -225,7 +225,7 @@ func (d *Daemon) gardenSeedEventRecipients(name, subject string, payload []byte)
 	if decision.Quiet() {
 		return audience, nil
 	}
-	resolver, err := d.readGardenEventRoles()
+	resolver, err := d.readGardenEventRoles(subject)
 	if err != nil {
 		return gardenSeedEventAudience{}, err
 	}
@@ -298,8 +298,8 @@ type gardenEventRoles struct {
 	subscriptions gardenSubscriptions
 }
 
-func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
-	subscriptions, err := d.readGardenSubscriptions()
+func (d *Daemon) readGardenEventRoles(seedIDs ...string) (gardenEventRoles, error) {
+	subscriptions, err := d.readGardenSubscriptions(seedIDs...)
 	if err != nil {
 		return gardenEventRoles{}, err
 	}
@@ -311,7 +311,7 @@ func (d *Daemon) readGardenEventRoles() (gardenEventRoles, error) {
 }
 
 func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]string, error) {
-	if _, exists := r.subscriptions.seeds[seedID]; !exists {
+	if _, exists := r.subscriptions.plots.Seed(seedID); !exists {
 		schema, err := r.daemon.seedsCollection()
 		if err != nil {
 			return nil, fmt.Errorf("read seed %s for Garden bell eligibility: %w", seedID, err)
@@ -332,12 +332,13 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 	case events.CoveringTenders:
 		var addresses []string
 		seen := map[string]bool{seedID: true}
-		for at := r.subscriptions.parents[seedID]; at != ""; at = r.subscriptions.parents[at] {
+		for at, _ := r.subscriptions.parent(seedID); at != ""; at, _ = r.subscriptions.parent(at) {
 			if seen[at] {
 				return nil, fmt.Errorf("garden seed ancestry cycle reaches %s while resolving %s", at, seedID)
 			}
 			seen[at] = true
-			if !r.parties.claimHolds(r.subscriptions.seeds[at]) {
+			plot, _ := r.subscriptions.plots.Seed(at)
+			if !r.parties.claimHolds(plot) {
 				continue
 			}
 			tenders, err := r.ResolveSeedRole(at, events.CurrentTender)
@@ -348,7 +349,7 @@ func (r gardenEventRoles) ResolveSeedRole(seedID string, role events.Role) ([]st
 		}
 		return addresses, nil
 	case events.CurrentTender:
-		seed, exists := r.subscriptions.seeds[seedID]
+		seed, exists := r.subscriptions.plots.Seed(seedID)
 		if !exists {
 			return nil, nil
 		}
@@ -393,7 +394,11 @@ func (d *Daemon) discardIneligibleGardenSeedBellsLocked(to who.Address) error {
 	if len(items) == 0 {
 		return nil
 	}
-	resolver, err := d.readGardenEventRoles()
+	seedIDs := make([]string, len(items))
+	for i, item := range items {
+		seedIDs[i] = item.SeedID
+	}
+	resolver, err := d.readGardenEventRoles(seedIDs...)
 	if err != nil {
 		return err
 	}
