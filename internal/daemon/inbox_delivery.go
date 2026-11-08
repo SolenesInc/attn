@@ -421,9 +421,21 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 
 func (d *Daemon) heldRingAddress(recorded string) (who.Address, error) {
 	if profileID, heldSinceBeforeChiefMembers := strings.CutPrefix(recorded, "chief:"); heldSinceBeforeChiefMembers {
-		return d.chiefMailbox(profileID)
+		return d.migratedChiefMailbox(profileID)
 	}
 	return who.ParseAddress(recorded)
+}
+
+func (d *Daemon) migratedChiefMailbox(profileID string) (who.Address, error) {
+	chiefs, err := d.store.ProfileChiefMembers()
+	if err != nil {
+		return who.Address{}, err
+	}
+	key, err := who.ParseMemberKey(chiefs[profileID])
+	if err != nil {
+		return who.Address{}, fmt.Errorf("profile %s has no Chief member: %w", profileID, err)
+	}
+	return who.Member(key).Address(), nil
 }
 
 func (d *Daemon) projectReturnedRing(ev bus.Event) {

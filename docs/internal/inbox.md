@@ -282,7 +282,9 @@ connected:
   standby until the tender next reads its mail.
 - A ring taken before the Chief became a crew member keeps the old Chief address
   in its record. When the mod gives one back after the upgrade, attn returns its
-  items to the unread mail of that profile's Chief member.
+  items to the unread mail of that profile's Chief member, even when attn could
+  not yet create the Chief's home. The items then wait for the daemon start that
+  creates the Chief.
 - While a running turn waits on a permission question, the mod takes a ring it
   would take during that turn. It holds the ring until the question closes,
   because the mod's delivery cannot answer the question. Refusing the question,
