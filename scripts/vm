@@ -11,8 +11,9 @@ scripts/vm: run this checkout's attn in a shared macOS VM.
   scripts/vm shot OUT.png           screenshot the app's window
   scripts/vm down                   quit and clean this instance and release the VM
 
---instance NAME, before or right after the command, selects another instance of
-this checkout. The default is vm-<worktree name>. macvm ls shows every VM.
+Each agent gets its own instance by default, vm-<worktree name>-<hash>. --instance
+NAME, before or right after the command, selects another; a name another agent is
+using in the VM is refused. macvm ls shows every VM.
 EOF
     exit 2
 }
@@ -28,14 +29,13 @@ command -v macvm >/dev/null || die "macvm is not on PATH; it comes from shell-co
 
 READY_LIMIT_SECONDS=600
 
+holder="$(macvm holder)" || die "macvm has no holder command; update it with: shell-config apply"
+
 default_instance() {
     local name
     name="$(basename "$root" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9\n' '-')"
     name="vm-${name#attn--}"
-    if [ "${#name}" -gt 16 ]; then
-        name="${name:0:11}-$(printf '%s' "$root" | shasum | cut -c1-4)"
-    fi
-    printf '%s' "$name"
+    printf '%s-%s' "${name:0:11}" "$(printf '%s\n%s' "$root" "$holder" | shasum | cut -c1-4)"
 }
 
 instance=""
@@ -64,6 +64,7 @@ bundle="app/src-tauri/target/staged/$app.app"
 guest_app="Applications/$app.app"
 guest_bin="/Users/admin/$guest_app/Contents/MacOS/attn"
 harness="h/$instance"
+owner_link="vm-instance-owners/$instance"
 export MACVM_LABEL="scripts/vm $instance"
 
 bundle_fingerprint() { jq -r .sourceFingerprint "$bundle/Contents/Resources/build-identity.json" 2>/dev/null || true; }
@@ -74,6 +75,22 @@ guest_fingerprint() {
 bridge() {
     macvm exec env ATTN_HARNESS_INSTANCE="$instance" ATTN_HARNESS_BIN="$guest_bin" \
         node "$harness/app/scripts/real-app-harness/ui-automation-cli.mjs" "$@"
+}
+
+instance_owner() { macvm exec readlink "$owner_link" 2>/dev/null || true; }
+
+claim_instance() {
+    local owner
+    owner="$(macvm exec /bin/sh -c 'mkdir -p "$(dirname "$1")"; ln -s "$2" "$1" 2>/dev/null; readlink "$1"' sh "$owner_link" "$holder")"
+    [ "$owner" = "$holder" ] ||
+        die "instance '$instance' in this VM belongs to $owner; pass another with --instance. Release this VM with: scripts/vm down --instance $instance"
+}
+
+require_own_instance() {
+    local owner
+    owner="$(instance_owner)"
+    [ "$owner" = "$holder" ] ||
+        die "instance '$instance' is not yours in this VM (owner: ${owner:-none}); start your own with: scripts/vm up"
 }
 
 wait_ready() {
@@ -93,6 +110,7 @@ cmd_up() {
     fi
     local vm
     vm="$(macvm up)"
+    claim_instance
     if [ "$(guest_fingerprint)" != "$(bundle_fingerprint)" ]; then
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm install-app "$bundle"
@@ -133,10 +151,10 @@ cmd_shot() {
 }
 
 cmd_down() {
-    if macvm exec /usr/bin/true 2>/dev/null; then
+    if [ "$(instance_owner)" = "$holder" ]; then
         macvm exec osascript -e "quit app \"$app\"" 2>/dev/null || true
         macvm exec "$guest_bin" instance clean "$instance" 2>/dev/null || true
-        macvm exec /bin/rm -rf "$harness" "$guest_app"
+        macvm exec /bin/rm -rf "$harness" "$guest_app" "$owner_link"
     fi
     macvm down
 }
@@ -145,10 +163,17 @@ case "$command" in
 up) cmd_up ;;
 drive)
     [ ${#args[@]} -ge 1 ] || usage
+    require_own_instance
     bridge "${args[@]}"
     ;;
-record) cmd_record "${args[@]}" ;;
-shot) cmd_shot "${args[@]}" ;;
+record)
+    require_own_instance
+    cmd_record "${args[@]}"
+    ;;
+shot)
+    require_own_instance
+    cmd_shot "${args[@]}"
+    ;;
 down) cmd_down ;;
 *) usage ;;
 esac

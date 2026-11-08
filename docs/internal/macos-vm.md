@@ -51,9 +51,10 @@ window repaints, so a clip of a still window has few frames. Publish clips from
 the host with `./scripts/pr-evidence.sh publish`; its `record` command does not
 work in the VM, where `screencapture -v` writes an empty video.
 
-The instance is `vm-<worktree name>`. `--instance NAME`, before or right after
-the command, selects another. `down` quits and cleans the instance and releases
-the VM, so if one agent runs two instances, bring both down together.
+Each agent gets its own instance by default, `vm-<worktree name>-<hash>`, even
+when agents share a checkout. `--instance NAME`, before or right after the
+command, selects another. `down` quits and cleans the instance and releases the
+VM, so if one agent runs two instances, bring both down together.
 
 ## Sharing
 
@@ -62,6 +63,11 @@ agents per VM. `scripts/vm up` joins the fullest running VM with room and starts
 one only when none has room. Each instance keeps its data apart, and clips show
 only their own window. One recording runs at a time per VM; a second one waits
 for the first.
+
+An instance belongs to the agent that brought it up in that VM. Another agent's
+`up`, `drive`, `record` or `shot` on that name is refused and names the owner, so
+pick a different `--instance`. Its `down` releases only its own hold on the VM
+and leaves the owner's app and data alone.
 
 When both VMs are full, `up` prints who holds them and waits up to 30 minutes.
 
