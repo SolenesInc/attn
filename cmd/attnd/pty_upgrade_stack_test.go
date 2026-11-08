@@ -974,11 +974,20 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 		t.Fatalf("adding the outpost: %+v %+v", row, row.Update)
 	}
 	remote.AwaitStopped()
+	installDir := filepath.Dir(ssh.InstallPath(remote))
+	for name, shipped := range map[string]string{"attn": current, "attnd": filepath.Join(filepath.Dir(current), "attnd"), ptyhost.BinaryName: currentHost} {
+		if sha256OfFile(t, filepath.Join(installDir, name)) != sha256OfFile(t, shipped) {
+			t.Errorf("the update did not install this build's %s", name)
+		}
+	}
 	host := row.ID
 	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
 		return len(m.Outposts) == 1 && m.Outposts[0].Notebook != nil && m.Outposts[0].Notebook.State == protocol.OutpostNotebookStateInSync
 	})
 	remoteApp = remote.App()
+	if ready := remote.Attn("seed", "ready"); ready.Code != 0 {
+		t.Errorf("attn seed ready on the updated outpost: %+v", ready)
+	}
 	if came := initialSession(t, remoteApp, liveShell); protocol.Deref(came.TerminalBuildStale) {
 		t.Errorf("the outpost's shell came back with the reload notice")
 	}
