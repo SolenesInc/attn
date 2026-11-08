@@ -27,7 +27,7 @@ def listing():
 
 before = listing()
 (args.out / 'isolation-before.json').write_text(json.dumps(before, indent=2) + '\n')
-command = ['go', 'test', './cmd/attn', '-run', 'TestSSH|TestBridgeExits|TestLegacyBridgeAddress|TestOutpostUpdateNames', '-count=1', '-v']
+command = ['go', 'test', './cmd/attnd', '-run', 'TestSSH|TestBridgeExits|TestLegacyBridgeAddress|TestOutpostUpdateNames', '-count=1', '-v']
 with (args.out / 'stack.log').open('w') as output:
     result = subprocess.run(command, stdout=output, stderr=subprocess.STDOUT)
 after = listing()

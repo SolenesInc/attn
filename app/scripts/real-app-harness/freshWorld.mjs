@@ -1,7 +1,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { appDaemonInTree, appPlatform } from './platform.mjs';
+import { appCliInTree, appPlatform } from './platform.mjs';
 import {
   bundleIdentifierForInstance,
   currentHarnessInstance,
@@ -37,7 +37,7 @@ export function assertFreshWorldTargetSafe({ instance, appPath } = {}) {
 }
 
 function attnBinaryPath(appPath) {
-  return appDaemonInTree(appPath);
+  return appCliInTree(appPath);
 }
 
 function ptyHostBinaryPath(appPath) {

@@ -24,4 +24,4 @@ tests=$(rg --no-filename '^func Test' \
   | sed -E 's/^func (Test[^ (]+).*/\1/' | paste -sd '|' -)
 go test -v ./internal/daemon -run "^($tests)$" -count=1
 go test ./internal/sessionmonitor ./internal/sessioncost
-go test -v ./cmd/attn -run '^(TestAgentPeekShowsASessionWithoutInterruptingIt|TestSessionTranscriptAndInstructionsReadTheTargetConversation|TestStateExplainReplaysEachClaimAndWhatBecameOfIt|TestSessionSnoozeCLIShowsBatchDeadlinesAndUnsnoozes|TestAnAgentOpensAndSettlesItsOwnTurnFromItsSession|TestAnAgentVentsOncePerTurnAndWithdrawsWithoutWritingTheOutbox)$' -count=1
+go test -v ./cmd/attnd -run '^(TestAgentPeekShowsASessionWithoutInterruptingIt|TestSessionTranscriptAndInstructionsReadTheTargetConversation|TestStateExplainReplaysEachClaimAndWhatBecameOfIt|TestSessionSnoozeCLIShowsBatchDeadlinesAndUnsnoozes|TestAnAgentOpensAndSettlesItsOwnTurnFromItsSession|TestAnAgentVentsOncePerTurnAndWithdrawsWithoutWritingTheOutbox)$' -count=1

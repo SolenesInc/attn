@@ -1,0 +1,4 @@
+kind: changed
+area: CLI
+change: attn is now a small native program that starts the Go program, renamed attnd, which installs beside it. Commands behave as before.
+notes: Releases ship attn-linux-* and attnd-linux-*. An attn found without attnd beside it names the path it searched. The Linux Rust binaries now link against glibc 2.28.

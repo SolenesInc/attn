@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
-import { appBuildIdentityInTree, appDaemonInTree } from './platform.mjs';
+import { appBuildIdentityInTree, appCliInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
@@ -67,7 +67,7 @@ function resolveDaemonBinaryPathSync({ appPath, launchEnv = null }) {
   const overridePath = launchEnv && typeof launchEnv === 'object'
     ? launchEnv.ATTN_DAEMON_BINARY
     : undefined;
-  const bundledPath = appDaemonInTree(appPath);
+  const bundledPath = appCliInTree(appPath);
   const explicitPath = typeof overridePath === 'string' && overridePath.trim() !== ''
     ? overridePath.trim()
     : (typeof process.env.ATTN_DAEMON_BINARY === 'string' && process.env.ATTN_DAEMON_BINARY.trim() !== ''

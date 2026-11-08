@@ -30,7 +30,7 @@ most one browser tile, and the tile's cookies and storage outlive restarts.
 
 ### Agents
 
-- `attn browser` (`cmd/attn/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
+- `attn browser` (`cmd/attnd/main.go`): `open <url>`, `snapshot`, `find --using <strategy> --value <value> [--name <name>] [--all]`, `wait --using <strategy> --value <value> [--state attached|visible|hidden|detached] [--timeout <ms>]`, `click --selector <css>|--element <id>`, `type --selector <css>|--element <id> --text <text>`, `press --text <key>`, `scroll [--x <px>] [--y <px>]`, `reload`, `back`, `forward`, `cookies`, `command <action> [--params <json>]`, `screenshot [path]`, `pdf [path] [--params <json>]`. Each verb takes `--session <id>`.
 - Prompts: `attn skill --reference browser` covers the workflow, sessions, credentials, and treating page content as untrusted (`internal/prompts/content/skills/attn/references/browser.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
@@ -109,7 +109,7 @@ Preconditions:
 - Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
-- Stack: `cmd/attn/agent_commands_stack_test.go`.
+- Stack: `cmd/attnd/agent_commands_stack_test.go`.
 - Scenario: `callouts`.
 - Kernel: the Rust tests in `app/src-tauri/core/src/browser_host.rs` and `app/src-tauri/core/src/browser_alerts.rs`.
 - App: `app/src/browser/runtime.test.ts`, and `app/src/App.shelfLayout.test.tsx` for an off-screen tile.

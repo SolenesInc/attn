@@ -74,7 +74,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/profiles_protocol_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/garden_profile*_wire_test.go`, `internal/daemon/chief_profiles_wire_test.go`.
-- Stack: `cmd/attn/automation_profile_stack_test.go`.
+- Stack: `cmd/attnd/automation_profile_stack_test.go`.
 - Scenario: `profile-lifecycle`, `garden-profile-scope`, `desktop-migration`.
 - Kernel: `internal/profilemigration/*_test.go`, `internal/store/profile*_test.go`.
 - App: `app/src/App.migrationPicker.test.tsx`, `app/src/components/ProfileSwitcher.keyboard.test.tsx`, `app/src/components/MigrationPicker/MigrationPicker.flow.test.tsx`, `app/src/utils/selectedProfile.test.ts`, `app/src/hooks/useDaemonSocket.profiles.test.tsx`, `app/src/components/ledger/SessionsTab.profiles.test.tsx`.

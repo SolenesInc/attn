@@ -34,10 +34,10 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 
 ### Agents
 
-- `attn skill` (`cmd/attn/skill.go`): no flag prints the attn map, `--list` names the references, `--reference <name>` prints that reference.
+- `attn skill` (`cmd/attnd/skill.go`): no flag prints the attn map, `--list` names the references, `--reference <name>` prints that reference.
 - The attn map names wrapping up and closing yourself, and the wrap-up reference also covers "can I close you?". The routine is `attn skill --reference wrap-up`. `converse-and-observe` also points to the routine and names `attn agent close --self -m "reason"`.
-- `attn prompts` (`cmd/attn/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
-- `attn presence` (`cmd/attn/main.go`), which tells a shell whether it runs inside attn.
+- `attn prompts` (`cmd/attnd/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
+- `attn presence` (`cmd/attnd/main.go`), which tells a shell whether it runs inside attn.
 - `attn --help` and each verb's help, which the attn map names as the authority for syntax.
 - Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md`, then `internal/prompts/content/session/attn-map.md`, then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/session/queue.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The references are in `internal/prompts/content/skills/attn/references/`.
 
@@ -92,9 +92,9 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/agent_guidance_wire_test.go`, `internal/daemon/agent_skill_wire_test.go`, `internal/daemon/attn_skill_install_wire_test.go`, `internal/daemon/settings_skill_read_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`.
-- Stack: `cmd/attn/skill_stack_test.go`, `cmd/attn/prompts_stack_test.go`.
+- Stack: `cmd/attnd/skill_stack_test.go`, `cmd/attnd/prompts_stack_test.go`.
 - Scenario: `prompt-composition`.
-- Kernel: `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attn/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
+- Kernel: `internal/prompts/*_test.go`, `cmd/prompt-editor/*_test.go`, `cmd/attnd/prompt_compatibility_test.go`, `internal/*/prompt_compatibility_test.go`.
 - App: `app/src/prompts/render.compatibility.test.ts`.
 
 ## Gotchas

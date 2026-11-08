@@ -37,14 +37,14 @@ paired program sends with `attn send` without the panel or the setting.
 
 ### Programs
 
-- `attn send pair --name <name> [--json]` asks the user to pair the program and waits for the approval dialog. It prints the code, then a token once (`cmd/attn/send.go`, `internal/daemon/senders.go`).
+- `attn send pair --name <name> [--json]` asks the user to pair the program and waits for the approval dialog. It prints the code, then a token once (`cmd/attnd/send.go`, `internal/daemon/senders.go`).
 - `attn send <session> --token-stdin [--file <path>]... [-m <text>] [--json]` uploads the files and sends the capture to that session. Without a paired sender's token, the daemon refuses.
 - `attn send sessions --token-stdin [--json]` lists the live agent sessions of the sender's profile, never a shell, with `last_focused_at`, which `terminal_focus` records (`internal/daemon/senders.go`).
 - `attn send senders [--profile <name|id>] [--json]` and `attn send unpair <name|id> [--profile <name|id>]` list and remove one profile's paired senders.
 
 ### Agents
 
-- `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`cmd/attn/agent_attachment.go`). Agents never send a quick capture. They receive one.
+- `attn agent attachment <capture-id> <attachment-id> --out <path>` saves a file the user attached (`cmd/attnd/agent_attachment.go`). Agents never send a quick capture. They receive one.
 - Prompts: the quick capture guidance in the session instructions of the chief and crew members launched while quick capture is on, and of no other agent (`internal/prompts/content/session/quick-capture.md`). The typed message and its file lines are in `session/quick-capture-item.md`, `quick-capture-file.md`, and `quick-capture-file-saved.md`.
 
 ### Triggers
@@ -114,7 +114,7 @@ EOF
 ## Tests
 
 - Wire: `internal/daemon/quick_captures_wire_test.go`.
-- Stack: `cmd/attn/quick_captures_stack_test.go`, `cmd/attn/send_stack_test.go` (pairing, sending to a local and an outpost session, unpair), `app/e2e/quick-capture-history.spec.ts`.
+- Stack: `cmd/attnd/quick_captures_stack_test.go`, `cmd/attnd/send_stack_test.go` (pairing, sending to a local and an outpost session, unpair), `app/e2e/quick-capture-history.spec.ts`.
 - Scenario: `quick-capture`.
 - App: `app/src/App.quickCapture.test.tsx`.
 

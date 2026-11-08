@@ -9,7 +9,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { dataDirForInstance, instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 import { captureScreenshotData, setFrontWindowBounds } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -205,7 +205,7 @@ async function main() {
   const instance = instanceForAppPath(options.appPath);
   const dataDir = dataDirForInstance(instance);
   const dbPath = path.join(dataDir, 'attn.db');
-  const daemonBinary = appDaemonInTree(options.appPath);
+  const daemonBinary = appCliInTree(options.appPath);
   const snapshotPath = path.join(runner.runDir, 'attn-before-migration.db');
   const client = new UiAutomationClient({ appPath: options.appPath });
   const driver = createWindowDriver({ appPath: options.appPath, client });

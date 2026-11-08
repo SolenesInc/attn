@@ -10,7 +10,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appCliInTree, delay } from './platform.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -23,7 +23,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('PTY host Settings verification requires a named, non-production instance');
   const dataDir = dataDirForInstance(instance);
-  const daemonBinary = appDaemonInTree(options.appPath);
+  const daemonBinary = appCliInTree(options.appPath);
   const ptyHostBinary = path.join(path.dirname(daemonBinary), 'attn-pty-host');
   const runner = createScenarioRunner(options, {
     scenarioId: 'PTY-HOST-SETTING', tier: 'tier1-local-shell', prefix: 'pty-host-setting',

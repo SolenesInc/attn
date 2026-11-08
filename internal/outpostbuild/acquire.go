@@ -28,8 +28,9 @@ type Request struct {
 }
 
 type Binaries struct {
-	Attn string
-	Host string
+	Attn  string
+	Attnd string
+	Host  string
 }
 
 func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, error) {
@@ -51,8 +52,8 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return Binaries{}, err
 	}
-	cached := Binaries{Attn: filepath.Join(dir, "attn"), Host: filepath.Join(dir, ptyhost.BinaryName)}
-	if nonEmptyFile(cached.Attn) && nonEmptyFile(cached.Host) {
+	cached := binariesIn(dir)
+	if nonEmptyFile(cached.Attn) && nonEmptyFile(cached.Attnd) && nonEmptyFile(cached.Host) {
 		return cached, req.prune(key, arch)
 	}
 	staging, err := os.MkdirTemp(dir, ".build-*")
@@ -60,7 +61,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 		return Binaries{}, err
 	}
 	defer os.RemoveAll(staging)
-	staged := Binaries{Attn: filepath.Join(staging, "attn"), Host: filepath.Join(staging, ptyhost.BinaryName)}
+	staged := binariesIn(staging)
 	switch req.Channel {
 	case "release":
 		phase("downloading")
@@ -75,10 +76,17 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	if err := os.Rename(staged.Host, cached.Host); err != nil {
 		return Binaries{}, err
 	}
+	if err := os.Rename(staged.Attnd, cached.Attnd); err != nil {
+		return Binaries{}, err
+	}
 	if err := os.Rename(staged.Attn, cached.Attn); err != nil {
 		return Binaries{}, err
 	}
 	return cached, req.prune(key, arch)
+}
+
+func binariesIn(dir string) Binaries {
+	return Binaries{Attn: filepath.Join(dir, "attn"), Attnd: filepath.Join(dir, "attnd"), Host: filepath.Join(dir, ptyhost.BinaryName)}
 }
 
 func nonEmptyFile(path string) bool {
@@ -88,6 +96,9 @@ func nonEmptyFile(path string) bool {
 
 func (req Request) download(ctx context.Context, arch string, staged Binaries) error {
 	release := strings.TrimRight(req.ReleaseSource, "/") + "/v" + strings.TrimPrefix(req.Build.Version, "v") + "/"
+	if err := downloadBinary(ctx, release+"attnd-linux-"+arch, staged.Attnd); err != nil {
+		return err
+	}
 	if err := downloadBinary(ctx, release+"attn-linux-"+arch, staged.Attn); err != nil {
 		return err
 	}
@@ -157,7 +168,7 @@ func (req Request) build(ctx context.Context, arch, staging string, staged Binar
 	} else if !strings.HasPrefix(req.Build.SourceFingerprint, "tree:") {
 		return fmt.Errorf("source fingerprint %q names neither a git commit nor a worktree", req.Build.SourceFingerprint)
 	}
-	buildArgs := []string{"build", "GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=1", "CC=zig cc -target " + zigTarget, "CXX=zig c++ -target " + zigTarget, "OUTPUT=" + staged.Attn, "VERSION=" + req.Build.Version, "CHANNEL=source", "SOURCE_FINGERPRINT=" + req.Build.SourceFingerprint, "REPOSITORY_PATH=" + repo}
+	buildArgs := []string{"build", "GOOS=linux", "GOARCH=" + arch, "CGO_ENABLED=1", "CC=zig cc -target " + zigTarget, "CXX=zig c++ -target " + zigTarget, "OUTPUT=" + staged.Attn, "CLI_TARGET=" + rustTarget, "VERSION=" + req.Build.Version, "CHANNEL=source", "SOURCE_FINGERPRINT=" + req.Build.SourceFingerprint, "REPOSITORY_PATH=" + repo}
 	if gitCommit != "" {
 		buildArgs = append(buildArgs, "GIT_COMMIT="+gitCommit)
 	}

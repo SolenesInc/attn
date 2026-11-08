@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appCliInTree, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint } from './perfMeasure.mjs';
 import { MOCK_AGENT_MODEL } from './mockAgent.mjs';
 
@@ -22,7 +22,7 @@ const observer = new DaemonObserver(options);
 const root = '[data-testid="delegation-settings"]';
 const toggle = '.settings-content-head [role="switch"][aria-label="Delegation preferences"]';
 const popover = 'dialog[aria-label="Choose a model"]';
-const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPathForInstance(instance) }) });
+const runAttn = args => execFileSync(appCliInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPathForInstance(instance) }) });
 const roles = () => JSON.parse(runAttn(['delegate', 'roles', '--json']));
 const click = selector => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });

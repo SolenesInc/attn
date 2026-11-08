@@ -166,6 +166,7 @@ describeWithBinary('single authority (attn instance resolve)', () => {
       expect(resources.appPath).toBe(r.appPath);
       expect(resources.appExecutable).toBe(r.appExecutable);
       expect(resources.appDaemon).toBe(r.appDaemon);
+      expect(resources.appCli).toBe(r.appCli);
       expect(resources.appLocalDataDir).toBe(r.appLocalDataDir);
       expect(resources.wsPort).toBe(Number(r.wsPort));
       expect(resources.socket).toBe(r.socket);

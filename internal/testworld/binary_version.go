@@ -29,7 +29,7 @@ func buildAttnAt(version, channel, releaseSource, snapshotFormat string) (string
 	if processDir == "" {
 		return "", fmt.Errorf("testworld.AttnBinaryAt builds into the process directory that testworld.Main creates; call it from TestMain")
 	}
-	binary := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(version+channel+releaseSource+snapshotFormat))))
+	dir := filepath.Join(processDir, "bin", fmt.Sprintf("attn-%x", sha256.Sum256([]byte(version+channel+releaseSource+snapshotFormat))))
 	fingerprint := "unknown"
 	if channel != "unknown" {
 		fingerprint = "git:" + version
@@ -38,11 +38,7 @@ func buildAttnAt(version, channel, releaseSource, snapshotFormat string) (string
 	if snapshotFormat != "" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + snapshotFormat
 	}
-	build := exec.Command("go", "build", "-ldflags", ldflags, "-o", binary, "github.com/victorarias/attn/cmd/attn")
-	if output, err := build.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("build attn %s: %w\n%s", version, err, output)
-	}
-	return binary, nil
+	return buildPair(dir, ldflags)
 }
 
 func (s *Stack) InstallsOnOutposts(attn, host string) {
@@ -93,6 +89,9 @@ func (s *Stack) InstallBuild(attn, host string) {
 		s.T.Fatal(err)
 	}
 	installed := filepath.Join(dir, "attn")
+	if daemon := filepath.Join(filepath.Dir(attn), "attnd"); isFile(daemon) {
+		replaceFile(s.T, daemon, filepath.Join(dir, "attnd"))
+	}
 	replaceFile(s.T, attn, installed)
 	if host != "" {
 		replaceFile(s.T, host, filepath.Join(dir, ptyhost.BinaryName))

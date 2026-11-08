@@ -19,7 +19,7 @@ Claude Code, whatever harness the agent runs in, and never touches the daemon.
 
 ### Agents
 
-- `attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]` (`cmd/attn/vision_check.go`).
+- `attn vision-check <image> <question> [--model sonnet] [--timeout 120s] [--json]` (`cmd/attnd/vision_check.go`).
 - Prompts: none. Agents find the verb in `attn --help`.
 
 ## Driving it
@@ -56,7 +56,7 @@ printf 'PNG pixels' > $P/shot.png
 
 ## Tests
 
-- Stack: `cmd/attn/vision_check_stack_test.go`.
+- Stack: `cmd/attnd/vision_check_stack_test.go`.
 
 ## Gotchas
 

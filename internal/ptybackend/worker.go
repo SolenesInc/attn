@@ -207,15 +207,11 @@ func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerB
 			cfg.BinaryPath = "attn-pty-host"
 		}
 	} else if !binaryPathExplicit {
-		if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
-			cfg.BinaryPath = wrapperPath
-		} else {
-			exe, err := os.Executable()
-			if err != nil {
-				return nil, fmt.Errorf("resolve worker executable: %w", err)
-			}
-			cfg.BinaryPath = exe
+		exe, err := os.Executable()
+		if err != nil {
+			return nil, fmt.Errorf("resolve worker executable: %w", err)
 		}
+		cfg.BinaryPath = exe
 	}
 	if cfg.Logf == nil {
 		cfg.Logf = func(string, ...interface{}) {}
@@ -285,16 +281,13 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 	}
 	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
 
-	candidates := make([]string, 0, 4)
-	if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
-		candidates = append(candidates, wrapperPath)
-	}
+	candidates := make([]string, 0, 3)
 	home, _ := os.UserHomeDir()
 	if home != "" {
-		candidates = append(candidates, filepath.Join(home, ".local", "bin", "attn"))
+		candidates = append(candidates, filepath.Join(home, ".local", "bin", "attnd"))
 	}
-	candidates = append(candidates, bundledAttnCandidates(home)...)
-	if path, err := exec.LookPath("attn"); err == nil && path != "" {
+	candidates = append(candidates, bundledDaemonCandidates(home)...)
+	if path, err := exec.LookPath("attnd"); err == nil && path != "" {
 		candidates = append(candidates, path)
 	}
 
@@ -330,7 +323,7 @@ func sharedHostBinaryCandidates() []string {
 			filepath.Join(home, ".local", "bin", ptyhost.BinaryName),
 		)
 	}
-	for _, daemonBinary := range bundledAttnCandidates(home) {
+	for _, daemonBinary := range bundledDaemonCandidates(home) {
 		candidates = append(candidates, filepath.Join(filepath.Dir(daemonBinary), ptyhost.BinaryName))
 	}
 	if path, err := exec.LookPath(ptyhost.BinaryName); err == nil {
@@ -348,13 +341,13 @@ func firstExecutable(candidates []string) string {
 	return ""
 }
 
-func bundledAttnCandidates(home string) []string {
+func bundledDaemonCandidates(home string) []string {
 	candidates := []string{config.AppDaemonBinaryForInstance(config.Instance())}
 	if runtime.GOOS == "darwin" {
 		if strings.TrimSpace(home) != "" {
-			candidates = append(candidates, filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", "attn"))
+			candidates = append(candidates, filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", "attnd"))
 		}
-		candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", "attn"))
+		candidates = append(candidates, filepath.Join(string(filepath.Separator), "Applications", "attn.app", "Contents", "MacOS", "attnd"))
 	}
 	unique := make([]string, 0, len(candidates))
 	seen := map[string]bool{}

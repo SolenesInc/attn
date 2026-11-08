@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -70,7 +70,7 @@ const observePendingWait = selector => {
 };
 const cli = async (...args) => {
   try {
-    const result = await exec(appDaemonInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
+    const result = await exec(appCliInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
     receipts.push({ args, ...result });
     return result.stdout;
   } catch (error) {

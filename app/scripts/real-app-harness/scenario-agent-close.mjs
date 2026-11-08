@@ -11,7 +11,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appCliInTree, delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import {
   waitForFirstDesktopPane,
@@ -107,7 +107,7 @@ async function main() {
   }
 
   const instance = currentHarnessInstance();
-  const daemonBinary = appDaemonInTree(options.appPath);
+  const daemonBinary = appCliInTree(options.appPath);
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
   const runner = createScenarioRunner(options, {

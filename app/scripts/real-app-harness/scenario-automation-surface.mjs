@@ -13,7 +13,7 @@ import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { fileURLToPath } from 'node:url';
 import { pressShortcutKeys, shownAgentId } from './common.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
 import { workInFolder } from './workedFolder.mjs';
@@ -189,7 +189,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('automation surface scenario requires a named non-production instance');
   const resources = resolveHarnessResources(instance);
-  const binary = appDaemonInTree(resources.appPath);
+  const binary = appCliInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SURFACE',
     allowRealAgents: false,

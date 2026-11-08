@@ -10,6 +10,7 @@
 # Inputs (env):
 #   INSTANCE                  instance name ("" = default/prod)
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
+#   ATTND_BIN                path to the freshly built attnd binary (sidecar)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
 #   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
@@ -32,6 +33,7 @@ if [ -n "$demo" ] && [ -z "$instance" ]; then
   exit 1
 fi
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
+attnd="${ATTND_BIN:?ATTND_BIN (path to built attnd binary) is required}"
 pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
 : "${VERSION:?VERSION is required}"
 : "${SOURCE_FINGERPRINT:?SOURCE_FINGERPRINT is required}"
@@ -76,6 +78,7 @@ if [ -z "$host_triple" ]; then
   exit 1
 fi
 mkdir -p app/src-tauri/binaries
+cp "$attnd" "app/src-tauri/binaries/attnd-${host_triple}"
 cp "$attn" "app/src-tauri/binaries/attn-${host_triple}"
 cp "$pty_host" "app/src-tauri/binaries/attn-pty-host-${host_triple}"
 
@@ -145,6 +148,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   rm -rf "$tree_dir"
   mkdir -p "${tree_dir}/bin" "${tree_dir}/resources"
   cp "${target_dir}/${cargo_profile}/app" "${tree_dir}/bin/attn-app"
+  cp "$attnd" "${tree_dir}/bin/attnd"
   cp "$attn" "${tree_dir}/bin/attn"
   cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
   write_build_identity "${tree_dir}/resources/build-identity.json"
@@ -169,6 +173,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
   while IFS= read -r executable; do
     codesign --force --sign "$identity" "$executable"
   done < <(find "${bundle_dir}/Contents/Resources/plugins" -type f -perm -111 2>/dev/null | sort)
+  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attnd"
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
   codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
   codesign --force --sign "$identity" "${bundle_dir}"

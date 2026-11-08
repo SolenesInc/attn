@@ -31,7 +31,7 @@ harness's logo.
 
 ### Agents
 
-- `attn plugin install --path <dir>`, `link --path <dir>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attn/plugin.go`), each printing JSON.
+- `attn plugin install --path <dir>`, `link --path <dir>`, `list`, `uninstall <name>` and `remove <name>` (`cmd/attnd/plugin.go`), each printing JSON.
 - `attn settings get|set` for `new_session_agent`, `claude_executable`, `codex_executable` and `sidebar_harness_logos_enabled` ([settings.md](settings.md)).
 - Prompts: a plugin driver that asks for launch instructions gets the same agent or chief guidance as the other harnesses (`internal/daemon/plugin_launch_instructions.go`). See [agent-guidance.md](agent-guidance.md) for what attn tells every harness.
 
@@ -71,7 +71,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`.
-- Stack: `cmd/attn/plugin_stack_test.go`, `cmd/attn/plugin_runtime_stack_test.go`, `cmd/attn/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`.
+- Stack: `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`.
 - Scenario: `agent-settings`, `claude-shared-conversation`.
 - Kernel: `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
 - App: `app/src/components/Sidebar.harnessIcons.test.tsx`, `app/src/App.modelTierSettings.test.tsx`.

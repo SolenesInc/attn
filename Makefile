@@ -10,6 +10,7 @@ export GOFLAGS := $(shell go env GOFLAGS) -trimpath
 export CGO_CFLAGS := $(shell cat go-cgo-cflags)
 
 BINARY_NAME=attn
+DAEMON_BINARY_NAME=attnd
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every
 # other instance's app path / bundle id / port is derived at build+install time
 # from the single authority (`attn instance resolve`), never hardcoded here.
@@ -42,7 +43,7 @@ INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATT
 # but the shell it ran from still points somewhere else — say so, because every
 # other attn command in that shell will refuse (config.ValidateInstanceRouting).
 WARN_LEAKED_ROUTING = leaked=""; for var in $(INSTANCE_ROUTING_VARS); do if printenv "$$var" >/dev/null; then leaked="$$leaked $$var"; fi; done; if [ -n "$$leaked" ]; then echo ">>> ignoring inherited routing env for this install:$$leaked"; echo ">>> this shell still routes elsewhere — select the instance with attn instance-env"; fi
-BUILD_DIR=./cmd/attn
+BUILD_DIR=./cmd/attnd
 VERSION ?= $(shell bash ./scripts/version.sh)
 CHANNEL ?= source
 RELEASE_SOURCE ?= https://github.com/victorarias/attn/releases/download
@@ -55,6 +56,8 @@ GIT_COMMIT ?= $(shell bash ./scripts/source-fingerprint.sh --field commit)
 # the same script, so a bundle's worker and app agree by construction.
 SNAPSHOT_FORMAT ?= $(shell bash ./scripts/snapshot-format.sh)
 OUTPUT ?= $(BINARY_NAME)
+DAEMON_OUTPUT ?= $(dir $(OUTPUT))$(DAEMON_BINARY_NAME)
+CLI_TARGET ?=
 # Guards the macOS-only branches below (code signing, the lsof port check). It
 # was used by three recipes and defined by none, so `$(UNAME_S)` expanded to
 # empty and `install-daemon` skipped signing entirely: the copied binary kept its
@@ -110,7 +113,8 @@ git-hooks:
 	git config core.hooksPath .githooks || [ "$$(git config --get core.hooksPath)" = .githooks ]
 
 build: git-hooks generate-prompts $(NATIVE_VT_DEP)
-	go build -ldflags "$(GO_LDFLAGS)" -o "$(OUTPUT)" $(BUILD_DIR)
+	go build -ldflags "$(GO_LDFLAGS)" -o "$(DAEMON_OUTPUT)" $(BUILD_DIR)
+	bash ./scripts/rust-cli.sh build --out "$(OUTPUT)"$(if $(CLI_TARGET), --target $(CLI_TARGET))
 
 PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
 
@@ -124,19 +128,19 @@ build-pty-host: pty-host/Cargo.toml pty-host/Cargo.lock pty-host/build.rs $(wild
 # sub-make command line exports them, so the sub-make's `go env` resolves the
 # Linux archive dependency (download-first) before the cross cgo link.
 build-linux-amd64: build-pty-host-linux-amd64
-	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=1 \
+	$(MAKE) build GOOS=linux GOARCH=amd64 CGO_ENABLED=1 CLI_TARGET=x86_64-unknown-linux-gnu \
 		CC='$(ZIG) cc -target x86_64-linux-gnu' \
 		CXX='$(ZIG) c++ -target x86_64-linux-gnu'
 
 build-linux-arm64: build-pty-host-linux-arm64
-	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=1 \
+	$(MAKE) build GOOS=linux GOARCH=arm64 CGO_ENABLED=1 CLI_TARGET=aarch64-unknown-linux-gnu \
 		CC='$(ZIG) cc -target aarch64-linux-gnu' \
 		CXX='$(ZIG) c++ -target aarch64-linux-gnu'
 
 build-pty-host-linux-amd64: third_party/ghostty-vt/linux_amd64/lib/libghostty-vt.a
 	@mkdir -p dist/pty-host/linux_amd64
 	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' \
-		ATTN_RUST_LINK_TARGET=x86_64-linux-gnu \
+		ATTN_RUST_LINK_TARGET=x86_64-linux-gnu.2.28 \
 		CC_x86_64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-linker.sh' \
 		AR_x86_64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-ar.sh' \
 		CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER='$(CURDIR)/scripts/rust-zig-linker.sh' \
@@ -146,7 +150,7 @@ build-pty-host-linux-amd64: third_party/ghostty-vt/linux_amd64/lib/libghostty-vt
 build-pty-host-linux-arm64: third_party/ghostty-vt/linux_arm64/lib/libghostty-vt.a
 	@mkdir -p dist/pty-host/linux_arm64
 	ATTN_PTY_HOST_SNAPSHOT_FORMAT='$(SNAPSHOT_FORMAT)' \
-		ATTN_RUST_LINK_TARGET=aarch64-linux-gnu \
+		ATTN_RUST_LINK_TARGET=aarch64-linux-gnu.2.28 \
 		CC_aarch64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-linker.sh' \
 		AR_aarch64_unknown_linux_gnu='$(CURDIR)/scripts/rust-zig-ar.sh' \
 		CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER='$(CURDIR)/scripts/rust-zig-linker.sh' \
@@ -210,7 +214,7 @@ test-frontend: $(APP_NODE_MODULES)
 
 # The Chief: every Go and frontend test whose name mentions the chief
 test-chief: $(NATIVE_VT_DEP) $(APP_NODE_MODULES)
-	./scripts/test-go.sh --packages -run '[Cc]hief' -count=1 ./internal/... ./cmd/attn/...
+	./scripts/test-go.sh --packages -run '[Cc]hief' -count=1 ./internal/... ./cmd/attnd/...
 	cd app && pnpm run test -t '[Cc]hief'
 
 lint: lint-go lint-frontend
@@ -232,7 +236,7 @@ lint-go: $(NATIVE_VT_DEP)
 	if printf '%s\n' "$$deps" | grep -E '/internal/(testworld|fakeagent)$$'; then \
 		echo "the shipped binaries must not import the test worlds listed above" >&2; exit 1; \
 	fi
-	@deps=$$(go list -deps ./cmd/attn) || exit 1; \
+	@deps=$$(go list -deps ./cmd/attnd) || exit 1; \
 	if printf '%s\n' "$$deps" | grep -E '^github.com/(santhosh-tekuri/jsonschema|prometheus)/'; then \
 		echo "attn must not link the packages listed above: every CLI command and agent hook pays for their init on every start" >&2; exit 1; \
 	fi
@@ -334,8 +338,11 @@ install-daemon: ensure-codesign-identity build build-pty-host
 	echo ">>> Updating $$label daemon at $$app_binary"; \
 	: "Rename, not overwrite: Linux refuses to write a running executable"; \
 	: "(ETXTBSY), while a rename leaves the running inode alone."; \
-	cp $(OUTPUT) "$$app_binary.new"; \
+	cp "$(DAEMON_OUTPUT)" "$$app_binary.new"; \
 	mv -f "$$app_binary.new" "$$app_binary"; \
+	cli_binary="$$(dirname "$$app_binary")/attn"; \
+	cp "$(OUTPUT)" "$$cli_binary.new"; \
+	mv -f "$$cli_binary.new" "$$cli_binary"; \
 	host_binary="$$(dirname "$$app_binary")/attn-pty-host"; \
 	cp "$(CURDIR)/$(PTY_HOST_BINARY)" "$$host_binary.new"; \
 	mv -f "$$host_binary.new" "$$host_binary"; \
@@ -344,6 +351,7 @@ install-daemon: ensure-codesign-identity build build-pty-host
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \
 		if [ -z "$$identity" ]; then identity="-"; fi; \
 		codesign --force --sign "$$identity" "$$app_binary"; \
+		codesign --force --sign "$$identity" "$$cli_binary"; \
 		codesign --force --sign "$$identity" "$$host_binary"; \
 		codesign --force --sign "$$identity" "$$app_bundle"; \
 	fi; \
@@ -391,7 +399,7 @@ install-window-recorder: ensure-codesign-identity
 	cd app && MACOS_CODESIGN_IDENTITY="$$identity" node scripts/real-app-harness/install-window-recorder.mjs
 
 clean:
-	rm -f $(BINARY_NAME)
+	rm -f $(BINARY_NAME) $(DAEMON_BINARY_NAME)
 
 # Type generation pipeline: TypeSpec -> JSON Schema -> go-jsonschema/quicktype
 #
@@ -509,6 +517,7 @@ check-schema:
 # empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
 build-app: ensure-codesign-identity build build-pty-host
 	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+	ATTND_BIN="$(abspath $(DAEMON_OUTPUT))" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
 		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
@@ -541,6 +550,7 @@ sign-app: ensure-codesign-identity
 		identity="$(MACOS_CODESIGN_IDENTITY)"; \
 		if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh find)"; fi; \
 		if [ -z "$$identity" ]; then identity="-"; fi; \
+		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attnd; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app/Contents/MacOS/attn-pty-host; \
 		codesign --force --sign "$$identity" ~/Applications/attn.app; \

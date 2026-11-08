@@ -15,7 +15,7 @@ import { stepClock } from './stepClock.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { waitForFirstDesktopPane, waitForPaneAttached, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -29,7 +29,7 @@ const homeClock = await stepClock(path.join(root, 'home-clock.sock'), observer.c
 const outpostClock = await stepClock(path.join(root, 'outpost-clock.sock'), observer.connectTimeoutMs);
 const client = new UiAutomationClient({ ...options, launchEnv: { ...ssh.env, ...homeClock.env } });
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const exec = promisify(execFile);
 const children = [];
 const created = [];

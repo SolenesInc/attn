@@ -57,7 +57,7 @@ try {
           message => message.event === 'runtime_respawned' && message.id === terminal,
           'CLI reload respawn',
         );
-        const { stdout } = await promisify(execFile)(resources.appDaemon,
+        const { stdout } = await promisify(execFile)(resources.appCli,
           ['agent', 'reload', session, '--source-session', session, '--json'],
           { env: instanceCliEnv(instance), encoding: 'utf8', timeout: 30_000 });
         const result = JSON.parse(stdout);

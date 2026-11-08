@@ -14,7 +14,7 @@ import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as inst
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appCliInTree, delay } from './platform.mjs';
 
 const PANEL_APPEAR_TIMEOUT_MS = 120_000;
 const REMOVAL_TIMEOUT_MS = 60_000;
@@ -178,7 +178,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('worktree surface scenario requires a named non-production instance');
   const resources = resolveHarnessResources(instance);
-  const binary = appDaemonInTree(resources.appPath);
+  const binary = appCliInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'WORKTREE-SURFACE',
     allowRealAgents: false,

@@ -184,7 +184,7 @@ jobs:
               - 'ghostty-vt-native.lock'
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
-              - 'scripts/check-pty-host-glibc.sh'
+              - 'scripts/check-binary-glibc.sh'
               - '.tool-versions'
               - '.github/actions/setup-toolchains/**'
   release-candidate:
@@ -395,6 +395,11 @@ jobs:
       - name: Start ClickHouse for the analytics tests
         run: echo "ATTN_TEST_CLICKHOUSE_URL=$(./scripts/ingest-clickhouse.sh start)" >> "$GITHUB_ENV"
 
+      - name: Ensure the attn CLI
+        uses: ./.github/actions/cache-attn-cli
+        with:
+          out: ${{ runner.temp }}/attn-cli-out/attn
+
       - name: Test
         run: |
           job_args=()
@@ -462,6 +467,11 @@ jobs:
           toolchain: stable
       - name: Ensure ghostty-vt artifacts
         uses: ./.github/actions/cache-ghostty-vt
+      - name: Ensure the attn CLI
+        uses: ./.github/actions/cache-attn-cli
+        with:
+          out: ${{ runner.temp }}/attn-cli-out/attn
+
       - name: Build host and native terminal library
         run: make build-pty-host
       - name: Install listener discovery tool
@@ -485,7 +495,7 @@ jobs:
         run: ATTN_TEST_WIRE_ON_PTY_HOST=1 ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test ./internal/daemon -run '^(TestAClientAttachingMidFloodContinuesFromItsSnapshotWithoutAGapOrARepeat|TestAPtyResizeIsEchoedOnceInStreamOrderKeepingTheCellSizeWhenPixelsAreUnusable|TestAProgramReadsThePixelGeometryOfItsLastResize|TestAPasteAProgramIsNotReadingLeavesOtherPanesResponsiveAndArrivesWhole|TestInputBeyondTheQueueLimitIsRefusedNamingTheLimit|TestEmptyInputLeavesTheTerminalTakingInput|TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft|TestADeliveryAProgramIsNotReadingFailsAndNeverArrivesLater|TestAQuickCaptureTheAgentsTerminalWillNotTakeStaysUnread|TestInputDuringADeliveryIsAnsweredWhileTheDeliveryWaitsForItsTerminal)$' -count=1
       - name: Verify shared host stack tests on macOS
         if: runner.os == 'macOS'
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestShellProgramTitleInsideHeavyOutputIsKept|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart|TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning)' -count=1
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attnd -run '^(TestInstanceClean.*SharedHost|TestBufferedEscapeSequencesKeepOutputEventsBoundedAndTheScreenExact|TestAProgramInAShellTile|TestShellProgramTitleInsideHeavyOutputIsKept|TestAgentsUseTheChosenLaunchMode|TestTheLaunchExperimentChanges|TestRestartNowLetsARunningTurnFinish|TestASharedCodexTerminalOpenedAfterADaemonRestart|TestTheSharedHostCanBeEnabledWhileGitCommandsAreRunning)' -count=1
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
@@ -625,7 +635,12 @@ jobs:
         run: |
           cd ..
           ./scripts/build-libghostty-vt.sh
-          go build -o /tmp/attn ./cmd/attn
+          go build -o /tmp/attnd ./cmd/attnd
+
+      - name: Build attn CLI
+        uses: ./.github/actions/cache-attn-cli
+        with:
+          out: /tmp/attn
 
       - name: Get Playwright version
         id: playwright-version
@@ -748,10 +763,12 @@ jobs:
         run: |
           cd ../..
           ./scripts/build-libghostty-vt.sh
-          go build -o /tmp/attn ./cmd/attn
+          go build -o /tmp/attnd ./cmd/attnd
+          scripts/rust-cli.sh build --out /tmp/attn
           make build-pty-host
           target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
           mkdir -p app/src-tauri/binaries
+          cp /tmp/attnd "app/src-tauri/binaries/attnd-${target_triple}"
           cp /tmp/attn "app/src-tauri/binaries/attn-${target_triple}"
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-${target_triple}"
           cd app/src-tauri

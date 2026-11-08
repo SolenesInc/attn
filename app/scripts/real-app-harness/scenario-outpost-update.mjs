@@ -15,7 +15,7 @@ import {
   registerNativeFailureEvidence,
 } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
@@ -33,7 +33,7 @@ const root = fs.mkdtempSync(
     'attn-update-',
   ),
 );
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const ssh = await outpostSsh(root);
 const asset = path.join(root, 'home-build');
 const hostAsset = path.join(root, 'home-host-build');
@@ -182,6 +182,7 @@ try {
       'failed first install leaves no binary',
       added,
     );
+    fs.copyFileSync(path.join(path.dirname(binary), 'attnd'), path.join(root, 'attnd'));
     fs.copyFileSync(binary, asset);
     await press('[aria-label="Close settings"]');
     await wait('[data-testid="settings-modal"]', { absent: true });

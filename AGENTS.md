@@ -15,7 +15,7 @@ as a maintainer:
 - The queue mode sorts agents into "waiting for you" or "busy" and moves the
   user to the next one after every prompt. State classification and turn
   accounting exist to serve this.
-- Linux. The daemon and CLI run on a Linux box, which is why `cmd/attn` and
+- Linux. The daemon and CLI run on a Linux box, which is why `cmd/attnd` and
   `internal/**` build on Linux.
 - The Garden is the work tracker. Agents plant, tend and harvest seeds. A seed
   is the unit of work agents hand off and work on, and the Garden keeps them

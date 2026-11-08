@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 
@@ -21,7 +21,7 @@ const resources = resolveHarnessResources(instance);
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const cliEnv = { ...instanceCliEnv(instance), ATTN_SESSION_ID: '' };
 const cli = (...args) => execFileSync(binary, args, { env: cliEnv, encoding: 'utf8' });
 const crew = () => { const output = cli('crew', 'list', '--json'); return JSON.parse(output.slice(output.indexOf('['))); };

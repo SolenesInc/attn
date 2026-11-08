@@ -8,7 +8,17 @@ import (
 	"strings"
 )
 
-const wrapperPathEnv = "ATTN_WRAPPER_PATH"
+const (
+	wrapperPathEnv = "ATTN_WRAPPER_PATH"
+	attnBinaryName = "attn"
+)
+
+func AttnBeside(daemonBinary string) string {
+	if beside, ok := FirstExecutablePath([]string{filepath.Join(filepath.Dir(daemonBinary), attnBinaryName)}); ok {
+		return beside
+	}
+	return daemonBinary
+}
 
 func ActiveAttnExecutable() string {
 	candidates := make([]string, 0, 4)
@@ -16,7 +26,7 @@ func ActiveAttnExecutable() string {
 		candidates = append(candidates, wrapperPath)
 	}
 	if executable, err := os.Executable(); err == nil && executable != "" {
-		candidates = append(candidates, executable)
+		candidates = append(candidates, filepath.Join(filepath.Dir(executable), attnBinaryName), executable)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
 		candidates = append(candidates, filepath.Join(home, ".local", "bin", "attn"))

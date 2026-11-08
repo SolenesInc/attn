@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -41,7 +41,7 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
   const driver = createWindowDriver({ client });
-  const binary = appDaemonInTree(options.appPath);
+  const binary = appCliInTree(options.appPath);
   const sessions = [];
   const openSessions = new Set();
   const seeds = [];

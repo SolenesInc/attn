@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { agentTripwireLaunchEnv } from './agentTripwire.mjs';
 import { mockGitHubLaunchEnv } from './mockGitHub.mjs';
-import { appDaemonInTree, appPlatform } from './platform.mjs';
+import { appCliInTree, appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -409,7 +409,7 @@ export class UiAutomationClient {
   }
 
   resolveDaemonBinaryPath() {
-    const bundledPath = appDaemonInTree(this.appPath);
+    const bundledPath = appCliInTree(this.appPath);
     const explicitPath = this.launchEnv && typeof this.launchEnv === 'object' && typeof this.launchEnv.ATTN_DAEMON_BINARY === 'string'
       ? this.launchEnv.ATTN_DAEMON_BINARY.trim()
       : (typeof process.env.ATTN_DAEMON_BINARY === 'string' ? process.env.ATTN_DAEMON_BINARY.trim() : '');

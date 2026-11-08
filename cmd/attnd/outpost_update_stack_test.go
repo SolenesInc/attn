@@ -359,6 +359,8 @@ func TestAReleaseHomeDownloadsTheHostWithAttnAndInstallsNothingWithoutIt(t *test
 	assets.HandleFunc("/v9.9.9/", func(w http.ResponseWriter, r *http.Request) {
 		name := filepath.Base(r.URL.Path)
 		switch {
+		case strings.HasPrefix(name, "attnd-linux-"):
+			http.ServeFile(w, r, filepath.Join(filepath.Dir(homeBinary), "attnd"))
 		case strings.HasPrefix(name, "attn-linux-"):
 			http.ServeFile(w, r, homeBinary)
 		case strings.HasPrefix(name, ptyhost.BinaryName+"-linux-") && hostBytes != nil:

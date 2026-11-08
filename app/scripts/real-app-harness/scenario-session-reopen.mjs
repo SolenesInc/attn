@@ -14,7 +14,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
@@ -102,7 +102,7 @@ async function main() {
 
   const instance = currentHarnessInstance();
   assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
-  const daemonBinary = appDaemonInTree(options.appPath);
+  const daemonBinary = appCliInTree(options.appPath);
   const dataDir = dataDirForInstance(instance);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSION-REOPEN',

@@ -54,8 +54,8 @@ sessions on a launch desktop.
 
 ### Agents
 
-- `attn terminal move [<terminal>] <desktop>` (`cmd/attn/terminal.go`): moves the caller's terminal, or a shell, or an agent below the caller in the caller's delegation chain. `<desktop>` is a digit, a name or an id. The command creates a missing numbered desktop. `attn terminal open --desktop <ref>` is in [terminals.md](terminals.md).
-- `attn crew set <member> --launch-desktop` (`cmd/attn/crew.go`) and `attn automation set <id> --launch-desktop`, `attn automation apply --file <yaml> --launch-desktop` (`cmd/attn/automation.go`).
+- `attn terminal move [<terminal>] <desktop>` (`cmd/attnd/terminal.go`): moves the caller's terminal, or a shell, or an agent below the caller in the caller's delegation chain. `<desktop>` is a digit, a name or an id. The command creates a missing numbered desktop. `attn terminal open --desktop <ref>` is in [terminals.md](terminals.md).
+- `attn crew set <member> --launch-desktop` (`cmd/attnd/crew.go`) and `attn automation set <id> --launch-desktop`, `attn automation apply --file <yaml> --launch-desktop` (`cmd/attnd/automation.go`).
 - `attn delegate --desktop` places a delegate ([delegation.md](delegation.md)), and `attn callout show desktop:<which>` points at a desktop ([callouts.md](callouts.md)).
 - Prompts: placement, reach and moves in `attn skill --reference terminal` (`internal/prompts/content/skills/attn/references/terminal.md`).
 
@@ -145,7 +145,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/desktop_*_wire_test.go`, `internal/daemon/launch_desktop_wire_test.go`, `internal/daemon/terminal_move_wire_test.go`, `internal/daemon/desktop_tiles_protocol_test.go`.
-- Stack: `cmd/attn/launch_desktop_stack_test.go`, `cmd/attn/terminal_move_stack_test.go`, `scripts/verify-terminal-move.sh`, `app/e2e/desktop-sessions.spec.ts`, `app/e2e/tile-header.spec.ts`, `app/e2e/agent-header.spec.ts`, `app/e2e/pane-focus-ring.spec.ts`, `app/e2e/split-paint.spec.ts`.
+- Stack: `cmd/attnd/launch_desktop_stack_test.go`, `cmd/attnd/terminal_move_stack_test.go`, `scripts/verify-terminal-move.sh`, `app/e2e/desktop-sessions.spec.ts`, `app/e2e/tile-header.spec.ts`, `app/e2e/agent-header.spec.ts`, `app/e2e/pane-focus-ring.spec.ts`, `app/e2e/split-paint.spec.ts`.
 - Scenario: `shelf-layout`, `title-bar`, `shelf-moves`, `shelf-drags`, `shelf-drop-beside`, `shelf-motion`, `shelf-peek`, `desktop-switching`, `desktop-order`, `desktop-splits`, `close-desktop`, `empty-desktop-keys`, `close-pane-nonblocking`, `desktop-close-one-session-keeps-selection`, `desktop-migration`, `launch-desktops`, `move-with-delegates`.
 - Kernel: `internal/layouttree/*_test.go`, `app/src/components/SessionTerminalDesktop/rowLayout.test.ts`.
 - App wire: `app/src/App.shelfLayout.test.tsx`, `app/src/App.shelfPeek.test.tsx`.

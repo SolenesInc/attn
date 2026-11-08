@@ -51,7 +51,7 @@ func buildAttnBinary(t *testing.T) string {
 		t.Fatal(err)
 	}
 	binary := filepath.Join(t.TempDir(), "attn-test-bin")
-	cmd := exec.Command("go", "build", "-o", binary, "./cmd/attn")
+	cmd := exec.Command("go", "build", "-o", binary, "./cmd/attnd")
 	cmd.Dir = repoRoot
 	output, err := cmd.CombinedOutput()
 	if err != nil {

@@ -33,7 +33,7 @@ sweep never takes it, delete a worktree now, and read what the sweep removed.
 
 ### Agents
 
-- `attn worktree` (`cmd/attn/worktree.go`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
+- `attn worktree` (`cmd/attnd/worktree.go`): `list` and `log` (with `--repo`, `--limit`, `--json`), `keep`, `unkeep`, `delete` (with `--force`) and `refresh`. None needs a session.
 - `attn delegate --new-worktree` creates the worktree a delegate works in (`--branch` with `--from`, or `--existing-branch`, and `--worktree-path`). [delegation.md](delegation.md) covers the verb.
 - What agents read: when attn removes a worktree, the daemon adds the note "attn <removed|deleted> the worktree <path> (branch <branch> of <repository>): <reason>." to the log of each seed that worked there (`internal/daemon/worktree_sweep.go`).
 
@@ -109,7 +109,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/worktree_*_wire_test.go`, `internal/daemon/worktree_wire_test.go`, `internal/daemon/plugin_worktree_wire_test.go`, `internal/daemon/delegate_checkout_wire_test.go`.
-- Stack: `cmd/attn/session_reopen_outpost_stack_test.go`.
+- Stack: `cmd/attnd/session_reopen_outpost_stack_test.go`.
 - Scenario: `worktree-surface`.
 - Kernel: `internal/git/worktree_test.go`.
 - App: `app/src/App.worktrees.test.tsx`, `app/src/components/ledger/WorktreesTab.test.tsx`, `app/src/components/NewSessionDialog/worktreeNames.test.ts`.

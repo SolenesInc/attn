@@ -39,7 +39,7 @@ Appearance.
 
 ### Agents
 
-- `attn settings` (`cmd/attn/settings.go`): `list` (with `--all` and `--json`), `get <key>` (with `--json`) and `set <key> <value>`. `set` to `""` restores the default where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
+- `attn settings` (`cmd/attnd/settings.go`): `list` (with `--all` and `--json`), `get <key>` (with `--json`) and `set <key> <value>`. `set` to `""` restores the default where the key's description allows it. A key family such as `default_model_<harness>` is set through a concrete key, such as `default_model_claude`.
 - Prompts: the attn map tells agents to read and change daemon settings with `attn settings list`, `get` and `set`, (`internal/prompts/content/session/attn-map.md`).
 
 ## Driving it
@@ -89,7 +89,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`.
-- Stack: `cmd/attn/settings_stack_test.go`, `cmd/attn/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
+- Stack: `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
 - Scenario: `focusless-native` (parked macOS native input), `agent-settings`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
@@ -100,5 +100,5 @@ Preconditions:
 - The Outposts, Phones and Analytics sections are always in the sidebar. While `outposts_enabled`, `phone_access_enabled` or `analytics.enabled` is off, `[data-testid="settings-nav-off-<section>"]` marks the section and the page below its head is dimmed and `inert`. The feature's switch, `[data-testid="settings-feature-<key>"]`, sits in the page head beside the title and reads On or Off. `bridge settings_select_section` refuses an unknown id and needs the dialog open. Like `set_setting`, it skips native input and serves only as setup.
 - `""` restores the default of a true or false setting, and of another key where its description says so. `attn settings set theme ""` is refused as an invalid theme.
 - `attn settings list` prints `profile <name>` as the scope of `notebook.root` and `notebook.root.effective` (under `--all`), and `home` or `this machine` for the rest. On an outpost, a home setting adds `set at the home`.
-- The home and machine step needs a paired outpost, which the baseline lacks. `cmd/attn/settings_outpost_stack_test.go` covers it.
+- The home and machine step needs a paired outpost, which the baseline lacks. `cmd/attnd/settings_outpost_stack_test.go` covers it.
 - Working but wrong: the app takes `theme` and `uiScale` from the daemon once. After that, `attn settings set theme` or `uiScale` from a shell or an agent changes the daemon but not the open app, and Appearance still shows the old choice until the app relaunches. The daemon accepts `uiScale` from 0.5 to 2.0, while the app uses only 0.7 to 1.5 and ignores the rest.

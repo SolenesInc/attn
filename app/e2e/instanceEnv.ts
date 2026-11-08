@@ -19,7 +19,7 @@ export function resolveAttnBinaryPath(): string {
 
   throw new Error(
     `attn binary not found. Tried: ${candidates.join(', ')}. ` +
-      `Set ATTN_E2E_BIN or build binary with 'go build -o ./attn ./cmd/attn'.`
+      `Set ATTN_E2E_BIN or build binary with 'go build -o ./attn ./cmd/attnd'.`
   );
 }
 

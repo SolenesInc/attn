@@ -11,7 +11,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 import {
   captureSessionArtifacts,
@@ -438,7 +438,7 @@ async function main() {
         const deadline = Date.now() + 5_000;
         let found = false;
         while (Date.now() < deadline) {
-          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0', '--grep', pane.runtimeId], {
+          const dump = execFileSync(appCliInTree(options.appPath), ['debug', 'input', '--tail', '0', '--grep', pane.runtimeId], {
             encoding: 'utf8', env: instanceCliEnv(instanceForAppPath(options.appPath)),
           });
           if (dump.includes(privateText)) throw new Error('Input diagnostics exposed composition text');

@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -39,7 +39,7 @@ client.request = async (action, payload = {}, ...options) => {
 const request = (action, payload) => client.request(action, payload);
 const wait = (selector, extra = {}) => request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const cli = async (...args) => {
-  const result = await exec(appDaemonInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
+  const result = await exec(appCliInTree(options.appPath), args, { env: instanceCliEnv(currentHarnessInstance()) });
   runner.log('cli', { args, ...result });
   return result.stdout;
 };

@@ -93,13 +93,13 @@ go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes"
 
-# ./cmd/attn's stack tests wait on real processes, one after another in one test
+# ./cmd/attnd's stack tests wait on real processes, one after another in one test
 # binary: 20s of a go test step that used 19 CPU-s (2026-11-04). Each shard links
 # its own binary, under 1.9 CPU-s. Five keep today's two slowest tests apart.
 # Go shares no vet in flight. Vetting in the first shard alone, which has tests
 # whenever any shard does, cost a prompt-only land 7 CPU-s; in all five, 16
 # (2026-11-05).
-stack_test_package=./cmd/attn
+stack_test_package=./cmd/attnd
 stack_test_shards=5
 
 run_go_units() {

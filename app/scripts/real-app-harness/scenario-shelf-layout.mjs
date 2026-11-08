@@ -8,7 +8,7 @@ import { PNG } from 'pngjs';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, queueDaemonSettingRestore } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { waitForPaneInputFocus, waitForPaneState, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -323,7 +323,7 @@ try {
     await focusLeaf(before[0]);
     await waitDom(`${surface()} .desktop-pane[data-pane-id="${before[1]}"]`);
     const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(firstSession) });
-    await execFileAsync(appDaemonInTree(options.appPath), ['browser', 'open', `http://127.0.0.1:${server.address().port}/`, '--session', firstSession], { env });
+    await execFileAsync(appCliInTree(options.appPath), ['browser', 'open', `http://127.0.0.1:${server.address().port}/`, '--session', firstSession], { env });
     const hostSelector = `${surface()} .browser-tile-host`;
     await waitDom(hostSelector);
     const row = await readRow();

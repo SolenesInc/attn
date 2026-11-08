@@ -10,7 +10,7 @@ fi
 
 probe_dir="$(mktemp -d)"
 trap 'rm -rf "$probe_dir"' EXIT
-go build "${race[@]}" -o "$probe_dir/attn" ./cmd/attn
+go build "${race[@]}" -o "$probe_dir/attn" ./cmd/attnd
 env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID \
   ATTN_E2E_BIN="$probe_dir/attn" \
   go test "${race[@]}" -v -count=1 "$@" ./internal/daemon -run \

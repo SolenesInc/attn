@@ -33,7 +33,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 ### Agents
 
-- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme|env` (`cmd/attn/instance.go`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cmd/attn/instance_env.go`). `attn daemon ensure|stop` and `attn version [--json]` (`cmd/attn/main.go`).
+- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme|env` (`cmd/attnd/instance.go`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cmd/attnd/instance_env.go`). `attn daemon ensure|stop` and `attn version [--json]` (`cmd/attnd/main.go`).
 - No prompt attn sends names these verbs. The agents an instance runs reach that instance with their own `attn` commands, because every terminal the instance starts carries the instance's routing: `ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest (`internal/daemon/spawn_routing.go`).
 
 ### Triggers
@@ -72,8 +72,8 @@ Preconditions:
 
 ## Tests
 
-- Stack: `cmd/attn/daemon_ensure_stack_test.go`, `cmd/attn/daemon_stop_stack_test.go`, `cmd/attn/daemon_stack_test.go`, `cmd/attn/daemon_startup_stack_test.go`, `cmd/attn/daemon_socket_stack_test.go`, `cmd/attn/pidlock_stack_test.go`, `cmd/attn/instance_env_stack_test.go`, `cmd/attn/version_stack_test.go`.
-- Kernel: `cmd/attn/instance_test.go`, `cmd/attn/instance_origin_test.go`, `cmd/attn/instance_pty_host_test.go`, `cmd/attn/instance_app_stop_test.go`, `internal/daemonctl/*_test.go`, `internal/desktopentry/*_test.go`.
+- Stack: `cmd/attnd/daemon_ensure_stack_test.go`, `cmd/attnd/daemon_stop_stack_test.go`, `cmd/attnd/daemon_stack_test.go`, `cmd/attnd/daemon_startup_stack_test.go`, `cmd/attnd/daemon_socket_stack_test.go`, `cmd/attnd/pidlock_stack_test.go`, `cmd/attnd/instance_env_stack_test.go`, `cmd/attnd/version_stack_test.go`.
+- Kernel: `cmd/attnd/instance_test.go`, `cmd/attnd/instance_origin_test.go`, `cmd/attnd/instance_pty_host_test.go`, `cmd/attnd/instance_app_stop_test.go`, `internal/daemonctl/*_test.go`, `internal/desktopentry/*_test.go`.
 - App: `app/src/App.daemonEnsure.test.tsx`, `app/src/App.instanceMismatch.test.tsx`, `app/src/App.releaseUpdates.test.tsx`.
 
 ## Gotchas

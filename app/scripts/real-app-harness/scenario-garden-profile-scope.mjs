@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -32,7 +32,7 @@ async function main() {
   const seeds = [];
   let home;
   const runAttn = async (argv, session = '') => {
-    const result = await execFileAsync(appDaemonInTree(options.appPath), argv, {
+    const result = await execFileAsync(appCliInTree(options.appPath), argv, {
       encoding: 'utf8', maxBuffer: Infinity, env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: session ? observer.terminalOf(session) : '' }),
     });
     return result.stdout;

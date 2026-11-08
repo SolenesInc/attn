@@ -419,12 +419,12 @@ done
 EOF
 chmod +x scripts/test-go.sh
 : >"$LAND_CHECK_LOG"
-scripts/landing-tests.sh --unit 'go ./internal/example TestExample' --unit 'go ./cmd/attn TestOne' --unit 'go ./cmd/attn TestTwo' >/dev/null
+scripts/landing-tests.sh --unit 'go ./internal/example TestExample' --unit 'go ./cmd/attnd TestOne' --unit 'go ./cmd/attnd TestTwo' >/dev/null
 if grep -F -- ./internal/example "$LAND_CHECK_LOG" | grep -qF -- '-vet=off'; then
   echo 'landing tests run by hand left out the vet of go test' >&2
   exit 1
 fi
-[ "$(grep -F -- ./cmd/attn "$LAND_CHECK_LOG" | grep -cvF -- '-vet=off')" = 1 ] || { echo 'expected exactly one ./cmd/attn run to keep the vet of go test' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+[ "$(grep -F -- ./cmd/attnd "$LAND_CHECK_LOG" | grep -cvF -- '-vet=off')" = 1 ] || { echo 'expected exactly one ./cmd/attnd run to keep the vet of go test' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
 : >"$LAND_CHECK_LOG"
 scripts/landing-tests.sh --no-go-vet --unit 'go ./internal/example TestExample' >/dev/null
 grep -qF -- '-vet=off' "$LAND_CHECK_LOG" || { echo '--no-go-vet kept the vet of go test' >&2; exit 1; }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -14,7 +15,7 @@ import (
 
 var (
 	attnBinary = sync.OnceValues(func() (string, error) {
-		return provideBinary("ATTN_E2E_BIN", "attn", "github.com/victorarias/attn/cmd/attn")
+		return provideAttnBinaries()
 	})
 	fakeAgentBinary = sync.OnceValues(func() (string, error) {
 		return provideBinary("ATTN_FAKEAGENT_BIN", "fakeagent", "github.com/victorarias/attn/scripts/fakeagent")
@@ -55,6 +56,40 @@ func FakeAgentBinary(t testing.TB) string {
 		t.Fatal(err)
 	}
 	return binary
+}
+
+func provideAttnBinaries() (string, error) {
+	if os.Getenv("ATTN_E2E_BIN") != "" {
+		return provideBinary("ATTN_E2E_BIN", "attn", "")
+	}
+	if _, err := provideBinary("ATTN_E2E_BIN", "attnd", "github.com/victorarias/attn/cmd/attnd"); err != nil {
+		return "", err
+	}
+	return stageCLI(filepath.Join(processDir, "bin"))
+}
+
+func stageCLI(dir string) (string, error) {
+	root, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}").Output()
+	if err != nil {
+		return "", fmt.Errorf("find the repository to build the attn CLI: %w", err)
+	}
+	cli := filepath.Join(dir, "attn")
+	script := filepath.Join(strings.TrimSpace(string(root)), "scripts", "rust-cli.sh")
+	if output, err := exec.Command("bash", script, "build", "--out", cli).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("build the attn CLI: %w\n%s", err, output)
+	}
+	return cli, nil
+}
+
+func buildPair(dir, ldflags string) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	build := exec.Command("go", "build", "-ldflags", ldflags, "-o", filepath.Join(dir, "attnd"), "github.com/victorarias/attn/cmd/attnd")
+	if output, err := build.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("build attnd in %s: %w\n%s", dir, err, output)
+	}
+	return stageCLI(dir)
 }
 
 func provideBinary(envVar, name, pkg string) (string, error) {

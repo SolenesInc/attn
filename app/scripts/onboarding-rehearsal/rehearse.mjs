@@ -11,7 +11,7 @@ import {
   dataDirForInstance,
   defaultAppPathForInstance,
 } from '../real-app-harness/harnessInstance.mjs';
-import { appDaemonInTree } from '../real-app-harness/platform.mjs';
+import { appCliInTree } from '../real-app-harness/platform.mjs';
 
 const INSTANCE = 'onboarding';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -25,7 +25,7 @@ const CODEX_HOME = path.join(TOOL_HOME, '.codex');
 const CLAUDE_LOGIN_STATE = path.join(ROOT, 'claude-login-state.json');
 const LAST_RUNS = path.join(ROOT, 'last-runs.json');
 const APP_PATH = defaultAppPathForInstance(INSTANCE);
-const ATTN = appDaemonInTree(APP_PATH);
+const ATTN = appCliInTree(APP_PATH);
 const HARNESS_ENV = /^(ATTN_|CLAUDE|CODEX_|ANTHROPIC_)/;
 const UNAVAILABLE_HARNESS = path.join(ROOT, 'harness-not-installed');
 

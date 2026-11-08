@@ -13,7 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appPlatform, createWindowDriver } from './platform.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 import { startWindowRecording, ensureWindowRecorder } from './windowRecording.mjs';
 import { instanceCliEnv, instanceForAppPath, dataDirForInstance, appLocalDataDirForInstance } from './harnessInstance.mjs';
 
@@ -75,7 +75,7 @@ const captureRecent = { webview: 'capture', selector: '[aria-label="Recent messa
 const testBinding = 'Control+Alt+B';
 const instance = instanceForAppPath(options.appPath);
 assert.ok(instance, 'Quick Capture scenarios require a named instance');
-const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
+const runAttn = args => execFileSync(appCliInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 const mailbox = `cap-${crypto.randomUUID()}`;
 const home = path.join(dataDirForInstance(instance), 'crew', mailbox);
 function saveNativeTrace(name) {
@@ -117,7 +117,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-const attn = process.env.ATTN_WRAPPER_PATH || ${JSON.stringify(appDaemonInTree(options.appPath))};
+const attn = process.env.ATTN_WRAPPER_PATH || ${JSON.stringify(appCliInTree(options.appPath))};
 const item = JSON.parse(execFileSync(attn, ['agent', 'inbox', process.argv[2], '--json'], { encoding: 'utf8' }));
 const receipts = [];
 for (const attachment of item.attachments || []) {

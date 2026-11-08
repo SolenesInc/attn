@@ -34,10 +34,10 @@ state ([agent-state.md](agent-state.md)).
 
 ### Agents
 
-- `attn preflight [--agent <name>] [--model <name>] [--effort <level>] [--app-path <path>] [--json]` (`cmd/attn/preflight.go`).
-- `attn debug ls|incidents|diagnostics|input|daemon-log` with `--tail`, `--grep` and, for the daemon log, `--since` (`cmd/attn/debug.go`).
-- `attn bus status [--json]`, `trim`, `disable <consumer>` and `enable <consumer>` (`cmd/attn/bus.go`).
-- `attn db restore [path|latest]` (`cmd/attn/db.go`).
+- `attn preflight [--agent <name>] [--model <name>] [--effort <level>] [--app-path <path>] [--json]` (`cmd/attnd/preflight.go`).
+- `attn debug ls|incidents|diagnostics|input|daemon-log` with `--tail`, `--grep` and, for the daemon log, `--since` (`cmd/attnd/debug.go`).
+- `attn bus status [--json]`, `trim`, `disable <consumer>` and `enable <consumer>` (`cmd/attnd/bus.go`).
+- `attn db restore [path|latest]` (`cmd/attnd/db.go`).
 - No prompt attn sends names these verbs. `attn --help` lists them, and the repository's `CLAUDE.md` lists them for maintainers under Diagnostics.
 
 ### Triggers
@@ -80,8 +80,8 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/bus_status_wire_test.go`, `internal/daemon/bus_health_wire_test.go`, `internal/daemon/bus_lag_wire_test.go`, `internal/daemon/bus_pin_alarm_wire_test.go`, `internal/daemon/daemon_warnings_wire_test.go`, `internal/daemon/diag_wire_test.go`, `internal/daemon/support_snapshot_wire_test.go`, `internal/daemon/backup_wire_test.go`, `internal/daemon/backup_rotation_wire_test.go`, `internal/daemon/tasks_wire_test.go`, `internal/daemon/tasks_protocol_wire_test.go`, `internal/daemon/tasks_restart_wire_test.go`.
-- Stack: `cmd/attn/debug_stack_test.go`, `cmd/attn/preflight_stack_test.go`, `cmd/attn/db_stack_test.go`, `cmd/attn/bus_stack_test.go`.
-- Kernel: `cmd/attn/bus_test.go`, `internal/daemon/bus_pin_alarm_test.go`, `internal/store/backup_test.go`, `internal/bus/*_test.go`, `internal/jobs/*_test.go`.
+- Stack: `cmd/attnd/debug_stack_test.go`, `cmd/attnd/preflight_stack_test.go`, `cmd/attnd/db_stack_test.go`, `cmd/attnd/bus_stack_test.go`.
+- Kernel: `cmd/attnd/bus_test.go`, `internal/daemon/bus_pin_alarm_test.go`, `internal/store/backup_test.go`, `internal/bus/*_test.go`, `internal/jobs/*_test.go`.
 - App: `app/src/App.diagnosticReport.test.tsx`, `app/src/App.eventBusSettings.test.tsx`, `app/src/App.backgroundTasks.test.tsx`, `app/src/application/useAppDiagnostics.test.tsx`, `app/src/components/MigrationFailureScreen.facts.test.tsx`.
 
 ## Gotchas

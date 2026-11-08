@@ -8,7 +8,7 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { sleep, waitForFirstDesktopPane, waitForPaneInputFocus, waitForPaneShellReady, waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
@@ -190,7 +190,7 @@ try {
     const shownBefore = await shownLeaves();
     await driver.typeText('echo first');
     const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(typingSession) });
-    const opened = execFileAsync(appDaemonInTree(options.appPath), ['open', planPath, '--session', typingSession], { env });
+    const opened = execFileAsync(appCliInTree(options.appPath), ['open', planPath, '--session', typingSession], { env });
     await driver.typeText('half');
     await opened;
     await driver.typeText('second');
@@ -224,7 +224,7 @@ try {
     fs.writeFileSync(planPath, '# Waiting\n\nFrom an agent on the shelf.\n');
     const owner = await sessionOf(offScreen);
     const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(owner) });
-    await execFileAsync(appDaemonInTree(options.appPath), ['open', planPath, '--session', owner], { env });
+    await execFileAsync(appCliInTree(options.appPath), ['open', planPath, '--session', owner], { env });
     const withDocument = await waitForRow((current) => current.length === row.length + 1);
     const documentLeaf = withDocument.find((id) => !row.includes(id));
     await waitForChip(documentLeaf, '.is-needs');
@@ -502,7 +502,7 @@ async function agentRunsOpen(ownerLeaf, fileName) {
   fs.writeFileSync(planPath, `# ${fileName}\n\nAn agent opened this.\n`);
   const owner = await sessionOf(ownerLeaf);
   const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(owner) });
-  await execFileAsync(appDaemonInTree(options.appPath), ['open', planPath, '--session', owner], { env });
+  await execFileAsync(appCliInTree(options.appPath), ['open', planPath, '--session', owner], { env });
 }
 
 async function agentOpensDocument(ownerLeaf, fileName) {

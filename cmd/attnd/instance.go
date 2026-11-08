@@ -84,6 +84,7 @@ type instanceResolved struct {
 	AppPath        string `json:"appPath"`
 	AppExecutable  string `json:"appExecutable"`
 	AppDaemon      string `json:"appDaemon"`
+	AppCli         string `json:"appCli"`
 	AppLocalData   string `json:"appLocalDataDir"`
 	AppLock        string `json:"appLockPath"`
 	DeepLinkScheme string `json:"deepLinkScheme"`
@@ -110,6 +111,7 @@ func resolveInstance(instance string) instanceResolved {
 		AppPath:        config.AppPathForInstance(instance),
 		AppExecutable:  config.AppExecutableForInstance(instance),
 		AppDaemon:      config.AppDaemonBinaryForInstance(instance),
+		AppCli:         config.AppCliBinaryForInstance(instance),
 		AppLocalData:   config.AppLocalDataDirForInstance(instance),
 		AppLock:        config.AppLockPathForInstance(instance),
 		DeepLinkScheme: config.DeepLinkSchemeForInstance(instance),
@@ -144,6 +146,8 @@ func (r instanceResolved) field(key string) (string, bool) {
 		return r.AppExecutable, true
 	case "appDaemon":
 		return r.AppDaemon, true
+	case "appCli":
+		return r.AppCli, true
 	case "appLocalDataDir":
 		return r.AppLocalData, true
 	case "appLockPath":
@@ -225,7 +229,7 @@ func runInstanceResolve(args []string) {
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			instanceFatal(fmt.Sprintf("unknown field %q (valid: instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
+			instanceFatal(fmt.Sprintf("unknown field %q (valid: instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appCli,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
 		}
 		fmt.Println(v)
 		return

@@ -33,7 +33,7 @@ current while the user reads it. For review notes on a markdown tile, see
 
 ### Agents
 
-- `attn open <file.md|seed-id> [--session <id>]` (`cmd/attn/main.go`): a relative path resolves against the folder `attn` runs in. The tile docks beside the caller, or beside the tile of `--session`.
+- `attn open <file.md|seed-id> [--session <id>]` (`cmd/attnd/main.go`): a relative path resolves against the folder `attn` runs in. The tile docks beside the caller, or beside the tile of `--session`.
 - Prompts: `attn skill --reference markdown` (`internal/prompts/content/skills/attn/references/markdown.md`), named in the attn map as "Show the user a markdown document" (`internal/prompts/content/session/attn-map.md`), and `attn open <plot>` in the seed craft (`internal/prompts/content/resources/seed-guide.md`).
 
 ### Triggers
@@ -88,7 +88,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`.
-- Stack: `cmd/attn/agent_commands_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`.
+- Stack: `cmd/attnd/agent_commands_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`.
 - Scenario: `markdown-opener`, `terminal-md-link`.
 - App: `app/src/App.markdownOpener.test.tsx`, `app/src/App.markdownRendering.test.tsx`, `app/src/components/MarkdownReader/*.test.*`, `app/src/components/palette/openerRank.test.ts`, `app/src/components/palette/pathMode.test.ts`, `app/src/utils/terminalMarkdown.test.ts`, `app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx`.
 

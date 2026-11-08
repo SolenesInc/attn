@@ -5,7 +5,7 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$root/scripts/lib/test-git.sh"
 daemon_package="github.com/victorarias/attn/internal/daemon"
-cli_package="github.com/victorarias/attn/cmd/attn"
+cli_package="github.com/victorarias/attn/cmd/attnd"
 shard_count="${ATTN_GO_TEST_SHARDS:-4}"
 cli_shard_count=6
 package_parallelism="${ATTN_GO_TEST_PACKAGE_PARALLELISM:-4}"
@@ -108,6 +108,21 @@ start_test_binary_build() {
   fi
 }
 
+start_attn_binaries_build() {
+  case "${ATTN_E2E_BIN:-}" in "$e2e_store"/*) return 0 ;; esac
+  if [ -n "${ATTN_E2E_BIN:-}" ]; then
+    if [ ! -x "$ATTN_E2E_BIN" ]; then
+      echo "ATTN_E2E_BIN is not executable: $ATTN_E2E_BIN" >&2
+      exit 2
+    fi
+    return 0
+  fi
+  "$go_bin" -C "$root" build -buildvcs=false -ldflags "-w -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$snapshot_format" -o "$test_root/attnd" ./cmd/attnd &
+  test_binary_builds+=("$!")
+  bash "$root/scripts/rust-cli.sh" build --out "$test_root/attn" &
+  test_binary_builds+=("$!")
+}
+
 start_pty_host_build() {
   case "${ATTN_TEST_PTY_HOST:-}" in "$e2e_store"/*) return 0 ;; esac
   if [ -n "${ATTN_TEST_PTY_HOST:-}" ]; then
@@ -122,14 +137,9 @@ start_pty_host_build() {
   ATTN_TEST_PTY_HOST="$root/pty-host/target/release/attn-pty-host"
 }
 
-store_test_binary() {
-  local env_var="$1" name="$2" source_bin="${!1:-$test_root/$2}" hash cache_dir cached_hash
-  case "$source_bin" in "$e2e_store"/*) return 0 ;; esac
+place_in_store() {
+  local source_bin="$1" cache_dir="$2" name="$3" hash cached_hash
   hash="$(shasum -a 256 "$source_bin" | awk '{ print $1 }')"
-  cache_dir="$e2e_store/$hash"
-  mkdir -p "$cache_dir"
-  touch "$cache_dir"
-  find "$e2e_store" -mindepth 1 -maxdepth 1 -type d -mmin "+$e2e_binary_idle_minutes" -exec rm -rf {} +
   cached_hash=""
   if [ -f "$cache_dir/$name" ]; then
     cached_hash="$(shasum -a 256 "$cache_dir/$name" | awk '{ print $1 }')"
@@ -139,6 +149,21 @@ store_test_binary() {
     chmod +x "$cache_dir/$name.$$.tmp"
     mv -f "$cache_dir/$name.$$.tmp" "$cache_dir/$name"
   fi
+}
+
+store_test_binary() {
+  local env_var="$1" name="$2" source_bin="${!1:-$test_root/$2}" sibling="" hash cache_dir
+  case "$source_bin" in "$e2e_store"/*) return 0 ;; esac
+  if [ "$name" = attn ] && [ -x "$(dirname "$source_bin")/attnd" ]; then
+    sibling="$(dirname "$source_bin")/attnd"
+  fi
+  hash="$(cat "$source_bin" ${sibling:+"$sibling"} | shasum -a 256 | awk '{ print $1 }')"
+  cache_dir="$e2e_store/$hash"
+  mkdir -p "$cache_dir"
+  touch "$cache_dir"
+  find "$e2e_store" -mindepth 1 -maxdepth 1 -type d -mmin "+$e2e_binary_idle_minutes" -exec rm -rf {} +
+  [ -z "$sibling" ] || place_in_store "$sibling" "$cache_dir" attnd
+  place_in_store "$source_bin" "$cache_dir" "$name"
   printf -v "$env_var" '%s' "$cache_dir/$name"
   export "${env_var?}"
 }
@@ -155,7 +180,7 @@ provide_test_binaries() {
       return 0
     fi
   done
-  start_test_binary_build ATTN_E2E_BIN attn ./cmd/attn
+  start_attn_binaries_build
   start_test_binary_build ATTN_FAKEAGENT_BIN fakeagent ./scripts/fakeagent
   start_pty_host_build
   if [ "${#test_binary_builds[@]}" -gt 0 ] && [ "${#compile_ahead[@]}" -gt 0 ]; then
@@ -294,7 +319,7 @@ run_shards() {
 }
 
 run_shards daemon "$shard_count" ./internal/daemon "$@"
-run_shards attn "$cli_shard_count" ./cmd/attn "$@"
+run_shards attn "$cli_shard_count" ./cmd/attnd "$@"
 
 failed=0
 index=0

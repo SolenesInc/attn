@@ -9,7 +9,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { ensureClaudePromptReadyViaPty } from './scenarioAgents.mjs';
 import { sleep, waitForFirstDesktopPane, waitForPaneInputFocus, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -29,7 +29,7 @@ async function main() {
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
-  const cli = (...cliArgs) => execFileSync(appDaemonInTree(options.appPath), cliArgs, {
+  const cli = (...cliArgs) => execFileSync(appCliInTree(options.appPath), cliArgs, {
     encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance()),
   });
   const label = `checkout-${runner.runId}`;

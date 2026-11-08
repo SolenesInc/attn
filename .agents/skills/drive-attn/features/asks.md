@@ -38,7 +38,7 @@ the seed. Asks are on by default, and an agent keeps the setting it launched wit
 
 ### Agents
 
-- `attn ask` (`cmd/attn/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. It reads each local image the markdown shows (resolved against the working directory, or beside `--file`) and sends the bytes with the ask; an unreadable image or more than 5 MiB of images refuses the ask. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
+- `attn ask` (`cmd/attnd/ask.go`): with no subcommand it opens an ask from stdin or `--file`, and takes `--subject` and `--seed`. It reads each local image the markdown shows (resolved against the working directory, or beside `--file`) and sends the bytes with the ask; an unreadable image or more than 5 MiB of images refuses the ask. The subcommands are `list` and `close <id>`. Every form takes `--session` and `--json`.
 - Prompts: the asks guidance in the session instructions of agents launched with asks on (`internal/prompts/content/ask/guidance.md`), and the answer as attn types it (`internal/prompts/content/ask/answer.md`, `entry.md`, `entry-picked.md`, `entry-recommended.md`, `entry-other.md`, `entry-unanswered.md`, `note.md`).
 
 ### Triggers
@@ -126,7 +126,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/asks_wire_test.go`.
-- Stack: `cmd/attn/ask_stack_test.go`, `cmd/attn/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
+- Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
 - Kernel: `internal/ask/ask_test.go`.
 - App: `app/src/App.asks.test.tsx`.
 

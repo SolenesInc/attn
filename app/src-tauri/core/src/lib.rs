@@ -79,7 +79,7 @@ fn resolve_daemon_binary() -> Result<PathBuf, String> {
     }
     let bundled_path = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(|d| d.join("attn")));
+        .and_then(|p| p.parent().map(|d| d.join("attnd")));
     if let Some(ref path) = bundled_path {
         if path.exists() {
             return Ok(path.clone());
@@ -90,7 +90,7 @@ fn resolve_daemon_binary() -> Result<PathBuf, String> {
 
 fn spawn_daemon(bin_path: &Path) -> Result<(), String> {
     Command::new(bin_path)
-        .env("ATTN_WRAPPER_PATH", bin_path)
+        .env("ATTN_WRAPPER_PATH", bin_path.with_file_name("attn"))
         .arg("daemon")
         .spawn()
         .map_err(|e| format!("Failed to start daemon: {}", e))?;

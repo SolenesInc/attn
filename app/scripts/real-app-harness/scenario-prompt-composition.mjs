@@ -44,7 +44,7 @@ async function main() {
   if (!instance) throw new Error('Prompt verification requires a named instance');
   const resources = resolveHarnessResources(instance);
   const env = instanceCliEnv(instance);
-  const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
+  const cli = args => execFileSync(resources.appCli, args, { env, encoding: 'utf8', timeout: 30_000 });
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ ...options, trustedApp: true });
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });

@@ -10,7 +10,7 @@ import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as inst
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { stepClock } from './stepClock.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -194,7 +194,7 @@ async function main() {
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('automation form scenario requires a named non-production instance');
   const resources = resolveHarnessResources(instance);
-  const binary = appDaemonInTree(resources.appPath);
+  const binary = appCliInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-FORM',
     allowRealAgents: false,

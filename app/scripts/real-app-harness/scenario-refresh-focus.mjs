@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { stopDaemon } from './perfMeasure.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
@@ -28,7 +28,7 @@ const popoverRefresh = `${popover} .route-kicker button`;
 const tierRefresh = '[data-testid="settings-section-models"] section[aria-label="Claude Code models"] .model-tier-header button';
 let waitingFor = '';
 
-const attn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance), timeout: 30_000 });
+const attn = args => execFileSync(appCliInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance), timeout: 30_000 });
 const waitDom = (selector, condition = {}, timeoutMs = 30_000) => {
   waitingFor = selector;
   return client.request('dom_wait', { selector, timeoutMs, ...condition }, { timeoutMs: timeoutMs + 1_000 });

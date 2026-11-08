@@ -3,7 +3,7 @@
 A CLI stack test runs the built `attn` binary and its daemon as separate
 processes. [Testing](testing.md) is the strategy around it.
 
-CLI stack tests live in `package main_test` in `cmd/attn`, whose `TestMain`
+CLI stack tests live in `package main_test` in `cmd/attnd`, whose `TestMain`
 returns `testworld.Main(m)`.
 
 - `testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, ...))`

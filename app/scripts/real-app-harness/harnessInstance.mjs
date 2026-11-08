@@ -65,14 +65,16 @@ function installedApp(appName) {
     return {
       appPath,
       appExecutable: appExecutableInAppTree(appPath),
-      appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attn'),
+      appDaemon: path.join(appPath, 'Contents', 'MacOS', 'attnd'),
+      appCli: path.join(appPath, 'Contents', 'MacOS', 'attn'),
     };
   }
   const appPath = path.join(xdgDataHome(), appName);
   return {
     appPath,
     appExecutable: appExecutableInAppTree(appPath),
-    appDaemon: path.join(appPath, 'bin', 'attn'),
+    appDaemon: path.join(appPath, 'bin', 'attnd'),
+    appCli: path.join(appPath, 'bin', 'attn'),
   };
 }
 
@@ -102,7 +104,7 @@ function resolveAttnBinaryPath() {
   }
   throw new Error(
     `attn binary not found for instance resolution. Tried: ${candidates.join(', ')}. `
-    + `Build it with 'make dev' (or 'go build -o ./attn ./cmd/attn'), or set ATTN_HARNESS_BIN.`,
+    + `Build it with 'make dev' (or 'go build -o ./attn ./cmd/attnd'), or set ATTN_HARNESS_BIN.`,
   );
 }
 
@@ -125,6 +127,7 @@ function resolveViaAuthority(instance) {
     appPath: resolved.appPath,
     appExecutable: resolved.appExecutable,
     appDaemon: resolved.appDaemon,
+    appCli: resolved.appCli,
     appLocalDataDir: resolved.appLocalDataDir,
     wsPort: Number(resolved.wsPort),
     socket: resolved.socket,

@@ -24,7 +24,7 @@ Only `attn seed` reaches the garden.
 
 ### Agents
 
-- `attn doc` (`cmd/attn/doc.go`): `define <namespace> <collection> [field:type ...]`, `undefine`, `collections [--json]`, `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]`, `delete [--expect <rev>]`, `query`, `count` and `watch [--resume]`, with the query flags `--where`, `--sort`, `--desc`, `--limit` and `--after`.
+- `attn doc` (`cmd/attnd/doc.go`): `define <namespace> <collection> [field:type ...]`, `undefine`, `collections [--json]`, `put <namespace> <collection> <id> <body|-> [--expect <rev|absent>]`, `get [--json]`, `delete [--expect <rev>]`, `query`, `count` and `watch [--resume]`, with the query flags `--where`, `--sort`, `--desc`, `--limit` and `--after`.
 - Prompts: none. Agents find the verb in `attn --help`, which the attn map names as the authority for syntax.
 - Plugins: none. The plugin API has no document methods.
 
@@ -69,7 +69,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/documents_wire_test.go`, `internal/daemon/documents_live_wire_test.go`, `internal/daemon/documents_rules_wire_test.go`.
-- Stack: `cmd/attn/doc_stack_test.go`.
+- Stack: `cmd/attnd/doc_stack_test.go`.
 - Kernel: `internal/docstore/*_test.go`, `internal/store/documents*_test.go`.
 
 ## Gotchas

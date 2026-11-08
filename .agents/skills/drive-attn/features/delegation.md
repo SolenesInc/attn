@@ -39,10 +39,10 @@ pass to a fresh agent, and the previous agent keeps running.
 
 ### Agents
 
-- `attn delegate` (`cmd/attn/main.go`): `--brief`, `--brief-file` or `--seed`. `--handover` with `-m`. `--authorization`. `--cwd` with `--reuse-checkout`, `--new-worktree`, `--branch`, `--existing-branch`, `--from`, `--worktree-path` and `--allow-worktree-reuse`. `--host`. `--role`, `--choice`, `--fallback`, `--agent`, `--model`, `--provider`, `--effort`. `--name`, `--desktop`, `--priority`, `--yolo`, `--request-id`, `--source-session`, `--profile`.
-- `attn delegate status <request-or-operation-id>` (`cmd/attn/main.go`).
-- `attn delegate roles` (`cmd/attn/delegation_roles.go`): with no command, it prints the catalog agents choose from. The commands are `show`, `history`, `install`, `add`, `set`, `copy`, `rm`, `enable`, `disable`, `apply`, `rollback`.
-- `attn session list --tree` nests live sessions under their dispatchers (`cmd/attn/session_ledger.go`).
+- `attn delegate` (`cmd/attnd/main.go`): `--brief`, `--brief-file` or `--seed`. `--handover` with `-m`. `--authorization`. `--cwd` with `--reuse-checkout`, `--new-worktree`, `--branch`, `--existing-branch`, `--from`, `--worktree-path` and `--allow-worktree-reuse`. `--host`. `--role`, `--choice`, `--fallback`, `--agent`, `--model`, `--provider`, `--effort`. `--name`, `--desktop`, `--priority`, `--yolo`, `--request-id`, `--source-session`, `--profile`.
+- `attn delegate status <request-or-operation-id>` (`cmd/attnd/main.go`).
+- `attn delegate roles` (`cmd/attnd/delegation_roles.go`): with no command, it prints the catalog agents choose from. The commands are `show`, `history`, `install`, `add`, `set`, `copy`, `rm`, `enable`, `disable`, `apply`, `rollback`.
+- `attn session list --tree` nests live sessions under their dispatchers (`cmd/attnd/session_ledger.go`).
 - `attn seed handover` is gone: it answers `seed: unknown command "handover"`. `attn delegate --seed <id> --handover --cwd <path>` replaces it.
 - Prompts: every session's instructions carry the delegation boundary (`internal/prompts/content/delegation-boundary.md`). The delegate's opening names the delegate's seed and the seed's checks, including the shared checks of the seed's plot, or says that the seed has none. When the seed has an authorization, the opening ends with it (`internal/prompts/content/delegation/identity.md`, `opening.md`, `seed.md`, `seed-checks.md`, `seed-no-checks.md`, `authorization.md`, `authorization-from-user.md`). The role's execution guidance and the catalog text are in `internal/prompts/content/delegation-preferences/`. `attn skill --reference delegation`s are `internal/prompts/content/skills/attn/references/delegation.md`, `delegated-agent.md` and `delegation-roles.md`, and its `delivery.md` covers both repository delivery flows. The attn-workflow skill tells a Pathfinder how to hand off a plan and when to run prototypes or independent candidates, and tells an Orchestrator how to delegate Builders (`internal/prompts/content/skills/attn-workflow/SKILL.md`, `references/planning.md`, `references/prototype.md`, `references/orchestration.md`). Without a daemon, `attn prompts show attn-workflow-skill` lists the skill and its references and `attn prompts render attn-workflow-skill planning` prints one ([agent-guidance.md](agent-guidance.md)).
 
@@ -136,7 +136,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/delegate*_wire_test.go`, `internal/daemon/delegation*_wire_test.go`, `internal/daemon/garden_authorization_wire_test.go`, `internal/daemon/session_delegation_roles_wire_test.go`, `internal/daemon/seed_handover_wire_test.go`, `internal/daemon/garden_profile_delegation_delete_wire_test.go`.
-- Stack: `cmd/attn/delegate_stack_test.go`, `cmd/attn/seed_authorization_stack_test.go`, `cmd/attn/delegate_restart_stack_test.go`, `cmd/attn/delegate_outpost_stack_test.go`, `cmd/attn/session_tree_stack_test.go`, `app/e2e/delegation-chain.spec.ts`, `scripts/verify-delegation-placement.sh`.
+- Stack: `cmd/attnd/delegate_stack_test.go`, `cmd/attnd/seed_authorization_stack_test.go`, `cmd/attnd/delegate_restart_stack_test.go`, `cmd/attnd/delegate_outpost_stack_test.go`, `cmd/attnd/session_tree_stack_test.go`, `app/e2e/delegation-chain.spec.ts`, `scripts/verify-delegation-placement.sh`.
 - Scenario: `delegation-chain`, `delegation-preferences`.
 - Kernel: `internal/prompts/delegation_preferences_test.go`.
 - App: `app/src/App.delegationChain.test.tsx`, `app/src/App.delegationSettings.test.tsx`, `app/src/components/DelegationSettings.autosave.test.tsx`, `app/src/components/DelegationSettings.editing.test.tsx`.

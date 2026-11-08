@@ -5,6 +5,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pathutil"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -240,11 +241,5 @@ func consumeOneShotEnv(key string) string {
 }
 
 func resolveWrapperPath() string {
-	if value := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); value != "" {
-		return value
-	}
-	if exePath, err := os.Executable(); err == nil && strings.TrimSpace(exePath) != "" {
-		return exePath
-	}
-	return "attn"
+	return launchenv.ActiveAttnExecutable()
 }

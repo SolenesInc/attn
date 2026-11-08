@@ -37,7 +37,7 @@ let firstSession;
 let desktop;
 
 const instance = currentHarnessInstance();
-const storedWidth = () => execFileSync(resolveHarnessResources(instance).appDaemon, ['settings', 'get', 'sidebar_width'], { encoding: 'utf8', env: instanceCliEnv(instance) }).trim();
+const storedWidth = () => execFileSync(resolveHarnessResources(instance).appCli, ['settings', 'get', 'sidebar_width'], { encoding: 'utf8', env: instanceCliEnv(instance) }).trim();
 const boxOf = async (selector) => (await request('dom_bounds', { selector })).bounds;
 const sidebarPx = async () => (await boxOf('.sidebar')).width;
 const tileAreaPx = async () => (await boxOf('.view-stack')).width;
@@ -244,7 +244,7 @@ try {
   await runner.step('the_whole_handle_takes_a_press_beside_a_browser', async () => {
     const before = await readRow();
     const env = instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(firstSession) });
-    execFileSync(resolveHarnessResources(instance).appDaemon, ['browser', 'open', `http://127.0.0.1:${pageServer.address().port}/`, '--session', firstSession], { env });
+    execFileSync(resolveHarnessResources(instance).appCli, ['browser', 'open', `http://127.0.0.1:${pageServer.address().port}/`, '--session', firstSession], { env });
     await waitDom(browserHost());
     const browserLeaf = (await readRow()).find((leaf) => !before.includes(leaf));
     await driver.click({ selector: `${surface()} [data-pane-id="${browserLeaf}"]`, at: { x: 0.7, y: 0.01 } });

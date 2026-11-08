@@ -45,7 +45,7 @@ function resolvedPath(candidate) {
   }
 }
 
-// Mirrors sameExecutable in cmd/attn/instance.go: /proc/<pid>/exe is already
+// Mirrors sameExecutable in cmd/attnd/instance.go: /proc/<pid>/exe is already
 // resolved, so a symlinked install root matches only once both sides are.
 function sameExecutable(a, b) {
   return a === b || resolvedPath(a) === resolvedPath(b);
@@ -92,7 +92,7 @@ const darwinPlatform = {
     return appPath.endsWith('.app') ? path.join(appPath, 'Contents', 'MacOS', 'app') : appPath;
   },
 
-  appDaemonInTree(appPath) {
+  appCliInTree(appPath) {
     return appPath.endsWith('.app')
       ? path.join(appPath, 'Contents', 'MacOS', 'attn')
       : path.join(path.dirname(appPath), 'attn');
@@ -153,7 +153,7 @@ const linuxPlatform = {
     return path.join(appPath, 'bin', 'attn-app');
   },
 
-  appDaemonInTree(appPath) {
+  appCliInTree(appPath) {
     return path.join(appPath, 'bin', 'attn');
   },
 
@@ -304,8 +304,8 @@ export function appExecutableInTree(appPath) {
   return appPlatform.appExecutableInTree(appPath);
 }
 
-export function appDaemonInTree(appPath) {
-  return appPlatform.appDaemonInTree(appPath);
+export function appCliInTree(appPath) {
+  return appPlatform.appCliInTree(appPath);
 }
 
 export function appBuildIdentityInTree(appPath) {

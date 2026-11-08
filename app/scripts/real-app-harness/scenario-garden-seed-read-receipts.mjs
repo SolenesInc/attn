@@ -18,7 +18,7 @@ import {
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { latestMockCodexRollout, transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
-import { delay, appDaemonInTree } from './platform.mjs';
+import { delay, appCliInTree } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -208,7 +208,7 @@ async function main() {
   let delegated = null;
   const instance = currentHarnessInstance();
   if (!instance) throw new Error('Garden subscription verification requires a named instance.');
-  const cli = (args) => execFileSync(appDaemonInTree(options.appPath), args,
+  const cli = (args) => execFileSync(appCliInTree(options.appPath), args,
     { encoding: 'utf8', env: instanceCliEnv(instance) }).trim();
   try {
     await launchFreshAppAndConnect(client, observer);

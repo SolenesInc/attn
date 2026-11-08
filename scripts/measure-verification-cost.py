@@ -8,7 +8,7 @@ Baselines (all by default):
   lands3   three concurrent lands on one machine, each from its own worktree
   suites   scripts/test-go.sh -count=1, then pnpm --dir app exec vitest run
   daemon   scripts/test-go.sh --packages -count=1 on ./internal/daemon, then on
-           ./cmd/attn: the two packages whose tests start daemons
+           ./cmd/attnd: the two packages whose tests start daemons
   ci       ci.yml wall time, its slowest chains and the longest job queue wait
            over the last 5 green main runs, or the runs --ci-run names
   acceptance  the Linux acceptance matrix with 1 worker, then each --workers count
@@ -65,7 +65,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 BASELINES = ("land", "lands3", "suites", "daemon", "ci", "acceptance")
-LAND_PACKAGES = ("internal/daemon", "internal/store", "cmd/attn")
+LAND_PACKAGES = ("internal/daemon", "internal/store", "cmd/attnd")
 CI_GREEN_RUNS = 5
 MEASUREMENT_LOCK = Path("/tmp/attn-verification-cost.lock")
 
@@ -256,7 +256,7 @@ def measure_suites(scratch, runs):
 
 
 def measure_daemon_packages(scratch, runs):
-    packages = ("./internal/daemon", "./cmd/attn")
+    packages = ("./internal/daemon", "./cmd/attnd")
     measure_commands(scratch, runs, tuple((package, ["scripts/test-go.sh", "--packages", "-count=1", package]) for package in packages))
 
 

@@ -2,7 +2,6 @@ package testworld
 
 import (
 	"fmt"
-	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -16,14 +15,7 @@ func AttnBinaryWithSnapshotFormat(t testing.TB, format string) string {
 		if processDir == "" {
 			return "", fmt.Errorf("testworld.AttnBinaryWithSnapshotFormat builds into the process directory that testworld.Main creates; call it from TestMain")
 		}
-		binary := filepath.Join(processDir, "bin", "attn-format-"+format)
-		cmd := exec.Command("go", "build", "-o", binary,
-			"-ldflags", "-w -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat="+format,
-			"github.com/victorarias/attn/cmd/attn")
-		if output, err := cmd.CombinedOutput(); err != nil {
-			return "", fmt.Errorf("build attn with snapshot format %s: %w\n%s", format, err, output)
-		}
-		return binary, nil
+		return buildPair(filepath.Join(processDir, "bin", "attn-format-"+format), "-w -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat="+format)
 	}))
 	binary, err := build.(func() (string, error))()
 	if err != nil {

@@ -8,7 +8,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
@@ -86,7 +86,7 @@ async function main() {
         });
         let sessionId;
         if (label === 'beta') {
-          const output = execFileSync(appDaemonInTree(options.appPath), [
+          const output = execFileSync(appCliInTree(options.appPath), [
             'delegate', '--source-session', agents[0].sessionId, '--agent', 'claude', '--model', MOCK_AGENT_MODEL,
             '--brief', 'READY: Exercise the isolated mock snooze keyboard test, then wait for input.', '--cwd', cwd, '--name', label,
           ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance()) });
@@ -94,7 +94,7 @@ async function main() {
           await observer.waitFor(() => observer.getSession(sessionId), 'delegated beta visible');
           await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'delegation opening turn stopped');
           const desktop = await observer.createDesktop();
-          execFileSync(appDaemonInTree(options.appPath), [
+          execFileSync(appCliInTree(options.appPath), [
             'terminal', 'move', sessionId, desktop.id,
           ], { encoding: 'utf8', env: instanceCliEnv(currentHarnessInstance(), { ATTN_TERMINAL_ID: observer.terminalOf(agents[0].sessionId) }) });
           await observer.waitFor(() => observer.desktopOf(sessionId)?.id === desktop.id, 'beta moved to its own desktop');

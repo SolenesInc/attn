@@ -44,10 +44,13 @@ if [ -z "${ATTN_UPGRADE_RELEASE_BIN:-}" ]; then
       curl -fsSL --retry 3 -o "$test_root/release/attn" "$latest/attn-linux-$arch"
       curl -fsSL --retry 3 -o "$test_root/release/attn-pty-host" "$latest/attn-pty-host-linux-$arch"
       chmod +x "$test_root/release/attn" "$test_root/release/attn-pty-host"
+      if curl -fsSL --retry 3 -o "$test_root/release/attnd" "$latest/attnd-linux-$arch"; then
+        chmod +x "$test_root/release/attnd"
+      fi
       ;;
     darwin)
       curl -fsSL --retry 3 "$latest/attn_aarch64.app.tar.gz" |
-        tar -xz --strip-components=3 -C "$test_root/release" attn.app/Contents/MacOS/attn attn.app/Contents/MacOS/attn-pty-host
+        tar -xz --strip-components=3 -C "$test_root/release" attn.app/Contents/MacOS
       ;;
     *)
       echo "No released attn for $(go env GOOS)." >&2
@@ -59,8 +62,10 @@ if [ -z "${ATTN_UPGRADE_RELEASE_BIN:-}" ]; then
 fi
 echo "Previous release under test: $("$ATTN_UPGRADE_RELEASE_BIN" --version)"
 if [ -z "${ATTN_E2E_BIN:-}" ]; then
+  mkdir -p "$test_root/current"
   go build -ldflags "-X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=$(bash scripts/snapshot-format.sh)" \
-    -o "$test_root/attn-current" ./cmd/attn
-  export ATTN_E2E_BIN="$test_root/attn-current"
+    -o "$test_root/current/attnd" ./cmd/attnd
+  bash scripts/rust-cli.sh build --out "$test_root/current/attn"
+  export ATTN_E2E_BIN="$test_root/current/attn"
 fi
-go test ./cmd/attn -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestTheFirstStartWithTheHostOn.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestTurningTheSettingsOffAndOn.*|TestDirectLaunchStartsAgents.*|TestAPhoneReattachesToAHost.*|TestKillingTheDaemonDuringAHostMove.*|TestAnOutpostOnTheRelease.*|TestAnOutpostAddedByAddress.*)$' -count=1 -timeout=180s -v "$@"
+go test ./cmd/attnd -run '^(TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations|TestAnUpgradedLegacyWorkerKeepsItsModelAndEffortOnReload|TestAnUpdateFromTheRelease.*|TestAFreshInstallFindsItsHost.*|TestTheFirstStartWithTheHostOn.*|TestAfterAnUpdateAReboot.*|TestAHostThatCannotRun.*|TestAMachineWithOnlyAttn.*|TestTurningTheSettingsOffAndOn.*|TestDirectLaunchStartsAgents.*|TestAPhoneReattachesToAHost.*|TestKillingTheDaemonDuringAHostMove.*|TestAnOutpostOnTheRelease.*|TestAnOutpostAddedByAddress.*)$' -count=1 -timeout=180s -v "$@"

@@ -13,7 +13,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
 const instance = currentHarnessInstance();
@@ -34,7 +34,7 @@ const ssh = await outpostSsh(root);
 const env = instanceCliEnv(instance, ssh.env);
 const exec = promisify(execFile);
 const run = (command, args, childEnv = env) => exec(command, args, { env: childEnv });
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const client = new UiAutomationClient({ ...options, launchEnv: ssh.env });
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });

@@ -115,6 +115,7 @@ runs:
         archive="$RUNNER_TEMP/app-tree.tar.gz"
         tar -czf "$archive" \
           attn \
+          attnd \
           "$app_tree"
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
         ls -l "$archive"

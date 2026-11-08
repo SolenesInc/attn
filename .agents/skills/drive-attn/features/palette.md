@@ -68,7 +68,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/command_usage_wire_test.go`.
-- Stack: `cmd/attn/command_usage_stack_test.go`.
+- Stack: `cmd/attnd/command_usage_stack_test.go`.
 - Scenario: `palette-order`, `snooze-keyboard`.
 - App: `app/src/App.actionMenu.test.tsx`, `app/src/App.commandUsage.test.tsx`, `app/src/App.paletteRename.test.tsx`, `app/src/components/palette/Palette.test.tsx`, `app/src/components/palette/UnifiedPalette.keyboard.test.tsx`, `app/src/components/palette/agentPaletteRows.ordering.test.tsx`.
 

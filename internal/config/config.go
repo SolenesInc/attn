@@ -158,11 +158,15 @@ func AppDaemonBinaryForInstance(instance string) string {
 	return AppDaemonBinaryInTree(AppPathForInstance(instance))
 }
 
+func AppCliBinaryForInstance(instance string) string {
+	return filepath.Join(filepath.Dir(AppDaemonBinaryForInstance(instance)), "attn")
+}
+
 func AppDaemonBinaryInTree(appPath string) string {
 	if runtime.GOOS == "darwin" {
-		return filepath.Join(appPath, "Contents", "MacOS", "attn")
+		return filepath.Join(appPath, "Contents", "MacOS", "attnd")
 	}
-	return filepath.Join(appPath, "bin", "attn")
+	return filepath.Join(appPath, "bin", "attnd")
 }
 
 func DeepLinkSchemeForInstance(instance string) string {

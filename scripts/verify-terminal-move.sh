@@ -3,7 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 env -u ATTN_CODEX_SHARED_PROFILE -u CODEX_THREAD_ID \
-  go test -v "$@" ./internal/daemon ./cmd/attn -run \
+  go test -v "$@" ./internal/daemon ./cmd/attnd -run \
   '^(TestTerminalMove.*|TestTerminalOpenCreatesOnlyTheExplicitNumberedDesktop|TestTerminalCommandsAddressEachTileOfASharedConversation|TestUnplacedAgentsKeepTheirTerminalAcrossPlacementAndRestart|TestTerminalCLIDesktopAndProfileReach|TestTerminalCLIUsesTransitiveAuthority|TestACommandCarryingItsTerminalsIDSpeaksAsTheSessionTheTerminalShows|TestReopenReturnsToItsNumberedDesktopEvenAfterItWasRemoved)$'
 make check-prompts
 go test ./internal/agent -run '^TestLegacyPromptCompatibility$'

@@ -38,7 +38,7 @@ the tiles still on the old Codex.
 
 ### Agents
 
-- `attn codex status [--profile <name|id>] [--json]`, `attn codex update [--profile]` and `attn codex restart [--now] [--profile]` (`cmd/attn/codex.go`). Inside a session, these commands act on the session's profile.
+- `attn codex status [--profile <name|id>] [--json]`, `attn codex update [--profile]` and `attn codex restart [--now] [--profile]` (`cmd/attnd/codex.go`). Inside a session, these commands act on the session's profile.
 - Prompts: `attn opened this conversation.`, typed into a conversation attn opens in the app-server (`internal/prompts/content/session/codex-opened.md`).
 
 ### Triggers
@@ -112,7 +112,7 @@ bridge --launch --wait-ready ping
 ## Tests
 
 - Wire: `internal/daemon/codex_*_wire_test.go`, `internal/daemon/slow_launch_wire_test.go`.
-- Stack: `cmd/attn/codex_shared_stack_test.go`.
+- Stack: `cmd/attnd/codex_shared_stack_test.go`.
 - Scenario: `codex-shared`, `codex-update`.
 - App: `app/src/components/BannerStack.sharedCodex.test.tsx`, `app/src/components/SettingsModal.experimental.test.tsx`, `app/src/App.hiddenSessions.test.tsx`.
 

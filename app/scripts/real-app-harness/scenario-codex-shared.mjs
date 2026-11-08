@@ -6,7 +6,7 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForPaneInputFocus, waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -19,7 +19,7 @@ const runner = createScenarioRunner(options, { scenarioId: 'CODEX-SHARED', tier:
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const daemonBinary = appDaemonInTree(options.appPath);
+const daemonBinary = appCliInTree(options.appPath);
 
 const SHARED_TOGGLE = '[data-testid="settings-feature-codex_shared_enabled"]';
 const CONVERSATION = /Conversation (mock-[0-9a-f-]{36})/g;

@@ -203,11 +203,11 @@ failure stops the push. `land.sh` prints each test's result, skipped tests
 included, and the command that reruns a failed test. The whole Vitest suite
 prints its failures and a count of the files that passed, and its log only when
 a file failed. `landing-tests.sh` runs its
-Go, Vitest and Playwright tests at once, and splits `./cmd/attn`'s tests across
+Go, Vitest and Playwright tests at once, and splits `./cmd/attnd`'s tests across
 five `go test` runs, each with its own receipt. When a landing runs the Go
 checks, `land.sh` passes `--no-go-vet`, which leaves out `go test`'s own vet,
 because those checks run `go vet` on every package. Every other run keeps it,
-and only the first `./cmd/attn` run vets that package.
+and only the first `./cmd/attnd` run vets that package.
 
 Go's test cache answers for Go landing tests whose inputs did not change, so
 after a rebase only the tests the new commits reach run again, and the others

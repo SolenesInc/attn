@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 	profilespkg "github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/prompts"
@@ -1279,11 +1280,5 @@ func (r *codexShared) resolveCaller(t protocol.TerminalID) (protocol.SessionID, 
 }
 
 func (d *Daemon) wrapperPath() string {
-	if path := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); path != "" {
-		return path
-	}
-	if path, err := os.Executable(); err == nil {
-		return path
-	}
-	return "attn"
+	return launchenv.ActiveAttnExecutable()
 }

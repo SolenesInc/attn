@@ -14,7 +14,7 @@ import {
 } from '../real-app-harness/harnessInstance.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from '../real-app-harness/mockGitHub.mjs';
 import { setFrontWindowBounds } from '../real-app-harness/nativeWindowCapture.mjs';
-import { appBuildIdentityInTree, appDaemonInTree, createWindowDriver } from '../real-app-harness/platform.mjs';
+import { appBuildIdentityInTree, appCliInTree, createWindowDriver } from '../real-app-harness/platform.mjs';
 import { startStubModel } from '../real-app-harness/stubModel.mjs';
 import { UiAutomationClient } from '../real-app-harness/uiAutomationClient.mjs';
 import { writeAgentHome } from './agentHome.mjs';
@@ -131,7 +131,7 @@ export async function startWorld({ repos, log }) {
     cleanups.push(() => fs.rmSync(toolHome, { recursive: true, force: true }));
     const launchEnv = {
       ...writeAgentHome({ toolHome, stubOrigin: stub.origin, trustedFolders }),
-      ATTN_WRAPPER_PATH: appDaemonInTree(appPath),
+      ATTN_WRAPPER_PATH: appCliInTree(appPath),
     };
     ensureMockGitHubServer({ instance, appPath, env: launchEnv, log });
     cleanups.push(() => stopMockGitHubServer({ instance, appPath, log }));

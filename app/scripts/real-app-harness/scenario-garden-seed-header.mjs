@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, printCommonHelp } from './common.mjs';
-import { appDaemonInTree, delay } from './platform.mjs';
+import { appCliInTree, delay } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -33,7 +33,7 @@ async function main() {
   let dispatcher;
   let agent;
   let seedId;
-  const runAttn = (args, sessionId = dispatcher) => execFileSync(appDaemonInTree(options.appPath), args, {
+  const runAttn = (args, sessionId = dispatcher) => execFileSync(appCliInTree(options.appPath), args, {
     encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: sessionId ? observer.terminalOf(sessionId) : '' }),
   });
   try {

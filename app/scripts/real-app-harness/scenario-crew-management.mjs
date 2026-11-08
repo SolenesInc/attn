@@ -9,7 +9,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { crewManagementFixture } from './crewManagementFixture.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import {
   captureWebKitPids,
@@ -51,7 +51,7 @@ let crewPlot = '';
 let crewChild = '';
 let asleepHeld = '';
 
-const runAttn = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
+const runAttn = (args) => execFileSync(appCliInTree(options.appPath), args, {
   encoding: 'utf8',
   env: instanceCliEnv(instance),
   timeout: 30_000,

@@ -41,7 +41,7 @@
     "macOS": {
       "entitlements": "Entitlements.plist"
     },
-    "externalBin": ["binaries/attn", "binaries/attn-pty-host"],
+    "externalBin": ["binaries/attnd", "binaries/attn", "binaries/attn-pty-host"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

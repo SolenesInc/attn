@@ -6,7 +6,7 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { appDaemonInTree, appPlatform, createWindowDriver } from './platform.mjs';
+import { appCliInTree, appPlatform, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
 
@@ -16,7 +16,7 @@ const options = parseCommonArgs(process.argv.slice(2));
 if (options.help) { printCommonHelp('scripts/real-app-harness/scenario-shell-titles.mjs'); process.exit(0); }
 const runner = createScenarioRunner(options, { scenarioId: 'SHELL-TITLES', tier: 'tier1-local-shell', prefix: 'shell-titles' });
 const instance = currentHarnessInstance();
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const client = new UiAutomationClient(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 let observer;

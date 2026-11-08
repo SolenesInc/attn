@@ -38,7 +38,7 @@ and jumps to the next run that stopped with a question.
 
 ### Agents
 
-- `attn automation` (`cmd/attn/automation.go`): `validate --file`, `apply --file` with `--launch-desktop` and `--desktop-name`, `list`, `show <id>`, `run <id>` with `--input-file`, `--pr-url` or `--request-id`, `runs <id>`, `enable <id>`, `disable <id>`, `delete <id>`, `cleanup <id>`, and `set <id> --launch-desktop`. `--profile` on each. The launch desktop is in [desktops.md](desktops.md).
+- `attn automation` (`cmd/attnd/automation.go`): `validate --file`, `apply --file` with `--launch-desktop` and `--desktop-name`, `list`, `show <id>`, `run <id>` with `--input-file`, `--pr-url` or `--request-id`, `runs <id>`, `enable <id>`, `disable <id>`, `delete <id>`, `cleanup <id>`, and `set <id> --launch-desktop`. `--profile` on each. The launch desktop is in [desktops.md](desktops.md).
 - Prompts: a run's opening carries the delegation identity, the automation's prompt, the seed the run reports to with that seed's checks or the sentence saying the seed has none, and, for a pull request, the pull request's identity and the untrusted-data rules (`internal/prompts/content/delegation/identity.md`, `seed.md`, `seed-checks.md`, `seed-no-checks.md`, `internal/prompts/content/automation/target.md`, `data.md`, `local-review.md`).
 
 ### Triggers
@@ -219,14 +219,14 @@ EOF
 ## Tests
 
 - Wire: `internal/daemon/automation_*_wire_test.go`, `internal/daemon/automation_wire_test.go`, `internal/daemon/automations_test.go`, `internal/daemon/garden_profile_automations_wire_test.go`.
-- Stack: `cmd/attn/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
+- Stack: `cmd/attnd/automation_profile_stack_test.go`, `internal/daemon/automation_codex_launch_stack_test.go`.
 - Scenario: `automation-form`, `automation-surface`.
 - Kernel: `internal/automation/automation_test.go`, `internal/automation/schedule_test.go`, `internal/store/automations_test.go`.
 - App: `app/src/App.automations.test.tsx`, `app/src/App.automationActions.test.tsx`, `app/src/App.automationForm.test.tsx`, `app/src/App.automationSelection.test.tsx`, `app/src/components/automations/automationFormModel.test.ts`, `app/src/utils/automationRuns.ordering.test.ts`.
 
 ## Gotchas
 
-- `attn automation` has no help: `--help` exits 1 with `unknown automation command "--help"`, after resolving the current session. Read `cmd/attn/automation.go` or the form for the fields.
+- `attn automation` has no help: `--help` exits 1 with `unknown automation command "--help"`, after resolving the current session. Read `cmd/attnd/automation.go` or the form for the fields.
 - `location.path` must be an absolute folder that exists. Write the definition with the path filled in, as the heredoc above does. attn refuses `~` and relative paths.
 - The run's agent reads its fixture from `location.path`. For a review request the worktree is the folder, so a fixture has to be committed in the repository for the mock to say anything. Without a committed fixture, the run still delivers, silently.
 - A run needs the user only while it is owed a turn: its agent has stopped and the turn is not snoozed. ⌘⇧J skips a run that is still working and a run the user snoozed.

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -36,7 +36,7 @@ async function main() {
   let memberRegistered = false;
   const member = `fern-${Date.now().toString(36)}`;
   const home = path.join(dataDirForInstance(instance), 'crew', member);
-  const run = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
+  const run = (args) => execFileSync(appCliInTree(options.appPath), args, {
     encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SESSION_ID: '' }),
   });
   const json = (args) => {

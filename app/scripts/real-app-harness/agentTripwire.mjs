@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 
 import { harnessArtifactsRoot } from './common.mjs';
 import { MOCK_AGENT_AGENTS, MOCK_AGENT_EXECUTABLE } from './mockAgent.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { MOCK_GITHUB_URL_VAR } from './mockGitHub.mjs';
 import {
@@ -375,7 +375,7 @@ export function ensureDaemonCarriesTripwire({
 
   const stale = carriesMock ? 'this tripwire' : 'this run\'s mock GitHub';
   log(`daemon pid ${pid} predates ${stale} — stopping it so the app relaunch brings one up armed.`);
-  run(appDaemonInTree(appPath), ['daemon', 'stop'], {
+  run(appCliInTree(appPath), ['daemon', 'stop'], {
     encoding: 'utf8',
     env: instanceCliEnv(instance),
     stdio: 'pipe',

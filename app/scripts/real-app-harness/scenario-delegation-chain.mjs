@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner, registerNativeFailureEvidence } from './scenarioRunner.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint, readGraphicsRegions, appPids } from './perfMeasure.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 
@@ -21,7 +21,7 @@ const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const created = [];
 const popup = '.delegation-chain-popover';
-const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
+const runAttn = args => execFileSync(appCliInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 const text = selector => client.request('dom_text', { selector }).then(result => result.text);
 const exists = selector => client.request('dom_text', { selector }).then(() => true, error => {
   if (String(error).includes('selector not found')) return false;

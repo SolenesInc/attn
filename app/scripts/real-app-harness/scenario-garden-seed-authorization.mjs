@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, printCommonHelp } from './common.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -29,7 +29,7 @@ async function main() {
   let dispatcher;
   let agent;
   let seedId;
-  const runAttn = (attnArgs, sessionId) => execFileSync(appDaemonInTree(options.appPath), attnArgs, {
+  const runAttn = (attnArgs, sessionId) => execFileSync(appCliInTree(options.appPath), attnArgs, {
     encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: sessionId ? observer.terminalOf(sessionId) : '' }),
   });
   const section = () => `.seed-document[data-seed-id="${seedId}"] .seed-authorization`;

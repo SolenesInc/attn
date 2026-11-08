@@ -19,6 +19,7 @@ import (
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/launchenv"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -247,7 +248,7 @@ func spawnDaemon(binaryPath string) (daemonProcess, error) {
 	cmd := exec.Command(binaryPath, "daemon")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	cmd.Env = append(os.Environ(),
-		"ATTN_WRAPPER_PATH="+binaryPath,
+		"ATTN_WRAPPER_PATH="+launchenv.AttnBeside(binaryPath),
 		fmt.Sprintf("%s=%d", readyFDEnv, 3),
 	)
 	cmd.ExtraFiles = []*os.File{writer}

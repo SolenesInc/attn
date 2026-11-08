@@ -238,7 +238,8 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
 	var binaries outpostbuild.Binaries
 	if config.Instance() != "" || os.Getenv("ATTN_HARNESS_DATA_DIR") != "" {
-		binaries = outpostbuild.Binaries{Attn: os.Getenv("ATTN_HARNESS_OUTPOST_BINARY"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}
+		attn := os.Getenv("ATTN_HARNESS_OUTPOST_BINARY")
+		binaries = outpostbuild.Binaries{Attn: attn, Attnd: filepath.Join(filepath.Dir(attn), "attnd"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}
 	}
 	if binaries.Attn == "" {
 		var err error

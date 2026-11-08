@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, pressShortcutKeys, printCommonHelp } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { waitForFirstDesktopPane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -27,7 +27,7 @@ const agents = [];
 let browserTileSelector;
 const waitDom = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: 15_000, ...extra });
 const cli = async (...args) => {
-  const { stdout } = await execFileAsync(appDaemonInTree(options.appPath), args, {
+  const { stdout } = await execFileAsync(appCliInTree(options.appPath), args, {
     env: instanceCliEnv(instance, { ATTN_TERMINAL_ID: observer.terminalOf(agents[0].sessionId) }),
   });
   return stdout;

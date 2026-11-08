@@ -14,7 +14,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
+import { appCliInTree, createWindowDriver, delay } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -32,7 +32,7 @@ const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const created = [];
-const binary = appDaemonInTree(options.appPath);
+const binary = appCliInTree(options.appPath);
 const cli = async (...args) => (await promisify(execFile)(binary, args, { env: instanceCliEnv(instance) })).stdout;
 const wait = (selector, extra = {}) => client.request('dom_wait', { selector, timeoutMs: observer.connectTimeoutMs, ...extra });
 const text = async selector => (await client.request('dom_text', { selector })).text;

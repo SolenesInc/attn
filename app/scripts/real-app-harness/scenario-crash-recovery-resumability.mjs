@@ -28,7 +28,7 @@ import {
 } from './scenarioAgents.mjs';
 import { claudeTranscriptPath, latestMockCodexRollout, writeMockAgentFixture } from './mockAgent.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -162,7 +162,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   // Daemon lifecycle and CLI reads must run through the exact build under test,
   // not an unrelated ./attn on PATH.
-  const attnBin = appDaemonInTree(options.appPath);
+  const attnBin = appCliInTree(options.appPath);
   const daemonEnv = instanceCliEnv(instance);
 
   const token = `CRASHREC${Date.now()}`;

@@ -6,7 +6,7 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { installMockCodex } from './mockAgent.mjs';
-import { appDaemonInTree, createWindowDriver } from './platform.mjs';
+import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { waitForPaneText, waitForSessionDesktop } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -19,7 +19,7 @@ const runner = createScenarioRunner(options, { scenarioId: 'CODEX-UPDATE', tier:
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath, client });
-const daemonBinary = appDaemonInTree(options.appPath);
+const daemonBinary = appCliInTree(options.appPath);
 const attn = (...args) => execFileSync(daemonBinary, args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 
 const BANNER = '[aria-label="Codex updates"]';

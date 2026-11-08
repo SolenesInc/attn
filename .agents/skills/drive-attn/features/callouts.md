@@ -25,7 +25,7 @@ ends the callout with Esc. Callouts are on until the user turns them off.
 
 ### Agents
 
-- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attn/callout.go`).
+- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attnd/callout.go`).
 - Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it
@@ -78,7 +78,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/callouts_wire_test.go`.
-- Stack: `cmd/attn/callout_stack_test.go`.
+- Stack: `cmd/attnd/callout_stack_test.go`.
 - Scenario: `callouts`.
 - App: `app/src/App.callouts.test.tsx`.
 

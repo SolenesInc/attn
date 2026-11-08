@@ -408,8 +408,17 @@ func (s *SSH) InstallBinary(remote *Stack, binary string) {
 	if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
 		s.t.Fatal(err)
 	}
+	if daemon := filepath.Join(filepath.Dir(binary), "attnd"); isFile(daemon) {
+		replaceFile(s.t, daemon, filepath.Join(filepath.Dir(target), "attnd"))
+	}
 	replaceFile(s.t, binary, target)
 }
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
 func (s *SSH) MachineCommand(remote *Stack, name, body string) {
 	s.t.Helper()
 	if err := os.WriteFile(filepath.Join(remote.Dir, "machine-bin", name), []byte("#!/bin/sh\n"+body+"\n"), 0700); err != nil {

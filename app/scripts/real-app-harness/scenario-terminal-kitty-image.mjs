@@ -23,7 +23,7 @@ import {
   waitForPaneText,
   waitForPaneVisible,
 } from './scenarioAssertions.mjs';
-import { appDaemonInTree } from './platform.mjs';
+import { appCliInTree } from './platform.mjs';
 
 const STORAGE_OFF = '0';
 
@@ -148,7 +148,7 @@ async function main() {
     throw new Error('kitty image scenario requires a named non-production instance (it restarts the instance daemon)');
   }
   const resources = resolveHarnessResources(instance);
-  const binary = appDaemonInTree(resources.appPath);
+  const binary = appCliInTree(resources.appPath);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-KITTY-IMAGE',

@@ -109,6 +109,7 @@ jobs:
           GOOS=darwin GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn
           make build-pty-host
           mkdir -p app/src-tauri/binaries
+          cp /tmp/attnd "app/src-tauri/binaries/attnd-aarch64-apple-darwin"
           cp /tmp/attn "app/src-tauri/binaries/attn-aarch64-apple-darwin"
           cp pty-host/target/release/attn-pty-host "app/src-tauri/binaries/attn-pty-host-aarch64-apple-darwin"
 
@@ -309,18 +310,18 @@ jobs:
 
       - name: Build Linux amd64 daemon
         run: |
-          GOOS=linux GOARCH=amd64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-amd64
+          make build-linux-amd64 VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-amd64 DAEMON_OUTPUT=/tmp/attnd-linux-amd64
 
       - name: Validate Linux amd64 daemon
         run: |
-          /tmp/attn-linux-amd64 --version
-          file /tmp/attn-linux-amd64
+          /tmp/attnd-linux-amd64 --version
+          file /tmp/attnd-linux-amd64 /tmp/attn-linux-amd64
 
       - name: Upload Linux amd64 daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${RELEASE_TAG}" /tmp/attn-linux-amd64 --clobber
+          gh release upload "${RELEASE_TAG}" /tmp/attnd-linux-amd64 /tmp/attn-linux-amd64 --clobber
 
       - name: Build Linux amd64 shared PTY host
         run: |
@@ -329,7 +330,7 @@ jobs:
           file /tmp/attn-pty-host-linux-amd64
 
       - name: Check the Linux amd64 shared PTY host runs where the daemon runs
-        run: scripts/check-pty-host-glibc.sh /tmp/attn-linux-amd64 /tmp/attn-pty-host-linux-amd64
+        run: scripts/check-binary-glibc.sh /tmp/attnd-linux-amd64 /tmp/attn-linux-amd64 /tmp/attn-pty-host-linux-amd64
 
       - name: Upload Linux amd64 shared PTY host
         env:
@@ -391,18 +392,18 @@ jobs:
 
       - name: Build Linux arm64 daemon
         run: |
-          GOOS=linux GOARCH=arm64 make build VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-arm64
+          make build-linux-arm64 VERSION="${RELEASE_VERSION}" CHANNEL=release OUTPUT=/tmp/attn-linux-arm64 DAEMON_OUTPUT=/tmp/attnd-linux-arm64
 
       - name: Validate Linux arm64 daemon
         run: |
-          /tmp/attn-linux-arm64 --version
-          file /tmp/attn-linux-arm64
+          /tmp/attnd-linux-arm64 --version
+          file /tmp/attnd-linux-arm64 /tmp/attn-linux-arm64
 
       - name: Upload Linux arm64 daemon
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${RELEASE_TAG}" /tmp/attn-linux-arm64 --clobber
+          gh release upload "${RELEASE_TAG}" /tmp/attnd-linux-arm64 /tmp/attn-linux-arm64 --clobber
 
       - name: Build Linux arm64 shared PTY host
         run: |
@@ -411,7 +412,7 @@ jobs:
           file /tmp/attn-pty-host-linux-arm64
 
       - name: Check the Linux arm64 shared PTY host runs where the daemon runs
-        run: scripts/check-pty-host-glibc.sh /tmp/attn-linux-arm64 /tmp/attn-pty-host-linux-arm64
+        run: scripts/check-binary-glibc.sh /tmp/attnd-linux-arm64 /tmp/attn-linux-arm64 /tmp/attn-pty-host-linux-arm64
 
       - name: Upload Linux arm64 shared PTY host
         env:

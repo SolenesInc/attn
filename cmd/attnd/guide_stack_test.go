@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	attn "github.com/victorarias/attn/cmd/attn"
+	attn "github.com/victorarias/attn/cmd/attnd"
 	"github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/testworld"
 )

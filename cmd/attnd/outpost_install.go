@@ -30,6 +30,9 @@ func installOutpostBinary(args []string) error {
 	flags := flag.NewFlagSet("_outpost-install", flag.ContinueOnError)
 	size := flags.Int64("size", 0, "Expected binary size")
 	digest := flags.String("sha256", "", "Expected binary sha256")
+	cli := flags.String("cli", "", "Staged attn CLI path")
+	cliSize := flags.Int64("cli-size", 0, "Expected attn CLI size")
+	cliDigest := flags.String("cli-sha256", "", "Expected attn CLI sha256")
 	host := flags.String("host", "", "Staged attn-pty-host path")
 	hostSize := flags.Int64("host-size", 0, "Expected attn-pty-host size")
 	hostDigest := flags.String("host-sha256", "", "Expected attn-pty-host sha256")
@@ -42,21 +45,26 @@ func installOutpostBinary(args []string) error {
 	if err := json.Unmarshal([]byte(*build), &expected); err != nil {
 		return fmt.Errorf("expected build: %w", err)
 	}
-	if *size <= 0 || *digest == "" || *host == "" || *hostSize <= 0 || *hostDigest == "" || *target == "" || flags.NArg() != 0 {
-		return fmt.Errorf("_outpost-install requires --size, --sha256, --host, --host-size, --host-sha256, --build and --target")
+	if *size <= 0 || *digest == "" || *cli == "" || *cliSize <= 0 || *cliDigest == "" || *host == "" || *hostSize <= 0 || *hostDigest == "" || *target == "" || flags.NArg() != 0 {
+		return fmt.Errorf("_outpost-install requires --size, --sha256, --cli, --cli-size, --cli-sha256, --host, --host-size, --host-sha256, --build and --target")
 	}
 	staged, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	if filepath.Clean(staged) == filepath.Clean(*target) {
-		return fmt.Errorf("run _outpost-install from a staged binary, not the install path %s", *target)
+	installedDaemon := filepath.Join(filepath.Dir(*target), "attnd")
+	if filepath.Clean(staged) == filepath.Clean(installedDaemon) {
+		return fmt.Errorf("run _outpost-install from a staged binary, not the install path %s", installedDaemon)
 	}
 	defer os.Remove(staged)
+	defer os.Remove(*cli)
 	defer os.Remove(*host)
 	fmt.Println("verifying")
 	if err := verifyStagedBinary(staged, *size, *digest); err != nil {
 		return err
+	}
+	if err := verifyStagedBinary(*cli, *cliSize, *cliDigest); err != nil {
+		return fmt.Errorf("attn: %w", err)
 	}
 	if err := verifyStagedBinary(*host, *hostSize, *hostDigest); err != nil {
 		return fmt.Errorf("%s: %w", ptyhost.BinaryName, err)
@@ -81,7 +89,10 @@ func installOutpostBinary(args []string) error {
 	if err := replaceKeepingPrevious(*host, filepath.Join(filepath.Dir(*target), ptyhost.BinaryName)); err != nil {
 		return err
 	}
-	if err := replaceKeepingPrevious(staged, *target); err != nil {
+	if err := replaceKeepingPrevious(staged, installedDaemon); err != nil {
+		return err
+	}
+	if err := replaceKeepingPrevious(*cli, *target); err != nil {
 		return err
 	}
 	fmt.Println("installed")

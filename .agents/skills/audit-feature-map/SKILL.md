@@ -92,7 +92,7 @@ last audited revision: run
 `attn seed search "feature map audit" --limit 50`, read the harvest messages of
 the audit stakes, and take the newest revision among those that don't start
 with `blocked`. Passes from before these outcomes harvested only when they
-finished, so their revisions count. Read the commits that touch `cmd/attn`,
+finished, so their revisions count. Read the commits that touch `cmd/attnd`,
 `app/src/shortcuts`, `app/src/application` or `internal/prompts/content`, from
 the last audited revision to your revision. Count a way in as missing only when
 you can point at the source that adds the way in.

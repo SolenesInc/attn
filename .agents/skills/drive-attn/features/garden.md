@@ -56,9 +56,9 @@ checks.
 
 ### Agents
 
-- `attn seed` (`cmd/attn/seed.go`): `plant`, `plot`, `ls` (with `--plot`), `search`, `ready`, `show` (with `--since` or `--section`), `notes` (with `--since` and `--kind`), `edit` (an exported body on stdin, `-m -`, with `--note`), `rollback [<version>]`, `authorization [<words> | --clear]`, `remind (--in <duration> | --at <time>) -m <message> | --clear`, `tend`, `park`, `harvest` (with `--when-merged [<pr-url>]`, which takes the session's single open pull request when it gets no url, and `--when-merged --clear`, which takes the arming back), `wither`, `replant`, `note` (with `--handoff` and `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `watch`, `unwatch`, `link`, `unlink`, `attach`, `detach`, `export`, `review`, `prime`, `guide`, `send-to-chief`.
+- `attn seed` (`cmd/attnd/seed.go`): `plant`, `plot`, `ls` (with `--plot`), `search`, `ready`, `show` (with `--since` or `--section`), `notes` (with `--since` and `--kind`), `edit` (an exported body on stdin, `-m -`, with `--note`), `rollback [<version>]`, `authorization [<words> | --clear]`, `remind (--in <duration> | --at <time>) -m <message> | --clear`, `tend`, `park`, `harvest` (with `--when-merged [<pr-url>]`, which takes the session's single open pull request when it gets no url, and `--when-merged --clear`, which takes the arming back), `wither`, `replant`, `note` (with `--handoff` and `--ring`), `check add|edit|remove|restore|report|confirm|reject|uncheck|reopen`, `watch`, `unwatch`, `link`, `unlink`, `attach`, `detach`, `export`, `review`, `prime`, `guide`, `send-to-chief`.
 - [crew.md](crew.md) covers `send-to-chief`, which hands the seed to the chief. To hand a seed over, run `attn delegate --seed <id> --handover --cwd <path>`, which [delegation.md](delegation.md) covers. `attn seed handover` was removed and answers `seed: unknown command "handover"`.
-- `attn open <seed-id>` opens the seed as a tile beside the caller. `attn ticket` prints `attn seed --help` (`cmd/attn/main.go`).
+- `attn open <seed-id>` opens the seed as a tile beside the caller. `attn ticket` prints `attn seed --help` (`cmd/attnd/main.go`).
 - Prompts: the garden contract in every session's instructions, which `attn seed prime` also prints (`internal/prompts/content/garden.md`). The craft that `attn seed guide` prints (`internal/prompts/content/resources/seed-guide.md`). Ready seeds and their handoffs at session start (`internal/prompts/content/session/garden-ready.md`, `garden-row.md`, `garden-handoff.md`). The seed update an agent reads from its inbox (`internal/prompts/content/session/garden-update.md`).
 
 ### Triggers
@@ -154,7 +154,7 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/garden_wire_test.go`, `internal/daemon/garden_*_wire_test.go`, `internal/daemon/seed_*_wire_test.go`.
-- Stack: `cmd/attn/seed_stack_test.go`, `cmd/attn/seed_notes_stack_test.go`, `cmd/attn/seed_authorization_stack_test.go`, `cmd/attn/garden_advisor_stack_test.go`, `cmd/attn/ticket_signpost_stack_test.go`, `app/e2e/garden-dock.spec.ts`, `app/e2e/garden-check-tally.spec.ts`, `app/e2e/seed-header.spec.ts`.
+- Stack: `cmd/attnd/seed_stack_test.go`, `cmd/attnd/seed_notes_stack_test.go`, `cmd/attnd/seed_authorization_stack_test.go`, `cmd/attnd/garden_advisor_stack_test.go`, `cmd/attnd/ticket_signpost_stack_test.go`, `app/e2e/garden-dock.spec.ts`, `app/e2e/garden-check-tally.spec.ts`, `app/e2e/seed-header.spec.ts`.
 - Scenario: `garden-plot-dispatch`, `garden-profile-scope`, `garden-seed-authorization`, `garden-seed-header`, `garden-seed-read-receipts`, `garden-seed-reopen`, `garden-seed-tile-navigation`, `crew-seed-header`.
 - Kernel: `internal/garden/*_test.go`, `internal/store/garden_*_test.go`.
 - App: `app/src/App.garden*.test.tsx`, `app/src/App.seedArtifactTransfer.test.tsx`, `app/src/App.terminalSeeds.test.tsx`, `app/src/components/PaneSeedChip.test.tsx`, `app/src/components/SeedArtifactRows.test.tsx`, `app/src/components/gardenBoardModel.takeover.test.ts`, `app/src/components/gardenSearch.test.ts`.
