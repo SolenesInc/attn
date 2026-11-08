@@ -8,7 +8,7 @@ import {
 } from '../../browser/host';
 import { useDesktopShelfStore } from '../../store/desktopShelf';
 import { useSidebarDrag } from '../../store/sidebarDrag';
-import { useTileWindow } from '../../tileWindow';
+import { nativeWindowLabel, useTileWindow } from '../../tileWindow';
 
 function hostRect(element: HTMLElement): BrowserHostRect {
   const rect = element.getBoundingClientRect();
@@ -43,6 +43,8 @@ export function BrowserTileBody({
   const dragging = tileDragging || sidebarDragging;
   const hostRef = useRef<HTMLDivElement>(null);
   const tileWindow = useTileWindow();
+  const tileWindowRef = useRef(tileWindow);
+  tileWindowRef.current = tileWindow;
   const draggingRef = useRef(dragging);
   const visibleRef = useRef(visible);
   const nativeLocationsRef = useRef<string[]>([]);
@@ -106,6 +108,7 @@ export function BrowserTileBody({
         await mountBrowserHost(
           label,
           url,
+          nativeWindowLabel(tileWindowRef.current),
           hostRect(element),
           visibleRef.current && !draggingRef.current,
         );
@@ -114,6 +117,7 @@ export function BrowserTileBody({
         if (currentElement) {
           await updateBrowserHost(
             label,
+            nativeWindowLabel(tileWindowRef.current),
             hostRect(currentElement),
             visibleRef.current && !draggingRef.current,
           );
@@ -131,7 +135,7 @@ export function BrowserTileBody({
     const element = hostRef.current;
     if (!element) return;
     const sync = () => {
-      void updateBrowserHost(label, hostRect(element), visible && !dragging).catch((updateError) => {
+      void updateBrowserHost(label, nativeWindowLabel(tileWindow), hostRect(element), visible && !dragging).catch((updateError) => {
         if (!String(updateError).includes('not mounted')) {
           console.warn('[BrowserTile] Failed to update browser host:', updateError);
         }

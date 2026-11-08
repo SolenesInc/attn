@@ -14,6 +14,16 @@ export function useTileWindow(): Window {
   return useContext(TileWindowContext);
 }
 
+const nativeLabels = new WeakMap<Window, string>();
+
+export function nameNativeWindow(tileWindow: Window, label: string): void {
+  nativeLabels.set(tileWindow, label);
+}
+
+export function nativeWindowLabel(tileWindow: Window): string {
+  return nativeLabels.get(tileWindow) ?? 'main';
+}
+
 export function usePortalTarget(): HTMLElement {
   return useTileWindow().document.body;
 }

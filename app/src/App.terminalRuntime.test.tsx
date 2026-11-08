@@ -694,10 +694,12 @@ describe('App terminal runtime', () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_mount', {
       label: 'browser-ws-tile-browser',
       url: 'https://example.com/',
+      window: 'main',
       geometry: { x: 10, y: 20, width: 300, height: 400, visible: true },
     });
     expect(vi.mocked(invoke)).toHaveBeenLastCalledWith('browser_host_update', {
       label: 'browser-ws-tile-browser',
+      window: 'main',
       geometry: { x: 10, y: 20, width: 300, height: 400, visible: true },
     });
 
@@ -707,6 +709,7 @@ describe('App terminal runtime', () => {
 
     expect(vi.mocked(invoke)).toHaveBeenLastCalledWith('browser_host_update', {
       label: 'browser-ws-tile-browser',
+      window: 'main',
       geometry: { x: 30, y: 40, width: 500, height: 600, visible: true },
     });
   });

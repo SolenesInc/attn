@@ -9,6 +9,7 @@ mod native_input_diagnostics;
 #[cfg(target_os = "macos")]
 mod native_keyboard;
 mod quick_capture;
+mod tile_window;
 mod title_bar;
 mod ui_automation;
 mod wake;
@@ -688,6 +689,35 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
     Ok(menu)
 }
 
+fn build_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .cloned()
+        .ok_or_else(|| tauri::Error::WindowNotFound)?;
+    let builder = tauri::WebviewWindowBuilder::from_config(app, &config)?;
+    #[cfg(target_os = "macos")]
+    let builder = {
+        let opener = app.clone();
+        builder.on_new_window(move |url, features| tile_window::create(&opener, url, features))
+    };
+    let main = builder.build()?;
+    #[cfg(target_os = "macos")]
+    if let Err(error) = tile_window::allow_scripted_windows(&main) {
+        eprintln!("[TileWindow] {error}");
+    }
+    let close_app = app.clone();
+    main.on_window_event(move |event| {
+        if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            tile_window::main_close_requested(&close_app, api);
+        }
+    });
+    Ok(())
+}
+
 fn dispatch_native_shortcut(app: &tauri::AppHandle, shortcut_id: &str) {
     use tauri::Manager;
 
@@ -1178,6 +1208,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             quick_capture::quick_capture_draft_file_chunk,
             quick_capture::quick_capture_download_find,
             quick_capture::quick_capture_download_append,
+            tile_window::tile_window_prepare,
+            tile_window::tile_window_show,
+            tile_window::tile_window_hide,
+            tile_window::tile_window_raise,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,
@@ -1196,6 +1230,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             instance::hold_app_lock()?;
             instance::write_app_pid_file();
             native_input_diagnostics::install();
+            build_main_window(app.handle())?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {
                 native_keyboard::install(&window)?;
@@ -1258,7 +1293,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                     }
                 }
             }
-            if webview.label() == "capture" {
+            if webview.label() == "capture" || tile_window::is_tile_window(webview.label()) {
                 return;
             }
             let _ = webview.window().show();
@@ -1269,6 +1304,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             std::process::exit(1);
         })
         .run(|_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = &event {
+                tile_window::show_main(_handle);
+            }
             if matches!(event, tauri::RunEvent::Exit) {
                 #[cfg(target_os = "macos")]
                 hotkeys::shutdown(_handle);

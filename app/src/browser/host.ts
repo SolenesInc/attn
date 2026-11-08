@@ -55,6 +55,7 @@ export function browserHostLabel(containerId: string, tileId: string): string {
 export async function mountBrowserHost(
   label: string,
   url: string,
+  windowLabel: string,
   rect: BrowserHostRect,
   visible: boolean,
 ): Promise<void> {
@@ -64,7 +65,7 @@ export async function mountBrowserHost(
   recordUiDiag({ kind: 'browser_host_request', action: 'mount', label, rect, visible });
   tracedBrowserHostState.set(label, { visible, suspicious: false });
   try {
-    await invoke('browser_host_mount', { label, url, geometry: { ...rect, visible } });
+    await invoke('browser_host_mount', { label, url, window: windowLabel, geometry: { ...rect, visible } });
     recordUiDiag({ kind: 'browser_host_result', action: 'mount', label, rect, visible });
   } catch (error) {
     recordUiDiag({ kind: 'browser_host_error', action: 'mount', label, rect, visible, error: String(error) });
@@ -72,12 +73,17 @@ export async function mountBrowserHost(
   }
 }
 
-export async function updateBrowserHost(label: string, rect: BrowserHostRect, visible: boolean): Promise<void> {
+export async function updateBrowserHost(
+  label: string,
+  windowLabel: string,
+  rect: BrowserHostRect,
+  visible: boolean,
+): Promise<void> {
   if (!isTauri()) return;
   const trace = shouldTraceBrowserUpdate(label, rect, visible);
   if (trace) recordUiDiag({ kind: 'browser_host_request', action: 'update', label, rect, visible });
   try {
-    await invoke('browser_host_update', { label, geometry: { ...rect, visible } });
+    await invoke('browser_host_update', { label, window: windowLabel, geometry: { ...rect, visible } });
     if (trace) recordUiDiag({ kind: 'browser_host_result', action: 'update', label, rect, visible });
   } catch (error) {
     recordUiDiag({ kind: 'browser_host_error', action: 'update', label, rect, visible, error: String(error) });

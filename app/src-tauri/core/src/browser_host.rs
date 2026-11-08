@@ -434,20 +434,20 @@ pub async fn browser_host_mount(
     app: AppHandle,
     label: String,
     url: String,
+    window: String,
     geometry: Geometry,
 ) -> Result<(), String> {
     validate_label(&label)?;
     let url = parse_url(&url)?;
+    let window = host_window(&app, &window)?;
     if let Some(webview) = app.get_webview(&label) {
+        move_to_window(&webview, &window)?;
         webview
             .navigate(url)
             .map_err(|error| format!("navigate browser webview: {error}"))?;
         return set_geometry(&webview, geometry);
     }
 
-    let window = app
-        .get_window("main")
-        .ok_or_else(|| "main window is unavailable".to_string())?;
     let popup_app = app.clone();
     let popup_label = label.clone();
     let page_load_app = app.clone();
@@ -502,13 +502,35 @@ pub fn browser_host_update(
     _caller: TrustedMainWebview,
     app: AppHandle,
     label: String,
+    window: String,
     geometry: Geometry,
 ) -> Result<(), String> {
     validate_label(&label)?;
+    let window = host_window(&app, &window)?;
     let webview = app
         .get_webview(&label)
         .ok_or_else(|| "browser webview is not mounted".to_string())?;
+    move_to_window(&webview, &window)?;
     set_geometry(&webview, geometry)
+}
+
+fn host_window(app: &AppHandle, label: &str) -> Result<tauri::Window, String> {
+    if label != "main" && !crate::tile_window::is_tile_window(label) {
+        return Err(format!(
+            "a browser tile can sit only in the main window or a tile window, not {label:?}"
+        ));
+    }
+    app.get_window(label)
+        .ok_or_else(|| format!("window {label} is not open"))
+}
+
+fn move_to_window(webview: &tauri::Webview, window: &tauri::Window) -> Result<(), String> {
+    if webview.window().label() == window.label() {
+        return Ok(());
+    }
+    webview
+        .reparent(window)
+        .map_err(|error| format!("move browser webview into {}: {error}", window.label()))
 }
 
 #[tauri::command]
