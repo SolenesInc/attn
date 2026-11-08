@@ -21,7 +21,7 @@ func TestTheGuideListsItsPagesAndPrintsEachForTheTerminal(t *testing.T) {
 		"telemetry", "using-outposts", "using-shared-codex", "using-nisse",
 		"Before you install", "Why did my desktop disappear?")
 
-	requireStdout(t, s.Attn("guide", "getting-started"), "# Getting started", "The home screen, with the sidebar")
+	requireStdout(t, s.Attn("guide", "getting-started"), "# Getting started", "The home screen, with the Chief at the top of the sidebar")
 
 	queue := s.Attn("guide", "queue")
 	requireStdout(t, queue, "# Queue flow", "```text", "anyone else waiting?")
