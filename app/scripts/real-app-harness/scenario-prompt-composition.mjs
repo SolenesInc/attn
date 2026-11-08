@@ -45,6 +45,10 @@ async function main() {
   const resources = resolveHarnessResources(instance);
   const env = instanceCliEnv(instance);
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
+  const wakeChief = (cwd, agent) => {
+    cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'claude-haiku-4-5', '--cwd', cwd]);
+    return { sessionId: JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id };
+  };
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ ...options, trustedApp: true });
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });
@@ -75,7 +79,9 @@ async function main() {
       await runner.step(`launch_${name}`, async () => {
         const cwd = path.join(runner.sessionDir, name);
         fs.mkdirSync(cwd, { recursive: true });
-        writeMockAgentFixture(cwd, { version: 1, agent, turns: [chief ? {
+        writeMockAgentFixture(cwd, { version: 1, agent, turns: chief ? [
+          { includes: 'You have been woken', submitHook: false, actions: [{ type: 'reply', text: 'CHIEF_READY', state: 'idle' }] },
+          {
           includes: 'sent through Quick Capture',
           submitHook: false,
           actions: [
@@ -83,7 +89,7 @@ async function main() {
             { type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] },
             { type: 'reply', text: 'QUICK_CAPTURE_READ', state: 'idle' },
           ],
-        } : {
+        }] : [{
           includes: '📬 You have unread items',
           submitHook: false,
           actions: [
@@ -91,7 +97,7 @@ async function main() {
             { type: 'reply', text: 'PEER_READ', state: 'idle' },
           ],
         }] });
-        const result = await client.request('create_session', { cwd, label: name, agent, chief_of_staff: chief });
+        const result = chief ? wakeChief(cwd, agent) : await client.request('create_session', { cwd, label: name, agent });
         sessions.push(result.sessionId);
         await observer.waitForSession({ id: result.sessionId });
         await waitForFirstDesktopPane(client, result.sessionId, name, 20_000);
@@ -99,7 +105,7 @@ async function main() {
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work that outlives this turn in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes('You are the chief of staff of your profile.') === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes('## You are the Chief') === chief, 'only the Chief member is guided as the Chief', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }

@@ -648,23 +648,6 @@ async function main() {
       );
     });
 
-    await runner.step('the_chief_never_queues', async () => {
-      await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
-      await client.request('chief_of_staff_toggle');
-      const promoted = await waitForTurns(client, [alpha.sessionId], 'beta out of the band once it is chief', 20_000);
-      runner.assert(promoted.chief?.id === beta.sessionId, `beta occupies the chief slot: ${JSON.stringify(promoted.chief)}`);
-
-      await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
-      await client.request('chief_of_staff_toggle');
-      const demoted = await waitForTurns(
-        client,
-        [beta.sessionId, alpha.sessionId],
-        'beta back in the band, with its original turn age',
-        20_000,
-      );
-      runner.assert(demoted.chief === null, 'the chief slot is empty again');
-    });
-
     await runner.step('toggling_the_arrangement_preserves_the_queue', async () => {
       const activeBefore = shownAgentId(await client.request('get_state'));
       const expected = turnIds(await queueState(client));
