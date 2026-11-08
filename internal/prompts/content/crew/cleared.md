@@ -1,3 +1,3 @@
-If your conversation ever starts empty, as after /clear or /new, run
-`attn crew prime` before anything else. It prints the orientation below, read
-fresh.
+The orientation below is already in your context. Run `attn crew prime` only
+when your conversation starts empty, as after /clear or /new: it prints this
+orientation again, read fresh.

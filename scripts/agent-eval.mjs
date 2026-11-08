@@ -14,10 +14,11 @@ const { values: options } = parseArgs({
     scenario: { type: 'string' },
     'tool-home': { type: 'string', default: path.join(os.homedir(), 'attn-onboarding-rehearsal', 'tool-home') },
     parallel: { type: 'string', default: '4' },
+    runs: { type: 'string', default: '3' },
   },
 });
 if (!options.attn) {
-  console.error(`usage: node scripts/agent-eval.mjs --attn <binary> [--harness claude|codex] [--model <id>] [--only <probe,...>] [--scenario plain|chief] [--tool-home <dir>]
+  console.error(`usage: node scripts/agent-eval.mjs --attn <binary> [--harness claude|codex] [--model <id>] [--only <probe,...>] [--scenario plain|chief] [--runs <n>] [--tool-home <dir>]
 
 Start real headless agents with attn's launch instructions and a plain request,
 and check that each reaches the right attn command. Actions are recorded, not
@@ -33,6 +34,8 @@ const probes = [
   { id: 'list-agents', ask: 'Which other agents are running right now?', want: /^agent list\b/ },
   { id: 'read-agent', ask: 'What is the agent called fern doing? Read its screen.', want: /^agent peek fern\b/ },
   { id: 'close-self', ask: 'Close yourself. There is nothing left to do.', want: /^agent close --self\b/, reads: 'wrap-up' },
+  { id: 'park-seed', ask: 'Stop working on seed s-abc123 for now and let someone else pick it up later.', want: /^seed park s-abc123\b/ },
+  { id: 'remind-seed', ask: 'Leave a note that whoever tends seed s-abc123 in two hours should check the deploy.', want: /^seed remind s-abc123\b/ },
   { id: 'can-close', ask: 'Can I close you?', want: /^skill --reference wrap-up\b/ },
   { id: 'open-shell', ask: 'Open me a shell in /tmp.', want: /^terminal open\b.*\/tmp/ },
   { id: 'move-terminal', ask: 'Move this terminal to desktop 3.', want: /^terminal move\b.*\b3\b/ },
@@ -111,8 +114,8 @@ function runAgent(dir, bin, instructions, ask) {
   });
 }
 
-async function runProbe(probe) {
-  const dir = path.join(root, probe.id);
+async function runProbe(probe, run) {
+  const dir = path.join(root, probe.id, String(run));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'plan.md'), '# Plan\n');
   const bin = installRecorder(dir);
@@ -122,20 +125,24 @@ async function runProbe(probe) {
   const reached = commands.some(line => probe.want.test(line));
   const read = !probe.reads || commands.some(line => line.startsWith(`skill --reference ${probe.reads}`));
   fs.writeFileSync(path.join(dir, 'answer.txt'), stdout);
-  return { id: probe.id, pass: reached && read && !failure, reached, read, commands, failure };
+  return { id: probe.id, run, pass: reached && read && !failure, reached, read, commands, failure };
 }
 
-const queue = [...probes];
+const runs = Number(options.runs);
+const queue = probes.flatMap(probe => Array.from({ length: runs }, (_, run) => ({ probe, run: run + 1 })));
 const results = [];
 await Promise.all(Array.from({ length: Number(options.parallel) }, async () => {
-  for (let probe = queue.shift(); probe; probe = queue.shift()) results.push(await runProbe(probe));
+  for (let next = queue.shift(); next; next = queue.shift()) results.push(await runProbe(next.probe, next.run));
 }));
 
-results.sort((a, b) => probes.findIndex(p => p.id === a.id) - probes.findIndex(p => p.id === b.id));
-for (const result of results) {
-  const why = result.pass ? '' : result.failure || (result.reached ? 'skipped the reference' : 'never reached the command');
-  console.log(`${result.pass ? 'pass' : 'FAIL'}  ${result.id.padEnd(18)} ${result.commands.join(' | ').slice(0, 150)}${why ? `  <- ${why}` : ''}`);
+let short = 0;
+for (const probe of probes) {
+  const mine = results.filter(result => result.id === probe.id).sort((a, b) => a.run - b.run);
+  const passed = mine.filter(result => result.pass).length;
+  if (passed < runs) short++;
+  const shown = mine.find(result => !result.pass) ?? mine[0];
+  const why = shown.pass ? '' : shown.failure || (shown.reached ? 'skipped the reference' : 'never reached the command');
+  console.log(`${passed === runs ? 'pass' : 'FAIL'} ${passed}/${runs}  ${probe.id.padEnd(18)} ${shown.commands.join(' | ').slice(0, 150)}${why ? `  <- run ${shown.run}: ${why}` : ''}`);
 }
-const failed = results.filter(result => !result.pass).length;
-console.log(`\n${results.length - failed}/${results.length} passed with ${options.harness}. Transcripts: ${root}`);
-process.exit(failed ? 1 : 0);
+console.log(`\n${probes.length - short}/${probes.length} probes passed all ${runs} runs with ${options.harness}. Transcripts: ${root}`);
+process.exit(short ? 1 : 0);
