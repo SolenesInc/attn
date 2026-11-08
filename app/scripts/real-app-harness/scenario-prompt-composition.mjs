@@ -176,12 +176,11 @@ async function main() {
         data_base64: pdf.toString('base64'), final: true }, 'quick_capture_result');
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const agent = launches[2];
-      const completed = observer.waitForMessage(data => data.event === 'session_state_changed' &&
-        data.session?.id === agent.id && data.session?.state === 'idle' ? data : null, 'quick capture agent finishes reading the capture');
       const saved = await observer.requestResult({ cmd: 'quick_capture_send', capture_id: captureId,
         mailbox: { kind: 'chief' }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
       runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
-      await completed;
+      await waitFor(() => transcriptTurns(transcripts(agent.cwd)[0]?.text || '').some(turn => turn.text.includes('QUICK_CAPTURE_READ')),
+        'quick capture agent finishes reading the capture');
       const receipt = await observer.requestResult({ cmd: 'quick_capture_get', capture_id: captureId }, 'quick_capture_result');
       runner.assert(Boolean(receipt.result.record.read_at), 'typing the quick capture commits a read receipt');
       const text = transcripts(agent.cwd)[0]?.text || '';
