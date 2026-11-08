@@ -5,6 +5,7 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/stepclock"
 )
@@ -51,16 +52,23 @@ func (m *Monitor) readFolderTrustQuestion(agent string, nextReadAfter time.Durat
 	}
 	m.mu.Unlock()
 
+	if m.screenShowsFolderTrustQuestion(agent, terminal) {
+		m.recordFolderTrustQuestion()
+	}
+}
+
+func (m *Monitor) screenShowsFolderTrustQuestion(agent string, terminal harness.TerminalID) bool {
 	ctx, cancel := context.WithTimeout(m.registry.host.Context(), folderTrustReadBudget)
 	defer cancel()
 	screen, err := m.registry.host.ReadScreen(ctx, terminal)
 	if err != nil {
 		m.registry.host.Logf("folder trust read failed: session=%s err=%v", m.session, err)
-		return
+		return false
 	}
-	if !agentdriver.ShowsFolderTrustQuestion(agent, screen) {
-		return
-	}
+	return agentdriver.ShowsFolderTrustQuestion(agent, screen)
+}
+
+func (m *Monitor) recordFolderTrustQuestion() {
 	at := time.Now()
 	m.UpdateEvidence(func(e *Evidence) bool {
 		return !m.awaitingHarness || showsFolderTrust(e)
@@ -71,6 +79,15 @@ func (m *Monitor) readFolderTrustQuestion(agent string, nextReadAfter time.Durat
 			ObservedAt: at,
 		}
 	}))
+}
+
+func (m *Monitor) ResumeAtFolderTrustQuestion(agent string, terminal harness.TerminalID) bool {
+	if m == nil || !m.screenShowsFolderTrustQuestion(agent, terminal) {
+		return false
+	}
+	m.HarnessStarting(agent)
+	m.recordFolderTrustQuestion()
+	return true
 }
 
 func (m *Monitor) clearFolderTrustQuestion() {

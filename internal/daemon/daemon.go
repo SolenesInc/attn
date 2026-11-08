@@ -1255,8 +1255,11 @@ func (d *Daemon) recoverMachine(ctx context.Context) machineReport {
 
 func (d *Daemon) resumeMonitor(existing *protocol.Session, live liveTerminal) (stateUpdated bool) {
 	sessionID := existing.ID
-	d.startSessionMonitor(sessionID)
+	monitor := d.startSessionMonitor(sessionID)
 	d.touchSession(sessionID)
+	if existing.State == protocol.SessionStateWaitingInput && !protocol.Deref(existing.ConversationStarted) && monitor.ResumeAtFolderTrustQuestion(existing.Agent, live.terminal) {
+		return false
+	}
 	if existing.State == protocol.SessionStateScheduled || !live.haveInfo {
 		return false
 	}
