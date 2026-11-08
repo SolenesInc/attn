@@ -18,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -165,17 +166,18 @@ func TestAppQuickCaptureRequestsAreCorrelatedAndEmptyOrMalformedMailboxsRefused(
 	}
 }
 func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	cli, app := w.Client(), w.TrustedApp()
-	registerSessions(t, w, cli, "chief", "peer")
-	setChiefOfStaff(app, "chief", true)
+	registerSessions(t, w, cli, "peer")
+	wakeConfiguredChief(t, w, cli)
+	chief := chiefSession(t, cli)
 	capture := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
-	batch := readInbox(t, cli, "chief", 0)
+	batch := readInbox(t, cli, string(chief), 0)
 	if len(batch.Items) != 1 || batch.Items[0].Kind != "peer_message" || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:peer" || batch.Remaining != 0 {
 		t.Fatalf("the inbox read %+v, want only the peer message, attributed to its sender, with the quick capture left for the ring", batch)
 	}
-	_, item, err := cli.AgentInboxEntry(capture.CaptureID, "chief")
+	_, item, err := cli.AgentInboxEntry(capture.CaptureID, chief)
 	if err != nil || item == nil || item.Kind != "quick_capture" || item.Sender != nil || item.Content != "user request" {
 		t.Fatalf("the quick capture reads %+v (%v), want the user's words with no sender session", item, err)
 	}
@@ -283,22 +285,23 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	}
 }
 
-func TestQuickCaptureWaitsForTheNextChief(t *testing.T) {
-	w := newWorld(t)
+func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
 	cli, app := w.Client(), w.TrustedApp()
 	msg := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "Please investigate this")
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
-		t.Fatalf("absent Chief quick capture is read: %+v", r)
+		t.Fatalf("a quick capture for the asleep Chief is read: %+v", r)
 	}
-	registerSessions(t, w, cli, "chief")
-	if r := setChiefOfStaff(app, "chief", true); !r.Success {
-		t.Fatal(r)
+	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+	woken := wakeCrew(t, cli, "chief", "")
+	run := w.Launched(string(woken.SessionID))
+	run.Prompted()
+	if typed := run.Prompted(); !strings.Contains(typed, msg.Content) {
+		t.Fatalf("the woken Chief was typed %q, want the capture that waited for it", typed)
 	}
-	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
-		t.Fatal("inspection marked quick capture read")
-	}
-	_, item, err := cli.AgentInboxEntry(msg.CaptureID, "chief")
-	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.Sender != nil || item.Address != "chief:"+app.SelectedProfile() {
+	receipt := testworld.Await(app, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool { return e.CaptureID == msg.CaptureID })
+	_, item, err := cli.AgentInboxEntry(msg.CaptureID, woken.SessionID)
+	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.Sender != nil || item.Address != "member:chief" || item.ReadAt != receipt.ReadAt {
 		t.Fatalf("user attribution: %+v %v", item, err)
 	}
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt == nil || *r.ReadAt != item.ReadAt {
@@ -429,23 +432,20 @@ func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
 }
 
 func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		a := w.TrustedApp()
 		profileA := a.SelectedProfile()
 		profileB := createProfile(w.App(), "Other quick captures").ID
 		b := w.TrustedApp(profileB)
 		cli := w.Client()
-		for _, chief := range []struct {
-			id, profile string
-			app         *testworld.Peer
-		}{{"chief-a", profileA, a}, {"chief-b", profileB, b}} {
-			if err := w.InjectSession(chief.id, chief.id, w.Path(chief.id), protocol.SessionAgentClaude, chief.profile); err != nil {
-				t.Fatal(err)
-			}
-			if r := setChiefOfStaff(chief.app, chief.id, true); !r.Success {
-				t.Fatal(r)
-			}
+		chiefs := map[string]*bubbleClaude{}
+		for _, profile := range []string{profileA, profileB} {
+			scoped := cli.WithGardenProfile(profile, "")
+			setCrew(t, scoped, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+			chiefs[profile] = w.bootBubbleClaude(t, string(wakeCrew(t, scoped, "chief", "").SessionID))
+			chiefs[profile].reply("Ready. <!-- attn:state=idle -->")
 		}
+		chiefA, chiefB := protocol.SessionID(chiefs[profileA].id), protocol.SessionID(chiefs[profileB].id)
 		quickCapture, file, draft := uuid.NewString(), uuid.NewString(), uuid.NewString()
 		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
 		uploadQuickCapture(t, a, quickCapture, file, bytesA, true)
@@ -454,6 +454,10 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := a.QuickCapture(msg); err != nil {
 			t.Fatal(err)
 		}
+		w.advance(0)
+		receipt := testworld.Await[protocol.QuickCaptureReadMessage](a, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool {
+			return e.CaptureID == quickCapture && e.ProfileID == profileA
+		})
 
 		if _, err := b.QuickCapture(protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: quickCapture}); client.ErrorCode(err) != protocol.ErrorCodeQuickCaptureNotFound {
 			t.Fatalf("other-profile get: %v", err)
@@ -461,10 +465,10 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
 			t.Fatal("other profile downloaded file")
 		}
-		if _, err := cli.WithGardenProfile(profileB, "chief-b").QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
+		if _, err := cli.WithGardenProfile(profileB, chiefB).QuickCapture(protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: file}); err == nil {
 			t.Fatal("other-profile CLI downloaded file")
 		}
-		if _, _, err := cli.AgentInboxEntry(quickCapture, "chief-b"); err == nil {
+		if _, _, err := cli.AgentInboxEntry(quickCapture, chiefB); err == nil {
 			t.Fatal("other Chief read A quick capture")
 		}
 		list, err := b.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 1})
@@ -491,25 +495,23 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		if _, err := b.QuickCapture(msg); err != nil {
 			t.Fatal(err)
 		}
-		if _, itemB, err := cli.AgentInboxEntry(quickCapture, "chief-b"); err != nil || itemB == nil || itemB.Content != "B request" {
+		w.advance(0)
+		if _, itemB, err := cli.AgentInboxEntry(quickCapture, chiefB); err != nil || itemB == nil || itemB.Content != "B request" {
 			t.Fatalf("B chief reads %+v, %v", itemB, err)
 		}
-		if r := quickCaptureRecord(t, a, quickCapture); r.ReadAt != nil {
-			t.Fatal("B read A receipt")
+		if r := quickCaptureRecord(t, a, quickCapture); r.ReadAt == nil || *r.ReadAt != receipt.ReadAt {
+			t.Fatalf("B's read changed A's receipt: %+v, want read at %s", r, receipt.ReadAt)
 		}
-		_, itemA, err := cli.AgentInboxEntry(quickCapture, "chief-a")
+		_, itemA, err := cli.AgentInboxEntry(quickCapture, chiefA)
 		if err != nil || itemA == nil || itemA.Content != "A request" {
 			t.Fatalf("A chief reads %+v, %v", itemA, err)
 		}
-		receipt := testworld.Await[protocol.QuickCaptureReadMessage](a, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool {
-			return e.CaptureID == quickCapture && e.ProfileID == profileA
-		})
 		if receipt.ReadAt != itemA.ReadAt {
 			t.Fatalf("read receipt: %+v", receipt)
 		}
 
 		for range 2 {
-			if _, _, err := cli.AgentInboxEntry(quickCapture, "chief-a"); err != nil {
+			if _, _, err := cli.AgentInboxEntry(quickCapture, chiefA); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -549,26 +551,33 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 	})
 }
 
-func TestAQuickCaptureForTheChiefRingsTheLiveChiefAndTheNextOne(t *testing.T) {
+func TestAQuickCaptureForTheChiefReachesItAwakeAndWakesItsNextDay(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, trusted := w.App(), w.TrustedApp()
+		app, trusted, cli := w.App(), w.TrustedApp(), w.Client()
+		setSetting(t, app, "crew.heartbeat_enabled", "false")
+		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief.reply("Ready. <!-- attn:state=idle -->")
 		chiefMailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}
-		sendQuickCapture(t, trusted, chiefMailbox, "Captured before there was a chief")
-		chief := w.bubbleClaude(t, app, "chief")
-		if set := setChiefOfStaff(app, chief.id, true); !set.Success {
-			t.Fatalf("make %s the chief: %s", chief.id, protocol.Deref(set.Error))
-		}
-		synctest.Wait()
-		chief = w.bootBubbleClaude(t, chief.id)
-		w.advance(0)
-		if pasted := strings.Join(chief.term.Pasted(), "\n"); !strings.Contains(pasted, "Captured before there was a chief") {
-			t.Fatalf("the new chief was typed %q, want the capture that waited for it", pasted)
-		}
 
 		sendQuickCapture(t, trusted, chiefMailbox, "Captured for the live chief")
 		w.advance(0)
 		if pasted := strings.Join(chief.term.Pasted(), "\n"); !strings.Contains(pasted, "Captured for the live chief") {
 			t.Fatalf("the live chief was typed %q, want the new capture", pasted)
+		}
+
+		crewHandoff(t, cli, chief.id, "Back when the user writes.", false)
+		sendQuickCapture(t, trusted, chiefMailbox, "Captured while the chief slept")
+		synctest.Wait()
+		nextID := protocol.Deref(chiefOfRoster(t, crewRoster(t, cli)).BindingSession)
+		if nextID == "" || string(nextID) == chief.id {
+			t.Fatalf("a quick capture for the sleeping Chief woke %q, want its next day", nextID)
+		}
+		next := w.bootBubbleClaude(t, string(nextID))
+		next.reply("Ready. <!-- attn:state=idle -->")
+		if got := next.promptsContaining("Captured while the chief slept"); got != 1 {
+			t.Fatalf("the Chief's next day was typed the capture %d times, want once: %q", got, next.prompts())
 		}
 	})
 }

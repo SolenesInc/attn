@@ -593,13 +593,9 @@ func TestRereadingAnOldPeerMessageDoesNotReleaseANewerOutstandingRing(t *testing
 
 func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		day := w.bubbleClaude(t, app, "chief")
-		if set := setChiefOfStaff(app, day.id, true); !set.Success {
-			t.Fatalf("make %s the chief: %s", day.id, protocol.Deref(set.Error))
-		}
-		synctest.Wait()
-		day = w.bootBubbleClaude(t, day.id)
+		cli := w.Client()
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "Session watch")
@@ -608,8 +604,9 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 		synctest.Wait()
 		day.reply("Later. <!-- attn:state=idle -->")
 		w.advance(time.Millisecond)
-		sent := lifeMove(t, cli, "sender", plantSeedAs(t, cli, "sender", "For the chief"), "tend", "", "")
-		if _, err := cli.SeedSendToChief("sender", sent, ""); err != nil {
+		tended := plantSeedAs(t, cli, day.id, "Tended by the Chief")
+		lifeMove(t, cli, day.id, tended, "tend", "", "")
+		if _, err := cli.AgentMsg(tended, "sender", "About the seed you tend"); err != nil {
 			t.Fatal(err)
 		}
 		day.reply("Later. <!-- attn:state=idle -->")
@@ -617,12 +614,12 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 			t.Fatalf("separate address rings=%d", got)
 		}
 		items := readInbox(t, cli, day.id, 1).Items
-		if len(items) != 1 || items[0].Address != "session:"+day.id {
+		if len(items) != 1 || items[0].Address != "member:chief" {
 			t.Fatalf("partial read=%+v", items)
 		}
 		synctest.Wait()
 		if got := day.promptsContaining(inboxDoorbell); got != 3 {
-			t.Fatalf("unread chief address was not acknowledged: %d", got)
+			t.Fatalf("unread seed address was not acknowledged: %d", got)
 		}
 	})
 }

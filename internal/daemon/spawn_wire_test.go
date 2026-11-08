@@ -130,19 +130,6 @@ func TestTwoSpawnsOfOneSessionStartOneAgent(t *testing.T) {
 	}
 }
 
-func TestAChiefStartsOnTheConfiguredChiefModelAndEffort(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
-	app := w.App()
-	setSetting(t, app, "chief_model_claude", "claude-opus-4")
-	setSetting(t, app, "chief_effort_claude", "high")
-	chief := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) }))
-	model, _ := flagValue(chief.Argv, "--model")
-	effort, _ := flagValue(chief.Argv, "--effort")
-	if model != "claude-opus-4" || effort != "high" {
-		t.Errorf("the chief ran claude %q, want the configured chief model and effort", chief.Argv)
-	}
-}
-
 func refuseSpawnLikeTheApp(w *world, app *testworld.Peer, agent fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) protocol.SpawnResultMessage {
 	app.T.Helper()
 	refused, _, _ := w.RequestSpawn(app, agent, cwd, opts...)

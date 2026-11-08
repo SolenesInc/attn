@@ -9,12 +9,13 @@ import (
 )
 
 func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "chief", "sender", "observer")
-		if made := setChiefOfStaff(app, "chief", true); !made.Success {
-			t.Fatalf("making chief the Chief: %s", protocol.Deref(made.Error))
-		}
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		registerSessions(t, w, cli, "sender", "observer")
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief.reply("Ready. <!-- attn:state=idle -->")
+		member := chiefOfRoster(t, crewRoster(t, cli)).ID
 		seed := plantSeedAs(t, cli, "sender", "Place this work")
 		tended := lifeMove(t, cli, "sender", seed, "tend", "", "")
 		// Drain the setup move before its late bell can reach the next tender or new watchers.
@@ -37,13 +38,13 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if sent.ChiefSessionID != "chief" || tenderSessionOf(sent.Seed) != "chief" {
-			t.Errorf("sending to the Chief answered %+v, want the chief tending it", sent)
+		if string(sent.ChiefSessionID) != chief.id || tenderMemberOf(sent.Seed) != member {
+			t.Errorf("sending to the Chief answered %+v, want the Chief member tending it from %s", sent, chief.id)
 		}
 		shown := lifeShow(t, cli, seed)
-		if got := shown.Seed; tenderSessionOf(got) != "chief" || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
-			t.Errorf("after the send the seed is tended by %q in execution %q, want chief in %q",
-				tenderSessionOf(got), protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
+		if got := shown.Seed; tenderMemberOf(got) != member || protocol.Deref(got.LastExecutionID) != protocol.Deref(tended.LastExecutionID) {
+			t.Errorf("after the send the seed is tended by %+v in execution %q, want the Chief member in %q",
+				got.Tender, protocol.Deref(got.LastExecutionID), protocol.Deref(tended.LastExecutionID))
 		}
 		if !slices.ContainsFunc(shown.Notes, func(note protocol.SeedNote) bool {
 			return strings.Contains(note.Body, "Sent to Chief") && strings.Contains(note.Body, "feature/special")
@@ -58,32 +59,8 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		if bells := readInbox(t, cli, "sender", 0).Items; len(bells) != 0 {
 			t.Errorf("the sender received %q, want no bell for its own move", inboxContents(bells))
 		}
-		if items := readInbox(t, cli, "chief", 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
+		if items := readInbox(t, cli, chief.id, 0).Items; len(items) != 1 || protocol.Deref(items[0].Hint) == "tended" || !strings.Contains(items[0].Content, "attn seed show "+seed) {
 			t.Errorf("the chief received %q, want only the assignment pointing at %s and no tended bell", inboxContents(items), seed)
-		}
-	})
-}
-
-func TestAChiefSeedAssignmentStaysWithItsTenderWhenTheChiefRoleTransfers(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		registerSessions(t, w, cli, "chief", "sender", "next-chief")
-		if result := setChiefOfStaff(app, "chief", true); !result.Success {
-			t.Fatal(protocol.Deref(result.Error))
-		}
-		seed := plantSeedAs(t, cli, "sender", "place this work")
-		if _, err := cli.SeedSendToChief("sender", lifeShow(t, cli, seed).Seed, ""); err != nil {
-			t.Fatal(err)
-		}
-		if result := setChiefOfStaff(app, "next-chief", true); !result.Success {
-			t.Fatal(protocol.Deref(result.Error))
-		}
-		if items := readInbox(t, cli, "next-chief", 0).Items; len(items) != 0 {
-			t.Fatalf("new Chief received another session's assignment: %+v", items)
-		}
-		items := readInbox(t, cli, "chief", 0).Items
-		if len(items) != 1 || items[0].Address != "seed:"+seed || !strings.Contains(items[0].Content, "attn seed show "+seed) {
-			t.Fatalf("actual tender assignment=%+v", items)
 		}
 	})
 }

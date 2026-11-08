@@ -97,8 +97,8 @@ node app/scripts/onboarding-rehearsal/rehearse.mjs <scenario> --rebuild
 `--rebuild-app` installs the whole app, for a change under `app/src`.
 `--fresh-world` builds the scenario's saved state again. Saved state is
 migrated forward like any old install, so a schema change doesn't need this.
-The `upgrader` state needs the old chief-of-staff session role, so it can't be
-rebuilt once that role is removed. Don't use `--fresh-world` for it after that.
+The `upgrader` state needs the old chief-of-staff session role, which attn no
+longer has, so it can't be rebuilt. Don't use `--fresh-world` for it.
 
 The Chief runs with its own harness config in `~/attn-onboarding-rehearsal/tool-home`,
 without your instructions, memory or skills. Log each harness in once:

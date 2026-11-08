@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -159,53 +158,6 @@ func TestAttnsOwnNotebookWritesReachEveryOpenView(t *testing.T) {
 		t.Fatalf("writing the Notebook: %s", protocol.Deref(written.Error))
 	}
 	heard("ui", "note.md")
-}
-
-func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
-	for _, c := range []struct {
-		agent    fakeagent.Harness
-		guidance []string
-		retired  string
-	}{
-		{fakeagent.Claude, []string{"Never park a blocking Monitor on attn activity"}, ""},
-		{fakeagent.Codex, []string{"`attn seed show <seed-id>`"}, "attn ticket inbox"},
-	} {
-		t.Run(string(c.agent), func(t *testing.T) {
-			w := newWorld(t, c.agent)
-			app, cli := w.App(), w.Client()
-			root := fsNotebookRoot(t, w)
-
-			worker := w.Spawn(app, c.agent, w.Path("worker"))
-			if guide, err := cli.NotebookGuide(protocol.SessionID(worker)); err != nil || guide.SessionIsChief || guide.Guidance == "" || guide.Root != root {
-				t.Fatalf("a worker's guide = %+v, %v; want guidance under %s without the chief's role", guide, err, root)
-			}
-			if listed := fsAskList(app, "", ""); len(listed.Entries) != 0 {
-				t.Fatalf("a worker's guide scaffolded %v", fsEntryPaths(listed.Entries))
-			}
-
-			chief := w.Spawn(app, c.agent, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
-			guide, err := cli.NotebookGuide(protocol.SessionID(chief))
-			if err != nil || !guide.SessionIsChief || guide.Root != root {
-				t.Fatalf("the chief's guide = %+v, %v; want the chief's guidance under %s", guide, err, root)
-			}
-			for _, want := range c.guidance {
-				if !strings.Contains(guide.Guidance, want) {
-					t.Errorf("the chief's guide does not carry %q", want)
-				}
-			}
-			if c.retired != "" && strings.Contains(guide.Guidance, c.retired) {
-				t.Errorf("the chief's guide sends it to the retired %q", c.retired)
-			}
-			fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
-				return m.Root == root && m.Origin == "agent" && slices.Contains(m.Paths, "index.md")
-			})
-			for _, scaffolded := range []string{"index.md", "log.md", "knowledge/index.md"} {
-				if read := fsAskRead(app, "", scaffolded); !read.Success {
-					t.Fatalf("the chief's guide did not scaffold %s: %s", scaffolded, protocol.Deref(read.Error))
-				}
-			}
-		})
-	}
 }
 
 func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing.T) {

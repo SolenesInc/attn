@@ -792,7 +792,7 @@ commands:
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
   close --self -m "reason" [--compact] [--source-session <id>] [--json]
         close a session for good. A session may close itself and agents below it
-        in its delegation chain, including delegates of delegates; a profile's chief of staff may close any agent of that
+        in its delegation chain, including delegates of delegates; the profile's Chief may close any agent of that
         profile. The reason is required: the session row stays in the ledger,
         and the reason is what the next reader gets. Without --compact it is
         immediate, so say what you have to say first. A seed id closes whoever

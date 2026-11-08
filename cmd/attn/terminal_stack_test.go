@@ -237,9 +237,8 @@ func TestTerminalCLIUsesTransitiveAuthority(t *testing.T) {
 	if moved.Code != 0 {
 		t.Fatalf("transitive move: %+v", moved)
 	}
-	chief := s.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
-	s.Launched(chief)
-	if got := s.Run(testworld.Invocation{Session: chief, Args: []string{"terminal", "send", root, "--text", "from-chief\r"}}); got.Code != 0 {
+	chief := wakeChief(t, s)
+	if got := s.Run(testworld.Invocation{Session: chief, Args: []string{"terminal", "send", root, "--text", "from-chief\r", "--desktop", "1"}}); got.Code != 0 {
 		t.Fatalf("chief typing: %+v", got)
 	}
 	if got := s.Run(testworld.Invocation{Session: root, Args: []string{"agent", "close", grandchild, "-m", "Review complete"}}); got.Code != 0 {

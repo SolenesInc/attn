@@ -12,12 +12,9 @@ import (
 func TestASeedSentToAChiefHeldByTheUsersTypingRingsOnceTheyAreQuiet(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		chief := w.bubbleClaude(t, app, "chief")
-		if set := setChiefOfStaff(app, chief.id, true); !set.Success {
-			t.Fatalf("make %s the chief: %s", chief.id, protocol.Deref(set.Error))
-		}
-		synctest.Wait()
-		chief = w.bootBubbleClaude(t, chief.id)
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief.reply("Ready. <!-- attn:state=idle -->")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "Follow up on the release")
 		tended := lifeMove(t, cli, "sender", seed, "tend", "", "")

@@ -195,9 +195,8 @@ instead of offering Resume. Both offer it again when the outpost returns. A runn
 same way and keeps its advice, and its other actions work either way. **Handover**
 asks where the new agent should work and starts it on the home.
 
-The chief and crew run only at the home. Attn refuses to start, wake or hand off
-a crew member on an outpost, and refuses to make an outpost agent the chief. The
-refusal names that limit. Plugin harnesses also run only at the home.
+The Chief and the rest of the crew run only at the home. Attn refuses to start,
+wake or hand off a crew member on an outpost, and the refusal names that limit. Plugin harnesses also run only at the home.
 
 Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent open no tile and enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.

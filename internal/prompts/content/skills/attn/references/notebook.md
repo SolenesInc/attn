@@ -105,14 +105,12 @@ app when a file changes.
 - **Be concise.** Future agents read notes under a token budget, so prefer a
   tight summary plus a `sources:` pointer over a transcript.
 
-## As chief of staff
+## As the Chief
 
-The Notebook holds your member home and the knowledge you maintain. When attn
-promotes you to the role mid-session, attn points you at `<root>/index.md`.
-Read that file to orient. Then read
-`<root>/knowledge/index.md`, record durable decisions in the knowledge base as
-you make them, and keep the day's journal current with your view of your
-profile. Write at a chief-of-staff level of detail: what moved across your
-profile's agents, what you delegated, and what you decided. Do not narrate each
-agent's work. Each profile has its own chief. Chiefs of profiles that share a
-Notebook folder write to the same files.
+The Notebook holds your member home and the knowledge you maintain. Read
+`<root>/index.md` and `<root>/knowledge/index.md` to orient, record durable
+decisions in the knowledge base as you make them, and keep the day's journal
+current with your view of your profile. Write at the Chief's level of detail:
+what moved across your profile's agents, what you delegated, and what you
+decided. Do not narrate each agent's work. Each profile has its own Chief.
+Chiefs of profiles that share a Notebook folder write to the same files.

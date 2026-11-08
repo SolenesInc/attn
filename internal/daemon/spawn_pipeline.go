@@ -318,7 +318,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	if protocol.Deref(msg.ChiefOfStaff) {
 		d.logf("create-as-chief: the Chief is a crew member; session %s starts as an ordinary agent", msg.ID)
 	}
-	plan.spawnOpts.Model = d.resolveLaunchModel(ctx, req.agent, configuredExecutable, plan.spawnOpts.Model)
+	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.spawnOpts.Model)
 	if err := ctx.Err(); err != nil {
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}

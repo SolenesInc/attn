@@ -13,19 +13,20 @@ import (
 )
 
 type promptTrace struct {
-	Reason   string        `json:"reason"`
 	Selected bool          `json:"selected"`
 	Source   string        `json:"source"`
 	Children []promptTrace `json:"children"`
 }
 
-func (p promptTrace) sources() []string {
-	var found []string
+func (p promptTrace) selectedBySource() map[string]bool {
+	found := map[string]bool{}
 	if p.Source != "" {
-		found = append(found, p.Source)
+		found[p.Source] = p.Selected
 	}
 	for _, child := range p.Children {
-		found = append(found, child.sources()...)
+		for source, selected := range child.selectedBySource() {
+			found[source] = selected
+		}
 	}
 	return found
 }
@@ -34,26 +35,25 @@ func TestPromptsExplainAndShowTheCatalogAndRefuseAMistypedScenario(t *testing.T)
 	t.Parallel()
 	s := testworld.NewStack(t)
 
-	explained := s.Attn("prompts", "explain", "session", "launch", "--set", "notebook_root=/tmp/notebook", "--json")
+	explained := s.Attn("prompts", "explain", "session", "launch", "--set", "vent_enabled=true", "--json")
 	var explanation struct {
 		Delivery string      `json:"delivery"`
 		Text     string      `json:"text"`
 		Trace    promptTrace `json:"trace"`
 	}
 	explained.JSON(t, &explanation)
-	if explanation.Delivery != "launch_instructions" || !strings.Contains(explanation.Text, "/tmp/notebook") {
-		t.Errorf("explain delivers %q with text:\n%s\nwant launch instructions naming the notebook", explanation.Delivery, explanation.Text)
+	if explanation.Delivery != "launch_instructions" || explanation.Text == "" {
+		t.Errorf("explain delivers %q with text:\n%s\nwant launch instructions", explanation.Delivery, explanation.Text)
 	}
-	choice := explanation.Trace.Children[0]
-	if choice.Reason != "notebook_root is present" || !choice.Children[0].Selected || choice.Children[1].Selected {
-		t.Errorf("explain chose %+v, want the chief branch selected because notebook_root is present", choice)
-	}
-	if sources := explanation.Trace.sources(); !slices.Contains(sources, "content/chief.md") || !slices.Contains(sources, "content/agent.md") {
-		t.Errorf("explain traced %q, want the selected chief and the skipped agent sources", sources)
+	selected := explanation.Trace.selectedBySource()
+	for source, want := range map[string]bool{"content/agent.md": true, "content/session/vent-guidance.md": true, "content/session/vent-attn-only.md": true, "content/session/vent-tools.md": false, "content/garden.md": false} {
+		if got, traced := selected[source]; !traced || got != want {
+			t.Errorf("explain traced %s selected=%v (traced %v), want selected=%v: %v", source, got, traced, want, selected)
+		}
 	}
 
 	shown := s.Attn("prompts", "show", "session")
-	for _, want := range []string{"session.chief", "session.agent", "otherwise", "crew_priming (text)", "internal/prompts/content/garden.md"} {
+	for _, want := range []string{"session.queue", "session.agent", "otherwise", "crew_priming (text)", "internal/prompts/content/garden.md"} {
 		if shown.Code != 0 || !strings.Contains(shown.Stdout, want) {
 			t.Errorf("prompts show session exited %d without %q:\n%s", shown.Code, want, shown.Stdout)
 		}
@@ -104,28 +104,32 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 	s.Start()
 	app := s.App()
 
-	chief := s.Spawn(app, fakeagent.Claude, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	ordinary := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
-	guide, err := s.Client().NotebookGuide(protocol.SessionID(chief))
-	if err != nil || !guide.SessionIsChief || guide.Root == "" {
-		t.Fatalf("notebook guide for the chief = %+v, %v", guide, err)
+	primed := func(member string) (protocol.SessionID, string) {
+		t.Helper()
+		woken, err := s.Client().CrewWake(member, string(fakeagent.Claude), "")
+		if err != nil {
+			t.Fatalf("crew wake %s: %v", member, err)
+		}
+		priming, err := s.Client().CrewPrime(woken.SessionID)
+		if err != nil || priming.Guidance == nil {
+			t.Fatalf("crew prime for %s = %+v, %v", member, priming, err)
+		}
+		return woken.SessionID, *priming.Guidance
 	}
-	woken, err := s.Client().CrewWake("keel", string(fakeagent.Claude), "")
-	if err != nil {
-		t.Fatalf("crew wake keel: %v", err)
+	if _, err := s.Client().CrewSet("chief", nil, protocol.Ptr(string(fakeagent.Claude)), nil, nil, nil); err != nil {
+		t.Fatalf("crew set chief: %v", err)
 	}
-	priming, err := s.Client().CrewPrime(woken.SessionID)
-	if err != nil || priming.Guidance == nil {
-		t.Fatalf("crew prime for keel = %+v, %v", priming, err)
-	}
+	chief, chiefPriming := primed("chief")
+	keel, keelPriming := primed("keel")
 
 	for _, tc := range []struct {
 		name    string
 		session string
 		set     []string
 	}{
-		{name: "chief", session: chief, set: []string{"--set", "notebook_root=" + guide.Root, "--set", "garden_available=true"}},
-		{name: "crew member", session: string(woken.SessionID), set: []string{"--set", "crew_priming=  \n" + *priming.Guidance + "\n  ", "--set", "garden_available=true"}},
+		{name: "chief", session: string(chief), set: []string{"--set", "crew_priming=" + chiefPriming, "--set", "garden_available=true"}},
+		{name: "crew member", session: string(keel), set: []string{"--set", "crew_priming=  \n" + keelPriming + "\n  ", "--set", "garden_available=true"}},
 		{name: "ordinary", session: ordinary, set: []string{"--set", "garden_available=true"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

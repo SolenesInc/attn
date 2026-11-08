@@ -72,6 +72,23 @@ func crewRosterMember(t *testing.T, cli *client.Client, id string) protocol.Crew
 	return members[index]
 }
 
+func rosterIDs(members []protocol.CrewMember) []string {
+	ids := make([]string, len(members))
+	for i, member := range members {
+		ids[i] = member.ID
+	}
+	slices.Sort(ids)
+	return ids
+}
+
+func memberOf(members []protocol.CrewMember, id string) (protocol.CrewMember, bool) {
+	at := slices.IndexFunc(members, func(m protocol.CrewMember) bool { return m.ID == id })
+	if at < 0 {
+		return protocol.CrewMember{}, false
+	}
+	return members[at], true
+}
+
 func wakeCrew(t *testing.T, cli *client.Client, member, agent string) *protocol.CrewWakeResult {
 	t.Helper()
 	woken, err := cli.CrewWake(member, agent, "")
@@ -169,8 +186,8 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 	cli := w.Client()
 
 	members := crewRoster(t, cli)
-	if len(members) != 3 {
-		t.Fatalf("roster = %d members, want the 3 homes on disk", len(members))
+	if got, want := rosterIDs(members), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
+		t.Fatalf("roster = %v, want the 3 homes on disk and the Chief: %v", got, want)
 	}
 	for _, member := range members {
 		if member.BindingSession != nil {
@@ -484,8 +501,8 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 3 {
-		t.Fatalf("roster = %d members after a restart, want 3", got)
+	if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
+		t.Fatalf("roster after a restart = %v, want %v", got, want)
 	}
 	if got := protocol.Deref(crewRosterMember(t, cli, "keel").Cwd); got != workDir {
 		t.Fatalf("keel's cwd after a restart = %q, want %q", got, workDir)
@@ -498,10 +515,9 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	writeCrewHomeFile(t, w, strings.Repeat("a", crew.MaxIDChars+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
-	if got := len(crewRoster(t, cli)); got != 4 {
-		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 4", got)
+	if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "sable", "trellis"}; !slices.Equal(got, want) {
+		t.Fatalf("roster after a home and some non-homes were added by hand = %v, want %v", got, want)
 	}
-	crewRosterMember(t, cli, "sable")
 }
 
 func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
@@ -520,14 +536,18 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 	}
 	copied.start()
 	cli := copied.Client()
-	if members := crewRoster(t, cli); len(members) != 3 {
-		t.Fatalf("copied roster = %+v, want all three members", members)
+	if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
+		t.Fatalf("copied roster = %v, want all three members and the Chief: %v", got, want)
 	}
-	for _, member := range crewRoster(t, cli) {
+	for id := range crewHomeLetters {
+		member := crewRosterMember(t, cli, id)
 		if member.HomeDir != crewHome(copied, member.ID) || member.CharterPath != filepath.Join(crewHome(copied, member.ID), crew.CharterFileName) {
 			t.Fatalf("copied member still points outside this instance: %+v", member)
 		}
 	}
+	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+	_, err = cli.CrewWake("chief", "", "")
+	crewErrorContains(t, err, "outside instance harness root")
 	woken := wakeCrew(t, cli, "trellis", "")
 	day := copied.Launched(string(woken.SessionID))
 	day.Prompted()
@@ -569,8 +589,8 @@ func TestMissingCrewFilesAffectOnlyTheirMember(t *testing.T) {
 			}
 			w.restart()
 			cli := w.Client()
-			if members := crewRoster(t, cli); len(members) != 3 {
-				t.Fatalf("missing %s removed members from the roster: %+v", missing, members)
+			if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
+				t.Fatalf("missing %s changed the roster to %v, want %v", missing, got, want)
 			}
 			_, err := cli.CrewWake("trellis", "", "")
 			crewErrorContains(t, err, "Trellis", path)

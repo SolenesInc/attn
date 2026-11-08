@@ -98,13 +98,12 @@ func TestSnoozePermissionsIncludeDispatchersAndProfileChief(t *testing.T) {
 	if err := cli.SnoozeSession(protocol.SessionID(other), delegated.SessionID, until); err == nil || !strings.Contains(err.Error(), "may snooze itself") {
 		t.Fatalf("other dispatcher: %v", err)
 	}
-	if result := setChiefOfStaff(app, source, true); !result.Success {
-		t.Fatalf("chief: %+v", result)
-	}
-	if err := cli.SnoozeSession(protocol.SessionID(source), protocol.SessionID(other), until); err != nil {
+	wakeConfiguredChief(t, w, cli)
+	chief := chiefSession(t, cli)
+	if err := cli.SnoozeSession(chief, protocol.SessionID(other), until); err != nil {
 		t.Fatal(err)
 	}
-	if err := cli.UnsnoozeSession(protocol.SessionID(source), protocol.SessionID(other)); err != nil {
+	if err := cli.UnsnoozeSession(chief, protocol.SessionID(other)); err != nil {
 		t.Fatal(err)
 	}
 	side := createProfile(app, "Side")
@@ -112,8 +111,8 @@ func TestSnoozePermissionsIncludeDispatchersAndProfileChief(t *testing.T) {
 	foreign := w.Spawn(w.AppOn(side.ID), fakeagent.Claude, w.Path("foreign"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("private foreign work") })
 	w.Launched(foreign)
 	for _, action := range []func() error{
-		func() error { return cli.SnoozeSession(protocol.SessionID(source), protocol.SessionID(foreign), until) },
-		func() error { return cli.UnsnoozeSession(protocol.SessionID(source), protocol.SessionID(foreign)) },
+		func() error { return cli.SnoozeSession(chief, protocol.SessionID(foreign), until) },
+		func() error { return cli.UnsnoozeSession(chief, protocol.SessionID(foreign)) },
 	} {
 		if err := action(); err == nil || !strings.Contains(err.Error(), "unknown live session") || strings.Contains(err.Error(), "private foreign work") {
 			t.Fatalf("cross-profile operation: %v", err)

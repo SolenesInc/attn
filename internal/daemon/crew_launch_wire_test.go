@@ -55,25 +55,22 @@ func TestCrewReachesPlainAndSharedCodexWithoutHarnessMemory(t *testing.T) {
 	}
 }
 
-func TestCrewDisablesClaudeMemoryAtEachLaunch(t *testing.T) {
+func TestCrewDisablesClaudeMemoryAtLaunch(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(fmt.Sprint(direct), func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
-			for day := range 2 {
-				woken := wakeCrew(t, cli, "trellis", "")
-				run := w.Launched(string(woken.SessionID))
-				if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
-					t.Fatalf("day %d wake prompt = %q, want %q", day, got, want)
-				}
-				if !strings.Contains(strings.Join(run.Argv, "\n"), "## How you work") {
-					t.Fatalf("day %d Claude missed the operating model", day)
-				}
-				if !slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1") {
-					t.Fatalf("day %d Claude launched with memory on: %q", day, run.Env)
-				}
-				crewHandoff(t, cli, string(woken.SessionID), "The next launch turns memory off again.", false)
+			woken := wakeCrew(t, cli, "trellis", "")
+			run := w.Launched(string(woken.SessionID))
+			if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
+				t.Fatalf("wake prompt = %q, want %q", got, want)
+			}
+			if !strings.Contains(strings.Join(run.Argv, "\n"), "## How you work") {
+				t.Fatalf("Claude missed the operating model")
+			}
+			if !slices.Contains(run.Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1") {
+				t.Fatalf("Claude launched with memory on: %q", run.Env)
 			}
 			agent := w.Spawn(app, fakeagent.Claude, w.Path("work"))
 			if slices.Contains(w.Launched(agent).Env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1") {

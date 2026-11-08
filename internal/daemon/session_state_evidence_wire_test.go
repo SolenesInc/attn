@@ -172,23 +172,17 @@ func TestAStopWithBackgroundWorkHoldsTheSessionUntilItClears(t *testing.T) {
 	})
 }
 
-func TestASessionMadeChiefStopsWithoutWaitingOnItsBackgroundWork(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		sessionStateEvidenceAtWork(t, w, app, cli)
-		result := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: "s1", ChiefOfStaff: true},
-			protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return r.SessionID == "s1" })
-		if result.Error != nil {
-			t.Fatalf("make s1 the chief of staff: %s", *result.Error)
-		}
+func TestTheChiefStopsWithoutWaitingOnItsBackgroundWork(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		cli := w.Client()
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief.reply("Ready. <!-- attn:state=idle -->")
 
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal("s1")), "", client.StopFacts{BackgroundTasks: []protocol.StopBackgroundTask{
-			{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
-		}}); err != nil {
-			t.Fatalf("stop with background work: %v", err)
-		}
+		chief.take("watch the deploy")
+		chief.stopWithBackgroundWork("The deploy is running.")
 		w.advance(time.Minute)
-		if got := queriedSession(t, cli, "s1"); protocol.Deref(got.StateReason) == "background_work" {
+		if got := queriedSession(t, cli, chief.id); protocol.Deref(got.StateReason) == "background_work" {
 			t.Fatalf("a minute after its stop the chief is still held %s on its background work", got.State)
 		}
 	})

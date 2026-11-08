@@ -113,9 +113,9 @@ write your handoff first.
 
 `attn agent close <session-or-seed> -m "reason"` ends a session for good. A
 session can close itself and any agent below it in the delegation chain,
-including delegates of delegates. A profile's chief of staff can close any
-agent of that profile. A refusal names the rule that failed. Nobody can close the
-chief of staff or a session a crew member works in, not even that session
+including delegates of delegates. A profile's Chief can close any
+agent of that profile. A refusal names the rule that failed. Nobody can close a
+session a crew member works in, the Chief's included, not even that session
 itself.
 
 The reason is required, because the next reader uses it to learn why the work

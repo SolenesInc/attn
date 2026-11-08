@@ -69,7 +69,9 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	})
 
 	s.Start()
-	requireStdout(t, s.Attn("crew", "list"), "No crew members in this profile", "attn crew create <name>")
+	if fresh := crewRoster(t, s); len(fresh) != 1 || fresh["chief"].ID == "" {
+		t.Fatalf("a fresh profile's roster = %+v, want the Chief alone", fresh)
+	}
 	s.Stop()
 	for _, name := range []string{"keel", "trellis"} {
 		writeCharter(t, s, name)
@@ -176,8 +178,12 @@ func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
 	if wake := asCaller(sideCaller, sideApp, "crew", "wake", "Keel"); wake.Code == 0 || !strings.Contains(wake.Stderr, `no crew member named "Keel" in profile "Side"`) {
 		t.Fatalf("wake of another profile's member: %+v", wake)
 	}
-	if list := asCaller(sideCaller, sideApp, "crew", "list"); list.Code != 0 || !strings.Contains(list.Stdout, "No crew members in this profile") {
-		t.Fatalf("Side roster: %+v", list)
+	list := asCaller(sideCaller, sideApp, "crew", "list")
+	if list.Code != 0 || strings.Contains(list.Stdout, "Keel") {
+		t.Fatalf("Side roster lists another profile's member: %+v", list)
+	}
+	if row := crewRow(t, list.Stdout, "Chief"); !strings.Contains(row, "Side ›") {
+		t.Fatalf("Side roster's Chief row = %q, want Side's own Chief", row)
 	}
 }
 
@@ -201,8 +207,8 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 
 	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "released seeds: -", "removed watches: 0", "closed asks: -", "unread mail kept: 0", "attn crew restore Keel")
 	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel was already retired.")
-	if roster := crewRoster(t, s); len(roster) != 1 {
-		t.Fatalf("list without --all = %+v", roster)
+	if roster := crewRoster(t, s); len(roster) != 2 || roster["chief"].ID == "" || roster["trellis"].ID == "" {
+		t.Fatalf("list without --all = %+v, want the Chief and Trellis", roster)
 	}
 	if row := crewRow(t, s.Attn("crew", "list", "--all").Stdout, "Keel"); !strings.Contains(row, "retired") {
 		t.Fatalf("retired row = %q", row)

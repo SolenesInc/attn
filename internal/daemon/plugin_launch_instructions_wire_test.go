@@ -5,10 +5,9 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/hooks"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *testing.T) {
+func TestADriverTakingLaunchInstructionsIsGivenTheAgentsGuidance(t *testing.T) {
 	for _, reportsPullRequests := range []bool{false, true} {
 		name := "a driver that reports nothing"
 		if reportsPullRequests {
@@ -23,38 +22,21 @@ func TestADriverTakingLaunchInstructionsIsGivenTheAgentsOrTheChiefsGuidance(t *t
 			awaitDriverAvailable(app, "snipe")
 			setSetting(t, app, "asks_enabled", "true")
 			_, agent := spawnDriven(w, app, driver, w.Path("shop"))
-			_, chief := spawnDriven(w, app, driver, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 
 			if got := agent.Instructions; got == nil || got.Kind != "agent" || got.ProfileID != app.SelectedProfile() {
 				t.Fatalf("the agent launch carried instructions %+v, want agent guidance for profile %s", got, app.SelectedProfile())
 			}
-			if got := chief.Instructions; got == nil || got.Kind != "chief" || got.NotebookRoot == "" {
-				t.Fatalf("the chief launch carried instructions %+v, want chief guidance with its notebook", got)
+			content := agent.Instructions.Content
+			for _, want := range []string{agentGuidanceLead, hooks.GardenGuidance(), askGuidanceLead} {
+				if !strings.Contains(content, want) {
+					t.Errorf("the agent guidance lacks %q", want)
+				}
 			}
-			for _, row := range []struct {
-				launch  string
-				content string
-				want    []string
-				unwant  []string
-			}{
-				{launch: "agent", content: agent.Instructions.Content,
-					want: []string{agentGuidanceLead, hooks.GardenGuidance(), askGuidanceLead}, unwant: []string{"shared context"}},
-				{launch: "chief", content: chief.Instructions.Content,
-					want: []string{"You are the chief of staff", chief.Instructions.NotebookRoot, hooks.GardenGuidance(), askGuidanceLead}},
-			} {
-				for _, want := range row.want {
-					if !strings.Contains(row.content, want) {
-						t.Errorf("the %s guidance lacks %q", row.launch, want)
-					}
-				}
-				for _, unwant := range row.unwant {
-					if strings.Contains(row.content, unwant) {
-						t.Errorf("the %s guidance still says %q", row.launch, unwant)
-					}
-				}
-				if told := strings.Contains(row.content, "attn pr record"); told == reportsPullRequests {
-					t.Errorf("the %s guidance tells the agent to record its own pull requests: %v, want %v", row.launch, told, !reportsPullRequests)
-				}
+			if strings.Contains(content, "shared context") {
+				t.Errorf("the agent guidance still says %q", "shared context")
+			}
+			if told := strings.Contains(content, "attn pr record"); told == reportsPullRequests {
+				t.Errorf("the agent guidance tells the agent to record its own pull requests: %v, want %v", told, !reportsPullRequests)
 			}
 		})
 	}

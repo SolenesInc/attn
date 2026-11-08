@@ -175,18 +175,16 @@ func sessionOfDelegate(t *testing.T, w *world, sessionID string) protocol.Sessio
 }
 
 func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "chief")
+	wakeConfiguredChief(t, w, cli)
+	chief := string(chiefSession(t, cli))
 	cwd := w.Path("chief")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if result := setChiefOfStaff(app, "chief", true); !result.Success {
-		t.Fatalf("making chief the chief: %s", protocol.Deref(result.Error))
-	}
 
-	request := delegateFrom("chief", cwd, "Audit the backlog", fakeagent.Codex)
+	request := delegateFrom(chief, cwd, "Audit the backlog", fakeagent.Codex)
 	request.Label = protocol.Ptr("Backlog audit")
 	result, err := cli.Delegate(request)
 	if err != nil {
@@ -202,21 +200,18 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if protocol.Deref(delegate.ChiefOfStaff) {
 		t.Errorf("the chief's delegate reads as the chief itself: %+v", delegate)
 	}
-	if chief := sessionOfDelegate(t, w, "chief"); !protocol.Deref(chief.ChiefOfStaff) || protocol.Deref(chief.DelegatedFromChief) {
+	if chief := sessionOfDelegate(t, w, chief); !protocol.Deref(chief.ChiefOfStaff) || protocol.Deref(chief.DelegatedFromChief) {
 		t.Errorf("the chief reads as %+v; want chief_of_staff and not delegated_from_chief", chief)
 	}
-	chiefDesktop, _ := placedPane(t, w, "chief")
+	chiefDesktop, _ := placedPane(t, w, chief)
 	if protocol.Deref(result.DesktopID) != chiefDesktop.ID {
 		t.Errorf("the chief's delegate landed on desktop %q; want the chief's own %s", protocol.Deref(result.DesktopID), chiefDesktop.ID)
 	}
 
-	registerSessions(t, w, cli, "next")
-	if transfer := setChiefOfStaff(app, "next", true); !transfer.Success {
-		t.Fatalf("making next the chief: %s", protocol.Deref(transfer.Error))
-	}
+	crewHandoff(t, cli, chief, "The backlog audit is delegated.", false)
 	w.restart()
 	if marked := sessionOfDelegate(t, w, string(result.SessionID)); !protocol.Deref(marked.DelegatedFromChief) {
-		t.Errorf("after the role moved on and the daemon restarted, the chief's delegate reads as %+v; want it still delegated_from_chief", marked)
+		t.Errorf("after the Chief went to sleep and the daemon restarted, the chief's delegate reads as %+v; want it still delegated_from_chief", marked)
 	}
 }
 

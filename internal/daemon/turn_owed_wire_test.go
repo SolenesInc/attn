@@ -94,7 +94,7 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 	})
 }
 
-func TestShellsAndTheChiefNeverOweATurn(t *testing.T) {
+func TestShellsNeverOweATurn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	queued := w.Spawn(app, fakeagent.Claude, w.Path("api"))
@@ -104,36 +104,15 @@ func TestShellsAndTheChiefNeverOweATurn(t *testing.T) {
 	})
 
 	shell := w.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), w.Path("scripts"))
-	chief := w.Spawn(app, fakeagent.Claude, w.Path("office"))
-	w.Launched(chief)
-	chiefResult := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(chief), ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return string(r.SessionID) == chief })
-	if chiefResult.Error != nil {
-		t.Fatalf("make %s the chief of staff: %s", chief, *chiefResult.Error)
-	}
-	w.Launched(chief)
-	madeChief := len(sessionUpdatesOf(app, chief))
-	for _, id := range []string{chief} {
-		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	}
 	testworld.AwaitSession(app, shell, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	for id, name := range map[string]string{shell: "shell", chief: "chief of staff"} {
-		got := queriedSession(t, cli, id)
-		if got.State != protocol.SessionStateIdle || got.TurnOwed != nil {
-			t.Errorf("the %s is %s with turn owed %v, want idle at its prompt owing nothing", name, got.State, protocol.Deref(got.TurnOwed))
-		}
-		if id == chief && !protocol.Deref(got.ChiefOfStaff) {
-			t.Errorf("the chief of staff is not shown as the chief")
-		}
+	if got := queriedSession(t, cli, shell); got.State != protocol.SessionStateIdle || got.TurnOwed != nil {
+		t.Errorf("the shell is %s with turn owed %v, want idle at its prompt owing nothing", got.State, protocol.Deref(got.TurnOwed))
 	}
 	app.TypeLine(shell, "exit")
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == shell })
-	for id, since := range map[string]int{shell: 0, chief: madeChief} {
-		for _, s := range sessionUpdatesOf(app, id)[since:] {
-			if protocol.Deref(s.TurnOwed) {
-				t.Fatalf("the app was shown %s owing a turn while %s", id, s.State)
-			}
+	for _, s := range sessionUpdatesOf(app, shell) {
+		if protocol.Deref(s.TurnOwed) {
+			t.Fatalf("the app was shown the shell owing a turn while %s", s.State)
 		}
 	}
 }

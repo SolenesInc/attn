@@ -78,10 +78,8 @@ func TestAgentReloadAllIncludesChiefAndCrewButOnlyInTheirProfile(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-			m.ChiefOfStaff = protocol.Ptr(true)
-			m.Model = protocol.Ptr("claude-opus-fake")
-		})
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
 		worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"), withIDPrefix("shared-"))
 		crew := string(wakeCrew(t, cli, "trellis", "").SessionID)
 		w.Spawn(app, shellHarness, w.Path("shell"))
@@ -122,10 +120,8 @@ func TestAgentReloadReachesAnAwakeCrewMemberByName(t *testing.T) {
 		writeCrewCharter(t, w, "fern")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-			m.ChiefOfStaff = protocol.Ptr(true)
-			m.Model = protocol.Ptr("claude-opus-fake")
-		})
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
 		member := wakeCrew(t, cli, "trellis", "").SessionID
 		result, err := cli.AgentReload([]string{"Trellis"}, protocol.SessionID(chief), false)
 		if err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success || protocol.Deref(result.Outcomes[0].SessionID) != member {

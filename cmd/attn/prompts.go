@@ -207,7 +207,7 @@ options:
   --json            include structured composition or render provenance
 
 example:
-  attn prompts explain session launch --set notebook_root=/tmp/notebook --set garden_available=true
+  attn prompts explain session launch --set garden_available=true --set asks_enabled=true
 
 The catalog covers launch, crew, delegation, automation, notifications, skills
 and background model tasks. Caller-rendered inputs link to their producer

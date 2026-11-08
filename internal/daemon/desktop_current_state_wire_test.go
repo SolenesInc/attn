@@ -92,6 +92,10 @@ func TestDesktopMoveResolvesOrCreatesDestinationAtomically(t *testing.T) {
 	app := w.App()
 	profileID := app.SelectedProfile()
 	source := app.Initial.Desktops[0]
+	starting := map[string]bool{}
+	for _, desktop := range app.Initial.Desktops {
+		starting[desktop.ID] = true
+	}
 	dockCurrentStateTile(app, source.ID, "slot-move")
 	dockCurrentStateTile(app, source.ID, "new-move")
 	dockCurrentStateTile(app, source.ID, "existing-move")
@@ -106,14 +110,17 @@ func TestDesktopMoveResolvesOrCreatesDestinationAtomically(t *testing.T) {
 		"source_desktop_id": source.ID, "leaf_id": "existing-move", "target_shortcut_slot": 5,
 	})
 	current := w.AppOn(profileID).Initial
-	if len(current.Desktops) != 3 || current.Profiles[0].CurrentDesktopID != source.ID {
-		t.Fatalf("moves created extra desktops or followed without a gesture: %+v", current)
+	if len(current.Desktops) != len(starting)+2 || current.Profiles[0].CurrentDesktopID != source.ID {
+		t.Fatalf("moves created other than two desktops or followed without a gesture: %+v", current)
 	}
 	for _, desktop := range current.Desktops {
 		if desktop.ID == source.ID {
 			if desktop.TreeJson != "" {
 				t.Fatalf("source kept tiles after the moves: %s", desktop.TreeJson)
 			}
+			continue
+		}
+		if starting[desktop.ID] {
 			continue
 		}
 		want := []string{"new-move"}

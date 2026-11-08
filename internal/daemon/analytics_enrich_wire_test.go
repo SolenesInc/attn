@@ -39,12 +39,6 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		setAnalyticsEnabled(app, "true")
 
 		user := w.bubbleClaude(t, app, "shop-checkout")
-		chief := w.bubbleClaude(t, app, "notes").id
-		if set := setChiefOfStaff(app, chief, true); !set.Success {
-			t.Fatalf("make %s the chief: %s", chief, protocol.Deref(set.Error))
-		}
-		synctest.Wait()
-		w.bootBubbleClaude(t, chief)
 		delegation := delegateAtSeed(user.id, shop, plantDelegationSeed(t, cli, user.id, "Refund flow"))
 		delegation.Agent = protocol.Ptr("claude")
 		delegation.Checkout = delegateNewWorktree("refunds", "main")
@@ -54,6 +48,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		}
 		w.bootBubbleClaude(t, string(delegated.SessionID))
 		synctest.Wait()
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		member := string(wakeCrew(t, cli, "chief", "").SessionID)
 		w.bootBubbleClaude(t, member)
 		synctest.Wait()
@@ -77,7 +72,6 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		}{
 			{"user", user.id, "session.state.changed", analytics.LaunchUser, &analytics.RepoTraits{AgentsMD: true, ClaudeMD: true, Worktree: true, Remote: true}},
 			{"delegated", string(delegated.SessionID), "session.state.changed", analytics.LaunchDelegation, &analytics.RepoTraits{AgentsMD: true, Worktree: true, Remote: true}},
-			{"chief", chief, "session.respawned", analytics.LaunchChief, nil},
 			{"chief member", member, "session.state.changed", analytics.LaunchChief, nil},
 		} {
 			subject := analytics.HashSubject(secret, tc.session)
@@ -104,7 +98,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, text := range []string{w.Dir, "shop", "notes", "example", "Refund", user.id, chief, member, string(delegated.SessionID)} {
+			for _, text := range []string{w.Dir, "shop", "example", "Refund", user.id, member, string(delegated.SessionID)} {
 				if strings.Contains(string(encoded), text) {
 					t.Errorf("mirrored %s carries %q: %s", record.Name, text, encoded)
 				}
@@ -392,26 +386,25 @@ func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *tes
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		setAnalyticsEnabled(app, "true")
-		chief := w.bubbleClaude(t, app, "chief")
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
+		w.bootBubbleClaude(t, chief)
 		target := w.bubbleClaude(t, app, "target")
 		closedByUser := w.bubbleClaude(t, app, "closed-by-user")
-		if made := setChiefOfStaff(app, chief.id, true); !made.Success {
-			t.Fatalf("making the chief: %+v", made)
-		}
-		first := plantDelegationSeed(t, cli, chief.id, "First")
-		second := plantDelegationSeed(t, cli, chief.id, "Second")
-		scoped := cli.WithGardenProfile("", protocol.SessionID(chief.id))
+		first := plantDelegationSeed(t, cli, chief, "First")
+		second := plantDelegationSeed(t, cli, chief, "Second")
+		scoped := cli.WithGardenProfile("", protocol.SessionID(chief))
 		if _, err := scoped.SeedLink(first, "blocks", second, false); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := scoped.SeedLink(first, "blocks", second, true); err != nil {
 			t.Fatal(err)
 		}
-		if result, err := cli.AgentReload([]string{target.id}, protocol.SessionID(chief.id), false); err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success {
+		if result, err := cli.AgentReload([]string{target.id}, protocol.SessionID(chief), false); err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success {
 			t.Fatalf("reload = %+v, %v", result, err)
 		}
 		synctest.Wait()
-		if _, err := cli.AgentClose(target.id, protocol.SessionID(chief.id), "finished"); err != nil {
+		if _, err := cli.AgentClose(target.id, protocol.SessionID(chief), "finished"); err != nil {
 			t.Fatalf("the chief closes the target: %v", err)
 		}
 		if closed := closeFromApp(app, closedByUser.id); !closed.Accepted {
@@ -423,7 +416,7 @@ func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *tes
 		if err != nil {
 			t.Fatal(err)
 		}
-		chiefSubject, terminal := analytics.HashSubject(secret, chief.id), analytics.HashSubject(secret, target.self)
+		chiefSubject, terminal := analytics.HashSubject(secret, chief), analytics.HashSubject(secret, target.self)
 		for _, want := range []struct {
 			name, subject, field, value string
 		}{

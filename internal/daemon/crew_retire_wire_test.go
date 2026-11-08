@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -50,7 +51,7 @@ func TestCreatingAMemberGivesItAHomeWithAnEmptyCharter(t *testing.T) {
 
 	wake := wakeCrew(t, cli, "Keel", "")
 	run := w.Launched(string(wake.SessionID))
-	if instructions := crewLaunchFlag(run.Argv, "--append-system-prompt"); !strings.Contains(instructions, "this is your first day") {
+	if instructions := crewLaunchFlag(run.Argv, "--append-system-prompt"); !strings.Contains(instructions, "this is your first session") {
 		t.Fatalf("first wake instructions = %q", instructions)
 	}
 	run.Prompted()
@@ -122,15 +123,18 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	crewErrorContains(t, err, "Keel is retired")
 	_, err = cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"})
 	crewErrorContains(t, err, "Keel is retired")
-	if roster := crewRoster(t, cli); len(roster) != 0 {
-		t.Fatalf("active roster = %+v", roster)
+	if got := rosterIDs(crewRoster(t, cli)); !slices.Equal(got, []string{"chief"}) {
+		t.Fatalf("active roster = %v, want the Chief alone", got)
 	}
-	if update := testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool { return len(e.Members) == 0 }); len(update.Members) != 0 {
-		t.Fatalf("app roster = %+v", update.Members)
-	}
+	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
+		return slices.Equal(rosterIDs(e.Members), []string{"chief"})
+	})
 	all, err := cli.CrewListAll()
-	if err != nil || len(all.Members) != 1 || !all.Members[0].Retired {
-		t.Fatalf("roster with retired members = %+v %v", all, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retired, found := memberOf(all.Members, keel.ID); len(all.Members) != 2 || !found || !retired.Retired {
+		t.Fatalf("roster with retired members = %+v, want the Chief and %s retired", all.Members, keel.ID)
 	}
 	again := retireCrew(t, cli, "Keel")
 	if !again.AlreadyRetired || len(again.ReleasedSeeds) != 0 {
@@ -146,17 +150,22 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	w.restart()
 	app, cli = w.App(), w.Client()
 	all, err = cli.CrewListAll()
-	if err != nil || len(all.Members) != 1 || !all.Members[0].Retired || all.Members[0].BindingSession != nil {
-		t.Fatalf("retirement after restart = %+v %v", all, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retired, found := memberOf(all.Members, keel.ID); !found || !retired.Retired || retired.BindingSession != nil {
+		t.Fatalf("retirement after restart = %+v", all.Members)
 	}
 	restored, err := cli.CrewRestore("Keel")
 	if err != nil || restored.AlreadyActive || restored.Member.Retired {
 		t.Fatalf("restore = %+v %v", restored, err)
 	}
 	update := testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
-		return len(e.Members) == 1 && e.Members[0].BindingSession != nil
+		restored, found := memberOf(e.Members, keel.ID)
+		return found && restored.BindingSession != nil
 	})
-	successor := protocol.Deref(update.Members[0].BindingSession)
+	restoredKeel, _ := memberOf(update.Members, keel.ID)
+	successor := protocol.Deref(restoredKeel.BindingSession)
 	next := w.Launched(string(successor))
 	next.Prompted()
 	next.Reply("Ready. <!-- attn:state=idle -->")
@@ -262,8 +271,11 @@ func TestARetiredMembersLetterClosesTheDayWithoutASuccessor(t *testing.T) {
 			}
 			awaitClosed(app, string(wake.SessionID))
 			all, err := cli.CrewListAll()
-			if err != nil || len(all.Members) != 1 || all.Members[0].ID != keel.ID || !all.Members[0].Retired || all.Members[0].BindingSession != nil {
-				t.Fatalf("retired roster = %+v %v", all, err)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if retired, found := memberOf(all.Members, keel.ID); !found || !retired.Retired || retired.BindingSession != nil {
+				t.Fatalf("retired roster = %+v, want %s retired and asleep", all.Members, keel.ID)
 			}
 		})
 	}

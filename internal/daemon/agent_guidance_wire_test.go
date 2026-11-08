@@ -38,7 +38,7 @@ func launchGuidance(t *testing.T, run *fakeagent.Run) string {
 	return ""
 }
 
-func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
+func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullRequestsToItsHooks(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
@@ -49,6 +49,10 @@ func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *test
 			yolo := map[fakeagent.Harness]string{
 				fakeagent.Claude: "--dangerously-skip-permissions",
 				fakeagent.Codex:  "--dangerously-bypass-approvals-and-sandbox",
+			}
+			marker := map[fakeagent.Harness]string{
+				fakeagent.Claude: "append_system_prompt",
+				fakeagent.Codex:  "developer_instructions",
 			}
 			for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
 				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
@@ -61,46 +65,11 @@ func TestEachHarnessReadsAttnsGuidanceAndLeavesItsPullRequestsToItsHooks(t *test
 				if !strings.Contains(guidance, agentGuidanceLead) {
 					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
 				}
+				if got, _ := envEntry(run.Env, "ATTN_AGENT_GUIDANCE"); got != marker[h] {
+					t.Errorf("%s runs with ATTN_AGENT_GUIDANCE=%q, want %q", h, got, marker[h])
+				}
 				if strings.Contains(guidance, "attn pr record") {
 					t.Errorf("%s, whose hooks report its pull requests, is told to record them itself", h)
-				}
-			}
-		})
-	}
-}
-
-func TestAChiefIsGuidedAsTheChiefAndMarkedSoItsHooksAddNoAgentGuidance(t *testing.T) {
-	for h, marker := range map[fakeagent.Harness]string{fakeagent.Claude: "append_system_prompt", fakeagent.Codex: "developer_instructions"} {
-		t.Run(string(h), func(t *testing.T) {
-			w := newWorld(t, h)
-			app := w.App()
-			chief := w.Launched(w.Spawn(app, h, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-				m.ChiefOfStaff = protocol.Ptr(true)
-			}))
-			worker := w.Launched(w.Spawn(app, h, w.Path("worker")))
-			for _, tc := range []struct {
-				name     string
-				run      *fakeagent.Run
-				guidance string
-				marker   string
-				unmarked string
-			}{
-				{"the chief", chief, "You are the chief of staff", "ATTN_CHIEF_GUIDANCE", "ATTN_AGENT_GUIDANCE"},
-				{"a worker", worker, agentGuidanceLead, "ATTN_AGENT_GUIDANCE", "ATTN_CHIEF_GUIDANCE"},
-			} {
-				guidance := launchGuidance(t, tc.run)
-				other := agentGuidanceLead
-				if tc.guidance == agentGuidanceLead {
-					other = "You are the chief of staff"
-				}
-				if !strings.Contains(guidance, tc.guidance) || strings.Contains(guidance, other) {
-					t.Errorf("%s %s launched without only its own guidance:\n%s", tc.name, h, guidance)
-				}
-				if got, _ := envEntry(tc.run.Env, tc.marker); got != marker {
-					t.Errorf("%s %s runs with %s=%q, want %q", tc.name, h, tc.marker, got, marker)
-				}
-				if got, ok := envEntry(tc.run.Env, tc.unmarked); ok {
-					t.Errorf("%s %s also carries %s=%s", tc.name, h, tc.unmarked, got)
 				}
 			}
 		})
@@ -146,23 +115,12 @@ func TestACodexDefaultContextWindowCapBecomesItsCompactLimit(t *testing.T) {
 func TestQuickCaptureGuidanceFollowsTheExperimentAtEachLaunch(t *testing.T) {
 	for _, direct := range []bool{false, true} {
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
-			w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
+			w := newCrewWorld(t, fakeagent.Codex)
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
 			for i, enabled := range []bool{false, true, false} {
 				if i > 0 {
 					setSetting(t, app, "quick_capture_enabled", strconv.FormatBool(enabled))
-				}
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-					chief := w.Launched(w.Spawn(app, h, w.Path(string(h)+strconv.Itoa(i)), func(m *protocol.SpawnSessionMessage) {
-						m.ChiefOfStaff = protocol.Ptr(true)
-					}))
-					if got := strings.Contains(launchGuidance(t, chief), "The user can send you messages from Quick Capture"); got != enabled {
-						t.Fatalf("%s chief Quick Capture guidance=%v, enabled=%v", h, got, enabled)
-					}
-					if result := setChiefOfStaff(app, chief.SessionID, false); !result.Success {
-						t.Fatal(result)
-					}
 				}
 				member := []string{"alder", "keel", "trellis"}[i]
 				day := w.Launched(string(wakeCrew(t, w.Client(), member, "codex").SessionID))

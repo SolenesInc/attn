@@ -620,11 +620,11 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		parent := w.bubbleClaude(t, app, "parent").id
-		chief := w.bubbleClaude(t, app, "chief").id
+		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+		chiefDay := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chiefDay.reply("Ready. <!-- attn:state=idle -->")
+		chief := chiefDay.id
 		registerSessions(t, w, cli, "stranger")
-		if result := setChiefOfStaff(app, chief, true); !result.Success {
-			t.Fatalf("set chief: %+v", result)
-		}
 		delegate := func(caller, title string) (string, string) {
 			t.Helper()
 			seed := plantDelegationSeed(t, cli, caller, title)
@@ -658,7 +658,7 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 				t.Fatal(err)
 			}
 		}
-		for _, actor := range []struct{ id, standing string }{{middle, "delegation-chain standing"}, {parent, "delegation-chain standing"}, {chief, "chief standing"}} {
+		for _, actor := range []struct{ id, name, standing string }{{middle, middle, "delegation-chain standing"}, {parent, parent, "delegation-chain standing"}, {chief, "Chief", "chief standing"}} {
 			for verb, status := range map[string]string{"tend": "growing", "park": "parked", "harvest": "harvested", "wither": "withered", "replant": "planted"} {
 				reset()
 				reason := ""
@@ -680,7 +680,7 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 				if !slices.Contains(notes, audit) {
 					t.Fatalf("returned audit is absent from log: %q", notes)
 				}
-				for _, want := range []string{actor.id, actor.standing, worker, "claim ended", "attn seed " + verb} {
+				for _, want := range []string{actor.name, actor.standing, worker, "claim ended", "attn seed " + verb} {
 					if !strings.Contains(audit, want) {
 						t.Errorf("audit %q lacks %q", audit, want)
 					}

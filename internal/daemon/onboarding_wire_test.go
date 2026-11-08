@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -66,15 +67,8 @@ func TestANewUsersChiefRunsTheFullPathUntilItSaysDoneOnBothHarnesses(t *testing.
 }
 
 func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
-	w := newWorld(t, fakeagent.Claude)
+	w, old := upgradedFromTodaysChief(t, t.TempDir(), store.LaunchIntent{})
 	app, cli := w.App(), w.Client()
-	old := w.Spawn(app, fakeagent.Claude, w.Path("chief-work"))
-	w.Launched(old)
-	if made := setChiefOfStaff(app, old, true); !made.Success {
-		t.Fatalf("making today's Chief = %+v", made)
-	}
-	w.Launched(old)
-	profileChief(t, w)
 	onboardingPending(t, cli, protocol.OnboardingActionShow, protocol.OnboardingPathTour)
 	woken := wakeCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))

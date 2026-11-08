@@ -12,11 +12,12 @@ func TestBusStatusReportsProducersAndRefusesToSwitchAnUnknownConsumer(t *testing
 	w := newWorld(t)
 	cli, app := w.Client(), w.App()
 	defineRequests(t, cli, gateNS)
+	before := producedBy(busStatus(t, app), "document.changed")
 	put(t, cli, gateNS, "a", `{}`)
 
 	status := busStatus(t, app)
-	if produced := producedBy(status, "document.changed"); produced != 1 || status.Rows < produced {
-		t.Errorf("bus status counts %d document.changed facts in %d rows, want the one write", produced, status.Rows)
+	if produced := producedBy(status, "document.changed"); produced != before+1 || status.Rows < produced {
+		t.Errorf("bus status counts %d document.changed facts in %d rows, want the %d before and the one write", produced, status.Rows, before)
 	}
 	if status.RecentWindowSeconds <= 0 || status.BaselineWindowSeconds <= 0 || status.SurgeRatePerHour <= 0 {
 		t.Errorf("bus status carries recent window %v, baseline window %v and surge tripwire %v, want all set",
@@ -39,9 +40,10 @@ func TestADaemonStartsAndWritesWhileItsFirstProducerReportReadsTheLog(t *testing
 
 	cli, app := w.Client(), w.App()
 	defineRequests(t, cli, gateNS)
+	before := producedBy(busStatus(t, app), "document.changed")
 	put(t, cli, gateNS, "a", `{}`)
-	if status := busStatus(t, app); producedBy(status, "document.changed") != 1 {
-		t.Errorf("bus status while the first report reads counts %d document.changed facts, want the one write", producedBy(status, "document.changed"))
+	if produced := producedBy(busStatus(t, app), "document.changed"); produced != before+1 {
+		t.Errorf("bus status while the first report reads counts %d document.changed facts, want the %d before and the one write", produced, before)
 	}
 	reading.Release()
 }

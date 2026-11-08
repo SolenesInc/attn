@@ -459,7 +459,7 @@ func TestChiefSetupThatCannotMoveTheHomeLeavesTheNotebookFolderAndTheChiefAsThey
 	app, cli := w.App(), w.Client()
 	own, defaultFolder := w.Path("own-notebook"), fsNotebookRoot(t, w)
 	setSetting(t, app, "notebook.root", own)
-	chief := profileChief(t, w)
+	chief := moveCrewHome(t, w, "chief").Member
 	for _, c := range []struct{ requestID, root, refusal string }{
 		{"inside-home", filepath.Join(chief.HomeDir, "nested"), "inside it"},
 		{"inside-default", filepath.Join(defaultFolder, "nested"), "the default Notebook folder " + defaultFolder},

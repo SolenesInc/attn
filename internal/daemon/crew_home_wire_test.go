@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -202,8 +203,8 @@ func TestAnUnavailableNotebookHomeStopsOnlyItsMember(t *testing.T) {
 	if err := os.Rename(member.HomeDir, aside); err != nil {
 		t.Fatal(err)
 	}
-	if roster := crewRoster(t, cli); len(roster) != 3 {
-		t.Fatalf("an unavailable home hid the roster: %+v", roster)
+	if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
+		t.Fatalf("an unavailable home changed the roster to %v, want %v", got, want)
 	}
 	read := testworld.Request(app, protocol.CrewCharterGetMessage{Cmd: protocol.CmdCrewCharterGet, Member: "Keel", RequestID: protocol.Ptr("missing-home")}, protocol.EventCrewCharterGetResult, func(r protocol.CrewCharterGetResultMessage) bool { return r.RequestID == "missing-home" })
 	if read.Success || !strings.Contains(protocol.Deref(read.Error), member.HomeDir) {

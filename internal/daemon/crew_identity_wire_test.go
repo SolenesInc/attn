@@ -261,8 +261,8 @@ func TestACrewRequesterRefusesAConflictingProfile(t *testing.T) {
 	_, err := cli.WithGardenProfile(side.ID, day.SessionID).CrewList()
 	crewErrorContains(t, err, "belongs to profile", `"Default"`, `"Side"`)
 	roster, err := cli.WithGardenProfile("Default", day.SessionID).CrewList()
-	if err != nil || len(roster.Members) != 3 {
-		t.Fatalf("matching profile name: %+v %v", roster, err)
+	if err != nil || !slices.Equal(rosterIDs(roster.Members), []string{"alder", "chief", "keel", "trellis"}) {
+		t.Fatalf("matching profile name: %+v %v, want Default's three members and its Chief", roster, err)
 	}
 }
 

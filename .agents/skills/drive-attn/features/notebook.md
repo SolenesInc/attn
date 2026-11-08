@@ -38,7 +38,7 @@ writers never collide. The chief treats the notebook as its home.
 
 - `attn journal append (--entry <text> | --entry-file <path>) [--date YYYY-MM-DD] [--session <id>] [--json]` (`cmd/attn/main.go`). There is no notebook CLI: agents read and edit notes with their own file tools.
 - `attn settings get notebook.root.effective [--profile <name|id>]` gives the folder the caller's profile uses (on an outpost, the copy of that folder, inside a session only). `attn settings set notebook.root <path> [--profile <name|id>]` sets a profile's folder. Inside a session, both commands use the session's profile.
-- Prompts: the chief's instructions name the notebook as its home (`internal/prompts/content/chief.md`), and `attn skill --reference notebook` covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
+- Prompts: the Chief's guidance names the notebook (`internal/prompts/content/crew/v2/chief.md`), and `attn skill --reference notebook` covers the two layers, frontmatter, links and the journal command (`internal/prompts/content/skills/attn/references/notebook.md`).
 
 ### Triggers
 
@@ -78,12 +78,12 @@ Preconditions:
   - Click inside the tile natively (point from `bridge dom_native_point '{"selector":"[data-tile-kind=\"notebook\"] .notebook-surface-tile"}'`), then run ⌘P: `bridge dom_wait '{"selector":"[placeholder=\"Find a note…\"]","focused":true,"timeoutMs":5000}'` matches, and `bridge markdown_opener_get_state` shows `open: false`.
 - **Drafts leave the screen with the tile.** With `narrowest_tile_cols` at 150, so only one tile fits, type in the editor tile and click another tile's `[data-testid^="shelf-chip-"]` natively within 700 ms: `cat` shows the edit on disk, and clicking the tile's chip brings it back. Append to the file from a shell between typing and clicking: the tile returns with the edit and `.notebook-browser-editor-conflict`, and "Overwrite anyway" saves it. Run `chmod 555` on the folder before typing: the tile returns with the edit and `.notebook-browser-editor-error`, and after `chmod 755` the status reads `Saved`.
 - **Change the editor root.** Click `[aria-label="Editor root"]` natively (its point comes from `bridge dom_native_point`). The click focuses the select without opening its menu. Then run `bridge native_text '{"text":"Notebook"}'` to select Notebook. Press Home and Enter: the value stays unchanged. `bridge dom_value '{"selector":"[aria-label=\"Editor root\"]"}'` reads an empty value, and `wsctl list` shows the editor tile updated from its agent-folder root.
-- **The chief's status.**
-  - Click `[data-testid="session-actions-nb-agent"]` natively, then `[data-testid="chief-of-staff-session-action"]` ("Make chief of staff").
+- **The Chief's status.**
+  - Run `./attn crew set chief --agent claude --cwd $A`, then `./attn crew wake chief --json`, and note its `session_id` as `<chief>`.
   - Open the notebook (⇧⌥⌘N): `bridge dom_text '{"selector":".notebook-browser-chief-pulse"}'` reads `chief: idle`.
-  - Run `wsctl input --id <agent> --text "journal-entry" --enter`: `bridge dom_wait '{"selector":".notebook-browser-chief-pulse","textIncludes":"chief: active","timeoutMs":10000}'` matches, then `chief: idle` again, and the open journal shows one more `The mock agent wrote this.` without a reload.
+  - Run `wsctl input --id <chief> --text "journal-entry" --enter`: `bridge dom_wait '{"selector":".notebook-browser-chief-pulse","textIncludes":"chief: active","timeoutMs":10000}'` matches, then `chief: idle` again, and the open journal shows one more `The mock agent wrote this.` without a reload.
   - Click `.notebook-browser-close` natively: `.notebook-browser` goes away.
-  - Remove the chief role from the same menu ("Remove chief role") before closing the agent. Closing the agent is refused while it is chief.
+  - Run `./attn crew sleep chief`. An agent cannot close the Chief's session.
 - **Notebook Folder in Settings.**
   - Press ⌘, and click `[data-testid="settings-nav-desktop"]` natively.
   - Click `[data-testid="settings-notebook-root-input"]` natively, type a folder under the home folder, such as `$HOME/attn-nbprof-<name>` written out, and press Enter: `[data-testid="settings-notebook-root-effective"]` reads `This profile uses:` that folder, and `./attn settings get notebook.root` prints it.
@@ -95,7 +95,7 @@ Preconditions:
   - Save a fixture in `$A2` whose turns run `["settings","get","notebook.root.effective"]` on `nb-root`, `["settings","set","notebook.root","<home>/attn-nbagent-<name>"]` on `nb-set`, `["settings","set","notebook.root",""]` on `nb-clear` and `["journal","append","--entry-file","<A2>/entry.md","--json"]` on `nb-file`, with the paths written out.
   - Start a second agent in `$A2`. Type each trigger through `wsctl input`. Peek then shows `$NB`, then `notebook.root = <folder>` (and `./attn settings get notebook.root.effective` from the shell prints that folder, since both are in the Default profile), then an empty `notebook.root`, then `rel_path` `journal/<date>.md`, and the day's file holds `Entry from a file.`.
 - **The person's shell with a profile and a session.** `./attn settings get notebook.root.effective --profile Default` prints `$NB`. `./attn settings set notebook.root <folder> --profile Default` changes it and `""` clears it. `./attn journal append --entry "with session flag" --session <second agent's session id>` exits 0 and appends the entry.
-- **What agents are told.** `./attn prompts render session launch --set notebook_root=$NB` opens with `You are the chief of staff of your profile. The attn Notebook at <NB> is your durable home`, and `./attn skill --reference notebook` prints the notebook reference with `attn journal append` and `attn settings get notebook.root.effective`.
+- **What agents are told.** `./attn crew prime` in the Chief's session prints the Chief's guidance, `## You are the Chief` (`internal/prompts/content/crew/v2/chief.md`), and `./attn skill --reference notebook` prints the notebook reference with `attn journal append` and `attn settings get notebook.root.effective`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, the day's journal file after each append and after the edit and undo, `./attn agent peek nb-agent` after the agent's append, and `wsctl list` with the editor tile open. Capture `bridge capture_screenshot '{"path":"<P>/notebook-fullscreen.png"}'` with the journal open and `<P>/notebook-tile.png` with the editor tile, `<P>` written out. Name each file for its way in, such as `notebook-agent-journal-peek.txt`.
 
 ## Contexts

@@ -32,8 +32,8 @@ func TestFsCommandsNeverReachPastTheirRoot(t *testing.T) {
 	for _, entry := range listed.Entries {
 		names = append(names, entry.Name)
 	}
-	if !listed.Success || !slices.Equal(names, []string{"sub", "a.txt", "b.md"}) {
-		t.Errorf("listing the root = %v (%s), want the directory first, then the files by name, without dotfiles or links leaving the root", names, protocol.Deref(listed.Error))
+	if !listed.Success || !slices.Equal(names, []string{"crew", "journal", "knowledge", "sub", "a.txt", "b.md", "index.md", "log.md"}) {
+		t.Errorf("listing the root = %v (%s), want the directories, the Chief's among them, then the files by name, without dotfiles or links leaving the root", names, protocol.Deref(listed.Error))
 	}
 	for _, path := range []string{"leak.txt", "linkdir/secret.txt", "../outside/secret.txt"} {
 		if read := fsAskRead(app, "", path); read.Success || (read.Result != nil && strings.Contains(read.Result.Content, "top secret")) {

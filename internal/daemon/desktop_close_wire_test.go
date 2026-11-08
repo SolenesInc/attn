@@ -39,13 +39,18 @@ func TestCloseDesktopSelectsItsNeighbourAndRefusesTheLast(t *testing.T) {
 		if !result.Success || result.Profile.CurrentDesktopID != third.ID {
 			t.Fatalf("close first: %+v", result)
 		}
+		chiefDesktop := viewProfile(t, w, profile).desktops[protocol.Deref(profileChief(t, w).LaunchDesktop.DesktopID)]
 		result = requestCloseDesktop(app, third)
+		if !result.Success || result.Profile.CurrentDesktopID != chiefDesktop.ID {
+			t.Fatalf("close third: %+v", result)
+		}
+		result = requestCloseDesktop(app, chiefDesktop)
 		if result.Success || protocol.Deref(result.ErrorCode) != protocol.ProfileErrorCodeLastDesktop {
 			t.Fatalf("close last: %+v", result)
 		}
 		w.restart()
 		view := viewProfile(t, w, profile)
-		if len(view.desktops) != 1 || view.profile.CurrentDesktopID != third.ID {
+		if len(view.desktops) != 1 || view.profile.CurrentDesktopID != chiefDesktop.ID {
 			t.Fatalf("after restart: %+v", view)
 		}
 	})
@@ -84,8 +89,8 @@ func TestCloseDesktopClosesAgentsAndShellsAndKeepsTheirLedger(t *testing.T) {
 		t.Fatalf("closed ledger: %v", closed)
 	}
 	view := viewProfile(t, w, profile)
-	if len(view.desktops) != 1 || view.profile.CurrentDesktopID != keeper.ID {
-		t.Fatalf("close arrangement: %+v", view)
+	if _, remains := view.desktops[desktop.ID]; remains || view.profile.CurrentDesktopID != keeper.ID {
+		t.Fatalf("close arrangement: %+v, want the closed desktop gone and the keeper current", view)
 	}
 	reopened := reopenOverTheWebSocket(app, agent)
 	if !reopened.Success {
@@ -95,27 +100,19 @@ func TestCloseDesktopClosesAgentsAndShellsAndKeepsTheirLedger(t *testing.T) {
 }
 
 func TestCloseDesktopRefusesProtectedSessionsBeforeClosingAnything(t *testing.T) {
-	for _, protection := range []string{"chief", "crew"} {
-		t.Run(protection, func(t *testing.T) {
+	for _, member := range []string{"chief", "alder"} {
+		t.Run(member, func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			app := w.App()
 			profile := app.SelectedProfile()
 			createDesktop(app, profile)
 			ordinary := w.Spawn(app, fakeagent.Claude, w.Path("ordinary"))
 			w.Launched(ordinary)
-			protected := w.Spawn(app, fakeagent.Claude, w.Path("protected"))
-			w.Launched(protected)
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, ordinary)
-			if protection == "chief" {
-				if made := setChiefOfStaff(app, protected, true); !made.Success {
-					t.Fatal(protocol.Deref(made.Error))
-				}
-			} else {
-				writeLaunchChoice(app, "crew", "alder", protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
-				wake := wakeCrew(t, w.Client(), "alder", "")
-				protected = string(wake.SessionID)
-				w.Launched(protected)
-			}
+			setCrew(t, w.Client(), member, protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
+			writeLaunchChoice(app, "crew", member, protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
+			protected := string(wakeCrew(t, w.Client(), member, "").SessionID)
+			w.Launched(protected)
 			before := viewProfile(t, w, profile)
 			result := requestCloseDesktop(app, before.desktops[desktop.ID])
 			if result.Success || !strings.Contains(protocol.Deref(result.Error), protected) {

@@ -403,29 +403,15 @@ func TestOutpostAgentLaunchNamesItsFirstSyncAndHarnessLimits(t *testing.T) {
 		}
 	}
 	t.Logf("first sync gate: %s", protocol.Deref(early.Error))
-	for _, limit := range []struct {
-		agent fakeagent.Harness
-		chief bool
-		want  string
-	}{
-		{fakeagent.Claude, true, "chief and crew run only at the home"},
-		{fakeagent.Harness("plug"), false, "plugin harness plug runs only at the home"},
-	} {
-		denied, _, _ := home.RequestSpawn(pair.App, limit.agent, outpost.Path("agent"), withHost, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(limit.chief) })
-		if denied.Success || !strings.Contains(protocol.Deref(denied.Error), limit.want) {
-			t.Fatalf("limit %s: %+v", limit.want, denied)
-		}
+	denied, _, _ := home.RequestSpawn(pair.App, fakeagent.Harness("plug"), outpost.Path("agent"), withHost)
+	if want := "plugin harness plug runs only at the home"; denied.Success || !strings.Contains(protocol.Deref(denied.Error), want) {
+		t.Fatalf("limit %s: %+v", want, denied)
 	}
 	syncing.Release()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 	id := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("agent"), withHost)
 	outpost.LaunchedCarrying(pair.App.Terminal(id))
-	pair.App.Send(protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: protocol.SessionID(id), ChiefOfStaff: true})
-	refused := testworld.Await(pair.App, protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return m.SessionID == protocol.SessionID(id) })
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "chief runs only at the home") {
-		t.Fatalf("chief toggle: %+v", refused)
-	}
-	t.Log("chief/crew and plugin launch limits named; chief toggle refused; the profile folder's first-sync completion permits Claude")
+	t.Log("the plugin launch limit named; the profile folder's first-sync completion permits Claude")
 }
 
 func TestAnOutpostReplaysItsPendingConversationAfterRestart(t *testing.T) {

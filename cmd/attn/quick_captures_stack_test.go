@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -24,12 +25,12 @@ func quickCaptureCall(t *testing.T, cli *testworld.Peer, msg any) *protocol.Quic
 	}
 	return r
 }
-func quickCaptureSetChief(t *testing.T, app *testworld.Peer, id protocol.SessionID) {
+func wakeChief(t *testing.T, s *testworld.Stack) string {
 	t.Helper()
-	r := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: id, ChiefOfStaff: true}, protocol.EventChiefOfStaffResult, func(r protocol.ChiefOfStaffResultMessage) bool { return r.SessionID == id })
-	if !r.Success {
-		t.Fatal(r)
+	if set := s.Attn("crew", "set", "chief", "--agent", "claude"); set.Code != 0 {
+		t.Fatalf("crew set chief: %+v", set)
 	}
+	return wakeMember(t, s, "chief")
 }
 func uploadQuickCaptureChunks(t *testing.T, cli *testworld.Peer, quickCapture, id string, data []byte) {
 	t.Helper()
@@ -50,12 +51,9 @@ func uploadQuickCaptureChunks(t *testing.T, cli *testworld.Peer, quickCapture, i
 }
 func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.TrustedApp()
-	register(t, s, "first", "first")
-	register(t, s, "second", "second")
-	quickCaptureSetChief(t, s.TrustedApp(), "first")
 	data, err := os.ReadFile("../../docs/banner.png")
 	if err != nil {
 		t.Fatal(err)
@@ -75,24 +73,16 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	s.Stop()
 	s.Start()
 	app = s.TrustedApp()
-	register(t, s, "first", "first")
-	register(t, s, "second", "second")
 	replay := quickCaptureCall(t, app, msg)
-	if replay.Record.ID != quickCapture || len(replay.Record.Attachments) != 1 || replay.Record.Attachments[0].Bytes != len(data) {
+	if replay.Record.ID != quickCapture || len(replay.Record.Attachments) != 1 || replay.Record.Attachments[0].Bytes != len(data) || replay.Record.ReadAt != nil {
 		t.Fatalf("restart/lost ack %+v", replay)
 	}
-	quickCaptureSetChief(t, s.TrustedApp(), "second")
-	old := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", "--json"}, Session: "first"})
-	var empty protocol.AgentInboxBatchResult
-	old.JSON(t, &empty)
-	if len(empty.Items) != 0 {
-		t.Fatalf("old chief read %+v", empty)
-	}
-	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: "second"})
+	chief := wakeChief(t, s)
+	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: chief})
 	if read.Code != 0 || !strings.Contains(read.Stdout, "Message from the user, sent through Quick Capture.") || !strings.Contains(read.Stdout, msg.Content) || !strings.Contains(read.Stdout, "attn agent attachment "+quickCapture+" "+id) || strings.Contains(read.Stdout, "another agent") {
 		t.Fatalf("CLI attribution %+v", read)
 	}
-	reread := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: "second"})
+	reread := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: chief})
 	var entry protocol.AgentInboxItem
 	reread.JSON(t, &entry)
 	if entry.Kind != "quick_capture" || entry.Content != msg.Content || len(entry.Attachments) != 1 {
@@ -116,9 +106,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	}
 	s.Stop()
 	s.Start()
-	register(t, s, "first", "first")
-	quickCaptureSetChief(t, s.TrustedApp(), "first")
-	final := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: "first"})
+	final := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture, "--json"}, Session: chief})
 	var kept protocol.AgentInboxItem
 	final.JSON(t, &kept)
 	if kept.ReadAt != entry.ReadAt {
@@ -152,16 +140,15 @@ func TestQuickCaptureInstalledFileRecoversAfterProcessCrash(t *testing.T) {
 
 func TestQuickCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.TrustedApp()
-	register(t, s, "chief", "chief")
-	quickCaptureSetChief(t, app, "chief")
+	chief := wakeChief(t, s)
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})
 	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}})
-	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: "chief"})
+	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: chief})
 	if read.Code != 0 || !strings.Contains(read.Stdout, "File \"notes.pdf\" (application/pdf") || !strings.Contains(read.Stdout, "Inspect the saved file with your tools.") {
 		t.Fatalf("PDF inbox: %+v", read)
 	}

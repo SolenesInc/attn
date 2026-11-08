@@ -161,8 +161,8 @@ func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 	}
 	hash := *created.Result.Hash
 
-	if top := fsAskList(app, "", ""); !top.Success || len(top.Entries) != 1 || top.Entries[0].Name != "notes" || !top.Entries[0].IsDir {
-		t.Fatalf("listing the root = %+v, want the notes directory alone", top.Entries)
+	if top := fsAskList(app, "", ""); !top.Success || !slices.ContainsFunc(top.Entries, func(e protocol.FsEntry) bool { return e.Name == "notes" && e.IsDir }) {
+		t.Fatalf("listing the root = %+v, want the notes directory among them", top.Entries)
 	}
 	if notes := fsAskList(app, "", "notes"); !notes.Success || len(notes.Entries) != 1 || notes.Entries[0].Path != "notes/todo.txt" ||
 		notes.Entries[0].IsDir || notes.Entries[0].Size != len("buy milk") || notes.Entries[0].Modified == nil {

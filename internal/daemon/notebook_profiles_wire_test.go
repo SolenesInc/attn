@@ -65,12 +65,16 @@ func TestEachProfileReadsAndWritesItsOwnNotebookFolder(t *testing.T) {
 	notebookFileHolds(t, filepath.Join(workRoot, "work.md"), notebookNote("work.md"))
 	notebookFileHolds(t, filepath.Join(homeRoot, "home.md"), notebookNote("home.md"))
 	notebookFileHolds(t, filepath.Join(defaultFolder, "plain.md"), notebookNote("plain.md"))
+	notes := []string{"work.md", "home.md", "plain.md"}
 	for _, listed := range []struct {
-		app  *testworld.Peer
-		want []string
-	}{{workApp, []string{"work.md"}}, {homeApp, []string{"home.md"}}, {plainApp, []string{"plain.md"}}} {
-		if got := fsAskList(listed.app, "", ""); !slices.Equal(fsEntryPaths(got.Entries), listed.want) {
-			t.Fatalf("a profile lists %v, want only its own %v", fsEntryPaths(got.Entries), listed.want)
+		app *testworld.Peer
+		own string
+	}{{workApp, "work.md"}, {homeApp, "home.md"}, {plainApp, "plain.md"}} {
+		got := fsEntryPaths(fsAskList(listed.app, "", "").Entries)
+		for _, note := range notes {
+			if slices.Contains(got, note) != (note == listed.own) {
+				t.Fatalf("a profile lists %v, want its own %s and no other profile's note", got, listed.own)
+			}
 		}
 	}
 

@@ -12,7 +12,7 @@ draft:
 
 ```sh
 go run ./cmd/prompt-editor context crew/priming --include crew/wake --base main --json
-go run ./cmd/prompt-editor context --scenario chief-with-handoff --json
+go run ./cmd/prompt-editor context --scenario crew-v2-chief-first-day --json
 go run ./cmd/prompt-editor context --draft DRAFT_ID --json
 ```
 
@@ -70,9 +70,9 @@ maintainer and an agent need to edit together. This checkout's ignored
 ```sh
 go run ./cmd/prompt-editor draft create --title 'Clarify wake instructions' --json
 go run ./cmd/prompt-editor context crew/wake --draft DRAFT_ID --json
-go run ./cmd/prompt-editor draft put DRAFT_ID content/crew/wake.md \
+go run ./cmd/prompt-editor draft put DRAFT_ID content/crew/v2/wake.md \
   --file /tmp/wake.md --expect SOURCE_REVISION --author agent
-go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-wake --base main
+go run ./cmd/prompt-editor draft focus DRAFT_ID --scenario crew-v2-wake --base main
 go run ./cmd/prompt-editor check --draft DRAFT_ID
 go run ./cmd/prompt-editor compare --draft DRAFT_ID --base main --json
 go run ./cmd/prompt-editor context --draft DRAFT_ID --base main --json
@@ -119,7 +119,7 @@ running while the user reviews. Open the appropriate view:
 
 ```sh
 go run ./cmd/prompt-editor show --draft DRAFT_ID \
-  --scenario crew-wake --source content/crew/wake.md --base main --open
+  --scenario crew-v2-wake --source content/crew/v2/wake.md --base main --open
 go run ./cmd/prompt-editor show --review REVIEW_ID --open
 ```
 

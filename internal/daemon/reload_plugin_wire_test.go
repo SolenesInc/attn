@@ -45,34 +45,29 @@ func TestAReloadedPluginSessionResumesItsConversationOnTheLaunchItHad(t *testing
 	converse(t, app, session, second, "price the checkout")
 }
 
-func TestAReloadedPluginChiefResumesWithCurrentChiefGuidanceAndItsPins(t *testing.T) {
+func TestAReloadedPluginSessionResumesWithItsPins(t *testing.T) {
 	t.Setenv(fakeagent.PlugCapabilitiesEnv, "launch_instructions,model_pin,effort_pin,yolo")
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
 	pluginDriverSettings(app, "plug")
-	chief := w.Spawn(app, fakeagent.Plug, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
+	session := w.Spawn(app, fakeagent.Plug, w.Path("planner"), func(m *protocol.SpawnSessionMessage) {
 		m.Model = protocol.Ptr("provider/model")
 		m.Effort = protocol.Ptr("high")
 		m.YoloMode = protocol.Ptr(true)
 	})
-	first := w.Launched(chief)
+	first := w.Launched(session)
 
-	if reloaded := reloadPlug(app, chief); !reloaded.Success {
+	if reloaded := reloadPlug(app, session); !reloaded.Success {
 		t.Fatalf("reload: %s", protocol.Deref(reloaded.Error))
 	}
-	second := w.Launched(chief)
+	second := w.Launched(session)
 	model, _ := flagValue(second.Argv, "--model")
 	effort, _ := flagValue(second.Argv, "--effort")
-	guidance, _ := flagValue(second.Argv, "--append-system-prompt")
 	if !second.Resumed || second.ConversationID != first.ConversationID || model != "provider/model" || effort != "high" || !second.Yolo {
 		t.Errorf("the reload ran plug resuming %v %s on %q at %q (yolo %v), want it resuming %s on provider/model at high effort in yolo",
 			second.Resumed, second.ConversationID, model, effort, second.Yolo, first.ConversationID)
 	}
-	if !strings.Contains(guidance, "chief of staff") {
-		t.Error("the reloaded chief was launched without the chief guidance")
-	}
-	converse(t, app, chief, second, "plan the week")
+	converse(t, app, session, second, "plan the week")
 }
 
 func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
@@ -80,24 +75,16 @@ func TestAPluginSessionKeepsRunningWhenItsDriverCannotRelaunchIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Plug)
 	app := w.App()
 	pluginDriverSettings(app, "plug")
-	chief := w.Spawn(app, fakeagent.Plug, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	planner := w.Spawn(app, fakeagent.Plug, w.Path("planner"))
 	worker := w.Spawn(app, fakeagent.Plug, w.Path("worker"))
-	runs := map[string]*fakeagent.Run{chief: w.Launched(chief), worker: w.Launched(worker)}
+	runs := map[string]*fakeagent.Run{planner: w.Launched(planner), worker: w.Launched(worker)}
 
 	allow := w.RefusePlugLaunches("the plug session store is locked")
-	if reloaded := reloadPlug(app, chief); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), "store is locked") {
-		t.Errorf("reloading the chief = %+v, want it failing with the driver's reason", reloaded)
-	}
-	for session, promote := range map[string]bool{worker: true, chief: false} {
-		if result := setChiefOfStaff(app, session, promote); result.Success || !strings.Contains(protocol.Deref(result.Error), "store is locked") {
-			t.Errorf("setting chief=%v on %s = %+v, want it failing with the driver's reason", promote, session, result)
-		}
+	if reloaded := reloadPlug(app, planner); reloaded.Success || !strings.Contains(protocol.Deref(reloaded.Error), "store is locked") {
+		t.Errorf("reloading %s = %+v, want it failing with the driver's reason", planner, reloaded)
 	}
 	allow()
 
-	if chiefs := chiefsOf(w); !slices.Equal(chiefs, []string{chief}) {
-		t.Errorf("the chiefs are %v, want only %s as before the refused changes", chiefs, chief)
-	}
 	for session, run := range runs {
 		converse(t, app, session, run, "still there?")
 	}

@@ -426,14 +426,13 @@ func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t 
 	app := w.App()
 	profile := app.SelectedProfile()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	spawned, home, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
-	})
-	if !spawned.Success {
-		t.Fatalf("spawn the chief: %s", protocol.Deref(spawned.Error))
-	}
-	chief := string(spawned.ID)
+	cli := w.Client()
+	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
+	chief := string(wakeCrew(t, cli, "chief", "").SessionID)
+	home, _ := placedPane(t, w, chief)
 	codex := w.Launched(chief)
+	codex.Prompted()
+	codex.Reply("Ready. <!-- attn:state=idle -->")
 	app.TypeLine(chief, "plan the week")
 	codex.Prompted()
 	codex.Reply("Planned. <!-- attn:state=idle -->")
@@ -450,7 +449,7 @@ func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t 
 	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[elsewhere.ID]); !result.Success {
 		t.Fatalf("closing a desktop with one of the chief's two tiles: %s", protocol.Deref(result.Error))
 	}
-	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[home]); result.Success || !strings.Contains(protocol.Deref(result.Error), "protected") {
+	if result := requestCloseDesktop(app, viewProfile(t, w, profile).desktops[home.ID]); result.Success || !strings.Contains(protocol.Deref(result.Error), "protected") {
 		t.Fatalf("closing the desktop with the chief's last tile = %+v, want it refused as protected", result)
 	}
 	if entry := ledgerShowOverTheWebSocket(app, chief).Entry; entry == nil || protocol.Deref(entry.ClosedAt) != "" {
@@ -847,21 +846,20 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "codex_shared_enabled", "true")
-	chief := w.Spawn(app, fakeagent.Codex, w.Path("chief"), func(m *protocol.SpawnSessionMessage) {
-		m.ChiefOfStaff = protocol.Ptr(true)
-	})
+	cli := w.Client()
+	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
+	chief := string(wakeCrew(t, cli, "chief", "").SessionID)
 	codex := w.Launched(chief)
 	terminal := app.Terminal(chief)
-	app.TypeLine(chief, "plan the week")
 	codex.Prompted()
-	codex.Reply("Planned. <!-- attn:state=idle -->")
+	codex.Reply("Ready. <!-- attn:state=idle -->")
 	server := w.CodexServer()
-	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are the chief of staff") {
-		t.Fatalf("the chief's conversation started with:\n%s\nwant the chief guidance", got)
+	if got := server.Instructions(codex.ConversationID); !strings.Contains(got, "You are the Chief") {
+		t.Fatalf("the Chief's conversation started with:\n%s\nwant the Chief's guidance", got)
 	}
 
 	moveOn(t, app, codex, terminal, "/new", "fix the build")
-	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the chief of staff") || !strings.Contains(got, agentGuidanceLead) {
+	if got := server.Instructions(codex.ConversationID); strings.Contains(got, "You are the Chief") || !strings.Contains(got, agentGuidanceLead) {
 		t.Errorf("the conversation /new started in the chief's terminal began with:\n%s\nwant only the agent guidance", got)
 	}
 }

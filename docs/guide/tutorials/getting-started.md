@@ -79,13 +79,13 @@ This is where you watch all your agents and your open PRs:
 
 - **Sessions** lists every agent, grouped by state. Click one to go to it, or
   click **+ New** to start one.
-- **Chief of Staff** shows your Chief's session once you have one. The Chief is
-  an agent that keeps track of your other agents, delegates work for you and
-  journals your day in the Notebook. Read [The Chief](../reference/chief.md) to
-  make an agent your Chief, set up the Chief and see how the experimental Chief
-  crew member onboards you on its first day.
 - **Pull Requests** lists your PRs and the ones waiting for your review, with
   their CI status. This list needs `gh`.
+
+Every profile also has a Chief, a crew member that keeps track of your other
+agents, delegates work for you and journals your day in the Notebook. Read
+[The Chief](../reference/chief.md) to set it up and see how it onboards you on
+its first day.
 
 The gear at the top right opens Settings (Cmd+, or Ctrl+Shift+, on Linux).
 

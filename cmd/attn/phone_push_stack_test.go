@@ -84,13 +84,6 @@ func TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly(t *testing.T) 
 		pairPhone(t, app, cloud, work, "Work phone"),
 	}
 
-	chief := s.Spawn(app, fakeagent.Claude, s.Path("chief"), labelled("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
-	chiefAgent := s.Launched(chief)
-	app.TypeLine(chief, "triage the inbox")
-	chiefAgent.Prompted()
-	chiefAgent.Reply("Triaged. <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, chief, func(x protocol.Session) bool { return x.State == protocol.SessionStateWaitingInput })
-
 	builder := s.Spawn(app, fakeagent.Claude, s.Path("shop"), labelled("builder"))
 	claude := s.Launched(builder)
 	app.TypeLine(builder, "land the discount field")
@@ -124,7 +117,7 @@ func TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly(t *testing.T) 
 	}
 	slices.SortStableFunc(got[:len(got)-1], func(a, b openedPush) int { return cmpPhone(phones, a.phone, b.phone) })
 	if !slices.Equal(got, want) {
-		t.Fatalf("pushes = %+v\nwant one per phone of each session's profile, in order, and none for the chief, who is never owed a turn: %+v", got, want)
+		t.Fatalf("pushes = %+v\nwant one per phone of each session's profile, in order: %+v", got, want)
 	}
 
 	asked := s.Run(testworld.Invocation{Args: []string{"ask"}, Session: builder, Stdin: ":::question\nWhich store keeps the cache?\n- [ ] Postgres\n- [ ] Redis\n:::\n"})

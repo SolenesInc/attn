@@ -44,8 +44,8 @@ When nothing is left to raise, run:
 
     attn agent close --self -m "<what you settled>"
 
-attn refuses this close when you are the chief of staff or a session a crew
-member works in. Those sessions stay open after the wrap-up. attn also refuses
+attn refuses this close when you are a session a crew member works in, the
+Chief's included. Those sessions stay open after the wrap-up. attn also refuses
 it while a seed you tend is on standby and has unread mail. Read the mail with
 `attn agent inbox`, then close. The close is immediate, so write everything
 first. attn adds the reason as a note on each seed you still tend, and the

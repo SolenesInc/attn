@@ -369,7 +369,7 @@ func (d *Daemon) defaultLaunchEffort(agent string) string {
 	return strings.TrimSpace(d.setting(setting.DefaultEffort.For(strings.ToLower(strings.TrimSpace(agent)))))
 }
 
-func (d *Daemon) resolveLaunchModel(ctx context.Context, agent, executable string, requested string) string {
+func (d *Daemon) resolveLaunchModel(agent string, requested string) string {
 	if requested != "" {
 		return requested
 	}

@@ -179,7 +179,7 @@ func TestTheLaunchReviewCreatesSuggestedDesktopsOnFinishAndKeepsChoicesAcrossRes
 		return testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
 	}
 	state := read(app)
-	if state.Phase != protocol.MigrationPhaseLaunchRequired || len(state.Groups) != 0 || len(state.LaunchItems) != 3 {
+	if state.Phase != protocol.MigrationPhaseLaunchRequired || len(state.Groups) != 0 || len(state.LaunchItems) != 4 {
 		t.Fatalf("migration without workspaces = %+v", state)
 	}
 	for _, item := range state.LaunchItems {
@@ -210,7 +210,7 @@ func TestTheLaunchReviewCreatesSuggestedDesktopsOnFinishAndKeepsChoicesAcrossRes
 		t.Fatalf("finish = %+v", done)
 	}
 	view := viewProfile(t, w, profile)
-	for member, name := range map[string]string{"alder": "Alder", "keel": "Keel", "trellis": "Trellis"} {
+	for member, name := range map[string]string{"alder": "Alder", "chief": "Chief", "keel": "Keel", "trellis": "Trellis"} {
 		item := readLaunchSetting(app, "crew", member)
 		desktop, exists := view.desktops[protocol.Deref(item.Setting.DesktopID)]
 		if !item.Confirmed || !exists || (member == "alder") != (desktop.ID == target.ID) || (member != "alder" && desktop.Name != name) {
@@ -251,10 +251,14 @@ func TestUpgradingAnInstallWithOnlyAutomationsRequiresLaunchReviewAndPlacesExist
 	w.start()
 	app := w.App()
 	result := testworld.Request(app, protocol.MigrationGetMessage{Cmd: protocol.CmdMigrationGet, RequestID: "migration"}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "migration" })
-	if !result.Success || result.State == nil || result.State.Phase != protocol.MigrationPhaseLaunchRequired || len(result.State.LaunchItems) != 1 {
-		t.Fatalf("automation-only migration = %+v", result)
+	if !result.Success || result.State == nil || result.State.Phase != protocol.MigrationPhaseLaunchRequired || len(result.State.LaunchItems) != 2 {
+		t.Fatalf("automation-only migration = %+v, want the automation and the Chief to review", result)
 	}
-	item := result.State.LaunchItems[0]
+	automationAt := slices.IndexFunc(result.State.LaunchItems, func(i protocol.LaunchDesktopItem) bool { return i.Kind == protocol.LaunchDesktopKindAutomation })
+	if automationAt < 0 {
+		t.Fatalf("automation-only migration reviews %+v, want the automation among them", result.State.LaunchItems)
+	}
+	item := result.State.LaunchItems[automationAt]
 	if item.Kind != protocol.LaunchDesktopKindAutomation || item.ItemID != "1" || item.Confirmed || protocol.Deref(item.Setting.Label) != "Local check (new)" {
 		t.Fatalf("existing automation = %+v", item)
 	}
@@ -325,7 +329,8 @@ func TestANamedDesktopIsNeverRemovedUntilItsNameIsCleared(t *testing.T) {
 		if _, exists := view.desktops[named.ID]; !exists {
 			t.Fatal("an empty named desktop was removed")
 		}
-		if _, exists := view.desktops[left]; exists || len(view.desktops) != 2 || view.profile.CurrentDesktopID != shown.ID {
+		_, leftRemains := view.desktops[left]
+		if _, shownRemains := view.desktops[shown.ID]; leftRemains || !shownRemains || view.profile.CurrentDesktopID != shown.ID {
 			t.Fatalf("after an hour the profile holds %v with %s current, want the empty desktop the user left removed and the empty current desktop %s kept", view.desktops, view.profile.CurrentDesktopID, shown.ID)
 		}
 		mustProfileRequest(app, protocol.DesktopRenameMessage{Cmd: protocol.CmdDesktopRename, RequestID: "unname", DesktopID: named.ID, Name: ""}, "unname")
@@ -383,7 +388,7 @@ func TestALaunchWhoseNumberedDesktopWasRemovedRecreatesItWithoutFocus(t *testing
 	})
 }
 
-func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t *testing.T) {
+func TestACompletedMigrationDoesNotReopenForALaterAutomation(t *testing.T) {
 	w := &world{World: prepareWorld(t)}
 	directory := w.Path("check")
 	if err := os.MkdirAll(directory, 0o755); err != nil {
@@ -434,10 +439,20 @@ func TestFinishingMigrationWithoutLaunchItemsDoesNotReopenForALaterAutomation(t 
 	if err := cli.AutomationDelete(1); err != nil {
 		t.Fatal(err)
 	}
-	state = read(app)
-	done := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: "finish", ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == "finish" })
-	if !done.Success || done.State == nil || done.State.Phase != protocol.MigrationPhaseComplete {
-		t.Fatalf("finish: %+v", done)
+	finish := func(requestID string, state protocol.MigrationState) protocol.MigrationState {
+		t.Helper()
+		done := testworld.Request(app, protocol.MigrationFinishMessage{Cmd: protocol.CmdMigrationFinish, RequestID: requestID, ExpectedRevision: state.Revision}, protocol.EventMigrationResult, func(r protocol.MigrationResultMessage) bool { return r.RequestID == requestID })
+		if !done.Success || done.State == nil {
+			t.Fatalf("finish %s: %+v", requestID, done)
+		}
+		return *done.State
+	}
+	placed := finish("finish-placement", read(app))
+	if placed.Phase != protocol.MigrationPhaseLaunchRequired || len(placed.LaunchItems) != 1 || placed.LaunchItems[0].ItemID != "chief" {
+		t.Fatalf("finishing placement = %+v, want the Chief's launch desktop left to review", placed)
+	}
+	if reviewed := finish("finish-review", placed); reviewed.Phase != protocol.MigrationPhaseComplete {
+		t.Fatalf("finishing the review = %+v, want the migration complete", reviewed)
 	}
 	applyAutomation(t, cli, definition)
 	w.restart()

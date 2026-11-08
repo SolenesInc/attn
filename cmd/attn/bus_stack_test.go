@@ -70,6 +70,15 @@ func trimBus(t *testing.T, s *testworld.Stack) string {
 	return strings.TrimSpace(trimmed.Stdout)
 }
 
+func documentChanges(log busLog) int {
+	for _, producer := range log.Producers {
+		if producer.Name == "document.changed" {
+			return producer.Events
+		}
+	}
+	return 0
+}
+
 func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
@@ -79,6 +88,7 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 
 	s.Start()
 	assertBusTable(t, busTable(s), []string{"log: seq "}, []string{"ERROR", "WARN"})
+	started := documentChanges(readBusLog(t, s))
 	if r := s.Attn("bus", "disable", "garden-seed-bells"); r.Code != 0 {
 		t.Fatalf("attn bus disable garden-seed-bells exited %d: %s", r.Code, r.Stderr)
 	}
@@ -97,15 +107,8 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	if before.Rows == 0 || before.Bytes == 0 || before.OldestAt == "" || before.OldestAt > before.NewestAt {
 		t.Fatalf("bus status after document writes = %+v", before)
 	}
-	if changed := func() int {
-		for _, producer := range before.Producers {
-			if producer.Name == "document.changed" {
-				return producer.Events
-			}
-		}
-		return 0
-	}(); changed != 2 {
-		t.Errorf("document.changed events = %d, want two writes", changed)
+	if changed := documentChanges(before); changed != started+2 {
+		t.Errorf("document.changed events = %d, want the %d at start and two writes", changed, started)
 	}
 	foundDisabled := false
 	for _, consumer := range before.Consumers {
