@@ -495,7 +495,11 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			s := testworld.NewStack(t)
 			binary := testworld.AttnBinary(t)
-			data, err := os.ReadFile(binary)
+			data, err := os.ReadFile(filepath.Join(filepath.Dir(binary), "attnd"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			cliBytes, err := os.ReadFile(binary)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -522,6 +526,10 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 			}
 			home := bridge.Build{Version: info.Version, SourceFingerprint: info.Fingerprint, ProtocolVersion: info.Protocol}
 			env := []string{"ATTN_HARNESS_OUTPOST_INSTALL_ROOT=" + root}
+			stagedCLI := filepath.Join(filepath.Dir(target), ".attn-cli-install")
+			if err := os.WriteFile(stagedCLI, cliBytes, 0o700); err != nil {
+				t.Fatal(err)
+			}
 			stagedHost := filepath.Join(filepath.Dir(target), ".attn-pty-host-install")
 			hostBytes := []byte("the host of this build")
 			hostDigest := sha256.Sum256(hostBytes)
@@ -537,7 +545,7 @@ func TestSSHStagedInstallRefusalsKeepTheInstalledBinary(t *testing.T) {
 				hostDigest = sha256.Sum256([]byte("what the home sent"))
 			}
 			expected, _ := json.Marshal(home)
-			result := s.Run(testworld.Invocation{Binary: staged, Args: []string{"_outpost-install", "--size", fmt.Sprint(len(data)), "--sha256", fmt.Sprintf("%x", sha256.Sum256(data)), "--host", stagedHost, "--host-size", fmt.Sprint(len(hostBytes)), "--host-sha256", fmt.Sprintf("%x", hostDigest), "--build", string(expected), "--target", target}, Env: env})
+			result := s.Run(testworld.Invocation{Binary: staged, Args: []string{"_outpost-install", "--size", fmt.Sprint(len(data)), "--sha256", fmt.Sprintf("%x", sha256.Sum256(data)), "--cli", stagedCLI, "--cli-size", fmt.Sprint(len(cliBytes)), "--cli-sha256", fmt.Sprintf("%x", sha256.Sum256(cliBytes)), "--host", stagedHost, "--host-size", fmt.Sprint(len(hostBytes)), "--host-sha256", fmt.Sprintf("%x", hostDigest), "--build", string(expected), "--target", target}, Env: env})
 			if result.Code == 0 || !strings.Contains(result.Stderr, tc.reason) {
 				t.Fatalf("install refusal: %+v", result)
 			}

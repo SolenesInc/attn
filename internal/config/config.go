@@ -479,13 +479,20 @@ func validateSessionBinary(home string) error {
 		return fmt.Errorf("resolve this binary: %w", err)
 	}
 	sessionBinary := strings.TrimSpace(os.Getenv(sessionBinaryEnv))
-	if this == sessionBinary {
+	if this == sessionBinary || this == daemonBesideCLI(sessionBinary) {
 		return nil
 	}
 	return fmt.Errorf(
 		"refusing to start a daemon or open the database on %s from %s.\nThis process is inside an attn session whose daemon runs from %s.\nA different build here would replace that daemon and migrate its database.\nTo test this build, select an instance: eval \"$(%s instance-env <name>)\"\nTo make it the installed build, run `make install`. To run it anyway, start it from a terminal outside attn",
 		home, this, sessionBinary, this,
 	)
+}
+
+func daemonBesideCLI(binary string) string {
+	if filepath.Base(binary) != "attn" {
+		return binary
+	}
+	return filepath.Join(filepath.Dir(binary), "attnd")
 }
 
 func comparableDaemonIsolationPath(path string) (string, error) {
