@@ -88,6 +88,7 @@ go ./cmd/attn TestARingTheModReturnsAfterTheHomeDaemonRestartsIsUnread
 go ./cmd/attn TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHolds
 go ./cmd/attn TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod
 go ./cmd/attn TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto
+go ./cmd/attn TestARingCaughtWhileTheModDropsAfterARestartIsTypedInto
 go ./cmd/attn TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns
 go ./internal/daemon TestTheDaemonAnswersWhileTheLoginShellRuns
 go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer

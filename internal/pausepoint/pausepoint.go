@@ -56,6 +56,7 @@ const (
 	SessionInputPlacing            = "session-input-placing"
 	SessionInputPasteGap           = "session-input-paste-gap"
 	ClaudeModReturnWaits           = "claude-mod-return-waits"
+	ClaudeModEnqueuing             = "claude-mod-enqueuing"
 	RingPlacementAnswering         = "ring-placement-answering"
 	TenderDirectoryInspecting      = "tender-directory-inspecting"
 	SessionInputLaneContended      = "session-input-lane-contended"

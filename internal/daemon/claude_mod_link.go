@@ -32,6 +32,7 @@ func (l claudeModLink) Compact(ctx context.Context, in harness.Input) harness.Cu
 
 func (l claudeModLink) hand(ctx context.Context, delivery *claudeModDelivery) harness.Custody {
 	in := delivery.input
+	pausepoint.At(pausepoint.ClaudeModEnqueuing)
 	if !l.mod.enqueue(l.terminal, delivery) {
 		return harness.Custody{Reason: fmt.Sprintf("claude mod: terminal %s stopped polling before taking input %s, send it again", l.terminal, in.ID)}
 	}

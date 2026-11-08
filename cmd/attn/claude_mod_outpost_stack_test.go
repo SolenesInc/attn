@@ -373,6 +373,27 @@ func TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto(t *testing.T) {
 	}
 }
 
+func TestARingCaughtWhileTheModDropsAfterARestartIsTypedInto(t *testing.T) {
+	m, app := newHomeMod(t, func(*testworld.Stack) {})
+	m.workingOn(t, app, "write the essay")
+	m.sendMail(t, m.session, "the discount is applied after tax")
+	m.run.ModStopPolling()
+
+	m.home.Stop()
+	enqueuing := m.home.PauseAt(pausepoint.ClaudeModEnqueuing)
+	m.home.Start()
+	m.home.AwaitTimer(daemon.ClaudeModReachTimer)
+	if err := m.home.Client().UpdateState(m.terminal, protocol.StateWaitingInput); err != nil {
+		t.Fatal(err)
+	}
+	enqueuing.Await()
+	m.home.FirePending(daemon.ClaudeModReachTimer)
+	enqueuing.Release()
+	if got := m.run.Prompted(); m.run.ThroughMod || !strings.Contains(got, "attn agent inbox") {
+		t.Fatalf("the agent took %q (through the mod: %t), want the ring typed", got, m.run.ThroughMod)
+	}
+}
+
 func TestAReportTheHomeRefusesDoesNotBlockTheOnesBehindIt(t *testing.T) {
 	m := newOutpostMod(t)
 	m.workingOn(t, m.pair.App, "write the essay")
