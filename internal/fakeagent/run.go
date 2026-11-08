@@ -133,6 +133,11 @@ func (r *Run) ModGiveBack() {
 	r.call(methodModGiveBack, struct{}{}, nil)
 }
 
+func (r *Run) ModHeldRingsRecordAddress(address string) {
+	r.t.Helper()
+	r.call(methodModReaddressHeld, address, nil)
+}
+
 func (r *Run) ModSkipNextCompact(reason string) {
 	r.t.Helper()
 	r.call(methodModCompactOutcome, ModCompactReport{Outcome: ModCompactSkipped, Reason: reason}, nil)

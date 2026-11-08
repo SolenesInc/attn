@@ -398,7 +398,7 @@ type inboxRingReturned struct {
 }
 
 func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettleMessage) (struct{}, error) {
-	address, err := who.ParseAddress(msg.Ring.Address)
+	address, err := d.heldRingAddress(msg.Ring.Address)
 	if err != nil {
 		return struct{}{}, fmt.Errorf("inbox ring %s: %w", msg.DeliveryID, err)
 	}
@@ -417,6 +417,13 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 	d.publishFact(FactInboxRingReturned, address.String(), inboxRingReturned{ProfileID: msg.Ring.ProfileID, Captures: msg.Ring.Captures, AuthorizedSeeds: msg.Ring.AuthorizedSeeds})
 	d.kickInbox(address)
 	return struct{}{}, nil
+}
+
+func (d *Daemon) heldRingAddress(recorded string) (who.Address, error) {
+	if profileID, heldSinceBeforeChiefMembers := strings.CutPrefix(recorded, "chief:"); heldSinceBeforeChiefMembers {
+		return d.chiefMailbox(profileID)
+	}
+	return who.ParseAddress(recorded)
 }
 
 func (d *Daemon) projectReturnedRing(ev bus.Event) {

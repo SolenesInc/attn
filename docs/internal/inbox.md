@@ -24,7 +24,6 @@ session holds it reads.
 |---|---|---|
 | session | that session | The item waits, and attn never resumes a closed session to deliver an item. A seed update is the exception: attn withdraws it when the session closes (see [Seed updates](#seed-updates)). |
 | crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
-| chief | the session of the profile's Chief member | attn wakes the Chief member, as for its member address. New items use the member address; the chief address remains for items saved before the Chief became a crew member. |
 | seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. A closed session tender is resumed only when the seed is on standby (see [Wakes](#wakes)). |
 
 An item follows its mailbox. When a member's session ends, their next session
@@ -35,17 +34,17 @@ and to each watcher directly, so a seed update does not move to a new tender.
 The sender picks the address:
 
 - `attn agent msg <member>` addresses the member.
-- `attn agent msg <session>` addresses the member or the chief when that
-  session holds one of those mailboxes, so the message follows the role into
-  the next session. Otherwise the command addresses the session.
+- `attn agent msg <session>` addresses the member when that session holds a
+  member's mailbox, so the message follows the role into the next session.
+  Otherwise the command addresses the session.
 - `attn agent msg <seed-id>` addresses the seed.
 - A seed update addresses a crew member tender as the member. It addresses a
   session tender and every watcher as their session.
 - Crew sleep and auto-sleep requests address the session, because each request
   concerns that one session. attn never wakes a member to deliver a request.
 
-A session reads all its addresses together: its own, its member's, the chief's
-when it is the chief, and those of the seeds it tends.
+A session reads all its addresses together: its own, its member's, and those of
+the seeds it tends.
 
 ## What puts items in
 
@@ -67,7 +66,7 @@ attn refuses a peer message, and gives the reason, when:
 - the sender sent 8 messages to the same address in the last 30 seconds
 - the address has 50 unread peer messages
 - the message would reach the sender: the sender's own session, the sender's
-  member, the chief when the sender is the chief, or a seed the sender tends
+  member, or a seed the sender tends
 
 ### Seed updates
 
@@ -281,6 +280,9 @@ connected:
   for an empty composer or a prompt, because the daemon keeps those in memory. A
   "placed" report waiting at a restart is lost too, so a seed on standby stays on
   standby until the tender next reads its mail.
+- A ring taken before the Chief became a crew member keeps the old Chief address
+  in its record. When the mod gives one back after the upgrade, attn returns its
+  items to the unread mail of that profile's Chief member.
 - While a running turn waits on a permission question, the mod takes a ring it
   would take during that turn. It holds the ring until the question closes,
   because the mod's delivery cannot answer the question. Refusing the question,
@@ -359,8 +361,7 @@ session, attn resumes that session and rings it instead of starting a new one.
 - attn wakes a member again when the member goes back to sleep with unread
   items that have attempts left. The wake comes 5 minutes after the last
   attempt, or at once for user input and for seed mail.
-- attn wakes the Chief member like any member, for its member address and for
-  its chief address.
+- attn wakes the Chief member like any member.
 - A manual wake does not ring for items that have no attempts left. The agent
   still finds those items with `attn agent inbox`. attn types user input
   regardless of their attempts.

@@ -45,6 +45,7 @@ const (
 	methodModPause          = "mod_pause"
 	methodModResume         = "mod_resume"
 	methodModGiveBack       = "mod_give_back"
+	methodModReaddressHeld  = "mod_readdress_held"
 )
 
 const (
@@ -224,6 +225,27 @@ func (m *fakeMod) ackHeld(instance string, message fakeModMessage, outcome strin
 	m.post("/claude/ack", map[string]any{"terminal": m.terminal, "instance": instance, "id": message.ID, "outcome": outcome, "ring": message.Ring})
 }
 
+func (m *fakeMod) readdressHeldRings(address string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, message := range m.held {
+		if message.Ring == nil {
+			continue
+		}
+		var ring map[string]any
+		if err := json.Unmarshal(message.Ring, &ring); err != nil {
+			return err
+		}
+		ring["address"] = address
+		data, err := json.Marshal(ring)
+		if err != nil {
+			return err
+		}
+		m.held[i].Ring = data
+	}
+	return nil
+}
+
 func (m *fakeMod) sendGivenBack(instance string) {
 	m.mu.Lock()
 	back := m.back
@@ -345,6 +367,12 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 		m.mu.Unlock()
 		m.sendGivenBack(instance)
 		return struct{}{}, nil
+	case methodModReaddressHeld:
+		var address string
+		if err := json.Unmarshal(params, &address); err != nil {
+			return nil, err
+		}
+		return struct{}{}, m.readdressHeldRings(address)
 	case methodModCompactOutcome:
 		var next ModCompactReport
 		if err := json.Unmarshal(params, &next); err != nil {
