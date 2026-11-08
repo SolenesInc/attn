@@ -1583,6 +1583,7 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
     model: '',
     effort: '',
     executable: '',
+    manualLocation: 'directory',
     directoryPath: '',
     repositoryOverrides: [],
     prompt: '',

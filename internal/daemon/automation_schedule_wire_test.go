@@ -120,7 +120,10 @@ location: {type: directory, path: %q}
 		if got := protocol.Deref(hourly.NextRunAt); got != "2000-01-01T01:00:00Z" {
 			t.Errorf("apply reported next run %q, want 01:00", got)
 		}
-		applyAutomation(t, cli, manualAutomation(w, "Check locally."))
+		manual := applyAutomation(t, cli, manualAutomation(w, "Check locally."))
+		if protocol.Deref(manual.LocationType) != "directory" {
+			t.Errorf("a manual automation's location type = %q, want directory", protocol.Deref(manual.LocationType))
+		}
 
 		w.advance(30 * time.Minute)
 

@@ -154,7 +154,7 @@
   margin: 0;
 }
 
-.automation-form__advanced button,
+.automation-form__browse,
 .automation-form__overrides button {
   background: var(--color-bg-button);
   border: 1px solid var(--color-border);
@@ -315,11 +315,12 @@
 .automation-form__overrides {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  padding-top: 8px;
 }
 
 .automation-form__override-row {
+  align-self: stretch;
   display: flex;
   gap: 8px;
 }
@@ -523,4 +524,44 @@
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.automation-form__with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.automation-form__with-button .automation-form__input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.automation-form__browse {
+  flex: none;
+}
+
+.automation-form__advanced-body {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.automation-form__advanced-chip {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.automation-form__definition {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 6px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

@@ -54,6 +54,7 @@ export interface LocationPickerProps {
   // False while another surface holds the keyboard: no focus grab, no Escape handling.
   active?: boolean;
   title?: string;
+  folderOnly?: boolean;
   onClose: () => void;
   onSelect: (
     path: string,
@@ -98,6 +99,7 @@ export function LocationPicker({
   variant = 'dialog',
   active = true,
   title = 'New Session Location',
+  folderOnly = false,
   onClose,
   onSelect,
   onGetRecentLocations,
@@ -632,7 +634,7 @@ export function LocationPicker({
 
   return (
     <PickerFrame inline={inline} onDismiss={handleClosePicker} onStepBack={stepBack} onKeyDown={handleDialogKeyDown}>
-      <SessionControls controls={controls} />
+      {!folderOnly && <SessionControls controls={controls} />}
       {mode === 'path-input' ? (
         <>
           <div className="picker-header">

@@ -313,3 +313,16 @@ button.automations-panel__run-row-main {
   font-size: var(--font-size-xs);
   padding: 8px 0;
 }
+
+.automations-panel__pr-prompt {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.automations-panel__pr-prompt input {
+  flex: 1 1 220px;
+  min-width: 0;
+}

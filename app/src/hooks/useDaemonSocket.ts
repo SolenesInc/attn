@@ -3819,7 +3819,7 @@ export function useDaemonSocket({
   }, [nextRequestID]);
 
   const runAutomationNow = useCallback(
-    (definitionId: number, requestId: string): Promise<AutomationRunSummary | undefined> => {
+    (definitionId: number, requestId: string, prUrl?: string): Promise<AutomationRunSummary | undefined> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3831,7 +3831,7 @@ export function useDaemonSocket({
           resolve: (result: any) => resolve(result.run as AutomationRunSummary | undefined),
           reject,
         });
-        ws.send(JSON.stringify({ cmd: 'automation_run', definition_id: definitionId, request_id: requestId }));
+        ws.send(JSON.stringify({ cmd: 'automation_run', definition_id: definitionId, request_id: requestId, ...(prUrl ? { pr_url: prUrl } : {}) }));
         setTimeout(() => {
           if (pendingActionsRef.current.has(key)) {
             pendingActionsRef.current.delete(key);

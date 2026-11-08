@@ -1080,6 +1080,9 @@ type AutomationDefinitionSummary struct {
 	// LaunchDesktop corresponds to the JSON schema field "launch_desktop".
 	LaunchDesktop *LaunchDesktopSetting `json:"launch_desktop,omitempty,omitzero"`
 
+	// LocationType corresponds to the JSON schema field "location_type".
+	LocationType *string `json:"location_type,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
 

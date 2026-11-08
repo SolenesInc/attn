@@ -4,7 +4,7 @@ import { useProfilesStore } from '../../store/profiles';
 import type { LaunchDesktopSetting } from '../../types/generated';
 // The host remounts on a fresh key per target, so mount already means an explicit
 // load: edit mode reads once on mount and never re-fetches on definitionId churn.
-import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode, type RefObject } from 'react';
 import {
   useFieldArray,
   useForm,
@@ -26,18 +26,19 @@ import {
   specJSONString,
   specToFormValues,
 } from './automationFormModel';
-import type { AutomationAgent } from './automationFormModel';
 import { useHarnessChoices } from '../../hooks/useHarnesses';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { HarnessRouteChip } from '../HarnessRouteChip';
 const AUTOMATION_HARNESSES = ['codex', 'claude'];
+import { LocationPicker } from '../LocationPicker';
+import { writeClipboardText } from '../../utils/clipboardBridge';
 import { ScheduleComposer } from './ScheduleComposer';
 import { setAutomationFormAutomationHandle } from './automationFormAutomation';
 import './AutomationForm.css';
 
 export interface AutomationFormProps {
   definitionId: number | null;
-  getDefinition: (definitionId: number) => Promise<{ specJson: string; definition?: AutomationDefinitionSummary }>;
+  getDefinition: (definitionId: number) => Promise<{ specYaml: string; specJson: string; definition?: AutomationDefinitionSummary }>;
   applyDefinition: (
     specJson: string,
     expectedId: number,
@@ -72,13 +73,14 @@ function makeCreateDefaults(): AutomationFormValues {
     scheduleTimeZone: localTimeZone(),
     guard: '',
     continuity: 'fresh',
-    catchUp: '',
+    catchUp: 'latest',
     repositoriesInclude: [],
     repositoriesExclude: [],
     agent: 'codex',
     model: '',
     effort: '',
     executable: '',
+    manualLocation: 'directory',
     directoryPath: '',
     repositoryOverrides: [],
     prompt: '',
@@ -153,22 +155,40 @@ interface AutomationFields {
 }
 
 function AutomationDirectoryField({ fields }: { fields: AutomationFields }) {
-  const { regField, fieldError } = fields;
+  const { regField, fieldError, setValue } = fields;
+  const { sendGetRecentLocations, sendBrowseDirectory, sendInspectPath, settings } = useDaemonApi();
+  const [browsing, setBrowsing] = useState(false);
   return (
     <div className="automation-form__field">
       <label className="automation-form__label" htmlFor="automation-form-directory-path">
-        Directory
+        Folder
       </label>
-      <input
-        id="automation-form-directory-path"
-        className={
-          fieldError('directoryPath')
-            ? 'automation-form__input automation-form__input--invalid'
-            : 'automation-form__input'
-        }
-        data-testid="automation-form-directory-path"
-        placeholder="/absolute/path"
-        {...regField('directoryPath')}
+      <div className="automation-form__with-button">
+        <input
+          id="automation-form-directory-path"
+          className={
+            fieldError('directoryPath')
+              ? 'automation-form__input automation-form__input--invalid'
+              : 'automation-form__input'
+          }
+          data-testid="automation-form-directory-path"
+          placeholder="/absolute/path"
+          {...regField('directoryPath')}
+        />
+        <button type="button" className="automation-form__browse" data-testid="automation-form-browse" onClick={() => setBrowsing(true)}>
+          Browse
+        </button>
+      </div>
+      <LocationPicker
+        isOpen={browsing}
+        folderOnly
+        title="Choose a folder"
+        onClose={() => setBrowsing(false)}
+        onSelect={(path) => setValue('directoryPath', path, { shouldDirty: true, shouldValidate: true })}
+        onGetRecentLocations={sendGetRecentLocations}
+        onBrowseDirectory={sendBrowseDirectory}
+        onInspectPath={sendInspectPath}
+        projectsDirectory={settings.projects_directory}
       />
       {fieldError('directoryPath') && (
         <p className="automation-form__field-error" data-testid="automation-form-error-directoryPath">
@@ -176,6 +196,195 @@ function AutomationDirectoryField({ fields }: { fields: AutomationFields }) {
         </p>
       )}
     </div>
+  );
+}
+
+function AutomationSegments<T extends string>({ label, value, options, onChange }: {
+  label: string;
+  value: T;
+  options: { value: T; label: string; testId: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="automation-form__segmented" role="group" aria-label={label}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={value === option.value}
+          className={value === option.value ? 'automation-form__segment automation-form__segment--selected' : 'automation-form__segment'}
+          onClick={() => onChange(option.value)}
+          data-testid={option.testId}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function advancedChips(values: AutomationFormValues): string[] {
+  const chips: string[] = [];
+  if (values.trigger === 'scheduled' && values.continuity === 'singleton') chips.push('Same agent');
+  if (values.trigger === 'scheduled' && values.catchUp === 'skip') chips.push('Skip missed runs');
+  if (values.trigger === 'manual' && values.manualLocation === 'repository_worktree') chips.push('Pull request worktree');
+  if (usesWorktree(values) && values.repositoryOverrides.length > 0) {
+    chips.push(values.repositoryOverrides.length === 1 ? '1 local clone' : `${values.repositoryOverrides.length} local clones`);
+  }
+  if (values.executable.trim()) chips.push('Custom executable');
+  return chips;
+}
+
+function usesWorktree(values: AutomationFormValues): boolean {
+  return values.trigger === 'github_review_requested' || (values.trigger === 'manual' && values.manualLocation === 'repository_worktree');
+}
+
+function AutomationDefinitionView({ yaml }: { yaml: string }) {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="automation-form__field">
+      <div className="schedule-composer__line">
+        <button type="button" className="schedule-composer__quiet" data-testid="automation-form-definition-toggle" onClick={() => setShown(!shown)}>
+          {shown ? 'Hide definition' : 'Show definition'}
+        </button>
+        {shown && (
+          <button
+            type="button"
+            className="schedule-composer__quiet"
+            data-testid="automation-form-definition-copy"
+            onClick={() => void writeClipboardText(yaml).then(() => setCopied(true))}
+          >
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        )}
+      </div>
+      {shown && <pre className="automation-form__definition" data-testid="automation-form-definition">{yaml}</pre>}
+    </div>
+  );
+}
+
+function AutomationAdvanced({ fields, overrides, definitionYaml }: {
+  fields: AutomationFields;
+  overrides: {
+    fields: FieldArrayWithId<AutomationFormValues, 'repositoryOverrides'>[];
+    append: UseFieldArrayAppend<AutomationFormValues, 'repositoryOverrides'>;
+    remove: UseFieldArrayRemove;
+  };
+  definitionYaml: string;
+}) {
+  const { values, register, regField, setValue, fieldError } = fields;
+  const [open, setOpen] = useState(false);
+  const set = { shouldDirty: true, shouldValidate: true };
+  const chips = advancedChips(values);
+  const hasError = Boolean(fieldError('catchUp') || fieldError('repositoryOverrides'));
+  return (
+    <details className="automation-form__advanced" open={open || hasError} data-testid="automation-form-advanced" onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>
+        Advanced
+        {chips.map((chip) => <span className="automation-form__advanced-chip" key={chip}>{chip}</span>)}
+      </summary>
+      <div className="automation-form__advanced-body">
+        {values.trigger === 'scheduled' && (
+          <>
+            <div className="automation-form__field">
+              <span className="automation-form__label">Agent</span>
+              <AutomationSegments
+                label="Agent"
+                value={values.continuity}
+                onChange={(continuity) => setValue('continuity', continuity, set)}
+                options={[
+                  { value: 'fresh', label: 'New each run', testId: 'automation-form-continuity-fresh' },
+                  { value: 'singleton', label: 'Same agent', testId: 'automation-form-continuity-singleton' },
+                ]}
+              />
+              <p className="automation-form__hint">
+                {values.continuity === 'fresh'
+                  ? 'Every run starts a new agent.'
+                  : 'Every run goes to one agent, and it resumes if closed. Changing the prompt, model or folder starts a replacement.'}
+              </p>
+            </div>
+            <div className="automation-form__field">
+              <span className="automation-form__label">Missed runs</span>
+              <AutomationSegments
+                label="Missed runs"
+                value={values.catchUp}
+                onChange={(catchUp) => setValue('catchUp', catchUp, set)}
+                options={[
+                  { value: 'latest', label: 'Run latest', testId: 'automation-form-catchup-latest' },
+                  { value: 'skip', label: 'Skip', testId: 'automation-form-catchup-skip' },
+                ]}
+              />
+              <p className="automation-form__hint">
+                {values.catchUp === 'skip'
+                  ? 'A missed time still runs if attn notices within 5 minutes. Older ones are dropped.'
+                  : 'After downtime, one run for the most recent missed time.'}
+              </p>
+              {fieldError('catchUp') && (
+                <p className="automation-form__field-error" data-testid="automation-form-error-catchUp">{fieldError('catchUp')}</p>
+              )}
+            </div>
+          </>
+        )}
+        {values.trigger === 'manual' && (
+          <div className="automation-form__field">
+            <span className="automation-form__label">Works in</span>
+            <AutomationSegments
+              label="Works in"
+              value={values.manualLocation}
+              onChange={(location) => setValue('manualLocation', location, set)}
+              options={[
+                { value: 'directory', label: 'Folder', testId: 'automation-form-location-directory' },
+                { value: 'repository_worktree', label: 'Pull request worktree', testId: 'automation-form-location-worktree' },
+              ]}
+            />
+            <p className="automation-form__hint">
+              {values.manualLocation === 'directory'
+                ? 'The agent works in the folder above.'
+                : 'Run now asks for a pull request, and the agent works in a fresh worktree at its head.'}
+            </p>
+          </div>
+        )}
+        {usesWorktree(values) && (
+          <div className="automation-form__overrides">
+            <span className="automation-form__label">Local clones</span>
+            {overrides.fields.map((field, index) => (
+              <div className="automation-form__override-row" key={field.id}>
+                <input
+                  className="automation-form__input"
+                  placeholder="host/owner/repository"
+                  data-testid={`automation-form-override-repository-${index}`}
+                  {...register(`repositoryOverrides.${index}.repository` as const)}
+                />
+                <input
+                  className="automation-form__input"
+                  placeholder="/absolute/path"
+                  data-testid={`automation-form-override-path-${index}`}
+                  {...register(`repositoryOverrides.${index}.path` as const)}
+                />
+                <button type="button" onClick={() => overrides.remove(index)} data-testid={`automation-form-overrides-remove-${index}`}>
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button type="button" onClick={() => overrides.append({ repository: '', path: '' })} data-testid="automation-form-overrides-add">
+              Add override
+            </button>
+          </div>
+        )}
+        <div className="automation-form__field">
+          <label className="automation-form__label" htmlFor="automation-form-executable">Executable override</label>
+          <input
+            id="automation-form-executable"
+            className="automation-form__input"
+            placeholder="Default from PATH"
+            data-testid="automation-form-executable"
+            {...regField('executable')}
+          />
+        </div>
+        {definitionYaml && <AutomationDefinitionView yaml={definitionYaml} />}
+      </div>
+    </details>
   );
 }
 
@@ -187,7 +396,6 @@ function AutomationGitHubFields({
   setExcludeInput,
   addRepository,
   removeRepository,
-  overrides,
 }: {
   fields: AutomationFields;
   includeInput: string;
@@ -196,14 +404,8 @@ function AutomationGitHubFields({
   setExcludeInput: (value: string) => void;
   addRepository: (field: 'repositoriesInclude' | 'repositoriesExclude', value: string) => void;
   removeRepository: (field: 'repositoriesInclude' | 'repositoriesExclude', index: number) => void;
-  overrides: {
-    fields: FieldArrayWithId<AutomationFormValues, 'repositoryOverrides'>[];
-    append: UseFieldArrayAppend<AutomationFormValues, 'repositoryOverrides'>;
-    remove: UseFieldArrayRemove;
-  };
 }) {
-  const { values, register } = fields;
-  const { fields: overrideFields, append: appendOverride, remove: removeOverride } = overrides;
+  const { values } = fields;
   return (
     <div className="automation-form__trigger-section">
       <div className="automation-form__field">
@@ -297,42 +499,6 @@ function AutomationGitHubFields({
         Reviews always run in a fresh worktree checked out at the PR&apos;s head commit — your existing clone is never
         touched.
       </p>
-
-      <details className="automation-form__advanced">
-        <summary>Advanced</summary>
-        <div className="automation-form__overrides">
-          {overrideFields.map((field, index) => (
-            <div className="automation-form__override-row" key={field.id}>
-              <input
-                className="automation-form__input"
-                placeholder="host/owner/repository"
-                data-testid={`automation-form-override-repository-${index}`}
-                {...register(`repositoryOverrides.${index}.repository` as const)}
-              />
-              <input
-                className="automation-form__input"
-                placeholder="/absolute/path"
-                data-testid={`automation-form-override-path-${index}`}
-                {...register(`repositoryOverrides.${index}.path` as const)}
-              />
-              <button
-                type="button"
-                onClick={() => removeOverride(index)}
-                data-testid={`automation-form-overrides-remove-${index}`}
-              >
-                Remove
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => appendOverride({ repository: '', path: '' })}
-            data-testid="automation-form-overrides-add"
-          >
-            Add override
-          </button>
-        </div>
-      </details>
     </div>
   );
 }
@@ -348,7 +514,7 @@ function AutomationTriggerFields({
   onScheduleValidityChange: (valid: boolean) => void;
   github: ReactNode;
 }) {
-  const { values, regField, fieldError, setValue } = fields;
+  const { values, regField, setValue } = fields;
   return (
     <section className="automation-form__section">
       <span className="automation-form__section-label">Trigger</span>
@@ -394,7 +560,7 @@ function AutomationTriggerFields({
       {values.trigger === 'manual' && (
         <div className="automation-form__trigger-section">
           <span className="automation-form__fact-chip">Fresh worker each run</span>
-          <AutomationDirectoryField fields={fields} />
+          {values.manualLocation === 'directory' && <AutomationDirectoryField fields={fields} />}
         </div>
       )}
 
@@ -411,7 +577,7 @@ function AutomationTriggerFields({
 
           <div className="automation-form__field">
             <label className="automation-form__label" htmlFor="automation-form-guard">
-              Guard (optional)
+              Only run if
             </label>
             <input
               id="automation-form-guard"
@@ -424,71 +590,6 @@ function AutomationTriggerFields({
             <p className="automation-form__hint" id="automation-form-guard-help">
               Runs in the folder before each scheduled run. The agent starts only when the command prints something new.
             </p>
-          </div>
-
-          <div className="automation-form__field">
-            <span className="automation-form__label">Worker</span>
-            <div className="automation-form__segmented">
-              <button
-                type="button"
-                className={
-                  values.continuity === 'fresh'
-                    ? 'automation-form__segment automation-form__segment--selected'
-                    : 'automation-form__segment'
-                }
-                onClick={() => setValue('continuity', 'fresh', { shouldDirty: true, shouldValidate: true })}
-                data-testid="automation-form-continuity-fresh"
-              >
-                Fresh
-              </button>
-              <button
-                type="button"
-                className={
-                  values.continuity === 'singleton'
-                    ? 'automation-form__segment automation-form__segment--selected'
-                    : 'automation-form__segment'
-                }
-                onClick={() => setValue('continuity', 'singleton', { shouldDirty: true, shouldValidate: true })}
-                data-testid="automation-form-continuity-singleton"
-              >
-                Singleton
-              </button>
-            </div>
-          </div>
-
-          <div className="automation-form__field">
-            <span className="automation-form__label">Missed runs</span>
-            <div className="automation-form__segmented">
-              <button
-                type="button"
-                className={
-                  values.catchUp === 'skip'
-                    ? 'automation-form__segment automation-form__segment--selected'
-                    : 'automation-form__segment'
-                }
-                onClick={() => setValue('catchUp', 'skip', { shouldDirty: true, shouldValidate: true })}
-                data-testid="automation-form-catchup-skip"
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                className={
-                  values.catchUp === 'latest'
-                    ? 'automation-form__segment automation-form__segment--selected'
-                    : 'automation-form__segment'
-                }
-                onClick={() => setValue('catchUp', 'latest', { shouldDirty: true, shouldValidate: true })}
-                data-testid="automation-form-catchup-latest"
-              >
-                Latest
-              </button>
-            </div>
-            {fieldError('catchUp') && (
-              <p className="automation-form__field-error" data-testid="automation-form-error-catchUp">
-                {fieldError('catchUp')}
-              </p>
-            )}
           </div>
 
           <AutomationDirectoryField fields={fields} />
@@ -507,9 +608,10 @@ function AutomationLaunchFields({
   fields: AutomationFields;
   desktop: ReactNode;
 }) {
-  const { values, regField, fieldError, setValue } = fields;
+  const { values, fieldError, setValue } = fields;
   const { settings } = useDaemonApi();
-  const { harnesses, error, retry } = useHarnessChoices(AUTOMATION_HARNESSES, settings);
+  const offeredHarnesses = useMemo(() => [...new Set([...AUTOMATION_HARNESSES, values.agent])], [values.agent]);
+  const { harnesses, error, retry } = useHarnessChoices(offeredHarnesses, settings);
   const routeHarnesses = values.executable.trim() ? harnesses.map(harness => ({ ...harness, discovery: false })) : harnesses;
   return (
     <section className="automation-form__section">
@@ -517,7 +619,7 @@ function AutomationLaunchFields({
       {desktop}
       {error && <div className="settings-warning" role="alert">{error}<button type="button" className="settings-action quiet" onClick={retry}>Retry</button></div>}
       <HarnessRouteChip variant="field" aria-label="Automation model" data-testid="automation-form-route" value={{ harness: values.agent, provider: '', model: values.model, effort: values.effort }} rules={{ harnesses: routeHarnesses }} onChange={route => {
-        setValue('agent', route.harness as AutomationAgent, { shouldDirty: true, shouldValidate: true });
+        setValue('agent', route.harness, { shouldDirty: true, shouldValidate: true });
         setValue('model', route.model, { shouldDirty: true, shouldValidate: true });
         setValue('effort', route.effort, { shouldDirty: true, shouldValidate: true });
       }} />
@@ -529,22 +631,6 @@ function AutomationLaunchFields({
       <p className="automation-form__invariant">
         Automation sessions always run unattended with the agent&apos;s automatic approval mode.
       </p>
-
-      <details className="automation-form__advanced">
-        <summary>Advanced</summary>
-        <div className="automation-form__field">
-          <label className="automation-form__label" htmlFor="automation-form-executable">
-            Executable override
-          </label>
-          <input
-            id="automation-form-executable"
-            className="automation-form__input"
-            placeholder="Default from PATH"
-            data-testid="automation-form-executable"
-            {...regField('executable')}
-          />
-        </div>
-      </details>
     </section>
   );
 }
@@ -684,6 +770,7 @@ export function AutomationForm({
   const [enabled, setEnabledState] = useState<boolean | null>(null);
 
   const [scheduleValid, setScheduleValid] = useState(true);
+  const [definitionYaml, setDefinitionYaml] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveErrorCode, setSaveErrorCode] = useState('');
@@ -709,6 +796,7 @@ export function AutomationForm({
           return;
         }
         reset(parsed);
+        setDefinitionYaml(result.specYaml);
         setLoadedId(result.definition?.id ?? definitionId);
         setRevision(result.definition?.revision ?? 0);
         setLaunchDesktop(result.definition?.launch_desktop);
@@ -767,6 +855,7 @@ export function AutomationForm({
           return;
         }
         reset(parsed);
+        setDefinitionYaml(result.specYaml);
         setRevision(result.definition?.revision ?? revision);
         setLaunchDesktop(result.definition?.launch_desktop);
         setProfileId(result.definition?.profile_id ?? profileId);
@@ -1020,7 +1109,6 @@ export function AutomationForm({
               setExcludeInput={setExcludeInput}
               addRepository={addRepository}
               removeRepository={removeRepository}
-              overrides={{ fields: overrideFields, append: appendOverride, remove: removeOverride }}
             />
           }
         />
@@ -1061,6 +1149,12 @@ export function AutomationForm({
             </p>
           )}
         </section>
+
+        <AutomationAdvanced
+          fields={fields}
+          overrides={{ fields: overrideFields, append: appendOverride, remove: removeOverride }}
+          definitionYaml={definitionYaml}
+        />
       </fieldset>
 
       <AutomationFormActions

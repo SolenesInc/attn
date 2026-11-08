@@ -4625,6 +4625,7 @@ model AutomationDefinitionSummary {
   schedule_cron?: string;
   schedule_time_zone?: string;
   next_run_at?: string;
+  location_type?: string;
   updated_at: string;
   last_run?: AutomationRunSummary;
   guard_check?: AutomationGuardCheck;

@@ -1801,6 +1801,7 @@ export interface Items {
     id:                  number;
     last_run?:           LastRun;
     launch_desktop?:     LaunchDesktopSettingObject;
+    location_type?:      string;
     name:                string;
     next_run_at?:        string;
     profile_id:          string;
@@ -1922,6 +1923,7 @@ export interface AutomationDefinitionSummary {
     id:                  number;
     last_run?:           LastRun;
     launch_desktop?:     LaunchDesktopSettingObject;
+    location_type?:      string;
     name:                string;
     next_run_at?:        string;
     profile_id:          string;
@@ -21193,6 +21195,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: 0 },
         { json: "last_run", js: "last_run", typ: u(undefined, r("LastRun")) },
         { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktopSettingObject")) },
+        { json: "location_type", js: "location_type", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
         { json: "next_run_at", js: "next_run_at", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: "" },
@@ -21276,6 +21279,7 @@ const typeMap: any = {
         { json: "id", js: "id", typ: 0 },
         { json: "last_run", js: "last_run", typ: u(undefined, r("LastRun")) },
         { json: "launch_desktop", js: "launch_desktop", typ: u(undefined, r("LaunchDesktopSettingObject")) },
+        { json: "location_type", js: "location_type", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
         { json: "next_run_at", js: "next_run_at", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: "" },

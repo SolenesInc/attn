@@ -1,5 +1,4 @@
 import { z } from 'zod';
-export type AutomationAgent = 'codex' | 'claude';
 
 // Mirrors the validation rules of internal/automation/automation.go so the client
 // rejects the same shapes the daemon would.
@@ -7,6 +6,8 @@ export type AutomationAgent = 'codex' | 'claude';
 export const AUTOMATION_API_VERSION = 'attn.dev/automations/v1alpha1';
 
 export type AutomationTrigger = 'manual' | 'scheduled' | 'github_review_requested';
+
+export type AutomationManualLocation = 'directory' | 'repository_worktree';
 
 export interface AutomationRepositoryOverride {
   repository: string;
@@ -37,10 +38,11 @@ export interface AutomationFormValues {
   catchUp: '' | 'skip' | 'latest'; // '' = not chosen yet; schema rejects on scheduled
   repositoriesInclude: AutomationRepositoryEntry[];
   repositoriesExclude: AutomationRepositoryEntry[];
-  agent: AutomationAgent;
+  agent: string;
   model: string;
   effort: string;
   executable: string; // '' = default from PATH
+  manualLocation: AutomationManualLocation;
   directoryPath: string;
   repositoryOverrides: AutomationRepositoryOverride[];
   prompt: string;
@@ -141,10 +143,11 @@ const baseFormSchema = z.object({
   catchUp: z.enum(['', 'skip', 'latest']),
   repositoriesInclude: z.array(z.object({ id: z.string(), repository: z.string() })),
   repositoriesExclude: z.array(z.object({ id: z.string(), repository: z.string() })),
-  agent: z.enum(['codex', 'claude']),
+  agent: z.string(),
   model: z.string(),
   effort: z.string(),
   executable: z.string(),
+  manualLocation: z.enum(['directory', 'repository_worktree']),
   directoryPath: z.string(),
   repositoryOverrides: z.array(z.object({ repository: z.string(), path: z.string() })),
   prompt: z.string(),
@@ -160,9 +163,9 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
 
   switch (values.trigger) {
     case 'manual': {
-      // The form only offers a directory location for manual triggers, though the
-      // CLI/YAML path can still express manual + repository_worktree.
-      if (!values.directoryPath.startsWith('/')) {
+      if (values.manualLocation === 'repository_worktree') {
+        validateOverrides(values.repositoryOverrides, ctx);
+      } else if (!values.directoryPath.startsWith('/')) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['directoryPath'], message: ABSOLUTE_PATH_MESSAGE });
       }
       break;
@@ -252,7 +255,7 @@ function dedupeCanonical(entries: string[]): string[] {
 }
 
 function buildLocation(values: AutomationFormValues): Record<string, unknown> {
-  if (values.trigger === 'github_review_requested') {
+  if (values.trigger === 'github_review_requested' || (values.trigger === 'manual' && values.manualLocation === 'repository_worktree')) {
     const overrides: Record<string, unknown> = {};
     for (const override of values.repositoryOverrides) {
       overrides[canonicalRepositoryIdentity(override.repository)] = { type: 'local_clone', path: override.path };
@@ -292,6 +295,14 @@ function asStringArray(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
+function readRepositoryOverrides(location: Record<string, unknown>): AutomationRepositoryOverride[] {
+  const overrides = asRecord(asRecord(location.repository_sources).overrides);
+  return Object.entries(overrides).map(([repository, source]) => ({
+    repository,
+    path: asString(asRecord(source).path),
+  }));
+}
+
 export function specToFormValues(specJson: string): AutomationFormValues {
   let raw: unknown;
   try {
@@ -305,12 +316,6 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   }
 
   const launch = asRecord(root.launch);
-  const driver = launch.driver;
-  if (driver !== 'codex' && driver !== 'claude') {
-    throw new Error(
-      `This automation uses launch driver ${JSON.stringify(driver)}, which the form cannot edit. Use the CLI for this definition.`,
-    );
-  }
 
   const name = asString(root.name);
   const id = typeof root.id === 'number' ? root.id : 0;
@@ -319,6 +324,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   const trigger = asRecord(root.trigger);
   const triggerType = trigger.type;
 
+  let manualLocation: AutomationManualLocation = 'directory';
   let directoryPath = '';
   let scheduleCron = '';
   let scheduleTimeZone = localTimeZone();
@@ -332,10 +338,14 @@ export function specToFormValues(specJson: string): AutomationFormValues {
   switch (triggerType) {
     case 'manual': {
       const location = asRecord(root.location);
-      if (location.type !== 'directory') {
+      if (location.type === 'repository_worktree') {
+        manualLocation = 'repository_worktree';
+        repositoryOverrides = readRepositoryOverrides(location);
+      } else if (location.type === 'directory') {
+        directoryPath = asString(location.path);
+      } else {
         throw new Error('This automation uses a location the form cannot edit. Use the CLI for this definition.');
       }
-      directoryPath = asString(location.path);
       break;
     }
     case 'scheduled': {
@@ -356,13 +366,7 @@ export function specToFormValues(specJson: string): AutomationFormValues {
       const repositories = asRecord(trigger.repositories);
       repositoriesInclude = asStringArray(repositories.include).map(repositoryEntry);
       repositoriesExclude = asStringArray(repositories.exclude).map(repositoryEntry);
-      const location = asRecord(root.location);
-      const sources = asRecord(location.repository_sources);
-      const overrides = asRecord(sources.overrides);
-      repositoryOverrides = Object.entries(overrides).map(([repository, source]) => ({
-        repository,
-        path: asString(asRecord(source).path),
-      }));
+      repositoryOverrides = readRepositoryOverrides(asRecord(root.location));
       break;
     }
     default:
@@ -380,10 +384,11 @@ export function specToFormValues(specJson: string): AutomationFormValues {
     catchUp,
     repositoriesInclude,
     repositoriesExclude,
-    agent: driver,
+    agent: asString(launch.driver),
     model: asString(launch.model),
     effort: asString(launch.effort),
     executable: asString(launch.executable),
+    manualLocation,
     directoryPath,
     repositoryOverrides,
     prompt,

@@ -14,7 +14,7 @@ export interface AutomationsPanelProps {
   fetchDefinitions: () => Promise<AutomationDefinitionSummary[]>;
   fetchRuns: (definitionId: number) => Promise<AutomationRunSummary[]>;
   setEnabled: (definitionId: number, enabled: boolean) => Promise<void>;
-  runNow: (definitionId: number, requestId: string) => Promise<AutomationRunSummary | undefined>;
+  runNow: (definitionId: number, requestId: string, prUrl?: string) => Promise<AutomationRunSummary | undefined>;
   getDefinition: (
     definitionId: number,
   ) => Promise<{ specYaml: string; specJson: string; definition?: AutomationDefinitionSummary }>;
@@ -107,6 +107,7 @@ export function AutomationsPanel({
   // The ONLY state that opens/closes/targets the editor, so an automations_changed
   // broadcast cannot close it or swap its target. AutomationForm.tsx holds the other
   const [editorTarget, setEditorTarget] = useState<EditorTarget>(null);
+  const [pullRequestPrompt, setPullRequestPrompt] = useState<{ definitionId: number; url: string; missing: boolean } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -173,7 +174,7 @@ export function AutomationsPanel({
       });
   }
 
-  function handleRunNow(definitionId: number) {
+  function handleRunNow(definitionId: number, prUrl?: string) {
     const requestId = useAutomationsStore.getState().ensureRunRequest(definitionId);
     setRunInFlight((prev) => ({ ...prev, [definitionId]: true }));
     setRunErrors((prev) => {
@@ -182,9 +183,10 @@ export function AutomationsPanel({
       delete next[definitionId];
       return next;
     });
-    runNow(definitionId, requestId)
+    runNow(definitionId, requestId, prUrl)
       .then(() => {
         useAutomationsStore.getState().clearRunRequest(definitionId);
+        setPullRequestPrompt((prompt) => (prompt?.definitionId === definitionId ? null : prompt));
       })
       .catch((error) => {
         if (error instanceof AutomationActionTimeoutError) {
@@ -325,7 +327,13 @@ export function AutomationsPanel({
                     type="button"
                     className="automations-panel__run-now"
                     disabled={Boolean(runInFlight[definition.id])}
-                    onClick={() => handleRunNow(definition.id)}
+                    onClick={() => {
+                      if (definition.location_type === 'repository_worktree') {
+                        setPullRequestPrompt({ definitionId: definition.id, url: '', missing: false });
+                      } else {
+                        handleRunNow(definition.id);
+                      }
+                    }}
                     data-testid={`automation-run-now-${definition.id}`}
                   >
                     Run now
@@ -341,6 +349,37 @@ export function AutomationsPanel({
                   Edit
                 </button>
 
+                {pullRequestPrompt?.definitionId === definition.id && (
+                  <form
+                    className="automations-panel__pr-prompt"
+                    data-testid={`automation-pr-prompt-${definition.id}`}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      const url = pullRequestPrompt.url.trim();
+                      if (url === '') setPullRequestPrompt({ ...pullRequestPrompt, missing: true });
+                      else handleRunNow(definition.id, url);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Escape') return;
+                      event.stopPropagation();
+                      setPullRequestPrompt(null);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      aria-label="Pull request URL"
+                      placeholder="https://github.com/owner/repo/pull/42"
+                      data-testid={`automation-pr-url-${definition.id}`}
+                      value={pullRequestPrompt.url}
+                      onChange={(event) => setPullRequestPrompt({ ...pullRequestPrompt, url: event.target.value, missing: false })}
+                    />
+                    <button type="submit" disabled={Boolean(runInFlight[definition.id])} data-testid={`automation-pr-run-${definition.id}`}>Run</button>
+                    <button type="button" onClick={() => setPullRequestPrompt(null)}>Cancel</button>
+                    {pullRequestPrompt.missing && (
+                      <p className="automations-panel__error" data-testid={`automation-pr-error-${definition.id}`}>Enter a pull request URL.</p>
+                    )}
+                  </form>
+                )}
                 {toggleErrors[definition.id] && (
                   <p
                     className="automations-panel__error"

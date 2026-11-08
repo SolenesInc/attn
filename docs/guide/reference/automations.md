@@ -35,8 +35,8 @@ Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 
 **Save** creates the automation, enabled.
 
-For a **Manual** or **Scheduled** trigger, **Directory** is the folder the
-agent works in. A scheduled trigger also takes:
+For a **Manual** or **Scheduled** trigger, **Folder** is where the agent works.
+**Browse** picks one. A scheduled trigger also takes:
 
 - **When**. Build the schedule with the **Every**, **On days** or **Monthly**
   controls, or write it on the **Cron** tab. The cron field stays in sync under
@@ -47,19 +47,7 @@ agent works in. A scheduled trigger also takes:
 - **Next runs** and **Time zone**. The next five times, from the scheduler
   itself, in the time zone you pick. A new automation starts in your local time
   zone. An invalid schedule shows the error here and holds **Save**.
-- **Worker**. **Fresh** starts a new agent for every run. **Singleton** sends
-  every run to the same agent and resumes that agent if it was closed. When you
-  change the prompt, harness, model, effort or directory, the next run starts a
-  new agent on the same seed. The new agent continues from the seed's state.
-  Attn leaves the old agent running, and you can still open it. After a run on
-  the new agent succeeds, the new agent is the seed's tender. If the old agent
-  tends the seed again, later runs fail and name the old agent as the tender
-  instead of taking the seed back.
-- **Missed runs**. What Attn does with a scheduled time that passed while Attn
-  was off or the automation was disabled. **Skip** starts a run for a missed
-  time only if Attn notices the miss within 5 minutes. **Latest** starts one run
-  for the most recent missed time.
-- **Guard (optional)**. A shell command, such as `git rev-parse HEAD`, that
+- **Only run if**. An optional shell command, such as `git rev-parse HEAD`, that
   runs in the folder when the schedule is due. The agent starts only when the
   command succeeds and prints something different from the output of the last
   run. The agent receives that output.
@@ -72,6 +60,28 @@ touched. Each pull request has one agent: when you are asked to review the pull
 request again, the same agent picks it up. When you change the prompt, harness, model
 or effort, the next review starts a new agent on the pull request's seed.
 Attn ignores requests that already exist when you enable the automation.
+
+**Advanced** holds the settings most automations leave alone. Its summary shows
+the ones you changed:
+
+- **Agent**, for a schedule. **New each run** starts a new agent for every run.
+  **Same agent** sends every run to one agent and resumes that agent if it was
+  closed. When you change the prompt, harness, model, effort or folder, the next
+  run starts a new agent on the same seed. The new agent continues from the
+  seed's state. Attn leaves the old agent running, and you can still open it.
+  After a run on the new agent succeeds, the new agent is the seed's tender. If
+  the old agent tends the seed again, later runs fail and name the old agent as
+  the tender instead of taking the seed back.
+- **Missed runs**, for a schedule. What Attn does with a scheduled time that
+  passed while Attn was off or the automation was disabled. **Run latest**, the
+  default, starts one run for the most recent missed time. **Skip** starts a run
+  for a missed time only if Attn notices the miss within 5 minutes.
+- **Works in**, for a manual automation. **Folder**, or **Pull request worktree**.
+  With a worktree, **Run now** asks for the pull request's URL.
+- **Local clones**, for a worktree. Repositories to fetch from one of your
+  clones.
+- **Executable override**. A specific binary of the harness.
+- **Show definition**, on a saved automation. The read-only YAML, with **Copy**.
 
 ## Runs
 

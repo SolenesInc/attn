@@ -64,13 +64,14 @@ const sparseSpec = {
 interface Scene {
   definitions: Definition[];
   spec?: object;
+  specYaml?: string;
 }
 
 const specResult = (scene: Scene): Reply => ({
   event: 'automation_definition_result',
   success: true,
   spec_json: JSON.stringify(scene.spec ?? manualSpec()),
-  spec_yaml: '',
+  spec_yaml: scene.specYaml ?? '',
   definition: scene.definitions[0],
 });
 
@@ -200,7 +201,7 @@ describe('App automation form', () => {
   describe('creating', () => {
     it('saves a scheduled guard', async () => {
       const daemon = await openNew();
-      expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
+      expect(screen.queryByLabelText('Only run if')).toBeNull();
       fireEvent.click(field('trigger-scheduled'));
       fillManual();
       type('cron', '0 9 * * *');
@@ -231,7 +232,7 @@ describe('App automation form', () => {
       type('prompt', 'Do the work');
       type('directory-path', '/tmp/work');
 
-      expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
+      expect(screen.queryByLabelText('Only run if')).toBeNull();
       await press(daemon, 'save');
 
       expect(applied(daemon)).toHaveLength(1);
@@ -313,17 +314,14 @@ describe('App automation form', () => {
       expect(screen.queryByTestId('automation-form-error-prompt')).toBeNull();
     });
 
-    it('refuses to save a schedule until the user chooses what happens to missed runs', async () => {
+    it('starts a schedule with Run latest for missed runs', async () => {
       const daemon = await openNew();
       fireEvent.click(field('trigger-scheduled'));
-      expect(field('catchup-skip')).toBeInTheDocument();
       fillManual();
-      type('cron', '0 9 * * *');
 
       await press(daemon, 'save');
 
-      expect(field('error-catchUp')).toHaveTextContent('Choose what happens to missed runs.');
-      expect(daemon.sentOf('automation_apply')).toEqual([]);
+      expect(applied(daemon)[0].spec.trigger.catch_up).toBe('latest');
     });
 
     it('saves a schedule in the time zone of the machine it was written on', async () => {
@@ -451,6 +449,89 @@ describe('App automation form', () => {
       await openSchedule('0 9 * * 1-5');
       expect(screen.queryByTestId('automation-form-sentence')).toBeNull();
       expect(screen.queryByLabelText('This automation, in plain words')).toBeNull();
+    });
+  });
+
+  describe('editor gaps', () => {
+    const worktreeSpec = { ...manualSpec(), location: {
+      type: 'repository_worktree',
+      repository_sources: {
+        default: { type: 'managed_cache' },
+        overrides: { 'github.com/acme/widgets': { type: 'local_clone', path: '/home/user/widgets' } },
+      },
+    } };
+    const worktreeScene = { definitions: [definition(1, { location_type: 'repository_worktree' })], spec: worktreeSpec };
+    const ranWith = (daemon: ScriptedDaemon) => daemon.sentOf('automation_run').map(({ pr_url }) => pr_url);
+    const answerRuns = (daemon: ScriptedDaemon) => daemon.on('automation_run', ({ request_id }) => ({
+      event: 'automation_run_result',
+      request_id,
+      success: true,
+    }));
+
+    it('opens a manual worktree automation and saves it unchanged', async () => {
+      const daemon = await openEdit(worktreeScene);
+
+      expect(screen.queryByTestId('automation-form-directory-path')).toBeNull();
+      expect(field('location-worktree')).toHaveAttribute('aria-pressed', 'true');
+      await press(daemon, 'save');
+
+      expect(applied(daemon)).toEqual([{ spec: worktreeSpec, expected_id: 1, expected_revision: 1 }]);
+    });
+
+    it('asks Run now for a pull request and says so when none is given', async () => {
+      const daemon = await openAutomations(worktreeScene, answerRuns);
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-run-now-1')));
+      expect(ranWith(daemon)).toEqual([]);
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-pr-run-1')));
+      expect(screen.getByTestId('automation-pr-error-1')).toHaveTextContent('Enter a pull request URL.');
+      expect(ranWith(daemon)).toEqual([]);
+
+      const url = 'https://github.com/acme/widgets/pull/42';
+      await gesture(daemon, () => fireEvent.change(screen.getByTestId('automation-pr-url-1'), { target: { value: url } }));
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-pr-run-1')));
+
+      expect(ranWith(daemon)).toEqual([url]);
+      expect(screen.queryByTestId('automation-pr-prompt-1')).toBeNull();
+    });
+
+    it('runs a folder automation without asking for anything', async () => {
+      const daemon = await openAutomations({ definitions: [definition(1, { location_type: 'directory' })] }, answerRuns);
+
+      await gesture(daemon, () => fireEvent.click(screen.getByTestId('automation-run-now-1')));
+
+      expect(ranWith(daemon)).toEqual([undefined]);
+    });
+
+    it('keeps a driver the form does not offer across a save', async () => {
+      const spec = { ...manualSpec(), launch: { driver: 'my-plugin', model: 'm1' } };
+      const daemon = await openEdit({ definitions: [definition(1)], spec });
+
+      await press(daemon, 'save');
+
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'my-plugin', model: 'm1' });
+    });
+
+    it('shows the stored definition read-only', async () => {
+      const yaml = 'name: PR reviewer\ntrigger: {type: manual}\n';
+      const daemon = await openEdit({ definitions: [definition(1)], specYaml: yaml });
+      expect(screen.queryByTestId('automation-form-definition')).toBeNull();
+
+      await gesture(daemon, () => fireEvent.click(field('definition-toggle')));
+
+      expect(field('definition').textContent).toBe(yaml);
+      expect(field('definition-copy')).toHaveTextContent('Copy');
+    });
+
+    it('summarises only what differs from the defaults', async () => {
+      const spec = { ...manualSpec(), trigger: {
+        type: 'scheduled', schedule: { cron: '0 9 * * *', time_zone: 'UTC' }, continuity: 'singleton', catch_up: 'latest',
+      } };
+      await openEdit({ definitions: [definition(1, { trigger_type: 'scheduled' })], spec });
+
+      const summary = within(field('advanced')).getByText('Advanced').closest('summary');
+      expect(summary).toHaveTextContent('Same agent');
+      expect(summary).not.toHaveTextContent('Run latest');
     });
   });
 

@@ -331,6 +331,7 @@ func (d *Daemon) buildAutomationDefinitionSummary(def store.AutomationDefinition
 		}
 	}
 	summary.TriggerType = spec.Trigger.Type
+	summary.LocationType = protocol.Ptr(spec.Location.Type)
 	if spec.Trigger.Schedule != nil {
 		summary.ScheduleCron = protocol.Ptr(spec.Trigger.Schedule.Cron)
 		summary.ScheduleTimeZone = protocol.Ptr(spec.Trigger.Schedule.TimeZone)

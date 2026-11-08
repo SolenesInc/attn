@@ -23,6 +23,7 @@ function baseValues(overrides: Partial<AutomationFormValues> = {}): AutomationFo
     model: 'gpt-5.5',
     effort: 'medium',
     executable: '',
+    manualLocation: 'directory',
     directoryPath: '/Users/victor/projects/victor/attn',
     repositoryOverrides: [],
     prompt: 'Review the diff.',
@@ -230,32 +231,5 @@ describe('specToFormValues', () => {
     });
     expect(specToFormValues(specJson).continuity).toBe('fresh');
   });
-
-  it('throws with a use-the-CLI message for a manual trigger whose location is not directory', () => {
-    const specJson = JSON.stringify({
-      api_version: 'attn.dev/automations/v1alpha1',
-      id: 1,
-      name: 'Legacy manual',
-      trigger: { type: 'manual' },
-      prompt: 'Do the thing.',
-      launch: { driver: 'codex' },
-      location: { type: 'repository_worktree', repository_sources: { default: { type: 'managed_cache' } } },
-    });
-    expect(() => specToFormValues(specJson)).toThrow(/use the cli/i);
-  });
-
-  it('throws with a use-the-CLI message when the spec uses an unsupported driver', () => {
-    const specJson = JSON.stringify({
-      api_version: 'attn.dev/automations/v1alpha1',
-      id: 1,
-      name: 'Legacy',
-      trigger: { type: 'manual' },
-      prompt: 'Do the thing.',
-      launch: { driver: 'gemini' },
-      location: { type: 'directory', path: '/repo' },
-    });
-    expect(() => specToFormValues(specJson)).toThrow(/use the cli/i);
-  });
-
 
 });
