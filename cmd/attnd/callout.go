@@ -109,7 +109,6 @@ func executeCallout(args []string, stdout, stderr io.Writer) int {
 
 func writeCalloutHelp(w io.Writer) {
 	fmt.Fprint(w, `Point at the attn app with short callouts.
-The user can turn them off in Settings → Appearance → Agent callouts.
 
 Usage:
   attn callout anchors [--json]

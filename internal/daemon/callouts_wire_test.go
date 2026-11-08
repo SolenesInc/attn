@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestCalloutsAreOnUntilTurnedOffAndRefuseInvalidSteps(t *testing.T) {
+func TestCalloutsRefuseInvalidStepsAndListAnchorsWithoutAnApp(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
@@ -20,22 +20,9 @@ func TestCalloutsAreOnUntilTurnedOffAndRefuseInvalidSteps(t *testing.T) {
 	step := []protocol.CalloutShowStep{{Anchor: "garden", Text: "Work you and your agents track"}}
 	_, untouchedErr := cli.CalloutShow(session.ID, step)
 	calloutRefused(t, untouchedErr, "the attn app is not showing your profile")
-	for _, enabled := range []string{"false", "true", "false"} {
-		setSetting(t, app, "callouts_enabled", enabled)
-		_, showErr := cli.CalloutShow(session.ID, step)
-		_, anchorsErr := cli.CalloutAnchors(session.ID)
-		if enabled == "true" {
-			calloutRefused(t, showErr, "the attn app is not showing your profile")
-			if anchorsErr != nil {
-				t.Fatal(anchorsErr)
-			}
-		} else {
-			for _, err := range []error{showErr, anchorsErr} {
-				calloutRefused(t, err, "Settings → Appearance → Agent callouts")
-			}
-		}
+	if _, err := cli.CalloutAnchors(session.ID); err != nil {
+		t.Fatal(err)
 	}
-	setSetting(t, app, "callouts_enabled", "true")
 	for _, tc := range []struct {
 		steps []protocol.CalloutShowStep
 		want  string
@@ -59,7 +46,6 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "callouts_enabled", "true")
 	session, desktopID, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
 	profileID := app.SelectedProfile()
@@ -119,7 +105,6 @@ func TestCalloutsStopReachingAnAppOnceItCloses(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		injectAgent(t, w, "callout-source")
-		setSetting(t, app, "callouts_enabled", "true")
 		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
 		selectProfile(target, app.SelectedProfile())
 		target.Close()
@@ -133,7 +118,6 @@ func TestCalloutsRefuseRepliesAfterTheAppSwitchesProfiles(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "callouts_enabled", "true")
 	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
 	profileID := app.SelectedProfile()
@@ -167,7 +151,6 @@ func TestCalloutsReportMissingAnchorsAndDisconnects(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "callouts_enabled", "true")
 	session, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	defer exitShells(app, string(session.ID))
 	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
@@ -192,7 +175,6 @@ func TestCalloutsReportMissingAnchorsAndDisconnects(t *testing.T) {
 func TestCalloutsTreatAnotherProfilesAgentAsNotFound(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "callouts_enabled", "true")
 	caller, _, _ := w.RequestSpawn(app, shellHarness, w.Path("caller"))
 	other := createProfile(app, "Private")
 	otherApp := w.AppOn(other.ID)
@@ -210,7 +192,6 @@ func TestCalloutsNameTheReplyTimeoutWhenTheAppDoesNotAnswer(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		injectAgent(t, w, "callout-source")
-		setSetting(t, app, "callouts_enabled", "true")
 		target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
 		selectProfile(target, app.SelectedProfile())
 		answered := make(chan error, 1)

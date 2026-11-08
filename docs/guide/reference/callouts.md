@@ -5,17 +5,6 @@ window. Ask an agent where something is, and it can point at the thing instead
 of describing your screen. An agent can also point you at another agent or a
 desktop, and take you there in one key.
 
-## Turn them off
-
-Callouts are on. To stop agents pointing, turn off **Agent callouts** in
-**Settings → Appearance**. While the setting is off, Attn refuses the agent's
-command and names the setting, so the agent can tell you.
-`attn settings set callouts_enabled false` does the same as the switch.
-
-The one exception is [the Chief's first day](chief.md#the-chiefs-first-day): the
-Chief can tour the app with callouts during its onboarding, even with the setting
-off.
-
 ## Step through a callout
 
 The card shows the agent that is pointing, the step count, and the text. A ring

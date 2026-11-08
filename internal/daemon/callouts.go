@@ -11,7 +11,6 @@ import (
 
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 const calloutMaxSteps = 20
@@ -34,25 +33,6 @@ var calloutAnchorDirectory = []protocol.CalloutAnchorInfo{
 type calloutReply struct {
 	result protocol.CalloutResultMessage
 	err    error
-}
-
-func (d *Daemon) calloutsAllowed(session *protocol.Session) error {
-	if session == nil {
-		return fmt.Errorf("session not found")
-	}
-	if !d.on(setting.CalloutsEnabled) && !d.onboardingChief(session.ID) {
-		return setting.CalloutsEnabled.Refusal()
-	}
-	return nil
-}
-
-func (d *Daemon) onboardingChief(session protocol.SessionID) bool {
-	member, ok := d.crewMemberBoundToSession(session)
-	if !ok || !member.Chief {
-		return false
-	}
-	_, pending := member.PendingOnboarding()
-	return pending
 }
 
 func (d *Daemon) calloutSteps(session *protocol.Session, raw []protocol.CalloutShowStep) ([]protocol.CalloutStep, error) {
@@ -144,8 +124,8 @@ func (d *Daemon) requestCallout(app *wsClient, profileID string, message func(st
 
 func (d *Daemon) handleCalloutShow(conn net.Conn, msg *protocol.CalloutShowMessage) {
 	session := d.store.Get(msg.SessionID)
-	if err := d.calloutsAllowed(session); err != nil {
-		d.sendError(conn, err.Error())
+	if session == nil {
+		d.sendError(conn, "session not found")
 		return
 	}
 	steps, err := d.calloutSteps(session, msg.Steps)
@@ -173,8 +153,8 @@ func (d *Daemon) handleCalloutShow(conn net.Conn, msg *protocol.CalloutShowMessa
 
 func (d *Daemon) handleCalloutAnchors(conn net.Conn, msg *protocol.CalloutAnchorsMessage) {
 	session := d.store.Get(msg.SessionID)
-	if err := d.calloutsAllowed(session); err != nil {
-		d.sendError(conn, err.Error())
+	if session == nil {
+		d.sendError(conn, "session not found")
 		return
 	}
 	app, err := d.calloutApp(session.ProfileID)

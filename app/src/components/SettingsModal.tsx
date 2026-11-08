@@ -174,8 +174,6 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           narrowestTileColsDraft={state.narrowestTileColsDraft}
           sidebarWidthDraft={state.sidebarWidthDraft}
           savedFlash={state.savedFlash}
-          settings={state.settings}
-          onSetSetting={state.onSetSetting}
         />
       );
     case 'desktop':

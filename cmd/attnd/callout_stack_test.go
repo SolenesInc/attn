@@ -21,18 +21,6 @@ func TestAnAgentShowsACalloutAndGetsItsRefusals(t *testing.T) {
 	app := s.App()
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	s.Launched(session)
-	set := func(value string) {
-		t.Helper()
-		reply := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "callouts_enabled", Value: value, RequestID: protocol.Ptr("callouts-" + value)},
-			protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == "callouts-"+value })
-		if !protocol.Deref(reply.Success) {
-			t.Fatal(protocol.Deref(reply.Error))
-		}
-	}
-	set("false")
-	refused(t, s.Run(testworld.Invocation{Session: session, Args: []string{"callout", "show", "garden", "Work tracked here"}}), 1,
-		"callout show: Agent callouts is off. Turn it on in Settings → Appearance → Agent callouts (callouts_enabled)")
-	set("true")
 	token, err := os.ReadFile(filepath.Join(s.Dir, config.ClientTokenFile))
 	if err != nil {
 		t.Fatal(err)

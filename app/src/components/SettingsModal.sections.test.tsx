@@ -140,15 +140,6 @@ describe('SettingsModal sections', () => {
     expect(field).toHaveValue(86);
   });
 
-  it('finds Agent callouts on the Appearance page, not under Experimental', async () => {
-    const { daemon } = await renderSettings();
-    const search = screen.getByRole('searchbox', { name: 'Search settings' });
-    const navigation = within(screen.getByRole('navigation', { name: 'Settings sections' }));
-    await gesture(daemon, () => fireEvent.change(search, { target: { value: 'Agent callouts' } }));
-    expect(navigation.getByRole('button', { name: 'Appearance' })).toBeInTheDocument();
-    expect(navigation.queryByRole('button', { name: 'Experimental' })).not.toBeInTheDocument();
-  });
-
   it('finds every Experimental feature by its name, including one whose own section is hidden while it is off', async () => {
     const { daemon } = await renderSettings();
     const search = screen.getByRole('searchbox', { name: 'Search settings' });

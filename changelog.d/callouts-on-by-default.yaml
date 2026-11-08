@@ -1,3 +1,3 @@
 kind: changed
 area: agents
-change: Agent callouts are on by default, so any agent can point you at a part of the app without a setting first. Settings → Appearance → Agent callouts turns them off, and a stored value still wins.
+change: Agent callouts are always on, so any agent can point you at a part of the app. The Agent callouts setting is gone from Settings → Appearance and `attn settings`, and a stored value is deleted on upgrade.

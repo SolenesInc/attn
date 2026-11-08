@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 async function launch(queue = false) {
-  const settings = { queue_mode_enabled: String(queue), callouts_enabled: 'true' };
+  const settings = { queue_mode_enabled: String(queue) };
   const view = await renderApp({ initialState: {
     sessions: [daemonSession('first'), daemonSession('second')],
     desktops: [soloDesktop('first', { shortcut_slot: 1 }), soloDesktop('second', { shortcut_slot: 2 })], settings,
@@ -293,13 +293,4 @@ describe('App callouts', () => {
     expect(updates().slice(-1)[0]).toMatchObject({ geometry: { visible: false } });
   });
 
-  it('turns callouts off from Appearance', async () => {
-    const { daemon } = await launch();
-    await gesture(daemon, () => pressShortcut('ui.openSettings'));
-    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Appearance/ })));
-    const toggle = screen.getByRole('switch', { name: 'Agent callouts' });
-    expect(toggle).toHaveAttribute('aria-checked', 'true');
-    await gesture(daemon, () => fireEvent.click(toggle));
-    expect(daemon.sentOf('set_setting').filter(({ key }) => key === 'callouts_enabled')).toEqual([{ cmd: 'set_setting', key: 'callouts_enabled', value: 'false', request_id: expect.any(String) }]);
-  });
 });

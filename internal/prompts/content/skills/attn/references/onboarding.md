@@ -101,10 +101,8 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    attn owns `journal/`, `seeds/`, `crew/` and `.attn/`. The user can reshape
    `knowledge/`. Ask whether the layout suits them, and record what you agree in
    `index.md` so other agents follow it.
-5. Offer a tour of the app. Show it with callouts. While onboarding is pending,
-   attn lets your callouts through even if the Agent callouts setting is off, so
-   do not ask the user to turn it on. Read the callouts reference and
-   `attn callout anchors`, then point, in short steps, at the sidebar, agent
+5. Offer a tour of the app. Show it with callouts. Read the callouts
+   reference and `attn callout anchors`, then point, in short steps, at the sidebar, agent
    states, your own row (`agent:chief`), the Garden, the command palette and
    Settings. Name ⌘K and ⇧⌘K for the command palette, ⌘, for Settings and ⌘/ for
    all the keyboard shortcuts. If an anchor isn't on screen, name its shortcut in a

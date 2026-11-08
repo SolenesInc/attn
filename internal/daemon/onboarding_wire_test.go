@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/testworld"
 )
 
 const onboardingReference = "attn skill --reference onboarding"
@@ -94,34 +93,4 @@ func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
 	if err != nil || protocol.Deref(workPending.Pending) != protocol.OnboardingPathTour {
 		t.Fatalf("a new profile in an install already in use = %+v, %v; want the tour, untouched by the other profile's done", workPending, err)
 	}
-}
-
-func TestOnlyTheOnboardingChiefPointsWithCalloutsOff(t *testing.T) {
-	t.Setenv("ATTN_BROWSER_HOST_TOKEN", browserHostToken)
-	w := newWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	setSetting(t, app, "callouts_enabled", "false")
-	profileChief(t, w)
-	wakeConfiguredChief(t, w, cli)
-	chief := chiefSession(t, cli)
-	registerSessions(t, w, cli, "other")
-	target := calloutAppPeer(w.World, "tauri://localhost", browserHostToken)
-	selectProfile(target, app.SelectedProfile())
-
-	_, err := cli.CalloutShow("other", []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}})
-	calloutRefused(t, err, "Settings → Appearance → Agent callouts")
-	answered := make(chan error, 1)
-	go func() {
-		_, err := cli.CalloutShow(chief, []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}, {Anchor: "commands", Text: "Find commands here"}})
-		answered <- err
-	}()
-	request := testworld.Await[protocol.CalloutShowRequestMessage](target, protocol.EventCalloutShowRequest, nil)
-	target.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: request.RequestID, OnScreen: []protocol.CalloutAnchor{protocol.CalloutAnchorGarden, protocol.CalloutAnchorCommands}})
-	if err := <-answered; err != nil {
-		t.Fatalf("the onboarding Chief's tour was refused: %v", err)
-	}
-
-	onboardingPending(t, cli, protocol.OnboardingActionDone, "")
-	_, err = cli.CalloutShow(chief, []protocol.CalloutShowStep{{Anchor: "garden", Text: "Your work"}})
-	calloutRefused(t, err, "Settings → Appearance → Agent callouts")
 }

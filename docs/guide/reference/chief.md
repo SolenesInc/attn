@@ -105,7 +105,7 @@ You can also let agents vent about your own tools and environment. Those vents
 never leave your machine. Nothing turns on unless you say yes.
 
 The Chief changes Attn for you with its commands, and tells you what each one
-did. During onboarding the Chief can point at the app even when [Agent callouts](callouts.md) is off.
+did.
 Onboarding can span several sessions: the Chief keeps its progress in its
 letter and continues from there.
 

@@ -36,7 +36,7 @@ func TestSettingsCLIDiscoversReadsAndSavesDaemonSettings(t *testing.T) {
 		return m.Settings["theme"] == "dark" && protocol.Deref(m.ChangedKey) == "theme"
 	})
 	requireStdout(t, s.Attn("settings", "get", "theme"), "dark")
-	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "callouts_enabled", "quick_capture_enabled"} {
+	for _, key := range []string{"headless_tasks.enabled", "queue_show_hidden_sessions", "asks_enabled", "quick_capture_enabled"} {
 		requireStdout(t, s.Attn("settings", "set", key, "true"), key+" = true")
 		requireStdout(t, s.Attn("settings", "get", key), "true")
 	}

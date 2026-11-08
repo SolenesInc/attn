@@ -96,8 +96,6 @@ export function AppearanceSettings({
   narrowestTileColsDraft,
   sidebarWidthDraft,
   savedFlash,
-  settings,
-  onSetSetting,
 }: Pick<
   SettingsModalState,
   | 'themePreference'
@@ -114,8 +112,6 @@ export function AppearanceSettings({
   | 'narrowestTileColsDraft'
   | 'sidebarWidthDraft'
   | 'savedFlash'
-  | 'settings'
-  | 'onSetSetting'
 >) {
   return (
     <>
@@ -293,22 +289,6 @@ export function AppearanceSettings({
             </div>
           </div>
           <SettingRefusal settingKey="sidebar_width" />
-        </div>
-      </section>
-      <section className="settings-block">
-        <div className="settings-block-intro">
-          <h3>Callouts</h3>
-          <p className="settings-description">Agents can point at parts of the app and walk you through them.</p>
-        </div>
-        <div className="settings-block-body">
-          <div className="settings-row-card">
-            <div id={featureDescriptionID(BoolSetting.calloutsEnabled)}>
-              <p className="settings-row-title">{featureFor(BoolSetting.calloutsEnabled).name}</p>
-              <p className="settings-row-copy">{featureSummary(BoolSetting.calloutsEnabled)}</p>
-              <FeatureNote featureKey={BoolSetting.calloutsEnabled} />
-            </div>
-            <FeatureSwitch featureKey={BoolSetting.calloutsEnabled} settings={settings} onSetSetting={onSetSetting} />
-          </div>
         </div>
       </section>
     </>

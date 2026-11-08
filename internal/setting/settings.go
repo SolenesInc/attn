@@ -56,16 +56,6 @@ var (
 		Since:   "2026-10-16",
 		Search:  "one-screen one screen new-session new session project path",
 	})
-	CalloutsEnabled = feature("callouts_enabled", "Let agents point at the app interface: true or false. On by default.", Info{
-		Name:    "Agent callouts",
-		Summary: "Let agents point at parts of the app, step by step.",
-		Group:   Interface,
-		Applies: Now,
-		Stage:   OnByDefault,
-		Where:   "Appearance",
-		Since:   "2026-10-18",
-		Search:  "point guided steps tour",
-	})
 	TilePopoutEnabled = feature("tile_popout_enabled", "Let tiles pop out of the main window into their own windows: true or false. Off by default.", Info{
 		Name:    "Tile windows",
 		Summary: "Pop a tile out of the main window into its own window, and bring it back to its column.",

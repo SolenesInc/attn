@@ -5,23 +5,21 @@ tour. When the user asks where something is, or an agent wants the user to
 look at another agent or a desktop, the agent shows a callout: a card beside
 the named part of the window, one step at a time. The user steps through the
 callout with Enter or →, goes to the agent or desktop the last step names, and
-ends the callout with Esc. Callouts are on until the user turns them off.
+ends the callout with Esc. Callouts are always on.
 
 ## Sub-features
 
 - `callout-show`: up to 20 steps, each an anchor and at most 160 characters of text. A new callout replaces the one showing.
 - `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
 - `callout-stepping`: Enter and → do the same on every step: they go to the next step, and on the last step they go to its agent or desktop and end the callout. Esc ends it, and so does a click outside a one-step callout.
-- `callout-setting`: the switch the user can turn off; it is on by default. Every call checks the switch, except from the Chief's session while the Chief's onboarding is pending (`attn onboarding`).
 
 ## How to get to it
 
 ### People
 
-- **Settings → Appearance**, "Agent callouts" (`app/src/components/SettingsModalSections.tsx`), the home setting `callouts_enabled`.
 - The callout card (`app/src/callouts/CalloutOverlay.tsx`) shows the pointing agent's name and the step count, the text, and "↵ Next", or on the last step "↵ Done", or "↵ Go there" when that step names an agent or desktop. It also shows "End callout". A step whose anchor is not on screen says "<anchor> isn't on screen".
 - Where people see what agents do: the card names the agent that points, and the ring marks what it points at.
-- Their own shell: `attn settings set callouts_enabled false`, and `attn callout show --session <id>` to point from a session.
+- Their own shell: `attn callout show --session <id>` to point from a session.
 
 ### Agents
 
@@ -53,8 +51,7 @@ Preconditions:
 
 - Start the agent and a shell on the current desktop with `wsctl add-session --cwd $A --agent claude --label co-agent --id co-agent --place` and `wsctl add-session --cwd $A --agent shell --label co-shell --id co-shell --place`. `<agent>` is the agent's `runtime_id` in `wsctl list`.
 
-- **On by default.** On a fresh instance with no setting touched, run `./attn settings get callouts_enabled`: it prints `true`. Run `wsctl input --id <agent> --text "point-garden" --enter`. `./attn agent peek co-agent` shows the callout showing.
-- **The person turns them off.** Press ⌘, (`bridge native_key '{"key":",","modifiers":["command"]}'`), click `[data-testid="settings-nav-general"]` natively, then scroll to the Callouts block. Click `[aria-label="Agent callouts"]` natively after `dom_native_point` has scrolled it into view. `./attn settings get callouts_enabled` prints `false`. Close settings with Escape. Run `wsctl input --id <agent> --text "point-garden" --enter`: `./attn agent peek co-agent` shows the command failing with `callout show: Agent callouts is off. Turn it on in Settings → Appearance → Agent callouts (callouts_enabled)`. Click the switch again: `./attn settings get callouts_enabled` prints `true`. From the person's shell, `./attn settings set callouts_enabled false` or `true` does the same.
+- **Always on.** On a fresh instance, run `wsctl input --id <agent> --text "point-garden" --enter`. `./attn agent peek co-agent` shows the callout showing.
 - **List anchors.** Run `wsctl input --id <agent> --text "list-anchors" --enter`. Peek lists each anchor with `on screen` or `not on screen` and its description. In desktop flow `sidebar`, `commands` and `desktops` are on screen and `queue` is not.
 - **Show a tour.** Press ⌘2 (`bridge native_key '{"key":"2","modifiers":["command"]}'`) first, so `arrangement.currentDesktopId` in `bridge get_state` is not desktop 1 and the last step's jump shows. Run `wsctl input --id <agent> --text "point-tour" --enter`. Peek shows `showing a callout with 3 steps; the user steps through it`. `bridge dom_wait '{"selector":".callout-card","textIncludes":"Your agents live here","timeoutMs":5000}'` matches, and `bridge dom_text '{"selector":".callout-heading"}'` reads `co-agent` and `1 of 3`.
 - **Step through it.** Run `bridge native_key '{"key":"Enter"}'`: the card reads `Everything attn can do`. Run `bridge native_key '{"key":"ArrowRight"}'`: the card reads `Your first desktop`, with "↵ Go there". Run `bridge native_key '{"key":"Enter"}'`: the card is gone (`bridge dom_wait '{"selector":".callout-card","absent":true,"timeoutMs":5000}'`), and `arrangement.currentDesktopId` in `bridge get_state` is desktop 1 again.
@@ -84,8 +81,6 @@ Preconditions:
 
 ## Gotchas
 
-- The Agent callouts switch starts below the baseline Settings viewport. `dom_native_point` scrolls the switch into view before returning its point.
-- The setting is on on every fresh instance. A refusal naming Settings → Appearance → Agent callouts means someone turned the switch off. It is not a bug.
 - While another overlay is open (Settings, the palette, What's new, the notebook), `callout show` is refused with `not on screen:` naming every anchor of the callout and `on screen now:` empty. Close the overlay and call again.
 - `callout show` returns as soon as the app accepts the card, before the user reads the card. There is no completion. Prove the stepping from the app with `bridge`, not from the CLI.
 - An agent anchor whose agent no tile shows still gets its step. The step says the agent isn't on screen, and Enter on the last step still goes to the agent.
