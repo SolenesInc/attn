@@ -14,6 +14,7 @@ import {
   firstColumnStillShows,
   readRow,
   resolveRowLayout,
+  revealDrop,
   revealFirstColumn,
   reachableTileCounts,
   stepNarrowestCols,
@@ -125,6 +126,7 @@ interface RowSettlingInput {
   activeLeafId: string;
   agentPaneById: ReadonlyMap<string, AgentTerminal>;
   tileLeafById: ReadonlyMap<string, TileLeaf>;
+  onClearWantedCols: (columns: readonly RowColumn[]) => void;
 }
 
 const leavesOf = (columns: readonly RowColumn[]) => columns.flatMap((column) => column.leafIds);
@@ -144,7 +146,7 @@ export function useRowSettling(input: RowSettlingInput) {
   const dropBeside = useDesktopShelfStore((state) => state.dropBesideByDesktop[desktopId]);
 
   useLayoutEffect(() => {
-    const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById } = latest.current;
+    const { rowPlan: plan, rowInput, visible, agentPaneById, tileLeafById, onClearWantedCols } = latest.current;
     if (!measured || !plan || !rowInput) return;
     const shelf = useDesktopShelfStore.getState();
     const previous = shelf.settledRowByDesktop[desktopId];
@@ -193,12 +195,18 @@ export function useRowSettling(input: RowSettlingInput) {
       }
     }
 
+    let pendingWantedCols = rowInput.pendingWantedCols;
     if (dropBeside && droppedBeside(rowInput, dropBeside)) {
-      firstColumn = revealFirstColumn(rowInput, dropBeside.anchorId, plan.firstColumn.index) ?? firstColumn;
+      const reveal = revealDrop(rowInput, dropBeside, plan.firstColumn.index);
+      if (reveal) {
+        firstColumn = reveal.firstColumn;
+        pendingWantedCols = reveal.pendingWantedCols;
+        if (reveal.widthsToClear.length > 0) onClearWantedCols(reveal.widthsToClear);
+      }
       shelf.setDropBeside(desktopId, null);
     }
 
-    const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, firstColumn }).screen;
+    const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, pendingWantedCols, firstColumn }).screen;
     const screen = new Set(leavesOf(settledScreen));
     if (previous && visible) {
       const movedOff = (leafId: string) => previous.orderKey !== orderKey && previous.screen.has(leafId);

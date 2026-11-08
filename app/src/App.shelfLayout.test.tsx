@@ -1082,6 +1082,32 @@ describe('Shelf layout', () => {
       expect(active()).toBe('pane-s2');
     });
 
+    it('clears a saved width that keeps the pair apart, and shows the pair', async () => {
+      const daemon = await renderRow(NARROWEST_66, { root: rightChain([wanted('s1', 200), pane('s2'), pane('s3'), pane('s4')]) });
+      await slideTo(daemon, 'terminal.focusRight');
+      expect(paneIds()).toEqual(onScreen('s2', 's3', 's4'));
+
+      await drag(daemon, header('s2'), { clientX: 400, clientY: 60 }, anchorPoint('shelf-chip-pane-s1', RIGHT_HALF));
+
+      expect(rowOf(daemon)).toEqual(['s1', 's2', 's3', 's4']);
+      expect(widths(daemon)).toEqual([expect.objectContaining({ leaf_id: 'pane-s1', cols: 0 })]);
+      expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
+      expect(active()).toBe('pane-s2');
+      expect(terminalInput('s2')).toHaveFocus();
+    });
+
+    it('shows the dropped tile alone and says the numbers when two tiles cannot fit side by side', async () => {
+      const daemon = await renderRow({ narrowest_tile_cols: '150' }, { root: FOUR });
+      expect(paneIds()).toEqual(onScreen('s1'));
+
+      await drag(daemon, header('s1'), { clientX: 400, clientY: 60 }, anchorPoint('shelf-chip-pane-s3', RIGHT_HALF));
+
+      expect(rowOf(daemon)).toEqual(['s2', 's3', 's1', 's4']);
+      expect(paneIds()).toEqual(onScreen('s1'));
+      expect(active()).toBe('pane-s1');
+      expect(screen.getByText(/^2 tiles side by side at the narrowest width \(150 cols, \d+px\) need \d+px\. Tiles have 2000px here, so the dropped tile shows alone\./)).toBeInTheDocument();
+    });
+
     it('shows a tile dropped on a cap beside the row’s far column', async () => {
       const daemon = await renderRow(NARROWEST_66, { shelfWidth: 600 });
 

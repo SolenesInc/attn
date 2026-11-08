@@ -13,7 +13,7 @@ const runner = createScenarioRunner(options, {
   scenarioId: 'SHELF-DROP-BESIDE',
   tier: 'tier1-local-shell',
   prefix: 'shelf-drop-beside',
-  metadata: { agent: 'shell', focus: 'a tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two, with native pointer input' },
+  metadata: { agent: 'shell', focus: 'a tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart, with native pointer input' },
 });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -27,6 +27,9 @@ let firstSession;
 let desktop;
 
 const leavesOf = (node) => (node.type === 'split' ? node.children.flatMap(leavesOf) : [node.paneId ?? node.tileId]);
+const firstLeafOf = (node) => (node.type === 'split' ? firstLeafOf(node.children[0]) : node);
+const columnsOf = (node) => (node.type === 'split' && node.direction === 'vertical' ? node.children.flatMap(columnsOf) : [node]);
+const wantedIn = (tree, leafId) => firstLeafOf(columnsOf(tree).find((column) => leavesOf(column).includes(leafId))).wantedCols;
 const readRow = async () => leavesOf((await request('get_desktop', { sessionId: firstSession })).desktop.layoutTree);
 const activeLeaf = async () => (await request('get_state')).activeLeaf.leafId;
 const shownLeaves = async () => (await request('get_desktop_ui_state', { desktopId: desktop })).shownLeafIds;
@@ -39,6 +42,7 @@ const sameList = (left, right) => left.join() === right.join();
 const LEFT_HALF = 0.15;
 const RIGHT_HALF = 0.85;
 const TILE_DRAG = { steps: 24, withoutReceipt: 'a tile header cancels the press, so it has no mouse events' };
+const DIVIDER_DRAG = { steps: 24, withoutReceipt: 'the drag\'s shield leaves the page under the pointer before the mouse-up' };
 
 async function waitForScreen(expected) {
   for (const leafId of expected) await waitDom(paneSelector(leafId));
@@ -134,6 +138,21 @@ try {
     await dropBeside(row[tileAt], row[tileAt + 1], LEFT_HALF);
     runner.assert(sameList(await readRow(), row), 'the row order is unchanged', { row });
     await shot('unchanged-order-drop');
+  });
+
+  await runner.step('a_saved_width_that_keeps_the_pair_apart_gives_way', async () => {
+    const [wide, neighbour] = await shownLeaves();
+    runner.assert((await activeLeaf()) === wide, 'the left tile on screen is active', { wide });
+    await driver.drag({ selector: `${surface()} .desktop-split-divider[data-split-id="row:${wide}"]` }, { by: { x: 500, y: 0 } }, DIVIDER_DRAG);
+    await waitForSessionDesktop(client, firstSession, (current) => wantedIn(current.desktop.layoutTree, wide) > 0, `${wide} saved wide`);
+    await waitDom(paneSelector(neighbour), { absent: true });
+    await waitDom(chipSelector(neighbour));
+    await shot('saved-width-alone');
+    const row = await readRow();
+    await dropBeside(wide, neighbour, LEFT_HALF);
+    runner.assert(sameList(await readRow(), row), 'the row order is unchanged', { row });
+    await waitForSessionDesktop(client, firstSession, (current) => !wantedIn(current.desktop.layoutTree, wide), `${wide} gives up its saved width`);
+    await shot('saved-width-cleared-pair-shown');
   });
 
   console.log(JSON.stringify(await runner.finishSuccess(), null, 2));

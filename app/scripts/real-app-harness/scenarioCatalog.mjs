@@ -175,7 +175,7 @@ export const scenarioCatalog = [
   {
     id: 'shelf-drop-beside',
     runnerId: 'SHELF-DROP-BESIDE',
-    label: 'A tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two',
+    label: 'A tile dropped beside a chip comes on screen next to it, active, for every drop place on a four-tile row that shows two and when a saved width keeps the pair apart',
     command: ['pnpm', 'run', 'real-app:scenario-shelf-drop-beside'],
   },
   {

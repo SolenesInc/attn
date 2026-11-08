@@ -37,6 +37,7 @@ import {
   columnDividerIndex,
   columnStackNeedPx,
   areaInCols,
+  besideLimitMessage,
   columnIndexOf,
   lastUsedLeaf,
   narrowestWidthPx,
@@ -313,6 +314,7 @@ export function useDesktopController(
     activeLeafId,
     agentPaneById,
     tileLeafById,
+    onClearWantedCols: (columns) => clearWantedColsRef.current(columns),
   });
   useShelfPublisher({
     desktopId,
@@ -979,6 +981,9 @@ export function useDesktopController(
     for (const anchorLeafId of row[columnIndexOf(row, target.anchorId)]?.leafIds ?? []) shelf.releaseLeaf(desktopId, anchorLeafId);
     const drop = { leafId, ...target };
     shelf.setDropBeside(desktopId, drop);
+    const input = rowInputRef.current;
+    const limitMessage = input && besideLimitMessage(input, shelfNarrowestCols, window.innerWidth);
+    if (limitMessage) onShelfLimit?.(limitMessage);
     focusLeaf(leafId);
     void onMoveRowLeaf?.({ leafId, anchorId: target.anchorId, edge: target.edge, wholeColumn: false, activate: true })
       ?.catch(reportShelfMove('move that tile'))

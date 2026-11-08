@@ -422,7 +422,7 @@ export function planSendToShelf(
 }
 
 export function revealFirstColumn(input: Omit<RowLayoutInput, 'view'>, leafId: string, currentStart: number): FirstColumn | null {
-  const shown = shownRow(readRow(input.tree), input.heldLeafIds, input.activeLeafId);
+  const shown = shownRow(withPendingWantedCols(readRow(input.tree), input.pendingWantedCols), input.heldLeafIds, input.activeLeafId);
   const leafAt = columnIndexOf(shown, leafId);
   const activeAt = columnIndexOf(shown, input.activeLeafId);
   if (leafAt < 0 || activeAt < 0) return null;
@@ -435,7 +435,43 @@ export function revealFirstColumn(input: Omit<RowLayoutInput, 'view'>, leafId: s
   return best === null ? null : { leafId: shown[best].leafIds[0], index: best };
 }
 
-export function droppedBeside(input: Pick<RowLayoutInput, 'tree' | 'activeLeafId'>, drop: { leafId: string; anchorId: string; edge: 'left' | 'right' }): boolean {
+export interface ShelfDrop {
+  leafId: string;
+  anchorId: string;
+  edge: 'left' | 'right';
+}
+
+export interface DropReveal {
+  firstColumn: FirstColumn;
+  widthsToClear: RowColumn[];
+  pendingWantedCols: ReadonlyMap<string, number> | undefined;
+}
+
+export function revealDrop(input: Omit<RowLayoutInput, 'view'>, drop: ShelfDrop, currentStart: number): DropReveal | null {
+  const row = withPendingWantedCols(readRow(input.tree), input.pendingWantedCols);
+  const widened = [drop.anchorId, drop.leafId]
+    .map((leafId) => row[columnIndexOf(row, leafId)])
+    .filter((column) => column && wantedPxWithRoom(column, input) !== null);
+  const attempts = [[], ...widened.map((column) => [column]), ...(widened.length > 1 ? [widened] : [])];
+  for (const widthsToClear of attempts) {
+    const pendingWantedCols = widthsToClear.length === 0
+      ? input.pendingWantedCols
+      : new Map([...(input.pendingWantedCols ?? []), ...widthsToClear.map((column) => [column.leafIds[0], 0] as const)]);
+    const firstColumn = revealFirstColumn({ ...input, pendingWantedCols }, drop.anchorId, currentStart);
+    if (firstColumn) return { firstColumn, widthsToClear, pendingWantedCols };
+  }
+  return null;
+}
+
+export function besideLimitMessage(input: RowMeasures, narrowestCols: number, windowPx: number): string | null {
+  const neededPx = 2 * input.narrowestPx;
+  if (fitsArea(neededPx, input)) return null;
+  const sidebarWouldHelp = input.areaPx < windowPx && neededPx <= windowPx;
+  const narrowerWouldHelp = input.narrowestPx > TILE_MIN_WIDTH && 2 * TILE_MIN_WIDTH <= input.areaPx;
+  return `2 tiles side by side at the narrowest width (${narrowestCols} cols, ${input.narrowestPx}px) need ${neededPx}px. Tiles have ${input.areaPx}px here, so the dropped tile shows alone.${sidebarWouldHelp ? ' Closing the sidebar would make room.' : ''}${narrowerWouldHelp ? ' A narrower width can be set in Settings → Appearance.' : ''}`;
+}
+
+export function droppedBeside(input: Pick<RowLayoutInput, 'tree' | 'activeLeafId'>, drop: ShelfDrop): boolean {
   const row = readRow(input.tree);
   const anchorAt = columnIndexOf(row, drop.anchorId);
   const beside = anchorAt < 0 ? undefined : row[anchorAt + (drop.edge === 'left' ? -1 : 1)];
