@@ -25,8 +25,10 @@ The loop:
     attn seed search <words>         find seeds across your profile's garden, closed ones included
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    create a seed and print its id
 
+Other verbs: `park` (pause and release your claim), `wither` (abandon), `replant` (reopen), `link` (order or group seeds), `plot -f` (create a whole plot at once), `watch`, `remind` (message a seed's future tender), `standby` (wait for mail, optionally closing yourself) and `harvest --when-merged` (close on merge).
+
 `show` prints a bookmark under the header. Keep the bookmark from your last read, and read the entries since that bookmark instead of reading the whole seed again.
 
 When attn sends an update notification, run the read that the notification names. Reading acknowledges the update and keeps you aware. It does not authorize or require you to act on the update. Act on an update, or interrupt the user, only when the update genuinely requires your action or the user's attention.
 
-`attn seed --help` lists every command, and `attn seed <verb> --help` gives its syntax. `attn skill --reference garden` covers moving a seed another agent tends, closing a plot, harvesting on a merge, watches, reminders, standby, and artifacts.
+`attn seed --help` lists every command, and `attn seed <verb> --help` gives its syntax. `attn skill --reference garden` covers those verbs in depth, moving a seed another agent tends, closing a plot, and artifacts.

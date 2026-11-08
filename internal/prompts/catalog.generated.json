@@ -13,6 +13,64 @@
             "kind": "compose",
             "children": [
               {
+                "kind": "when",
+                "condition": {
+                  "field": {
+                    "name": "crew_priming",
+                    "kind": "text",
+                    "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                    "trim_space": true,
+                    "from": "crew/priming"
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "compose",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "crew.cleared",
+                        "source": "content/crew/cleared.md"
+                      },
+                      {
+                        "kind": "input",
+                        "field": {
+                          "name": "crew_priming",
+                          "kind": "text",
+                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
+                          "trim_space": true,
+                          "from": "crew/priming"
+                        }
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "quick_capture_enabled",
+                            "kind": "flag",
+                            "description": "Include Quick Capture guidance when the experimental feature is enabled."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.quick-capture-guidance",
+                            "source": "content/session/quick-capture.md"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "id": "session.attn-map",
+                "source": "content/session/attn-map.md"
+              },
+              {
                 "kind": "text",
                 "id": "session.agent",
                 "source": "content/agent.md",
@@ -26,11 +84,6 @@
                     }
                   }
                 ]
-              },
-              {
-                "kind": "text",
-                "id": "session.attn-map",
-                "source": "content/session/attn-map.md"
               },
               {
                 "kind": "when",
@@ -139,59 +192,6 @@
                     "kind": "text",
                     "id": "session.pull-request-guidance",
                     "source": "content/session/pull-request-guidance.md"
-                  }
-                ]
-              },
-              {
-                "kind": "when",
-                "condition": {
-                  "field": {
-                    "name": "crew_priming",
-                    "kind": "text",
-                    "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                    "trim_space": true,
-                    "from": "crew/priming"
-                  },
-                  "test": "present"
-                },
-                "children": [
-                  {
-                    "kind": "compose",
-                    "children": [
-                      {
-                        "kind": "text",
-                        "id": "crew.cleared",
-                        "source": "content/crew/cleared.md"
-                      },
-                      {
-                        "kind": "input",
-                        "field": {
-                          "name": "crew_priming",
-                          "kind": "text",
-                          "description": "Rendered crew identity and predecessor letter, supplied by internal/crew.",
-                          "trim_space": true,
-                          "from": "crew/priming"
-                        }
-                      },
-                      {
-                        "kind": "when",
-                        "condition": {
-                          "field": {
-                            "name": "quick_capture_enabled",
-                            "kind": "flag",
-                            "description": "Include Quick Capture guidance when the experimental feature is enabled."
-                          },
-                          "test": "enabled"
-                        },
-                        "children": [
-                          {
-                            "kind": "text",
-                            "id": "session.quick-capture-guidance",
-                            "source": "content/session/quick-capture.md"
-                          }
-                        ]
-                      }
-                    ]
                   }
                 ]
               }
@@ -5714,5 +5714,5 @@
       ]
     }
   ],
-  "definitions_hash": "08a0d22cba93256b65d10bae0418d17264e759f9bf3fcbdf2c1d876f2e60e225"
+  "definitions_hash": "09ad75ee8121868aebc0bce37d9a0bc9cbec3ffa2e2b6beb3248c634a72e6a3d"
 }

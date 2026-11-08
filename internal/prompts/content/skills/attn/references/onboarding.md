@@ -54,7 +54,8 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    Builder, Reviewer, Orchestrator, Prototyper) aren't in the table, describe
    them in those terms and offer to add them. If the user agrees, run
    `attn delegate roles install` with their reason in `-m`. The command adds the
-   roles, turns the table on, and installs the skill for each available harness.
+   roles, turns the table on, and installs the `attn-workflow` skill for each
+   available harness.
    Each role still needs a harness, a model and an effort before agents can use
    it. Suggest these in a table with a short reason for each, always including
    the effort, and change what the user wants:

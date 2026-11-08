@@ -164,7 +164,7 @@ func TestLaunchScenarioSelectsSourcesAndPreservesInput(t *testing.T) {
 		}
 	}
 	visit(result.Trace)
-	if !reflect.DeepEqual(selected, []string{"session.agent", "delegation.boundary", "session.attn-map", "session.garden", "session.queue", "crew.cleared", "session.quick-capture-guidance"}) {
+	if !reflect.DeepEqual(selected, []string{"crew.cleared", "session.quick-capture-guidance", "session.attn-map", "session.agent", "delegation.boundary", "session.garden", "session.queue"}) {
 		t.Fatalf("selected sources: %v", selected)
 	}
 	if !reflect.DeepEqual(skipped, []string{"ask.guidance", "session.vent-guidance", "session.vent-tools", "session.vent-attn-only", "session.vent-rules", "session.pull-request-guidance"}) {
