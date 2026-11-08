@@ -91,15 +91,6 @@ try {
     await waitDom(wake, { focused: true });
     await assertFits('first-run setup', 'setup-fit.json');
     await screenshot('01-chief-setup');
-    await pressShortcutKeys(client, driver, 'session.goToDashboard');
-    await waitDom('[data-testid="chief-slot"]');
-    await assertNothingMarksASessionChief('home');
-    await screenshot('01b-home-without-todays-chief');
-    await pressShortcutKeys(client, driver, 'session.new');
-    await waitDom('[data-testid="location-picker-overlay"]');
-    await assertNothingMarksASessionChief('new session dialog');
-    await screenshot('01c-new-session-without-chief-toggle');
-    await driver.pressKey('Escape');
   });
 
   await runner.step('keyboard_only_setup_wakes_the_chief', async () => {
@@ -122,6 +113,18 @@ try {
     runner.assert(path.dirname(configured.home_dir) === path.join(notebookRoot, 'crew'), "the Chief's home is in the Notebook", { home: configured.home_dir });
     runner.assert(fs.existsSync(path.join(configured.home_dir, 'CHARTER.md')), "the Chief's charter is in the Notebook");
     await screenshot('03-chief-awake');
+  });
+
+  await runner.step('nothing_marks_a_session_chief', async () => {
+    await pressShortcutKeys(client, driver, 'session.goToDashboard');
+    await waitDom('[data-testid="chief-slot"]');
+    await assertNothingMarksASessionChief('home');
+    await screenshot('01b-home-without-todays-chief');
+    await pressShortcutKeys(client, driver, 'session.new');
+    await waitDom('[data-testid="location-picker-overlay"]');
+    await assertNothingMarksASessionChief('new session dialog');
+    await screenshot('01c-new-session-without-chief-toggle');
+    await driver.pressKey('Escape');
   });
 
   console.log(JSON.stringify(await runner.finishSuccess({ profile: profile.id, chief: chief.id }), null, 2));
