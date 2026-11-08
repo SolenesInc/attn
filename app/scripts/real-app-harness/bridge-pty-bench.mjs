@@ -122,7 +122,7 @@ async function captureRelevantDaemonPids() {
   const table = await readProcessTable();
   return new Set(
     table
-      .filter((processInfo) => processInfo.command.includes('attn daemon'))
+      .filter((processInfo) => /attnd? daemon/.test(processInfo.command))
       .map((processInfo) => processInfo.pid),
   );
 }
@@ -168,7 +168,7 @@ function classifyProcess(processInfo) {
   if (processInfo.command.includes('/Applications/attn.app/Contents/MacOS/app')) {
     return 'app';
   }
-  if (processInfo.command.includes('attn daemon')) {
+  if (/attnd? daemon/.test(processInfo.command)) {
     return 'daemon';
   }
   if (processInfo.command.includes('com.apple.WebKit.WebContent')) {
