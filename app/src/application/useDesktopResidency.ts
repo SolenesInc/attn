@@ -37,15 +37,15 @@ function sameMembers(a: Set<string>, b: Set<string>) {
   return a.size === b.size && [...a].every((id) => b.has(id));
 }
 
-function useDesktopsAwaitingVisit(poppedDesktopIds: Set<string>, currentDesktopId: string | null) {
-  const [seen, setSeen] = useState({ poppedDesktopIds, currentDesktopId, awaiting: new Set<string>() });
-  if (sameMembers(seen.poppedDesktopIds, poppedDesktopIds) && seen.currentDesktopId === currentDesktopId) return seen.awaiting;
+function useDesktopsAwaitingVisit(poppedDesktopIds: Set<string>, shownDesktopId: string | null) {
+  const [seen, setSeen] = useState({ poppedDesktopIds, shownDesktopId, awaiting: new Set<string>() });
+  if (sameMembers(seen.poppedDesktopIds, poppedDesktopIds) && seen.shownDesktopId === shownDesktopId) return seen.awaiting;
   const awaiting = new Set(seen.awaiting);
   for (const desktopId of seen.poppedDesktopIds) {
     if (!poppedDesktopIds.has(desktopId)) awaiting.add(desktopId);
   }
-  if (currentDesktopId) awaiting.delete(currentDesktopId);
-  setSeen({ poppedDesktopIds, currentDesktopId, awaiting });
+  if (shownDesktopId) awaiting.delete(shownDesktopId);
+  setSeen({ poppedDesktopIds, shownDesktopId, awaiting });
   return awaiting;
 }
 
@@ -54,7 +54,7 @@ export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId, t
   const popped = useMemo(() => poppedPanes(desktops, tileWindowsEnabled), [desktops, tileWindowsEnabled]);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
-  const awaitingVisit = useDesktopsAwaitingVisit(popped.desktopIds, currentDesktopId);
+  const awaitingVisit = useDesktopsAwaitingVisit(popped.desktopIds, view === 'session' ? currentDesktopId : null);
   const pendingSessionIds = usePendingTerminalInput(useShallow((state) => [...state.pending.keys()]));
   const mountedDesktopIds = useMemo(() => {
     const mounted = new Set<string>();

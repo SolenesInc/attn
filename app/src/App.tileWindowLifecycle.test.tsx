@@ -94,6 +94,34 @@ describe('a browser tile in its own window', () => {
 
     expect(browserHostLifecycle()).toEqual(['browser_host_mount']);
   });
+
+  it('keeps its live page when brought back while main shows the home screen', async () => {
+    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
+    await gesture(daemon, () => pressShortcut('session.goToDashboard'));
+
+    const tileWindowLabel = shownTileWindowLabel();
+    await gesture(daemon, () => window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label: tileWindowLabel } })));
+    expect(daemon.sentOf('desktop_bring_back_leaf')).toHaveLength(1);
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => pressShortcut('desktop.select3'));
+
+    expect(browserHostLifecycle()).toEqual(['browser_host_mount']);
+  });
+
+  it('lets its desktop leave memory once main has shown it after the bring-back', async () => {
+    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
+    await gesture(daemon, () => pressShortcut('session.goToDashboard'));
+    const tileWindowLabel = shownTileWindowLabel();
+    await gesture(daemon, () => window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label: tileWindowLabel } })));
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => pressShortcut('desktop.select3'));
+
+    expect(browserHostLifecycle()).toEqual(['browser_host_mount', 'browser_host_unmount']);
+  });
 });
 
 it('turning tile windows on and off keeps open browser pages', async () => {
