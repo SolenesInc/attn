@@ -4,7 +4,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PNG } from 'pngjs';
 import { execFileSync } from 'node:child_process';
-import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
+import { launchFreshAppAndConnect, parseCommonArgs, submitPrompt } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -45,13 +45,42 @@ async function main() {
   const resources = resolveHarnessResources(instance);
   const env = instanceCliEnv(instance);
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
-  const wakeChief = (cwd, agent) => {
-    cli(['crew', 'set', 'chief', '--agent', agent, '--model', 'claude-haiku-4-5', '--cwd', cwd]);
-    return { sessionId: JSON.parse(cli(['crew', 'wake', 'chief', '--json'])).session_id };
-  };
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver({ ...options, trustedApp: true });
   const runner = createScenarioRunner(options, { scenarioId: 'PromptComposition', tier: 'local', prefix: 'prompt-composition' });
+  const readChief = () => JSON.parse(cli(['crew', 'list', '--json'])).find(member => member.chief);
+  const launchSettings = member => ({ cwd: member.cwd ?? '', agent: member.agent ?? '', model: member.model ?? '', effort: member.effort ?? '' });
+  let chiefBefore = null;
+  let chiefExpected = null;
+  let chiefDay = null;
+  const endChiefDay = async () => {
+    if (!chiefBefore) return;
+    try {
+      if (!chiefDay || readChief().binding_session !== chiefDay) return;
+      const letters = path.join(readChief().home_dir, 'handoffs');
+      const existing = new Set(fs.existsSync(letters) ? fs.readdirSync(letters) : []);
+      const pane = await waitForFirstDesktopPane(client, chiefDay, 'the Chief day pane', 20_000);
+      await submitPrompt(client, chiefDay, pane.paneId, 'PROMPT_CHIEF_CLOSE');
+      await waitFor(() => !readChief().binding_session, `the Chief day ${chiefDay} this scenario woke to close`);
+      for (const name of fs.readdirSync(letters).filter(name => !existing.has(name)))
+        fs.renameSync(path.join(letters, name), path.join(runner.sessionDir, `chief-${name}`));
+      if (existing.size === 0) fs.rmdirSync(letters);
+    } finally {
+      cli(['crew', 'set', 'chief', '--cwd', chiefBefore.cwd]);
+    }
+  };
+  runner.registerCleanup('end_chief_day', endChiefDay);
+  const wakeChief = (cwd, agent) => {
+    const chief = readChief();
+    if (chief.binding_session) {
+      throw new Error(`The Chief of instance ${instance} is awake in session ${chief.binding_session}, and this scenario wakes a Chief day of its own. Put the Chief to sleep first with attn crew sleep chief.`);
+    }
+    chiefBefore = launchSettings(chief);
+    chiefExpected = { ...chiefBefore, agent: chiefBefore.agent || agent };
+    cli(['crew', 'set', 'chief', '--cwd', cwd, ...(chiefBefore.agent ? [] : ['--agent', agent])]);
+    chiefDay = JSON.parse(cli(['crew', 'wake', 'chief', '--agent', agent, '--json'])).session_id;
+    return { sessionId: chiefDay };
+  };
   const sessions = [];
   const captureId = randomUUID(), attachmentId = randomUUID();
   const pdfId = randomUUID();
@@ -89,6 +118,10 @@ async function main() {
             { type: 'attn', args: ['agent', 'attachment', captureId, pdfId, '--out', pdfOut] },
             { type: 'reply', text: 'QUICK_CAPTURE_READ', state: 'idle' },
           ],
+        }, {
+          includes: 'PROMPT_CHIEF_CLOSE',
+          submitHook: false,
+          actions: [{ type: 'attn', args: ['handoff', '-m', 'PROMPT_CHIEF_LETTER'] }],
         }] : [{
           includes: '📬 You have unread items',
           submitHook: false,
@@ -205,6 +238,14 @@ async function main() {
         fs.renameSync(path.join(crewHome, 'handoffs', name), path.join(runner.sessionDir, name));
       cli(['crew', 'sleep', crewName, '--json']);
       await waitFor(() => !observer.sessionsById.has(second.session_id), 'successor day closed');
+    });
+    await runner.step('chief_day_ends_with_its_settings_unchanged', async () => {
+      await endChiefDay();
+      const after = readChief();
+      runner.assert(!after.binding_session, 'the Chief is asleep after the scenario', after);
+      runner.assert(JSON.stringify(launchSettings(after)) === JSON.stringify(chiefExpected),
+        'the Chief keeps the launch settings it had before the scenario, gaining a harness only when it had none',
+        { before: chiefBefore, after: launchSettings(after) });
     });
     await runner.finishSuccess({ sessions });
   } catch (error) {
