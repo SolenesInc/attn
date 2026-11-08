@@ -134,12 +134,6 @@ describe('validation matrix', () => {
     ).toContain('catchUp');
   });
 
-  it('rejects a 4-field cron expression', () => {
-    expect(
-      issuePaths(baseValues({ trigger: 'scheduled', scheduleCron: '0 3 * *', catchUp: 'latest', continuity: 'fresh' })),
-    ).toContain('scheduleCron');
-  });
-
   it('rejects a relative directoryPath', () => {
     expect(issuePaths(baseValues({ directoryPath: 'relative/path' }))).toContain('directoryPath');
   });

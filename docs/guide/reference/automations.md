@@ -12,8 +12,8 @@ An automation has one trigger:
 
 - **Manual**. It runs when you click **Run now** or run
   `attn automation run <id>`.
-- **Scheduled**. It runs on a cron schedule, such as `0 9 * * 1-5` for 9:00
-  on weekdays, in your time zone.
+- **Scheduled**. It runs on a schedule, such as every weekday at 9:00, in the
+  time zone you pick.
 - **PR review requested**. It runs when someone asks you to review an open,
   non-draft pull request on GitHub. Attn sees these through the accounts
   you are logged into with `gh`.
@@ -33,14 +33,20 @@ Ctrl+Alt+K on Linux). Click **New automation** and fill in:
 - **Prompt**. The instruction the agent receives. Details of the occurrence,
   such as the pull request, arrive separately as data, and Attn never changes the prompt with them.
 
-The form ends with a sentence that says what the automation will do, in
-plain words. **Save** creates the automation, enabled.
+**Save** creates the automation, enabled.
 
 For a **Manual** or **Scheduled** trigger, **Directory** is the folder the
 agent works in. A scheduled trigger also takes:
 
-- **Schedule (cron)**. A standard five-field cron expression. The form reads
-  it back in words.
+- **When**. Build the schedule with the **Every**, **On days** or **Monthly**
+  controls, or write it on the **Cron** tab. The cron field stays in sync under
+  the controls. It takes a standard five-field expression or a descriptor such
+  as `@daily` or `@every 90m`. A cron the controls can't write opens on the
+  **Cron** tab and is saved exactly as written. Choosing another tab replaces
+  it and offers **Undo**.
+- **Next runs** and **Time zone**. The next five times, from the scheduler
+  itself, in the time zone you pick. A new automation starts in your local time
+  zone. An invalid schedule shows the error here and holds **Save**.
 - **Worker**. **Fresh** starts a new agent for every run. **Singleton** sends
   every run to the same agent and resumes that agent if it was closed. When you
   change the prompt, harness, model, effort or directory, the next run starts a

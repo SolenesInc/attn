@@ -2260,6 +2260,7 @@ export function useDaemonSocket({
 
           case 'automation_apply_result':
           case 'automation_validate_result':
+          case 'automation_schedule_preview_result':
           case 'automation_definitions_result':
           case 'automation_definition_result':
           case 'automation_runs_result':
@@ -3877,6 +3878,35 @@ export function useDaemonSocket({
     [nextRequestID],
   );
 
+  const previewAutomationSchedule = useCallback(
+    (cron: string, timeZone: string): Promise<{ times?: string[]; error?: string }> => {
+      return new Promise((resolve, reject) => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          reject(new Error('WebSocket not connected'));
+          return;
+        }
+        const requestId = nextRequestID('automation_schedule_preview');
+        const key = `automation:${requestId}`;
+        pendingActionsRef.current.set(key, {
+          resolve: (result: any) => resolve({ times: result.times ?? [] }),
+          reject: (error: Error) => {
+            if (error instanceof AutomationActionError) resolve({ error: error.message });
+            else reject(error);
+          },
+        });
+        ws.send(JSON.stringify({ cmd: 'automation_schedule_preview', cron, time_zone: timeZone, request_id: requestId }));
+        setTimeout(() => {
+          if (pendingActionsRef.current.has(key)) {
+            pendingActionsRef.current.delete(key);
+            reject(new AutomationActionTimeoutError('Preview automation schedule timed out'));
+          }
+        }, 30000);
+      });
+    },
+    [nextRequestID],
+  );
+
   const applyAutomationDefinition = useCallback(
     (
       definitionYaml: string,
@@ -4420,6 +4450,7 @@ export function useDaemonSocket({
     setAutomationEnabled,
     runAutomationNow,
     getAutomationDefinition,
+    previewAutomationSchedule,
     applyAutomationDefinition,
     deleteAutomationDefinition,
   };

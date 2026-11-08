@@ -257,11 +257,6 @@ async function main() {
         'the default model and effort are left to the harness',
         opened,
       );
-      runner.assert(
-        opened.compiledSentence.includes('Run now'),
-        'the compiled sentence for a manual trigger mentions Run now',
-        opened,
-      );
     });
 
     await runner.step('leg2_client_validation_blocks_submit', async () => {
@@ -581,12 +576,12 @@ async function main() {
         prompt: 'Work only when the guard prints something new.',
       } });
       await driver.typeInto('[data-testid="automation-form-guard"]', guard);
-      const sentence = await client.request('dom_wait', {
-        selector: '[data-testid="automation-form-sentence"]',
-        textIncludes: `only when ${guard} prints something new`,
+      const nextChecks = await client.request('dom_wait', {
+        selector: '[data-testid="automation-form-next-runs"]',
+        textIncludes: 'Next checks',
         timeoutMs: FORM_TIMEOUT_MS,
       });
-      runner.writeJson('guard-form-sentence.json', sentence);
+      runner.writeJson('guard-form-next-checks.json', nextChecks);
       await driver.click('[data-testid="automation-form-save"]');
       await client.request('dom_wait', { selector: '[data-testid="automation-form"]', absent: true, timeoutMs: FORM_TIMEOUT_MS });
       const savedAt = performance.now();

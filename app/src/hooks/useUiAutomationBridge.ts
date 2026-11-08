@@ -1592,7 +1592,6 @@ const INACTIVE_AUTOMATION_FORM_STATE: AutomationFormAutomationState = {
   saveError: '',
   saveErrorCode: '',
   enabled: null,
-  compiledSentence: '',
   deleteArmed: false,
 };
 

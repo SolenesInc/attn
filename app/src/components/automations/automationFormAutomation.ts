@@ -18,7 +18,6 @@ export interface AutomationFormAutomationState {
   saveError: string;
   saveErrorCode: string;
   enabled: boolean | null;
-  compiledSentence: string;
   deleteArmed: boolean;
 }
 

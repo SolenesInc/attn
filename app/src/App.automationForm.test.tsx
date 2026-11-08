@@ -10,6 +10,7 @@ import { HOLD, answerInTurn } from './test/scriptedDaemon';
 type Definition = NonNullable<EventMessage<'automation_definitions_result'>['definitions']>[number];
 
 const API_VERSION = 'attn.dev/automations/v1alpha1';
+const NEXT_RUNS = ['2030-06-03T09:00:00Z', '2030-06-04T09:00:00Z', '2030-06-05T09:00:00Z', '2030-06-06T09:00:00Z', '2030-06-07T09:00:00Z'];
 
 function definition(id: number, over: Partial<Definition> = {}): Definition {
   return {
@@ -99,6 +100,11 @@ async function openAutomations(scene: Scene, script: (daemon: ScriptedDaemon) =>
     success: true,
     definition: definition(expected_id || 4, { revision: 2 }),
     spec_yaml: '',
+  }));
+  daemon.on('automation_schedule_preview', () => ({
+    event: 'automation_schedule_preview_result',
+    success: true,
+    times: NEXT_RUNS,
   }));
   daemon.on('automation_delete', () => ({ event: 'automation_delete_result', success: true }));
   daemon.on('automation_set_enabled', ({ definition_id, enabled }) => ({
@@ -192,7 +198,7 @@ describe('App automation form', () => {
   });
 
   describe('creating', () => {
-    it('saves a scheduled guard and names it in the plain-words sentence', async () => {
+    it('saves a scheduled guard', async () => {
       const daemon = await openNew();
       expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
       fireEvent.click(field('trigger-scheduled'));
@@ -201,8 +207,6 @@ describe('App automation form', () => {
       fireEvent.click(field('catchup-skip'));
       type('guard', 'git rev-parse HEAD');
 
-      expect(field('sentence')).toHaveTextContent('only when git rev-parse HEAD prints something new');
-      expect(within(field('sentence')).getByText('git rev-parse HEAD')).toHaveClass('automation-form__sentence-mono');
       await press(daemon, 'save');
 
       expect(applied(daemon)).toEqual([{
@@ -228,7 +232,6 @@ describe('App automation form', () => {
       type('directory-path', '/tmp/work');
 
       expect(screen.queryByLabelText('Guard (optional)')).toBeNull();
-      expect(field('sentence')).not.toHaveTextContent('git rev-parse HEAD');
       await press(daemon, 'save');
 
       expect(applied(daemon)).toHaveLength(1);
@@ -245,7 +248,6 @@ describe('App automation form', () => {
       await pickModel(daemon, 'Opus 5.5');
       await pickEffort(daemon, 'high');
       expect(field('route')).toHaveTextContent('deep');
-      expect(field('sentence')).toHaveTextContent('Opus 5.5');
       fillManual();
       await press(daemon, 'save');
       expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'claude', model: 'opus', effort: 'high' });
@@ -341,6 +343,117 @@ describe('App automation form', () => {
     });
   });
 
+  describe('schedule', () => {
+    const scheduled = (cron: string, timeZone = 'UTC') => ({ ...manualSpec(), trigger: {
+      type: 'scheduled',
+      schedule: { cron, time_zone: timeZone },
+      continuity: 'fresh',
+      catch_up: 'latest',
+    } });
+    const openSchedule = (cron: string, script?: (daemon: ScriptedDaemon) => void) =>
+      openEdit({ definitions: [definition(1, { trigger_type: 'scheduled' })], spec: scheduled(cron) }, script);
+    const lastPreview = (daemon: ScriptedDaemon) => daemon.sentOf('automation_schedule_preview').slice(-1)[0];
+    const refusePreviews = (daemon: ScriptedDaemon) => daemon.on('automation_schedule_preview', () => ({
+      event: 'automation_schedule_preview_result',
+      success: false,
+      error: 'schedule.cron must be a valid cron expression',
+    }));
+
+    it.each(['0 9 * * MON-FRI', '@every 90m', '0 9,17 * * *'])('opens %s on the Cron tab and saves it unchanged', async (cron) => {
+      const daemon = await openSchedule(cron);
+
+      expect(field('schedule-tab-cron')).toHaveAttribute('aria-pressed', 'true');
+      expect(field('cron')).toHaveValue(cron);
+      await press(daemon, 'save');
+
+      expect(applied(daemon)[0].spec.trigger.schedule).toEqual({ cron, time_zone: 'UTC' });
+    });
+
+    it('opens a schedule the controls can write on its tab', async () => {
+      await openSchedule('*/10 7-23 * * *');
+
+      expect(field('schedule-tab-every')).toHaveAttribute('aria-pressed', 'true');
+      expect(field('schedule-every-n')).toHaveValue('10');
+      expect(field('schedule-window')).toBeChecked();
+      expect(screen.getByLabelText('From hour')).toHaveValue('7');
+      expect(screen.getByLabelText('To hour')).toHaveValue('23');
+    });
+
+    it('builds a cron from the controls and shows its next runs from the daemon', async () => {
+      const daemon = await openNew();
+      await gesture(daemon, () => fireEvent.click(field('trigger-scheduled')));
+      await gesture(daemon, () => fireEvent.click(field('schedule-tab-every')));
+      await gesture(daemon, () => fireEvent.change(field('schedule-every-n'), { target: { value: '10' } }));
+      await gesture(daemon, () => fireEvent.click(field('schedule-window')));
+
+      expect(field('cron')).toHaveValue('*/10 9-17 * * 1-5');
+      expect(lastPreview(daemon)).toMatchObject({
+        cron: '*/10 9-17 * * 1-5',
+        time_zone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      expect(within(field('next-runs')).getAllByRole('listitem')).toHaveLength(5);
+    });
+
+    it('asks again for the time zone the user picks', async () => {
+      const daemon = await openSchedule('0 9 * * 1-5');
+
+      await gesture(daemon, () => type('time-zone', 'Europe/Stockholm'));
+
+      expect(lastPreview(daemon)).toMatchObject({ time_zone: 'Europe/Stockholm' });
+      await press(daemon, 'save');
+      expect(applied(daemon)[0].spec.trigger.schedule.time_zone).toBe('Europe/Stockholm');
+    });
+
+    it('keeps showing the form while a time zone is half typed', async () => {
+      const daemon = await openSchedule('0 9 * * 1-5');
+      refusePreviews(daemon);
+
+      type('time-zone', 'Europe/St');
+      await daemon.idle();
+
+      expect(field('time-zone')).toHaveValue('Europe/St');
+      expect(field('save')).toBeDisabled();
+    });
+
+    it('shows the daemon\'s error and holds Save until the cron is valid', async () => {
+      const daemon = await openSchedule('0 9 * * 1-5');
+      expect(field('save')).toBeEnabled();
+
+      refusePreviews(daemon);
+      await gesture(daemon, () => type('cron', '99 99 99 99 99'));
+
+      expect(field('schedule-error')).toHaveTextContent('must be a valid cron expression');
+      expect(field('save')).toBeDisabled();
+      expect(within(field('next-runs')).queryAllByRole('listitem')).toHaveLength(0);
+    });
+
+    it('leaves the schedule alone when its own tab is chosen again', async () => {
+      const daemon = await openSchedule('*/5 * * * *');
+
+      await gesture(daemon, () => fireEvent.click(field('schedule-tab-every')));
+
+      expect(field('cron')).toHaveValue('*/5 * * * *');
+    });
+
+    it('replaces a custom cron from a friendly tab and offers it back', async () => {
+      const daemon = await openSchedule('0 9 * * MON-FRI');
+
+      await gesture(daemon, () => fireEvent.click(field('schedule-tab-days')));
+      expect(field('cron')).toHaveValue('0 9 * * *');
+      expect(field('schedule-replaced')).toHaveTextContent('0 9 * * MON-FRI');
+
+      await gesture(daemon, () => fireEvent.click(field('schedule-undo')));
+      expect(field('cron')).toHaveValue('0 9 * * MON-FRI');
+      expect(screen.queryByTestId('automation-form-schedule-replaced')).toBeNull();
+    });
+
+    it('never shows a narrating sentence', async () => {
+      await openSchedule('0 9 * * 1-5');
+      expect(screen.queryByTestId('automation-form-sentence')).toBeNull();
+      expect(screen.queryByLabelText('This automation, in plain words')).toBeNull();
+    });
+  });
+
   describe('editing', () => {
     it('reads a scheduled guard and lets the user remove it', async () => {
       const spec = { ...manualSpec(), trigger: {
@@ -353,7 +466,6 @@ describe('App automation form', () => {
       const daemon = await openEdit({ definitions: [definition(1, { trigger_type: 'scheduled' })], spec });
 
       expect(field('guard')).toHaveValue('git rev-parse HEAD');
-      expect(field('sentence')).toHaveTextContent('only when git rev-parse HEAD prints something new');
       type('guard', '');
       await press(daemon, 'save');
 
@@ -384,7 +496,6 @@ describe('App automation form', () => {
       const reads = daemon.sentOf('harness_models').length;
       await gesture(daemon, () => type('executable', '/opt/alternate-codex'));
       expect(field('route')).not.toHaveTextContent('Global Luna');
-      expect(field('sentence')).not.toHaveTextContent('Global Luna');
       await openRoute(daemon, 'Automation model');
       expect(routeDialog().queryByRole('option', { name: /^Global Luna/ })).toBeNull();
       expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('medium');
@@ -432,25 +543,14 @@ describe('App automation form', () => {
       expect(field('repositories-include-chip-0')).toHaveTextContent('github.com/acme/widgets');
       expect(field('route')).toHaveTextContent('Sonnet 5.5');
       expect(screen.getByText('Existing requests are left alone when enabled')).toBeInTheDocument();
-      expect(field('sentence')).toHaveTextContent('fresh worktree at the PR head');
-      expect(field('sentence')).toHaveTextContent('Sonnet 5.5');
 
       await press(daemon, 'save');
 
       expect(applied(daemon)).toEqual([{ spec: githubSpec, expected_id: 1, expected_revision: 7 }]);
     });
 
-    it('rewrites the sentence when the trigger changes', async () => {
-      await openEdit({ definitions: [definition(1)], spec: githubSpec });
-
-      fireEvent.click(field('trigger-manual'));
-
-      expect(field('sentence')).toHaveTextContent('Run now');
-    });
-
     it('names a stored effort even when the harness chooses the model', async () => {
       const daemon = await openEdit({ definitions: [definition(1)], spec: { ...sparseSpec, launch: { driver: 'codex', effort: 'future-effort' } } });
-      expect(field('sentence')).toHaveTextContent('Codex (future-effort effort)');
       await press(daemon, 'save');
       expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex', effort: 'future-effort' });
     });
@@ -458,20 +558,10 @@ describe('App automation form', () => {
       const daemon = await openEdit({ definitions: [definition(1, { revision: 2 })], spec: sparseSpec });
 
       expect(field('route')).toHaveTextContent('Codex default');
-      expect(field('sentence')).not.toHaveTextContent('effort');
 
       await press(daemon, 'save');
 
       expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex' });
-    });
-
-    it('names a picked model in the sentence without an effort the agent chooses', async () => {
-      const daemon = await openEdit({ definitions: [definition(1)], spec: sparseSpec });
-      await openRoute(daemon, 'Automation model');
-      await pickModel(daemon, 'gpt-5.6-luna');
-
-      expect(field('sentence')).toHaveTextContent('(gpt-5.6-luna)');
-      expect(field('sentence')).not.toHaveTextContent('effort');
     });
 
     it('saves a new named desktop beside the definition without putting it in the spec', async () => {

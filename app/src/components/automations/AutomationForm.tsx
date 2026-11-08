@@ -28,11 +28,10 @@ import {
 } from './automationFormModel';
 import type { AutomationAgent } from './automationFormModel';
 import { useHarnessChoices } from '../../hooks/useHarnesses';
-import { useKnownModelName } from '../../hooks/useHarnessRoute';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { HarnessRouteChip } from '../HarnessRouteChip';
 const AUTOMATION_HARNESSES = ['codex', 'claude'];
-import { compiledSentenceSegments, compiledSentenceText, cronPhrase } from './automationCompiledSentence';
+import { ScheduleComposer } from './ScheduleComposer';
 import { setAutomationFormAutomationHandle } from './automationFormAutomation';
 import './AutomationForm.css';
 
@@ -69,7 +68,7 @@ function makeCreateDefaults(): AutomationFormValues {
     name: '',
     id: 0,
     trigger: 'manual',
-    scheduleCron: '',
+    scheduleCron: '0 9 * * 1-5',
     scheduleTimeZone: localTimeZone(),
     guard: '',
     continuity: 'fresh',
@@ -341,10 +340,12 @@ function AutomationGitHubFields({
 function AutomationTriggerFields({
   fields,
   onTriggerChange,
+  onScheduleValidityChange,
   github,
 }: {
   fields: AutomationFields;
   onTriggerChange: (trigger: AutomationTrigger) => void;
+  onScheduleValidityChange: (valid: boolean) => void;
   github: ReactNode;
 }) {
   const { values, regField, fieldError, setValue } = fields;
@@ -399,30 +400,14 @@ function AutomationTriggerFields({
 
       {values.trigger === 'scheduled' && (
         <div className="automation-form__trigger-section">
-          <div className="automation-form__field">
-            <label className="automation-form__label" htmlFor="automation-form-cron">
-              Schedule (cron)
-            </label>
-            <input
-              id="automation-form-cron"
-              className={
-                fieldError('scheduleCron')
-                  ? 'automation-form__input automation-form__input--invalid'
-                  : 'automation-form__input'
-              }
-              data-testid="automation-form-cron"
-              placeholder="0 9 * * *"
-              {...regField('scheduleCron')}
-            />
-            <p className="automation-form__cron-phrase" data-testid="automation-form-cron-phrase">
-              {cronPhrase(values.scheduleCron) ?? 'not set yet'}
-            </p>
-            {fieldError('scheduleCron') && (
-              <p className="automation-form__field-error" data-testid="automation-form-error-scheduleCron">
-                {fieldError('scheduleCron')}
-              </p>
-            )}
-          </div>
+          <ScheduleComposer
+            cron={values.scheduleCron}
+            timeZone={values.scheduleTimeZone}
+            guarded={values.guard.trim() !== ''}
+            onCronChange={(cron) => setValue('scheduleCron', cron, { shouldDirty: true, shouldValidate: true })}
+            onTimeZoneChange={(timeZone) => setValue('scheduleTimeZone', timeZone, { shouldDirty: true, shouldValidate: true })}
+            onValidityChange={onScheduleValidityChange}
+          />
 
           <div className="automation-form__field">
             <label className="automation-form__label" htmlFor="automation-form-guard">
@@ -564,40 +549,10 @@ function AutomationLaunchFields({
   );
 }
 
-function AutomationSentence({ values }: { values: AutomationFormValues }) {
-  const modelName = useKnownModelName(values.agent, '', values.model);
-  const sentenceSegments = compiledSentenceSegments(values, modelName);
-  return (
-    <p
-      className="automation-form__sentence"
-      aria-live="polite"
-      aria-label="This automation, in plain words"
-      data-testid="automation-form-sentence"
-    >
-      {sentenceSegments.map((segment, index) => {
-        const className =
-          segment.emphasis === 'accent'
-            ? 'automation-form__sentence-accent'
-            : segment.emphasis === 'strong'
-              ? 'automation-form__sentence-strong'
-              : segment.emphasis === 'mono'
-                ? 'automation-form__sentence-mono'
-                : undefined;
-        return className ? (
-          <span className={className} key={index}>
-            {segment.text}
-          </span>
-        ) : (
-          <span key={index}>{segment.text}</span>
-        );
-      })}
-    </p>
-  );
-}
-
 function AutomationFormActions({
   mode,
   saving,
+  saveBlocked,
   saveError,
   saveErrorCode,
   deleteArmed,
@@ -608,6 +563,7 @@ function AutomationFormActions({
 }: {
   mode: 'create' | 'edit';
   saving: boolean;
+  saveBlocked: boolean;
   saveError: string;
   saveErrorCode: string;
   deleteArmed: boolean;
@@ -671,7 +627,7 @@ function AutomationFormActions({
           >
             Cancel
           </button>
-          <button type="submit" className="automation-form__save" disabled={saving} data-testid="automation-form-save">
+          <button type="submit" className="automation-form__save" disabled={saving || saveBlocked} data-testid="automation-form-save">
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>
@@ -727,6 +683,7 @@ export function AutomationForm({
   const [profileId, setProfileId] = useState(selectedProfile ?? '');
   const [enabled, setEnabledState] = useState<boolean | null>(null);
 
+  const [scheduleValid, setScheduleValid] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveErrorCode, setSaveErrorCode] = useState('');
@@ -925,7 +882,6 @@ export function AutomationForm({
         saveError,
         saveErrorCode,
         enabled,
-        compiledSentence: compiledSentenceText(getValues()),
         deleteArmed,
       }),
       setValues: (partial) => {
@@ -1054,6 +1010,7 @@ export function AutomationForm({
         <AutomationTriggerFields
           fields={fields}
           onTriggerChange={handleTriggerChange}
+          onScheduleValidityChange={setScheduleValid}
           github={
             <AutomationGitHubFields
               fields={fields}
@@ -1106,11 +1063,10 @@ export function AutomationForm({
         </section>
       </fieldset>
 
-      <AutomationSentence values={values} />
-
       <AutomationFormActions
         mode={mode}
         saving={saving}
+        saveBlocked={values.trigger === 'scheduled' && !scheduleValid}
         saveError={saveError}
         saveErrorCode={saveErrorCode}
         deleteArmed={deleteArmed}

@@ -70,11 +70,6 @@ function isValidRepositoryIdentity(raw: string): boolean {
   return true;
 }
 
-function isFiveFieldCron(cron: string): boolean {
-  const fields = cron.trim().split(/\s+/).filter(Boolean);
-  return fields.length === 5;
-}
-
 function validateRepositoryList(
   list: string[],
   field: 'repositoriesInclude' | 'repositoriesExclude',
@@ -173,13 +168,6 @@ export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => 
       break;
     }
     case 'scheduled': {
-      if (!isFiveFieldCron(values.scheduleCron)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['scheduleCron'],
-          message: 'Enter a valid 5-field cron expression.',
-        });
-      }
       if (values.catchUp !== 'skip' && values.catchUp !== 'latest') {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
