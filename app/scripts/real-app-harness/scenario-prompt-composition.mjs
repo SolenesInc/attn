@@ -177,7 +177,7 @@ async function main() {
       runner.assert(uploadedPDF.result.upload.attachment.media_type === 'application/pdf', 'PDF finalizes without image validation');
       const agent = launches[2];
       const saved = await observer.requestResult({ cmd: 'quick_capture_send', capture_id: captureId,
-        mailbox: { kind: 'chief' }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
+        mailbox: { kind: 'crew_member', member_id: readChief().id }, content: 'PROMPT_QUICK_CAPTURE', attachment_ids: [attachmentId, pdfId] }, 'quick_capture_result');
       runner.assert(saved.result.record.id === captureId, 'save returns the requested durable identity');
       await waitFor(() => transcriptTurns(transcripts(agent.cwd)[0]?.text || '').some(turn => turn.text.includes('QUICK_CAPTURE_READ')),
         'quick capture agent finishes reading the capture');
