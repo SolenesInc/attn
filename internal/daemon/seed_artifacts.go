@@ -327,6 +327,10 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 	if err != nil {
 		return err
 	}
+	observed, err := d.store.GardenSeedsWithArtifactObservation()
+	if err != nil {
+		return fmt.Errorf("read artifact observations: %w", err)
+	}
 	var reconciliationErrors []error
 	for _, seed := range read.seeds {
 		root, err := d.seedProfileNotebookRoot(seed)
@@ -337,12 +341,7 @@ func (d *Daemon) reconcileSeedArtifactObservations() error {
 		dir := notebook.SeedArtifactsDir(root, seed.ID)
 		info, statErr := os.Lstat(dir)
 		if os.IsNotExist(statErr) {
-			observed, observedErr := d.store.HasGardenSeedArtifactObservation(seed.ID)
-			if observedErr != nil {
-				reconciliationErrors = append(reconciliationErrors, fmt.Errorf("read artifact observation for %s: %w", seed.ID, observedErr))
-				continue
-			}
-			if !observed {
+			if !observed[seed.ID] {
 				continue
 			}
 			if err := d.recordObservedSeedArtifacts(seed.ID); err != nil {

@@ -198,17 +198,26 @@ func upsertGardenSeedArtifactObservation(tx *sql.Tx, seedID, checksum string, ev
 	return err
 }
 
-func (s *Store) HasGardenSeedArtifactObservation(seedID string) (bool, error) {
+func (s *Store) GardenSeedsWithArtifactObservation() (map[string]bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	observed := make(map[string]bool)
 	if s.db == nil {
-		return false, nil
+		return observed, nil
 	}
-	var present bool
-	err := s.db.QueryRow(`
-		SELECT EXISTS(SELECT 1 FROM garden_seed_artifact_observations WHERE seed_id=?)
-	`, seedID).Scan(&present)
-	return present, err
+	rows, err := s.db.Query(`SELECT DISTINCT seed_id FROM garden_seed_artifact_observations`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seedID string
+		if err := rows.Scan(&seedID); err != nil {
+			return nil, err
+		}
+		observed[seedID] = true
+	}
+	return observed, rows.Err()
 }
 
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
