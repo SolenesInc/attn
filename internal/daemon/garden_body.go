@@ -44,6 +44,79 @@ func seedBodyCommit(schema docstore.CollectionSchema, id, body string, planting 
 	return store.DocumentCommit{Write: write, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeedBodies, id, false)}, nil
 }
 
+func (d *Daemon) adoptInlineSeedBodies() error {
+	if d.store == nil {
+		return nil
+	}
+	seedSchema, err := d.seedsCollection()
+	if err != nil {
+		return err
+	}
+	inline, err := d.store.ReadInlineSeedBodies(*seedSchema)
+	if err != nil {
+		return err
+	}
+	for _, found := range inline {
+		if err := d.adoptInlineSeedBody(*seedSchema, found); err != nil {
+			return fmt.Errorf("seed %s holds a body written by an older attn build that could not be moved: %w", found.ID, err)
+		}
+	}
+	if len(inline) > 0 {
+		d.logf("garden: adopted %d seed bodies written by an older attn build", len(inline))
+	}
+	return nil
+}
+
+func (d *Daemon) adoptInlineSeedBody(seedSchema docstore.CollectionSchema, inline store.InlineSeedBody) error {
+	current, err := d.readSeedBody(inline.ID)
+	if err != nil {
+		return err
+	}
+	latest, err := d.latestSeedBodyVersion(inline.ID)
+	if err != nil {
+		return err
+	}
+	if inline.Body != current && (current != "" || latest.Version > 0) {
+		_, err := d.commitSeedBodyEdit(&protocol.SeedEditMessage{
+			SeedID: inline.ID, Body: inline.Body, BaseBodySHA256: garden.BodySHA256(current),
+			Note: protocol.Ptr("written by an older attn build, which could not see the previous text; that text stays in the previous body version"),
+		})
+		return err
+	}
+	seed, doc, err := d.readSeed(inline.ID)
+	if err != nil {
+		return err
+	}
+	seedBody, err := seed.Encode()
+	if err != nil {
+		return err
+	}
+	commits := []store.DocumentCommit{
+		{Write: store.DocumentWrite{Schema: seedSchema, ID: seed.ID, Body: seedBody, Expected: &doc.Rev}, Fact: documentChangedFact(garden.Namespace, garden.CollectionSeeds, seed.ID, false)},
+	}
+	if inline.Body != current {
+		bodySchema, err := d.seedBodiesCollection()
+		if err != nil {
+			return err
+		}
+		bodyCommit, err := seedBodyCommit(*bodySchema, seed.ID, inline.Body, false)
+		if err != nil {
+			return err
+		}
+		commits = append(commits, bodyCommit)
+	}
+	written, _, err := d.store.CommitDocumentWritesWithEvents(commits, nil, d.gardenTime())
+	if err != nil {
+		return err
+	}
+	d.coalesceSnapshots(func() {
+		for i, commit := range commits {
+			d.announceCommittedWrite(commit.Fact, written[i].Seq)
+		}
+	})
+	return nil
+}
+
 func (d *Daemon) readSeedBody(id string) (string, error) {
 	schema, err := d.seedBodiesCollection()
 	if err != nil {

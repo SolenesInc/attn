@@ -1,12 +1,15 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 )
 
@@ -156,5 +159,100 @@ func TestCrewBodyEditsAndRollbacksNameTheirMember(t *testing.T) {
 		if note.Kind != garden.NoteKindEdit || authorMemberOf(note) != "keel" {
 			t.Fatalf("member edit attribution: %+v", note)
 		}
+	}
+}
+
+func TestBodiesWrittenByAnOlderBuildSurviveTheReturnToThisBuild(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	planted := func(title, body string) string {
+		t.Helper()
+		got, err := cli.SeedPlant("", title, body, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.Seed.ID
+	}
+	const (
+		split      = "Text the older build could not see"
+		oldEdit    = "Replacement typed on the older build chrysoberyl"
+		oldPlant   = "Planted on the older build tourmaline"
+		legacySeed = "s-7k3f9a"
+	)
+	edited := planted("Edited on the older build", split)
+	parked := planted("Parked on the older build", split)
+	same := planted("Same text in both places", split)
+	empty := planted("Filled on the older build", "")
+
+	w.stop()
+	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var collection int64
+	if err := db.QueryRow(`SELECT id FROM document_collections WHERE namespace = ? AND collection = ?`, garden.Namespace, garden.CollectionSeeds).Scan(&collection); err != nil {
+		t.Fatal(err)
+	}
+	table := docstore.TableName(collection)
+	setInline := func(id, body string) {
+		t.Helper()
+		if _, err := db.Exec(`UPDATE `+table+` SET body = json_set(body, '$.body', ?), rev = rev + 1 WHERE id = ?`, body, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setInline(edited, oldEdit)
+	setInline(parked, "")
+	setInline(same, split)
+	setInline(empty, oldEdit)
+	if _, err := db.Exec(`INSERT INTO `+table+` (id, body, rev, created_at, updated_at)
+		SELECT ?, json_set(body, '$.id', ?, '$.title', 'Beryl garnet', '$.body', ?), 1, created_at, updated_at FROM `+table+` WHERE id = ?`,
+		legacySeed, legacySeed, oldPlant, parked); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	w.start()
+	cli = w.Client()
+	body := func(id string) string { t.Helper(); return lifeShow(t, cli, id).Seed.Body }
+	for id, want := range map[string]string{edited: oldEdit, parked: split, same: split, empty: oldEdit, legacySeed: oldPlant} {
+		if got := body(id); got != want {
+			t.Fatalf("%s after returning: %q, want %q", id, got, want)
+		}
+		lifeMove(t, cli, "", id, "park", "", "")
+		if got := body(id); got != want {
+			t.Fatalf("%s after parking: %q, want %q", id, got, want)
+		}
+	}
+	for _, id := range []string{parked, same, empty, legacySeed} {
+		if _, err := cli.SeedRollback(id, nil); err == nil {
+			t.Fatalf("%s had no competing text but gained a body version", id)
+		}
+	}
+	notes, err := cli.SeedNotes("", edited, client.SeedNotesQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if encoded, _ := json.Marshal(notes.Notes); !strings.Contains(string(encoded), "older attn build") {
+		t.Fatalf("the log does not say which text replaced which: %s", encoded)
+	}
+	for word, want := range map[string]string{"tourmaline": legacySeed, "garnet": legacySeed, "chrysoberyl": edited} {
+		found, err := cli.SeedSearch("", word, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if encoded, _ := json.Marshal(found); !strings.Contains(string(encoded), want) {
+			t.Fatalf("search for %q missed %s: %s", word, want, encoded)
+		}
+	}
+	w.restart()
+	cli = w.Client()
+	if got := body(legacySeed); got != oldPlant {
+		t.Fatalf("after a second restart: %q", got)
+	}
+	restored, err := cli.SeedRollback(edited, nil)
+	if err != nil || restored.Seed.Body != split {
+		t.Fatalf("rolling back to the text the older build could not see: %+v, %v", restored, err)
 	}
 }

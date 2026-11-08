@@ -701,6 +701,9 @@ func (d *Daemon) Start() error {
 	d.configurePhoneAccess()
 	d.recordAnalytics(analytics.StreamSample, "daemon_start", d.run.ID, previous)
 	d.ensureGardenCollections()
+	if err := d.adoptInlineSeedBodies(); err != nil {
+		return fmt.Errorf("keep seed bodies from an older build: %w", err)
+	}
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	d.ensureChiefs()

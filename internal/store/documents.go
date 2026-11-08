@@ -710,6 +710,32 @@ func (s *Store) ReadAllDocuments(schema docstore.CollectionSchema) ([]docstore.D
 	return out, rows.Err()
 }
 
+type InlineSeedBody struct {
+	ID   string
+	Body string
+}
+
+func (s *Store) ReadInlineSeedBodies(schema docstore.CollectionSchema) ([]InlineSeedBody, error) {
+	table, err := s.documentTable(schema)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.Query(`SELECT id, json_extract(body, '$.body') FROM ` + table + ` WHERE json_type(body, '$.body') = 'text' AND json_extract(body, '$.body') <> ''`)
+	if err != nil {
+		return nil, fmt.Errorf("store: reading inline seed bodies: %w", err)
+	}
+	defer rows.Close()
+	out := []InlineSeedBody{}
+	for rows.Next() {
+		var inline InlineSeedBody
+		if err := rows.Scan(&inline.ID, &inline.Body); err != nil {
+			return nil, fmt.Errorf("store: scanning an inline seed body: %w", err)
+		}
+		out = append(out, inline)
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) ReadDocumentsByID(schema docstore.CollectionSchema, ids []string) (map[string]docstore.Document, error) {
 	table, err := s.documentTable(schema)
 	if err != nil {
