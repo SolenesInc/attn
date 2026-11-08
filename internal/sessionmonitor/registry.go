@@ -274,8 +274,15 @@ func (m *Monitor) Arm() {
 		return
 	}
 	m.mu.Lock()
-	m.armWakeLocked()
+	deadline, key := m.turn.SnoozedUntil, m.keyLocked()
+	if deadline.IsZero() || deadline.After(time.Now()) {
+		m.armWakeLocked()
+		m.mu.Unlock()
+		return
+	}
+	m.stopWakeLocked()
 	m.mu.Unlock()
+	m.wakeAtDeadline(key, deadline)
 }
 
 func (m *Monitor) Home() Home { return m.home }

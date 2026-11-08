@@ -114,13 +114,15 @@ func (m *Monitor) armWakeLocked() {
 		return
 	}
 	key := m.keyLocked()
-	m.wakeTimer = m.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() {
-		crashpoint.At("snooze-wake-running")
-		view, err := m.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
-		if err == nil && m.publish(view) {
-			m.traceWake("deadline")
-		}
-	})
+	m.wakeTimer = m.registry.host.AfterFunc("monitorSnoozeWake", max(0, time.Until(deadline)), func() { m.wakeAtDeadline(key, deadline) })
+}
+
+func (m *Monitor) wakeAtDeadline(key Key, deadline time.Time) {
+	crashpoint.At("snooze-wake-running")
+	view, err := m.Do(Command{Key: key, Kind: Wake, Until: deadline}, deadline)
+	if err == nil && m.publish(view) {
+		m.traceWake("deadline")
+	}
 }
 
 func (m *Monitor) wakeLocked(deadline, at time.Time) bool {
