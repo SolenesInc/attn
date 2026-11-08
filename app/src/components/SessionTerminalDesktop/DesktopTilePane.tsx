@@ -71,10 +71,12 @@ export function DesktopTilePane({
         paneGeometry={paneGeometry.get(tileLeaf.tileId)}
         visible={
           placement !== undefined &&
-          (placement.popped || (isActiveSession && isSessionViewVisible)) &&
-          enabled &&
-          renamePane === null &&
-          effectiveDraggingLeafId === null
+          (placement.popped ||
+            (isActiveSession &&
+              isSessionViewVisible &&
+              enabled &&
+              renamePane === null &&
+              effectiveDraggingLeafId === null))
         }
         desktopSessions={tileLeaf.tileKind === 'seed' ? seedTargetSessions : tileSessionOptions}
         gardenSeeds={gardenSeeds}

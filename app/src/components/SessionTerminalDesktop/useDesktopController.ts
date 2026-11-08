@@ -479,6 +479,10 @@ export function useDesktopController(
   );
   const terminalPaneIds = useMemo(() => new Set([...renderedPaneIds, ...poppedLeafIds]), [poppedLeafIds, renderedPaneIds]);
   const desktopDrawn = isActiveSession && isSessionViewVisible;
+  const paneShown = useCallback(
+    (paneId: string) => isActiveSession || poppedLeafIdSet.has(paneId),
+    [isActiveSession, poppedLeafIdSet],
+  );
   const runtimePanes = useMemo(() => {
     const panes = [];
     for (const pane of agentPanes) {
@@ -498,16 +502,16 @@ export function useDesktopController(
         state_reason: paneSession?.state_reason,
         terminalExit: paneSession?.terminalExit,
         drawn: desktopDrawn || poppedLeafIdSet.has(pane.id),
+        shown: paneShown(pane.id),
       });
     }
     return panes;
-  }, [agentPanes, desktopDrawn, poppedLeafIdSet, sessionById, terminalPaneIds]);
+  }, [agentPanes, desktopDrawn, paneShown, poppedLeafIdSet, sessionById, terminalPaneIds]);
 
   const runtime = useGhosttyPaneRuntime(
     runtimePanes,
     activeAgentPaneId,
     eventRouter,
-    isActiveSessionRef,
     terminalsLive,
     attachOnlyDrawn,
     connected,
@@ -1390,6 +1394,7 @@ export function useDesktopController(
     offScreenBrowserIds,
     poppedLeafIds,
     poppedLeafIdSet,
+    paneShown,
     tileWindowsEnabled,
     toggleTileWindow,
     sessionVisible,

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '../../src/components/SessionTerminalDesktop/SessionTerminalDesktop.css';
 import { useRowMotion, type RowMotionLayout } from '../../src/components/SessionTerminalDesktop/useRowMotion';
 import type { NormalizedPaneBounds } from '../../src/types/desktop';
+import { MovablePane } from '../../src/tileWindow/MovablePane';
 import { stillFrameOf } from '../../src/utils/stillFrame';
 import type { HarnessProps } from '../types';
 
@@ -77,16 +78,17 @@ export function RowMotionHarness({ onReady, setTriggerRerender }: HarnessProps) 
           {shown.map((id, index) => {
             const bounds = columnBounds(index, shown.length);
             return (
-              <div
-                key={id}
-                className="desktop-pane"
-                data-pane-id={id}
-                data-testid={`pane-${id}`}
-                style={{ left: `${bounds.left * 100}%`, top: 0, width: `${bounds.width * 100}%`, height: '100%' }}
-              >
-                {id}
-                <TileBody id={id} keepLeavingFrame={keepLeavingFrame} />
-              </div>
+              <MovablePane key={id} leafKey={id} popped={false}>
+                <div
+                  className="desktop-pane"
+                  data-pane-id={id}
+                  data-testid={`pane-${id}`}
+                  style={{ left: `${bounds.left * 100}%`, top: 0, width: `${bounds.width * 100}%`, height: '100%' }}
+                >
+                  {id}
+                  <TileBody id={id} keepLeavingFrame={keepLeavingFrame} />
+                </div>
+              </MovablePane>
             );
           })}
         </div>

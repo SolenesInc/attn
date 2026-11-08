@@ -1,0 +1,106 @@
+import { act, fireEvent, screen } from '@testing-library/react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { describe, expect, it, vi } from 'vitest';
+import { openSession } from './test/appFixtures';
+import { agentPane, daemonDesktop, daemonSession, defaultProfile, emptyDesktop } from './test/daemonFixtures';
+import { pane, split } from './test/desktopLayouts';
+import { fakeRects } from './test/layout';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
+import { serveSettings } from './test/settings';
+import { letTileWindowsOpen } from './test/tileWindows';
+
+const FRAME = { x: 10, y: 20, width: 500, height: 400 };
+const PAGE = 'https://example.test/page';
+const BROWSER_LABEL_PART = 'tile-browser';
+
+const layout = (popped: boolean) => split('a-split', 'vertical', [pane('s1'), {
+  type: 'tile', tile_id: 'tile-browser', tile_kind: 'browser', tile_params: PAGE,
+  ...(popped ? { window: FRAME } : {}),
+}]);
+
+const browserHostLifecycle = () => vi.mocked(invoke).mock.calls
+  .filter(([command]) => command === 'browser_host_mount' || command === 'browser_host_unmount')
+  .map(([command]) => command);
+
+const shownTileWindowLabel = () => vi.mocked(invoke).mock.calls
+  .filter(([command]) => command === 'tile_window_prepare' || command === 'tile_window_show')
+  .map(([, args]) => (args as { label: string }).label)
+  .pop();
+
+const lastBrowserUpdate = () => vi.mocked(invoke).mock.calls
+  .filter(([command, args]) => command === 'browser_host_update' && String((args as { label: string }).label).includes(BROWSER_LABEL_PART))
+  .map(([, args]) => args as { window: string; geometry: { visible: boolean } })
+  .pop();
+
+function scriptPopOut(daemon: ScriptedDaemon) {
+  const arrange = (popped: boolean) => {
+    const desktop = daemon.arrangement.desktop('A')!;
+    daemon.arrangement.replace({ ...desktop, tree_json: JSON.stringify(layout(popped)) });
+  };
+  daemon.on('desktop_pop_out_leaf', (command) => {
+    arrange(true);
+    return [daemon.arrangement.answer(command), { event: 'profile_action_result', action: command.cmd, success: true }];
+  });
+  daemon.on('desktop_bring_back_leaf', (command) => {
+    arrange(false);
+    return [daemon.arrangement.answer(command), { event: 'profile_action_result', action: command.cmd, success: true }];
+  });
+}
+
+async function openBrowserOnA({ popoutOn, popped = false }: { popoutOn: boolean; popped?: boolean }) {
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.mocked(invoke).mockImplementation(async (command: string) => (command === 'tile_window_frame_over' ? FRAME : undefined));
+  await letTileWindowsOpen();
+  fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, 1500, 1000) : null));
+  const settings = { tile_popout_enabled: popoutOn ? 'true' : 'false' };
+  const view = await renderApp({ initialState: {
+    sessions: [daemonSession('s1', { state: 'idle' })],
+    profiles: [defaultProfile('A')],
+    desktops: [
+      daemonDesktop('A', { root: layout(popped), panes: [agentPane('s1', 'A')] }, { shortcut_slot: 1 }),
+      emptyDesktop('B', { shortcut_slot: 2 }),
+      emptyDesktop('C', { shortcut_slot: 3 }),
+    ],
+    settings,
+  } });
+  serveSettings(view.daemon, settings);
+  scriptPopOut(view.daemon);
+  await act(async () => { await openSession(view.daemon, 's1'); });
+  return view;
+}
+
+describe('a browser tile in its own window', () => {
+  it('stays shown while Settings is open in main', async () => {
+    const { daemon } = await openBrowserOnA({ popoutOn: true, popped: true });
+    const tileWindowLabel = shownTileWindowLabel();
+    expect(lastBrowserUpdate()).toMatchObject({ window: tileWindowLabel, geometry: { visible: true } });
+
+    await gesture(daemon, () => pressShortcut('ui.openSettings'));
+
+    expect(lastBrowserUpdate()).toMatchObject({ window: tileWindowLabel, geometry: { visible: true } });
+  });
+
+  it('keeps its live page when brought back to a desktop main has moved away from', async () => {
+    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
+    await gesture(daemon, () => pressShortcut('desktop.select2'));
+    await gesture(daemon, () => pressShortcut('desktop.select3'));
+
+    const tileWindowLabel = shownTileWindowLabel();
+    await gesture(daemon, () => window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label: tileWindowLabel } })));
+    expect(daemon.sentOf('desktop_bring_back_leaf')).toHaveLength(1);
+    await gesture(daemon, () => pressShortcut('desktop.select1'));
+
+    expect(browserHostLifecycle()).toEqual(['browser_host_mount']);
+  });
+});
+
+it('turning tile windows on and off keeps open browser pages', async () => {
+  const { daemon } = await openBrowserOnA({ popoutOn: false });
+
+  await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { tile_popout_enabled: 'true' } }));
+  await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { tile_popout_enabled: 'false' } }));
+
+  expect(browserHostLifecycle()).toEqual(['browser_host_mount']);
+});

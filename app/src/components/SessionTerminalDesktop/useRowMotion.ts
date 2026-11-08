@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 import type { NormalizedPaneBounds } from '../../types/desktop';
 import { freeStillFrame } from '../../utils/stillFrame';
-import { isDomInstance } from '../../utils/realm';
+import { rowPaneElements } from './rowPanes';
 
 const STIFFNESS = 630;
 const DAMPING = 39;
@@ -184,12 +184,8 @@ function emptyRowAfter(layout: RowMotionLayout): RowMotionLayout {
 
 function animateChange(state: MotionState, container: HTMLElement, before: RowMotionLayout, after: RowMotionLayout): void {
   const slidePx = rowSlidePx(before, after);
-  const paneElement = (leafId: string) => {
-    for (const child of container.children) {
-      if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId === leafId) return child;
-    }
-    return null;
-  };
+  const panes = rowPaneElements(container);
+  const paneElement = (leafId: string) => panes.find((pane) => pane.dataset.paneId === leafId) ?? null;
   for (const leafId of before.bounds.keys()) {
     if (!after.bounds.has(leafId)) holdLeaving(state, container, leafId, slidePx);
   }
@@ -220,20 +216,18 @@ function startAwaitedEntrances(state: MotionState, layout: RowMotionLayout, cont
       state.awaitingElement.delete(leafId);
       continue;
     }
-    for (const child of container.children) {
-      if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId === leafId) {
-        state.awaitingElement.delete(leafId);
-        if (!isBrowserTile(child)) startEntering(state, leafId, child);
-        break;
-      }
+    const pane = rowPaneElements(container).find((candidate) => candidate.dataset.paneId === leafId);
+    if (pane) {
+      state.awaitingElement.delete(leafId);
+      if (!isBrowserTile(pane)) startEntering(state, leafId, pane);
     }
   }
 }
 
 function rememberElements(state: MotionState, container: HTMLElement): void {
   state.elements.clear();
-  for (const child of container.children) {
-    if (isDomInstance(child, 'HTMLElement') && child.dataset.paneId) state.elements.set(child.dataset.paneId, child);
+  for (const pane of rowPaneElements(container)) {
+    if (pane.dataset.paneId) state.elements.set(pane.dataset.paneId, pane);
   }
 }
 

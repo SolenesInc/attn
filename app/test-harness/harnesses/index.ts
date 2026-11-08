@@ -15,6 +15,7 @@ import { RowMotionHarness } from './RowMotionHarness';
 import { QueueBarHarness } from './QueueBarHarness';
 import { QueueSidebarFitHarness } from './QueueSidebarFitHarness';
 import { TerminalWindowMoveHarness } from './TerminalWindowMoveHarness';
+import { PoppedTerminalHarness } from './PoppedTerminalHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
 import { SeedHeaderHarness } from './SeedHeaderHarness';
 import { GardenReviewActionsHarness } from './GardenReviewActionsHarness';
@@ -39,6 +40,7 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   PaneFocusRing: PaneFocusRingHarness,
   RowMotion: RowMotionHarness,
   TerminalWindowMove: TerminalWindowMoveHarness,
+  PoppedTerminal: PoppedTerminalHarness,
   TileHeader: TileHeaderHarness,
   SeedHeader: SeedHeaderHarness,
   GardenReviewActions: GardenReviewActionsHarness,

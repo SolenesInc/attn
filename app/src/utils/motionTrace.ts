@@ -1,5 +1,6 @@
 import { recordDiag, supportTerminalDiagnosticsSnapshot } from './terminalDiagnosticsLog';
 import { isDomInstance } from './realm';
+import { ROW_PANES } from '../components/SessionTerminalDesktop/rowPanes';
 
 export interface MotionTraceStop {
   frames: number;
@@ -23,7 +24,7 @@ function stillFrameInk(pane: HTMLElement): number | null {
 }
 
 function samplePanes() {
-  return Array.from(document.querySelectorAll<HTMLElement>('.session-terminal-panes > .desktop-pane')).map((pane) => {
+  return Array.from(document.querySelectorAll<HTMLElement>(ROW_PANES)).map((pane) => {
     const rect = pane.getBoundingClientRect();
     const style = getComputedStyle(pane);
     return {
@@ -69,7 +70,7 @@ function sampleAnimations() {
 function panesAnimations(): Animation[] {
   return document.getAnimations().filter((animation) => {
     const effect = animation.effect;
-    return isDomInstance(effect, 'KeyframeEffect') && isDomInstance(effect.target, 'Element') && effect.target.matches('.session-terminal-panes > .desktop-pane');
+    return isDomInstance(effect, 'KeyframeEffect') && isDomInstance(effect.target, 'Element') && effect.target.matches(ROW_PANES);
   });
 }
 

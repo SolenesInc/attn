@@ -1266,10 +1266,13 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             Ok(())
         })
         .on_page_load(|webview, _payload| {
+            if webview.label() != "main" {
+                return;
+            }
             // The visible strip is logical pixels while primary_monitor().size() is
             // physical, hence the scale_factor.
             #[cfg(target_os = "macos")]
-            if webview.label() == "main" {
+            {
                 if let Ok(px_str) = std::env::var("ATTN_HARNESS_PARK_VISIBLE_PX") {
                     if let Ok(visible_px) = px_str.parse::<f64>() {
                         if visible_px > 0.0 {
@@ -1295,9 +1298,6 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
                         }
                     }
                 }
-            }
-            if webview.label() == "capture" || tile_window::is_tile_window(webview.label()) {
-                return;
             }
             let _ = webview.window().show();
         })

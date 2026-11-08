@@ -16,7 +16,10 @@ in `app/src/test/`. Paths below are relative to `app/src`.
 - Besides the daemon, the app sees only these fakes. `test/setup.ts` mocks the
   modules of the Tauri host and loads the terminal's WebAssembly from disk.
   Fakes also stand in for the pieces the simulated browser lacks, such as canvas
-  and WebGL contexts, `ResizeObserver`, and `matchMedia`.
+  and WebGL contexts, `ResizeObserver`, and `matchMedia`. The simulated
+  browser cannot open a second window, so `letTileWindowsOpen()` in
+  `test/tileWindows.ts` makes `window.open` return a detached one for tile
+  windows.
   `installScriptedDaemon` replaces `WebSocket` and `fetch`. `fetch` rejects,
   because app wire tests reach no network.
 - Domain helpers in `test/` script whole features, such as

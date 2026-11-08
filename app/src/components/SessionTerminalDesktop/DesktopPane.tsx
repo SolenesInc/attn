@@ -31,8 +31,7 @@ function PaneContent({ paneId }: { paneId: string }): ReactNode {
 }
 
 export function DesktopPane({ paneId }: { paneId: string }) {
-  const { desktopId, tileWindowsEnabled, poppedLeafIdSet } = useDesktopContext();
-  if (!tileWindowsEnabled) return <PaneContent paneId={paneId} />;
+  const { desktopId, poppedLeafIdSet } = useDesktopContext();
   return (
     <MovablePane leafKey={tileWindowKey(desktopId, paneId)} popped={poppedLeafIdSet.has(paneId)}>
       <PaneContent paneId={paneId} />

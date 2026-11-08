@@ -45,6 +45,7 @@ import {
   settleUi,
 } from './uiAutomationSettle';
 import { isDomInstance } from '../utils/realm';
+import { ROW_PANES } from '../components/SessionTerminalDesktop/rowPanes';
 
 
 
@@ -2400,7 +2401,7 @@ export function useUiAutomationBridge({
       case 'motion_trace_stop':
         return stopMotionTrace();
       case 'motion_at_rest': {
-        const panes = Array.from(document.querySelectorAll<HTMLElement>('.session-terminal-panes > .desktop-pane'));
+        const panes = Array.from(document.querySelectorAll<HTMLElement>(ROW_PANES));
         return {
           animations: document.getAnimations().filter((animation) => {
             const target = isDomInstance(animation.effect, 'KeyframeEffect') ? animation.effect.target : null;

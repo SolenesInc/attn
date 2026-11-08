@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AppView } from '../navigation/sessionNavigation';
 import { useProfilesStore } from '../store/profiles';
@@ -33,11 +33,28 @@ function poppedPanes(desktops: ReturnType<typeof useProfilesStore.getState>['des
   return { desktopIds, sessionIds };
 }
 
+function sameMembers(a: Set<string>, b: Set<string>) {
+  return a.size === b.size && [...a].every((id) => b.has(id));
+}
+
+function useDesktopsAwaitingVisit(poppedDesktopIds: Set<string>, currentDesktopId: string | null) {
+  const [seen, setSeen] = useState({ poppedDesktopIds, currentDesktopId, awaiting: new Set<string>() });
+  if (sameMembers(seen.poppedDesktopIds, poppedDesktopIds) && seen.currentDesktopId === currentDesktopId) return seen.awaiting;
+  const awaiting = new Set(seen.awaiting);
+  for (const desktopId of seen.poppedDesktopIds) {
+    if (!poppedDesktopIds.has(desktopId)) awaiting.add(desktopId);
+  }
+  if (currentDesktopId) awaiting.delete(currentDesktopId);
+  setSeen({ poppedDesktopIds, currentDesktopId, awaiting });
+  return awaiting;
+}
+
 export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId, tileWindowsEnabled }: Options) {
   const desktops = useProfilesStore((state) => state.desktops);
   const popped = useMemo(() => poppedPanes(desktops, tileWindowsEnabled), [desktops, tileWindowsEnabled]);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
+  const awaitingVisit = useDesktopsAwaitingVisit(popped.desktopIds, currentDesktopId);
   const pendingSessionIds = usePendingTerminalInput(useShallow((state) => [...state.pending.keys()]));
   const mountedDesktopIds = useMemo(() => {
     const mounted = new Set<string>();
@@ -45,11 +62,12 @@ export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId, t
     if (previousDesktopId) mounted.add(previousDesktopId);
     if (dragSourceDesktopId) mounted.add(dragSourceDesktopId);
     for (const desktopId of popped.desktopIds) mounted.add(desktopId);
+    for (const desktopId of awaitingVisit) mounted.add(desktopId);
     for (const desktop of desktopViews) {
       if (desktop.sessions.some((session) => pendingSessionIds.includes(session.id))) mounted.add(desktop.id);
     }
     return mounted;
-  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, desktopViews, pendingSessionIds, popped]);
+  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, desktopViews, pendingSessionIds, popped, awaitingVisit]);
   const onScreenSessionIds = useMemo(() => {
     const onScreen = new Set(popped.sessionIds);
     if (view !== 'session' || !currentDesktopId) return onScreen;

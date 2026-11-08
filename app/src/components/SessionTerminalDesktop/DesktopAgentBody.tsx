@@ -48,6 +48,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
     shortcutsEnabled,
     handleGhosttyTerminalReady,
     handleClosePane,
+    paneShown,
   } = useDesktopContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
   const stopped = Boolean(paneSession && sessionHasStopped(paneSession));
@@ -120,7 +121,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
               runtimeId: agentPane.runtimeId,
               paneKind: 'agent',
               isActivePane: activeAgentPaneId === agentPane.id,
-              isActiveSession,
+              isActiveSession: paneShown(agentPane.id),
               paneCount: paneIds.length,
             }}
             onInput={runtime.handleTerminalInput(agentPane.id)}

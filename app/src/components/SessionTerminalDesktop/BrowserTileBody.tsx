@@ -37,12 +37,13 @@ export function BrowserTileBody({
   paneGeometry?: string;
   onClose: () => void;
 }) {
-  const peekOverDesktop = useDesktopShelfStore((state) => state.peek?.desktopId === desktopId);
-  const visible = visibleInTile && !peekOverDesktop;
-  const sidebarDragging = useSidebarDrag((state) => state.dragging);
-  const dragging = tileDragging || sidebarDragging;
-  const hostRef = useRef<HTMLDivElement>(null);
   const tileWindow = useTileWindow();
+  const inMainWindow = tileWindow === window;
+  const peekOverDesktop = useDesktopShelfStore((state) => state.peek?.desktopId === desktopId);
+  const visible = visibleInTile && !(inMainWindow && peekOverDesktop);
+  const sidebarDragging = useSidebarDrag((state) => state.dragging);
+  const dragging = tileDragging || (inMainWindow && sidebarDragging);
+  const hostRef = useRef<HTMLDivElement>(null);
   const tileWindowRef = useRef(tileWindow);
   tileWindowRef.current = tileWindow;
   const draggingRef = useRef(dragging);

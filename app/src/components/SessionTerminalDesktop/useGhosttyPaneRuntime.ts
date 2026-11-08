@@ -29,6 +29,7 @@ export interface PaneRuntimeSpec {
   state_reason?: string;
   terminalExit?: import('../../types/generated').TerminalExit;
   drawn: boolean;
+  shown: boolean;
 }
 
 export type TerminalReach = `${OutpostReach}`;
@@ -74,7 +75,6 @@ export function useGhosttyPaneRuntime(
   panes: PaneRuntimeSpec[],
   activePaneId: string,
   eventRouter: PaneRuntimeEventRouter,
-  isActiveSessionRef: { current: boolean },
   terminalsLive = true,
   attachOnlyDrawn = false,
   connected = true,
@@ -114,10 +114,11 @@ export function useGhosttyPaneRuntime(
   const flushPendingResize = useCallback((runtimeId: string) => {
     const resize = pendingResizeRef.current.get(runtimeId);
     pendingResizeRef.current.delete(runtimeId);
-    if (resize && !panesRef.current.some((pane) => pane.runtimeId === runtimeId && !reachable(pane)) && isActiveSessionRef.current) {
+    const pane = panesRef.current.find((candidate) => candidate.runtimeId === runtimeId);
+    if (resize && pane?.shown && reachable(pane)) {
       void ptyResize({ id: runtimeId, ...resize });
     }
-  }, [isActiveSessionRef]);
+  }, []);
   const cancelRuntimeConnection = useCallback((runtimeId: string) => {
     attachGenerationRef.current.set(
       runtimeId,
@@ -349,7 +350,7 @@ export function useGhosttyPaneRuntime(
           flushPendingResize(pane.runtimeId);
         }
         void terminal.drain().then(() => {
-          if (isActiveSessionRef.current && refit) {
+          if (paneFor(paneId)?.shown && refit) {
             terminal.fit();
           }
         });
@@ -381,7 +382,7 @@ export function useGhosttyPaneRuntime(
       default:
         break;
     }
-  }, [attachPane, attachable, cancelRuntimeConnection, flushPendingResize, isActiveSessionRef, paneFor]);
+  }, [attachPane, attachable, cancelRuntimeConnection, flushPendingResize, paneFor]);
 
   useEffect(() => {
     const disposers = panes.map((pane) => eventRouter.registerBinding({
@@ -433,9 +434,8 @@ export function useGhosttyPaneRuntime(
   }, [paneFor]);
 
   const handleTerminalResize = useCallback((paneId: string) => (cols: number, rows: number, options?: TerminalResizeOptions) => {
-    if (!isActiveSessionRef.current) return;
     const pane = paneFor(paneId);
-    if (!pane || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
+    if (!pane?.shown || pane.terminalExit || stoppedRuntimesRef.current.has(pane.runtimeId)) return;
     // GhosttyTerminal.fit() is the geometry authority. Re-applying MIN_USABLE here dropped
     // legitimate small fits and stranded the PTY taller than the pane.
     if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 1 || rows < 1) return;
@@ -454,7 +454,7 @@ export function useGhosttyPaneRuntime(
       xpixel: options?.xpixel,
       ypixel: options?.ypixel,
     });
-  }, [isActiveSessionRef, paneFor]);
+  }, [paneFor]);
 
   const get = useCallback((paneId: string) => handlesRef.current.get(paneId), []);
   const emptyContent = useCallback((): TerminalVisibleContentSnapshot => ({
