@@ -624,7 +624,7 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 		_ = down.Close(websocket.StatusInternalError, err.Error())
 		return
 	}
-	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message), error) {
+	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message) func(), error) {
 		if m.Method == "thread/resume" {
 			proxy.mcpStartup.resuming(s, m)
 		}
@@ -745,7 +745,7 @@ func (r *codexShared) proxied(v *codexView, proxy *codexProxy) {
 	r.viewsChanged(v.profile)
 }
 
-func (r *codexShared) prepare(connection context.Context, v *codexView, m *codexshared.Message) (func(*codexshared.Message), error) {
+func (r *codexShared) prepare(connection context.Context, v *codexView, m *codexshared.Message) (func(*codexshared.Message) func(), error) {
 	method := m.Method
 	switch method {
 	case "initialize":
@@ -801,7 +801,13 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 	m.Params = raw
 	opened := method != "thread/resume"
 	firstOfItsSession := opened && r.conversation(sessionID) == ""
-	return func(reply *codexshared.Message) {
+	return func(reply *codexshared.Message) func() {
+		opening := false
+		settle := func() {
+			if opening {
+				r.openingChanged(v, -1)
+			}
+		}
 		var result struct {
 			Thread struct {
 				ID     string `json:"id"`
@@ -813,10 +819,10 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		thread := result.Thread
 		if established && thread.Parent == "" && opened {
 			r.openingChanged(v, 1)
-			defer r.openingChanged(v, -1)
+			opening = true
 			err := r.materialize(connection, v.terminal, v.profile, thread.ID)
 			if connection.Err() != nil {
-				return
+				return settle
 			}
 			if err != nil {
 				established = false
@@ -831,9 +837,8 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		v.replies.Lock()
 		defer v.replies.Unlock()
 		if connection.Err() != nil {
-			return
+			return settle
 		}
-		r.started(v)
 		switch {
 		case !established:
 		case thread.Parent != "":
@@ -842,6 +847,14 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 			r.show(v, thread.ID, opened)
 			if !firstOfItsSession {
 				r.d.conversationIn(v.terminal, agentConversationObservation{NativeID: thread.ID, TranscriptPath: thread.Path})
+			}
+		}
+		return func() {
+			defer settle()
+			v.replies.Lock()
+			defer v.replies.Unlock()
+			if connection.Err() == nil {
+				r.started(v)
 			}
 		}
 	}, nil
@@ -880,21 +893,21 @@ func (r *codexShared) followPrompt(v *codexView, m *codexshared.Message) {
 	}
 }
 
-func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
+func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) func() {
 	r.mu.Lock()
 	folder := v.trusted
 	r.mu.Unlock()
 	if folder == "" {
 		return nil
 	}
-	return func(reply *codexshared.Message) {
+	return func(reply *codexshared.Message) func() {
 		var result map[string]any
 		if len(reply.Error) > 0 || json.Unmarshal(reply.Result, &result) != nil {
-			return
+			return nil
 		}
 		config, _ := result["config"].(map[string]any)
 		if config == nil {
-			return
+			return nil
 		}
 		projects, _ := config["projects"].(map[string]any)
 		if projects == nil {
@@ -902,12 +915,13 @@ func (r *codexShared) answerTrust(v *codexView) func(*codexshared.Message) {
 			config["projects"] = projects
 		}
 		if project, _ := projects[folder].(map[string]any); project["trust_level"] != nil {
-			return
+			return nil
 		}
 		projects[folder] = map[string]any{"trust_level": "trusted"}
 		if raw, err := json.Marshal(result); err == nil {
 			reply.Result = raw
 		}
+		return nil
 	}
 }
 

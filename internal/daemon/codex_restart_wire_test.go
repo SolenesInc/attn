@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -140,6 +141,42 @@ func TestASharedCodexAppServerThatExitsBeforeAnsweringIsNotStartedAgainOnEveryCo
 		}
 	}
 	t.Fatal("every launch started another app-server; want a cooldown named in the error")
+}
+
+func TestAQuietRestartWaitsUntilATerminalHasItsConversationReply(t *testing.T) {
+	w, app, _, _ := sharedCodexOn(t, "0.162.1")
+
+	w.SetCodexVersion("0.163.0")
+	boot := w.HoldNextBoot()
+	cart := w.Spawn(app, fakeagent.Codex, w.Path("cart"))
+	boot.Await()
+	blockedByCartAlone := func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.162.1", "0.163.0", protocol.SharedCodexRestartPending) &&
+			slices.Equal(s.Blockers, blockedBy(cart, protocol.SharedCodexBlockerReasonStarting))
+	}
+	awaitSharedCodex(app, blockedByCartAlone)
+	delivering := w.PauseAt(pausepoint.CodexReplyDelivering)
+	boot.Release()
+	delivering.Await()
+	shelf := w.Spawn(app, fakeagent.Codex, w.Path("shelf"))
+	shelfStarted := false
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		if s != nil && s.Restart == protocol.SharedCodexRestartRestarting {
+			t.Fatalf("the restart went to %q while a terminal had not heard its conversation opened", s.Restart)
+		}
+		shelfStarted = shelfStarted || (s != nil && slices.ContainsFunc(s.Blockers, func(b protocol.SharedCodexBlocker) bool { return string(b.SessionID) == shelf }))
+		return shelfStarted && blockedByCartAlone(s)
+	})
+	w.Launched(shelf)
+	delivering.Release()
+	codex := w.Launched(cart)
+	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+		return restartState(s, "0.163.0", "0.163.0", protocol.SharedCodexRestartNone)
+	})
+	app.TypeLine(cart, "add a tax field")
+	if got := codex.Prompted(); got != "add a tax field" {
+		t.Fatalf("the terminal the restart waited for took %q after it", got)
+	}
 }
 
 func TestAQuietRestartWaitsForATerminalAskingWhetherToTrustItsFolder(t *testing.T) {

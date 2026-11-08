@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/victorarias/attn/internal/pausepoint"
 	"nhooyr.io/websocket"
 )
 
@@ -201,11 +202,11 @@ func (c *Client) Connected() bool {
 	}
 }
 
-func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connection context.Context, m *Message) (func(*Message), error), forward func(Message) bool) {
+func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connection context.Context, m *Message) (func(*Message) func(), error), forward func(Message) bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex
-	pending := make(map[string]func(*Message))
+	pending := make(map[string]func(*Message) func())
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -216,6 +217,7 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connectio
 				return
 			}
 			var m Message
+			var delivered func()
 			if json.Unmarshal(data, &m) == nil {
 				if m.Method == "" && len(m.ID) > 0 {
 					mu.Lock()
@@ -223,7 +225,7 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connectio
 					delete(pending, string(m.ID))
 					mu.Unlock()
 					if callback != nil {
-						callback(&m)
+						delivered = callback(&m)
 						data = rewriteReply(data, m)
 					}
 				}
@@ -231,7 +233,14 @@ func Proxy(ctx context.Context, down, up *websocket.Conn, prepare func(connectio
 					continue
 				}
 			}
-			if down.Write(ctx, kind, data) != nil {
+			if delivered != nil {
+				pausepoint.At(pausepoint.CodexReplyDelivering)
+			}
+			err = down.Write(ctx, kind, data)
+			if delivered != nil {
+				delivered()
+			}
+			if err != nil {
 				return
 			}
 		}

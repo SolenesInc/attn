@@ -58,6 +58,7 @@ const (
 	RingPlacementAnswering         = "ring-placement-answering"
 	TenderDirectoryInspecting      = "tender-directory-inspecting"
 	SessionInputLaneContended      = "session-input-lane-contended"
+	CodexReplyDelivering           = "codex-reply-delivering"
 	CompactingClosePlacing         = "compacting-close-placing"
 	CompactingCloseFinishing       = "compacting-close-finishing"
 	SessionSnoozeArrived           = "session-snooze-arrived"
