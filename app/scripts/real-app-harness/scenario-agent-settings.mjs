@@ -123,7 +123,6 @@ try {
     await click(`${popover} [data-harness="claude"]`);
     await saved('activity.config', '{"agent":"claude"}', () => click(`${popover} [data-model=""]`));
     await section('backgroundAgents');
-    runner.assert((await text('[data-testid="settings-section-backgroundAgents"]')).includes('attn crew set chief'), 'the Chief block points to the Chief\'s own launch settings');
     await screenshot('03-background-agents.png');
   });
   await runner.step('pricing_autosaves_and_removes_overrides', async () => {

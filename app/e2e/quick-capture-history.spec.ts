@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=';
 const records = Array.from({ length: 6 }, (_, index) => ({
-  id: `message-${index}`, content: `Saved message ${index}`, mailbox: { kind: 'chief' },
+  id: `message-${index}`, content: `Saved message ${index}`, mailbox: { kind: 'crew_member', member_id: 'chief' },
   created_at: `2026-10-0${1 + Math.floor(index / 2)}T1${index % 2}:00:00Z`,
   attachments: [0, 1].map(file => ({ id: `image-${index}-${file}`, name: `Preview ${index}-${file}`, media_type: 'image/png', bytes: 68 })),
 }));
