@@ -4638,11 +4638,17 @@ model AutomationGuardCheck {
   checks_since_run: int32;
 }
 
+model AutomationRunFix {
+  agent: string;
+  directory: string;
+}
+
 model AutomationRunSummary {
   id: string;
   definition_id: safeint;
   state: string;
   last_error?: string;
+  fix?: AutomationRunFix;
   cancel_reason?: string;
   seed_id?: string;
   session_id?: SessionID;

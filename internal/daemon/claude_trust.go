@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type claudeProject struct {
@@ -46,7 +48,10 @@ func (d *Daemon) settleClaudeFolderTrust(opts *ptybackend.SpawnOptions, trust *R
 	}
 	if origin == "" || !slices.Contains(trust.KnownOrigins, origin) {
 		if unattended {
-			return fmt.Errorf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", opts.CWD)
+			return &fixableAutomationDeliveryError{
+				message: fmt.Sprintf("no agent has started a conversation in the repository of %s in this profile, on any machine, and Claude does not trust it, so an automation will not trust it for you; open Claude there once and choose to trust it", opts.CWD),
+				fix:     store.AutomationRunFix{Agent: string(protocol.SessionAgentClaude), Directory: cmp.Or(checkout.repository, cwd)},
+			}
 		}
 		return nil
 	}

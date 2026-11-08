@@ -64,6 +64,48 @@ describe('App automation actions', () => {
     expect(screen.getByTestId('automation-toggle-1')).toBeChecked();
   });
 
+  it('opens the harness at the folder a failed run names, so the user can trust it there', async () => {
+    const view = await renderApp();
+    const { daemon } = view;
+    const failed = {
+      ...REVIEWER,
+      last_run: {
+        id: 'run-1',
+        definition_id: 1,
+        state: 'failed',
+        last_error: 'Codex does not trust /code/shop',
+        fix: { agent: 'codex', directory: '/code/shop' },
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+      },
+    };
+    daemon.on('automation_definitions_get', () => ({ event: 'automation_definitions_result', success: true, definitions: [failed] }));
+    daemon.on('automation_runs_get', ({ definition_id }) => ({ event: 'automation_runs_result', success: true, definition_id, runs: [] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show Automations' }));
+    await daemon.idle();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trust folder in Codex' }));
+    const spawn = await daemon.received('spawn_session');
+
+    expect(spawn).toEqual(expect.objectContaining({ agent: 'codex', cwd: '/code/shop', label: 'shop' }));
+    expect(spawn.initial_prompt).toBeUndefined();
+  });
+
+  it('offers no folder action on a failed run with nothing to trust', async () => {
+    const view = await renderApp();
+    view.daemon.on('automation_definitions_get', () => ({
+      event: 'automation_definitions_result',
+      success: true,
+      definitions: [{ ...REVIEWER, last_run: { id: 'run-1', definition_id: 1, state: 'failed', last_error: 'prepare location: gone', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' } }],
+    }));
+    view.daemon.on('automation_runs_get', ({ definition_id }) => ({ event: 'automation_runs_result', success: true, definition_id, runs: [] }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show Automations' }));
+    await view.daemon.idle();
+
+    expect(screen.getByText('prepare location: gone')).toBeInTheDocument();
+    expect(screen.queryByTestId('automation-fix-1')).toBeNull();
+  });
+
   it('runs a manual automation and is ready to run it again once the daemon answers', async () => {
     const { daemon } = await renderAutomations();
     daemon.on('automation_run', ({ definition_id }) => ({

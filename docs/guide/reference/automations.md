@@ -171,7 +171,7 @@ Only when you already do. A Claude run starts when either of these is true:
 - An agent session in the automation's profile has started a conversation in a repository with the same `origin`, on any machine. Attn then records Claude's trust on the main repository in `.claude.json` before the run starts, and notes it in the daemon log. Remove that entry to take the trust back.
 - Claude already trusts the folder or its repository.
 
-In any other folder the run fails, says why, and Claude does not start. Open Claude there once and trust the folder. The next run then starts.
+In any other folder the run fails, says why, and Claude does not start. Choose **Trust folder in Claude** on the failed automation in the drawer, or open Claude there yourself, and trust the folder. The next run then starts.
 </details>
 
 <details>
@@ -186,7 +186,7 @@ A review run in Attn's own copy of a repository passes once you have worked in y
 
 With [shared Codex](using-shared-codex.md#folder-trust), Attn answers Codex's trust question for the run. With a plain Codex, Attn adds the repository as trusted to Codex's `config.toml` before the run starts, as choosing "Trust and continue" would, and notes it in the daemon log. Remove that entry from `config.toml` to take the trust back.
 
-In any other folder, or in a folder you marked untrusted in Codex, the run fails, says why, and Codex does not start. Open Codex there once and trust the folder, or work there with any agent. The next run then starts.
+In any other folder, or in a folder you marked untrusted in Codex, the run fails, says why, and Codex does not start. For a folder Codex has never been asked about, choose **Trust folder in Codex** on the failed automation in the drawer, or open Codex there yourself, and trust the folder, or work there with any agent. The next run then starts. A folder marked untrusted stays that way until you change its entry in `config.toml`.
 </details>
 
 <details>

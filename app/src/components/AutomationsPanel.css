@@ -186,6 +186,20 @@
   margin: 0;
 }
 
+.automations-panel__fix {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  padding: 2px 8px;
+}
+
+.automations-panel__fix:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
 .automations-panel__last-error {
   color: var(--color-text-tertiary);
   flex-basis: 100%;

@@ -11,8 +11,10 @@ import {
   useAppSessionsContext,
   useAttentionQueueContext,
   useNavigationContext,
+  useSessionLaunchContext,
 } from './AppContexts';
 import { useEscapeStack } from '../hooks/useEscapeStack';
+import { baseName } from '../components/ledger/ledgerQuery';
 import { useSessionStore } from '../store/sessions';
 import { isDomInstance } from '../utils/realm';
 
@@ -46,6 +48,7 @@ export function AppDock() {
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
   const { handleSelectSession } = useNavigationContext();
+  const { launchAgent } = useSessionLaunchContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
   const { profileSessions } = useAppSessionsContext();
   const {
@@ -123,6 +126,7 @@ export function AppDock() {
                 applyDefinition={applyAutomationDefinition}
                 deleteDefinition={deleteAutomationDefinition}
                 onSelectSession={handleSelectSession}
+                openAgentInFolder={(agent, directory) => launchAgent(baseName(directory), directory, undefined, agent)}
               />
             ),
           },

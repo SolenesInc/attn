@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "78635de82196";
+pub const PROTOCOL_VERSION: &str = "d7977f9e6cab";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1073,6 +1073,11 @@ pub struct AutomationProvenance {
     pub trigger_type: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AutomationRunFix {
+    pub agent: String,
+    pub directory: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AutomationRunMessage {
     pub cmd: String,
     pub definition_id: i64,
@@ -1127,6 +1132,8 @@ pub struct AutomationRunSummary {
     pub definition_id: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delivered_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fix: Option<AutomationRunFix>,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,

@@ -157,6 +157,7 @@ func TestAClaudeAutomationRefusesARepositoryThatIsNeitherKnownNorTrusted(t *test
 	if w.ClaudeFolderTrusted(repo) {
 		t.Errorf("Claude's config trusts %s, want it left untrusted", repo)
 	}
+	requireTrustFix(t, app, "claude", repo)
 }
 
 func TestAClaudeAutomationRunsInAKnownOrAlreadyTrustedRepository(t *testing.T) {

@@ -1207,6 +1207,14 @@ type AutomationProvenance struct {
 	TriggerType string `json:"trigger_type"`
 }
 
+type AutomationRunFix struct {
+	// Agent corresponds to the JSON schema field "agent".
+	Agent string `json:"agent"`
+
+	// Directory corresponds to the JSON schema field "directory".
+	Directory string `json:"directory"`
+}
+
 type AutomationRunMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -1262,6 +1270,9 @@ type AutomationRunSummary struct {
 
 	// DeliveredAt corresponds to the JSON schema field "delivered_at".
 	DeliveredAt *string `json:"delivered_at,omitempty,omitzero"`
+
+	// Fix corresponds to the JSON schema field "fix".
+	Fix *AutomationRunFix `json:"fix,omitempty,omitzero"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`

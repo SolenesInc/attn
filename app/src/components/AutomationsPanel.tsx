@@ -1,6 +1,7 @@
 import type { LaunchDesktopSetting } from '../types/generated';
 import { useEffect, useState } from 'react';
-import { AutomationDefinitionSummary, AutomationRunSummary } from '../types/generated';
+import { AutomationDefinitionSummary, AutomationRunFix, AutomationRunSummary } from '../types/generated';
+import { agentLabel } from '../utils/agentAvailability';
 import { useAutomationsStore, selectDefinitionById } from '../store/automations';
 import { AutomationActionTimeoutError } from '../hooks/useDaemonSocket';
 import { AutomationForm, automationFormKey } from './automations/AutomationForm';
@@ -11,6 +12,7 @@ import './AutomationsPanel.css';
 export interface AutomationsPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  openAgentInFolder: (agent: string, directory: string) => Promise<unknown>;
   fetchDefinitions: () => Promise<AutomationDefinitionSummary[]>;
   fetchRuns: (definitionId: number) => Promise<AutomationRunSummary[]>;
   setEnabled: (definitionId: number, enabled: boolean) => Promise<void>;
@@ -91,6 +93,7 @@ export function AutomationsPanel({
   applyDefinition,
   deleteDefinition,
   onSelectSession,
+  openAgentInFolder,
 }: AutomationsPanelProps) {
   const definitions = useAutomationsStore((state) => state.definitions);
   const runsByDefinition = useAutomationsStore((state) => state.runsByDefinition);
@@ -103,6 +106,7 @@ export function AutomationsPanel({
   const [toggleErrors, setToggleErrors] = useState<Record<string, string>>({});
   const [toggleInFlight, setToggleInFlight] = useState<Record<string, boolean>>({});
   const [runErrors, setRunErrors] = useState<Record<string, string>>({});
+  const [fixInFlight, setFixInFlight] = useState<Record<string, boolean>>({});
   const [runInFlight, setRunInFlight] = useState<Record<string, boolean>>({});
   // The ONLY state that opens/closes/targets the editor, so an automations_changed
   // broadcast cannot close it or swap its target. AutomationForm.tsx holds the other
@@ -205,6 +209,26 @@ export function AutomationsPanel({
       })
       .finally(() => {
         setRunInFlight((prev) => ({ ...prev, [definitionId]: false }));
+      });
+  }
+
+  function handleFix(definitionId: number, fix: AutomationRunFix) {
+    setFixInFlight((prev) => ({ ...prev, [definitionId]: true }));
+    setRunErrors((prev) => {
+      if (!(definitionId in prev)) return prev;
+      const next = { ...prev };
+      delete next[definitionId];
+      return next;
+    });
+    openAgentInFolder(fix.agent, fix.directory)
+      .catch((error) => {
+        setRunErrors((prev) => ({
+          ...prev,
+          [definitionId]: error instanceof Error ? error.message : `Could not open ${agentLabel(fix.agent)}`,
+        }));
+      })
+      .finally(() => {
+        setFixInFlight((prev) => ({ ...prev, [definitionId]: false }));
       });
   }
 
@@ -410,6 +434,18 @@ export function AutomationsPanel({
                 )}
                 {latestRun?.state === 'failed' && latestRun.last_error && (
                   <p className="automations-panel__last-error">{latestRun.last_error}</p>
+                )}
+                {latestRun?.state === 'failed' && latestRun.fix && (
+                  <button
+                    type="button"
+                    className="automations-panel__fix"
+                    disabled={fixInFlight[definition.id]}
+                    title={latestRun.fix.directory}
+                    onClick={() => handleFix(definition.id, latestRun.fix!)}
+                    data-testid={`automation-fix-${definition.id}`}
+                  >
+                    Trust folder in {agentLabel(latestRun.fix.agent)}
+                  </button>
                 )}
               </li>
             );

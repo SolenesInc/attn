@@ -50,7 +50,12 @@ func (d *Daemon) handleAutomationDeliveryError(run *store.AutomationRun, deliver
 	if err := d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, deliveryErr.Error())); err != nil {
 		persistErr = errors.Join(persistErr, err)
 	}
-	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), diskFull, time.Now()); err != nil {
+	var fix *store.AutomationRunFix
+	var fixable *fixableAutomationDeliveryError
+	if errors.As(deliveryErr, &fixable) {
+		fix = &fixable.fix
+	}
+	if err := d.store.MarkAutomationRunFailed(run.ID, deliveryErr.Error(), fix, diskFull, time.Now()); err != nil {
 		persistErr = errors.Join(persistErr, fmt.Errorf("mark run failed: %w", err))
 	}
 	d.broadcastAutomationsChanged(run.DefinitionID)
@@ -80,6 +85,13 @@ func (d *Daemon) persistAutomationLaunchOutcomes() error {
 	return persistErr
 }
 func (d *Daemon) stopping() bool { return d.life.Ended() }
+
+type fixableAutomationDeliveryError struct {
+	message string
+	fix     store.AutomationRunFix
+}
+
+func (e *fixableAutomationDeliveryError) Error() string { return e.message }
 
 func automationFailureComment(run *store.AutomationRun, message string) string {
 	comment := "Automation delivery failed: " + message

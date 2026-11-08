@@ -61,7 +61,16 @@ func TestACodexAutomationRefusesAFolderTheUserIsNotKnownToTrust(t *testing.T) {
 			if servers := w.CodexServers(); len(servers) != 0 {
 				t.Errorf("app-servers launched = %v, want none", servers)
 			}
+			requireTrustFix(t, app, "codex", repo)
 		})
+	}
+}
+
+func requireTrustFix(t *testing.T, app *testworld.Peer, agent, directory string) {
+	t.Helper()
+	runs := testworld.Request(app, protocol.AutomationRunsGetMessage{Cmd: protocol.CmdAutomationRunsGet, DefinitionID: 1, RequestID: protocol.Ptr("runs")}, protocol.EventAutomationRunsResult, automationAnswer[protocol.AutomationRunsResultMessage]("runs"))
+	if len(runs.Runs) != 1 || runs.Runs[0].Fix == nil || runs.Runs[0].Fix.Agent != agent || runs.Runs[0].Fix.Directory != directory {
+		t.Fatalf("the failed run answered %+v, want a fix opening %s at %s", runs.Runs, agent, directory)
 	}
 }
 

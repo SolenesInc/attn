@@ -1127,7 +1127,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	}
 	defer s.Close()
 
-	if _, err := s.db.Exec(`ALTER TABLE automation_runs ADD COLUMN launched_at TEXT NOT NULL DEFAULT ''`); err != nil {
+	if _, err := s.db.Exec(`ALTER TABLE automation_runs ADD COLUMN launched_at TEXT NOT NULL DEFAULT ''; ALTER TABLE automation_runs ADD COLUMN fix_agent TEXT NOT NULL DEFAULT ''; ALTER TABLE automation_runs ADD COLUMN fix_directory TEXT NOT NULL DEFAULT ''`); err != nil {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
