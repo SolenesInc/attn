@@ -43,8 +43,12 @@ async function main() {
       queueDaemonSettingRestore(observer, 'queue_mode_enabled');
       await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
       profile = (await observer.profileCommand('profile_create', { name: `harness-order-${runner.runId}` })).profile;
+      const selected = observer.waitForMessage((m) => m.event === 'profile_arrangement_changed' && m.profile.id === profile.id && m, 'new profile arrangement');
       await observer.profileCommand('profile_select', { profile_id: profile.id });
       const one = `${profile.id}/desktop_1`;
+      const arrangement = await selected;
+      const [chief, ...unexpected] = arrangement.desktops.filter((d) => d.id !== one).map((d) => d.id);
+      runner.assert(chief && !unexpected.length, 'a new profile starts with desktop 1 and its Chief desktop', arrangement);
       await pressShortcutKeys(client, driver, 'ui.commandPalette');
       await wait('[role="combobox"][aria-label="Commands"]', { focused: true });
       await driver.typeText(`Switch to ${profile.name}`);
@@ -58,8 +62,8 @@ async function main() {
       const named10 = await create(0, 'Review 10');
       const named2 = await create(0, 'review 2');
       const alpha = await create(0, 'Alpha');
-      runner.before = [nine, named10, six, named2, one, alpha];
-      runner.sorted = [one, six, nine, alpha, named2, named10];
+      runner.before = [nine, named10, six, named2, one, chief, alpha];
+      runner.sorted = [one, six, nine, alpha, chief, named2, named10];
       runner.six = six;
       await observer.profileCommand('desktop_set_order', { profile_id: profile.id, desktop_ids: runner.before });
       if (!(await client.request('queue_get_state')).treeDesktopIds.length) {
