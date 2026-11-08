@@ -44,6 +44,8 @@ func (d *Daemon) ensureChief(profileID, key string) error {
 		}
 	} else if _, _, err := d.crewMember(key); err == nil {
 		return nil
+	} else if err := d.store.StartChiefOnOwnDesktop(key); err != nil {
+		return err
 	}
 	member := crew.Member{ID: key, Name: crew.ChiefName, ProfileID: profileID, AwarenessDirs: []string{}, FirstDay: &crew.FirstDay{Onboarding: protocol.OnboardingPathFull}}
 	d.prefillChiefFromLegacySession(&member)
@@ -163,11 +165,12 @@ func (d *Daemon) chiefParty(profileID string) (who.Party, bool) {
 	return who.Member(member.Key), ok && !member.Retired
 }
 
-func (d *Daemon) chiefMailbox(profileID string) who.Address {
-	if member, ok := d.chiefMember(profileID); ok {
-		return who.Member(member.Key).Address()
+func (d *Daemon) chiefMailbox(profileID string) (who.Address, error) {
+	member, ok := d.chiefMember(profileID)
+	if !ok {
+		return who.Address{}, errors.New("this profile has no Chief yet; attn creates it at the next daemon start")
 	}
-	return who.ToChief(profileID)
+	return who.Member(member.Key).Address(), nil
 }
 
 func chiefRefusesRetire(member crew.Member) error {

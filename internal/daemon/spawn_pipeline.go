@@ -125,9 +125,6 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q is not available", requestedAgent)}
 	}
 	isShell := agent == protocol.AgentShellValue
-	if protocol.Deref(msg.ChiefOfStaff) {
-		return nil, &spawnRejection{err: errChiefIsCrewMember}
-	}
 	if host := protocol.Deref(msg.Host); host != "" {
 		if (policy.launchPlacement != nil && policy.launchPlacement.kind == "crew") || d.crewMemberBoundTo(msg.ID) != "" {
 			return nil, &spawnRejection{err: fmt.Errorf("outpost limit: the chief and crew run only at the home, not on %s", host)}

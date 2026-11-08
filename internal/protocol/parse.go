@@ -77,7 +77,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdForwardAnalytics:              decodeInto[ForwardAnalyticsMessage],
 	CmdNotebookFolders:               decodeInto[NotebookFoldersMessage],
 	CmdSeedArtifactTransferHere:      decodeInto[SeedArtifactTransferHereMessage],
-	CmdNotebookGuide:                 decodeInto[NotebookGuideMessage],
 	CmdJournalAppend:                 decodeInto[JournalAppendMessage],
 	CmdNotebookBacklinks:             decodeInto[NotebookBacklinksMessage],
 	CmdTaskList:                      decodeInto[TaskListMessage],
@@ -306,7 +305,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopSetWantedCols:          decodeInto[DesktopSetWantedColsMessage],
 	CmdDesktopPopOutLeaf:             decodeInto[DesktopPopOutLeafMessage],
 	CmdDesktopBringBackLeaf:          decodeInto[DesktopBringBackLeafMessage],
-	CmdSetChiefOfStaff:               decodeInto[SetChiefOfStaffMessage],
 	CmdSetSessionContextWindowCap:    decodeInto[SetSessionContextWindowCapMessage],
 }
 

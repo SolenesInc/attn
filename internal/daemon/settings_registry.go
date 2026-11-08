@@ -33,9 +33,8 @@ func (d *Daemon) on(s *setting.Setting) bool {
 }
 
 var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error{
-	setting.ChiefContextWindowCap: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) },
-	setting.ClaudeExecutable:      func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
-	setting.CodexExecutable:       func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
+	setting.ClaudeExecutable: func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
+	setting.CodexExecutable:  func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
 	setting.ModelTierOverrides: func(d *Daemon, key, value string) error {
 		_, err := modeltiers.ParseOverrides(value)
 		return err

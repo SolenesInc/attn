@@ -356,7 +356,6 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 	}}
 	seedID, toSeed := a.To.TenderOf()
 	memberKey, toMember := a.To.Member()
-	chiefProfileID, toChief := a.To.Chief()
 	switch {
 	case toSeed:
 		seed, _, err := d.readSeed(seedID)
@@ -371,9 +370,6 @@ func (d *Daemon) describeAsk(a store.Ask, parts []protocol.AskPart) (shownAsk, e
 	case toMember:
 		shown.wire.CrewMember = protocol.Ptr(memberKey.String())
 		shown.profileID = d.crewProfileID(memberKey.String())
-	case toChief:
-		shown.wire.Chief = protocol.Ptr(true)
-		shown.profileID = chiefProfileID
 	default:
 		if session := d.store.Get(a.SessionID); session != nil {
 			shown.profileID = session.ProfileID

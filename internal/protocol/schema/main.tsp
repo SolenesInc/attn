@@ -1352,17 +1352,6 @@ model NotebookBacklinksMessage {
   request_id?: string; // set by the WS frontend for result correlation
 }
 
-// Resolve a session's notebook role and root for the agent-launch wrapper. The
-// daemon answers whether the session is the chief of staff and where the notebook
-// root is; the launcher injects the canonical operating guidance from that. This
-// is the one surviving unix-socket notebook command after the user-facing
-// `attn notebook …` subcommands were removed.
-@extension("x-on", #{ home: true })
-model NotebookGuideMessage {
-  cmd: "notebook_guide";
-  session_id?: SessionID; // when set, session_is_chief reflects this session's role
-}
-
 @extension("x-on", #{ home: true })
 model JournalAppendMessage {
   cmd: "journal_append";
@@ -2220,13 +2209,12 @@ model SpawnSessionMessage {
   resume_picker?: boolean;
   priority?: boolean;
   yolo_mode?: boolean;
-  chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: SessionID;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
   executable?: string;         // Generic executable override for selected agent
   claude_executable?: string;  // Backward compatibility
   codex_executable?: string;   // Backward compatibility
-  `model`?: string;            // Pin the launched agent's model; empty = agent default (chief launches fall back to chief_model_<agent>)
+  `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
 }
 
@@ -3834,12 +3822,6 @@ model SetSessionContextWindowCapMessage {
 
 // Assign or remove the instance-wide chief-of-staff role. Assigning a new
 // session transfers the singleton role from the previous holder.
-model SetChiefOfStaffMessage {
-  cmd: "set_chief_of_staff";
-  session_id: SessionID;
-  chief_of_staff: boolean;
-}
-
 // ============================================================================
 // Result/Event Messages (Daemon → Client)
 // ============================================================================
@@ -3941,15 +3923,6 @@ model SessionContextWindowCapResultMessage {
   event: "session_context_window_cap_result";
   session_id: SessionID;
   cap: int32;
-  success: boolean;
-  error?: string;
-}
-
-model ChiefOfStaffResultMessage {
-  event: "chief_of_staff_result";
-  session_id: SessionID;
-  chief_of_staff: boolean;
-  previous_session_id?: SessionID;
   success: boolean;
   error?: string;
 }
@@ -6945,7 +6918,6 @@ model Response {
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
-  notebook_guide?: NotebookGuideResult;
   journal_append_result?: JournalAppendResult;
   activity_status_result?: ActivityStatusResult;
   kept_conversation_list_result?: KeptConversationListResult;
@@ -7984,15 +7956,6 @@ model NotebookEntry {
   size: int32;
 }
 
-// Result of notebook_guide. guidance is the operating rules text; root is the
-// resolved notebook root; session_is_chief is true only when the request's
-// session_id currently holds the chief-of-staff role.
-model NotebookGuideResult {
-  guidance: string;
-  root: string;
-  session_is_chief: boolean;
-}
-
 // One durable task-runner record, surfaced read-only for the task status panel.
 // kind and state are plain strings (the runner persists them as self-describing
 // strings, never Go/TypeSpec enums). The runner's internal Meta bag (transcript
@@ -8680,7 +8643,6 @@ alias DaemonEvent =
   | MigrationResultMessage
   | MigrationChangedMessage
   | RenameResultMessage
-  | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
   | GardenSeedsUpdatedMessage
   | GardenSeedsChangedMessage

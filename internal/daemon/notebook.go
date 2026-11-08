@@ -1,10 +1,8 @@
 package daemon
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -187,26 +185,6 @@ func (d *Daemon) sessionNotebookProfile(sessionID protocol.SessionID) (string, e
 		return "", err
 	}
 	return profile.ID, nil
-}
-
-func (d *Daemon) handleNotebookGuide(conn net.Conn, msg *protocol.NotebookGuideMessage) {
-	sessionID := protocol.TrimID(protocol.Deref(msg.SessionID))
-	profileID, err := d.sessionNotebookProfile(sessionID)
-	if err != nil {
-		d.sendError(conn, "notebook: "+err.Error())
-		return
-	}
-	root, err := d.notebookRoot(profileID)
-	if err != nil {
-		d.sendError(conn, "notebook: "+err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(protocol.Response{
-		Ok: true,
-		NotebookGuide: &protocol.NotebookGuideResult{
-			Root: root,
-		},
-	})
 }
 
 func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path string) {

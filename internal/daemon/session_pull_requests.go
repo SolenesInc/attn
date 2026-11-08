@@ -392,9 +392,6 @@ func (d *Daemon) sessionPullRequestsForSession(session *protocol.Session) []prot
 			addresses = append(addresses, address)
 		}
 	}
-	if protocol.Deref(session.ChiefOfStaff) {
-		addresses = append(addresses, who.ToChief(session.ProfileID))
-	}
 	byPR := d.pullRequestWatchesByPR()
 	bySession := d.store.SessionPullRequestsOf(withWatchHolders([]protocol.SessionID{session.ID}, byPR))
 	return d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(session.ID, addresses, bySession, byPR), addresses, byPR)

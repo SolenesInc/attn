@@ -143,6 +143,12 @@ func (s *Store) CreateChiefMember(profileID, key string) error {
 	})
 }
 
+func (s *Store) StartChiefOnOwnDesktop(key string) error {
+	return s.profilesTx(func(tx *sql.Tx, now string) error {
+		return startOnOwnDesktop(tx, now, "crew", key)
+	})
+}
+
 func (s *Store) DeleteCrewMember(key string) error {
 	return s.profilesTx(func(tx *sql.Tx, _ string) error {
 		_, err := tx.Exec(`DELETE FROM crew_members WHERE member_key = ?`, key)

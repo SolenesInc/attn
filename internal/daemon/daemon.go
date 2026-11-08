@@ -2257,7 +2257,6 @@ func (d *Daemon) recordSessionClose(sessionID protocol.SessionID, closing *proto
 	if unregistered != nil {
 		d.publishFact(FactSessionUnregistered, string(sessionID), unregistered)
 	}
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 	d.crewMemo().forget(sessionID)
 	return nil
@@ -2280,7 +2279,6 @@ func (d *Daemon) removeReapedSession(sessionID protocol.SessionID) {
 	}
 	d.forgetMonitor(sessionID)
 	d.announceClosedAsks(closedAsks)
-	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
 }
 
@@ -2938,8 +2936,6 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdWithdrawVent:
 		d.handleWithdrawVent(conn, msg.(*protocol.WithdrawVentMessage))
 
-	case protocol.CmdNotebookGuide:
-		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
 	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
 	case protocol.CmdUnregister:
@@ -3490,9 +3486,6 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 			addresses := []who.Address{who.ToSession(decorated.ID)}
 			if member, bound := crewBySession[decorated.ID]; bound {
 				addresses = append(addresses, who.Member(member.Key).Address())
-			}
-			if chiefs[decorated.ProfileID] == decorated.ID {
-				addresses = append(addresses, who.ToChief(decorated.ProfileID))
 			}
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(d.sessionPullRequestRecords(decorated.ID, addresses, pullRequestsBySession, pullRequestWatchesByPR), addresses, pullRequestWatchesByPR)
 			out = append(out, *decorated)

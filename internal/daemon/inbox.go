@@ -82,24 +82,9 @@ func (d *Daemon) withdrawFromInbox(to who.Address, kind inbox.Kind, key string) 
 	return nil
 }
 
-// chiefAddressOf is the chief inbox of the profile this session is chief of.
-func (d *Daemon) chiefAddressOf(sessionID protocol.SessionID) (who.Address, bool) {
-	sessionID = protocol.TrimID(sessionID)
-	if sessionID == "" || d.store == nil {
-		return who.Address{}, false
-	}
-	profileID, err := d.store.SessionProfileID(sessionID)
-	if err != nil || profileID == "" || d.chiefOfProfile(profileID) != sessionID {
-		return who.Address{}, false
-	}
-	return who.ToChief(profileID), true
-}
 func (d *Daemon) inboxAddressOf(sessionID protocol.SessionID) who.Address {
 	if member, bound := d.crewMemberBoundToSession(sessionID); bound {
 		return who.Member(member.Key).Address()
-	}
-	if chief, ok := d.chiefAddressOf(sessionID); ok {
-		return chief
 	}
 	return who.ToSession(sessionID)
 }
@@ -108,17 +93,11 @@ func (d *Daemon) inboxRoleAddresses(sessionID protocol.SessionID) []who.Address 
 	if member, bound := d.crewMemberBoundToSession(sessionID); bound {
 		addresses = append(addresses, who.Member(member.Key).Address())
 	}
-	if chief, ok := d.chiefAddressOf(sessionID); ok {
-		addresses = append(addresses, chief)
-	}
 	return addresses
 }
 
 func (d *Daemon) inboxAddressesOf(sessionID protocol.SessionID) ([]who.Address, error) {
 	addresses := []who.Address{who.ToSession(sessionID)}
-	if chief, ok := d.chiefAddressOf(sessionID); ok {
-		addresses = append(addresses, chief)
-	}
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return nil, err

@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"slices"
@@ -276,12 +277,10 @@ func upgradedFromTodaysChief(t *testing.T, directory string, intent store.Launch
 	if err := before.SetLaunchIntent(protocol.SessionID(old), intent); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := before.SetProfileChief(protocol.SessionID(old)); err != nil {
-		t.Fatal(err)
-	}
 	if err := before.Close(); err != nil {
 		t.Fatal(err)
 	}
+	execOnWorldDB(t, w.Dir, `UPDATE profiles SET chief_session_id = ? WHERE id = ?`, old, profiles[0].ID)
 	w.start()
 	return w, old
 }
@@ -474,5 +473,17 @@ func TestChiefSetupThatCannotMoveTheHomeLeavesTheNotebookFolderAndTheChiefAsThey
 		if after := chiefOfRoster(t, crewRoster(t, cli)); after.Agent != nil || after.HomeDir != chief.HomeDir {
 			t.Fatalf("a failed setup changed the Chief: %+v", after)
 		}
+	}
+}
+
+func execOnWorldDB(t *testing.T, dir, statement string, args ...any) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", filepath.Join(dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(statement, args...); err != nil {
+		t.Fatal(err)
 	}
 }

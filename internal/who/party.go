@@ -10,7 +10,6 @@ const (
 	tenderOf
 	user
 	attn
-	chief
 )
 
 type ref struct {
@@ -28,7 +27,6 @@ func Attn() Actor                             { return Actor{ref{kind: attn}} }
 func Session(id protocol.SessionID) Party     { return Party{ref{session, string(id)}} }
 func ToSession(id protocol.SessionID) Address { return Address{ref{session, string(id)}} }
 func ToTenderOf(seedID string) Address        { return Address{ref{tenderOf, seedID}} }
-func ToChief(profileID string) Address        { return Address{ref{chief, profileID}} }
 
 func (p Party) Actor() Actor     { return Actor{p.party} }
 func (p Party) Address() Address { return Address{p.party} }
@@ -74,13 +72,6 @@ func (a Address) Member() (MemberKey, bool) {
 
 func (a Address) TenderOf() (string, bool) {
 	if a.address.kind == tenderOf {
-		return a.address.id, true
-	}
-	return "", false
-}
-
-func (a Address) Chief() (string, bool) {
-	if a.address.kind == chief {
 		return a.address.id, true
 	}
 	return "", false

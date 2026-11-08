@@ -89,7 +89,7 @@ func (d *Daemon) sessionTraitsOf(session *protocol.Session) *analytics.SessionTr
 func (d *Daemon) sessionLaunch(id protocol.SessionID, intent store.LaunchIntent) analytics.Launch {
 	member, crewBound := d.crewMemberBoundToSession(id)
 	switch {
-	case intent.ChiefOfStaff || member.Chief:
+	case member.Chief:
 		return analytics.LaunchChief
 	case crewBound:
 		return analytics.LaunchCrew

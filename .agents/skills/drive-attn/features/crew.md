@@ -29,7 +29,6 @@ a crew member that every profile has.
 - `crew-apply`: put an awake member's saved launch settings and charter into the member's running session. On the same harness, apply reloads the session in place. On a different harness, apply requests a letter. A requested switch shows as `switch_pending` in `attn crew list --json` and in Manage crew until the member files the letter. Saving the running harness back, or a sleep request, cancels the switch.
 - `crew-mailbox`: attn delivers items addressed to a member to the member's current session and wakes the member when it sleeps.
 - `crew-heartbeat`: attn keeps an idle member's cache warm and puts the member to sleep after the user is away.
-- `chief`: retired. Marking a session Chief is refused; the session menu's items, the new-session switch and the `set_chief_of_staff` command go in a later change.
 - `chief-member`: the Chief is a crew member that every profile has. attn creates the Chief at daemon start and with each new profile. On the first start after an upgrade, a profile that had a chief session gets a Chief prefilled from that session. `chief` reaches the Chief under any name. The Chief can't be closed or retired and gets no heartbeat or auto-sleep. It follows the crew's queue rule (`queue_crew_enabled`) and keeps its row. The chief's powers follow the Chief's current session.
 - `chief-slot`: the Chief's row at the top of the sidebar's Crew section, in queue and desktop flow. While the Chief has no harness, the row opens a setup popover (harness, model, effort, Notebook folder), where Enter saves and then wakes. Otherwise the row is the Chief's crew row with one-click wake, Sleep, "Harness and model…" and "Edit charter".
 - `send-to-chief`: hand a seed to the chief, who decides how the seed continues.
@@ -150,7 +149,7 @@ Preconditions:
 - Stack: `cmd/attn/crew_stack_test.go` (`TestCrewCreateRetireAndRestoreCommands`, `TestAClearedMemberKeepsItsDayAcrossADaemonCrash`), `internal/daemon/crew_retired_clear_stack_test.go`, `cmd/attn/handoff_stack_test.go`, `cmd/attn/crew_day_transcript_stack_test.go`, `scripts/verify-handoff.mjs`, `scripts/verify-crew-operating-model.mjs`.
 - Scenario: `crew-management`, `crew-seed-header`, `chief-slot`.
 - Kernel: `internal/crew/lifecycle_test.go`, `internal/crew/priming_test.go`, `internal/crew/prompt_compatibility_test.go`.
-- App: `app/src/App.chiefOfStaff.test.tsx`, `app/src/App.chiefSlot.test.tsx`, `app/src/App.crewCharter.test.tsx`, `app/src/App.crewLaunchSettings.test.tsx`, `app/src/App.crewRoster.test.tsx`, `app/src/App.crewWake.test.tsx`, `app/src/components/CrewPanel.test.tsx`, `app/src/utils/crewName.test.ts`, `app/src/application/useChiefOfStaff.profile.test.tsx`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
+- App: `app/src/App.chiefSlot.test.tsx`, `app/src/App.crewCharter.test.tsx`, `app/src/App.crewLaunchSettings.test.tsx`, `app/src/App.crewRoster.test.tsx`, `app/src/App.crewWake.test.tsx`, `app/src/components/CrewPanel.test.tsx`, `app/src/utils/crewName.test.ts`, `app/src/application/useChiefOfStaff.profile.test.tsx`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
 
 ## Gotchas
 

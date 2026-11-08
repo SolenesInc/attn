@@ -604,56 +604,6 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, members int) (p
 	return profile, closedAsks, nil
 }
 
-func (s *Store) SetProfileChief(sessionID protocol.SessionID) (profiles.Profile, protocol.SessionID, error) {
-	var profile profiles.Profile
-	var previous protocol.SessionID
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var profileID string
-		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ? AND closed_at = ''`, sessionID).Scan(&profileID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return profiles.Errorf(profiles.CodeNotFound, "session %s is not a live agent", sessionID)
-		}
-		if err != nil {
-			return err
-		}
-		if profile, err = loadLiveProfile(tx, profileID); err != nil {
-			return err
-		}
-		previous = profile.ChiefSessionID
-		profile.ChiefSessionID = sessionID
-		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ?`, sessionID, profile.ID)
-		return err
-	})
-	return profile, previous, err
-}
-
-func (s *Store) ClaimProfileChief(profileID string, sessionID protocol.SessionID) (bool, error) {
-	claimed := false
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		result, err := tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ? AND chief_session_id = '' AND deleted_at = ''`, sessionID, profileID)
-		if err != nil {
-			return err
-		}
-		affected, err := result.RowsAffected()
-		claimed = affected == 1
-		return err
-	})
-	return claimed, err
-}
-
-func (s *Store) ClearProfileChief(sessionID protocol.SessionID) (string, error) {
-	var profileID string
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		found, err := rowFound(tx.QueryRow(`SELECT id FROM profiles WHERE chief_session_id = ? AND deleted_at = ''`, sessionID), &profileID)
-		if err != nil || !found {
-			return err
-		}
-		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = '' WHERE id = ?`, profileID)
-		return err
-	})
-	return profileID, err
-}
-
 func (s *Store) ProfileChiefs() (map[string]protocol.SessionID, error) {
 	chiefs := map[string]protocol.SessionID{}
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {

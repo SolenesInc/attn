@@ -92,7 +92,7 @@ func TestWhoCodecMatchesItsTextSpecification(t *testing.T) {
 				t.Fatalf("address accepted %q", text)
 			}
 		}
-		for _, text := range []string{"seed:" + id, "chief:" + id} {
+		for _, text := range []string{"seed:" + id} {
 			a, err := who.ParseAddress(text)
 			if err != nil {
 				t.Fatal(err)

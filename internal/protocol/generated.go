@@ -1930,26 +1930,6 @@ type CheckoutRef struct {
 	Ref string `json:"ref"`
 }
 
-type ChiefOfStaffResultMessage struct {
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff bool `json:"chief_of_staff"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// PreviousSessionID corresponds to the JSON schema field "previous_session_id".
-	PreviousSessionID *SessionID `json:"previous_session_id,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type ClaudeModReachChange string
 
 const ClaudeModReachChangeChanged ClaudeModReachChange = "changed"
@@ -7090,25 +7070,6 @@ type NotebookFoldersMessage struct {
 	Folders []NotebookSyncFolder `json:"folders"`
 }
 
-type NotebookGuideMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
-}
-
-type NotebookGuideResult struct {
-	// Guidance corresponds to the JSON schema field "guidance".
-	Guidance string `json:"guidance"`
-
-	// Root corresponds to the JSON schema field "root".
-	Root string `json:"root"`
-
-	// SessionIsChief corresponds to the JSON schema field "session_is_chief".
-	SessionIsChief bool `json:"session_is_chief"`
-}
-
 type NotebookSyncFolder struct {
 	// Epoch corresponds to the JSON schema field "epoch".
 	Epoch string `json:"epoch"`
@@ -9225,9 +9186,6 @@ type Response struct {
 	// KeptConversationListResult corresponds to the JSON schema field
 	// "kept_conversation_list_result".
 	KeptConversationListResult *KeptConversationListResult `json:"kept_conversation_list_result,omitempty,omitzero"`
-
-	// NotebookGuide corresponds to the JSON schema field "notebook_guide".
-	NotebookGuide *NotebookGuideResult `json:"notebook_guide,omitempty,omitzero"`
 
 	// Ok corresponds to the JSON schema field "ok".
 	Ok bool `json:"ok"`
@@ -12573,17 +12531,6 @@ type SessionsUpdatedMessage struct {
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
 }
 
-type SetChiefOfStaffMessage struct {
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff bool `json:"chief_of_staff"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID SessionID `json:"session_id"`
-}
-
 type SetClientPresenceMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -12943,9 +12890,6 @@ type SpawnResultMessage struct {
 type SpawnSessionMessage struct {
 	// Agent corresponds to the JSON schema field "agent".
 	Agent string `json:"agent"`
-
-	// ChiefOfStaff corresponds to the JSON schema field "chief_of_staff".
-	ChiefOfStaff *bool `json:"chief_of_staff,omitempty,omitzero"`
 
 	// ClaudeExecutable corresponds to the JSON schema field "claude_executable".
 	ClaudeExecutable *string `json:"claude_executable,omitempty,omitzero"`

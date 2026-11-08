@@ -86,7 +86,6 @@ type LaunchIntent struct {
 	Executable       string                              `json:"executable,omitempty"`
 	Model            string                              `json:"model,omitempty"`
 	Effort           string                              `json:"effort,omitempty"`
-	ChiefOfStaff     bool                                `json:"chief_of_staff,omitempty"`
 	Asks             bool                                `json:"asks,omitempty"`
 	Vent             bool                                `json:"vent,omitempty"`
 	ToolVents        bool                                `json:"tool_vents,omitempty"`

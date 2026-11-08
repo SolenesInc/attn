@@ -53,9 +53,6 @@ func (d *Daemon) applySetting(_ context.Context, msg protocol.SetSettingMessage)
 	if err != nil {
 		return nil, err
 	}
-	if err := refuseRetiredChiefSetting(spec, msg.Key); err != nil {
-		return nil, err
-	}
 	if err := validateSetting(d, spec, msg.Key, msg.Value); err != nil {
 		return nil, err
 	}
