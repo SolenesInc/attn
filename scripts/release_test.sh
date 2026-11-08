@@ -28,11 +28,11 @@ case "$1 $2" in
     printf '%s' "${FAKE_ACTIVE_CANDIDATE:-}"
     ;;
   "api --method")
-    if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != "missing" ]]; then
-      printf '%s\t%s\t%s\t%s\n' "$FAKE_ACCEPTANCE_SHA" \
-        "${FAKE_ACCEPTANCE_STATUS:-completed}" \
-        "${FAKE_ACCEPTANCE_CONCLUSION:-success}" \
-        'https://github.com/example/attn/actions/runs/42/job/7'
+    args="$*"
+    commit="${args#*commits/}"
+    commit="${commit%%/*}"
+    if [[ "${FAKE_ACCEPTANCE_MODE:-success}" != "missing" && " ${FAKE_ACCEPTANCE_RED:-} " != *" $commit "* ]]; then
+      printf '%s\n' 'https://github.com/example/attn/actions/runs/42/job/7'
     fi
     ;;
   "pr create")
@@ -111,14 +111,12 @@ export FAKE_PR_BODY="$work/pr-body.md"
 export FAKE_CLAUDE_ARGC="$work/claude-argc.txt"
 export FAKE_CLAUDE_INPUT="$work/claude-input.txt"
 export FAKE_ACCEPTANCE_MODE=success
-export FAKE_ACCEPTANCE_STATUS=completed
-export FAKE_ACCEPTANCE_CONCLUSION=success
+export FAKE_ACCEPTANCE_RED=
 export FAKE_ACTIVE_CANDIDATE=
 
 run_release() (
   cd "$fixture_repo"
-  acceptance_sha="${FAKE_ACCEPTANCE_SHA_OVERRIDE:-$(git rev-parse origin/main)}"
-  FAKE_ACCEPTANCE_SHA="$acceptance_sha" "$release_script" "$@"
+  "$release_script" "$@"
 )
 
 expect_failure() {
@@ -148,16 +146,8 @@ expect_failure 'working tree must be clean' run_release v99.98.97
 rm "$fixture_repo/untracked.txt"
 
 export FAKE_ACCEPTANCE_MODE=missing
-expect_failure 'has no Acceptance check' run_release v99.98.97
+expect_failure 'has green Acceptance' run_release v99.98.97
 export FAKE_ACCEPTANCE_MODE=success
-
-export FAKE_ACCEPTANCE_SHA_OVERRIDE=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-expect_failure 'Acceptance belongs to' run_release v99.98.97
-export FAKE_ACCEPTANCE_SHA_OVERRIDE=
-
-export FAKE_ACCEPTANCE_CONCLUSION=failure
-expect_failure 'Acceptance is completed/failure' run_release v99.98.97
-export FAKE_ACCEPTANCE_CONCLUSION=success
 
 export FAKE_ACTIVE_CANDIDATE=$'release/v99.0.0\thttps://github.com/example/attn/pull/109'
 expect_failure 'another release candidate is open' run_release v99.98.97
@@ -181,9 +171,22 @@ expect_failure 'local main is not origin/main' run_release v99.98.97
 git -C "$fixture_repo" merge -q --ff-only origin/main
 
 main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
-expect_failure "wait until reviewed reaches $main_sha" run_release v99.98.97
-grep -Fq "reviewed: $(git --git-dir="$fixture_origin" rev-parse reviewed)" "$work/failure.out"
+reviewed_sha="$(git --git-dir="$fixture_origin" rev-parse reviewed)"
+run_release v99.98.97 --dry-run >"$work/unreviewed-head.out"
+grep -Fq "accepted main: $reviewed_sha" "$work/unreviewed-head.out"
 git --git-dir="$fixture_origin" update-ref refs/heads/reviewed "$main_sha"
+
+export FAKE_ACCEPTANCE_RED="$main_sha"
+run_release v99.98.97 --dry-run >"$work/red-head.out"
+grep -Fq "accepted main: $reviewed_sha" "$work/red-head.out"
+export FAKE_ACCEPTANCE_RED=
+
+printf '%s\n' newer >"$work/updater/newer.txt"
+git -C "$work/updater" add newer.txt
+git -C "$work/updater" commit -q -m 'fix(release): move main past the reviewed commit'
+git -C "$work/updater" push -q origin main
+git -C "$fixture_repo" fetch -q origin main
+git -C "$fixture_repo" merge -q --ff-only origin/main
 
 # Historical tag drift must not block an unrelated candidate. Release
 # preparation reads the requested remote tag and leaves local history alone.
@@ -254,5 +257,13 @@ unset FAKE_CLAUDE_FAIL
 [[ "$(git -C "$fixture_repo" branch --show-current)" == main ]]
 [[ -z "$(git -C "$fixture_repo" status --porcelain)" ]]
 [[ "$(git -C "$fixture_repo" worktree list | wc -l | tr -d ' ')" == 1 ]]
+
+setup_fixture unreviewed-release
+printf 'version: 99.98.97\nmain_sha: %s\n' "$(git -C "$fixture_repo" rev-parse HEAD)" \
+  >"$fixture_repo/.github/release-candidate.yml"
+git -C "$fixture_repo" add .github/release-candidate.yml
+git -C "$fixture_repo" commit -q -m 'chore(release): prepare v99.98.97'
+git -C "$fixture_repo" push -q origin main
+expect_failure 'does not contain the previous release commit' run_release v99.98.98 --dry-run
 
 echo "release preparation: OK"

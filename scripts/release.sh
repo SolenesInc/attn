@@ -8,8 +8,8 @@ usage() {
 usage: $0 <version-tag> [--dry-run]
 example: $0 v0.12.0
 
-Cut release/vX.Y.Z from the accepted and reviewed ${remote}/main head,
-compile its changelog, bump versions, write the release manifest, and open a
+Cut release/vX.Y.Z from the newest ${remote}/main commit that has green
+Acceptance and that ${remote}/reviewed contains, compile its changelog, bump versions, write the release manifest, and open a
 PR to main.
 Once merged, Acceptance on the release commit tags and publishes it. This
 command never merges, tags, or starts a release.
@@ -72,23 +72,15 @@ fi
 
 echo "Fetching ${remote}/main and ${remote}/reviewed..."
 git fetch --no-tags "$remote" main reviewed
-main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
-reviewed_sha="$(git rev-parse --verify "${remote}/reviewed^{commit}")"
+current_main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
 local_sha="$(git rev-parse --verify HEAD)"
 release_branch="release/${version_tag}"
 
-if [[ "$local_sha" != "$main_sha" ]]; then
+if [[ "$local_sha" != "$current_main_sha" ]]; then
   echo "prepare release: local main is not ${remote}/main" >&2
   echo "local:  ${local_sha}" >&2
-  echo "remote: ${main_sha}" >&2
-  echo "fast-forward main and wait for Acceptance on the new head" >&2
-  exit 1
-fi
-if ! git merge-base --is-ancestor "$main_sha" "$reviewed_sha"; then
-  echo "prepare release: ${remote}/reviewed does not contain ${remote}/main" >&2
-  echo "main:     ${main_sha}" >&2
-  echo "reviewed: ${reviewed_sha}" >&2
-  echo "run the review-main skill, or wait until reviewed reaches ${main_sha}" >&2
+  echo "remote: ${current_main_sha}" >&2
+  echo "fast-forward main and run this again" >&2
   exit 1
 fi
 require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
@@ -105,23 +97,34 @@ if [[ -n "$candidate_prs" ]]; then
   exit 1
 fi
 
-acceptance="$(
-  gh api --method GET \
-    "repos/{owner}/{repo}/commits/${main_sha}/check-runs?check_name=Acceptance&filter=latest" \
-    --jq '.check_runs | map(select(.name == "Acceptance" and .app.slug == "github-actions")) | sort_by(.started_at) | last | select(.) | [.head_sha, .status, (.conclusion // ""), .html_url] | @tsv'
+reviewed_main_sha="$(git merge-base "${remote}/main" "${remote}/reviewed")"
+manifest=.github/release-candidate.yml
+if [[ "$(git rev-parse "${remote}/main:${manifest}")" != "$(git rev-parse "${reviewed_main_sha}:${manifest}")" ]]; then
+  echo "prepare release: ${remote}/reviewed does not contain the previous release commit" >&2
+  echo "reviewed: ${reviewed_main_sha}" >&2
+  echo "run the review-main skill, or wait until reviewed contains it" >&2
+  exit 1
+fi
+previous_release_sha="$(
+  git show "${reviewed_main_sha}:${manifest}" |
+    awk '$1 == "main_sha:" { print $2 }'
 )"
-if [[ -z "$acceptance" ]]; then
-  echo "prepare release: ${main_sha} has no Acceptance check" >&2
-  exit 1
-fi
-IFS=$'\t' read -r acceptance_sha acceptance_status acceptance_conclusion acceptance_url <<<"$acceptance"
-if [[ "$acceptance_sha" != "$main_sha" ]]; then
-  echo "prepare release: Acceptance belongs to ${acceptance_sha}, expected ${main_sha}" >&2
-  exit 1
-fi
-if [[ "$acceptance_status" != "completed" || "$acceptance_conclusion" != "success" ]]; then
-  echo "prepare release: Acceptance is ${acceptance_status}/${acceptance_conclusion:-none}" >&2
-  echo "${acceptance_url}" >&2
+main_sha=""
+acceptance_url=""
+for commit in $(git rev-list --first-parent "${previous_release_sha}..${reviewed_main_sha}"); do
+  acceptance_url="$(
+    gh api --method GET \
+      "repos/{owner}/{repo}/commits/${commit}/check-runs?check_name=Acceptance&filter=latest" \
+      --jq '.check_runs | map(select(.name == "Acceptance" and .app.slug == "github-actions")) | sort_by(.started_at) | last | select(.status == "completed" and .conclusion == "success") | .html_url'
+  )"
+  if [[ -n "$acceptance_url" ]]; then
+    main_sha="$commit"
+    break
+  fi
+done
+if [[ -z "$main_sha" ]]; then
+  echo "prepare release: no commit in ${previous_release_sha:0:12}..${reviewed_main_sha:0:12} has green Acceptance" >&2
+  echo "run the review-main skill, or wait for a reviewed commit to pass Acceptance" >&2
   exit 1
 fi
 
@@ -170,15 +173,8 @@ git add -A CHANGELOG.md .github/release-candidate.yml \
 git commit -m "chore(release): prepare ${version_tag}"
 candidate_sha="$(git rev-parse HEAD)"
 
-echo "Rechecking main before publishing..."
+echo "Rechecking release state before publishing..."
 git fetch --no-tags "$remote" main
-current_main_sha="$(git rev-parse --verify "${remote}/main^{commit}")"
-if [[ "$current_main_sha" != "$main_sha" ]]; then
-  echo "prepare release: main moved during preparation" >&2
-  echo "recorded: ${main_sha}" >&2
-  echo "current:  ${current_main_sha}" >&2
-  exit 1
-fi
 require_remote_tag_absent "$remote" "$version_tag" "prepare release" \
   "tag ${version_tag} appeared during preparation"
 candidate_prs="$(bash "$script_root/open-release-candidates.sh")"
@@ -189,7 +185,7 @@ if [[ -n "$candidate_prs" ]]; then
 fi
 
 go run ./cmd/release-train candidate validate \
-  --current-main "$main_sha" \
+  --current-main "${remote}/main" \
   --head "$candidate_sha" \
   --tag-status absent \
   --other-open-candidates 0

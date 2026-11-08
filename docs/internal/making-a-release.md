@@ -20,28 +20,30 @@ them, and the next release deletes the fragments.
 
 ## Release
 
-Run this from a clean, current `main` whose head has green Acceptance and is
-contained in `reviewed`:
+Run this from a clean, current `main`:
 
 ```bash
 ./scripts/release.sh vX.Y.Z
 ```
 
-When `reviewed` does not contain the head yet, the script stops. Run the
+The script cuts `release/vX.Y.Z` from the newest `main` commit that has green
+Acceptance and that `reviewed` contains, so landings do not have to pause. It
+stops when no commit since the last release qualifies, or when `reviewed` does
+not yet contain the previous release commit. Then run the
 `review-main` skill, or wait for the review automation to move `reviewed`.
-Otherwise the script cuts `release/vX.Y.Z` from that commit, compiles the
-commits since the last release into `CHANGELOG.md`, bumps every version, and
-opens a PR to `main`. Merge the PR once `PR gate` and `App acceptance` are
-green. The merged commit is the release commit. CI on `main` runs one push at a
+
+The script compiles the commits since the last release into `CHANGELOG.md`,
+bumps every version, and opens a PR to `main`. Merge the PR once `PR gate` and
+`App acceptance` are green. The merged commit is the release commit. CI on `main` runs one push at a
 time and drops a waiting push when a newer one arrives, but the release commit
 gets a run of its own that later landings cannot drop. CI tags and publishes
 the release commit once both hold: its Acceptance is green and `reviewed`
 contains it. Whichever happens last triggers the publish: CI finishing on the release
 commit, or a review moving `reviewed` to contain it.
 
-`main` may keep moving while the release PR is open. Changes that land after
-the release was cut ship in the release, but this release's notes do not list
-them. The next release's notes do. The review automation reviews these changes
+`main` may have moved past that commit, and may keep moving while the release
+PR is open. Commits after that commit ship in the release, but this release's
+notes do not list them. The next release's notes do. The review automation reviews these changes
 together with the release commit before the release ships.
 
 If the automated app acceptance cannot cover the release PR or the merged
