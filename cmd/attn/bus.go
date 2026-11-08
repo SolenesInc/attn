@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -254,7 +253,7 @@ func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 	if len(s.Producers) > 0 {
 		fmt.Fprintf(w, "\nproducers (rates per hour over the last %s and %s):\n",
 			humanAge(bus.RecentWindow), humanAge(bus.BaselineWindow))
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		tw := newTableWriter(w)
 		fmt.Fprintln(tw, "FACT\tEVENTS\tSHARE\tSUBJECTS\tBYTES\t1H/H\t24H/H")
 		shown := s.Producers
 		if len(shown) > busProducerLines {
@@ -287,7 +286,7 @@ func writeBusStatus(w io.Writer, s bus.Status, now time.Time) {
 		fmt.Fprintln(w, "no registered consumers: every subscriber on this bus is ephemeral,")
 		fmt.Fprintln(w, "so nothing holds a cursor and nothing pins retention.")
 	} else {
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		tw := newTableWriter(w)
 		fmt.Fprintln(tw, "CONSUMER\tCURSOR\tLAG\tOLDEST UNREAD\tENABLED\tFILTER")
 		for _, c := range s.Consumers {
 			name := c.Name

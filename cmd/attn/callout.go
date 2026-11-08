@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -89,7 +88,7 @@ func executeCallout(args []string, stdout, stderr io.Writer) int {
 			return fail(err)
 		}
 	} else {
-		w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+		w := newTableWriter(stdout)
 		for _, anchor := range result.Anchors {
 			visibility := ""
 			if anchor.OnScreen != nil {

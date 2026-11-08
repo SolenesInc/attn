@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
@@ -128,7 +127,7 @@ func runSettings() {
 	if reason := protocol.Deref(result.ProfileUnresolved); reason != "" {
 		fmt.Fprintln(os.Stderr, "settings: profile settings left out: "+reason)
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(os.Stdout)
 	if *features {
 		values := map[string]string{}
 		for _, entry := range result.Entries {

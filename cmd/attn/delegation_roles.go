@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/delegationprefs"
@@ -185,7 +184,7 @@ func writeDelegationTable(w io.Writer, cfg protocol.DelegationPreferences) {
 		state, offered = "off: agents choose harness and model themselves", 0
 	}
 	fmt.Fprintf(w, "delegation roles %s · revision %d · %d of %d roles offered to agents\n\n", state, cfg.Revision, offered, len(cfg.Roles))
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := newTableWriter(w)
 	for _, role := range prompts.ExpandDelegationRoles(cfg.Roles) {
 		var tags []string
 		if role.Builtin != nil {

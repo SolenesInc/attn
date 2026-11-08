@@ -8,7 +8,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -194,7 +193,7 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 	}
 
 	verdicts := sessionReopenVerdictsByID(result.Reopen)
-	table := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	table := newTableWriter(w)
 	header := "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tLABEL"
 	if args.reopen {
 		header = "ID\tAGENT\tSTATE\tSNOOZED UNTIL\tWHEN\tCLOSED BY\tREOPEN\tLABEL"

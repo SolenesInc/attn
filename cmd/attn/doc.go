@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -205,7 +204,7 @@ func runDocCollections(args []string) {
 		fmt.Println("no collections declared")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(os.Stdout)
 	fmt.Fprintln(w, "NAMESPACE\tCOLLECTION\tINDEXED FIELDS")
 	for _, c := range result.Collections {
 		names := make([]string, 0, len(c.Fields))
@@ -523,7 +522,7 @@ func printDocuments(docs []protocol.StoredDocument, asJSON bool) {
 		fmt.Println("no documents")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(os.Stdout)
 	fmt.Fprintln(w, "ID\tREV\tUPDATED\tBODY")
 	for _, doc := range docs {
 		fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", doc.ID, doc.Rev, doc.UpdatedAt, doc.Body)

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -210,7 +209,7 @@ func printSessionPRs(pullRequests []protocol.SessionPullRequest, owner prListOwn
 		}
 		return 0
 	}
-	w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(stdout)
 	fmt.Fprintln(w, "PULL REQUEST\tSTATE\tMODE\tREADINESS\tHEALTH\tURL")
 	for _, pr := range entries {
 		fmt.Fprintf(w, "%s#%d\t%s\t%s\t%s\t%s\t%s\n",

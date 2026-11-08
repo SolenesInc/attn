@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -164,7 +163,7 @@ func writeCodexStatus(w io.Writer, result *protocol.CodexStatusResult, names map
 		}
 		return string(id)
 	}
-	table := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	table := newTableWriter(w)
 	defer table.Flush()
 	fmt.Fprintf(table, "profile\t%s\n", result.ProfileName)
 	fmt.Fprintf(table, "codex\t%s\n", result.Executable)

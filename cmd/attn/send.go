@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/client"
@@ -233,7 +232,7 @@ func executeSendSenders(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, "No paired senders. Pair one with attn send pair --name <name>.")
 		return 0
 	}
-	table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	table := newTableWriter(stdout)
 	fmt.Fprintln(table, "NAME\tPAIRED\tLAST USED\tID")
 	for _, s := range senders {
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", s.Name, s.CreatedAt, orDash(protocol.Deref(s.LastUsedAt)), s.ID)
@@ -288,7 +287,7 @@ func executeSendSessions(args []string, stdin io.Reader, stdout, stderr io.Write
 		fmt.Fprintln(stdout, "No live sessions in this sender's profile.")
 		return 0
 	}
-	table := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	table := newTableWriter(stdout)
 	fmt.Fprintln(table, "ID\tAGENT\tSTATE\tHOST\tLAST FOCUSED\tLABEL")
 	for _, s := range sessions {
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\t%s\n", s.ID, s.Agent, s.State, orDash(protocol.Deref(s.Host)), orDash(protocol.Deref(s.LastFocusedAt)), s.Label)

@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 
 	"github.com/victorarias/attn/internal/client"
@@ -379,7 +378,7 @@ func executeTerminal(ctx context.Context, cli *client.Client, caller protocol.Se
 	} else {
 		switch args.action {
 		case "ls":
-			w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+			w := newTableWriter(os.Stdout)
 			fmt.Fprintln(w, "ID\tNAME\tAGENT\tSTATE\tDESKTOP\tPOSITION\tOPENED BY")
 			for _, entry := range response.TerminalEntries {
 				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", entry.ShortID, entry.Name, entry.Agent, entry.State, entry.DesktopLabel, protocol.Deref(entry.Position), protocol.Deref(entry.OpenedBy))

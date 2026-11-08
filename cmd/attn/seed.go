@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"text/tabwriter"
 	"time"
 	"unicode/utf8"
 
@@ -847,7 +846,7 @@ func runSeedList(args []string) {
 		fmt.Println("the garden is empty — `attn seed plant \"what this is\"` puts something in it")
 		return
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(os.Stdout)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tTENDER\tPLANTED\tTITLE")
 	for _, row := range seedRows(result.Seeds, f.flat || plotID != "") {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s%s%s\n",
@@ -964,7 +963,7 @@ func fprintSeedReview(w io.Writer, review protocol.GardenReview, detailed bool) 
 
 	if !detailed {
 		fmt.Fprintln(w)
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		tw := newTableWriter(w)
 		fmt.Fprintln(tw, "SEED\tSTATUS\tRECOMMENDATION\tTITLE")
 		for _, item := range review.Items {
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", item.SeedID, item.Status,
@@ -1110,7 +1109,7 @@ func runSeedPlot(args []string) {
 		return
 	}
 	fmt.Println(seedLine(result.Crown.ID, result.Crown.StepSlug, result.Crown.Title))
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := newTableWriter(os.Stdout)
 	for _, child := range result.Children {
 		fmt.Fprintf(w, "  %s\t%s\t%s\n", child.ID, child.StepSlug, child.Title)
 	}
@@ -1669,7 +1668,7 @@ func fprintBoard(out io.Writer, plotID string, board []protocol.SeedBoardRow, cl
 	}
 	fmt.Fprintln(out)
 	fmt.Fprintf(out, "board  %d open\n", len(board))
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	w := newTableWriter(out)
 	for _, row := range board {
 		child := row.Seed
 		status := child.Status
@@ -1778,7 +1777,7 @@ func fprintHandoff(w io.Writer, handoff *protocol.SeedNote) {
 }
 
 func fprintRelations(out io.Writer, relations []protocol.SeedRelation) {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	w := newTableWriter(out)
 	for _, relation := range relations {
 		tally := ""
 		if relation.Checks != nil {
@@ -1844,7 +1843,7 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 		return
 	}
 	handoffs := freshestHandoffs(result.Handoffs)
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	w := newTableWriter(out)
 	fmt.Fprintln(w, "ID\tSLUG\tSTATUS\tPLANTED\tTITLE")
 	rows := make([]seedRow, 0, len(result.Plots)+len(result.Seeds))
 	if result.Scope == "garden" && len(result.Plots) > 0 {
@@ -1897,7 +1896,7 @@ func readyScopeName(result *protocol.SeedReadyResult) string {
 }
 
 func fprintSeedHeader(out io.Writer, seed protocol.Seed, watching bool) {
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	w := newTableWriter(out)
 	fmt.Fprintf(w, "%s\t%s\n", seed.ID, seed.Title)
 	fmt.Fprintf(w, "slug\t%s\n", seed.StepSlug)
 	fmt.Fprintf(w, "status\t%s\n", seed.Status)
@@ -2064,7 +2063,7 @@ func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
 	}
 	fmt.Fprintf(out, "this unblocked %d seed(s):\n", len(seeds))
 	free := false
-	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	w := newTableWriter(out)
 	for _, seed := range seeds {
 		tender := partyLabel(seed.Tender)
 		held := ""

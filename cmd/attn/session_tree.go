@@ -5,7 +5,6 @@ import (
 	"io"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
@@ -106,7 +105,7 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 		}
 	}
 	var profile string
-	var table *tabwriter.Writer
+	var table *tableWriter
 	for _, root := range roots {
 		if table == nil || root.session.ProfileID != profile {
 			if table != nil {
@@ -115,7 +114,7 @@ func runSessionTree(w io.Writer, cli *client.Client, profileID string) error {
 			}
 			profile = root.session.ProfileID
 			fmt.Fprintf(w, "%s (%s)\n", profiles[profile], profile)
-			table = tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+			table = newTableWriter(w)
 			fmt.Fprintln(table, "SESSION\tAGENT\tSTATE\tTURN\tSEED")
 		}
 		fprintSessionTreeNode(table, root, "", "")
