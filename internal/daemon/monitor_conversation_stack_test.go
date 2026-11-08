@@ -308,7 +308,7 @@ func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	agent.Prompted()
 	original := agent.ConversationID
 	agent.Reply("First question? <!-- attn:state=waiting_input -->")
-	initial := testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
+	testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
 	app.TypeLine(first, "/new")
 	agent.Prompted()
 	outcome.Await()
@@ -322,12 +322,14 @@ func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	if string(back.ID) != first {
 		t.Fatalf("resume shows %s, want %s", back.ID, first)
 	}
-	mark := len(app.Log())
+	prompting := len(app.Log())
 	app.TypeLine(first, "continue the original conversation")
 	agent.Prompted()
+	testworld.AwaitSessionSince(app, prompting, first, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+	replying := len(app.Log())
 	agent.Reply("Second question? <!-- attn:state=waiting_input -->")
-	current := testworld.AwaitSessionSince(app, mark, first, func(x protocol.Session) bool {
-		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.LastModelRequestAt) != protocol.Deref(initial.LastModelRequestAt)
+	current := testworld.AwaitSessionSince(app, replying, first, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput
 	})
 	if !protocol.Deref(current.TurnOwed) {
 		t.Fatal("the resumed conversation lost its turn before the outcome")
