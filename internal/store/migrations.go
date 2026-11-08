@@ -31,7 +31,15 @@ var migrationFilename = sync.OnceValue(func() *regexp.Regexp {
 	return regexp.MustCompile(`^([0-9]{14}|[0-9]{16})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
 })
 
-var timestampedMigrations = loadSQLMigrations()
+var goMigrations []migration
+
+var timestampedMigrations = sync.OnceValue(func() []migration {
+	all := loadSQLMigrations()
+	for _, m := range goMigrations {
+		all = appendMigration(all, m)
+	}
+	return all
+})
 
 type migration struct {
 	version int
@@ -103,7 +111,7 @@ func parseMigrationID(raw string) (int, error) {
 }
 
 func registerMigration(m migration) {
-	timestampedMigrations = appendMigration(timestampedMigrations, m)
+	goMigrations = append(goMigrations, m)
 }
 
 func appendMigration(all []migration, m migration) []migration {
@@ -125,7 +133,7 @@ func appendMigration(all []migration, m migration) []migration {
 }
 
 func allMigrations() []migration {
-	all := append(append([]migration(nil), migrations...), timestampedMigrations...)
+	all := append(append([]migration(nil), migrations...), timestampedMigrations()...)
 	sort.Slice(all, func(i, j int) bool { return all[i].version < all[j].version })
 	return all
 }

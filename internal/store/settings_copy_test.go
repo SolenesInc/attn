@@ -80,7 +80,7 @@ func TestCopiedRowsRefuseEverySQLWriteOutsideTheCopyApplier(t *testing.T) {
 func TestHomeSettingsUpgradePreservesPreviousDatabaseAndOutbox(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "previous.db")
 	previous := 1792879590336371
-	for _, migration := range timestampedMigrations {
+	for _, migration := range timestampedMigrations() {
 		if migration.version < 1793074357713072 && migration.version > previous {
 			previous = migration.version
 		}

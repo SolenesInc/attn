@@ -15,12 +15,13 @@ func withMigrationsThrough(version int, run func() error) error {
 	all := migrations
 	timestamps := timestampedMigrations
 	defer func() { migrations = all; timestampedMigrations = timestamps }()
-	timestampedMigrations = nil
-	for _, m := range timestamps {
+	var through []migration
+	for _, m := range timestamps() {
 		if m.version <= version {
-			timestampedMigrations = append(timestampedMigrations, m)
+			through = append(through, m)
 		}
 	}
+	timestampedMigrations = func() []migration { return through }
 	for i, m := range all {
 		if m.version > version {
 			migrations = all[:i]
@@ -28,6 +29,14 @@ func withMigrationsThrough(version int, run func() error) error {
 		}
 	}
 	return run()
+}
+
+func registerOnlyTestMigrations(t *testing.T) func(migration) {
+	original := timestampedMigrations
+	t.Cleanup(func() { timestampedMigrations = original })
+	var registered []migration
+	timestampedMigrations = func() []migration { return registered }
+	return func(m migration) { registered = appendMigration(registered, m) }
 }
 
 func creatingDBThrough(version int, create func() error) error {

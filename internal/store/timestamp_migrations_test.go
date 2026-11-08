@@ -25,10 +25,8 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 	newer := migration{version: int(stamp.Add(time.Microsecond).UnixMicro()), desc: "newer sessions column", sql: `ALTER TABLE sessions ADD COLUMN newer_column TEXT NOT NULL DEFAULT 'newer'`}
 	for _, first := range []migration{older, newer} {
 		t.Run(first.desc, func(t *testing.T) {
-			original := timestampedMigrations
-			defer func() { timestampedMigrations = original }()
-			timestampedMigrations = nil
-			registerMigration(first)
+			register := registerOnlyTestMigrations(t)
+			register(first)
 			path := filepath.Join(t.TempDir(), "attn.db")
 			db, err := OpenDBAtSchemaVersion(path, first.version)
 			if err != nil {
@@ -42,7 +40,7 @@ func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
 			if first.version == older.version {
 				second = newer
 			}
-			registerMigration(second)
+			register(second)
 			current, err := OpenCurrent(path)
 			if current != nil {
 				current.Close()
@@ -120,17 +118,15 @@ func TestLegacyMigrationRowGapsDoNotReplayAppliedMigrations(t *testing.T) {
 }
 
 func TestFailedTimestampedUpgradeRollsBackAllPendingWork(t *testing.T) {
-	original := timestampedMigrations
-	defer func() { timestampedMigrations = original }()
-	timestampedMigrations = nil
+	register := registerOnlyTestMigrations(t)
 	path := filepath.Join(t.TempDir(), "attn.db")
 	db, err := OpenDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
-	registerMigration(migration{version: 20261005210200, desc: "first pending column", sql: `ALTER TABLE sessions ADD COLUMN rollback_column TEXT`})
-	registerMigration(migration{version: 20261005210300, desc: "failing pending column", sql: `ALTER TABLE absent_table ADD COLUMN failure TEXT`})
+	register(migration{version: 20261005210200, desc: "first pending column", sql: `ALTER TABLE sessions ADD COLUMN rollback_column TEXT`})
+	register(migration{version: 20261005210300, desc: "failing pending column", sql: `ALTER TABLE absent_table ADD COLUMN failure TEXT`})
 	s, upgrade, err := Open(path)
 	if s != nil {
 		s.Close()
