@@ -116,7 +116,7 @@ export function AppSurface() {
                   <div className="app-frame">
                     <AppSidebar />
                     <div className="view-stack">
-                      {/* Always rendered; shown/hidden via z-index. */}
+                      {/* Always rendered, to keep its scroll position. */}
                       <AppDashboard />
                       {/* Always rendered, to keep terminals alive. */}
                       <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>

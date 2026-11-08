@@ -312,6 +312,7 @@ html, body, #root {
 .view-container.hidden {
   z-index: 0;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .view-container.visible {
