@@ -343,9 +343,22 @@
 }
 
 .card-body {
+  --width-past-webkit-tiling-limit: 4200px;
+  position: relative;
   padding: 12px;
+  overflow-x: hidden;
   overflow-y: auto;
   flex: 1;
+}
+
+.card-body::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--width-past-webkit-tiling-limit);
+  height: 1px;
+  pointer-events: none;
 }
 
 .card-empty {
