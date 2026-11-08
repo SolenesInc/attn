@@ -167,7 +167,7 @@ for (const selection of ['rail', 'spotlight'] as const) {
         dot: opacity(header.querySelector('.state-indicator')),
         askOpacity: opacity(header.querySelector('.pane-ask-chip')),
         settling: opacity(header.querySelector('.settling-header')),
-        body: opacity(pane.querySelector('.desktop-pane-body')),
+        bodyVeil: Number(getComputedStyle(pane.querySelector('.desktop-pane-body')!, '::after').opacity),
         subline: opacity(header.querySelector('.desktop-pane-subline')),
         titleIsSecondary: getComputedStyle(header.querySelector('.desktop-pane-title')!).color === secondary,
         geometry: {
@@ -182,11 +182,11 @@ for (const selection of ['rail', 'spotlight'] as const) {
 
     const active = await look('pane-release');
     expect(active).toMatchObject({
-      dot: 1, askOpacity: 1, settling: 1, body: 1, subline: 1, titleIsSecondary: false,
+      dot: 1, askOpacity: 1, settling: 1, bodyVeil: 0, subline: 1, titleIsSecondary: false,
     });
     const inactive = Object.fromEntries(await Promise.all(['pane-sync', 'pane-bare', 'pane-proto'].map(async (paneId) => [paneId, await look(paneId)] as const)));
     for (const [paneId, tile] of Object.entries(inactive)) {
-      expect(tile, paneId).toMatchObject({ dot: 1, body: 0.58, subline: 0.7, titleIsSecondary: true });
+      expect(tile, paneId).toMatchObject({ dot: 1, bodyVeil: 0.42, subline: 0.7, titleIsSecondary: true });
     }
     expect(inactive['pane-sync'].askOpacity).toBe(1);
     expect(inactive['pane-sync'].askBox).toEqual(active.askBox);

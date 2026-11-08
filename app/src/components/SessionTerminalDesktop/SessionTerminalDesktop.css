@@ -6,9 +6,12 @@
   background: var(--color-bg-editor);
 }
 
-.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent'])),
-.session-terminal-desktop.zoom-mode .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
+.session-terminal-desktop.zoom-mode .desktop-pane:not(.active):where(:not([data-pane-kind='agent'])) {
   opacity: 0.72;
+}
+
+.session-terminal-desktop.zoom-mode .desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body::after {
+  opacity: 0.28;
 }
 
 .desktop-review-tabs {
@@ -112,9 +115,16 @@
   transition: opacity 120ms ease;
 }
 
-.desktop-pane:where(:not([data-pane-kind='agent'])),
-.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
+.desktop-pane:where(:not([data-pane-kind='agent'])) {
   opacity: 0.58;
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body {
+  isolation: isolate;
+}
+
+.desktop-pane[data-pane-kind='agent']:not(.active, .desktop-pane--dragging) > .desktop-pane-body::after {
+  opacity: 0.42;
 }
 
 .desktop-pane.active {
@@ -229,7 +239,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .desktop-pane,
-  .desktop-pane-body {
+  .desktop-pane-body::after {
     transition: none;
   }
 }
@@ -756,6 +766,16 @@
   min-width: 0;
   position: relative;
   overflow: hidden;
+}
+
+.desktop-pane-body::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+  background: var(--color-bg-editor);
+  opacity: 0;
   transition: opacity 120ms ease;
 }
 
