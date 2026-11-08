@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/procreap"
@@ -45,6 +48,29 @@ func ReapDataDir(dataDir string) []procreap.ReapResult {
 		results = append(results, result)
 	}
 	return results
+}
+
+func RunningHostPIDs(dataDir string) ([]int, error) {
+	out, err := exec.Command("ps", "-axww", "-o", "pid=,command=").Output()
+	if err != nil {
+		return nil, err
+	}
+	return hostPIDsUnder(string(out), dataDir), nil
+}
+
+func hostPIDsUnder(processTable, dataDir string) []int {
+	marker := "--host-registry-path " + filepath.Join(dataDir, "pty-hosts") + string(filepath.Separator)
+	var pids []int
+	for _, line := range strings.Split(processTable, "\n") {
+		if !strings.Contains(line, marker) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if pid, err := strconv.Atoi(fields[0]); err == nil {
+			pids = append(pids, pid)
+		}
+	}
+	return pids
 }
 
 func shutdownHost(dataDir, registryPath string, entry HostRegistry) error {

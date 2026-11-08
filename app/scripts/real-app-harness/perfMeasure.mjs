@@ -3,8 +3,9 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   daemonPidFilePathForInstance,
-  dataDirForInstance,
+  defaultAppPathForInstance,
 } from './harnessInstance.mjs';
+import { resetInstanceData } from './freshWorld.mjs';
 
 const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -316,14 +317,10 @@ export async function teardownInstanceState({ client, instance, wipe = true }) {
   if (!instance || instance === 'default') {
     throw new Error(`teardownInstanceState refuses an empty/prod instance (got ${JSON.stringify(instance)})`);
   }
-  const dataDir = dataDirForInstance(instance);
-  if (dataDir === dataDirForInstance('')) {
-    throw new Error(`teardownInstanceState refuses to wipe the prod data dir ${dataDir}`);
-  }
   await client.quitApp();
   await stopDaemon(instance);
   if (wipe) {
-    try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {}
+    resetInstanceData({ instance, appPath: defaultAppPathForInstance(instance) });
   }
 }
 

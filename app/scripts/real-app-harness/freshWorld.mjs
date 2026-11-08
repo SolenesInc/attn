@@ -40,10 +40,6 @@ function attnBinaryPath(appPath) {
   return appCliInTree(appPath);
 }
 
-function ptyHostBinaryPath(appPath) {
-  return path.join(path.dirname(attnBinaryPath(appPath)), 'attn-pty-host');
-}
-
 function requestAppQuit({ instance, appPath, bundleId }) {
   if (appPlatform.os === 'darwin') {
     try {
@@ -108,8 +104,10 @@ function runningPids(pids, executablePath, commandLineFor) {
   return [...new Set(pids.filter(Boolean))].filter((pid) => commandRunsExecutable(commandLineFor(pid), executablePath));
 }
 
-export function registeredPtyHostPids({ dataDir, executablePath, commandLineFor = commandLineForPid }) {
-  return runningPids(registeredPids(dataDir, 'pty-hosts', 'hosts', 'host_pid'), executablePath, commandLineFor);
+export function registeredPtyHostPids({ dataDir, commandLineFor = commandLineForPid }) {
+  const hostsRoot = `${path.join(dataDir, 'pty-hosts')}${path.sep}`;
+  return [...new Set(registeredPids(dataDir, 'pty-hosts', 'hosts', 'host_pid'))]
+    .filter((pid) => commandLineFor(pid).startsWith(hostsRoot));
 }
 
 export function instanceProcesses({ appPath, dataDir, commandLineFor = commandLineForPid }) {
@@ -118,7 +116,7 @@ export function instanceProcesses({ appPath, dataDir, commandLineFor = commandLi
     app: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'app.pid')))], appExecutableInAppTree(appPath), commandLineFor),
     daemon: runningPids([readPid(readFileOrEmpty(path.join(dataDir, 'attn.pid')))], attn, commandLineFor),
     'pty-worker': runningPids(registeredPids(dataDir, 'workers', 'registry', 'worker_pid'), attn, commandLineFor),
-    'attn-pty-host': registeredPtyHostPids({ dataDir, executablePath: ptyHostBinaryPath(appPath), commandLineFor }),
+    'attn-pty-host': registeredPtyHostPids({ dataDir, commandLineFor }),
   };
   return Object.entries(running).flatMap(([name, pids]) => pids.map((pid) => ({ name, pid })));
 }
@@ -148,6 +146,17 @@ async function terminateProcesses({ pids, name, log }) {
       process.kill(pid, 'SIGKILL');
     } catch {
     }
+  }
+}
+
+export function resetInstanceData({ instance, appPath }) {
+  assertFreshWorldTargetSafe({ instance, appPath });
+  const result = spawnSync(attnBinaryPath(appPath), ['instance', 'clean', instance, '--keep-app'], {
+    env: instanceCliEnv(instance),
+    encoding: 'utf8',
+  });
+  if (result.status !== 0) {
+    throw new Error(`attn instance clean ${instance} --keep-app failed: ${result.error?.message ?? result.stderr}`);
   }
 }
 

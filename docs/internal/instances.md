@@ -101,7 +101,12 @@ created, including runs you abandon. `clean` stops the instance's app, daemon,
 workers, and plugin drivers, and removes the instance's data. `clean` takes the
 instance from its argument alone, never from routing variables, and refuses the
 default (production) instance without `--force`.
-Never delete a data directory by hand, because cleanup needs the worker registry.
+To start an instance over and keep its installed app, run
+`attn instance clean <name> --keep-app`.
+Never delete a data directory by hand or from a script: cleanup needs the
+worker and PTY host registries in it to stop those processes and their agents.
+If registries are already gone, `clean` lists the PTY hosts still running from
+the data directory and keeps the data until they are stopped.
 
 If `clean` reports a live app, quit the app and rerun `clean`.
 

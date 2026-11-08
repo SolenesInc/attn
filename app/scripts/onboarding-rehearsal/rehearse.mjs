@@ -4,9 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureFreshWorld } from '../real-app-harness/freshWorld.mjs';
+import { ensureFreshWorld, resetInstanceData } from '../real-app-harness/freshWorld.mjs';
 import {
-  appLocalDataDirForInstance,
   bundleIdentifierForInstance,
   dataDirForInstance,
   defaultAppPathForInstance,
@@ -193,9 +192,8 @@ function make(target) {
 function scrubInstance() {
   const home = os.homedir();
   const bundleId = bundleIdentifierForInstance(INSTANCE);
+  resetInstanceData({ instance: INSTANCE, appPath: APP_PATH });
   for (const dir of [
-    dataDirForInstance(INSTANCE),
-    appLocalDataDirForInstance(INSTANCE),
     NOTEBOOK,
     WORK_NOTEBOOK,
     path.join(home, 'Library', 'WebKit', bundleId),

@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -129,6 +131,119 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 	}
 	if _, err := os.Stat(r.DataDir); !os.IsNotExist(err) {
 		t.Fatalf("data dir still exists: %v", err)
+	}
+}
+
+type runningSharedHost struct{ hostPID, childPID int }
+
+func startSharedHostGeneration(t *testing.T, r instanceResolved, daemonID string) runningSharedHost {
+	t.Helper()
+	backend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{DataRoot: r.DataDir, DaemonInstanceID: daemonID, BinaryPath: testworld.SharedHostBinary(t)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Probe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	id := "session-" + daemonID
+	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: harness.TerminalID(id), Agent: "cleanup-fixture", CWD: r.AppLocalData, Cols: 80, Rows: 24, AgentArgv: []string{"/bin/cat"}}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := backend.SessionInfo(context.Background(), harness.TerminalID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := runningSharedHost{hostPID: backend.WorkerPIDs(context.Background())[id], childPID: info.PID}
+	if err := backend.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		for _, pid := range []int{host.childPID, host.hostPID} {
+			if procreap.ProcessAlive(pid) {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	return host
+}
+
+func hostTestInstance(t *testing.T) instanceResolved {
+	t.Helper()
+	root, err := os.MkdirTemp("/tmp", "pty-clean-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(root) })
+	r := instanceResolved{Label: "test", DataDir: filepath.Join(root, "data"), AppPath: filepath.Join(root, "app"), AppLocalData: filepath.Join(root, "app-data"), AppLock: filepath.Join(root, "app.lock")}
+	for _, dir := range []string{r.AppPath, r.AppLocalData} {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return r
+}
+
+func TestInstanceCleanStopsHostsFromManyDaemonGenerations(t *testing.T) {
+	r := hostTestInstance(t)
+	var hosts []runningSharedHost
+	for i := 0; i < 3; i++ {
+		hosts = append(hosts, startSharedHostGeneration(t, r, fmt.Sprintf("d-reset-%d", i)))
+	}
+	var out bytes.Buffer
+	if err := cleanInstance(&out, r); err != nil {
+		t.Fatalf("clean instance: %v\n%s", err, out.String())
+	}
+	for _, host := range hosts {
+		if procreap.ProcessAlive(host.hostPID) || procreap.ProcessAlive(host.childPID) {
+			t.Errorf("host %d or child %d survived instance cleanup", host.hostPID, host.childPID)
+		}
+	}
+}
+
+func TestInstanceCleanRefusesWhileAHostRunsWithoutItsRegistry(t *testing.T) {
+	r := hostTestInstance(t)
+	registered := startSharedHostGeneration(t, r, "d-current")
+	orphan := startSharedHostGeneration(t, r, "d-erased")
+	if err := os.RemoveAll(ptyhost.Root(r.DataDir, "d-erased")); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	err := cleanInstance(&out, r)
+	if err == nil {
+		t.Fatalf("clean removed the data dir while host %d still ran: %s", orphan.hostPID, out.String())
+	}
+	if !strings.Contains(err.Error(), strconv.Itoa(orphan.hostPID)) {
+		t.Fatalf("refusal does not name host %d: %v", orphan.hostPID, err)
+	}
+	if procreap.ProcessAlive(registered.hostPID) {
+		t.Fatalf("registered host %d survived the reap", registered.hostPID)
+	}
+	if !procreap.ProcessAlive(orphan.hostPID) {
+		t.Fatalf("clean stopped host %d it could not identify", orphan.hostPID)
+	}
+	if _, err := os.Stat(r.DataDir); err != nil {
+		t.Fatalf("refused clean removed the data dir: %v", err)
+	}
+}
+
+func TestInstanceDataResetStopsHostsAndKeepsTheApp(t *testing.T) {
+	r := hostTestInstance(t)
+	host := startSharedHostGeneration(t, r, "d-reset")
+	var out bytes.Buffer
+	if err := resetInstanceData(&out, r); err != nil {
+		t.Fatalf("reset instance data: %v\n%s", err, out.String())
+	}
+	if procreap.ProcessAlive(host.hostPID) || procreap.ProcessAlive(host.childPID) {
+		t.Fatalf("host %d or child %d survived the reset", host.hostPID, host.childPID)
+	}
+	if _, err := os.Stat(r.DataDir); !os.IsNotExist(err) {
+		t.Fatalf("data dir still exists: %v", err)
+	}
+	if _, err := os.Stat(r.AppLocalData); !os.IsNotExist(err) {
+		t.Fatalf("app local data still exists: %v", err)
+	}
+	if _, err := os.Stat(r.AppPath); err != nil {
+		t.Fatalf("reset removed the app: %v", err)
 	}
 }
 

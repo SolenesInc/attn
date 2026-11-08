@@ -6,12 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 import { assertPackagedAppBuildMatchesCurrentSource } from '../real-app-harness/buildPreflight.mjs';
 import { DaemonObserver } from '../real-app-harness/daemonObserver.mjs';
-import { assertFreshWorldTargetSafe, ensureFreshWorld } from '../real-app-harness/freshWorld.mjs';
-import {
-  appLocalDataDirForInstance,
-  dataDirForInstance,
-  defaultAppPathForInstance,
-} from '../real-app-harness/harnessInstance.mjs';
+import { assertFreshWorldTargetSafe, ensureFreshWorld, resetInstanceData } from '../real-app-harness/freshWorld.mjs';
+import { defaultAppPathForInstance } from '../real-app-harness/harnessInstance.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from '../real-app-harness/mockGitHub.mjs';
 import { setFrontWindowBounds } from '../real-app-harness/nativeWindowCapture.mjs';
 import { appBuildIdentityInTree, appCliInTree, createWindowDriver } from '../real-app-harness/platform.mjs';
@@ -44,12 +40,6 @@ export function preflight(instance) {
     throw new Error(`${REPOS_ROOT} already exists; the demo creates and removes it, so move it away first`);
   }
   return appPath;
-}
-
-function scrubInstanceData(instance) {
-  for (const dir of [dataDirForInstance(instance), appLocalDataDirForInstance(instance)]) {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
 }
 
 function worktreePath(repo, branch) {
@@ -115,7 +105,7 @@ export async function startWorld({ repos, log }) {
   }
   try {
     await ensureFreshWorld({ instance, appPath, log });
-    scrubInstanceData(instance);
+    resetInstanceData({ instance, appPath });
 
     cleanups.push(() => fs.rmSync(REPOS_ROOT, { recursive: true, force: true }));
     const trustedFolders = createRepos(repos);

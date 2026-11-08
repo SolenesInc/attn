@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -334,12 +335,15 @@ func baseMainWindow(tauriConf []byte) (map[string]any, error) {
 	return conf.App.Windows[0], nil
 }
 
+const keepAppFlag = "--keep-app"
+
 func cleanPlan(args []string) (normalized string, force bool, err error) {
 	name := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--force", "-f":
 			force = true
+		case keepAppFlag:
 		default:
 			if strings.HasPrefix(args[i], "-") {
 				recordUsageError("instance clean", usageErrorUnknownFlag)
@@ -376,12 +380,24 @@ func runInstanceClean(args []string) {
 	if err != nil {
 		instanceFatal(err.Error())
 	}
-	if err := cleanInstance(os.Stdout, resolveInstance(normalized)); err != nil {
+	clean := cleanInstance
+	if slices.Contains(args, keepAppFlag) {
+		clean = resetInstanceData
+	}
+	if err := clean(os.Stdout, resolveInstance(normalized)); err != nil {
 		instanceFatal(err.Error())
 	}
 }
 
 func cleanInstance(w io.Writer, r instanceResolved) error {
+	return stopAndRemoveInstance(w, r, removeInstanceApp)
+}
+
+func resetInstanceData(w io.Writer, r instanceResolved) error {
+	return stopAndRemoveInstance(w, r, func(io.Writer, instanceResolved) error { return nil })
+}
+
+func stopAndRemoveInstance(w io.Writer, r instanceResolved, removeApp func(io.Writer, instanceResolved) error) error {
 	fmt.Fprintf(w, ">>> Cleaning instance %s\n", r.Label)
 
 	msg, err := stopInstanceApp(r)
@@ -423,31 +439,22 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 		}
 	}
 
+	unregistered, err := ptyhost.RunningHostPIDs(r.DataDir)
+	if err != nil {
+		return fmt.Errorf("could not check for shared PTY hosts still running from %s: %w; instance data was preserved", r.DataDir, err)
+	}
+	if len(unregistered) > 0 {
+		return fmt.Errorf("%d shared PTY host(s) still run from %s with no registry to stop them through (pids %v): their terminals and agents would be orphaned; instance data was preserved. Check each PID's command, stop it by PID, and re-run", len(unregistered), r.DataDir, unregistered)
+	}
+
 	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(stepclock.Process(), r.DataDir))
 
 	if err := refuseRelaunchedApp(r); err != nil {
 		return err
 	}
 
-	if fileExists(r.AppPath) {
-		lsregisterForget(r.AppPath)
-		if err := os.RemoveAll(r.AppPath); err != nil {
-			return fmt.Errorf("remove app bundle %s: %w", r.AppPath, err)
-		}
-		fmt.Fprintf(w, "  app      removed %s\n", r.AppPath)
-	} else {
-		fmt.Fprintf(w, "  app      not installed (%s)\n", r.AppPath)
-	}
-
-	if r.DesktopEntry != "" {
-		removed, err := desktopentry.Remove(r.AppName)
-		if err != nil {
-			fmt.Fprintf(w, "  scheme   %v\n", err)
-		} else if removed {
-			fmt.Fprintf(w, "  scheme   removed %s\n", r.DesktopEntry)
-		} else {
-			fmt.Fprintf(w, "  scheme   not registered (%s)\n", r.DesktopEntry)
-		}
+	if err := removeApp(w, r); err != nil {
+		return err
 	}
 
 	localData, err := removeAppLocalData(r)
@@ -482,6 +489,30 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 	}
 
 	fmt.Fprintf(w, "Cleaned instance %s.\n", r.Label)
+	return nil
+}
+
+func removeInstanceApp(w io.Writer, r instanceResolved) error {
+	if fileExists(r.AppPath) {
+		lsregisterForget(r.AppPath)
+		if err := os.RemoveAll(r.AppPath); err != nil {
+			return fmt.Errorf("remove app bundle %s: %w", r.AppPath, err)
+		}
+		fmt.Fprintf(w, "  app      removed %s\n", r.AppPath)
+	} else {
+		fmt.Fprintf(w, "  app      not installed (%s)\n", r.AppPath)
+	}
+
+	if r.DesktopEntry != "" {
+		removed, err := desktopentry.Remove(r.AppName)
+		if err != nil {
+			fmt.Fprintf(w, "  scheme   %v\n", err)
+		} else if removed {
+			fmt.Fprintf(w, "  scheme   removed %s\n", r.DesktopEntry)
+		} else {
+			fmt.Fprintf(w, "  scheme   not registered (%s)\n", r.DesktopEntry)
+		}
+	}
 	return nil
 }
 
@@ -978,6 +1009,8 @@ Usage:
   attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler
+  attn instance clean <name> --keep-app
+                                the same, but keep the installed app and scheme handler
   attn instance stop-app        quit the active instance's app (--instance <name> for another)
   attn instance list            every instance with data and/or an installed app
   attn instance list --json     same, machine-readable, with origin and what is running

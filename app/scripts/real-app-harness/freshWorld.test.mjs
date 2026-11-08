@@ -49,8 +49,6 @@ describe('commandRunsExecutable', () => {
 });
 
 describe('registeredPtyHostPids', () => {
-  const host = '/home/runner/.local/share/attn-app-acceptance/bin/attn-pty-host';
-
   function dataDirWithHosts(entries) {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fresh-world-hosts-'));
     for (const [daemonInstance, generation, body] of entries) {
@@ -61,20 +59,20 @@ describe('registeredPtyHostPids', () => {
     return dataDir;
   }
 
-  it('returns only registry pids whose live command still runs this executable', () => {
+  it('finds hosts running from the artifact the daemon installed in the data dir', () => {
     const dataDir = dataDirWithHosts([
-      ['d-1', 'gen-1', JSON.stringify({ host_pid: 4242, executable: host })],
-      ['d-1', 'gen-2', JSON.stringify({ host_pid: 4343, executable: host })],
-      ['d-2', 'gen-1', JSON.stringify({ host_pid: 4444, executable: host })],
+      ['d-1', 'gen-1', JSON.stringify({ host_pid: 4242 })],
+      ['d-1', 'gen-2', JSON.stringify({ host_pid: 4343 })],
+      ['d-2', 'gen-1', JSON.stringify({ host_pid: 4444 })],
       ['d-2', 'notes.txt', 'not a registry'],
       ['d-3', 'gen-1', '{not json'],
     ]);
     const commands = {
-      4242: `${host} --socket /tmp/attn.sock`,
+      4242: `${dataDir}/pty-hosts/d-1/artifacts/abc/attn-pty-host --daemon-instance-id d-1`,
       4343: '/usr/bin/sleep 100',
       4444: '',
     };
-    expect(registeredPtyHostPids({ dataDir, executablePath: host, commandLineFor: (pid) => commands[pid] ?? '' }))
+    expect(registeredPtyHostPids({ dataDir, commandLineFor: (pid) => commands[pid] ?? '' }))
       .toEqual([4242]);
   });
 });
