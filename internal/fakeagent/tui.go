@@ -164,6 +164,28 @@ func (t *terminal) awaitEnter() error {
 	}
 }
 
+func (t *terminal) awaitFolderTrustAnswer() (bool, error) {
+	yes := false
+	chunk := make([]byte, 256)
+	for {
+		n, err := t.in.Read(chunk)
+		pressed := chunk[:n]
+		if bytes.Contains(pressed, []byte("\x1b[B")) {
+			yes = true
+		}
+		if bytes.Contains(pressed, []byte("\x1b[A")) {
+			yes = false
+		}
+		if i := bytes.IndexAny(pressed, "\r\n"); i >= 0 {
+			t.early = append(t.early, pressed[i+1:]...)
+			return yes, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+}
+
 func (t *terminal) stopReading() error {
 	return t.in.Close()
 }

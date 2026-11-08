@@ -271,6 +271,11 @@ func (h monitorHost) ReadBranch(ctx context.Context, directory string) (*attngit
 	return h.daemon.readBranchInfo(ctx, gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, directory)
 }
 
+func (h monitorHost) ReadScreen(ctx context.Context, terminal harness.TerminalID) (string, error) {
+	text, err := h.daemon.readTerminalText(ctx, protocol.TerminalReadTextMessage{TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
+	return text.Text, err
+}
+
 type monitorHome struct {
 	bridge  *bridge.Conn
 	host    string

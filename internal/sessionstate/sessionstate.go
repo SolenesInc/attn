@@ -26,6 +26,7 @@ const (
 	ClaimSettled         Claim = "settled"
 	ClaimApprovalPending Claim = "approval_pending"
 	ClaimNeedsInput      Claim = "needs_input"
+	ClaimFolderTrust     Claim = "folder_trust_question"
 	ClaimIdle            Claim = "idle"
 	ClaimParked          Claim = "parked"
 	ClaimExited          Claim = "exited"
@@ -127,6 +128,7 @@ const (
 	ReasonProgramSettled    Reason = "program_settled"
 	ReasonApprovalOpen      Reason = "approval_open"
 	ReasonQuestionOpen      Reason = "question_open"
+	ReasonFolderTrust       Reason = "folder_trust_question"
 	ReasonCronPending       Reason = "cron_pending"
 	ReasonBracketOpen       Reason = "bracket_open"
 	ReasonPromptIdle        Reason = "prompt_idle"
@@ -374,6 +376,8 @@ func harnessEdge(e evidence, policy Policy) (Resolution, bool) {
 			Reason: ReasonQuestionOpen,
 			Detail: e.LastHarnessEvent.Detail,
 		}, true
+	case ClaimFolderTrust:
+		return Resolution{State: protocol.SessionStateWaitingInput, Reason: ReasonFolderTrust}, true
 	case ClaimStopFailed:
 		return Resolution{
 			State:  protocol.SessionStateWaitingInput,

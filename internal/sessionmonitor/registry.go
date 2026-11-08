@@ -36,6 +36,7 @@ type Host interface {
 	HomeFor(*Monitor) Home
 	Classify(ctx context.Context, request ClassifyRequest) (string, error)
 	ReadBranch(ctx context.Context, directory string) (*attngit.BranchInfo, error)
+	ReadScreen(ctx context.Context, terminal harness.TerminalID) (string, error)
 
 	LiveTerminals(ctx context.Context) map[harness.TerminalID]struct{}
 	ViewOwner(harness.TerminalID) string
@@ -90,6 +91,7 @@ type Monitor struct {
 	userInputs           uint64
 	firstReportAt        time.Time
 	awaitingHarness      bool
+	folderTrustRead      stepclock.Timer
 	wakeTimer            *time.Timer
 	watch                *TerminalWatch
 	conversationInput    Conversation
@@ -394,6 +396,7 @@ func (m *Monitor) Stop() {
 		m.wakeTimer.Stop()
 		m.wakeTimer = nil
 	}
+	m.stopFolderTrustReadLocked()
 	m.resolvePending = false
 	m.stopped = true
 	m.stopSaveRetryLocked()

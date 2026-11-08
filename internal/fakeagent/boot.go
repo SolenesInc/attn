@@ -7,7 +7,11 @@ type bootingResult struct {
 	Code         int    `json:"code,omitempty"`
 	Screen       string `json:"screen,omitempty"`
 	WaitForEnter bool   `json:"wait_for_enter,omitempty"`
+	FolderTrust  bool   `json:"folder_trust,omitempty"`
 }
+
+const claudeFolderTrustScreen = "Quick safety check: Is this a project you created or one you trust?\r\n\r\n" +
+	"❯ No, exit\r\n  Yes, I trust this folder\r\n\r\nEnter to confirm · Esc to cancel"
 
 func (k *Kit) ExitAtNextBoot(code int, screen string) {
 	k.mu.Lock()
@@ -19,6 +23,12 @@ func (k *Kit) RequireEnterAtNextBoot(screen string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	k.nextBootResult = &bootingResult{WaitForEnter: true, Screen: screen}
+}
+
+func (k *Kit) AskFolderTrustAtNextBoot() {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.nextBootResult = &bootingResult{FolderTrust: true}
 }
 
 func (k *Kit) boot(params json.RawMessage) (any, error) {

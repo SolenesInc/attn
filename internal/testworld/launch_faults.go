@@ -12,3 +12,7 @@ func (w *World) RefusePlugLaunches(reason string) (allow func()) {
 	w.T.Helper()
 	return w.kit.RefusePlugLaunches(reason)
 }
+
+func (w *World) AskFolderTrustAtNextBoot() {
+	w.kit.AskFolderTrustAtNextBoot()
+}

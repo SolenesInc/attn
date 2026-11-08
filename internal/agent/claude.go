@@ -37,6 +37,7 @@ var _ ResumeAvailabilityProvider = (*Claude)(nil)
 var _ TranscriptClassificationExtractor = (*Claude)(nil)
 var _ HeadlessTaskProvider = (*Claude)(nil)
 var _ HeadlessTaskAvailabilityProvider = (*Claude)(nil)
+var _ FolderTrustQuestionReader = (*Claude)(nil)
 
 const (
 	claudeTranscriptRetryWindow   = 2 * time.Second
@@ -57,6 +58,16 @@ func (c *Claude) ExecutableEnvVar() string  { return "ATTN_CLAUDE_EXECUTABLE" }
 
 func (c *Claude) ResolveExecutable(configured string) string {
 	return resolveExec(c.ExecutableEnvVar(), configured, c.DefaultExecutable())
+}
+
+const claudeFolderTrustChoice = "Yes, I trust this folder"
+
+func (c *Claude) ShowsFolderTrustQuestion(screen string) bool {
+	return strings.Contains(withoutWhitespace(screen), withoutWhitespace(claudeFolderTrustChoice))
+}
+
+func withoutWhitespace(text string) string {
+	return strings.Join(strings.Fields(text), "")
 }
 
 func (c *Claude) Capabilities() Capabilities {

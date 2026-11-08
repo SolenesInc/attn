@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -14,7 +15,7 @@ import (
 
 const delegationFirstTurnTimeout = 90 * time.Second
 
-const seedNoteExitScreenMaxBytes = garden.MaxNoteBytes / 2
+const seedNoteScreenMaxBytes = garden.MaxNoteBytes / 2
 
 var errDelegationInterrupted = errors.New("the daemon stopped before the delegate's first turn")
 
@@ -152,7 +153,7 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 	if exit.ExitCode != 0 || exit.ExitSignal != "" {
 		fmt.Fprintf(&b, " `attn agent peek %s` shows the screen it left.", shortSessionID(sessionID))
 	}
-	if text := exitScreenTail(exit.Text); text != "" {
+	if text := seedNoteScreenTail(exit.Text); text != "" {
 		b.WriteString("\n\nScreen at exit:\n\n")
 		for _, line := range strings.Split(text, "\n") {
 			b.WriteString("    " + line + "\n")
@@ -164,10 +165,40 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID string, agent string, sessionID 
 	}
 }
 
-func exitScreenTail(text string) string {
+func (d *Daemon) noteDelegatedStallOnSeed(agent string, sessionID protocol.SessionID, unconfirmed string) string {
+	var screen string
+	if session := d.store.Get(sessionID); session != nil {
+		if peeked := d.agentPeekScreen(session); peeked != nil {
+			screen = peeked.Text
+		}
+	}
+	var b strings.Builder
+	if agentdriver.ShowsFolderTrustQuestion(agent, screen) {
+		unconfirmed = fmt.Sprintf("%s is waiting at its folder-trust question and starts only after someone answers it in session %s; %s", agent, shortSessionID(sessionID), unconfirmed)
+		fmt.Fprintf(&b, "The delegated agent (%s) is stopped at its folder-trust question, so nothing here is being worked on. Answer the question in session %s to start it.", agent, sessionID)
+	} else {
+		fmt.Fprintf(&b, "The delegated agent (%s) reported no first turn within %s, so nothing here may be being worked on. Session: %s. `attn agent peek %s` shows its pane.", agent, delegationFirstTurnTimeout, sessionID, shortSessionID(sessionID))
+	}
+	if tail := seedNoteScreenTail(screen); tail != "" {
+		b.WriteString("\n\nScreen now:\n\n")
+		for _, line := range strings.Split(tail, "\n") {
+			b.WriteString("    " + line + "\n")
+		}
+	}
+	seedID, _ := d.gardenDispatchCrown(sessionID)
+	if strings.TrimSpace(seedID) == "" {
+		return unconfirmed
+	}
+	if _, err := d.appendSeedNote(seedID, strings.TrimRight(b.String(), "\n"), d.actorOfSession(sessionID), garden.NoteKindNote, nil, true, sessionID); err != nil {
+		d.logf("delegation stall not noted on %s: %v", seedID, err)
+	}
+	return unconfirmed
+}
+
+func seedNoteScreenTail(text string) string {
 	text = strings.TrimRight(text, "\n")
-	if len(text) > seedNoteExitScreenMaxBytes {
-		text = "[first " + fmt.Sprint(len(text)-seedNoteExitScreenMaxBytes) + " bytes omitted]\n" + text[len(text)-seedNoteExitScreenMaxBytes:]
+	if len(text) > seedNoteScreenMaxBytes {
+		text = "[first " + fmt.Sprint(len(text)-seedNoteScreenMaxBytes) + " bytes omitted]\n" + text[len(text)-seedNoteScreenMaxBytes:]
 	}
 	return text
 }

@@ -2,6 +2,7 @@ package testworld
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -366,6 +367,20 @@ func (b *Terminals) ScreenSnapshot(_ context.Context, id harness.TerminalID) (pt
 		Cols: term.Options.Cols, Rows: term.Options.Rows, Running: term.running,
 		Screen: &pty.ViewportSnapshot{Text: text, HasText: true, Cols: term.Options.Cols, Rows: term.Options.Rows},
 	}, nil
+}
+
+func (b *Terminals) ReadText(_ context.Context, id harness.TerminalID, _ string, _ int) (pty.ReadTextInfo, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	term, err := b.lookup(id)
+	if err != nil {
+		return pty.ReadTextInfo{}, err
+	}
+	return pty.ReadTextInfo{Text: strings.Join(term.screen, "\n") + string(term.line)}, nil
+}
+
+func (b *Terminals) WaitBlock(context.Context, harness.TerminalID, pty.WaitBlockParams) (pty.WaitBlockResult, error) {
+	return pty.WaitBlockResult{}, errors.New("in-memory terminals record no command blocks")
 }
 
 func (t *Terminal) PaintScreen(text string) {

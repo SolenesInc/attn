@@ -31,39 +31,40 @@ const (
 )
 
 const (
-	configName       = "fakeagent.json"
-	plugPluginName   = "attn-plug"
-	wrapperName      = "attn"
-	tripwireExitCode = 97
-	roleAgent        = "agent"
-	rolePlugin       = "plugin"
-	methodBooting    = "booting"
-	methodLaunched   = "launched"
-	methodUnexpected = "unexpected"
-	methodExiting    = "exiting"
-	methodPrompted   = "prompted"
-	methodReply      = "reply"
-	methodInput      = "input"
-	methodReplyLate  = "reply_after_stop"
-	methodReplyBg    = "reply_leaving_background_work"
-	methodStream     = "stream"
-	methodSubagent   = "subagent"
-	methodDropSubs   = "delete_subagent_transcripts"
-	methodHalt       = "halt"
-	methodExit       = "exit"
-	methodStopRead   = "stop_reading_terminal"
-	methodStatus     = "program_status"
-	methodSuggestion = "claude_suggestion"
-	methodModNext    = "mod_next"
-	methodModTool    = "mod_tool_boundary"
-	methodModEsc     = "mod_esc"
-	methodModReload  = "mod_reload"
-	methodModStop    = "mod_stop_polling"
-	methodCrashSrv   = "crash_app_server"
-	methodHoldRejoin = "hold_rejoin"
-	methodFreeRejoin = "release_rejoin"
-	methodTranscript = "transcript_written"
-	signalExitBase   = 128
+	configName                 = "fakeagent.json"
+	plugPluginName             = "attn-plug"
+	wrapperName                = "attn"
+	tripwireExitCode           = 97
+	folderTrustRefusedExitCode = 1
+	roleAgent                  = "agent"
+	rolePlugin                 = "plugin"
+	methodBooting              = "booting"
+	methodLaunched             = "launched"
+	methodUnexpected           = "unexpected"
+	methodExiting              = "exiting"
+	methodPrompted             = "prompted"
+	methodReply                = "reply"
+	methodInput                = "input"
+	methodReplyLate            = "reply_after_stop"
+	methodReplyBg              = "reply_leaving_background_work"
+	methodStream               = "stream"
+	methodSubagent             = "subagent"
+	methodDropSubs             = "delete_subagent_transcripts"
+	methodHalt                 = "halt"
+	methodExit                 = "exit"
+	methodStopRead             = "stop_reading_terminal"
+	methodStatus               = "program_status"
+	methodSuggestion           = "claude_suggestion"
+	methodModNext              = "mod_next"
+	methodModTool              = "mod_tool_boundary"
+	methodModEsc               = "mod_esc"
+	methodModReload            = "mod_reload"
+	methodModStop              = "mod_stop_polling"
+	methodCrashSrv             = "crash_app_server"
+	methodHoldRejoin           = "hold_rejoin"
+	methodFreeRejoin           = "release_rejoin"
+	methodTranscript           = "transcript_written"
+	signalExitBase             = 128
 )
 
 type config struct {
@@ -254,6 +255,14 @@ func serve(cfg config, style composer, conv conversation) int {
 		term.print(boot.Screen)
 		if err := term.awaitEnter(); err != nil {
 			return 1
+		}
+		term.write("\x1b[2J\x1b[H" + term.composer())
+	}
+	if boot.FolderTrust {
+		term.print(claudeFolderTrustScreen)
+		trusted, err := term.awaitFolderTrustAnswer()
+		if err != nil || !trusted {
+			return folderTrustRefusedExitCode
 		}
 		term.write("\x1b[2J\x1b[H" + term.composer())
 	}

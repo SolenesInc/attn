@@ -275,6 +275,7 @@ func (m *Monitor) HarnessStarting(agent string) {
 	}
 	m.mu.Lock()
 	m.awaitingHarness = true
+	m.watchFolderTrustQuestionLocked(agent)
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
@@ -287,9 +288,11 @@ func (m *Monitor) harnessStarted() {
 		return
 	}
 	m.awaitingHarness = false
+	m.stopFolderTrustReadLocked()
 	view := m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
+	m.clearFolderTrustQuestion()
 }
 
 func showsHarnessStarted(obs pty.Observation) bool {
@@ -323,6 +326,7 @@ func (m *Monitor) RecordBracket(state string) {
 				switch e.LastHarnessEvent.Claim {
 				case sessionstate.ClaimApprovalPending,
 					sessionstate.ClaimNeedsInput,
+					sessionstate.ClaimFolderTrust,
 					sessionstate.ClaimStopFailed,
 					sessionstate.ClaimTurnAborted:
 					e.LastHarnessEvent = nil

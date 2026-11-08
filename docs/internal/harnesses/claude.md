@@ -181,6 +181,9 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   Claude sets no title and fires no SessionStart (2 of 2 launches). Probed on
   2.1.319 on Linux through a PTY with a mock API, with the turn read from the
   requests.
+  attn recognizes the question by the choice text "Yes, I trust this folder",
+  which appears 0.8 to 2.2 s after start (4 launches of 2.1.319). "No, exit"
+  ends the process with code 1.
 - An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
   the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
   hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved

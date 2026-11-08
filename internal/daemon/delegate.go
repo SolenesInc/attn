@@ -645,7 +645,7 @@ func (d *Daemon) confirmDelegatedLaunch(operationID string, sessionID protocol.S
 		return launchExitError(agent, sessionID, outcome.exit)
 	}
 	if outcome.unconfirmed != "" {
-		result.FirstTurnUnconfirmed = protocol.Ptr(outcome.unconfirmed)
+		result.FirstTurnUnconfirmed = protocol.Ptr(d.noteDelegatedStallOnSeed(agent, sessionID, outcome.unconfirmed))
 	}
 	if !outcome.startedAt.IsZero() {
 		result.FirstTurnAt = protocol.Ptr(outcome.startedAt.UTC().Format(time.RFC3339Nano))

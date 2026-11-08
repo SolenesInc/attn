@@ -35,6 +35,15 @@ type Driver interface {
 	Capabilities() Capabilities
 }
 
+type FolderTrustQuestionReader interface {
+	ShowsFolderTrustQuestion(screen string) bool
+}
+
+func ShowsFolderTrustQuestion(agent, screen string) bool {
+	reader, ok := Get(agent).(FolderTrustQuestionReader)
+	return ok && reader.ShowsFolderTrustQuestion(screen)
+}
+
 type Capabilities struct {
 	HasHooks bool
 
