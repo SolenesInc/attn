@@ -21,6 +21,16 @@ func nisseSession(t *testing.T, w *world, app *testworld.Peer, opts ...func(*pro
 	return session, w.Launched(session), w.NisseServer()
 }
 
+func promptNisseUntilWorking(app *testworld.Peer, session string, nisse *fakeagent.Run, server *fakeagent.NisseServer, prompt string) {
+	app.T.Helper()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	mark := len(app.Log())
+	app.TypeLine(session, prompt)
+	nisse.Prompted()
+	server.Prompted(nisse.ConversationID)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+}
+
 func TestNisseIsOfferedOnlyWhileItsExperimentalSettingIsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Nisse)
 	app := w.App()
@@ -215,10 +225,7 @@ func TestANisseSessionWorkingThroughADaemonRestartSettlesFromTheServerAfterIt(t 
 	app := w.App()
 	session, nisse, server := nisseSession(t, w, app)
 	conversation := nisse.ConversationID
-	app.TypeLine(session, "migrate the orders table")
-	nisse.Prompted()
-	server.Prompted(conversation)
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	promptNisseUntilWorking(app, session, nisse, server, "migrate the orders table")
 
 	w.restart()
 	app = w.App()
@@ -244,10 +251,7 @@ func TestNisseSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWasDown
 	testworld.AwaitSession(app, asked, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	working := w.Spawn(app, fakeagent.Nisse, w.Path("shop"))
 	workingTUI := w.Launched(working)
-	app.TypeLine(working, "migrate the orders table")
-	workingTUI.Prompted()
-	server.Prompted(workingTUI.ConversationID)
-	testworld.AwaitSession(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	promptNisseUntilWorking(app, working, workingTUI, server, "migrate the orders table")
 
 	w.stop()
 	server.Reply(workingTUI.ConversationID, "Migrated, but two rows failed. Retry them? <!-- attn:state=waiting_input -->")

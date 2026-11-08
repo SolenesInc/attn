@@ -192,10 +192,7 @@ func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	app := w.App()
 	session, nisse, server := nisseSession(t, w, app)
 	conversation := nisse.ConversationID
-	app.TypeLine(session, "migrate the orders table")
-	nisse.Prompted()
-	server.Prompted(conversation)
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	promptNisseUntilWorking(app, session, nisse, server, "migrate the orders table")
 
 	shell.block()
 	w.restart()
