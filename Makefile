@@ -208,7 +208,7 @@ $(SCHEMA_NODE_MODULES): internal/protocol/schema/package.json internal/protocol/
 test-frontend: $(APP_NODE_MODULES)
 	cd app && pnpm run test
 
-# Today's Chief of Staff: every Go and frontend test whose name mentions the chief
+# The Chief: every Go and frontend test whose name mentions the chief
 test-chief: $(NATIVE_VT_DEP) $(APP_NODE_MODULES)
 	./scripts/test-go.sh --packages -run '[Cc]hief' -count=1 ./internal/... ./cmd/attn/...
 	cd app && pnpm run test -t '[Cc]hief'

@@ -145,11 +145,11 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/crew_*_wire_test.go` (create, retire and restore in `crew_retire_wire_test.go`), `internal/daemon/crew_wire_test.go`, `internal/daemon/crew_resume_wire_test.go` (a member's earlier session brought back), `internal/daemon/chief_of_staff_wire_test.go`, `internal/daemon/chief_member_wire_test.go`, `internal/daemon/chief_profiles_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/create_as_chief_wire_test.go`, `internal/daemon/plugin_chief_wire_test.go`, `internal/daemon/seed_send_to_chief_wire_test.go`, `internal/daemon/garden_handoff_wire_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/crew_wake_test.go`, `internal/daemon/conversation_keep_crew_wire_test.go`.
+- Wire: `internal/daemon/crew_*_wire_test.go` (create, retire and restore in `crew_retire_wire_test.go`), `internal/daemon/crew_wire_test.go`, `internal/daemon/crew_resume_wire_test.go` (a member's earlier session brought back), `internal/daemon/chief_member_wire_test.go`, `internal/daemon/chief_nudge_quiet_wire_test.go`, `internal/daemon/seed_send_to_chief_wire_test.go`, `internal/daemon/garden_handoff_wire_test.go`, `internal/daemon/profile_delete_crew_wire_test.go`, `internal/daemon/crew_wake_test.go`, `internal/daemon/conversation_keep_crew_wire_test.go`.
 - Stack: `cmd/attn/crew_stack_test.go` (`TestCrewCreateRetireAndRestoreCommands`, `TestAClearedMemberKeepsItsDayAcrossADaemonCrash`), `internal/daemon/crew_retired_clear_stack_test.go`, `cmd/attn/handoff_stack_test.go`, `cmd/attn/crew_day_transcript_stack_test.go`, `scripts/verify-handoff.mjs`, `scripts/verify-crew-operating-model.mjs`.
 - Scenario: `crew-management`, `crew-seed-header`, `chief-slot`.
 - Kernel: `internal/crew/lifecycle_test.go`, `internal/crew/priming_test.go`, `internal/crew/prompt_compatibility_test.go`.
-- App: `app/src/App.chiefSlot.test.tsx`, `app/src/App.crewCharter.test.tsx`, `app/src/App.crewLaunchSettings.test.tsx`, `app/src/App.crewRoster.test.tsx`, `app/src/App.crewWake.test.tsx`, `app/src/components/CrewPanel.test.tsx`, `app/src/utils/crewName.test.ts`, `app/src/application/useChiefOfStaff.profile.test.tsx`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
+- App: `app/src/App.chiefSlot.test.tsx`, `app/src/App.crewCharter.test.tsx`, `app/src/App.crewLaunchSettings.test.tsx`, `app/src/App.crewRoster.test.tsx`, `app/src/App.crewWake.test.tsx`, `app/src/components/CrewPanel.test.tsx`, `app/src/utils/crewName.test.ts`, `app/src/application/useAppSessions.notebookChief.test.tsx`.
 
 ## Gotchas
 

@@ -19,18 +19,12 @@ export const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_version';
 
-export const CHIEF_OF_STAFF_CLOSE_HINT =
-  'Chief of staff is protected — unset the chief role to close it.';
-
 export function crewMemberCloseHint(name: string): string {
   return `${name} is protected — put ${name} to sleep to close the day.`;
 }
 
 export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): string | null {
   const session = sessions.find((candidate) => candidate.id === id);
-  if (session?.chief_of_staff === true) {
-    return CHIEF_OF_STAFF_CLOSE_HINT;
-  }
   return session?.crew_member ? crewMemberCloseHint(session.crew_member_name ?? session.crew_member) : null;
 }
 

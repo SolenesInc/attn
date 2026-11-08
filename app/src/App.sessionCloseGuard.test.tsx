@@ -41,12 +41,12 @@ describe('chief and crew sessions are protected from close', () => {
     ['the close action', closeFromSidebar],
     ['⌘W', pressCmdW],
   ])('no-ops %s on the chief session and shows the protected hint', async (_, close) => {
-    const { daemon } = await renderOrchestrator({ chief_of_staff: true });
+    const { daemon } = await renderOrchestrator({ chief_of_staff: true, crew_member: 'chief', crew_member_name: 'Chief' });
 
     close();
 
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Chief of staff is protected');
+    expect(toast()).toHaveTextContent('Chief is protected — put Chief to sleep to close the day.');
   });
 
   it.each([
@@ -64,7 +64,7 @@ describe('chief and crew sessions are protected from close', () => {
   it('closes only the tile when another tile still shows the chief', async () => {
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true })],
+        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true, crew_member: 'chief', crew_member_name: 'Chief' })],
         desktops: [
           laidOutDesktop(pane('a'), ['a']),
           daemonDesktop('other', { root: { type: 'pane', pane_id: 'pane-a2' }, panes: [{ ...agentPane('a', 'other', 'term-2'), pane_id: 'pane-a2' }] }, { order_key: 'b' }),
@@ -88,14 +88,14 @@ describe('chief and crew sessions are protected from close', () => {
   it('asks the daemon whether closing the chief\'s only tile ends it, and shows its refusal', async () => {
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true }), daemonSession('b', { state: 'idle' })],
+        sessions: [daemonSession('a', { state: 'idle', chief_of_staff: true, crew_member: 'chief', crew_member_name: 'Chief' }), daemonSession('b', { state: 'idle' })],
         desktops: [laidOutDesktop(split('ab', 'vertical', [pane('a'), pane('b')]), ['a', 'b'])],
       },
       script: (d) => {
         d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
         d.on('desktop_close_tile', (command) => ({
           event: 'profile_action_result', action: command.cmd, success: false, error_code: 'invalid',
-          error: 'chief of staff is protected from closing; unset the chief role first', request_id: command.request_id ?? '',
+          error: 'Chief is protected from closing; put Chief to sleep first', request_id: command.request_id ?? '',
         }));
       },
     });
@@ -107,7 +107,7 @@ describe('chief and crew sessions are protected from close', () => {
     expect(daemon.sentOf('desktop_close_tile')).toEqual([
       { cmd: 'desktop_close_tile', request_id: expect.any(String), desktop_id: 'ws', tile_id: 'pane-a' },
     ]);
-    expect(toast()).toHaveTextContent('chief of staff is protected from closing');
+    expect(toast()).toHaveTextContent('Chief is protected from closing');
   });
 
   it('closes an ordinary session normally and shows no hint', async () => {
