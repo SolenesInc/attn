@@ -11530,6 +11530,9 @@ type Session struct {
 	// Repository corresponds to the JSON schema field "repository".
 	Repository *string `json:"repository,omitempty,omitzero"`
 
+	// RepositoryOrigin corresponds to the JSON schema field "repository_origin".
+	RepositoryOrigin *string `json:"repository_origin,omitempty,omitzero"`
+
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
 

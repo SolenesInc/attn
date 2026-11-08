@@ -218,7 +218,7 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 
 func branchFromSession(session *protocol.Session) attngit.BranchInfo {
 	return attngit.BranchInfo{Branch: protocol.Deref(session.Branch), IsWorktree: protocol.Deref(session.IsWorktree),
-		MainRepo: protocol.Deref(session.MainRepo), Repository: protocol.Deref(session.Repository)}
+		MainRepo: protocol.Deref(session.MainRepo), Repository: protocol.Deref(session.Repository), Origin: protocol.Deref(session.RepositoryOrigin)}
 }
 
 func (d *Daemon) driverInputFromRecord(session protocol.SessionID) sessionmonitor.DriverMetadata {

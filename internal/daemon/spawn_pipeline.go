@@ -25,17 +25,18 @@ import (
 )
 
 type internalSpawnPolicy struct {
-	command               *store.TerminalCommand
-	installWorkflowSkill  bool
-	requireWorkflowSkill  bool
-	parentSessionID       protocol.SessionID
-	launchPlacement       *launchPlacement
-	unattendedLaunch      launchcontract.UnattendedLaunchSpec
-	approvalRoute         launchcontract.ApprovalRoute
-	preserveApprovalRoute bool
-	userStarted           bool
-	fromLedger            bool
-	startsLaunching       bool
+	command                *store.TerminalCommand
+	installWorkflowSkill   bool
+	requireWorkflowSkill   bool
+	recordsRepositoryTrust bool
+	parentSessionID        protocol.SessionID
+	launchPlacement        *launchPlacement
+	unattendedLaunch       launchcontract.UnattendedLaunchSpec
+	approvalRoute          launchcontract.ApprovalRoute
+	preserveApprovalRoute  bool
+	userStarted            bool
+	fromLedger             bool
+	startsLaunching        bool
 	// The client that asked; it gets the placement as its own answer before any broadcast of it.
 	requester *wsClient
 }
@@ -701,6 +702,9 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 	launch.InstallWorkflowSkill, launch.RequireWorkflowSkill = req.policy.installWorkflowSkill, req.policy.requireWorkflowSkill
 	launch.AddedTerminal = req.addsTerminal
 	launch.FreshCost = req.existingSession == nil && req.resumeSessionID == ""
+	if req.policy.recordsRepositoryTrust {
+		launch.RepositoryTrust = &RepositoryTrust{KnownOrigins: d.store.StartedRepositoryOrigins(req.profile.ID)}
+	}
 	if req.hasPluginDriver {
 		runID := uuid.NewString()
 		params := pluginDriverSpawnParams{

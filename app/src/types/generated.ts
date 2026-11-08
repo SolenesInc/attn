@@ -6243,6 +6243,7 @@ export interface SessionObject {
     profile_id:                 string;
     pull_requests?:             SeedPullRequestElement[];
     repository?:                string;
+    repository_origin?:         string;
     seed_id?:                   string;
     state:                      SessionState;
     state_reason?:              string;
@@ -11303,6 +11304,7 @@ export interface Session {
     profile_id:                 string;
     pull_requests?:             SeedPullRequestElement[];
     repository?:                string;
+    repository_origin?:         string;
     seed_id?:                   string;
     state:                      SessionState;
     state_reason?:              string;
@@ -23917,6 +23919,7 @@ const typeMap: any = {
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "pull_requests", js: "pull_requests", typ: u(undefined, a(r("SeedPullRequestElement"))) },
         { json: "repository", js: "repository", typ: u(undefined, "") },
+        { json: "repository_origin", js: "repository_origin", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
         { json: "state_reason", js: "state_reason", typ: u(undefined, "") },
@@ -27199,6 +27202,7 @@ const typeMap: any = {
         { json: "profile_id", js: "profile_id", typ: "" },
         { json: "pull_requests", js: "pull_requests", typ: u(undefined, a(r("SeedPullRequestElement"))) },
         { json: "repository", js: "repository", typ: u(undefined, "") },
+        { json: "repository_origin", js: "repository_origin", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: r("SessionState") },
         { json: "state_reason", js: "state_reason", typ: u(undefined, "") },

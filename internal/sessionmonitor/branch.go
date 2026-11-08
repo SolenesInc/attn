@@ -17,6 +17,7 @@ func (m *Monitor) CheckBranch() {
 		return
 	}
 	m.mu.Lock()
+	branch.Origin = m.branch.Origin
 	if m.branch == *branch {
 		m.mu.Unlock()
 		return

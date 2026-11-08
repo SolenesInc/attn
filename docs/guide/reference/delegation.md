@@ -370,6 +370,14 @@ never moves your Linear ticket to done by mistake.
 ## Details
 
 <details>
+<summary>Does a delegated Claude ask me to trust its folder?</summary>
+
+Only in a repository Attn doesn't know yet. When an agent session in the same profile has started a conversation in a repository with the same `origin`, on any machine, Attn records Claude's trust for that repository before the delegate launches, on the machine that runs the delegate, and notes it in the daemon log. It records the trust on the main repository, as answering the question in a worktree would, so new worktrees don't ask either. Remove the repository's entry from `.claude.json` to take the trust back.
+
+In any other repository, Claude asks. The session waits for you, and the agent that delegated hears about it after 90 seconds. Answer the question once and the repository is known from then on. A launch that never got past the question doesn't count.
+</details>
+
+<details>
 <summary>What happens to a delegate when the agent that started it closes?</summary>
 
 The delegate keeps running with its seed, and you can still open, steer, and close the delegate. The delegate's chain shows the closed agent at the top as unavailable, and Cmd+Shift+Up (Ctrl+Alt+O on Linux) does nothing from the delegate. When a crew member started the delegate, the member's current session takes the delegator's place, so the chain and the jump lead to the member's new session.

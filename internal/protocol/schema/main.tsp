@@ -210,6 +210,7 @@ model Session {
   is_worktree?: boolean;        // Optional: false if not worktree
   main_repo?: string;           // Optional: only set if worktree
   repository?: string;          // Local path of the repository the session ran in: the main repository for a worktree, the checkout itself otherwise
+  repository_origin?: string;   // The repository's origin remote, normalized to name it across machines; read once at launch
   state: SessionState;
   state_since: string;          // ISO timestamp, always set
   state_updated_at: string;     // ISO timestamp, always set

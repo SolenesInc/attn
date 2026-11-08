@@ -279,7 +279,7 @@ func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProt
 	if placement != nil {
 		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
 	}
-	placed, rejection := d.runSpawnPipelineProtected(protection, spawnMsg, internalSpawnPolicy{installWorkflowSkill: msg.InstallWorkflowSkill, requireWorkflowSkill: msg.RequireWorkflowSkill})
+	placed, rejection := d.runSpawnPipelineProtected(protection, spawnMsg, internalSpawnPolicy{installWorkflowSkill: msg.InstallWorkflowSkill, requireWorkflowSkill: msg.RequireWorkflowSkill, recordsRepositoryTrust: true})
 	placed.launch.finish()
 	return placed, rejection.reason()
 }

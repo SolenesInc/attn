@@ -69,6 +69,13 @@ func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper stri
 	if err != nil {
 		t.Fatal(err)
 	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := setClaudeTrust(toolHome, resolved); err != nil {
+		t.Fatal(err)
+	}
 	links := map[string]string{wrapperName: binary}
 	if wrapper != "" {
 		links[wrapperName] = wrapper
@@ -172,6 +179,22 @@ func (k *Kit) CodexFolderTrust(dir string) string {
 		k.t.Fatal(err)
 	}
 	return codexFolderTrust(config, dir)
+}
+
+func (k *Kit) SetClaudeFolderTrust(dir string) {
+	k.t.Helper()
+	if err := setClaudeTrust(k.cfg.ToolHome, dir); err != nil {
+		k.t.Fatal(err)
+	}
+}
+
+func (k *Kit) ClaudeFolderTrusted(dir string) bool {
+	k.t.Helper()
+	projects, err := readClaudeTrust(k.cfg.ToolHome)
+	if err != nil {
+		k.t.Fatal(err)
+	}
+	return projects[dir]["hasTrustDialogAccepted"] == true
 }
 
 func (k *Kit) CodexServers() []int {

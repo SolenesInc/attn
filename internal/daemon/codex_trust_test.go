@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/git"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,7 +37,7 @@ func TestAnUnattendedCodexRunTrustsOnlyAFolderTheUserIsKnownToTrust(t *testing.T
 	originOf := func(repository string) string {
 		rel, err := filepath.Rel(root, repository)
 		if remote, ok := origins[rel]; err == nil && ok {
-			return normalizedOrigin(remote)
+			return git.NormalizedOrigin(remote)
 		}
 		return ""
 	}
@@ -113,7 +114,7 @@ func TestTwoRemotesNameTheSameRepositoryOnlyWhenTheirHostedLocationsMatch(t *tes
 		{"SSH remotes in different users' homes", "alice@example.org:shop.git", "bob@example.org:shop.git", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			a, b := normalizedOrigin(c.a), normalizedOrigin(c.b)
+			a, b := git.NormalizedOrigin(c.a), git.NormalizedOrigin(c.b)
 			if a == "" || b == "" {
 				t.Fatalf("origins %q and %q normalize to %q and %q, want both named", c.a, c.b, a, b)
 			}

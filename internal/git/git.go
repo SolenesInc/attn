@@ -21,6 +21,7 @@ type BranchInfo struct {
 	IsWorktree bool
 	MainRepo   string
 	Repository string
+	Origin     string
 }
 
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {

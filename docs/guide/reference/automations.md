@@ -148,6 +148,17 @@ Runs start unattended, with an approval reviewer in your place, so a routine per
 </details>
 
 <details>
+<summary>Does a Claude run trust its folder?</summary>
+
+Only when you already do. A Claude run starts when either of these is true:
+
+- An agent session in the automation's profile has started a conversation in a repository with the same `origin`, on any machine. Attn then records Claude's trust on the main repository in `.claude.json` before the run starts, and notes it in the daemon log. Remove that entry to take the trust back.
+- Claude already trusts the folder or its repository.
+
+In any other folder the run fails, says why, and Claude does not start. Open Claude there once and trust the folder. The next run then starts.
+</details>
+
+<details>
 <summary>Does a Codex run trust its folder?</summary>
 
 Only when you already do. A Codex run starts when either of these is true:

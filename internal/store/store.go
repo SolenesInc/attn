@@ -161,6 +161,9 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.Repository != nil {
 		cloned.Repository = protocol.Ptr(protocol.Deref(session.Repository))
 	}
+	if session.RepositoryOrigin != nil {
+		cloned.RepositoryOrigin = protocol.Ptr(protocol.Deref(session.RepositoryOrigin))
+	}
 	if session.LastModelRequestAt != nil {
 		cloned.LastModelRequestAt = protocol.Ptr(protocol.Deref(session.LastModelRequestAt))
 	}
@@ -380,10 +383,10 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	var isWorktree, priority, commandTerminal int
 	var conversationStarted bool
 	var contextWindowCap int
-	var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+	var branch, mainRepo, repository, repositoryOrigin, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
+		SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, repository_origin, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, copied_from, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 		FROM sessions_with_runtime WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&labels.UserLabel,
@@ -395,6 +398,7 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 		&isWorktree,
 		&mainRepo,
 		&repository,
+		&repositoryOrigin,
 		&session.State,
 		&stateSince,
 		&stateUpdatedAt,
@@ -463,6 +467,9 @@ func (s *Store) openSessionLocked(id protocol.SessionID) (*protocol.Session, boo
 	}
 	if repository.Valid && repository.String != "" {
 		session.Repository = protocol.Ptr(repository.String)
+	}
+	if repositoryOrigin.Valid && repositoryOrigin.String != "" {
+		session.RepositoryOrigin = protocol.Ptr(repositoryOrigin.String)
 	}
 	session.StateSince = stateSince
 	session.StateUpdatedAt = stateUpdatedAt
@@ -574,11 +581,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, repository_origin, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE closed_at = '' ORDER BY id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
+			SELECT id, user_label, harness_title, agent, directory, profile_id, branch, is_worktree, main_repo, repository, repository_origin, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, succeeds, priority, host, command_terminal, (transcript_path != '' OR agent_driver_transcript_path != '')
 			FROM sessions_with_runtime WHERE state = ? AND closed_at = '' ORDER BY id`, stateFilter)
 	}
 	if err != nil {
@@ -595,7 +602,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var isWorktree, priority, commandTerminal int
 		var conversationStarted bool
 		var contextWindowCap int
-		var branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+		var branch, mainRepo, repository, repositoryOrigin, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
@@ -608,6 +615,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&isWorktree,
 			&mainRepo,
 			&repository,
+			&repositoryOrigin,
 			&session.State,
 			&stateSince,
 			&stateUpdatedAt,
@@ -673,6 +681,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		if repository.Valid && repository.String != "" {
 			session.Repository = protocol.Ptr(repository.String)
 		}
+		if repositoryOrigin.Valid && repositoryOrigin.String != "" {
+			session.RepositoryOrigin = protocol.Ptr(repositoryOrigin.String)
+		}
 		session.StateSince = stateSince
 		session.StateUpdatedAt = stateUpdatedAt
 		if lastModelRequestAt.Valid && lastModelRequestAt.String != "" {
@@ -713,6 +724,29 @@ func (s *Store) StartedConversationDirectories(profileID string) []string {
 		}
 	}
 	return directories
+}
+
+func (s *Store) StartedRepositoryOrigins(profileID string) []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+	rows, err := s.db.Query(`
+		SELECT DISTINCT r.repository_origin FROM sessions s JOIN session_runtime r ON r.session_id = s.id
+		WHERE s.profile_id = ? AND s.agent != ? AND r.repository_origin != '' AND (s.transcript_path != '' OR r.agent_driver_transcript_path != '')`, profileID, protocol.AgentShellValue)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var origins []string
+	for rows.Next() {
+		var origin string
+		if rows.Scan(&origin) == nil {
+			origins = append(origins, origin)
+		}
+	}
+	return origins
 }
 
 func (s *Store) HasSessionInDirectory(directory string) bool {

@@ -385,6 +385,7 @@ func newAutomationReviewWorld(t *testing.T, backlog ...int) *automationReviewWor
 	r.w = newWorld(t, fakeagent.Claude)
 	r.app, r.cli = r.w.App(), r.w.Client()
 	r.clone = newRepo(t, "shop")
+	r.w.SetClaudeFolderTrust(r.clone)
 	runGit(t, r.clone, "remote", "add", "origin", "git@github.test:acme/shop.git")
 	r.head = commitFile(t, r.clone, "change.go", "package change\n")
 	for _, number := range backlog {

@@ -335,6 +335,9 @@ func applyBranchInfo(session *protocol.Session, branchInfo *git.BranchInfo) {
 	if branchInfo.Repository != "" {
 		session.Repository = protocol.Ptr(branchInfo.Repository)
 	}
+	if branchInfo.Origin != "" {
+		session.RepositoryOrigin = protocol.Ptr(branchInfo.Origin)
+	}
 }
 
 func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSessionMessage) {

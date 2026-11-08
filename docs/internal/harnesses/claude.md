@@ -184,6 +184,15 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
   attn recognizes the question by the choice text "Yes, I trust this folder",
   which appears 0.8 to 2.2 s after start (4 launches of 2.1.319). "No, exit"
   ends the process with code 1.
+- Measured on 2.1.319 through a PTY with a scratch `CLAUDE_CONFIG_DIR`: folder
+  trust resolves through the main repository, and the walk up from the working
+  directory stops at the repository root. Trust on the main repository covers
+  its subfolders and every worktree. Trust on a worktree covers that worktree
+  only, not the main repository. Trust on a parent folder covers a plain folder
+  below it, but not a Git repository or worktree below it. Answering the
+  question inside a worktree writes `projects[<main repository>].hasTrustDialogAccepted`.
+  `claudeHasTrust` in `internal/daemon/claude_trust.go` copies this rule, so
+  recheck it when Claude changes trust handling.
 - An interactive paste can be stored as `\n\n<pasted_content id="hhhh">\n`,
   the pasted text, and `\n</pasted_content id="hhhh">\n`, with the same four
   hexadecimal characters in both tags. A 2.1.310 paid eval trace preserved

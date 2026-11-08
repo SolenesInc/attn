@@ -16,3 +16,11 @@ func (w *World) RefusePlugLaunches(reason string) (allow func()) {
 func (w *World) AskFolderTrustAtNextBoot() {
 	w.kit.AskFolderTrustAtNextBoot()
 }
+
+func (w *World) SetClaudeFolderTrust(dir string) {
+	w.kit.SetClaudeFolderTrust(dir)
+}
+
+func (w *World) ClaudeFolderTrusted(dir string) bool {
+	return w.kit.ClaudeFolderTrusted(dir)
+}

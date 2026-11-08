@@ -34,6 +34,11 @@ type AgentLaunch struct {
 	AddedTerminal        bool
 	FreshCost            bool
 	StartedAt            time.Time
+	RepositoryTrust      *RepositoryTrust
+}
+
+type RepositoryTrust struct {
+	KnownOrigins []string
 }
 
 type AgentPluginLaunch struct {
@@ -127,6 +132,9 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	}
 	l := d.linkNamed(launch.Link)
 	if err := d.trustUnattendedCodexFolder(opts, launch.Profile, l != nil && l.kind() == codexLinkKind); err != nil {
+		return nil, err
+	}
+	if err := d.settleClaudeFolderTrust(opts, launch.RepositoryTrust); err != nil {
 		return nil, err
 	}
 	if l != nil {

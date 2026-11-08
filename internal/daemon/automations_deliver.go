@@ -848,7 +848,7 @@ func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, i
 		return err
 	}
 	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
-	_, rejection := d.runSpawnPipelineReporting(message, internalSpawnPolicy{unattendedLaunch: req.Launch, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
+	_, rejection := d.runSpawnPipelineReporting(message, internalSpawnPolicy{unattendedLaunch: req.Launch, recordsRepositoryTrust: true, launchPlacement: &launchPlacement{kind: "automation", itemID: strconv.Itoa(req.DefinitionID)}})
 	if rejection != nil {
 		return rejection.reason()
 	}

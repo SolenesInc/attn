@@ -120,7 +120,11 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 		d.kickMonitorTerminals()
 	}()
 	opts.ID = msg.TerminalID
-	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, session.Directory)
+	identity := gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}
+	branchInfo, _ := d.readBranchInfo(context.Background(), identity, session.Directory)
+	if branchInfo != nil && branchInfo.Repository != "" {
+		branchInfo.Origin = d.repositoryOrigin(identity, branchInfo.Repository)
+	}
 	applyBranchInfo(&session, branchInfo)
 	d.seedAgentMonitor(&session, opts, agent)
 	plugin, err := d.prepareMachineAgent(session.ID, &opts, agent, false)

@@ -258,7 +258,7 @@ func serve(cfg config, style composer, conv conversation) int {
 		}
 		term.write("\x1b[2J\x1b[H" + term.composer())
 	}
-	if boot.FolderTrust {
+	if boot.FolderTrust && !claudeTrustsCurrentRepository(cfg.ToolHome) {
 		term.print(claudeFolderTrustScreen)
 		trusted, err := term.awaitFolderTrustAnswer()
 		if err != nil || !trusted {
