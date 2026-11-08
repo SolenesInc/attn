@@ -1,6 +1,6 @@
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { SessionPriority } from './SessionPriority';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, type UIEvent } from 'react';
 import { DaemonPR, RateLimitState } from '../hooks/useDaemonSocket';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { PRActions } from './PRActions';
@@ -19,6 +19,12 @@ import type { AutomationProvenance as AutomationProvenanceValue } from '../types
 import { SessionProvenance } from './SessionProvenance';
 import './Dashboard.css';
 import { formatShortcut } from '../shortcuts/formatShortcut';
+
+function stayAtLeftEdge(event: UIEvent<HTMLDivElement>) {
+  if (event.currentTarget.scrollLeft !== 0) {
+    event.currentTarget.scrollLeft = 0;
+  }
+}
 
 type DashboardSession = {
   id: string;
@@ -436,7 +442,7 @@ export function Dashboard({
               + New
             </button>
           </div>
-          <div className="card-body">
+          <div className="card-body" onScroll={stayAtLeftEdge}>
             {asks.length > 0 && (
               <div className="session-group" data-testid="session-group-asks">
                 <div className="group-label">
@@ -545,7 +551,7 @@ export function Dashboard({
               <span className="card-count">{needsAttention.length}</span>
             </div>
           </div>
-          <div className="card-body scrollable">
+          <div className="card-body scrollable" onScroll={stayAtLeftEdge}>
             {isLoading ? (
               <div className="pr-loading">
                 <div className="pr-loading-status">Fetching PRs...</div>
