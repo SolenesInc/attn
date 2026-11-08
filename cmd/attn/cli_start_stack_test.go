@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const maxPackageInitAllocs = 13000
+const maxPackageInitAllocs = 7000
 
 var packageInitLine = regexp.MustCompile(`(?m)^init (\S+) @.* (\d+) allocs$`)
 

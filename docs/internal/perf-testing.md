@@ -12,15 +12,16 @@ Every CLI command and agent hook runs package init before doing anything else.
 `TestEveryCommandStartsWithoutPayingForInitItNeverUses` runs on every Go land
 and fails when `attn version` makes more than `maxPackageInitAllocs` init
 allocations, naming the heaviest packages. `lint-go` also refuses jsonschema
-and Prometheus, which the start work dropped, because the limit alone would let
-Prometheus's 1,429 allocations back in.
+and Prometheus, which the start work dropped, so either one fails by name
+instead of as a count.
 
 | `GODEBUG=inittrace=1 attn version`, Linux unless named | Init allocations |
 | --- | --- |
-| Today, 5db0778fa | 10,373 |
+| Today, with regexps, migrations and garden events built on first use | 5,877 |
+| Before that, 5db0778fa | 10,373 |
 | macOS arm64, 25c2331c | 10,537 |
-| Today plus Prometheus | 11,802 |
-| Today plus jsonschema | 32,725 |
+| 5db0778fa plus Prometheus | 11,802 |
+| 5db0778fa plus jsonschema | 32,725 |
 | Before the start work, 6496f367b | 39,179 |
 
 The count moves by a few allocations between runs, even at load 16, while init
