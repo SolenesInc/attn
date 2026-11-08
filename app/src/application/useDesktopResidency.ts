@@ -7,6 +7,7 @@ import { useAppSessions } from './useAppSessions';
 import { usePendingTerminalInput } from '../store/pendingTerminalInput';
 import { poppedLeaves } from '../types/desktop';
 import { desktopTerminalState } from '../utils/desktops';
+import { tileWindowsSupported } from '../tileWindow/supported';
 
 type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'][number];
 
@@ -14,11 +15,10 @@ interface Options {
   desktopViews: DesktopWithSessions<EnrichedSession>[];
   view: AppView;
   dragSourceDesktopId: string | null;
-  tileWindowsEnabled: boolean;
 }
 
-function poppedPanes(desktops: ReturnType<typeof useProfilesStore.getState>['desktops'], enabled: boolean) {
-  if (!enabled) return { desktopIds: new Set<string>(), sessionIds: new Set<string>() };
+function poppedPanes(desktops: ReturnType<typeof useProfilesStore.getState>['desktops']) {
+  if (!tileWindowsSupported()) return { desktopIds: new Set<string>(), sessionIds: new Set<string>() };
   const desktopIds = new Set<string>();
   const sessionIds = new Set<string>();
   for (const desktop of desktops) {
@@ -49,9 +49,9 @@ function useDesktopsAwaitingVisit(poppedDesktopIds: Set<string>, shownDesktopId:
   return awaiting;
 }
 
-export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId, tileWindowsEnabled }: Options) {
+export function useDesktopResidency({ desktopViews, view, dragSourceDesktopId }: Options) {
   const desktops = useProfilesStore((state) => state.desktops);
-  const popped = useMemo(() => poppedPanes(desktops, tileWindowsEnabled), [desktops, tileWindowsEnabled]);
+  const popped = useMemo(() => poppedPanes(desktops), [desktops]);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
   const awaitingVisit = useDesktopsAwaitingVisit(popped.desktopIds, view === 'session' ? currentDesktopId : null);

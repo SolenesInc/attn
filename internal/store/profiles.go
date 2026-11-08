@@ -16,7 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 type LeafMove struct {
@@ -900,32 +899,13 @@ func showDesktopLeaf(tx *sql.Tx, now string, profile *profiles.Profile, desktop 
 	if err := saveDesktopFocus(tx, now, desktop, leafID); err != nil {
 		return err
 	}
-	popped, err := poppedOut(tx, desktop.Tree, leafID)
-	if err != nil {
-		return err
-	}
-	if popped {
+	if layouttree.Popped(desktop.Tree, leafID) {
 		return touchProfileUse(tx, profile, now)
 	}
 	profile.CurrentDesktopID = desktop.ID
 	profile.LastUsedAt = now
-	_, err = tx.Exec(`UPDATE profiles SET current_desktop_id = ?, last_used_at = ? WHERE id = ?`, desktop.ID, now, profile.ID)
+	_, err := tx.Exec(`UPDATE profiles SET current_desktop_id = ?, last_used_at = ? WHERE id = ?`, desktop.ID, now, profile.ID)
 	return err
-}
-
-func tileWindowsOn(tx *sql.Tx) (bool, error) {
-	var value string
-	if _, err := rowFound(tx.QueryRow(`SELECT value FROM settings WHERE key = ? AND copied_from = ''`, setting.TilePopoutEnabled.Key), &value); err != nil {
-		return false, err
-	}
-	return strings.EqualFold(strings.TrimSpace(setting.TilePopoutEnabled.WithDefault(value)), "true"), nil
-}
-
-func poppedOut(tx *sql.Tx, tree layouttree.Node, leafID string) (bool, error) {
-	if !layouttree.Popped(tree, leafID) {
-		return false, nil
-	}
-	return tileWindowsOn(tx)
 }
 
 func (s *Store) ShowLeaf(desktopID, leafID string) (profiles.Profile, profiles.Desktop, string, error) {
@@ -992,11 +972,7 @@ func shownSessionTile(tx *sql.Tx, tiles []sessionTile) (profiles.Desktop, string
 		if err != nil {
 			return profiles.Desktop{}, "", err
 		}
-		popped, err := poppedOut(tx, desktop.Tree, tile.tileID)
-		if err != nil {
-			return profiles.Desktop{}, "", err
-		}
-		if popped {
+		if layouttree.Popped(desktop.Tree, tile.tileID) {
 			return desktop, tile.tileID, nil
 		}
 		if i == 0 {
@@ -1155,23 +1131,15 @@ func newSplitID() string {
 	return newProfileEntityID("split")
 }
 
-func settleDesktop(tx *sql.Tx, desktop profiles.Desktop, previousTree layouttree.Node) (profiles.Desktop, error) {
-	tileWindows, err := tileWindowsOn(tx)
-	if err != nil {
-		return desktop, err
-	}
-	mainLeafIDs := layouttree.LeafIDs
-	if tileWindows {
-		mainLeafIDs = layouttree.MainLeafIDs
-	}
-	desktop = profiles.SettleAfterIn(desktop, previousTree, layouttree.NextInPosition, mainLeafIDs)
+func settleDesktop(desktop profiles.Desktop, previousTree layouttree.Node) profiles.Desktop {
+	desktop = profiles.SettleAfter(desktop, previousTree, layouttree.NextInPosition)
 	for i := range desktop.Panes {
 		desktop.Panes[i].DesktopID = desktop.ID
 		if desktop.Panes[i].Status == "" {
 			desktop.Panes[i].Status = profiles.PaneStatusReady
 		}
 	}
-	return desktop, nil
+	return desktop
 }
 
 func writeCurrentDesktopArrangement(tx *sql.Tx, now string, desktop *profiles.Desktop) error {
@@ -1187,9 +1155,7 @@ func writeCurrentArrivingArrangement(tx *sql.Tx, now string, desktop *profiles.D
 		return err
 	}
 	desktop.FocusHistory = profiles.Focus(previous, previous.ActivePaneID).FocusHistory
-	if *desktop, err = settleDesktop(tx, *desktop, previous.Tree); err != nil {
-		return err
-	}
+	*desktop = settleDesktop(*desktop, previous.Tree)
 	if err := profiles.CheckDesktop(*desktop); err != nil {
 		return err
 	}

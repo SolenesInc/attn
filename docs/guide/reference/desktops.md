@@ -51,6 +51,13 @@ When a desktop gets crowded:
 - Focus, Cmd+Shift+Enter (Ctrl+Alt+Enter on Linux), shows only the active tile.
   Esc or the same keys bring the rest back.
 
+On macOS, a tile can also have a window of its own. Cmd+Shift+O, the pop-out
+button in the tile's header, or "Pop out tile" in the palette moves the active
+tile into its own window, and the tile keeps its place on its desktop. The same
+keys, or closing the window, bring it back. A popped-out tile returns to its
+window and saved position when Attn restarts. Showing a popped-out tile from
+another desktop leaves the main window where it is.
+
 ## Moving agents
 
 Cmd+Option+1–9 (Ctrl+Alt+1–9 on Linux) moves the active tile to that desktop and

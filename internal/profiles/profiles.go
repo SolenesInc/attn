@@ -246,10 +246,6 @@ func RecentThenLeft(previousTree layouttree.Node, closedLeafID string, live map[
 }
 
 func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus) Desktop {
-	return SettleAfterIn(desktop, previousTree, closeFocus, layouttree.MainLeafIDs)
-}
-
-func SettleAfterIn(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus, mainLeafIDs func(layouttree.Node) []string) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
 	leaves := layouttree.LeafIDs(desktop.Tree)
 	live := make(map[string]bool, len(leaves))
@@ -263,7 +259,7 @@ func SettleAfterIn(desktop Desktop, previousTree layouttree.Node, closeFocus Clo
 		}
 	}
 	if !live[desktop.ActivePaneID] {
-		main := mainLeafIDs(desktop.Tree)
+		main := layouttree.MainLeafIDs(desktop.Tree)
 		inMain := make(map[string]bool, len(main))
 		for _, id := range main {
 			inMain[id] = true

@@ -1,0 +1,4 @@
+kind: changed
+area: desktops
+change: Tile windows are always available on macOS. Pop a tile out with Cmd+Shift+O, the button in its header or the palette; closing the window brings it back.
+notes: The tile_popout_enabled setting is gone. A stored value is removed at upgrade, and tiles that were already popped out reopen in their windows.

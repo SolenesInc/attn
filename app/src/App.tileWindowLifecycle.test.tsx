@@ -48,12 +48,11 @@ function scriptPopOut(daemon: ScriptedDaemon) {
   });
 }
 
-async function openBrowserOnA({ popoutOn, popped = false }: { popoutOn: boolean; popped?: boolean }) {
+async function openBrowserOnA({ popped = false }: { popped?: boolean } = {}) {
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async (command: string) => (command === 'tile_window_frame_over' ? FRAME : undefined));
   await letTileWindowsOpen();
   fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, 1500, 1000) : null));
-  const settings = { tile_popout_enabled: popoutOn ? 'true' : 'false' };
   const view = await renderApp({ initialState: {
     sessions: [daemonSession('s1', { state: 'idle' })],
     profiles: [defaultProfile('A')],
@@ -62,9 +61,8 @@ async function openBrowserOnA({ popoutOn, popped = false }: { popoutOn: boolean;
       emptyDesktop('B', { shortcut_slot: 2 }),
       emptyDesktop('C', { shortcut_slot: 3 }),
     ],
-    settings,
   } });
-  serveSettings(view.daemon, settings);
+  serveSettings(view.daemon, {});
   scriptPopOut(view.daemon);
   await act(async () => { await openSession(view.daemon, 's1'); });
   return view;
@@ -72,7 +70,7 @@ async function openBrowserOnA({ popoutOn, popped = false }: { popoutOn: boolean;
 
 describe('a browser tile in its own window', () => {
   it('stays shown while Settings is open in main', async () => {
-    const { daemon } = await openBrowserOnA({ popoutOn: true, popped: true });
+    const { daemon } = await openBrowserOnA({ popped: true });
     const tileWindowLabel = shownTileWindowLabel();
     expect(lastBrowserUpdate()).toMatchObject({ window: tileWindowLabel, geometry: { visible: true } });
 
@@ -82,7 +80,7 @@ describe('a browser tile in its own window', () => {
   });
 
   it('keeps its live page when brought back to a desktop main has moved away from', async () => {
-    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    const { daemon } = await openBrowserOnA();
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
     await gesture(daemon, () => pressShortcut('desktop.select2'));
     await gesture(daemon, () => pressShortcut('desktop.select3'));
@@ -96,7 +94,7 @@ describe('a browser tile in its own window', () => {
   });
 
   it('keeps its live page when brought back while main shows the home screen', async () => {
-    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    const { daemon } = await openBrowserOnA();
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
     await gesture(daemon, () => pressShortcut('session.goToDashboard'));
 
@@ -110,7 +108,7 @@ describe('a browser tile in its own window', () => {
   });
 
   it('lets its desktop leave memory once main has shown it after the bring-back', async () => {
-    const { daemon } = await openBrowserOnA({ popoutOn: true });
+    const { daemon } = await openBrowserOnA();
     await gesture(daemon, () => fireEvent.click(screen.getByTestId('tile-window-toggle-tile-browser')));
     await gesture(daemon, () => pressShortcut('session.goToDashboard'));
     const tileWindowLabel = shownTileWindowLabel();
@@ -122,13 +120,4 @@ describe('a browser tile in its own window', () => {
 
     expect(browserHostLifecycle()).toEqual(['browser_host_mount', 'browser_host_unmount']);
   });
-});
-
-it('turning tile windows on and off keeps open browser pages', async () => {
-  const { daemon } = await openBrowserOnA({ popoutOn: false });
-
-  await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { tile_popout_enabled: 'true' } }));
-  await gesture(daemon, () => daemon.emit({ event: 'settings_updated', settings: { tile_popout_enabled: 'false' } }));
-
-  expect(browserHostLifecycle()).toEqual(['browser_host_mount']);
 });

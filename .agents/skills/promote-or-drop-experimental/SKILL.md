@@ -85,12 +85,12 @@ Git history and the existing sections of `CHANGELOG.md` are records. Leave them.
 ## Walk every surface
 
 Search for the key, the Go and TypeScript identifiers, and the display name.
-This example is for `tile_popout_enabled`, displayed as Tile windows. The first
-search matches `tile_popout_enabled`, `TilePopoutEnabled` and `tilePopoutEnabled`:
+This example is for `new_session_launcher_enabled`, displayed as Launcher 2.0. The first
+search matches `new_session_launcher_enabled`, `NewSessionLauncherEnabled` and `newSessionLauncherEnabled`:
 
 ```sh
-git grep -il -E 'tile_?popout_?enabled'
-git grep -il 'tile windows' -- docs website .agents internal/prompts mobile
+git grep -il -E 'new_?session_?launcher_?enabled'
+git grep -il 'launcher 2.0' -- docs website .agents internal/prompts mobile
 ```
 
 Stop when the first search returns only files you meant to keep. Check each

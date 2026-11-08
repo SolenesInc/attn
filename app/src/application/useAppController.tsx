@@ -40,7 +40,6 @@ import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
 import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
 import { focusLanded, selectionShown } from '../hooks/uiAutomationSelection';
-import { tileWindowsEnabled } from '../tileWindow/enabled';
 
 export function useAppController({
   daemonSessions,
@@ -520,7 +519,6 @@ export function useAppController({
     desktopViews,
     view,
     dragSourceDesktopId: leafDrag.leafDesktopDrag?.sourceDesktopId ?? null,
-    tileWindowsEnabled: tileWindowsEnabled(settings),
   });
   const { onScreenSessionIds } = desktopResidency;
 

@@ -14,7 +14,7 @@ import { useProfilesStore } from '../store/profiles';
 import { desktopLabel, desktopTerminalState, orderedDesktops, sortedDesktopOrder } from '../utils/desktops';
 import { activeLeafOf } from '../navigation/activeLeaf';
 import { collectLayoutLeaves, isPoppedLeaf, leafSlotId } from '../types/desktop';
-import { tileWindowsEnabled } from '../tileWindow/enabled';
+import { tileWindowsSupported } from '../tileWindow/supported';
 import type { ShortcutId } from '../shortcuts/registry';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
@@ -781,7 +781,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return commands;
   }, [chief, setSidebarCollapsed]);
 
-  const popoutOn = tileWindowsEnabled(settings);
+  const popoutOn = tileWindowsSupported();
   const tileWindowCommands = useMemo<PaletteCommand[]>(() => {
     if (!popoutOn) return [];
     const active = activeLeafOf({ profileId: selectedProfileId ?? '', currentDesktopId, desktops });

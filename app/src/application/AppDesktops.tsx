@@ -31,7 +31,7 @@ import { openThenShow } from './openThenShow';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 import { localDirectory } from '../utils/outpostPaths';
 import { BoolSetting, isOn } from '../utils/settings';
-import { tileWindowsEnabled } from '../tileWindow/enabled';
+import { tileWindowsSupported } from '../tileWindow/supported';
 import { frameOverLeaf, useTileWindows } from '../tileWindow/useTileWindows';
 
 export function AppDesktops() {
@@ -104,7 +104,7 @@ export function AppDesktops() {
     return home.id === viewing.id ? `${named} on this desktop` : `${named} on ${desktopLabel(home, desktops)}`;
   };
 
-  const popoutOn = tileWindowsEnabled(settings);
+  const popoutOn = tileWindowsSupported();
   useTileWindows(popoutOn, showError);
 
   const mounted = orderedDesktops(desktops).filter((desktop) => mountedDesktopIds.has(desktop.id));
