@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
@@ -45,7 +46,9 @@ func Stamp(id, body string) string {
 	return fmt.Sprintf("<!-- attn-seed %s body-sha256 %s -->\n%s", id, BodySHA256(body), body)
 }
 
-var bodyStamp = regexp.MustCompile(`^<!-- attn-seed (\S+) body-sha256 ([0-9a-f]{64}) -->$`)
+var bodyStamp = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^<!-- attn-seed (\S+) body-sha256 ([0-9a-f]{64}) -->$`)
+})
 
 func EditRecipe(id string) string {
 	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
@@ -60,7 +63,7 @@ func ValidateBodyEdit(body string) error {
 
 func ParseStamped(id, text string) (body, base string, err error) {
 	line, body, found := strings.Cut(text, "\n")
-	stamp := bodyStamp.FindStringSubmatch(strings.TrimSuffix(line, "\r"))
+	stamp := bodyStamp().FindStringSubmatch(strings.TrimSuffix(line, "\r"))
 	if !found || stamp == nil {
 		return "", "", protocol.Refuse(protocol.RefusalInvalidInput, "%s", EditRecipe(id))
 	}

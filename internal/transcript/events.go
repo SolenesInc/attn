@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/statemarker"
 )
@@ -34,12 +35,24 @@ var (
 	ErrCursorMismatch = errors.New("transcript cursor does not match this transcript")
 	ErrCursorPastEnd  = errors.New("transcript cursor is past the end of the transcript")
 
-	bearerSecretPattern     = regexp.MustCompile(`(?i)\b(bearer\s+)[A-Za-z0-9._~+/=-]+`)
-	assignmentSecretPattern = regexp.MustCompile(`(?i)(\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|passwd|secret|authorization|cookie|private[_-]?key)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)`)
-	knownTokenPattern       = regexp.MustCompile(`\b(?:github_pat_[A-Za-z0-9_]{12,}|gh[opusr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})\b`)
-	urlCredentialPattern    = regexp.MustCompile(`(https?://[^\s:/@]+:)[^\s/@]+(@)`)
-	privateKeyPattern       = regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
-	toolFailurePattern      = regexp.MustCompile(`(?i)(?:process|script|command) exited with (?:code )?[1-9][0-9]*|["']?exit_code["']?\s*[:=]\s*[1-9][0-9]*`)
+	bearerSecretPattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`(?i)\b(bearer\s+)[A-Za-z0-9._~+/=-]+`)
+	})
+	assignmentSecretPattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`(?i)(\b(?:api[_-]?key|access[_-]?token|auth[_-]?token|token|password|passwd|secret|authorization|cookie|private[_-]?key)\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;}]+)`)
+	})
+	knownTokenPattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`\b(?:github_pat_[A-Za-z0-9_]{12,}|gh[opusr]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16})\b`)
+	})
+	urlCredentialPattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`(https?://[^\s:/@]+:)[^\s/@]+(@)`)
+	})
+	privateKeyPattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----`)
+	})
+	toolFailurePattern = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`(?i)(?:process|script|command) exited with (?:code )?[1-9][0-9]*|["']?exit_code["']?\s*[:=]\s*[1-9][0-9]*`)
+	})
 )
 
 type Event struct {
@@ -457,7 +470,7 @@ func parseCodexEvent(envelope eventEnvelope) []Event {
 				Kind:       EventKindToolResult,
 				ToolCallID: payload.CallID,
 				Text:       text,
-				IsError:    strings.EqualFold(payload.Status, "failed") || payload.Error != "" || toolFailurePattern.MatchString(text),
+				IsError:    strings.EqualFold(payload.Status, "failed") || payload.Error != "" || toolFailurePattern().MatchString(text),
 			}}
 		}
 		if strings.Contains(payload.Type, "error") || payload.Error != "" {
@@ -634,11 +647,11 @@ func RedactText(text string) string {
 	if text == "" {
 		return ""
 	}
-	text = privateKeyPattern.ReplaceAllString(text, "[REDACTED PRIVATE KEY]")
-	text = bearerSecretPattern.ReplaceAllString(text, `${1}[REDACTED]`)
-	text = assignmentSecretPattern.ReplaceAllString(text, `${1}[REDACTED]`)
-	text = knownTokenPattern.ReplaceAllString(text, "[REDACTED]")
-	text = urlCredentialPattern.ReplaceAllString(text, `${1}[REDACTED]${2}`)
+	text = privateKeyPattern().ReplaceAllString(text, "[REDACTED PRIVATE KEY]")
+	text = bearerSecretPattern().ReplaceAllString(text, `${1}[REDACTED]`)
+	text = assignmentSecretPattern().ReplaceAllString(text, `${1}[REDACTED]`)
+	text = knownTokenPattern().ReplaceAllString(text, "[REDACTED]")
+	text = urlCredentialPattern().ReplaceAllString(text, `${1}[REDACTED]${2}`)
 	return text
 }
 

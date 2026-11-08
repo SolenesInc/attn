@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
@@ -134,14 +135,18 @@ func (d Document) Type() string {
 func (d Document) Title() string { return firstH1(d.Body) }
 
 var (
-	atxH1Re   = regexp.MustCompile(`^ {0,3}#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$`)
-	mdFenceRe = regexp.MustCompile("^[ \t]*(`{3,}|~{3,})")
+	atxH1Re = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^ {0,3}#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$`)
+	})
+	mdFenceRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile("^[ \t]*(`{3,}|~{3,})")
+	})
 )
 
 func firstH1(body string) string {
 	var fence byte
 	for line := range strings.SplitSeq(body, "\n") {
-		if mdFenceRe.MatchString(line) {
+		if mdFenceRe().MatchString(line) {
 			marker := strings.TrimLeft(line, " \t")[0]
 			switch {
 			case fence == 0:
@@ -154,7 +159,7 @@ func firstH1(body string) string {
 		if fence != 0 {
 			continue
 		}
-		if m := atxH1Re.FindStringSubmatch(line); m != nil {
+		if m := atxH1Re().FindStringSubmatch(line); m != nil {
 			return strings.TrimSpace(m[1])
 		}
 	}

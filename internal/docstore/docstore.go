@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -169,12 +170,22 @@ type Compiled struct {
 }
 
 var (
-	namePart      = `[a-z0-9][a-z0-9_-]*`
-	namespaceRe   = regexp.MustCompile(`^` + namePart + `/` + namePart + `$`)
-	collectionRe  = regexp.MustCompile(`^` + namePart + `$`)
-	documentIDRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
-	fieldNameRe   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
-	tableNameRe   = regexp.MustCompile(`^doc_[1-9][0-9]*$`)
+	namePart    = `[a-z0-9][a-z0-9_-]*`
+	namespaceRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^` + namePart + `/` + namePart + `$`)
+	})
+	collectionRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^` + namePart + `$`)
+	})
+	documentIDRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+	})
+	fieldNameRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+	})
+	tableNameRe = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^doc_[1-9][0-9]*$`)
+	})
 	reservedField = map[string]bool{FieldCreatedAt: true, FieldUpdatedAt: true}
 )
 
@@ -191,7 +202,7 @@ func ValidateTableName(name string) error {
 	if name == "" {
 		return fmt.Errorf("docstore: collection has no table; a declaration must be read from the store before it can be queried")
 	}
-	if !tableNameRe.MatchString(name) {
+	if !tableNameRe().MatchString(name) {
 		return fmt.Errorf("docstore: %q is not a minted table name", name)
 	}
 	return nil
@@ -224,7 +235,7 @@ func ValidateNamespace(ns string) error {
 	if ns == "" {
 		return fmt.Errorf("docstore: namespace is required, as owner/name (for example core/garden)")
 	}
-	if !namespaceRe.MatchString(ns) {
+	if !namespaceRe().MatchString(ns) {
 		return fmt.Errorf("docstore: namespace %q is not owner/name, where each part is lowercase letters, digits, - or _ (for example core/garden)", ns)
 	}
 	return nil
@@ -234,7 +245,7 @@ func ValidateCollection(name string) error {
 	if name == "" {
 		return fmt.Errorf("docstore: collection is required")
 	}
-	if !collectionRe.MatchString(name) {
+	if !collectionRe().MatchString(name) {
 		return fmt.Errorf("docstore: collection %q must be lowercase letters, digits, - or _", name)
 	}
 	return nil
@@ -244,7 +255,7 @@ func ValidateDocumentID(id string) error {
 	if id == "" {
 		return fmt.Errorf("docstore: document id is required")
 	}
-	if !documentIDRe.MatchString(id) {
+	if !documentIDRe().MatchString(id) {
 		return fmt.Errorf("docstore: document id %q must start alphanumeric and contain only letters, digits, ., - or _", id)
 	}
 	return nil
@@ -265,7 +276,7 @@ func (s CollectionSchema) Validate() error {
 		case reservedField[f.Name]:
 			return fmt.Errorf("docstore: %s/%s declares %q, which is reserved — %s and %s are always queryable and must not be declared",
 				s.Namespace, s.Collection, f.Name, FieldCreatedAt, FieldUpdatedAt)
-		case !fieldNameRe.MatchString(f.Name):
+		case !fieldNameRe().MatchString(f.Name):
 			return fmt.Errorf("docstore: %s/%s declares field %q, which must start with a letter or _ and contain only letters, digits or _",
 				s.Namespace, s.Collection, f.Name)
 		case seen[f.Name]:
@@ -281,7 +292,7 @@ func (s CollectionSchema) Validate() error {
 	}
 	clear(seen)
 	for _, name := range s.Text {
-		if !fieldNameRe.MatchString(name) || seen[name] {
+		if !fieldNameRe().MatchString(name) || seen[name] {
 			return fmt.Errorf("docstore: %s/%s has an invalid or repeated text field %q", s.Namespace, s.Collection, name)
 		}
 		seen[name] = true

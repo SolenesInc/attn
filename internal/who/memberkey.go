@@ -3,14 +3,17 @@ package who
 import (
 	"fmt"
 	"regexp"
+	"sync"
 )
 
 type MemberKey struct{ key string }
 
-var memberKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+var memberKeyPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z][a-z0-9-]{0,39}$`)
+})
 
 func ParseMemberKey(stored string) (MemberKey, error) {
-	if !memberKeyPattern.MatchString(stored) {
+	if !memberKeyPattern().MatchString(stored) {
 		return MemberKey{}, fmt.Errorf("invalid stored member key %q: lowercase letters, digits and -, starting with a letter, at most 40 characters", stored)
 	}
 	return MemberKey{key: stored}, nil

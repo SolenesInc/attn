@@ -869,10 +869,12 @@ func (d *Daemon) applyPtySize(owner terminalClient, terminal protocol.TerminalID
 	})
 }
 
-var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+var hexColorPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+})
 
 func sanitizeThemeColor(value string) string {
-	if hexColorPattern.MatchString(value) {
+	if hexColorPattern().MatchString(value) {
 		return value
 	}
 	return ""
@@ -883,7 +885,7 @@ func sanitizeANSIPalette(values []string) (palette [16]string, ok bool) {
 		return palette, false
 	}
 	for i, value := range values {
-		if !hexColorPattern.MatchString(value) {
+		if !hexColorPattern().MatchString(value) {
 			return [16]string{}, false
 		}
 		palette[i] = value

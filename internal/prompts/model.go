@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type Field struct {
@@ -133,7 +134,9 @@ type Catalog struct {
 	templates  map[string]string
 }
 
-var placeholder = regexp.MustCompile(`\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}`)
+var placeholder = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}`)
+})
 
 func New(files fs.FS, recipients ...Recipient) (*Catalog, error) {
 	c := &Catalog{recipients: cloneRecipients(recipients), templates: map[string]string{}}
@@ -216,12 +219,12 @@ func (c *Catalog) validate(files fs.FS, n Node, ids map[string]string, fields ma
 			}
 			return nil
 		}
-		remainder := placeholder.ReplaceAllString(source, "")
+		remainder := placeholder().ReplaceAllString(source, "")
 		if strings.Contains(remainder, "{{") || strings.Contains(remainder, "}}") {
 			return fmt.Errorf("%s: only {{name}} substitutions are supported", n.Source)
 		}
 		used := map[string]bool{}
-		for _, match := range placeholder.FindAllStringSubmatch(source, -1) {
+		for _, match := range placeholder().FindAllStringSubmatch(source, -1) {
 			used[match[1]] = true
 		}
 		for _, binding := range n.Bindings {
@@ -436,7 +439,7 @@ func (c *Catalog) render(n Node, values Values, selected bool, reason string) (T
 			}
 			t.Text = source
 			if !n.Verbatim {
-				t.Text = placeholder.ReplaceAllStringFunc(source, func(token string) string {
+				t.Text = placeholder().ReplaceAllStringFunc(source, func(token string) string {
 					return bound[token[2:len(token)-2]]
 				})
 			}

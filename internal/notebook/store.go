@@ -65,10 +65,12 @@ func (s *Store) EnsureScaffold() (created []SelfWrite, err error) {
 	return created, nil
 }
 
-var journalDateRE = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+var journalDateRE = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+})
 
 func (s *Store) AppendJournal(dateISO, entry string) (relPath string, hash string, err error) {
-	if !journalDateRE.MatchString(dateISO) {
+	if !journalDateRE().MatchString(dateISO) {
 		return "", "", fmt.Errorf("notebook: invalid journal date %q (want YYYY-MM-DD)", dateISO)
 	}
 	if strings.TrimSpace(entry) == "" {

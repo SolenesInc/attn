@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
@@ -130,7 +131,9 @@ func Decode(body []byte) (Member, error) {
 
 const MaxIDChars = 40
 
-var memberIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var memberIDRe = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+})
 
 const DaemonID = "attn"
 
@@ -141,7 +144,7 @@ func ValidateID(id string) error {
 	if len(id) > MaxIDChars {
 		return fmt.Errorf("%q is %d characters and a member id's limit is %d — a member's name is said out loud", id, len(id), MaxIDChars)
 	}
-	if !memberIDRe.MatchString(id) {
+	if !memberIDRe().MatchString(id) {
 		return fmt.Errorf("%q is not a member id: lowercase letters, digits and - only, starting with a letter, like `trellis`", id)
 	}
 	if id == DaemonID {
@@ -166,9 +169,13 @@ const MaxNameChars = 40
 
 const KeyRefPrefix = "member:"
 
-var namePattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
+var namePattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]*$`)
+})
 
-var idShapedName = regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
+var idShapedName = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[A-Za-z]-[A-Za-z0-9]{6}$`)
+})
 
 func ValidateName(name string) error {
 	if name == "" {
@@ -177,14 +184,14 @@ func ValidateName(name string) error {
 	if len(name) > MaxNameChars {
 		return fmt.Errorf("%q is too long: a crew member name's limit is %d characters, asked for %d", name, MaxNameChars, len(name))
 	}
-	if !namePattern.MatchString(name) {
+	if !namePattern().MatchString(name) {
 		return fmt.Errorf("%q is not a crew member name: letters, digits and - only, starting with a letter", name)
 	}
 	switch strings.ToLower(name) {
 	case ChiefAlias, DaemonID, "user", "you":
 		return fmt.Errorf("%q is reserved; attn uses it to address someone else", name)
 	}
-	if idShapedName.MatchString(name) {
+	if idShapedName().MatchString(name) {
 		return fmt.Errorf("%q looks like an ID; choose a name that does not", name)
 	}
 	return nil

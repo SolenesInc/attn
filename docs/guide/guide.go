@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 )
 
 //go:embed tutorials/*.md reference/*.md diagrams/*.txt
@@ -16,8 +17,12 @@ var sections = []string{"tutorials", "reference"}
 
 var readingOrder = []string{"getting-started", "building-with-roles"}
 
-var imageLink = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
-var summaryLine = regexp.MustCompile(`<summary>(.*?)</summary>`)
+var imageLink = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
+})
+var summaryLine = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`<summary>(.*?)</summary>`)
+})
 
 type page struct {
 	topic string
@@ -64,8 +69,8 @@ func Topic(name string) ([]byte, error) {
 }
 
 func forTerminal(section, text string) string {
-	return imageLink.ReplaceAllStringFunc(text, func(link string) string {
-		match := imageLink.FindStringSubmatch(link)
+	return imageLink().ReplaceAllStringFunc(text, func(link string) string {
+		match := imageLink().FindStringSubmatch(link)
 		alt, target := match[1], path.Clean(path.Join(section, match[2]))
 		if strings.HasPrefix(target, "diagrams/") {
 			if diagram, err := content.ReadFile(strings.TrimSuffix(target, path.Ext(target)) + ".txt"); err == nil {
@@ -103,7 +108,7 @@ func writeOutline(out *strings.Builder, p page) {
 			level := len(line) - len(strings.TrimLeft(line, "#"))
 			fmt.Fprintf(out, "%s%s\n", strings.Repeat("  ", level), strings.TrimSpace(line[level:]))
 		}
-		if match := summaryLine.FindStringSubmatch(line); match != nil {
+		if match := summaryLine().FindStringSubmatch(line); match != nil {
 			fmt.Fprintf(out, "      %s\n", match[1])
 		}
 	}

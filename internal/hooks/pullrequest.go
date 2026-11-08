@@ -4,23 +4,28 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"sync"
 )
 
-var ghPRCreatePattern = regexp.MustCompile(`\bgh\s+pr\s+create\b`)
+var ghPRCreatePattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`\bgh\s+pr\s+create\b`)
+})
 
-var pullRequestURLPattern = regexp.MustCompile(`https://[A-Za-z0-9][A-Za-z0-9.-]*/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[0-9]+`)
+var pullRequestURLPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`https://[A-Za-z0-9][A-Za-z0-9.-]*/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/pull/[0-9]+`)
+})
 
 func PullRequestCreated(toolName string, toolInput, toolResponse json.RawMessage) []string {
 	if !isShellTool(toolName) {
 		return nil
 	}
-	if !ghPRCreatePattern.MatchString(shellCommand(toolInput)) {
+	if !ghPRCreatePattern().MatchString(shellCommand(toolInput)) {
 		return nil
 	}
 
 	var urls []string
 	seen := map[string]bool{}
-	for _, url := range pullRequestURLPattern.FindAllString(string(toolResponse), -1) {
+	for _, url := range pullRequestURLPattern().FindAllString(string(toolResponse), -1) {
 		if seen[url] {
 			continue
 		}

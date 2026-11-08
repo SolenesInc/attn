@@ -69,7 +69,9 @@ const (
 	HarnessSignalsCodex  HarnessSignalKind = "codex"
 )
 
-var capabilityEnvNameSanitizer = regexp.MustCompile(`[^A-Za-z0-9]+`)
+var capabilityEnvNameSanitizer = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`[^A-Za-z0-9]+`)
+})
 
 func EffectiveCapabilities(d Driver) Capabilities {
 	if d == nil {
@@ -120,7 +122,7 @@ func EffectiveCapabilities(d Driver) Capabilities {
 
 func envAgentKey(name string) string {
 	up := strings.ToUpper(strings.TrimSpace(name))
-	up = capabilityEnvNameSanitizer.ReplaceAllString(up, "_")
+	up = capabilityEnvNameSanitizer().ReplaceAllString(up, "_")
 	up = strings.Trim(up, "_")
 	if up == "" {
 		return "UNKNOWN"

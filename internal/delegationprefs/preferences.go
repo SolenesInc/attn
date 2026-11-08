@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -16,7 +17,9 @@ type Selection = protocol.DelegationSelection
 type Fallback = protocol.DelegationFallback
 
 var ErrConflict = errors.New("delegation preferences changed; reload before saving or choosing a role")
-var identifier = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+var identifier = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
+})
 
 func Defaults() Config { return Config{Roles: []Role{}} }
 
@@ -26,7 +29,7 @@ func Validate(c Config) error {
 	}
 	ids := map[string]bool{}
 	for _, role := range c.Roles {
-		if !identifier.MatchString(role.ID) || ids[role.ID] {
+		if !identifier().MatchString(role.ID) || ids[role.ID] {
 			return fmt.Errorf("invalid or duplicate role id %q", role.ID)
 		}
 		ids[role.ID] = true
@@ -49,7 +52,7 @@ func Validate(c Config) error {
 		}
 		choices := map[string]bool{}
 		for _, choice := range role.Choices {
-			if !identifier.MatchString(choice.ID) || choices[choice.ID] {
+			if !identifier().MatchString(choice.ID) || choices[choice.ID] {
 				return fmt.Errorf("role %q has an invalid or duplicate choice id %q", role.ID, choice.ID)
 			}
 			choices[choice.ID] = true
@@ -80,7 +83,7 @@ func ValidateSelection(s Selection, ready bool) error {
 		}
 		return nil
 	}
-	if !identifier.MatchString(s.Harness) {
+	if !identifier().MatchString(s.Harness) {
 		return fmt.Errorf("invalid harness %q", s.Harness)
 	}
 	for _, value := range []string{s.Provider, s.Model, s.Effort} {

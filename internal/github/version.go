@@ -7,9 +7,12 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-var ghVersionRe = regexp.MustCompile(`(?m)^gh version ([0-9]+\.[0-9]+\.[0-9]+)`)
+var ghVersionRe = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`(?m)^gh version ([0-9]+\.[0-9]+\.[0-9]+)`)
+})
 
 type VersionTooOldError struct {
 	Have string
@@ -64,7 +67,7 @@ func RequireGHVersion(minVersion string) error {
 }
 
 func parseGHVersionOutput(output string) (string, error) {
-	matches := ghVersionRe.FindStringSubmatch(output)
+	matches := ghVersionRe().FindStringSubmatch(output)
 	if len(matches) < 2 {
 		return "", fmt.Errorf("unable to parse gh version from output")
 	}

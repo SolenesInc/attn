@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -17,10 +18,18 @@ type OutlinePart struct {
 }
 
 var (
-	markdownHeading = regexp.MustCompile(`^(#{1,6})[ \t]+(.*?)[ \t]*$`)
-	itemID          = regexp.MustCompile(`^(?:[-*+][ \t]+)?\**([A-Z][0-9]+)\**[.:)][ \t*]`)
-	listMarker      = regexp.MustCompile(`^(?:[-*+]|[0-9]+[.)])[ \t]`)
-	idRef           = regexp.MustCompile(`^[A-Za-z][0-9]+$`)
+	markdownHeading = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^(#{1,6})[ \t]+(.*?)[ \t]*$`)
+	})
+	itemID = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^(?:[-*+][ \t]+)?\**([A-Z][0-9]+)\**[.:)][ \t*]`)
+	})
+	listMarker = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^(?:[-*+]|[0-9]+[.)])[ \t]`)
+	})
+	idRef = sync.OnceValue(func() *regexp.Regexp {
+		return regexp.MustCompile(`^[A-Za-z][0-9]+$`)
+	})
 )
 
 type bodyLine struct {
@@ -56,9 +65,9 @@ func scanBody(body string) []bodyLine {
 			fence = "~~~"
 		default:
 			unindented := strings.TrimRight(text, "\r")
-			if m := markdownHeading.FindStringSubmatch(unindented); m != nil {
+			if m := markdownHeading().FindStringSubmatch(unindented); m != nil {
 				line.headingLevel, line.heading = len(m[1]), m[2]
-			} else if m := itemID.FindStringSubmatch(unindented); m != nil {
+			} else if m := itemID().FindStringSubmatch(unindented); m != nil {
 				line.id = m[1]
 			}
 		}
@@ -117,7 +126,7 @@ func Section(body, ref string) (string, error) {
 	ref = strings.TrimSpace(ref)
 	lines := scanBody(body)
 	parts := bodyParts(lines)
-	if idRef.MatchString(ref) {
+	if idRef().MatchString(ref) {
 		id := strings.ToUpper(ref)
 		if items := itemsStartingWith(lines, parts, id); items != "" {
 			return items, nil
@@ -163,7 +172,7 @@ func itemsStartingWith(lines []bodyLine, parts []bodyPart, id string) string {
 }
 
 func itemEnd(lines []bodyLine, start int) int {
-	listItem := listMarker.MatchString(lines[start].text)
+	listItem := listMarker().MatchString(lines[start].text)
 	for i := start + 1; i < len(lines); i++ {
 		line := lines[i]
 		if line.inFence {
@@ -175,7 +184,7 @@ func itemEnd(lines []bodyLine, start int) int {
 		if line.blank() || line.indented() {
 			continue
 		}
-		startsList := listMarker.MatchString(line.text)
+		startsList := listMarker().MatchString(line.text)
 		if listItem && startsList {
 			return i
 		}

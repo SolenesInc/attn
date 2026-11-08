@@ -65,7 +65,9 @@ func ReloadForTesting() {
 	loadConfig()
 }
 
-var instanceNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+var instanceNamePattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+})
 
 func Instance() string {
 	raw := strings.TrimSpace(os.Getenv("ATTN_INSTANCE"))
@@ -73,7 +75,7 @@ func Instance() string {
 		return ""
 	}
 	normalized := strings.ToLower(raw)
-	if !instanceNamePattern.MatchString(normalized) {
+	if !instanceNamePattern().MatchString(normalized) {
 		return ""
 	}
 	return normalized
@@ -100,7 +102,7 @@ func DeepLinkScheme() string {
 
 func normalizeInstanceForDerivation(instance string) string {
 	p := strings.ToLower(strings.TrimSpace(instance))
-	if p == "" || p == "default" || !instanceNamePattern.MatchString(p) {
+	if p == "" || p == "default" || !instanceNamePattern().MatchString(p) {
 		return ""
 	}
 	return p
@@ -177,7 +179,7 @@ func ValidateInstanceName(name string) error {
 		return nil
 	}
 	normalized := strings.ToLower(trimmed)
-	if !instanceNamePattern.MatchString(normalized) {
+	if !instanceNamePattern().MatchString(normalized) {
 		return fmt.Errorf("invalid instance name %q: must match ^[a-z0-9][a-z0-9-]{0,15}$", name)
 	}
 	return nil
@@ -319,7 +321,7 @@ func DataDirForInstance(instance string) string {
 	if p == "" || p == "default" {
 		return base
 	}
-	if !instanceNamePattern.MatchString(p) {
+	if !instanceNamePattern().MatchString(p) {
 		return base
 	}
 	return base + "-" + p
@@ -465,7 +467,7 @@ func AppLockPathForInstance(instance string) string {
 		home = "/tmp"
 	}
 	label := strings.ToLower(strings.TrimSpace(instance))
-	if label == "" || !instanceNamePattern.MatchString(label) {
+	if label == "" || !instanceNamePattern().MatchString(label) {
 		label = "default"
 	}
 	return filepath.Join(home, ".attn.locks", "app-"+label+".lock")
@@ -491,7 +493,7 @@ func WSPortForInstance(instance string) string {
 	case "dev":
 		return "29849"
 	default:
-		if !instanceNamePattern.MatchString(p) {
+		if !instanceNamePattern().MatchString(p) {
 			return "9849"
 		}
 		return derivedInstancePort(p)

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/headless"
@@ -33,7 +34,9 @@ const ClaudeMaxTurns = 2
 
 const DefaultClaudeClassifierModel = "haiku"
 
-var verdictLineRegex = regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITING_INPUT|WAITING|DONE|IDLE|PARKED)(?:\s*(?:[-:]\s+.*|\([^)]*\)|[.!?]))?\s*$`)
+var verdictLineRegex = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`(?i)^\s*(?:VERDICT\s*[:=]\s*)?(WAITING_INPUT|WAITING|DONE|IDLE|PARKED)(?:\s*(?:[-:]\s+.*|\([^)]*\)|[.!?]))?\s*$`)
+})
 
 const classifierLogSnippetMaxChars = 600
 
@@ -95,7 +98,7 @@ func ParseQuietStopVerdict(structuredOutput json.RawMessage, text string) (strin
 }
 
 func parseVerdictToken(value string) (string, bool) {
-	match := verdictLineRegex.FindStringSubmatch(strings.TrimSpace(value))
+	match := verdictLineRegex().FindStringSubmatch(strings.TrimSpace(value))
 	if len(match) < 2 {
 		return "", false
 	}

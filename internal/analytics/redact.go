@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"sync"
 )
 
 const hashedSubjectHexLen = 12
@@ -31,7 +32,9 @@ type redactedObject struct {
 	N int `json:"n"`
 }
 
-var identifierKey = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+var identifierKey = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+})
 
 func Redact(payload json.RawMessage, fields Fields, secret []byte) json.RawMessage {
 	if len(bytes.TrimSpace(payload)) == 0 {
@@ -67,7 +70,7 @@ func redactValue(value any, path string, fields Fields, secret []byte) any {
 		return redactedString{S: len(v)}
 	case map[string]any:
 		for key := range v {
-			if !identifierKey.MatchString(key) {
+			if !identifierKey().MatchString(key) {
 				return redactedObject{N: len(v)}
 			}
 		}

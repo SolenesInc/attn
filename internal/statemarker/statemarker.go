@@ -5,18 +5,21 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-var markerRegex = regexp.MustCompile(`<!--\s*attn:state=([A-Za-z_]+)\s*-->`)
+var markerRegex = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`<!--\s*attn:state=([A-Za-z_]+)\s*-->`)
+})
 
 func States() []string {
 	return []string{protocol.StateWaitingInput, protocol.StateIdle}
 }
 
 func Parse(text string) (string, error) {
-	matches := markerRegex.FindAllStringSubmatch(text, -1)
+	matches := markerRegex().FindAllStringSubmatch(text, -1)
 	if len(matches) == 0 {
 		return "", nil
 	}
@@ -28,8 +31,8 @@ func Parse(text string) (string, error) {
 }
 
 func Strip(text string) string {
-	if !markerRegex.MatchString(text) {
+	if !markerRegex().MatchString(text) {
 		return text
 	}
-	return strings.TrimRight(markerRegex.ReplaceAllString(text, ""), " \t\r\n")
+	return strings.TrimRight(markerRegex().ReplaceAllString(text, ""), " \t\r\n")
 }

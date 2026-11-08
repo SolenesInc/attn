@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
@@ -343,16 +344,20 @@ func canonicalizeDirectory(path *string, field string) error {
 	return nil
 }
 
-var repositoryHostPattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
-var repositoryComponentPattern = regexp.MustCompile(`^[a-z0-9_.-]+$`)
+var repositoryHostPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$`)
+})
+var repositoryComponentPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^[a-z0-9_.-]+$`)
+})
 
 func CanonicalRepositoryIdentity(identity string) (string, error) {
 	identity = strings.ToLower(strings.TrimSpace(identity))
 	parts := strings.Split(identity, "/")
 	unsafeComponent := func(value string) bool {
-		return value == "." || value == ".." || !repositoryComponentPattern.MatchString(value)
+		return value == "." || value == ".." || !repositoryComponentPattern().MatchString(value)
 	}
-	if len(parts) != 3 || !repositoryHostPattern.MatchString(parts[0]) || unsafeComponent(parts[1]) || unsafeComponent(parts[2]) {
+	if len(parts) != 3 || !repositoryHostPattern().MatchString(parts[0]) || unsafeComponent(parts[1]) || unsafeComponent(parts[2]) {
 		return "", errors.New("repository identity must be host/owner/repository")
 	}
 	return identity, nil

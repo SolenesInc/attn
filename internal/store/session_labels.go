@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -37,8 +38,12 @@ func DefaultSessionLabel(directory string, id protocol.SessionID) string {
 	return label
 }
 
-var idShapedSessionLabel = regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
-var sixLetterSessionWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
+var idShapedSessionLabel = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
+})
+var sixLetterSessionWord = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
+})
 
 func SessionLabelIsPlaceholder(label, directory string, id protocol.SessionID) bool {
 	label = strings.TrimSpace(label)
@@ -47,7 +52,7 @@ func SessionLabelIsPlaceholder(label, directory string, id protocol.SessionID) b
 	if runes := []rune(def); len(runes) > SessionNameRunes {
 		truncated = strings.TrimRight(string(runes[:SessionNameRunes]), "-_. \t")
 	}
-	return label == def || label == truncated || (idShapedSessionLabel.MatchString(label) && !sixLetterSessionWord.MatchString(label))
+	return label == def || label == truncated || (idShapedSessionLabel().MatchString(label) && !sixLetterSessionWord().MatchString(label))
 }
 
 func initialSessionLabels(session *protocol.Session) SessionLabels {

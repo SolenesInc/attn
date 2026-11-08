@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
@@ -26,7 +27,9 @@ const lastLegacyVersion = 171
 //go:embed migrations
 var migrationFiles embed.FS
 
-var migrationFilename = regexp.MustCompile(`^([0-9]{14}|[0-9]{16})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
+var migrationFilename = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^([0-9]{14}|[0-9]{16})_([a-z0-9]+(?:_[a-z0-9]+)*)\.sql$`)
+})
 
 var timestampedMigrations = loadSQLMigrations()
 
@@ -67,7 +70,7 @@ func loadSQLMigrations() []migration {
 }
 
 func migrationFromFilename(filename string) migration {
-	parts := migrationFilename.FindStringSubmatch(filename)
+	parts := migrationFilename().FindStringSubmatch(filename)
 	if parts == nil {
 		panic(fmt.Sprintf("malformed migration filename %q; use <unix-microseconds>_slug.sql", filename))
 	}

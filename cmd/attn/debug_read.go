@@ -9,10 +9,13 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 )
 
-var daemonLogTimestampPattern = regexp.MustCompile(`^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]`)
+var daemonLogTimestampPattern = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]`)
+})
 
 const daemonLogTimestampLayout = "2006-01-02 15:04:05"
 
@@ -88,7 +91,7 @@ func filterSinceLines(lines []string, cutoff time.Time) []string {
 	var out []string
 	matching := false
 	for _, line := range lines {
-		if m := daemonLogTimestampPattern.FindStringSubmatch(line); m != nil {
+		if m := daemonLogTimestampPattern().FindStringSubmatch(line); m != nil {
 			ts, err := time.ParseInLocation(daemonLogTimestampLayout, m[1], time.Local)
 			if err != nil {
 				if matching {

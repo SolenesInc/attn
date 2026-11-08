@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/victorarias/attn/internal/prompts"
@@ -286,13 +287,13 @@ func requiresUserEvidence(question, answer string) bool {
 	return !isExplicitSpeechReportingQuestion(question)
 }
 
-var explicitSpeechReportingQuestion = regexp.MustCompile(
-	`^(?:(?:did|does|do|has|have)\s+(?:the\s+)?(?:agent|assistant|codex)|what\s+(?:did|does|has|have)\s+(?:the\s+)?(?:agent|assistant|codex))\s+(?:say|said|tell|told|write|wrote|state|stated|claim|claimed|report|reported)\b|^(?:is|was|were)\s+(?:the\s+)?(?:agent|assistant|codex)\s+(?:saying|writing|stating|claiming|reporting)\b`,
-)
+var explicitSpeechReportingQuestion = sync.OnceValue(func() *regexp.Regexp {
+	return regexp.MustCompile(`^(?:(?:did|does|do|has|have)\s+(?:the\s+)?(?:agent|assistant|codex)|what\s+(?:did|does|has|have)\s+(?:the\s+)?(?:agent|assistant|codex))\s+(?:say|said|tell|told|write|wrote|state|stated|claim|claimed|report|reported)\b|^(?:is|was|were)\s+(?:the\s+)?(?:agent|assistant|codex)\s+(?:saying|writing|stating|claiming|reporting)\b`)
+})
 
 func isExplicitSpeechReportingQuestion(question string) bool {
 	q := strings.ToLower(strings.TrimSpace(question))
-	return explicitSpeechReportingQuestion.MatchString(q)
+	return explicitSpeechReportingQuestion().MatchString(q)
 }
 
 func uniqueQuoteMatch(text, hint string) bool {
