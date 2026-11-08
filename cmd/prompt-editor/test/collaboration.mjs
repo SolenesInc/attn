@@ -78,7 +78,7 @@ try {
     const scenarioCount = (await fs.readdir(path.join(root, "scenarios"))).filter((name) => name.endsWith(".json")).length;
     await expect(page.locator("#saved-scenario option")).toHaveCount(scenarioCount + 1);
     await expect(page.locator("#base-status")).toContainText("Merge base");
-    await page.locator("#saved-scenario").selectOption("crew-wake");
+    await page.locator("#saved-scenario").selectOption("crew-v2-wake");
     page.once("dialog", (dialog) => dialog.accept("Clear wake instructions"));
     await page.locator("#new-draft").click();
     await expect(page.locator("#draft-state")).toContainText("d-");
@@ -96,9 +96,9 @@ try {
     assert.equal(link.url, `${url}/?draft=${draftID}`);
     await expect(page.locator("#event-name")).toHaveText("wake");
     await page.locator("#follow-agent").check();
-    cli("show", "--draft", draftID, "--event", "crew/priming", "--scenario", "crew-with-handoff");
+    cli("show", "--draft", draftID, "--event", "crew/priming", "--scenario", "crew-v2-with-handoff");
     await expect(page.locator("#event-name")).toHaveText("priming");
-    cli("show", "--draft", draftID, "--event", "crew/wake", "--source", source, "--scenario", "crew-wake");
+    cli("show", "--draft", draftID, "--event", "crew/wake", "--source", source, "--scenario", "crew-v2-wake");
     await expect(page.locator("#source")).toHaveValue("Wake with the agent's clarification.\n");
     await expect(page.locator("#event-name")).toHaveText("wake");
     await page.locator("#follow-agent").uncheck();
