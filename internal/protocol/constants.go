@@ -118,6 +118,7 @@ const (
 	CmdSessionInstructions           = "session_instructions"
 	CmdSessionTranscript             = "session_transcript"
 	CmdSessionList                   = "session_list"
+	CmdUpdateStatus                  = "update_status"
 	CmdSessionShow                   = "session_show"
 	CmdSessionReopen                 = "session_reopen"
 	CmdStateExplain                  = "state_explain"

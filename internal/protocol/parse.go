@@ -108,6 +108,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSessionInstructions:           decodeInto[SessionInstructionsMessage],
 	CmdSessionTranscript:             decodeInto[SessionTranscriptMessage],
 	CmdSessionList:                   decodeInto[SessionListMessage],
+	CmdUpdateStatus:                  decodeInto[UpdateStatusMessage],
 	CmdSessionShow:                   decodeInto[SessionShowMessage],
 	CmdTerminalReadText:              decodeInto[TerminalReadTextMessage],
 	CmdSessionReopen:                 decodeInto[SessionReopenMessage],

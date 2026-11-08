@@ -85,6 +85,15 @@ var (
 		Since:   "2026-10-24",
 		Search:  "telemetry vents record",
 	})
+	SelfUpdateEnabled = feature("self_update_enabled", "Let attn report and manage its own updates: true or false. Experimental; off by default.", Info{
+		Name:    "Self-update",
+		Summary: "See how attn was installed and whether an update is available.",
+		Group:   UnderTheHood,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-08",
+		Search:  "update upgrade version release install",
+	})
 	DirectAgentLaunchEnabled = feature("direct_agent_launch_enabled", "Launch agents directly, without an attn process beside each one: true or false. On by default; applies to new and reloaded agents.", Info{
 		Name:    "Direct agent launches",
 		Summary: "Launch agents using less memory.",
@@ -112,6 +121,13 @@ var (
 	NotebookSyncLastError        = add(&Setting{Key: "notebook_sync_last_error", Class: Machine, Kind: Computed, Description: "Current Notebook sync error and its reason."})
 	OutpostState                 = add(&Setting{Key: "outpost_state", Class: Machine, Kind: Computed, Description: "Whether a home bridge is connected: bridged or off."})
 	OutpostHome                  = add(&Setting{Key: "outpost_home", Class: Machine, Kind: Computed, Description: "Recorded home daemon id. Release it with attn enrollment leave."})
+	UpdateInstallKind            = add(&Setting{Key: "update_install_kind", Class: Machine, Kind: Computed, Description: "How attn was installed on this machine."})
+	UpdateCurrentVersion         = add(&Setting{Key: "update_current_version", Class: Machine, Kind: Computed, Description: "The version of the running build."})
+	UpdateCurrentCommit          = add(&Setting{Key: "update_current_commit", Class: Machine, Kind: Computed, Description: "The commit of the running build."})
+	UpdateAvailableVersion       = add(&Setting{Key: "update_available_version", Class: Machine, Kind: Computed, Description: "The newer published release, if any."})
+	UpdateAvailableURL           = add(&Setting{Key: "update_available_url", Class: Machine, Kind: Computed, Description: "The web page of the newer published release, if any."})
+	UpdateCheckedAt              = add(&Setting{Key: "update_checked_at", Class: Machine, Kind: Computed, Description: "When attn last looked for a published release."})
+	UpdateCheckError             = add(&Setting{Key: "update_check_error", Class: Machine, Kind: Computed, Description: "Why the last look for a published release failed."})
 	OutpostLastError             = add(&Setting{Key: "outpost_last_error", Class: Machine, Kind: Computed, Description: "Last outpost bridge error, kept until the next successful connection."})
 	CaptureShortcut              = add(&Setting{Key: "capture.shortcut", Class: Home, Kind: Free, Description: "Global shortcut for Quick Capture. Empty turns the shortcut off."})
 	QueueShowHiddenSessions      = add(&Setting{Key: "queue_show_hidden_sessions", Class: Home, Kind: Bool, Default: On, Description: "Include hidden sessions in the queue: true or false. On by default."})

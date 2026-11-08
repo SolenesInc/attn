@@ -9376,6 +9376,9 @@ type Response struct {
 	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
 	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
 
+	// UpdateStatus corresponds to the JSON schema field "update_status".
+	UpdateStatus *UpdateStatus `json:"update_status,omitempty,omitzero"`
+
 	// WorkflowSkillPaths corresponds to the JSON schema field "workflow_skill_paths".
 	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 
@@ -13968,6 +13971,52 @@ type UpdateOutpostMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+}
+
+type UpdateStatus struct {
+	// AvailableURL corresponds to the JSON schema field "available_url".
+	AvailableURL *string `json:"available_url,omitempty,omitzero"`
+
+	// AvailableVersion corresponds to the JSON schema field "available_version".
+	AvailableVersion *string `json:"available_version,omitempty,omitzero"`
+
+	// BuildTime corresponds to the JSON schema field "build_time".
+	BuildTime string `json:"build_time"`
+
+	// Channel corresponds to the JSON schema field "channel".
+	Channel string `json:"channel"`
+
+	// CheckError corresponds to the JSON schema field "check_error".
+	CheckError *string `json:"check_error,omitempty,omitzero"`
+
+	// CheckedAt corresponds to the JSON schema field "checked_at".
+	CheckedAt *string `json:"checked_at,omitempty,omitzero"`
+
+	// Commit corresponds to the JSON schema field "commit".
+	Commit string `json:"commit"`
+
+	// Dirty corresponds to the JSON schema field "dirty".
+	Dirty bool `json:"dirty"`
+
+	// HomeKind corresponds to the JSON schema field "home_kind".
+	HomeKind *string `json:"home_kind,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Outpost corresponds to the JSON schema field "outpost".
+	Outpost *string `json:"outpost,omitempty,omitzero"`
+
+	// Refusal corresponds to the JSON schema field "refusal".
+	Refusal *string `json:"refusal,omitempty,omitzero"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version string `json:"version"`
+}
+
+type UpdateStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 }
 
 type Vent struct {

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "d7977f9e6cab";
+pub const PROTOCOL_VERSION: &str = "b49729ddc214";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -8859,6 +8859,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_wait_result: Option<TerminalWaitResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_status: Option<UpdateStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_skill_paths: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree_keep_result: Option<WorktreeKeepResult>,
@@ -12914,6 +12916,43 @@ impl UpdateOutpostMessage {
     pub fn new() -> Self {
         Self {
             cmd: "update_outpost".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateStatus {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_version: Option<String>,
+    pub build_time: String,
+    pub channel: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_at: Option<String>,
+    pub commit: String,
+    pub dirty: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub home_kind: Option<String>,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outpost: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refusal: Option<String>,
+    pub version: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateStatusMessage {
+    pub cmd: String,
+}
+
+impl UpdateStatusMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "update_status".to_string(),
             ..Self::default()
         }
     }

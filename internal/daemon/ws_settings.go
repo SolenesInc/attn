@@ -325,6 +325,7 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[setting.OutpostState.Key] = state
 	settings[setting.OutpostHome.Key] = home
 	settings[setting.OutpostLastError.Key] = lastError
+	d.addUpdateSettings(settings)
 	return settings
 }
 

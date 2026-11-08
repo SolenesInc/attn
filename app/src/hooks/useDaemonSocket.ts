@@ -2,7 +2,6 @@ import { handleCalloutDaemonEvent } from './daemonCalloutEvents';
 import { refreshHarnesses } from './useHarnesses';
 import { clearHarnessModelCatalogs } from './useHarnessRoute';
 import { PROTOCOL_VERSION } from '../types/protocolVersion';
-import { normalizeInstallChannel } from '../utils/installChannel';
 export { PROTOCOL_VERSION } from '../types/protocolVersion';
 import { handleCommandUsageEvent } from './daemonCommandUsageEvents';
 import { handleAskDaemonEvent } from './daemonAskEvents';
@@ -1085,7 +1084,7 @@ export function useDaemonSocket({
           browser_host_token: browserHostToken || undefined,
           profile_id: readSelectedProfileId(),
           app_version: __ATTN_APP_VERSION__,
-          app_channel: normalizeInstallChannel(import.meta.env.VITE_INSTALL_CHANNEL),
+          app_channel: import.meta.env.VITE_INSTALL_CHANNEL || 'unknown',
           app_pid: appPid,
         }),
       );

@@ -53,6 +53,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSessionTranscript:             commandMetadata(false, true),
 	protocol.CmdSessionList:                   commandMetadata(false, true),
 	protocol.CmdSessionShow:                   commandMetadata(false, true),
+	protocol.CmdUpdateStatus:                  commandMetadata(false, true),
 	protocol.CmdSessionReopen:                 commandMetadata(false, true),
 	protocol.CmdStateExplain:                  commandMetadata(false, true),
 	protocol.CmdAgentPeek:                     commandMetadata(false, true),

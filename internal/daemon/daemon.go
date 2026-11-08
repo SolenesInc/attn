@@ -109,6 +109,7 @@ type Daemon struct {
 	monitorsOnce        sync.Once
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
+	releases            releaseAvailability
 	outpost             outpostRuntime
 	homeGateway         homeGatewayConns
 	phones              phonesRuntime
@@ -2964,6 +2965,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSessionList(conn, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow:
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
+	case protocol.CmdUpdateStatus:
+		d.handleUpdateStatus(ctx, conn)
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdTerminalList:

@@ -10,6 +10,7 @@ export const BoolSetting = {
   outpostsEnabled: "outposts_enabled",
   phoneAccessEnabled: "phone_access_enabled",
   analyticsEnabled: "analytics.enabled",
+  selfUpdateEnabled: "self_update_enabled",
   directAgentLaunchEnabled: "direct_agent_launch_enabled",
   ptySharedHostEnabled: "pty_shared_host_enabled",
   queueShowHiddenSessions: "queue_show_hidden_sessions",
@@ -69,6 +70,7 @@ export const FEATURES: readonly Feature[] = [
   { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", since: "2026-10-27", search: "remote computers bridge ssh" },
   { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", since: "2026-11-02", search: "mobile iphone pair" },
   { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used, here and on outposts.", note: "Nothing is sent unless you turn on sharing.", group: "Data", timing: "", stage: "experimental", since: "2026-10-24", search: "telemetry vents record" },
+  { key: "self_update_enabled", name: "Self-update", summary: "See how attn was installed and whether an update is available.", note: "", group: "Under the hood", timing: "", stage: "experimental", since: "2026-11-08", search: "update upgrade version release install" },
   { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", note: "", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", since: "2026-10-15", search: "memory launcher" },
   { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", note: "", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", since: "2026-09-04", search: "terminal hosting pty backend rust workers memory" },
 ];

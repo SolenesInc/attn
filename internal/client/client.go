@@ -513,6 +513,17 @@ func (c *Client) SessionShow(sessionID protocol.SessionID) (*protocol.SessionSho
 	return resp.SessionShowResult, nil
 }
 
+func (c *Client) UpdateStatus() (*protocol.UpdateStatus, error) {
+	resp, err := c.send(protocol.UpdateStatusMessage{Cmd: protocol.CmdUpdateStatus})
+	if err != nil {
+		return nil, err
+	}
+	if resp.UpdateStatus == nil {
+		return nil, errors.New("daemon returned no update status")
+	}
+	return resp.UpdateStatus, nil
+}
+
 func (c *Client) RenameSession(sessionID protocol.SessionID, name string) error {
 	_, err := c.send(protocol.RenameSessionMessage{
 		Cmd:       protocol.CmdRenameSession,

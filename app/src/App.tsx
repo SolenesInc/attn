@@ -20,7 +20,6 @@ import {
   DaemonWorktree,
   useDaemonSocket,
 } from './hooks/useDaemonSocket';
-import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useAutomationRequestListener } from './hooks/uiAutomationDomActions';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
@@ -54,9 +53,6 @@ function App() {
 
 
   const [, setWorktrees] = useState<DaemonWorktree[]>([]);
-
-  const { updateAvailableVersion, handleOpenLatestRelease, handleDismissLatestRelease } =
-    useReleaseUpdates();
 
   const {
     daemonSessions,
@@ -198,9 +194,6 @@ function App() {
               daemonGitHubHosts={daemonGitHubHosts}
               githubPollingOffReason={githubPollingOffReason}
               settings={settings}
-              updateAvailableVersion={updateAvailableVersion}
-              onOpenLatestRelease={handleOpenLatestRelease}
-              onDismissLatestRelease={handleDismissLatestRelease}
               settingError={settingError}
               clearSettingError={() => setSettingError(null)}
               notificationsUnread={notificationsUnread}

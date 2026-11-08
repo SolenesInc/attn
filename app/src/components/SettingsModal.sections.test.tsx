@@ -39,6 +39,7 @@ describe('SettingsModal sections', () => {
       'Phones',
       'Paired senders',
       'Plugins',
+      'Updates',
       'Experimental',
       'Task runner',
       'Event bus',

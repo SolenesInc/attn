@@ -543,6 +543,13 @@ export function useSettingsModalState({
         label: 'System',
         items: [
           {
+            id: 'updates',
+            label: 'Updates',
+            description: 'How attn was installed and what is available.',
+            feature: BoolSetting.selfUpdateEnabled,
+            keywords: 'update upgrade version release install build',
+          },
+          {
             id: 'experimental',
             label: 'Experimental',
             description: 'Features still in development. Each applies to this home and its outposts.',

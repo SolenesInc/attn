@@ -47,9 +47,6 @@ export function AppSurface() {
   } = useDaemonApi();
   const {
     githubPollingOffReason,
-    updateAvailableVersion,
-    onOpenLatestRelease,
-    onDismissLatestRelease,
   } = useAppInputs();
   const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
   const { snoozeMenu } = useAttentionQueueContext();
@@ -103,15 +100,12 @@ export function AppSurface() {
                   <BannerStack
                     connectionError={connectionError}
                     warnings={warnings}
-                    updateAvailableVersion={updateAvailableVersion}
                     onOpenWarningUrl={(url) => {
                       openUrl(url).catch((err) => {
                         console.error('[App] Failed to open warning link:', err);
                       });
                     }}
                     onClearWarnings={clearWarnings}
-                    onOpenLatestRelease={onOpenLatestRelease}
-                    onDismissLatestRelease={onDismissLatestRelease}
                   />
                   <div className="app-frame">
                     <AppSidebar />

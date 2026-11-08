@@ -11,11 +11,8 @@ import {
 import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type TerminalDesktopState } from '../store/sessions';
 import { type SessionAgent } from '../types/sessionAgent';
-export const RELEASES_LATEST_API = 'https://api.github.com/repos/victorarias/attn/releases/latest';
 
-export const RELEASES_LATEST_WEB = 'https://github.com/victorarias/attn/releases/latest';
 
-export const RELEASE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_version';
 
@@ -43,13 +40,6 @@ export interface SplitSessionOptions {
   label?: string;
   yoloMode?: boolean;
   desktopId?: string;
-}
-
-export interface GitHubReleaseResponse {
-  tag_name?: string;
-  html_url?: string;
-  prerelease?: boolean;
-  draft?: boolean;
 }
 
 export interface LeafDragPreviewState {
@@ -152,9 +142,6 @@ export interface AppContentProps {
   daemonGitHubHosts: string[];
   githubPollingOffReason: string | null;
   settings: Record<string, string>;
-  updateAvailableVersion: string | null;
-  onOpenLatestRelease: () => Promise<void>;
-  onDismissLatestRelease: () => void;
   settingError: string | null;
   clearSettingError: () => void;
   notificationsUnread: number;

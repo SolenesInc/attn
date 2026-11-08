@@ -230,6 +230,7 @@ var Placements = map[string][]Placement{
 	"transcript_activity":              {Placement{LocatorSession, "session_id"}},
 	"unregister":                       {Placement{LocatorHome, ""}},
 	"update_outpost":                   {Placement{LocatorHome, ""}},
+	"update_status":                    {Placement{LocatorHome, ""}},
 	"wake_turn":                        {Placement{LocatorHome, ""}},
 	"withdraw_vent":                    {Placement{LocatorHome, ""}},
 	"worktree_keep":                    {Placement{LocatorHere, ""}},
@@ -2742,6 +2743,18 @@ func (m UpdateOutpostMessage) Placement() Placement {
 }
 
 func (m UpdateOutpostMessage) Locate() string {
+	return ""
+}
+
+func (UpdateStatusMessage) CommandName() string {
+	return "update_status"
+}
+
+func (m UpdateStatusMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m UpdateStatusMessage) Locate() string {
 	return ""
 }
 

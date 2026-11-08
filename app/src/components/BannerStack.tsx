@@ -1,5 +1,6 @@
 import { Fragment } from 'react';
 import { renderWarningSegments } from '../utils/warningLinks';
+import { AvailableUpdateBanner } from './AvailableUpdateBanner';
 import { OutpostUpdateBanner } from './OutpostUpdateBanner';
 import { SharedCodexBanner } from './SharedCodexBanner';
 
@@ -11,21 +12,15 @@ export interface BannerStackWarning {
 interface BannerStackProps {
   connectionError: string | null;
   warnings: BannerStackWarning[];
-  updateAvailableVersion: string | null;
   onOpenWarningUrl: (url: string) => void;
   onClearWarnings: () => void;
-  onOpenLatestRelease: () => Promise<void>;
-  onDismissLatestRelease: () => void;
 }
 
 export function BannerStack({
   connectionError,
   warnings,
-  updateAvailableVersion,
   onOpenWarningUrl,
   onClearWarnings,
-  onOpenLatestRelease,
-  onDismissLatestRelease,
 }: BannerStackProps) {
   return (
     <div className="banner-stack">
@@ -49,23 +44,7 @@ export function BannerStack({
           </button>
         </div>
       )}
-      {updateAvailableVersion && (
-        <div className="update-banner">
-          <span>Version {updateAvailableVersion} is available on GitHub.</span>
-          <button type="button" className="banner-button" onClick={() => void onOpenLatestRelease()}>
-            View Release
-          </button>
-          <button
-            type="button"
-            className="banner-dismiss"
-            onClick={onDismissLatestRelease}
-            title="Dismiss"
-            aria-label="Dismiss update banner"
-          >
-            ×
-          </button>
-        </div>
-      )}
+      <AvailableUpdateBanner />
       <OutpostUpdateBanner />
       <SharedCodexBanner />
     </div>

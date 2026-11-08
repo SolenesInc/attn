@@ -51,6 +51,7 @@ export type SettingsSectionID =
   | 'hygiene'
   | 'agents'
   | 'models'
+  | 'updates'
   | 'backgroundAgents'
   | 'experimental'
   | 'delegation'

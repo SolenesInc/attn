@@ -1,3 +1,4 @@
+import { UpdateSettings } from './UpdateSettings';
 import { OutpostsSettings } from './OutpostsSettings';
 import { PhonesSettings } from './PhonesSettings';
 import { SendersSettings } from './SendersSettings';
@@ -244,6 +245,12 @@ function SelectedSection({ state }: { state: SettingsModalState }) {
           savedFlash={state.savedFlash}
           headlessContextCapDraft={state.headlessContextCapDraft}
         />
+      );
+    case 'updates':
+      return (
+        <FeaturePage featureKey={BoolSetting.selfUpdateEnabled} settings={state.settings}>
+          <UpdateSettings settings={state.settings} />
+        </FeaturePage>
       );
     case 'outposts':
       return (

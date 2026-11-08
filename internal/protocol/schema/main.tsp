@@ -742,6 +742,29 @@ model SessionListMessage {
   reopen?: boolean;
 }
 
+// Reports how attn was installed and whether an update is available. The home
+// answers, so on an outpost the reply is the home's, naming the outpost.
+@extension("x-on", #{ home: true })
+model UpdateStatusMessage {
+  cmd: "update_status";
+}
+
+model UpdateStatus {
+  kind: string;
+  channel: string;
+  version: string;
+  commit: string;
+  build_time: string;
+  dirty: boolean;
+  home_kind?: string;
+  outpost?: string;
+  refusal?: string;
+  available_version?: string;
+  available_url?: string;
+  checked_at?: string;
+  check_error?: string;
+}
+
 // Reads one ledger row, live or closed, by exact session id.
 @extension("x-on", #{ home: true })
 model SessionShowMessage {
@@ -6956,6 +6979,7 @@ model Response {
   session_transcript_result?: SessionTranscriptResult;
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
+  update_status?: UpdateStatus;
   session_reopen_result?: SessionReopenResult;
   terminal_entries?: TerminalEntry[];
   terminal_open_result?: TerminalOpenResult;
