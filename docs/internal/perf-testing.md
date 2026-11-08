@@ -17,7 +17,8 @@ instead of as a count.
 
 | `GODEBUG=inittrace=1 attn version`, Linux unless named | Init allocations |
 | --- | --- |
-| Today, with regexps, migrations and garden events built on first use | 5,877 |
+| Today, with ask image discovery on goldmark's parser alone | 3,664 |
+| With regexps, migrations and garden events built on first use | 5,877 |
 | Before that, 5db0778fa | 10,373 |
 | macOS arm64, 25c2331c | 10,537 |
 | 5db0778fa plus Prometheus | 11,802 |

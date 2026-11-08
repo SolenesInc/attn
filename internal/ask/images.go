@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 	"golang.org/x/net/html"
@@ -38,7 +37,11 @@ func ImageType(imagePath string) (string, bool) {
 	return mimeType, ok
 }
 
-var imageMarkdown = goldmark.New(goldmark.WithExtensions(extension.GFM))
+var imageMarkdown = parser.NewParser(
+	parser.WithBlockParsers(parser.DefaultBlockParsers()...),
+	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
+	parser.WithParagraphTransformers(parser.DefaultParagraphTransformers()...),
+)
 
 // ImagePaths lists the local images the ask's parts show, as the app resolves them against
 // baseDir: absolute paths with an image extension, each once, in reading order.
@@ -73,7 +76,7 @@ func renderedMarkdown(parts []protocol.AskPart) []string {
 func imageTargets(markdown string) []string {
 	source := []byte(markdown)
 	var targets []string
-	_ = ast.Walk(imageMarkdown.Parser().Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+	_ = ast.Walk(imageMarkdown.Parse(text.NewReader(source)), func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}

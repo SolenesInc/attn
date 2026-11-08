@@ -22,7 +22,7 @@ edit.
 
 | Do not | What it cost | What else guards it |
 | --- | --- | --- |
-| Do work in package `init` or package-level `var`s, or link a package whose `init` does | Every CLI command and agent hook paid for it: 39,179 init allocations against 5,877 today | `TestEveryCommandStartsWithoutPayingForInitItNeverUses`, `lint-go` |
+| Do work in package `init` or package-level `var`s, or link a package whose `init` does | Every CLI command and agent hook paid for it: 39,179 init allocations against 3,664 today | `TestEveryCommandStartsWithoutPayingForInitItNeverUses`, `lint-go` |
 | Allocate an object per cell or per row while painting | With the scan below, about 210-250 MB of held WebContent memory at 4 panes | This review |
 | Scan every row or every seed on each paint | As above | This review |
 | Send a whole list when one item changed | 3.92 MB per garden push against 11 KB, and 95.7 ms from message to frame against 8.7 ms | `TestGardenPushSendsOnlyWhatChanged` |

@@ -22,6 +22,14 @@ func TestImagePathsResolveEachImageOnceAsTheAppShowsIt(t *testing.T) {
 		"an absolute path":                    {"![a](/tmp/x.webp)", []string{"/tmp/x.webp"}},
 		"each path once, in reading order":    {"![b](b.png) ![a](a.png) ![b](./b.png)", []string{"/work/b.png", "/work/a.png"}},
 		"no remote, anchor or non-image file": {"![r](https://x.dev/r.png) ![h](#top) ![n](notes.txt)", nil},
+		"not inside code":                     {"`![s](span.png)` ![r](real.png)\n\n```\n![f](fence.png)\n```\n\n    ![i](indented.png)", []string{"/work/real.png"}},
+		"inside lists and quotes":             {"- ![l](list.png)\n  - ![n](nested.png)\n\n> ![q](quote.png)", []string{"/work/list.png", "/work/nested.png", "/work/quote.png"}},
+		"a reference image":                   {"![a][Logo] ![logo][]\n\n[logo]: <logo two.png> \"Logo\"", []string{"/work/logo two.png"}},
+		"an escaped bracket and parentheses":  {`\![no](no.png) ![a\]b](esc.png) ![p](paren\(1\).png)`, []string{"/work/esc.png", "/work/paren(1).png"}},
+		"an image inside a link":              {"[![a](linked.png)](https://example.com)", []string{"/work/linked.png"}},
+		"table cells":                         {"| a | b |\n|---|---|\n| ![c](cell.png) | <img src=\"html.png\"> |\n| ![p](a\\|b.png) | `![s](span.png)` |", []string{"/work/cell.png", "/work/html.png", "/work/a|b.png"}},
+		"an html img across lines":            {"<img\n  src=\"wrapped.png\">", []string{"/work/wrapped.png"}},
+		"markdown inside an html block":       {"<details>\n\n![d](details.png)\n\n</details>", []string{"/work/details.png"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			parts := []protocol.AskPart{{Markdown: protocol.Ptr(tc.markdown)}}
