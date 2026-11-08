@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore, type ProfilesState } from '../store/profiles';
+import { useDesktopShelfStore } from '../store/desktopShelf';
 import { useSessionStore } from '../store/sessions';
 import { activeLeafOf, sameLeaf, sessionOfLeaf, type ActiveLeaf } from '../navigation/activeLeaf';
 import { displayedArrangement } from '../navigation/sessionNavigation';
@@ -152,13 +153,15 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
     const show = () => target.kind === 'session'
       ? sendDesktopShowSession(target.sessionId)
       : sendDesktopShowLeaf(target.desktopId, target.leafId);
+    const beside = bring?.anchorStaysOnScreen ? { leafId: bring.leafId, anchorId: bring.anchorId, edge: bring.edge, keepsDraggedWidths: true } : null;
+    if (bring && beside) useDesktopShelfStore.getState().setDropBeside(bring.desktopId, beside);
     const request: Promise<unknown> = bring
       ? sendDesktopMoveLeaf({
         sourceDesktopId: bring.desktopId,
         targetDesktopId: bring.desktopId,
         leafId: bring.leafId,
         anchorId: bring.anchorId,
-        edge: 'right',
+        edge: bring.edge,
         wholeColumn: true,
       })
       : show();
@@ -168,6 +171,8 @@ export function useDesktopSelectionBridge(reportFailure: (message: string) => vo
         useSessionStore.getState().historyLanded(profileId, historyCursor, { leafId: target.leafId, lastKnownDesktopId: target.desktopId });
       },
       (error: unknown) => {
+        const shelf = useDesktopShelfStore.getState();
+        if (bring && shelf.dropBesideByDesktop[bring.desktopId] === beside) shelf.setDropBeside(bring.desktopId, null);
         const store = useSessionStore.getState();
         const current = store.intent?.id === id;
         const reason = error instanceof Error ? error.message : String(error);

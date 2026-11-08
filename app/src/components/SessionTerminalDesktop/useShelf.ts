@@ -158,6 +158,17 @@ export function useRowSettling(input: RowSettlingInput) {
     const askedToShow = (leafId: string) => !onScreen.has(leafId) && (showRequests.get(leafId) ?? 0) !== (previous?.showRequests.get(leafId) ?? 0);
     const arrivals = new Set(previous ? [...row].filter((leafId) => !previous.row.has(leafId) || askedToShow(leafId)) : []);
 
+    let pendingWantedCols = rowInput.pendingWantedCols;
+    if (dropBeside && droppedBeside(rowInput, dropBeside)) {
+      const reveal = revealDrop(rowInput, dropBeside, plan.firstColumn.index);
+      if (reveal) {
+        firstColumn = reveal.firstColumn;
+        pendingWantedCols = reveal.pendingWantedCols;
+        if (reveal.widthsToClear.length > 0) onClearWantedCols(reveal.widthsToClear);
+      }
+      shelf.setDropBeside(desktopId, null);
+    }
+
     if (previous) {
       const returns = shelf.documentReturnsByDesktop[desktopId] ?? {};
       for (const leafId of previous.row) {
@@ -189,21 +200,10 @@ export function useRowSettling(input: RowSettlingInput) {
       if (activeLeafId !== previous.activeLeafId && shelf.unseenByDesktop[desktopId]?.includes(activeLeafId)) {
         shelf.saveDocumentReturn(desktopId, activeLeafId, {
           firstColumn: previousFirstColumn,
-          shownAtLeafId: plan.firstColumn.leafId,
+          shownAtLeafId: firstColumn.leafId,
           activeLeafId: previous.activeLeafId,
         });
       }
-    }
-
-    let pendingWantedCols = rowInput.pendingWantedCols;
-    if (dropBeside && droppedBeside(rowInput, dropBeside)) {
-      const reveal = revealDrop(rowInput, dropBeside, plan.firstColumn.index);
-      if (reveal) {
-        firstColumn = reveal.firstColumn;
-        pendingWantedCols = reveal.pendingWantedCols;
-        if (reveal.widthsToClear.length > 0) onClearWantedCols(reveal.widthsToClear);
-      }
-      shelf.setDropBeside(desktopId, null);
     }
 
     const settledScreen = firstColumn === plan.firstColumn ? plan.screen : resolveRowLayout({ ...rowInput, pendingWantedCols, firstColumn }).screen;

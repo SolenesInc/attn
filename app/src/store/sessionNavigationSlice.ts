@@ -35,7 +35,7 @@ import type { LeafRef } from '../navigation/leafHistory';
 import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import { recordAppAction, type AppActionProps } from '../analytics/appActions';
 import { usePendingTerminalInput } from './pendingTerminalInput';
-import { bringAnchor } from './desktopShelf';
+import { bringPlacement } from './desktopShelf';
 
 export interface SessionNavigationActions {
   selectAgent: (sessionId: string, focusOwner?: Element | null, announce?: boolean) => boolean;
@@ -112,7 +112,7 @@ export function reconcileSessionNavigation(
   const arrangement = arrangementOf(next);
   const reconciled = arrival ? reconcileArrangement(next, arrangement, arrangementOf(state), arrival) : next;
   const advanced = advanceQueue(reconciled, arrangement, state.navigationQueue, next.navigationQueue);
-  return { ...next, ...focusIntent(advanced, arrangement, bringAnchor) };
+  return { ...next, ...focusIntent(advanced, arrangement, bringPlacement) };
 }
 
 export function createSessionNavigationActions(
@@ -121,7 +121,7 @@ export function createSessionNavigationActions(
 ): SessionNavigationActions {
   const set: SetState = (update) => write((state) => {
     const next = { ...state, ...(typeof update === 'function' ? update(state) : update) };
-    return focusIntent(next, arrangementOf(next), bringAnchor);
+    return focusIntent(next, arrangementOf(next), bringPlacement);
   });
   return {
     selectAgent: (sessionId, owner = focusOwner(), announce = true) => {

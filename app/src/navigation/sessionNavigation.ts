@@ -54,6 +54,8 @@ export interface LeafBring {
   desktopId: string;
   leafId: string;
   anchorId: string;
+  edge: 'left' | 'right';
+  anchorStaysOnScreen: boolean;
   sessionId: string | null;
 }
 
@@ -242,14 +244,14 @@ export function displayedArrangement(arrangement: Arrangement, intent: Intent | 
 export function focusIntent(
   state: SessionNavigationState,
   arrangement: Arrangement,
-  anchorOfBring: (leaf: ActiveLeaf) => string | null,
+  placementOfBring: (leaf: ActiveLeaf) => Pick<LeafBring, 'anchorId' | 'edge' | 'anchorStaysOnScreen'> | null,
 ): SessionNavigationState {
   const intent = state.intent;
   if (!intent || intent.focusRequested) return state;
   const leaf = intentLeaf(arrangement, intent);
   if (!leaf) return state;
-  const anchorId = intent.sendsShow && !intent.slides ? anchorOfBring(leaf) : null;
-  const bring = anchorId ? { desktopId: leaf.desktopId, leafId: leaf.leafId, anchorId, sessionId: leaf.kind === 'agent' ? leaf.sessionId : null } : null;
+  const placement = intent.sendsShow && !intent.slides ? placementOfBring(leaf) : null;
+  const bring = placement ? { ...placement, desktopId: leaf.desktopId, leafId: leaf.leafId, sessionId: leaf.kind === 'agent' ? leaf.sessionId : null } : null;
   return claimFocus({ ...state, view: 'session', intent: { ...intent, focusRequested: true, bring } }, leaf, intent.focusOwner, intent.announce);
 }
 

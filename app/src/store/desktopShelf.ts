@@ -84,6 +84,7 @@ export interface ShelfDropBeside {
   leafId: string;
   anchorId: string;
   edge: 'left' | 'right';
+  keepsDraggedWidths?: boolean;
 }
 
 export interface DesktopRowActions {
@@ -267,11 +268,24 @@ useProfilesStore.subscribe((state, previous) => {
   });
 });
 
-export function bringAnchor(leaf: { desktopId: string; leafId: string }): string | null {
+export interface BringPlacement {
+  anchorId: string;
+  edge: 'left' | 'right';
+  anchorStaysOnScreen: boolean;
+}
+
+export function bringPlacement(leaf: { desktopId: string; leafId: string }): BringPlacement | null {
   const shelf = useDesktopShelfStore.getState().shelfByDesktop[leaf.desktopId];
   if (!shelf?.activeLeafId) return null;
-  const offScreen = [...shelf.before, ...shelf.after].some((column) => column.tiles.some((tile) => tile.leafId === leaf.leafId));
-  return offScreen ? shelf.activeLeafId : null;
+  const hasLeaf = (column: ShelfColumn, leafId: string) => column.tiles.some((tile) => tile.leafId === leafId);
+  if (![...shelf.before, ...shelf.after].some((column) => hasLeaf(column, leaf.leafId))) return null;
+  const activeSlot = shelf.screen.findIndex((column) => hasLeaf(column, shelf.activeLeafId));
+  const rightmost = activeSlot === shelf.screen.length - 1;
+  return {
+    anchorId: shelf.activeLeafId,
+    edge: rightmost && activeSlot > 0 ? 'left' : 'right',
+    anchorStaysOnScreen: shelf.screen.length > 1,
+  };
 }
 
 export function oldestUnseenDocument(desktopId: string | null): string | null {

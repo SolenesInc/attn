@@ -42,6 +42,10 @@ const desktopState = () => request('get_desktop', { sessionId: firstSession });
 const readRow = async () => leavesOf((await desktopState()).desktop.layoutTree);
 const activeLeaf = async () => (await request('get_state')).activeLeaf.leafId;
 const shownLeaves = async () => (await request('get_desktop_ui_state', { desktopId: desktop })).shownLeafIds;
+const shownInRowOrder = async () => {
+  const [row, shown] = await Promise.all([readRow(), shownLeaves()]);
+  return row.filter((id) => shown.includes(id));
+};
 const surface = () => `[data-session-terminal-desktop="${desktop}"]`;
 const sessionOf = async (leafId) => (await desktopState()).desktop.panes.find((pane) => pane.paneId === leafId)?.sessionId;
 const waitForActive = (leafId) => waitDom(`${surface()}[data-active-leaf-id="${leafId}"] .desktop-pane[data-pane-id="${leafId}"]`);
@@ -210,6 +214,7 @@ try {
   });
 
   await runner.step('cmd_j_brings_an_unseen_document_and_closing_restores_the_screen', async () => {
+    await slideTo((await shownLeaves()).at(-1));
     const row = await readRow();
     const shownBefore = await shownLeaves();
     const offScreen = row.find((id) => !shownBefore.includes(id));
@@ -256,6 +261,7 @@ try {
     await press('shelf.sendToShelf');
     await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
     await waitForChip(documentLeaf, ':not(.is-needs)');
+    await slideTo((await shownLeaves()).at(-1));
     const active = await activeLeaf();
     const shownBefore = await shownLeaves();
 
@@ -324,6 +330,31 @@ try {
     await shot('document-brought-after-unmount');
     await press('terminal.close');
     await waitDom(`${surface()} .desktop-pane[data-pane-id="${documentLeaf}"]`, { absent: true });
+  });
+
+  await runner.step('a_brought_tile_replaces_a_neighbour_and_the_selected_tile_stays', async () => {
+    await narrowScreenToTwoTiles();
+    const [left] = await readRow();
+    await slideTo(left);
+    await waitForActive(left);
+    await shot('bring-selected-on-the-left-before');
+    const fromLeft = await offScreenLeaf();
+    await driver.click(`[data-testid="shelf-chip-${fromLeft}"]`);
+    await assertActiveHasInput(fromLeft);
+    const afterLeft = await shownInRowOrder();
+    runner.assert(afterLeft[0] === left && afterLeft[1] === fromLeft, 'the selected tile on the left stays and the right neighbour is replaced', { afterLeft, left, fromLeft });
+    await hold();
+    await shot('bring-selected-on-the-left-after');
+
+    const right = fromLeft;
+    await shot('bring-selected-on-the-right-before');
+    const fromRight = await offScreenLeaf();
+    await driver.click(`[data-testid="shelf-chip-${fromRight}"]`);
+    await assertActiveHasInput(fromRight);
+    const afterRight = await shownInRowOrder();
+    runner.assert(afterRight[0] === fromRight && afterRight[1] === right, 'the selected tile on the right stays and the left neighbour is replaced', { afterRight, right, fromRight });
+    await hold();
+    await shot('bring-selected-on-the-right-after');
   });
 
   await runner.step('needing_the_user_shows_in_color_with_no_highlighted_border', async () => {
