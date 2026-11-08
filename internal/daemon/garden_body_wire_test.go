@@ -256,3 +256,94 @@ func TestBodiesWrittenByAnOlderBuildSurviveTheReturnToThisBuild(t *testing.T) {
 		t.Fatalf("rolling back to the text the older build could not see: %+v, %v", restored, err)
 	}
 }
+
+func TestAnEditOverTextMissingFromHistoryKeepsThatText(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	const (
+		first    = "First saved text"
+		saved    = "Latest saved version"
+		live     = "Live text no version holds"
+		returned = "Typed on the older build after the split"
+		typed    = "Typed on this build"
+	)
+	planted := func(title string) string {
+		t.Helper()
+		seed, err := cli.SeedPlant("", title, first, "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cli.SeedEdit(seed.Seed.ID, saved, garden.BodySHA256(first), ""); err != nil {
+			t.Fatal(err)
+		}
+		return seed.Seed.ID
+	}
+	adopted := planted("Repair replaces live text")
+	edited := planted("Edit replaces live text")
+	rolled := planted("Rollback from live text")
+	inHistory := planted("Live text is the latest version")
+
+	w.stop()
+	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tableOf := func(collection string) string {
+		t.Helper()
+		var id int64
+		if err := db.QueryRow(`SELECT id FROM document_collections WHERE namespace = ? AND collection = ?`, garden.Namespace, collection).Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		return docstore.TableName(id)
+	}
+	seeds, bodies := tableOf(garden.CollectionSeeds), tableOf(garden.CollectionSeedBodies)
+	setLive := func(id, body string) {
+		t.Helper()
+		encoded, err := garden.EncodeSeedBody(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`UPDATE `+bodies+` SET body = ?, rev = rev + 1 WHERE id = ?`, encoded, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setInline := func(id, body string) {
+		t.Helper()
+		if _, err := db.Exec(`UPDATE `+seeds+` SET body = json_set(body, '$.body', ?), rev = rev + 1 WHERE id = ?`, body, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setLive(adopted, live)
+	setInline(adopted, returned)
+	setLive(edited, live)
+	setLive(rolled, live)
+	setInline(inHistory, returned)
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	w.start()
+	cli = w.Client()
+	rollback := func(id string, wantVersion, wantRestored int, want string) {
+		t.Helper()
+		got, err := cli.SeedRollback(id, nil)
+		if err != nil || got.BodyVersion != wantVersion || got.RestoredVersion != wantRestored || got.Seed.Body != want {
+			t.Fatalf("rollback of %s: %+v, %v; want v%d restoring v%d (%q)", id, got, err, wantVersion, wantRestored, want)
+		}
+	}
+
+	if got := lifeShow(t, cli, adopted).Seed.Body; got != returned {
+		t.Fatalf("after the repair: %q", got)
+	}
+	rollback(adopted, 5, 3, live)
+
+	if _, err := cli.SeedEdit(edited, typed, garden.BodySHA256(live), ""); err != nil {
+		t.Fatal(err)
+	}
+	rollback(edited, 5, 3, live)
+
+	rollback(rolled, 4, 2, saved)
+	rollback(rolled, 5, 3, live)
+
+	rollback(inHistory, 4, 2, saved)
+}

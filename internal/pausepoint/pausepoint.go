@@ -40,6 +40,7 @@ const (
 	DocumentQueryReading      = "document-query-reading"
 	GardenSeedsReading        = "garden-seeds-reading"
 	SeedRollbackRead          = "seed-rollback-read"
+	SeedBodiesAdopting        = "seed-bodies-adopting"
 	SeedReminderDue           = "seed-reminder-due"
 	SeedReminderRead          = "seed-reminder-read"
 

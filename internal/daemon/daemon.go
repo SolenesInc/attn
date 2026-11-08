@@ -663,6 +663,10 @@ func (d *Daemon) Start() error {
 	if err := d.startEventBus(); err != nil {
 		return fmt.Errorf("start event bus: %w", err)
 	}
+	d.ensureGardenCollections()
+	if err := d.adoptInlineSeedBodies(); err != nil {
+		return fmt.Errorf("keep seed bodies from an older build: %w", err)
+	}
 	if d.ptyBackend == nil {
 		if err := d.startPTYBackend(); err != nil {
 			return err
@@ -700,10 +704,6 @@ func (d *Daemon) Start() error {
 	d.configureAnalytics()
 	d.configurePhoneAccess()
 	d.recordAnalytics(analytics.StreamSample, "daemon_start", d.run.ID, previous)
-	d.ensureGardenCollections()
-	if err := d.adoptInlineSeedBodies(); err != nil {
-		return fmt.Errorf("keep seed bodies from an older build: %w", err)
-	}
 	d.ensureCrewCollections()
 	d.importCrewHomes()
 	d.ensureChiefs()

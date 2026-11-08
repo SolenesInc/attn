@@ -48,6 +48,7 @@ func (d *Daemon) adoptInlineSeedBodies() error {
 	if d.store == nil {
 		return nil
 	}
+	pausepoint.At(pausepoint.SeedBodiesAdopting)
 	seedSchema, err := d.seedsCollection()
 	if err != nil {
 		return err
@@ -215,7 +216,14 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 	if latest.Version == 0 {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s has no body edits to roll back", seed.ID)
 	}
+	body, err := d.readSeedBody(seed.ID)
+	if err != nil {
+		return nil, err
+	}
 	version := latest.Version - 1
+	if body != latest.Body {
+		version = latest.Version
+	}
 	if msg.Version != nil {
 		version = *msg.Version
 	}
@@ -232,10 +240,6 @@ func (d *Daemon) rollbackSeedBody(msg *protocol.SeedRollbackMessage) (*protocol.
 		return nil, protocol.Refuse(protocol.RefusalNotFound, "%s has no body v%d; available versions: v1 through v%d", seed.ID, version, latest.Version)
 	}
 	target, err = garden.DecodeBodyVersion(doc.Body)
-	if err != nil {
-		return nil, err
-	}
-	body, err := d.readSeedBody(seed.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -305,8 +309,8 @@ func (d *Daemon) commitSeedBodyEdit(msg *protocol.SeedEditMessage) (*protocol.Se
 			return nil, err
 		}
 		versions := []garden.BodyVersion{}
-		if latest.Version == 0 {
-			latest = garden.BodyVersion{Seed: seed.ID, Version: 1, Body: current}
+		if latest.Version == 0 || (current != "" && latest.Body != current) {
+			latest = garden.BodyVersion{Seed: seed.ID, Version: latest.Version + 1, Body: current}
 			versions = append(versions, latest)
 		}
 		version := garden.BodyVersion{Seed: seed.ID, Version: latest.Version + 1, Body: msg.Body}
