@@ -219,6 +219,13 @@ instance                a daemon, an app and a data folder under one name;
 ```
 
 ```text
+attn                    the command that users and hooks run; like a thin
+                        client. It starts attnd for what it cannot do itself
+attnd                   the program that runs the daemon and PTY workers;
+                        like a server binary. It installs beside attn
+```
+
+```text
 home                    the main daemon the user's app connects to
 ├─ bridge (0..n)       a connection through the user's ssh to one outpost
 │  ├─ state (1)
