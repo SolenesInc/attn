@@ -143,7 +143,7 @@ func TestASessionMailboxNamesOneRunningSessionOfTheProfile(t *testing.T) {
 		{protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("gone"))}, "is not running"},
 		{protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession}, "requires session_id"},
 		{protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID("here")), MemberID: protocol.Ptr("fern")}, "cannot include member_id"},
-		{protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief, SessionID: protocol.Ptr(protocol.SessionID("here"))}, "cannot include session_id"},
+		{protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, SessionID: protocol.Ptr(protocol.SessionID("here"))}, "cannot include session_id"},
 	} {
 		msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: uuid.NewString(), Mailbox: c.mailbox, Content: "Wrong mailbox", AttachmentIds: []string{}}
 		if _, err := app.QuickCapture(msg); err == nil || !strings.Contains(err.Error(), c.refusal) {

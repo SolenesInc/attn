@@ -8547,7 +8547,6 @@ type QuickCaptureMailbox struct {
 
 type QuickCaptureMailboxKind string
 
-const QuickCaptureMailboxKindChief QuickCaptureMailboxKind = "chief"
 const QuickCaptureMailboxKindCrewMember QuickCaptureMailboxKind = "crew_member"
 const QuickCaptureMailboxKindSession QuickCaptureMailboxKind = "session"
 

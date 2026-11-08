@@ -8529,7 +8529,6 @@ export interface Mailbox {
 }
 
 export enum QuickCaptureMailboxKind {
-    Chief = "chief",
     CrewMember = "crew_member",
     Session = "session",
 }
@@ -29794,7 +29793,6 @@ const typeMap: any = {
         "quick_capture_list",
     ],
     "QuickCaptureMailboxKind": [
-        "chief",
         "crew_member",
         "session",
     ],

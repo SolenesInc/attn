@@ -37,11 +37,6 @@ func (d *Daemon) validateQuickCaptureMailbox(profileID string, mailbox protocol.
 			return who.Address{}, fmt.Errorf("session %s is a shell; a capture goes only to an agent session", id)
 		}
 		return d.inboxAddressOf(session.ID), nil
-	case protocol.QuickCaptureMailboxKindChief:
-		if mailbox.MemberID != nil {
-			return who.Address{}, fmt.Errorf("chief mailbox cannot include member_id")
-		}
-		return d.chiefMailbox(profileID)
 	case protocol.QuickCaptureMailboxKindCrewMember:
 		if strings.TrimSpace(protocol.Deref(mailbox.MemberID)) == "" {
 			return who.Address{}, fmt.Errorf("crew mailbox requires member_id")

@@ -165,14 +165,6 @@ func (d *Daemon) chiefParty(profileID string) (who.Party, bool) {
 	return who.Member(member.Key), ok && !member.Retired
 }
 
-func (d *Daemon) chiefMailbox(profileID string) (who.Address, error) {
-	member, ok := d.chiefMember(profileID)
-	if !ok {
-		return who.Address{}, errors.New("this profile has no Chief yet; attn creates it at the next daemon start")
-	}
-	return who.Member(member.Key).Address(), nil
-}
-
 func chiefRefusesRetire(member crew.Member) error {
 	if !member.Chief {
 		return nil

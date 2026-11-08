@@ -851,7 +851,7 @@ model AgentReloadResult {
   outcomes: AgentReloadOutcome[];
 }
 
-enum QuickCaptureMailboxKind { chief, crew_member, session }
+enum QuickCaptureMailboxKind { crew_member, session }
 model QuickCaptureMailbox {
   kind: QuickCaptureMailboxKind;
   member_id?: string;

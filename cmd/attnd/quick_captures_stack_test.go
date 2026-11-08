@@ -65,7 +65,7 @@ func TestQuickCaptureRestartAndCLIFileRetrieval(t *testing.T) {
 	}
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	uploadQuickCaptureChunks(t, app, quickCapture, id, data)
-	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "Please inspect this screenshot", AttachmentIds: []string{id}}
+	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, Content: "Please inspect this screenshot", AttachmentIds: []string{id}}
 	quickCaptureCall(t, app, msg)
 	if err := os.Remove(source); err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestQuickCaptureInstalledFileRecoversAfterProcessCrash(t *testing.T) {
 	}
 	s.AwaitCrash()
 	s.Start()
-	quickCaptureCall(t, s.TrustedApp(), protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}})
+	quickCaptureCall(t, s.TrustedApp(), protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}})
 	saved := quickCaptureCall(t, s.TrustedApp(), protocol.QuickCaptureAttachmentGetMessage{Cmd: protocol.CmdQuickCaptureAttachmentGet, CaptureID: quickCapture, AttachmentID: id})
 	data, err := base64.StdEncoding.DecodeString(saved.Download.DataBase64)
 	if err != nil || !bytes.Equal(data, b.Bytes()) {
@@ -147,7 +147,7 @@ func TestQuickCapturePDFAttachmentRoundTripsThroughCLI(t *testing.T) {
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	quickCapture, id := uuid.NewString(), uuid.NewString()
 	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentPutMessage{Cmd: protocol.CmdQuickCaptureAttachmentPut, CaptureID: quickCapture, AttachmentID: id, Name: "notes.pdf", DataBase64: base64.StdEncoding.EncodeToString(data), Final: true})
-	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}})
+	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}})
 	read := s.Run(testworld.Invocation{Args: []string{"agent", "inbox", quickCapture}, Session: chief})
 	if read.Code != 0 || !strings.Contains(read.Stdout, "File \"notes.pdf\" (application/pdf") || !strings.Contains(read.Stdout, "Inspect the saved file with your tools.") {
 		t.Fatalf("PDF inbox: %+v", read)
@@ -183,7 +183,7 @@ func TestDamagedQuickCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	if len(list.List.DraftAssets) != 1 || list.List.DraftAssets[0].State != "staged" {
 		t.Fatalf("damaged file lost its draft: %+v", list.List)
 	}
-	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}}); err == nil || !strings.Contains(err.Error(), "staged") {
+	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, AttachmentIds: []string{id}}); err == nil || !strings.Contains(err.Error(), "staged") {
 		t.Fatalf("damaged file was accepted: %v", err)
 	}
 	quickCaptureCall(t, app, protocol.QuickCaptureAttachmentDiscardMessage{Cmd: protocol.CmdQuickCaptureAttachmentDiscard, CaptureID: quickCapture, AttachmentID: id})
@@ -191,5 +191,5 @@ func TestDamagedQuickCaptureDraftDoesNotBlockDaemonRestart(t *testing.T) {
 	if len(list.List.DraftAssets) != 0 {
 		t.Fatalf("discard retained the damaged draft: %+v", list.List)
 	}
-	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: uuid.NewString(), Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "A damaged draft must not block other quick captures."})
+	quickCaptureCall(t, app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: uuid.NewString(), Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("chief")}, Content: "A damaged draft must not block other quick captures."})
 }

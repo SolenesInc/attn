@@ -36,7 +36,7 @@ func TestACaptureWaitsForTheFolderTrustAnswerAcrossADaemonRestart(t *testing.T) 
 		t.Fatalf("after restart the session reads %s/%s, want it still at the folder-trust question", after.State, protocol.Deref(after.StateReason))
 	}
 
-	capture := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "Please investigate the build")
+	capture := sendQuickCapture(t, app, toTheChief(), "Please investigate the build")
 	if record := quickCaptureRecord(t, app, capture.CaptureID); record.ReadAt != nil {
 		t.Fatalf("the capture was read at %s while only the trust question was on screen", *record.ReadAt)
 	}

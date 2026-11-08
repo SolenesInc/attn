@@ -23,6 +23,14 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+func toTheChief() protocol.QuickCaptureMailbox {
+	return toMember("chief")
+}
+
+func toMember(id string) protocol.QuickCaptureMailbox {
+	return protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr(id)}
+}
+
 func sendQuickCapture(t *testing.T, cli *testworld.Peer, mailbox protocol.QuickCaptureMailbox, body string, attachments ...string) protocol.QuickCaptureSendMessage {
 	t.Helper()
 	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: uuid.NewString(), Mailbox: mailbox, Content: body, AttachmentIds: attachments}
@@ -75,7 +83,7 @@ func TestQuickCaptureFilesRequireFinalizationPreserveBytesAndDiscardOnlyDrafts(t
 		t.Fatal(err)
 	}
 	uploadQuickCapture(t, app, quickCapture, id, data, false)
-	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{id}}
+	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: toTheChief(), AttachmentIds: []string{id}}
 	if _, err := app.QuickCapture(msg); err == nil {
 		t.Fatal("incomplete upload accepted")
 	}
@@ -124,7 +132,7 @@ func TestConcurrentIdenticalFileQuickCapturesReturnOneSavedIdentity(t *testing.T
 	app := w.TrustedApp()
 	id, asset := uuid.NewString(), uuid.NewString()
 	uploadQuickCapture(t, app, id, asset, quickCapturePNG(t), true)
-	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: id, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "same request", AttachmentIds: []string{asset}}
+	msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: id, Mailbox: toTheChief(), Content: "same request", AttachmentIds: []string{asset}}
 	start := make(chan struct{})
 	errs := make(chan error, 2)
 	for range 2 {
@@ -154,11 +162,11 @@ func TestAppQuickCaptureRequestsAreCorrelatedAndEmptyOrMalformedMailboxsRefused(
 	if !r.Success || r.Result.Upload.Attachment == nil {
 		t.Fatalf("app upload %+v", r)
 	}
-	sent := testworld.Request(app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, RequestID: protocol.Ptr("save"), CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, AttachmentIds: []string{asset}}, protocol.EventQuickCaptureResult, func(r protocol.QuickCaptureResultMessage) bool { return r.RequestID == "save" })
+	sent := testworld.Request(app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, RequestID: protocol.Ptr("save"), CaptureID: quickCapture, Mailbox: toTheChief(), AttachmentIds: []string{asset}}, protocol.EventQuickCaptureResult, func(r protocol.QuickCaptureResultMessage) bool { return r.RequestID == "save" })
 	if !sent.Success || sent.Result.Record.ID != quickCapture || len(sent.Result.Record.Attachments) != 1 {
 		t.Fatalf("app save %+v", sent)
 	}
-	for _, mailbox := range []protocol.QuickCaptureMailbox{{Kind: protocol.QuickCaptureMailboxKindChief}, {Kind: protocol.QuickCaptureMailboxKindChief, MemberID: protocol.Ptr("alder")}, {Kind: protocol.QuickCaptureMailboxKindCrewMember}, {Kind: protocol.QuickCaptureMailboxKind("invalid")}} {
+	for _, mailbox := range []protocol.QuickCaptureMailbox{{Kind: protocol.QuickCaptureMailboxKind("chief")}, {Kind: protocol.QuickCaptureMailboxKindCrewMember}, {Kind: protocol.QuickCaptureMailboxKind("invalid")}} {
 		r := testworld.Request(app, protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, RequestID: protocol.Ptr("refuse"), CaptureID: uuid.NewString(), Mailbox: mailbox, AttachmentIds: []string{}}, protocol.EventQuickCaptureResult, func(r protocol.QuickCaptureResultMessage) bool { return r.RequestID == "refuse" })
 		if r.Success || protocol.Deref(r.Error) == "" {
 			t.Fatalf("invalid quick capture accepted %+v", r)
@@ -171,7 +179,7 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	registerSessions(t, w, cli, "peer")
 	wakeConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
-	capture := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "user request")
+	capture := sendQuickCapture(t, app, toTheChief(), "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
 	batch := readInbox(t, cli, string(chief), 0)
 	if len(batch.Items) != 1 || batch.Items[0].Kind != "peer_message" || string(protocol.Deref(batch.Items[0].Sender).Ref) != "session:peer" || batch.Remaining != 0 {
@@ -188,7 +196,7 @@ func TestQuickCaptureHistoryPagesWithoutReadingAndReportsMissingIdentity(t *test
 	app := w.TrustedApp()
 	var sent []string
 	for _, body := range []string{"first", "second", "third"} {
-		sent = append(sent, sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, body).CaptureID)
+		sent = append(sent, sendQuickCapture(t, app, toTheChief(), body).CaptureID)
 	}
 	page, err := app.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 2})
 	if err != nil {
@@ -197,7 +205,7 @@ func TestQuickCaptureHistoryPagesWithoutReadingAndReportsMissingIdentity(t *test
 	if len(page.List.Items) != 2 || page.List.Items[0].ID != sent[2] || page.List.Items[1].ID != sent[1] || page.List.NextCursor == nil {
 		t.Fatalf("first page %+v", page)
 	}
-	sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "arrived between pages")
+	sendQuickCapture(t, app, toTheChief(), "arrived between pages")
 	tail, err := app.QuickCapture(protocol.QuickCaptureListMessage{Cmd: protocol.CmdQuickCaptureList, Limit: 2, Cursor: page.List.NextCursor})
 	if err != nil || len(tail.List.Items) != 1 || tail.List.Items[0].ID != sent[0] || tail.List.NextCursor != nil || tail.List.Items[0].ReadAt != nil {
 		t.Fatalf("tail %+v %v", tail, err)
@@ -220,7 +228,7 @@ func TestQuickCaptureHistoryRefusesTheAgentSocket(t *testing.T) {
 	cli, app := w.Client(), w.TrustedApp()
 	quickCapture, asset := uuid.NewString(), uuid.NewString()
 	uploadQuickCapture(t, app, quickCapture, asset, quickCapturePNG(t), true)
-	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "User request", AttachmentIds: []string{asset}}); err != nil {
+	if _, err := app.QuickCapture(protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: toTheChief(), Content: "User request", AttachmentIds: []string{asset}}); err != nil {
 		t.Fatal(err)
 	}
 	for _, msg := range []any{
@@ -261,7 +269,7 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	p = w.Connect(hello, http.Header{"Origin": {"tauri://localhost"}})
 	testworld.Await[protocol.InitialStateMessage](p, protocol.EventInitialState, nil)
 	peers = append(peers, p)
-	send := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "Only the user", AttachmentIds: []string{asset}}
+	send := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: toTheChief(), Content: "Only the user", AttachmentIds: []string{asset}}
 	for _, peer := range peers {
 		for _, msg := range []any{send,
 			protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: quickCapture},
@@ -288,7 +296,7 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli, app := w.Client(), w.TrustedApp()
-	msg := sendQuickCapture(t, app, protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, "Please investigate this")
+	msg := sendQuickCapture(t, app, toTheChief(), "Please investigate this")
 	if r := quickCaptureRecord(t, app, msg.CaptureID); r.ReadAt != nil {
 		t.Fatalf("a quick capture for the asleep Chief is read: %+v", r)
 	}
@@ -439,8 +447,10 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		b := w.TrustedApp(profileB)
 		cli := w.Client()
 		chiefs := map[string]*bubbleClaude{}
+		chiefMailboxes := map[string]protocol.QuickCaptureMailbox{}
 		for _, profile := range []string{profileA, profileB} {
 			scoped := cli.WithGardenProfile(profile, "")
+			chiefMailboxes[profile] = toMember(chiefOfRoster(t, crewRoster(t, scoped)).ID)
 			setCrew(t, scoped, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 			chiefs[profile] = w.bootBubbleClaude(t, string(wakeCrew(t, scoped, "chief", "").SessionID))
 			chiefs[profile].reply("Ready. <!-- attn:state=idle -->")
@@ -450,7 +460,7 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		bytesA, bytesB := []byte("profile A file"), []byte("profile B file")
 		uploadQuickCapture(t, a, quickCapture, file, bytesA, true)
 		uploadQuickCapture(t, a, draft, file, bytesA, true)
-		msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}, Content: "A request", AttachmentIds: []string{file}}
+		msg := protocol.QuickCaptureSendMessage{Cmd: protocol.CmdQuickCaptureSend, CaptureID: quickCapture, Mailbox: chiefMailboxes[profileA], Content: "A request", AttachmentIds: []string{file}}
 		if _, err := a.QuickCapture(msg); err != nil {
 			t.Fatal(err)
 		}
@@ -492,6 +502,7 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 		}
 		uploadQuickCapture(t, b, quickCapture, file, bytesB, true)
 		msg.Content = "B request"
+		msg.Mailbox = chiefMailboxes[profileB]
 		if _, err := b.QuickCapture(msg); err != nil {
 			t.Fatal(err)
 		}
@@ -559,7 +570,7 @@ func TestAQuickCaptureForTheChiefReachesItAwakeAndWakesItsNextDay(t *testing.T) 
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")
-		chiefMailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindChief}
+		chiefMailbox := toTheChief()
 
 		sendQuickCapture(t, trusted, chiefMailbox, "Captured for the live chief")
 		w.advance(0)
