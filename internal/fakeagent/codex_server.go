@@ -44,6 +44,7 @@ const (
 	methodWorkspaceRoots = "workspace_roots"
 	methodPermissions    = "permissions"
 	methodDropControl    = "drop_control"
+	methodDrain          = "drain"
 	methodMCPStartup     = "mcp_startup"
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
@@ -1169,6 +1170,12 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return nil, err
 		}
 		s.tell(thread, notification(codexMCPStartupStatus, map[string]any{"threadId": p.ThreadID, "name": p.Server, "status": p.Text}))
+		return struct{}{}, nil
+	case methodDrain:
+		s.mu.Lock()
+		s.draining = true
+		s.mu.Unlock()
+		go s.stopWhenDrained()
 		return struct{}{}, nil
 	case methodDropControl:
 		s.mu.Lock()

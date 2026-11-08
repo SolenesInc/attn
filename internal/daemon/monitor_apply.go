@@ -81,7 +81,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 		if returnedInputMayPlace(previous, view) {
 			d.claudeMod().placeReturned(session)
 		}
-		if view.State.V.Sequence != previous.State.V.Sequence {
+		if compactingCloseMayPlace(previous, view) {
 			d.kickCompactingClose(session)
 		}
 		return true

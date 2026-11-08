@@ -429,8 +429,14 @@ Codex reports its thread active. A refused compact opens the lane again and is
 placed again when the harness reports the end of the turn: the mod sends
 `ready` when its next turn completes, and shared Codex reports its thread idle.
 Apart from a pending approval, attn's own reading of the session's state plays
-no part, so background work the agent leaves running does not hold the close. A ring placed before the compact
-starts a turn, and the compact waits for that turn's end. Once the compact is
+no part, so background work the agent leaves running does not hold the close.
+The exception is a compact that fails before the harness can say whether a
+turn runs: shared Codex's control connection or `thread/resume` fails, or no
+link can compact the session. While attn reads the session as working, that
+failure opens the lane again and the compact is placed again when the session's
+state changes, so the close still waits for the turn that asked for it. A
+failure once the session is prompt-ready closes it. A ring placed before the
+compact starts a turn, and the compact waits for that turn's end. Once the compact is
 placed and taken, the lane holds every later item until the session has closed,
 and seed mail that arrives then wakes the closed tender as above. User input
 before the close cancels it and opens the lane again.

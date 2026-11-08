@@ -42,7 +42,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if returnedInputMayPlace(previous, view) {
 		d.claudeMod().placeReturned(session)
 	}
-	if stateChanged {
+	if compactingCloseMayPlace(previous, view) {
 		d.kickCompactingClose(session)
 	}
 	broadcast := view.Driver.V.TranscriptPath != previous.Driver.V.TranscriptPath
@@ -77,6 +77,10 @@ func returnedInputMayPlace(previous, view sessionmonitor.View) bool {
 
 func harnessJustStarted(previous, view sessionmonitor.View) bool {
 	return previous.AwaitingHarness.V && !view.AwaitingHarness.V
+}
+
+func compactingCloseMayPlace(previous, view sessionmonitor.View) bool {
+	return view.State.V.Sequence != previous.State.V.Sequence || becamePromptReadyByReason(previous, view)
 }
 
 func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {

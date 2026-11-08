@@ -24,7 +24,8 @@ const (
 )
 
 type compactOutcome struct {
-	failed string
+	failed      string
+	turnUnknown bool
 }
 
 type compactionLedger struct {
@@ -39,7 +40,7 @@ type pendingCompactClose struct {
 	userInputs uint64
 	onStandby  []string
 	key        string
-	busyTimes  int
+	retries    int
 	placing    bool
 	again      bool
 	placed     bool
@@ -143,6 +144,7 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 		}
 		pausepoint.At(pausepoint.CompactingClosePlacing)
 		attempt := d.placeDelivery(context.Background(), p.session, p.compact())
+		turnEnded := turnHasEnded(p.monitor)
 		l.mu.Lock()
 		if l.pending[p.session] != p {
 			l.mu.Unlock()
@@ -162,26 +164,29 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 		case sessionmonitor.Failed:
 			p.placed = true
 			if p.outcome == nil {
-				p.outcome = &compactOutcome{failed: attempt.Err.Error()}
+				p.outcome = &compactOutcome{failed: attempt.Err.Error(), turnUnknown: true}
 			}
 		case sessionmonitor.Placed:
-			if p.busy {
-				betweenTurns := p.again
-				p.busy, p.again, p.placing = false, false, false
-				p.busyTimes++
-				l.mu.Unlock()
-				d.reopenCompactingCloseInput(p)
-				if betweenTurns {
-					d.kickCompactingClose(p.session)
-				}
-				return
-			}
 			p.placed = true
-			if p.outcome == nil {
+			if p.outcome == nil && !p.busy {
 				p.tripwire = d.clock.AfterFunc(CompactOutcomeTripwireTimer, compactOutcomeTripwire, func() {
 					d.life.Go("compactOutcomeTripwire", func() { d.compactOutcomeMissing(p) })
 				})
 			}
+		}
+		failedMidTurn := p.outcome != nil && p.outcome.turnUnknown && !turnEnded
+		if p.busy || failedMidTurn {
+			outcome, betweenTurns := p.outcome, p.again
+			p.waitForTurnEndLocked()
+			l.mu.Unlock()
+			if failedMidTurn {
+				d.logf("compacting close: the compact of session %s failed before its harness could tell whether the turn had ended, so it waits for the turn's end: %s", p.session, outcome.failed)
+			}
+			d.reopenCompactingCloseInput(p)
+			if betweenTurns {
+				d.kickCompactingClose(p.session)
+			}
+			return
 		}
 		ready := p.outcome != nil && l.takeLocked(p)
 		l.mu.Unlock()
@@ -189,6 +194,20 @@ func (d *Daemon) placeCompactingClose(p *pendingCompactClose) {
 			d.closeAfterCompact(p)
 		}
 		return
+	}
+}
+
+func turnHasEnded(monitor *sessionmonitor.Monitor) bool {
+	view := monitor.Snapshot()
+	return sessionmonitor.PromptReady(view.State.V.State, view.State.V.Reason)
+}
+
+func (p *pendingCompactClose) waitForTurnEndLocked() {
+	p.outcome, p.placed, p.placing, p.again, p.busy = nil, false, false, false, false
+	p.retries++
+	if p.tripwire != nil {
+		p.tripwire.Stop()
+		p.tripwire = nil
 	}
 }
 
@@ -208,7 +227,7 @@ func (l *compactionLedger) report(d *Daemon, session protocol.SessionID, deliver
 }
 
 func (p *pendingCompactClose) compact() sessionmonitor.Delivery {
-	return sessionmonitor.CompactInput(fmt.Sprintf("%s-%d", p.key, p.busyTimes))
+	return sessionmonitor.CompactInput(fmt.Sprintf("%s-%d", p.key, p.retries))
 }
 
 func (l *compactionLedger) retryAfterBusy(d *Daemon, session protocol.SessionID, delivery string, why string) {
@@ -224,12 +243,7 @@ func (l *compactionLedger) retryAfterBusy(d *Daemon, session protocol.SessionID,
 		l.mu.Unlock()
 		return
 	}
-	p.placed, p.placing, p.again = false, false, false
-	p.busyTimes++
-	if p.tripwire != nil {
-		p.tripwire.Stop()
-		p.tripwire = nil
-	}
+	p.waitForTurnEndLocked()
 	l.mu.Unlock()
 	d.reopenCompactingCloseInput(p)
 }

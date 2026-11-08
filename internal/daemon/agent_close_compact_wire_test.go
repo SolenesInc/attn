@@ -159,6 +159,22 @@ func TestACompactThatFailsStillClosesTheSharedCodexSessionSayingSo(t *testing.T)
 	}
 }
 
+func TestACompactRefusedByADrainingCodexServerWaitsForTheAskingTurnToEndBeforeClosing(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	session, codex := sharedCodexInATurn(t, w, app)
+	w.CodexServer().Drain()
+
+	closeCompacting(t, cli, session)
+	stillOpen(t, cli, session, "after the draining app-server refused the compact during the turn that asked to close")
+
+	codex.Reply("Fixed and closing. <!-- attn:state=idle -->")
+	closed := awaitClosed(app, session)
+	if reason := protocol.Deref(closed.CloseReason); !strings.HasPrefix(reason, compactReason) || protocol.Deref(closed.ClosedBy) != session {
+		t.Errorf("ledger entry = %+v, want it closed by itself for %q once its turn ended", closed, compactReason)
+	}
+}
+
 func TestMailThatArrivesWhileTheCompactRunsWaitsUntilTheSessionHasClosed(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()

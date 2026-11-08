@@ -19,7 +19,7 @@ func (l codexMonitorLink) Compact(_ context.Context, in harness.Input) harness.C
 	r, target := l.shared, l.target
 	conversation := target.Conversation.NativeID
 	failed := func(err error) harness.Custody {
-		r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: err.Error()})
+		r.d.compactions.report(r.d, target.Session, in.ID, compactOutcome{failed: err.Error(), turnUnknown: true})
 		return harness.Custody{Taken: true, At: time.Now()}
 	}
 	if conversation == "" {

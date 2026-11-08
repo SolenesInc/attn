@@ -139,6 +139,11 @@ func (s *CodexServer) ReportMCPStartup(conversation, server, status string) {
 	s.call(methodMCPStartup, serverThreadParams{ThreadID: conversation, Server: server, Text: status}, nil)
 }
 
+func (s *CodexServer) Drain() {
+	s.t.Helper()
+	s.call(methodDrain, serverThreadParams{}, nil)
+}
+
 func (s *CodexServer) DropControl() {
 	s.t.Helper()
 	s.call(methodDropControl, serverThreadParams{}, nil)
