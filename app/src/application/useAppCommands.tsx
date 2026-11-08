@@ -11,7 +11,10 @@ import { shortcutTokens } from '../shortcuts/formatShortcut';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useDesktopShelfStore } from '../store/desktopShelf';
 import { useProfilesStore } from '../store/profiles';
-import { desktopLabel, orderedDesktops, sortedDesktopOrder } from '../utils/desktops';
+import { desktopLabel, desktopTerminalState, orderedDesktops, sortedDesktopOrder } from '../utils/desktops';
+import { activeLeafOf } from '../navigation/activeLeaf';
+import { collectLayoutLeaves, isPoppedLeaf, leafSlotId } from '../types/desktop';
+import { tileWindowsEnabled } from '../tileWindow/enabled';
 import type { ShortcutId } from '../shortcuts/registry';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
@@ -778,8 +781,27 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     return commands;
   }, [chief, setSidebarCollapsed]);
 
+  const popoutOn = tileWindowsEnabled(settings);
+  const tileWindowCommands = useMemo<PaletteCommand[]>(() => {
+    if (!popoutOn) return [];
+    const active = activeLeafOf({ profileId: selectedProfileId ?? '', currentDesktopId, desktops });
+    const desktop = desktops.find((entry) => entry.id === active?.desktopId);
+    if (!active || !desktop) return [];
+    const leaf = collectLayoutLeaves(desktopTerminalState(desktop).layoutTree).find((entry) => leafSlotId(entry) === active.leafId);
+    if (!leaf) return [];
+    const popped = isPoppedLeaf(leaf);
+    return [{
+      id: popped ? 'tile-bring-back' : 'tile-pop-out',
+      title: popped ? 'Bring back tile' : 'Pop out tile',
+      keywords: ['tile', 'window', popped ? 'bring back' : 'pop out', 'detach'],
+      icon: <KeyboardActionIcon />,
+      shortcut: [shortcutTokens('tile.popOut')],
+      run: () => void triggerShortcut('tile.popOut'),
+    }];
+  }, [currentDesktopId, desktops, popoutOn, selectedProfileId]);
+
   return useMemo(
-    () => [...chiefCommands, ...navigationCommands, ...sharedCodexCommands, ...actionMenuItemsWithQueueActions],
-    [chiefCommands, navigationCommands, sharedCodexCommands, actionMenuItemsWithQueueActions],
+    () => [...chiefCommands, ...navigationCommands, ...sharedCodexCommands, ...tileWindowCommands, ...actionMenuItemsWithQueueActions],
+    [chiefCommands, navigationCommands, sharedCodexCommands, tileWindowCommands, actionMenuItemsWithQueueActions],
   );
 }

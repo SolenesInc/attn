@@ -89,7 +89,8 @@ export const DelegationChainProvider = forwardRef<DelegationChainHandle, {
   useLayoutEffect(() => {
     controller.configure({ navigationKey, blocked, sessionIds, onRestoreFocusFallback });
   }, [controller, navigationKey, blocked, sessionIds, onRestoreFocusFallback, open]);
-  useEffect(() => controller.connect(tileWindow), [controller, tileWindow]);
+  const listenWindow = open?.anchor ? ownerWindow(open.anchor) : tileWindow;
+  useEffect(() => controller.connect(listenWindow), [controller, listenWindow]);
   useImperativeHandle(ref, () => controller, [controller]);
   const context = useMemo(() => ({ controller, open: visible }), [controller, visible]);
   return (

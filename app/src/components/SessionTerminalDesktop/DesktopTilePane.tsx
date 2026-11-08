@@ -13,7 +13,7 @@ export function DesktopTilePane({
   placement,
 }: {
   tileLeaf: TileLeaf;
-  placement?: { bounds: NormalizedPaneBounds; path: string; frameStyle: CSSProperties };
+  placement?: { bounds: NormalizedPaneBounds; path: string; frameStyle: CSSProperties; popped?: boolean };
 }) {
   const {
     desktopId,
@@ -41,6 +41,8 @@ export function DesktopTilePane({
     paneGeometry,
     effectivePaneId,
     setMaximizedLeafId,
+    tileWindowsEnabled,
+    toggleTileWindow,
   } = useDesktopContext();
 
   const paneAttributes = placement
@@ -69,8 +71,7 @@ export function DesktopTilePane({
         paneGeometry={paneGeometry.get(tileLeaf.tileId)}
         visible={
           placement !== undefined &&
-          isActiveSession &&
-          isSessionViewVisible &&
+          (placement.popped || (isActiveSession && isSessionViewVisible)) &&
           enabled &&
           renamePane === null &&
           effectiveDraggingLeafId === null
@@ -79,6 +80,8 @@ export function DesktopTilePane({
         gardenSeeds={gardenSeeds}
         desktopDirectory={desktopDirectory}
         onClose={() => onUndockTile?.(tileLeaf.tileId)}
+        onPopOut={tileWindowsEnabled ? () => toggleTileWindow(tileLeaf.tileId) : undefined}
+        popped={placement?.popped ?? false}
         onReturnToRow={effectivePaneId === tileLeaf.tileId ? () => setMaximizedLeafId(null) : undefined}
         onFocusDocument={
           tileLeaf.tileKind === 'markdown' || tileLeaf.tileKind === 'seed'
@@ -91,7 +94,7 @@ export function DesktopTilePane({
         }
         onRevealSeedInGarden={onRevealSeedInGarden}
         onBackToCrew={tileLeaf.tileId === backToCrewTileId ? onBackToCrew : undefined}
-        onHeaderPointerDown={(event) => beginLeafDrag(tileLeaf.tileId, event)}
+        onHeaderPointerDown={(event) => { if (!placement?.popped) beginLeafDrag(tileLeaf.tileId, event); }}
         onRequestContent={onRequestTileContent ?? noRequestContent}
         bodyRef={tileBodyRefFor(tileLeaf.tileId)}
       />

@@ -234,7 +234,8 @@
   }
 }
 
-.session-terminal-panes > .desktop-pane {
+.session-terminal-panes > .desktop-pane,
+.tile-host > .desktop-pane {
   position: absolute;
   box-sizing: border-box;
 }
@@ -899,4 +900,13 @@
 @keyframes terminal-input-refused {
   from { opacity: 1; }
   to { opacity: 0; }
+}
+
+.tile-host-slot,
+.tile-host {
+  display: contents;
+}
+
+.tile-host[hidden] {
+  display: none;
 }

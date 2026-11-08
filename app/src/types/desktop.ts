@@ -68,6 +68,53 @@ export function leafSlotId(node: TerminalLeaf): string {
   return node.type === 'pane' ? node.paneId : node.tileId;
 }
 
+export type PoppedLeaf = TerminalLeaf & { window: TileWindowFrame };
+
+export function isPoppedLeaf(leaf: TerminalLeaf): leaf is PoppedLeaf {
+  return leaf.window !== undefined;
+}
+
+export function poppedLeaves(tree: TerminalLayoutNode | null): PoppedLeaf[] {
+  return collectLayoutLeaves(tree).filter(isPoppedLeaf);
+}
+
+function withoutPopped(node: TerminalLayoutNode): TerminalLayoutNode | null {
+  if (node.type !== 'split') return isPoppedLeaf(node) ? null : node;
+  const first = withoutPopped(node.children[0]);
+  const second = withoutPopped(node.children[1]);
+  if (!first || !second) return first ?? second;
+  if (first === node.children[0] && second === node.children[1]) return node;
+  return { ...node, children: [first, second] };
+}
+
+function withFirstLeafWidth(node: TerminalLayoutNode, width: Pick<TerminalLeaf, 'wantedCols' | 'wantedAreaCols'>): TerminalLayoutNode {
+  if (node.type === 'split') {
+    return { ...node, children: [withFirstLeafWidth(node.children[0], width), node.children[1]] };
+  }
+  const { wantedCols: _cols, wantedAreaCols: _areaCols, ...leaf } = node;
+  return { ...leaf, ...width };
+}
+
+function mainColumn(column: TerminalLayoutNode): TerminalLayoutNode | null {
+  const kept = withoutPopped(column);
+  if (!kept || kept === column) return kept;
+  const [{ wantedCols, wantedAreaCols }] = collectLayoutLeaves(column);
+  return withFirstLeafWidth(kept, {
+    ...(wantedCols !== undefined ? { wantedCols } : {}),
+    ...(wantedAreaCols !== undefined ? { wantedAreaCols } : {}),
+  });
+}
+
+export function mainTree(tree: TerminalLayoutNode | null): TerminalLayoutNode | null {
+  if (!tree) return null;
+  if (tree.type !== 'split' || tree.direction !== 'vertical') return mainColumn(tree);
+  const first = mainTree(tree.children[0]);
+  const second = mainTree(tree.children[1]);
+  if (!first || !second) return first ?? second;
+  if (first === tree.children[0] && second === tree.children[1]) return tree;
+  return { ...tree, children: [first, second] };
+}
+
 export interface AgentTerminal {
   id: string;
   runtimeId: string;

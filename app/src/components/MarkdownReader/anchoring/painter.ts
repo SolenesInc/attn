@@ -28,23 +28,43 @@ export function createHighlightPainter(root: HTMLElement): HighlightPainter {
   return supportsCustomHighlights() ? new CustomHighlightPainter() : new MarkPainter(root);
 }
 
+type HighlightRealm = Window & { CSS: typeof CSS; Highlight: typeof Highlight };
+
 /** CSS.highlights is per-DOCUMENT while painters are per-reader-root: every
- * mutation rebuilds the shared entries from the union of live painters. */
+ * mutation rebuilds each window's entries from the union of live painters. */
 const livePainters = new Set<CustomHighlightPainter>();
+let paintedRealms = new Set<HighlightRealm>();
+
+function realmOf(range: Range): HighlightRealm {
+  return (range.startContainer.ownerDocument?.defaultView ?? window) as HighlightRealm;
+}
 
 function rebuildSharedRegistry(): void {
+  const byRealm = new Map<HighlightRealm, Map<HighlightKind, Range[]>>();
   for (const kind of KINDS) {
     const ranges: Range[] = [];
     for (const painter of livePainters) {
       painter.collectRanges(kind, ranges);
     }
-    const name = HIGHLIGHT_NAMES[kind];
-    if (ranges.length === 0) {
-      CSS.highlights.delete(name);
-    } else {
-      CSS.highlights.set(name, new Highlight(...ranges));
+    for (const range of ranges) {
+      const realm = realmOf(range);
+      const kinds = byRealm.get(realm) ?? new Map<HighlightKind, Range[]>();
+      kinds.set(kind, [...(kinds.get(kind) ?? []), range]);
+      byRealm.set(realm, kinds);
     }
   }
+  for (const realm of new Set([window as HighlightRealm, ...paintedRealms, ...byRealm.keys()])) {
+    for (const kind of KINDS) {
+      const ranges = byRealm.get(realm)?.get(kind) ?? [];
+      const name = HIGHLIGHT_NAMES[kind];
+      if (ranges.length === 0) {
+        realm.CSS.highlights.delete(name);
+      } else {
+        realm.CSS.highlights.set(name, new realm.Highlight(...ranges));
+      }
+    }
+  }
+  paintedRealms = new Set(byRealm.keys());
 }
 
 class CustomHighlightPainter implements HighlightPainter {

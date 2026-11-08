@@ -706,6 +706,8 @@ fn build_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
     };
     let main = builder.build()?;
     #[cfg(target_os = "macos")]
+    tile_window::measure_title_bar();
+    #[cfg(target_os = "macos")]
     if let Err(error) = tile_window::allow_scripted_windows(&main) {
         eprintln!("[TileWindow] {error}");
     }
@@ -1212,6 +1214,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             tile_window::tile_window_show,
             tile_window::tile_window_hide,
             tile_window::tile_window_raise,
+            tile_window::tile_window_frame_over,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
             browser_host::browser_host_unmount,

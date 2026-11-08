@@ -373,7 +373,7 @@ export function useAnnotations({
       painterRef.current?.clearAll();
       rangesRef.current.clear();
     };
-  }, [content, enabled, frames, refreshAndPaint, rootRef]);
+  }, [content, enabled, frames, refreshAndPaint, rootRef, tileWindow]);
 
 
   const adoptDraft = useCallback(

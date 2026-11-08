@@ -28,6 +28,7 @@ import { SeedDocumentView, type SeedDocument } from '../SeedDocumentView';
 import { BrowserAddressForm } from './BrowserAddressForm';
 import { BrowserTileBody } from './BrowserTileBody';
 import { NotebookRootPicker } from './NotebookRootPicker';
+import { PopOutButton } from './PopOutButton';
 import { ReturnToRowButton } from './ReturnToRowButton';
 import { TileAnnotationControls } from './TileAnnotationControls';
 import { useSeedTileNavigation } from './useSeedTileNavigation';
@@ -61,6 +62,8 @@ interface DesktopDockTileProps {
   gardenSeeds?: Seed[];
   desktopDirectory?: string;
   onClose: () => void;
+  onPopOut?: () => void;
+  popped?: boolean;
   onFocusDocument?: () => void;
   onReturnToRow?: () => void;
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
@@ -86,6 +89,8 @@ export function DesktopDockTile({
   gardenSeeds = NO_GARDEN_SEEDS,
   desktopDirectory,
   onClose,
+  onPopOut,
+  popped = false,
   onFocusDocument,
   onReturnToRow,
   onUpdateParams,
@@ -236,6 +241,8 @@ export function DesktopDockTile({
           tile={tile}
           desktopId={desktopId}
           onClose={onClose}
+          onPopOut={onPopOut}
+          popped={popped}
         />
       </div>
       {isSeed && seedDocument && seedDocumentError && (
@@ -486,9 +493,11 @@ function DesktopTileActions({
   tile,
   desktopId,
   onClose,
+  onPopOut,
+  popped = false,
 }: Pick<
   DesktopDockTileProps,
-  'tile' | 'desktopId' | 'onClose' | 'onFocusDocument' | 'onReturnToRow' | 'onRevealSeedInGarden' | 'onBackToCrew'
+  'tile' | 'desktopId' | 'onClose' | 'onPopOut' | 'popped' | 'onFocusDocument' | 'onReturnToRow' | 'onRevealSeedInGarden' | 'onBackToCrew'
 > & { isAnnotatedDocument: boolean; isSeed: boolean; path: string }) {
   const reloadBrowser = () => {
     void controlBrowserHost(desktopId, tile.tileId, 'reload').catch((error) => {
@@ -551,6 +560,9 @@ function DesktopTileActions({
         >
           ↻
         </button>
+      ) : null}
+      {onPopOut ? (
+        <PopOutButton leafId={tile.tileId} popped={popped} className="desktop-dock-tile-action" onToggle={onPopOut} />
       ) : null}
       <button
         type="button"

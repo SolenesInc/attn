@@ -49,6 +49,7 @@ export const MAC_SHORTCUTS = {
   'shelf.carryLeft': { key: 'ArrowLeft', meta: true, alt: true, shift: true },
   'shelf.carryRight': { key: 'ArrowRight', meta: true, alt: true, shift: true },
   'shelf.sendToShelf': { key: 'ArrowUp', meta: true, alt: true, shift: true },
+  'tile.popOut': { key: 'o', code: 'KeyO', meta: true, shift: true },
   'sidebar.wider': { key: ']', code: 'BracketRight', meta: true, alt: true },
   'sidebar.narrower': { key: '[', code: 'BracketLeft', meta: true, alt: true },
 
@@ -167,6 +168,7 @@ export const LINUX_SHORTCUTS = {
   'shelf.carryLeft': { key: 'ArrowLeft', meta: true, alt: true, shift: true },
   'shelf.carryRight': { key: 'ArrowRight', meta: true, alt: true, shift: true },
   'shelf.sendToShelf': { key: 'ArrowUp', meta: true, alt: true, shift: true },
+  'tile.popOut': { key: 'o', code: 'KeyO', meta: true, shift: true },
   'sidebar.wider': { key: ']', code: 'BracketRight', meta: true, alt: true },
   'sidebar.narrower': { key: '[', code: 'BracketLeft', meta: true, alt: true },
   'terminal.find': { key: 'f', meta: true, shift: true, editableTarget: 'native' },

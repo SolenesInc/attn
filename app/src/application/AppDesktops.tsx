@@ -1,3 +1,4 @@
+import { recordUiDiag } from '../utils/uiDiagnosticsLog';
 import { sessionDisplayName } from '../utils/sessionDisplayName';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { SessionTerminalDesktop } from '../components/SessionTerminalDesktop';
@@ -30,6 +31,8 @@ import { openThenShow } from './openThenShow';
 import { leafOn, sessionOfLeaf } from '../navigation/activeLeaf';
 import { localDirectory } from '../utils/outpostPaths';
 import { BoolSetting, isOn } from '../utils/settings';
+import { tileWindowsEnabled } from '../tileWindow/enabled';
+import { frameOverLeaf, useTileWindows } from '../tileWindow/useTileWindows';
 
 export function AppDesktops() {
   const { snoozeMenu } = useAttentionQueueContext();
@@ -76,6 +79,8 @@ export function AppDesktops() {
     sendDesktopSetWantedCols,
     sendDesktopUpdateTile,
     sendSetSetting,
+    sendDesktopPopOutLeaf,
+    sendDesktopBringBackLeaf,
     desktopTileContents,
     isReady,
   } = useDaemonApi();
@@ -98,6 +103,9 @@ export function AppDesktops() {
     if (!home) return named;
     return home.id === viewing.id ? `${named} on this desktop` : `${named} on ${desktopLabel(home, desktops)}`;
   };
+
+  const popoutOn = tileWindowsEnabled(settings);
+  useTileWindows(popoutOn, showError);
 
   const mounted = orderedDesktops(desktops).filter((desktop) => mountedDesktopIds.has(desktop.id));
 
@@ -186,6 +194,19 @@ export function AppDesktops() {
           isSessionViewVisible={view === 'session'}
           terminalsLive
           attachOnlyDrawn={isOn(settings, BoolSetting.ptySharedHostEnabled)}
+          tileWindowsEnabled={popoutOn}
+          onPopOutLeaf={(leafId) => {
+            void frameOverLeaf(desktop.id, leafId)
+              .then((frame) => sendDesktopPopOutLeaf({ desktopId: desktop.id, leafId, frame }))
+              .catch((error) => {
+                recordUiDiag({ kind: 'tile_window_error', action: 'pop_out', leafId, error: String(error) });
+                showError(`Could not pop the tile out: ${String(error)}`);
+              });
+          }}
+          onBringBackLeaf={(leafId) => {
+            void Promise.resolve(sendDesktopBringBackLeaf({ desktopId: desktop.id, leafId }))
+              .catch((error) => showError(`Could not bring the tile back: ${String(error)}`));
+          }}
           shelfNarrowestCols={Number(settings.narrowest_tile_cols) || DEFAULT_NARROWEST_COLS}
           onSetNarrowestCols={(cols) => sendSetSetting('narrowest_tile_cols', String(cols))}
           onShelfLimit={showError}

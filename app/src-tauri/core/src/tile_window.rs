@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
 use tauri::{
     AppHandle, LogicalPosition, LogicalSize, Manager, Monitor, Url, WebviewUrl, WebviewWindow,
-    WebviewWindowBuilder, WindowEvent, Wry,
+    WebviewWindowBuilder, Window, WindowEvent, Wry,
 };
 
 const LABEL_PREFIX: &str = "tile-window-";
@@ -25,6 +25,46 @@ struct Opening {
 }
 
 static NEXT_OPENING: Mutex<Option<Opening>> = Mutex::new(None);
+static TITLE_BAR_HEIGHT: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "macos")]
+pub fn measure_title_bar() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSWindow, NSWindowStyleMask};
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let content = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(400.0, 300.0));
+    let style = NSWindowStyleMask::Titled
+        | NSWindowStyleMask::Closable
+        | NSWindowStyleMask::Miniaturizable
+        | NSWindowStyleMask::Resizable;
+    let frame = NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
+    let _ = TITLE_BAR_HEIGHT.set(frame.size.height - content.size.height);
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct ContentRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+#[tauri::command]
+pub fn tile_window_frame_over(app: AppHandle, rect: ContentRect) -> Result<Frame, String> {
+    let main = app
+        .get_window("main")
+        .ok_or_else(|| "main window is not open".to_string())?;
+    let origin = webview_rect(&main).ok_or_else(|| "main window has no frame".to_string())?;
+    Ok(Frame {
+        x: origin.x + rect.x,
+        y: origin.y + rect.y,
+        width: rect.width.max(MIN_WIDTH),
+        height: rect.height.max(MIN_HEIGHT),
+    })
+}
 
 pub fn is_tile_window(label: &str) -> bool {
     label.starts_with(LABEL_PREFIX)
@@ -48,9 +88,9 @@ fn harness_window() -> bool {
     std::env::var("ATTN_HARNESS_ALWAYS_ON_TOP").is_ok_and(|value| value == "1")
 }
 
-fn tile_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, String> {
+fn tile_window(app: &AppHandle, label: &str) -> Result<Window, String> {
     validate_label(label)?;
-    app.get_webview_window(label)
+    app.get_window(label)
         .ok_or_else(|| format!("tile window {label} is not open"))
 }
 
@@ -67,12 +107,12 @@ pub fn create(app: &AppHandle, url: Url, features: NewWindowFeatures) -> NewWind
         eprintln!("[TileWindow] window.open without tile_window_prepare; denied");
         return NewWindowResponse::Deny;
     };
-    let frame = fit_on_screen(app, opening.frame);
+    let outer = fit_on_screen(app, window_rect(opening.frame));
     let built = WebviewWindowBuilder::new(app, &opening.label, WebviewUrl::External(url))
         .window_features(features)
-        .position(frame.x, frame.y)
-        .inner_size(frame.width, frame.height)
-        .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
+        .position(outer.x, outer.y)
+        .inner_size(outer.width, outer.height)
+        .min_inner_size(MIN_WIDTH, MIN_HEIGHT + title_bar_height())
         .title("attn")
         .focused(!harness_window())
         .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
@@ -82,14 +122,17 @@ pub fn create(app: &AppHandle, url: Url, features: NewWindowFeatures) -> NewWind
         .build();
     match built {
         Ok(window) => {
+            if let Some(native) = app.get_window(&opening.label) {
+                if let Err(error) = place(app, &native, opening.frame) {
+                    eprintln!("[TileWindow] placing {} failed: {error}", opening.label);
+                }
+            }
             watch(app, &window);
             if harness_window() {
                 let _ = window.set_always_on_top(true);
                 let _ = window.set_focusable(false);
                 #[cfg(target_os = "macos")]
-                if let Err(error) = crate::native_input::install_harness_window(&window) {
-                    eprintln!("[TileWindow] harness window setup failed: {error}");
-                }
+                order_front_without_focus(window.ns_window());
             }
             NewWindowResponse::Create { window }
         }
@@ -97,6 +140,14 @@ pub fn create(app: &AppHandle, url: Url, features: NewWindowFeatures) -> NewWind
             eprintln!("[TileWindow] building {} failed: {error}", opening.label);
             NewWindowResponse::Deny
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn order_front_without_focus(ns_window: tauri::Result<*mut std::ffi::c_void>) {
+    if let Ok(pointer) = ns_window {
+        let ns: &objc2_app_kit::NSWindow = unsafe { &*pointer.cast() };
+        ns.orderFrontRegardless();
     }
 }
 
@@ -113,13 +164,13 @@ fn watch(app: &AppHandle, window: &WebviewWindow) {
             );
         }
         WindowEvent::Moved(_) | WindowEvent::Resized(_) => {
-            let Some(window) = app.get_webview_window(&label) else {
+            let Some(window) = app.get_window(&label) else {
                 return;
             };
             if !window.is_visible().unwrap_or(false) {
                 return;
             }
-            if let Some(frame) = frame_of(&window) {
+            if let Some(frame) = webview_rect(&window) {
                 tell_main(
                     &app,
                     "attn:tile-window-frame",
@@ -140,9 +191,47 @@ fn tell_main(app: &AppHandle, event: &str, detail: &serde_json::Value) {
     ));
 }
 
-fn frame_of(window: &WebviewWindow) -> Option<Frame> {
+fn title_bar_height() -> f64 {
+    TITLE_BAR_HEIGHT.get().copied().unwrap_or(0.0)
+}
+
+fn window_rect(webview: Frame) -> Frame {
+    let title_bar = title_bar_height();
+    Frame {
+        y: webview.y - title_bar,
+        height: webview.height + title_bar,
+        ..webview
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn webview_rect(window: &Window) -> Option<Frame> {
     let scale = window.scale_factor().ok()?;
-    let position = window.outer_position().ok()?.to_logical::<f64>(scale);
+    let top_left = window.outer_position().ok()?.to_logical::<f64>(scale);
+    let pointer = window.ns_window().ok()?;
+    let ns: &objc2_app_kit::NSWindow = unsafe { &*pointer.cast() };
+    let frame = ns.frame();
+    if ns.titlebarAppearsTransparent() {
+        return Some(Frame {
+            x: top_left.x,
+            y: top_left.y,
+            width: frame.size.width,
+            height: frame.size.height,
+        });
+    }
+    let content = ns.contentLayoutRect();
+    Some(Frame {
+        x: top_left.x + content.origin.x,
+        y: top_left.y + frame.size.height - content.origin.y - content.size.height,
+        width: content.size.width,
+        height: content.size.height,
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+fn webview_rect(window: &Window) -> Option<Frame> {
+    let scale = window.scale_factor().ok()?;
+    let position = window.inner_position().ok()?.to_logical::<f64>(scale);
     let size = window.inner_size().ok()?.to_logical::<f64>(scale);
     Some(Frame {
         x: position.x,
@@ -178,8 +267,33 @@ fn grip_visible(frame: &Frame, area: &Area) -> bool {
         && frame.y < area.y + area.height - VISIBLE_GRIP
 }
 
+fn parked_for_harness(app: &AppHandle, frame: Frame) -> Frame {
+    let Some(visible) = std::env::var("ATTN_HARNESS_PARK_VISIBLE_PX")
+        .ok()
+        .and_then(|value| value.parse::<f64>().ok())
+        .filter(|value| *value > 0.0)
+    else {
+        return frame;
+    };
+    let Some(area) = app
+        .get_window("main")
+        .and_then(|main| main.primary_monitor().ok().flatten())
+        .map(|monitor| logical_work_area(&monitor))
+    else {
+        return frame;
+    };
+    Frame {
+        x: area.x + area.width - visible,
+        ..frame
+    }
+}
+
 fn fit_on_screen(app: &AppHandle, frame: Frame) -> Frame {
-    let Some(main) = app.get_webview_window("main") else {
+    parked_for_harness(app, fit_inside_displays(app, frame))
+}
+
+fn fit_inside_displays(app: &AppHandle, frame: Frame) -> Frame {
+    let Some(main) = app.get_window("main") else {
         return frame;
     };
     let monitors = main.available_monitors().unwrap_or_default();
@@ -204,16 +318,16 @@ fn fit_on_screen(app: &AppHandle, frame: Frame) -> Frame {
     }
 }
 
-fn place(app: &AppHandle, window: &WebviewWindow, frame: Frame) -> Result<(), String> {
-    let frame = fit_on_screen(app, frame);
-    if frame_of(window) == Some(frame) {
+fn place(app: &AppHandle, window: &Window, frame: Frame) -> Result<(), String> {
+    let outer = fit_on_screen(app, window_rect(frame));
+    if webview_rect(window).map(window_rect) == Some(outer) {
         return Ok(());
     }
     window
-        .set_position(LogicalPosition::new(frame.x, frame.y))
+        .set_position(LogicalPosition::new(outer.x, outer.y))
         .map_err(|error| format!("move tile window: {error}"))?;
     window
-        .set_size(LogicalSize::new(frame.width, frame.height))
+        .set_size(LogicalSize::new(outer.width, outer.height))
         .map_err(|error| format!("resize tile window: {error}"))
 }
 
@@ -225,6 +339,10 @@ pub fn tile_window_show(app: AppHandle, label: String, frame: Frame) -> Result<(
         window
             .show()
             .map_err(|error| format!("show tile window: {error}"))?;
+        #[cfg(target_os = "macos")]
+        if harness_window() {
+            order_front_without_focus(window.ns_window());
+        }
     }
     Ok(())
 }
@@ -256,7 +374,7 @@ pub fn tile_window_raise(app: AppHandle, label: String) -> Result<(), String> {
 }
 
 fn any_tile_window_visible(app: &AppHandle) -> bool {
-    app.webview_windows()
+    app.windows()
         .iter()
         .any(|(label, window)| is_tile_window(label) && window.is_visible().unwrap_or(false))
 }
@@ -266,13 +384,13 @@ pub fn main_close_requested(app: &AppHandle, api: &tauri::CloseRequestApi) {
         return;
     }
     api.prevent_close();
-    if let Some(main) = app.get_webview_window("main") {
+    if let Some(main) = app.get_window("main") {
         let _ = main.hide();
     }
 }
 
 pub fn show_main(app: &AppHandle) {
-    let Some(main) = app.get_webview_window("main") else {
+    let Some(main) = app.get_window("main") else {
         return;
     };
     if main.is_visible().unwrap_or(true) {

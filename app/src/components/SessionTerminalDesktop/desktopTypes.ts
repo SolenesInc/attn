@@ -122,6 +122,9 @@ export interface SessionTerminalDesktopProps {
   onShelfLimit?: (message: string) => void;
   onMoveRowLeaf?: (move: { leafId: string; anchorId: string; edge: 'left' | 'right'; wholeColumn: boolean; activate: boolean }) => Promise<unknown>;
   onSetWantedCols?: (leafId: string, cols: number, areaCols: number) => Promise<unknown>;
+  tileWindowsEnabled?: boolean;
+  onPopOutLeaf?: (leafId: string) => void;
+  onBringBackLeaf?: (leafId: string) => void;
   zoomActive?: boolean;
   onSetZoomActive?: (active: boolean) => void;
   onNavigateOutOfSession: (direction: TerminalNavigationDirection) => void;

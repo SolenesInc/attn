@@ -5,6 +5,7 @@ import { DesktopAgentSignals } from './DesktopAgentSignals';
 import { DesktopAgentSubline } from './DesktopAgentSubline';
 import { useDesktopContext } from './DesktopContext';
 import { HEADLINE_RANK, TITLE_MINIMUM } from './headerFit';
+import { PopOutButton } from './PopOutButton';
 import { ReturnToRowButton } from './ReturnToRowButton';
 import { useHeaderFit } from './useHeaderFit';
 import type { DesktopAgentProps } from './desktopTypes';
@@ -19,16 +20,21 @@ export function DesktopAgentHeader({ agentPane, paneSession, paneTitle }: Deskto
     setMaximizedLeafId,
     focusLeaf,
     beginLeafDrag,
+    tileWindowsEnabled,
+    poppedLeafIdSet,
+    toggleTileWindow,
   } = useDesktopContext();
+  const popped = poppedLeafIdSet.has(agentPane.id);
+  const draggable = showPaneHeader && !popped;
   const headlineRef = useRef<HTMLDivElement>(null);
   const headline = useHeaderFit(headlineRef, HEADLINE_RANK, { reserve: TITLE_MINIMUM });
   return (
     <div
       className={`desktop-pane-header ${
-        showPaneHeader ? 'desktop-pane-header--draggable' : 'desktop-pane-header--static'
+        draggable ? 'desktop-pane-header--draggable' : 'desktop-pane-header--static'
       }`.trim()}
-      onPointerDown={showPaneHeader ? (event) => beginLeafDrag(agentPane.id, event) : undefined}
-      title={showPaneHeader ? 'Drag to move' : undefined}
+      onPointerDown={draggable ? (event) => beginLeafDrag(agentPane.id, event) : undefined}
+      title={draggable ? 'Drag to move' : undefined}
     >
       <div ref={headlineRef} className="desktop-pane-headline">
         {paneSession?.state ? (
@@ -61,7 +67,15 @@ export function DesktopAgentHeader({ agentPane, paneSession, paneTitle }: Deskto
                 ✎
               </button>
             ) : null}
-            {effectivePaneId !== agentPane.id ? (
+            {tileWindowsEnabled ? (
+              <PopOutButton
+                leafId={agentPane.id}
+                popped={popped}
+                className="desktop-pane-focus-btn desktop-pane-popout-btn"
+                onToggle={() => toggleTileWindow(agentPane.id)}
+              />
+            ) : null}
+            {effectivePaneId !== agentPane.id && !popped ? (
               <button
                 type="button"
                 className="desktop-pane-focus-btn"

@@ -24,6 +24,7 @@ export function DesktopSurface() {
     renderedLayoutTree,
     renderedPaneIds,
     offScreenBrowserIds,
+    poppedLeafIds,
     sessionVisible,
     effectiveDraggingLeafId,
     effectiveGhostPos,
@@ -33,7 +34,7 @@ export function DesktopSurface() {
     handleColumnDividerDoubleClick,
     shelfWidthLabel,
   } = useDesktopContext();
-  if (!renderedLayoutTree) {
+  if (!renderedLayoutTree && poppedLeafIds.length === 0) {
     return (
       <div
         className="session-terminal-desktop"
@@ -66,7 +67,7 @@ export function DesktopSurface() {
       <ShelfPeekPanel />
       <DesktopLayoutRenderer
         layoutTree={renderedLayoutTree}
-        paneIds={[...renderedPaneIds, ...offScreenBrowserIds]}
+        paneIds={[...renderedPaneIds, ...offScreenBrowserIds, ...poppedLeafIds]}
         renderPane={renderPaneSurface}
         containerRef={panesContainerRef}
         dividers={splitDividers}

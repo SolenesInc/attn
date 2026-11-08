@@ -104,6 +104,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'shelf.carryLeft': { label: 'Carry tile left along the row', category: 'panes' },
   'shelf.carryRight': { label: 'Carry tile right along the row', category: 'panes' },
   'shelf.sendToShelf': { label: 'Send tile to the shelf', category: 'panes' },
+  'tile.popOut': { label: 'Pop out or bring back tile', category: 'panes' },
   'terminal.find': { label: 'Find in terminal', category: 'panes', requiresTerminal: true },
 
   'markdown.sendAnnotations': { label: 'Send annotations to session', category: 'markdown', dockLabel: 'send notes' },

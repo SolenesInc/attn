@@ -69,7 +69,7 @@ function dividerStyle(divider: SplitDivider): React.CSSProperties {
 }
 
 interface DesktopLayoutRendererProps {
-  layoutTree: TerminalLayoutNode;
+  layoutTree: TerminalLayoutNode | null;
   paneIds: string[];
   renderPane: (paneId: string) => ReactNode;
   containerRef?: RefObject<HTMLDivElement | null>;
@@ -93,7 +93,7 @@ export function DesktopLayoutRenderer({
   return (
     <div className="session-terminal-panes" ref={containerRef}>
       <div className="desktop-layout-metadata" aria-hidden="true">
-        {renderLayoutMetadata(layoutTree)}
+        {layoutTree ? renderLayoutMetadata(layoutTree) : null}
       </div>
       {paneIds.map((paneId) => renderPane(paneId))}
       {onDividerPointerDown && dividers.map((divider) => (
