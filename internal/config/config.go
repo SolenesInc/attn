@@ -363,7 +363,19 @@ func SocketPath() string {
 	return filepath.Join(attnDir(), "attn.sock")
 }
 
+const (
+	sessionHomeEnv   = "ATTN_SESSION_HOME"
+	sessionBinaryEnv = "ATTN_SESSION_BINARY"
+)
+
 func ValidateDaemonIsolation(socketPath string) error {
+	if err := validateDaemonDatabaseIsolation(socketPath); err != nil {
+		return err
+	}
+	return ValidateSessionHome()
+}
+
+func validateDaemonDatabaseIsolation(socketPath string) error {
 	socketDir, err := comparableDaemonIsolationPath(filepath.Dir(strings.TrimSpace(socketPath)))
 	if err != nil {
 		return fmt.Errorf("resolve daemon socket root: %w", err)
@@ -393,6 +405,82 @@ func ValidateDaemonIsolation(socketPath string) error {
 		socketDir,
 		InstanceLabel(),
 		defaultDBPath,
+	)
+}
+
+func SessionMarkerEnv(dataDir string) []string {
+	binary, _ := os.Executable()
+	return []string{
+		sessionHomeEnv + "=" + canonicalOrGiven(dataDir),
+		sessionBinaryEnv + "=" + canonicalOrGiven(binary),
+	}
+}
+
+func canonicalOrGiven(path string) string {
+	if canonical, err := CanonicalRuntimePath(path); err == nil {
+		return canonical
+	}
+	return path
+}
+
+func ValidateSessionHome() error {
+	rawHome := strings.TrimSpace(os.Getenv(sessionHomeEnv))
+	if rawHome == "" || normalizeInstanceForDerivation(Instance()) != "" {
+		return nil
+	}
+	home, err := CanonicalRuntimePath(rawHome)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", sessionHomeEnv, err)
+	}
+
+	routes := []struct{ name, path string }{
+		{"ATTN_DATA_DIR", DataDir()},
+		{"ATTN_DB_PATH", DBPath()},
+		{"ATTN_SOCKET_PATH", SocketPath()},
+	}
+	inside := 0
+	var described strings.Builder
+	for _, route := range routes {
+		resolved, err := CanonicalRuntimePath(route.path)
+		if err != nil {
+			return fmt.Errorf("resolve %s: %w", route.name, err)
+		}
+		where := "outside"
+		if runtimePathWithin(resolved, home) {
+			inside++
+			where = "inside"
+		}
+		fmt.Fprintf(&described, "  %s=%s (%s)\n", route.name, resolved, where)
+	}
+	switch inside {
+	case 0:
+		return nil
+	case len(routes):
+		return validateSessionBinary(home)
+	default:
+		return fmt.Errorf(
+			"refusing to start a daemon or open a database: this process is inside an attn session of %s, and its paths point only partly there:\n%sA partly inherited environment acts on that home's daemon or database.\nSelect an instance with `eval \"$(attn instance-env <name>)\"`, or point all three outside %s",
+			home, described.String(), home,
+		)
+	}
+}
+
+func validateSessionBinary(home string) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolve this binary: %w", err)
+	}
+	this, err := CanonicalRuntimePath(executable)
+	if err != nil {
+		return fmt.Errorf("resolve this binary: %w", err)
+	}
+	sessionBinary := strings.TrimSpace(os.Getenv(sessionBinaryEnv))
+	if this == sessionBinary {
+		return nil
+	}
+	return fmt.Errorf(
+		"refusing to start a daemon or open the database on %s from %s.\nThis process is inside an attn session whose daemon runs from %s.\nA different build here would replace that daemon and migrate its database.\nTo test this build, select an instance: eval \"$(%s instance-env <name>)\"\nTo make it the installed build, run `make install`. To run it anyway, start it from a terminal outside attn",
+		home, this, sessionBinary, this,
 	)
 }
 

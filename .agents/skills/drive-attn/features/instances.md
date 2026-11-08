@@ -83,6 +83,7 @@ Preconditions:
 - `attn instance clean` with no instance name is refused. The default instance, production, is cleaned only with `--force`. Never pass `--force`.
 - `./attn` in a shell with no instance selected, or the `attn` on `PATH`, talks to production. Most verbs print `[attn instance=<name> socket=<socket> port=<port>]` on stderr while an instance is selected (`internal/config/banner.go`). No banner means no instance is selected. `./attn instance` shows the selection.
 - A routing override left in the shell, such as `ATTN_DATA_DIR` or `ATTN_SOCKET_PATH`, makes every other `attn` command refuse to run, and `./attn instance` prints `CONFLICT`. Select the instance again with `attn instance-env`, which clears them.
+- Inside a session on the default home, a binary other than that home's daemon binary cannot run `attn daemon`, `attn daemon ensure`, `attn _bridge` or `attn db restore` on the home, and a session whose routing points only partly at its home cannot run them from any binary. A named instance is unaffected (`docs/internal/instances.md`).
 - On macOS, `make run INSTANCE=<name>` opens the app through Launch Services, which drops the instance shell's environment. Launch with `bridge --launch` when the daemon needs the mock variables.
 - `make build` replaces `./attn` for every maintainer sharing the checkout. Build in a checkout of your own when others are driving.
 - `(daemon socket present)` only means the socket file exists, and the file can outlive a daemon that just stopped. Tell a restarted daemon by the PID in `attn.pid`.

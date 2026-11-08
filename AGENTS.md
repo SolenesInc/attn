@@ -57,6 +57,13 @@ Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Production ~/.attn is read-only. Copy data out; never run a test daemon
   against it, open it read-write, or clean it.
 - You may use the attn CLI to work with ~/.attn.
+- Inside a session, only the binary its daemon runs from may start or replace a
+  daemon on that home. Select an instance to test any other build. An inherited
+  `ATTN_DB_PATH` or `ATTN_SOCKET_PATH` beats `ATTN_DATA_DIR`, so a bare
+  `ATTN_DATA_DIR` is refused there. `env -i` with no instance gets past this
+  check, so never start a daemon that way.
+  [Instances](docs/internal/instances.md#starting-a-daemon-from-inside-a-session)
+  has the rule.
 - Open, drive, screenshot and record Mac app windows in a macOS VM, not on the
   user's screen, and run `macvm down` as soon as you are done.
   [macOS VM](docs/internal/macos-vm.md) says how, and which work still runs on

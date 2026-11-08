@@ -40,7 +40,19 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 		t.Fatal(err)
 	}
 
-	common := map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color", "NO_COLOR": "", "TERM_PROGRAM_VERSION": ""}
+	sessionHome, err := filepath.EvalSymlinks(w.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	daemonBinary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	daemonBinary, err = filepath.EvalSymlinks(daemonBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	common := map[string]string{"TERM_PROGRAM": "ghostty", "TERM": "xterm-256color", "NO_COLOR": "", "TERM_PROGRAM_VERSION": "", "ATTN_SESSION_HOME": sessionHome, "ATTN_SESSION_BINARY": daemonBinary}
 	for name, launched := range map[string]struct {
 		env  []string
 		want map[string]string

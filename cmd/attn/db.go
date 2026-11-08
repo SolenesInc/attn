@@ -66,6 +66,11 @@ func runDBRestore(args []string) {
 		source = args[0]
 	}
 
+	if err := config.ValidateSessionHome(); err != nil {
+		fmt.Fprintf(os.Stderr, "attn db restore: %v\n", err)
+		exit(1)
+	}
+
 	dbPath := config.DBPath()
 	backupsDir := filepath.Join(config.DataDir(), "backups")
 	pidPath := filepath.Join(config.DataDir(), "attn.pid")

@@ -10,9 +10,37 @@ eval "$(attn instance-env --unset)"  # fish: attn instance-env --fish --unset | 
 ```
 
 Tooling reads paths from `attn instance resolve --field <field>` and does not
-derive them. Tests scope their paths with `ATTN_DATA_DIR` alone: a daemon whose
-`ATTN_DATA_DIR` is not its instance's own folder keeps its default Notebook in
-`<data folder>/notebook`, away from the user's real one.
+derive them. `ATTN_DATA_DIR` moves only paths with no override of their own: an
+inherited `ATTN_SOCKET_PATH` or `ATTN_DB_PATH` still wins, and every attn session
+inherits both. To scope tests with `ATTN_DATA_DIR`, clear the others too, as
+`config.ScopeTestEnvironment` does; inside a session, select an instance. A
+daemon whose `ATTN_DATA_DIR` is not its instance's own folder keeps its default
+Notebook in `<data folder>/notebook`, away from the user's real one.
+
+## Starting a daemon from inside a session
+
+`ATTN_SESSION_HOME` and `ATTN_SESSION_BINARY`, set on everything a daemon spawns,
+name that daemon's data folder and binary. `attn daemon`, `attn daemon ensure`,
+`attn _bridge` and `attn db restore` compare them with the process's own routing:
+
+| The process | Result |
+| --- | --- |
+| Has no `ATTN_SESSION_HOME` | allowed |
+| Selects a named instance | allowed |
+| Has its data folder, database and socket all outside the session's home | allowed |
+| Has only some of the three inside the home | refused, from any binary |
+| Has all three inside the home and runs that home's binary | allowed |
+| Has all three inside the home and runs another binary | refused |
+
+An `attn` build that differs from the daemon's would otherwise replace the
+daemon and migrate its database. To test a build, select an instance. To make it
+the installed build, run `make install`, which restarts the daemon from its own
+path. Any build still runs on the home from a terminal outside attn, and there
+is no override flag.
+
+An agent that clears its whole environment with `env -i` and selects no instance
+gets past this check, because it then looks like a person's terminal. Closing
+that gap would add friction to source installs, so it stays open on purpose.
 
 ## Build and install
 
