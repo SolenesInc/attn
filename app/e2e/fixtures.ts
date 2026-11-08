@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test';
-import { spawn, ChildProcess, execSync } from 'child_process';
+import { spawn, ChildProcess, execSync, execFileSync } from 'child_process';
 import * as http from 'http';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -134,6 +134,13 @@ function daemonStartDebugInfo(tempDir: string, stdout: string, stderr: string): 
   return `stdout: ${stdout}\nstderr: ${stderr}\ndaemon log: ${daemonLog}`;
 }
 
+function finishChiefSetup(attnPath: string, tempDir: string, socketPath: string, dbPath: string) {
+  execFileSync(attnPath, ['crew', 'set', 'chief', '--agent', 'codex'], {
+    env: { ...process.env, ATTN_INSTANCE: '', ATTN_DATA_DIR: tempDir, ATTN_SOCKET_PATH: socketPath, ATTN_DB_PATH: dbPath },
+    stdio: 'pipe',
+  });
+}
+
 async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketPath: string; tempDir: string; stop: () => void }> {
   const tempDir = makeDaemonTempDir('attn-e2e-');
   const socketPath = path.join(tempDir, 'attn.sock');
@@ -191,6 +198,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
 
   await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
   console.log(`Daemon started with socket at ${socketPath}`);
+  finishChiefSetup(attnPath, tempDir, socketPath, dbPath);
 
   return {
     proc,
@@ -283,6 +291,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
 
     await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
     console.log(`[Managed daemon] started with socket ${socketPath}`);
+    finishChiefSetup(attnPath, tempDir, socketPath, dbPath);
   };
 
   const stop = async () => {
