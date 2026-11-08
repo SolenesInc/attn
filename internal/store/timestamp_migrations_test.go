@@ -17,6 +17,8 @@ import (
 	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 func TestTimestampedMigrationsApplyInEitherArrivalOrder(t *testing.T) {
@@ -502,5 +504,82 @@ func TestAnUpgradeMovesArmedRemindersOutOfSeedsAndBuildsWithTheGuardStillRefuse(
 	}
 	if !bytes.Equal(before, after) {
 		t.Fatal("the refused opens changed the database")
+	}
+}
+
+func TestABuildWithoutTileWindowsRefusesADatabaseHoldingThem(t *testing.T) {
+	const newestMigrationOfABuildWithoutTileWindows = 1794092435903832
+	path := filepath.Join(t.TempDir(), "attn.db")
+	current, _, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	profile, desktop, err := current.CreateProfile("Tile windows")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if desktop, err = current.EditDesktopArrangement(desktop.ID, func(d profiles.Desktop) (profiles.Desktop, error) {
+		d.Tree = layouttree.Node{Type: "tile", TileID: "tile-notes", TileKind: "markdown", TileParams: "/notes.md"}
+		d.ActivePaneID = "tile-notes"
+		return d, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	frame := layouttree.TileWindow{X: 10, Y: 20, Width: 500, Height: 400}
+	if _, err := current.PopOutLeaf(desktop.ID, "tile-notes", frame); err != nil {
+		t.Fatal(err)
+	}
+	if err := current.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := withMigrationsThrough(newestMigrationOfABuildWithoutTileWindows, func() error {
+		for name, open := range map[string]func() error{
+			"Open": func() error {
+				s, _, err := Open(path)
+				if s != nil {
+					s.Close()
+				}
+				return err
+			},
+			"OpenCurrent": func() error {
+				s, err := OpenCurrent(path)
+				if s != nil {
+					s.Close()
+				}
+				return err
+			},
+		} {
+			if err := open(); err == nil || !strings.Contains(err.Error(), "which this attn build does not support") {
+				return fmt.Errorf("%s from a build without tile windows = %v, want the refusal", name, err)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatal("the refused opens changed the database")
+	}
+
+	reopened, _, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reopened.Close()
+	_, desktops, err := reopened.ProfileArrangement(profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desktops) != 1 || desktops[0].Tree.Window == nil || *desktops[0].Tree.Window != frame {
+		t.Fatalf("after the refused opens the tile's desktops are %+v, want tile-notes popped at %+v", desktops, frame)
 	}
 }

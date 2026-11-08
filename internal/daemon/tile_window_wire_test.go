@@ -1,13 +1,16 @@
 package daemon_test
 
 import (
+	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -151,76 +154,98 @@ func TestAPopOutWithoutRoomOrALeafIsRefusedAndChangesNothing(t *testing.T) {
 	})
 }
 
-func TestShowingAPoppedTileLeavesMainOnItsDesktop(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		profileID := app.SelectedProfile()
-		injectAgent(t, w, "a")
-		injectAgent(t, w, "neighbour")
-		first, paneA := viewProfile(t, w, profileID).paneOf(t, "a")
-		_, neighbour := viewProfile(t, w, profileID).paneOf(t, "neighbour")
-		shownIn(t, requestShowLeaf(app, first.ID, neighbour), first.ID, neighbour)
-		if popped := popOut(app, first.ID, paneA, protocol.TileWindowFrame{X: 10, Y: 10, Width: 500, Height: 400}); !popped.Success {
-			t.Fatalf("popping out %s: %s", paneA, protocol.Deref(popped.Error))
-		}
-		second := createDesktop(app, profileID)
-		switchDesktop(app, profileID, second.ID)
-		watcher := w.AppOn(profileID)
+func TestShowingAPoppedTileLeavesMainOnItsDesktopOnlyWhileTileWindowsAreOn(t *testing.T) {
+	for _, tileWindows := range []bool{true, false} {
+		t.Run(fmt.Sprintf("tile windows %t", tileWindows), func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				app := w.App()
+				profileID := app.SelectedProfile()
+				setSetting(t, app, setting.TilePopoutEnabled.Key, strconv.FormatBool(tileWindows))
+				injectAgent(t, w, "a")
+				injectAgent(t, w, "neighbour")
+				first, paneA := viewProfile(t, w, profileID).paneOf(t, "a")
+				_, neighbour := viewProfile(t, w, profileID).paneOf(t, "neighbour")
+				shownIn(t, requestShowLeaf(app, first.ID, neighbour), first.ID, neighbour)
+				frame := protocol.TileWindowFrame{X: 10, Y: 10, Width: 500, Height: 400}
+				if popped := popOut(app, first.ID, paneA, frame); !popped.Success {
+					t.Fatalf("popping out %s: %s", paneA, protocol.Deref(popped.Error))
+				}
+				second := createDesktop(app, profileID)
+				switchDesktop(app, profileID, second.ID)
+				watcher := w.AppOn(profileID)
+				mainOn := first.ID
+				if tileWindows {
+					mainOn = second.ID
+				}
 
-		for _, tc := range []struct {
-			name string
-			show func() protocol.ProfileActionResultMessage
-		}{
-			{"show_leaf", func() protocol.ProfileActionResultMessage { return requestShowLeaf(app, first.ID, paneA) }},
-			{"show_session", func() protocol.ProfileActionResultMessage { return requestShowSession(app, "a") }},
-		} {
-			shownIn(t, requestShowLeaf(app, first.ID, neighbour), first.ID, neighbour)
-			switchDesktop(app, profileID, second.ID)
-			result := tc.show()
-			if !result.Success || protocol.Deref(result.PaneID) != paneA || result.Profile == nil || len(result.Desktops) != 1 {
-				t.Fatalf("%s of popped %s: success=%v error=%q pane %q", tc.name, paneA, result.Success, protocol.Deref(result.Error), protocol.Deref(result.PaneID))
-			}
-			if result.Profile.CurrentDesktopID != second.ID || result.Desktops[0].ActivePaneID != paneA {
-				t.Fatalf("%s of popped %s left main on %s with %s active on %s, want main on %s and %s active",
-					tc.name, paneA, result.Profile.CurrentDesktopID, result.Desktops[0].ActivePaneID, first.ID, second.ID, paneA)
-			}
-			testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
-				desktop, ok := desktopIn(e.Desktops, first.ID)
-				return ok && e.Profile.CurrentDesktopID == second.ID && desktop.ActivePaneID == paneA
+				for _, tc := range []struct {
+					name string
+					show func() protocol.ProfileActionResultMessage
+				}{
+					{"show_leaf", func() protocol.ProfileActionResultMessage { return requestShowLeaf(app, first.ID, paneA) }},
+					{"show_session", func() protocol.ProfileActionResultMessage { return requestShowSession(app, "a") }},
+				} {
+					shownIn(t, requestShowLeaf(app, first.ID, neighbour), first.ID, neighbour)
+					switchDesktop(app, profileID, second.ID)
+					result := tc.show()
+					if !result.Success || protocol.Deref(result.PaneID) != paneA || result.Profile == nil || len(result.Desktops) != 1 {
+						t.Fatalf("%s of popped %s: success=%v error=%q pane %q", tc.name, paneA, result.Success, protocol.Deref(result.Error), protocol.Deref(result.PaneID))
+					}
+					if result.Profile.CurrentDesktopID != mainOn || result.Desktops[0].ActivePaneID != paneA {
+						t.Fatalf("%s of popped %s left main on %s with %s active on %s, want main on %s and %s active",
+							tc.name, paneA, result.Profile.CurrentDesktopID, result.Desktops[0].ActivePaneID, first.ID, mainOn, paneA)
+					}
+					if got := leafWindow(t, result.Desktops[0], paneA); got == nil || *got != frame {
+						t.Fatalf("%s of popped %s left it with window %+v, want its saved %+v", tc.name, paneA, got, frame)
+					}
+					testworld.Await(watcher, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+						desktop, ok := desktopIn(e.Desktops, first.ID)
+						return ok && e.Profile.CurrentDesktopID == mainOn && desktop.ActivePaneID == paneA
+					})
+				}
 			})
-		}
-	})
+		})
+	}
 }
 
-func TestClosingATileInMainNeverActivatesAPoppedTile(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		profileID := app.SelectedProfile()
-		injectAgent(t, w, "a")
-		injectAgent(t, w, "b")
-		injectAgent(t, w, "c")
-		view := viewProfile(t, w, profileID)
-		desktop, paneA := view.paneOf(t, "a")
-		_, paneB := view.paneOf(t, "b")
-		_, paneC := view.paneOf(t, "c")
-		if got := desktopTree(t, desktop).leafIDs(); !slices.Equal(got, []string{paneA, paneB, paneC}) {
-			t.Fatalf("three agents placed as %v, want %v in a row", got, []string{paneA, paneB, paneC})
-		}
-		if popped := popOut(app, desktop.ID, paneC, protocol.TileWindowFrame{Width: 500, Height: 400}); !popped.Success {
-			t.Fatalf("popping out %s: %s", paneC, protocol.Deref(popped.Error))
-		}
-		shownIn(t, requestShowLeaf(app, desktop.ID, paneB), desktop.ID, paneB)
+func TestClosingATileInMainActivatesAPoppedTileOnlyWhileTileWindowsAreOff(t *testing.T) {
+	for _, tileWindows := range []bool{true, false} {
+		t.Run(fmt.Sprintf("tile windows %t", tileWindows), func(t *testing.T) {
+			inBubble(t, func(t *testing.T, w *world) {
+				app := w.App()
+				profileID := app.SelectedProfile()
+				setSetting(t, app, setting.TilePopoutEnabled.Key, strconv.FormatBool(tileWindows))
+				injectAgent(t, w, "a")
+				injectAgent(t, w, "b")
+				injectAgent(t, w, "c")
+				view := viewProfile(t, w, profileID)
+				desktop, paneA := view.paneOf(t, "a")
+				_, paneB := view.paneOf(t, "b")
+				_, paneC := view.paneOf(t, "c")
+				if got := desktopTree(t, desktop).leafIDs(); !slices.Equal(got, []string{paneA, paneB, paneC}) {
+					t.Fatalf("three agents placed as %v, want %v in a row", got, []string{paneA, paneB, paneC})
+				}
+				if popped := popOut(app, desktop.ID, paneC, protocol.TileWindowFrame{Width: 500, Height: 400}); !popped.Success {
+					t.Fatalf("popping out %s: %s", paneC, protocol.Deref(popped.Error))
+				}
+				shownIn(t, requestShowLeaf(app, desktop.ID, paneB), desktop.ID, paneB)
+				want := paneC
+				if tileWindows {
+					want = paneA
+				}
 
-		if closed := closeFromApp(app, "b"); closed.Error != nil {
-			t.Fatalf("closing b: %s", *closed.Error)
-		}
-		change := testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
-			shown, ok := desktopIn(e.Desktops, desktop.ID)
-			return ok && slices.Equal(desktopTree(t, shown).leafIDs(), []string{paneA, paneC})
+				if closed := closeFromApp(app, "b"); closed.Error != nil {
+					t.Fatalf("closing b: %s", *closed.Error)
+				}
+				change := testworld.Await(app, protocol.EventProfileArrangementChanged, func(e protocol.ProfileArrangementChangedMessage) bool {
+					shown, ok := desktopIn(e.Desktops, desktop.ID)
+					return ok && slices.Equal(desktopTree(t, shown).leafIDs(), []string{paneA, paneC})
+				})
+				shown, _ := desktopIn(change.Desktops, desktop.ID)
+				if shown.ActivePaneID != want {
+					t.Fatalf("closing %s between %s and popped %s made %q active, want %s", paneB, paneA, paneC, shown.ActivePaneID, want)
+				}
+			})
 		})
-		shown, _ := desktopIn(change.Desktops, desktop.ID)
-		if shown.ActivePaneID != paneA {
-			t.Fatalf("closing %s between %s and popped %s made %q active, want %s", paneB, paneA, paneC, shown.ActivePaneID, paneA)
-		}
-	})
+	}
 }

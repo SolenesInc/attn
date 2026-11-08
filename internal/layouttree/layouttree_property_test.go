@@ -398,16 +398,16 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 						t.Fatalf("leaf %q has window %+v, want popped=%v at %+v", id, leaf.Window, popped, want)
 					}
 				}
-				live := make(map[string]bool)
-				for _, id := range LeafIDs(m.tree) {
-					live[id] = true
+				inMain := make(map[string]bool)
+				for _, id := range MainLeafIDs(m.tree) {
+					inMain[id] = true
 				}
-				for _, closing := range LeafIDs(m.tree) {
-					stillLive := maps.Clone(live)
-					delete(stillLive, closing)
-					next := NextInPosition(m.tree, closing, stillLive, nil)
-					if _, popped := m.popped[next]; popped {
-						t.Fatalf("closing %q hands the active tile to popped %q", closing, next)
+				for _, closing := range MainLeafIDs(m.tree) {
+					stillInMain := maps.Clone(inMain)
+					delete(stillInMain, closing)
+					next := NextInPosition(m.tree, closing, stillInMain, nil)
+					if next != "" && !stillInMain[next] {
+						t.Fatalf("closing %q hands the active tile to %q, which main no longer shows", closing, next)
 					}
 					if next == "" && len(MainLeafIDs(m.tree)) > 1 {
 						t.Fatalf("closing %q found no next tile though main still holds %v", closing, MainLeafIDs(m.tree))

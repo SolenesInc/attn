@@ -246,6 +246,10 @@ func RecentThenLeft(previousTree layouttree.Node, closedLeafID string, live map[
 }
 
 func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus) Desktop {
+	return SettleAfterIn(desktop, previousTree, closeFocus, layouttree.MainLeafIDs)
+}
+
+func SettleAfterIn(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus, mainLeafIDs func(layouttree.Node) []string) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
 	leaves := layouttree.LeafIDs(desktop.Tree)
 	live := make(map[string]bool, len(leaves))
@@ -259,8 +263,14 @@ func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus Close
 		}
 	}
 	if !live[desktop.ActivePaneID] {
-		desktop.ActivePaneID = closeFocus(previousTree, desktop.ActivePaneID, live, history)
-		if fallback := slices.Concat(layouttree.MainLeafIDs(desktop.Tree), leaves); desktop.ActivePaneID == "" && len(fallback) > 0 {
+		main := mainLeafIDs(desktop.Tree)
+		inMain := make(map[string]bool, len(main))
+		for _, id := range main {
+			inMain[id] = true
+		}
+		mainHistory := slices.DeleteFunc(slices.Clone(history), func(id string) bool { return !inMain[id] })
+		desktop.ActivePaneID = closeFocus(previousTree, desktop.ActivePaneID, inMain, mainHistory)
+		if fallback := slices.Concat(main, leaves); desktop.ActivePaneID == "" && len(fallback) > 0 {
 			desktop.ActivePaneID = fallback[0]
 		}
 	}
