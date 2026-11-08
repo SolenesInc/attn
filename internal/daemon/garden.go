@@ -216,9 +216,17 @@ type gardenRead struct {
 }
 
 type gardenSeeds struct {
-	seeds []garden.Seed
-	docs  map[string]docstore.Document
-	plots garden.PlotTree
+	seeds      []garden.Seed
+	docs       map[string]docstore.Document
+	plots      garden.PlotTree
+	unreadable map[string]error
+}
+
+func (s gardenSeeds) firstUnreadable() error {
+	if len(s.unreadable) == 0 {
+		return nil
+	}
+	return s.unreadable[slices.Min(slices.Collect(maps.Keys(s.unreadable)))]
 }
 
 func (d *Daemon) rememberedGardenSeeds() (gardenSeeds, error) {
@@ -264,11 +272,12 @@ func (d *Daemon) readGardenSeeds(schema docstore.CollectionSchema) (gardenSeeds,
 	if err != nil {
 		return gardenSeeds{}, err
 	}
-	out := gardenSeeds{docs: make(map[string]docstore.Document, len(docs)), seeds: make([]garden.Seed, 0, len(docs))}
+	out := gardenSeeds{docs: make(map[string]docstore.Document, len(docs)), seeds: make([]garden.Seed, 0, len(docs)), unreadable: map[string]error{}}
 	for _, doc := range docs {
 		seed, err := garden.Decode(doc.Body)
 		if err != nil {
 			d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
+			out.unreadable[doc.ID] = err
 			continue
 		}
 		out.seeds = append(out.seeds, seed)
@@ -289,7 +298,7 @@ func (s gardenSeeds) sortNewestFirst() {
 }
 
 func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous gardenSeeds, written []string) (gardenSeeds, error) {
-	out := gardenSeeds{docs: maps.Clone(previous.docs)}
+	out := gardenSeeds{docs: maps.Clone(previous.docs), unreadable: maps.Clone(previous.unreadable)}
 	changed := map[string]bool{}
 	var fresh []garden.Seed
 	for _, id := range written {
@@ -298,6 +307,7 @@ func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous g
 		}
 		changed[id] = true
 		delete(out.docs, id)
+		delete(out.unreadable, id)
 		doc, found, err := d.store.GetDocument(schema, id)
 		if err != nil {
 			return gardenSeeds{}, err
@@ -308,6 +318,7 @@ func (d *Daemon) refreshGardenSeeds(schema docstore.CollectionSchema, previous g
 		seed, err := garden.Decode(doc.Body)
 		if err != nil {
 			d.logf("garden: seed %s has an unreadable body: %v", doc.ID, err)
+			out.unreadable[doc.ID] = err
 			continue
 		}
 		fresh = append(fresh, seed)

@@ -1,14 +1,18 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/transcript"
 )
@@ -123,6 +127,60 @@ func TestKeptConversationReleaseReplantAndDeletionAreVisible(t *testing.T) {
 	if verdict.Reopenable || !strings.Contains(protocol.Deref(verdict.Reason), date) {
 		t.Fatalf("expired reopen verdict: %+v", verdict)
 	}
+}
+
+func TestAnUnreadableSeedStopsExpiredCopiesBeingDeleted(t *testing.T) {
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
+	w.Launched(string(delegated.SessionID)).Prompted()
+	closePane(app, sessionPane{session: string(delegated.SessionID)})
+	testworld.AwaitTaskDone(app, "conversation_keep")
+	lifeMove(t, cli, "", delegated.SeedID, "wither", "abandoned", "")
+	testworld.AwaitTaskDone(app, "conversation_keep")
+
+	unreadable := plantSeedAs(t, cli, "", "A seed that will not decode")
+	readable := writeSeedBodyWhileStopped(t, w, unreadable, []byte(`{"id":5}`))
+	w.start()
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "0")
+	keepPassAfterAnotherSessionCloses(t, w)
+
+	t.Setenv("ATTN_CONVERSATION_KEEP_GRACE_DAYS", "")
+	writeSeedBodyWhileStopped(t, w, unreadable, readable)
+	w.start()
+	if kept := lifeShow(t, w.Client(), delegated.SeedID).Seed.Continuation.KeptConversation; kept == nil || kept.DeletedAt != nil {
+		t.Fatalf("expired copy deleted with an unreadable seed in the garden: %+v", kept)
+	}
+}
+
+func writeSeedBodyWhileStopped(t *testing.T, w *world, seed string, body []byte) []byte {
+	t.Helper()
+	w.stop()
+	offline, err := store.NewWithDB(config.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	schema, found, err := offline.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil || !found {
+		t.Fatalf("the seeds collection = %v, %v", found, err)
+	}
+	if err := offline.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite3", config.DBPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var previous []byte
+	if err := db.QueryRow("SELECT body FROM "+schema.Table+" WHERE id = ?", seed).Scan(&previous); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE "+schema.Table+" SET body = ? WHERE id = ?", string(body), seed); err != nil {
+		t.Fatal(err)
+	}
+	return previous
 }
 
 func TestLiveClaudeIsKeptOnlyWhenQuietAndNeverReplacedByASmallerSource(t *testing.T) {

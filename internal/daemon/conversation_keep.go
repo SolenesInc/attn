@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -18,7 +19,6 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
-	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
@@ -140,41 +140,37 @@ func readKeptConversationArchive(agent, resumeID string) (store.KeptConversation
 }
 
 func (d *Daemon) conversationSeedReferences() (map[conversationKey][]protocol.KeptConversationSeed, error) {
-	referenced := make(map[conversationKey][]protocol.KeptConversationSeed)
-	after := ""
-	for {
-		read, _, err := d.runDocQuery(docstore.Query{Namespace: garden.Namespace, Collection: garden.CollectionSeeds, Limit: docstore.MaxLimit, After: after})
-		if err != nil {
-			return nil, err
-		}
-		for _, doc := range read.Documents {
-			seed, err := garden.Decode(doc.Body)
-			if err != nil {
-				return nil, err
-			}
-			executionID := conversationReference(seed)
-			if executionID == "" {
-				continue
-			}
-			entry := d.store.SessionLedgerEntry(executionID)
-			if entry == nil || d.sessionHost(entry.ID) != "" {
-				continue
-			}
-			if _, dispatched := d.gardenDispatch(entry.ID); !dispatched {
-				continue
-			}
-			resumeID := d.store.GetResumeSessionID(entry.ID)
-			if resumeID == "" {
-				continue
-			}
-			key := conversationKey{entry.Agent, resumeID}
-			referenced[key] = append(referenced[key], protocol.KeptConversationSeed{ID: doc.ID, Slug: seed.StepSlug, Title: seed.Title})
-		}
-		if len(read.Documents) < docstore.MaxLimit {
-			return referenced, nil
-		}
-		after = read.Documents[len(read.Documents)-1].ID
+	all, err := d.rememberedGardenSeeds()
+	if err != nil {
+		return nil, err
 	}
+	if err := all.firstUnreadable(); err != nil {
+		return nil, err
+	}
+	referenced := make(map[conversationKey][]protocol.KeptConversationSeed)
+	for _, seed := range all.seeds {
+		executionID := conversationReference(seed)
+		if executionID == "" {
+			continue
+		}
+		entry := d.store.SessionLedgerEntry(executionID)
+		if entry == nil || d.sessionHost(entry.ID) != "" {
+			continue
+		}
+		if _, dispatched := d.gardenDispatch(entry.ID); !dispatched {
+			continue
+		}
+		resumeID := d.store.GetResumeSessionID(entry.ID)
+		if resumeID == "" {
+			continue
+		}
+		key := conversationKey{entry.Agent, resumeID}
+		referenced[key] = append(referenced[key], protocol.KeptConversationSeed{ID: seed.ID, Slug: seed.StepSlug, Title: seed.Title})
+	}
+	for _, seeds := range referenced {
+		slices.SortFunc(seeds, func(a, b protocol.KeptConversationSeed) int { return strings.Compare(a.ID, b.ID) })
+	}
+	return referenced, nil
 }
 
 func (d *Daemon) crewLetterReferences() (referenced map[conversationKey][]protocol.KeptConversationCrewLetter, unreadable error, err error) {
