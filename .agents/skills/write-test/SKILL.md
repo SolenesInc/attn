@@ -48,6 +48,14 @@ Each is a habit that works elsewhere and breaks a promise-only test here.
   that connected before the call (`testworld.Await`,
   `testworld.AwaitSession`), the CLI's output, or a pipe the process opens
   when ready. Browser end-to-end specs are the exception `testing.md` names.
+- Connecting a peer after the step it then waits for. The daemon sends an
+  event only to clients connected at that moment, so an update from a daemon's
+  startup work is lost to a peer that connects after `w.restart()` or
+  `s.Start()`, and the wait hangs. Connect first when the test starts the
+  step. Otherwise accept what the peer learned on connecting:
+  `testworld.AwaitSessionFromConnect` for a session, `p.Initial` before an
+  `Await` for anything else. A refresh that finds no change publishes nothing,
+  so it cannot stand in for the lost event.
 - Waiting for a timer to fire. Move the clock: `w.advance(d)` in a world,
   `s.Advance(d)` in a stack. When the timer is armed asynchronously, wait
   for the timer first, by the name its package gives it: `w.awaitTimer(name)`

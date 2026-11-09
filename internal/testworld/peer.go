@@ -534,6 +534,18 @@ func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protoco
 	return AwaitSessionSince(p, 0, id, match)
 }
 
+// AwaitSessionFromConnect is AwaitSession that also accepts the session as the peer's initial_state showed it,
+// for a state the daemon can reach before this peer connects.
+func AwaitSessionFromConnect(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
+	for _, s := range p.Initial.Sessions {
+		if s.ID == protocol.SessionID(id) && match(s) {
+			return s
+		}
+	}
+	return AwaitSession(p, id, match)
+}
+
 // AwaitSessionSince is AwaitSession over the frames from mark on, a len(p.Log()) taken earlier.
 func AwaitSessionSince(p *Peer, mark int, id string, match func(protocol.Session) bool) protocol.Session {
 	p.T.Helper()

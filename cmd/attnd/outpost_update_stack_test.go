@@ -317,9 +317,14 @@ func TestAPairedOutpostWithoutTheHostKeepsWorkersAndUpdateInstallsIt(t *testing.
 	}
 	home.Start()
 	app = home.App()
-	row = testworld.AwaitSince(app, 0, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
-		return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected && protocol.Deref(m.Outposts[0].HostMissing)
-	}).Outposts[0]
+	connectedWithoutHost := func(outposts []protocol.OutpostInfo) bool {
+		return len(outposts) == 1 && outposts[0].State == protocol.OutpostStateConnected && protocol.Deref(outposts[0].HostMissing)
+	}
+	outposts := app.Initial.Outposts
+	if !connectedWithoutHost(outposts) {
+		outposts = testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return connectedWithoutHost(m.Outposts) }).Outposts
+	}
+	row = outposts[0]
 	if _, err := os.Stat(ssh.HostPath(remote)); !os.IsNotExist(err) {
 		t.Fatalf("a reconnect installed the host: %v", err)
 	}

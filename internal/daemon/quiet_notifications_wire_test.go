@@ -344,7 +344,7 @@ func TestAnAgentsOwnTurnOutlivesARestart(t *testing.T) {
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	resumed := w.Launched(session)
-	restored := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	restored := testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if !protocol.Deref(restored.TurnOwed) || !protocol.Deref(restored.TurnByAgent) {
 		t.Fatalf("after a restart the agent's turn shows owed=%v by_agent=%v, want it still the agent's",
 			protocol.Deref(restored.TurnOwed), protocol.Deref(restored.TurnByAgent))
@@ -398,7 +398,7 @@ func TestAnAgentsRequestForItsTurnOutlivesARestartBeforeItStops(t *testing.T) {
 		m.ResumeSessionID = protocol.Ptr(session)
 	})
 	w.Launched(session)
-	stopped := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+	stopped := testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateIdle && protocol.Deref(s.TurnOwed)
 	})
 	if !protocol.Deref(stopped.TurnByAgent) {

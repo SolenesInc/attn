@@ -830,7 +830,9 @@ func TestEnrollmentLeavesHomeJobsIdleUntilTheMachineLeaves(t *testing.T) {
 		t.Fatalf("retry while enrolled: %+v", retried)
 	}
 	requireStdout(t, home.Attn("settings", "set", "headless_tasks.enabled", "true"), "true")
-	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["headless_tasks.enabled"] == "true" })
+	if app.Initial.Settings["headless_tasks.enabled"] != "true" {
+		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["headless_tasks.enabled"] == "true" })
+	}
 	local := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("machine-task"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 	agent := outpost.LaunchedCarrying(pair.App.Terminal(local))
 	pair.App.TypeLine(local, "Give this local machine task a title")

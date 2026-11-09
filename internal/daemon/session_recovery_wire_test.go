@@ -92,7 +92,7 @@ func TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened(t *testing.
 		if after := w.Launched(session); !after.Resumed || after.ConversationID != before.ConversationID {
 			t.Errorf("%s came back as %q, want it resuming conversation %s", session, after.Argv, before.ConversationID)
 		}
-		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+		testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 	}
 	if state := queriedSession(t, w.Client(), shell).State; state != protocol.SessionStateRecoverable {
 		t.Errorf("the shell is %s, want it recoverable until it is opened", state)

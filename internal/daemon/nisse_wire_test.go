@@ -229,7 +229,7 @@ func TestANisseSessionWorkingThroughADaemonRestartSettlesFromTheServerAfterIt(t 
 
 	w.restart()
 	app = w.App()
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	testworld.AwaitSessionFromConnect(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	server.Reply(conversation, "Migrated. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if servers := w.NisseServers(); servers != 1 {
@@ -257,7 +257,7 @@ func TestNisseSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWasDown
 	server.Reply(workingTUI.ConversationID, "Migrated, but two rows failed. Retry them? <!-- attn:state=waiting_input -->")
 	w.start()
 	app = w.App()
-	testworld.AwaitSession(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	testworld.AwaitSessionFromConnect(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if got := restartedSession(w.App(), asked); got.State != protocol.SessionStateWaitingInput {
 		t.Errorf("the session waiting on an answer is %s after the restart, want it still waiting", got.State)
 	}
