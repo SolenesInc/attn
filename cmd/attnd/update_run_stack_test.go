@@ -184,7 +184,12 @@ func updateRequestNotifications(app *testworld.Peer) []protocol.Notification {
 
 func requestUpdateAs(t *testing.T, stack *testworld.Stack, session string) string {
 	t.Helper()
-	result := stack.Run(testworld.Invocation{Args: []string{"update", "request", "--reason", "needs the fix"}, Session: session})
+	return requestUpdateBecause(t, stack, session, "needs the fix")
+}
+
+func requestUpdateBecause(t *testing.T, stack *testworld.Stack, session, reason string) string {
+	t.Helper()
+	result := stack.Run(testworld.Invocation{Args: []string{"update", "request", "--reason", reason}, Session: session})
 	if result.Code != 0 {
 		t.Fatalf("update request from %s: %+v", session, result)
 	}
@@ -255,6 +260,35 @@ func TestAnUpdateRequestWaitsForTheUserAndDeclineClosesIt(t *testing.T) {
 	}
 	if inbox := inboxText(t, install.stack, shell); !strings.Contains(inbox, "declined") {
 		t.Fatalf("the requester was not told: %q", inbox)
+	}
+}
+
+func TestEveryPendingRequestReasonReachesTheOneOpenNotification(t *testing.T) {
+	install := newSourceInstall(t)
+	app := install.start(t)
+	shell := fakeagent.Harness(protocol.SessionAgentShell)
+	first := install.stack.Spawn(app, shell, install.stack.Path("first"))
+	second := install.stack.Spawn(app, shell, install.stack.Path("second"))
+
+	requestUpdateBecause(t, install.stack, first, "the parser fix is on main")
+	if offered := updateRequestNotifications(app); len(offered) != 1 || !strings.Contains(offered[0].Trigger, "the parser fix is on main") {
+		t.Fatalf("the first reason is not shown: %+v", offered)
+	}
+
+	requestUpdateBecause(t, install.stack, second, "the new queue key shipped")
+	var open []protocol.Notification
+	for _, n := range updateRequestNotifications(app) {
+		if n.ReadAt == "" {
+			open = append(open, n)
+		}
+	}
+	if len(open) != 1 || len(open[0].Actions) != 2 {
+		t.Fatalf("open notifications = %+v", open)
+	}
+	for _, reason := range []string{"the parser fix is on main", "the new queue key shipped"} {
+		if !strings.Contains(open[0].Trigger, reason) {
+			t.Fatalf("the notification does not show %q: %q", reason, open[0].Trigger)
+		}
 	}
 }
 

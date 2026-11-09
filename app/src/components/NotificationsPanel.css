@@ -262,6 +262,7 @@
 }
 
 .notification-row-fact p {
+  white-space: pre-line;
   margin: 0;
   color: var(--color-text-secondary);
   font-size: 12px;

@@ -7,6 +7,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSharedCodexStore } from '../store/sharedCodex';
+import { useUpdateActions } from '../hooks/useUpdateActions';
 import { useSharedCodexActions } from './useSharedCodex';
 import {
   useAppGardenActionsContext,
@@ -31,7 +32,7 @@ export function AppLibrarySurfaces() {
   const daemonSessions = useDaemonStore((state) => state.daemonSessions);
   const installingCodexUpdate = useSharedCodexStore((state) => state.installing);
   const { install: installCodexUpdate } = useSharedCodexActions();
-  const { sendStartUpdate, sendDeclineUpdate } = useDaemonApi();
+  const { startUpdate, declineUpdate } = useUpdateActions();
   const profileMembership = useMemo(() => [
     ...profiles.map((profile) => `${profile.id}:${profile.name}`),
     ...daemonSessions.map((session) => `${session.id}@${session.profile_id}`),
@@ -198,8 +199,8 @@ export function AppLibrarySurfaces() {
           onOpenSeed={handleRevealSeedInGarden}
           installingCodexUpdate={installingCodexUpdate}
           onInstallCodexUpdate={installCodexUpdate}
-          onStartUpdate={(id) => void sendStartUpdate(id).catch((err) => console.error('[App] Start update failed:', err))}
-          onDeclineUpdate={(id) => void sendDeclineUpdate(id).catch((err) => console.error('[App] Decline update failed:', err))}
+          onStartUpdate={startUpdate}
+          onDeclineUpdate={declineUpdate}
           changeSignal={notificationsChangeSignal}
         />
       </Fragment>

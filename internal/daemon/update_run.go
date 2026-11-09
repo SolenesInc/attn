@@ -122,24 +122,16 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 	if err != nil {
 		return nil, err
 	}
-	if len(pending) > 0 {
-		request.NotificationID = pending[0].NotificationID
-		if err := d.store.AddUpdateRequest(request, store.UpdateRequestPending, "", now); err != nil {
-			return nil, err
-		}
-		return &protocol.UpdateRequestResult{RequestID: request.ID}, nil
-	}
-	body := "An agent asked to update attn."
-	if reason != "" {
-		body = "An agent asked to update attn: " + reason
+	if err := d.resolvePendingRequestNotifications(); err != nil {
+		return nil, err
 	}
 	note, _, err := d.store.EnsureNotification(store.NotificationRecord{
 		ID:       notificationKindUpdateRequest + ":" + request.ID,
 		Kind:     notificationKindUpdateRequest,
 		Severity: store.NotificationInfo,
 		Title:    "Update attn?",
-		Body:     body,
-		Trigger:  "attn update request",
+		Body:     "An agent asked to update attn.",
+		Trigger:  updateRequestTrigger(append(pending, request)),
 		Impact:   "Update builds the new attn and restarts it. Your agents keep running.",
 		Actions: []store.NotificationAction{
 			{Kind: notificationActionUpdate, Label: "Update", TargetID: protocol.SessionID(request.ID)},
@@ -157,6 +149,17 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 	}
 	d.publishFact(FactNotificationCreated, note.ID, nil)
 	return &protocol.UpdateRequestResult{RequestID: request.ID}, nil
+}
+
+func updateRequestTrigger(requests []store.UpdateRequest) string {
+	lines := make([]string, len(requests))
+	for i, request := range requests {
+		lines[i] = "An agent asked to update attn."
+		if request.Reason != "" {
+			lines[i] = "An agent asked to update attn: " + request.Reason
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (d *Daemon) handleStartUpdate(client *wsClient, msg *protocol.StartUpdateMessage) {

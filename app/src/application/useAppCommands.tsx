@@ -48,6 +48,7 @@ import {
   NotificationsBellIcon,
 } from './AppIcons';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
+import { useUpdateActions } from '../hooks/useUpdateActions';
 import { useOpenInEditor } from './useOpenInEditor';
 import { useSharedCodexCommands } from './useSharedCodex';
 import { BoolSetting, FEATURES, isOn } from '../utils/settings';
@@ -68,7 +69,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
-  const { sendStartUpdate } = useDaemonApi();
+  const { startUpdate } = useUpdateActions();
   const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
@@ -387,7 +388,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
             id: 'update-attn',
             title: 'Update attn',
             keywords: ['update', 'upgrade', 'install', 'build'],
-            run: () => void sendStartUpdate().catch((err: Error) => console.error('[App] Start update failed:', err)),
+            run: () => startUpdate(),
           }]
         : []),
       {
@@ -609,7 +610,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       toggleGardenFrame,
       gardenMode,
       settings,
-      sendStartUpdate,
+      startUpdate,
       handleToggleQueueMode,
       handleToggleCrewQueue,
       handleOpenCrew,

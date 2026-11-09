@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useUpdateActions } from '../hooks/useUpdateActions';
 import type { UpdateRun } from '../types/generated';
 import { DoneCountdown } from './OutpostUpdateBanner';
 
@@ -34,11 +35,12 @@ function persistClosedRun(id: string) {
 }
 
 export function UpdateRunBanner() {
-  const api = useOptionalDaemonApi();
+  const api = useDaemonApi();
+  const { startUpdate } = useUpdateActions();
   const [closed, setClosed] = useState(readClosedRun);
   const [paused, setPaused] = useState(false);
   const run = api?.updateRun;
-  if (!api || !run || run.id === closed) return null;
+  if (!run || run.id === closed) return null;
   const close = () => {
     persistClosedRun(run.id);
     setClosed(run.id);
@@ -61,7 +63,7 @@ export function UpdateRunBanner() {
           type="button"
           className="banner-button"
           disabled={!api.isConnected}
-          onClick={() => void api.sendStartUpdate().catch((err: Error) => console.error('[App] Retry update failed:', err))}
+          onClick={() => startUpdate()}
         >
           Retry
         </button>
