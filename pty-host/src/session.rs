@@ -1164,10 +1164,11 @@ impl Session {
                 Err(_) => return,
             };
             let read_at = SystemTime::now();
+            let mut closing_read_at = read_at;
             let admission = self.delivery.admit_output();
             let mut batch = OutputBatch::start(&buffer[..first], Instant::now(), last_emit);
-            let open = self.gather(reader, &mut buffer, &mut batch);
-            self.observe_output(batch.bytes(), read_at, &admission);
+            let open = self.gather(reader, &mut buffer, &mut batch, &mut closing_read_at);
+            self.observe_output(batch.bytes(), read_at, closing_read_at, &admission);
             drop(admission);
             last_emit = Some(Instant::now());
             if !open {
@@ -1176,7 +1177,13 @@ impl Session {
         }
     }
 
-    fn gather(&self, reader: &mut File, buffer: &mut [u8], batch: &mut OutputBatch) -> bool {
+    fn gather(
+        &self,
+        reader: &mut File,
+        buffer: &mut [u8],
+        batch: &mut OutputBatch,
+        closing_read_at: &mut SystemTime,
+    ) -> bool {
         while let Some(wait) = batch.wait(Instant::now()) {
             match self.quiesce.readable_within(reader.as_raw_fd(), wait) {
                 Ok(true) => {}
@@ -1186,7 +1193,10 @@ impl Session {
             }
             match reader.read(buffer) {
                 Ok(0) => return false,
-                Ok(read) => batch.push(&buffer[..read]),
+                Ok(read) => {
+                    *closing_read_at = SystemTime::now();
+                    batch.push(&buffer[..read]);
+                }
                 Err(error)
                     if matches!(error.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) => {}
                 Err(_) => return false,
@@ -1204,13 +1214,29 @@ impl Session {
             .at_ground()
     }
 
-    fn observe_output(&self, data: &[u8], read_at: SystemTime, admission: &OutputAdmission<'_>) {
+    fn observe_output(
+        &self,
+        data: &[u8],
+        read_at: SystemTime,
+        closing_read_at: SystemTime,
+        admission: &OutputAdmission<'_>,
+    ) {
         let _delivery = admission.delivery();
         let signal_order = self
             .signal_order
             .lock()
             .expect("signal order mutex poisoned");
-        let (first_seq, seq, wire, placements, resync, responses, observations, titles) = {
+        let (
+            first_seq,
+            seq,
+            wire,
+            placements,
+            resync,
+            responses,
+            program_statuses,
+            observations,
+            titles,
+        ) = {
             let mut model = self.model.lock().expect("model mutex poisoned");
             let (queries, complete_queries) = model.queries.scan(data);
             track_color_scheme_reports(&complete_queries, &mut model.color_scheme_reports);
@@ -1220,8 +1246,8 @@ impl Session {
             let drained = model.wire.terminal_mut().drain_responses();
             responses.extend(queries.replies_after_feed(model.wire.terminal(), &drained));
             let reports = model.wire.terminal_mut().drain_program_status();
-            let mut observations = model.signals.observe_program_status(&reports);
-            observations.extend(model.signals.observe(data, || {
+            let program_statuses = model.signals.observe_program_status(&reports);
+            let observations = model.signals.observe(data, || {
                 self.foreground_group().map(|pgid| {
                     let foreign = pgid != self.child_pid;
                     (
@@ -1233,7 +1259,7 @@ impl Session {
                         },
                     )
                 })
-            }));
+            });
             let first_seq = model.seq.wrapping_add(1);
             let events = u32::try_from(feed.wire.len().div_ceil(OUTPUT_EVENT_MAX_BYTES).max(1))
                 .expect("output event count fits u32");
@@ -1245,10 +1271,14 @@ impl Session {
                 feed.placements,
                 feed.resync,
                 responses,
+                program_statuses,
                 observations,
                 model.signals.take_title_changes(),
             )
         };
+        for status in program_statuses {
+            self.publish_state(status.claim, &status.detail, status.source, closing_read_at);
+        }
         for observation in observations {
             self.publish_state(
                 observation.claim,
