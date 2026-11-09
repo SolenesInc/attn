@@ -5,7 +5,7 @@
 The inbox is how attn delivers information to an agent: messages from other
 agents, seed updates, the user's answers and Quick Captures, and attn's own
 notices. A sender saves an item for an address. attn then decides when to ring
-the agent, when to wake an asleep crew member or resume a standby seed's closed
+the agent, when to start a session for a crew member between sessions or resume a standby seed's closed
 tender first, and when to stop. In a
 ring, attn types what the user wrote into the conversation as the user's
 message. The agent reads everything else with `attn agent inbox`.
@@ -23,8 +23,8 @@ session holds it reads.
 | Address | Who reads it | When nobody holds it |
 |---|---|---|
 | session | that session | The item waits, and attn never resumes a closed session to deliver an item. A seed update is the exception: attn withdraws it when the session closes (see [Seed updates](#seed-updates)). |
-| crew member | the member's current session | attn wakes the member (see [Wakes](#wakes)). |
-| seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender is woken like a member address. A closed session tender is resumed only when the seed is on standby (see [Wakes](#wakes)). |
+| crew member | the member's current session | attn starts a session for the member (see [Starts and resumes](#starts-and-resumes)). |
+| seed | the seed's current tender: a session, or a crew member | The item waits for the next tender. A member tender gets a session like a member address. A closed session tender is resumed only when the seed is on standby (see [Starts and resumes](#starts-and-resumes)). |
 
 An item follows its mailbox. When a member's session ends, their next session
 gets the unread items. When a seed gets a new tender, the new tender gets the
@@ -40,8 +40,8 @@ The sender picks the address:
 - `attn agent msg <seed-id>` addresses the seed.
 - A seed update addresses a crew member tender as the member. It addresses a
   session tender and every watcher as their session.
-- Crew sleep and auto-sleep requests address the session, because each request
-  concerns that one session. attn never wakes a member to deliver a request.
+- Crew close requests, from the user or when the user is away, address the session, because each request
+  concerns that one session. attn never starts a session to deliver a request.
 
 A session reads all its addresses together: its own, its member's, and those of
 the seeds it tends.
@@ -56,7 +56,7 @@ watch updates and notices.
 An agent sends a peer message with `attn agent msg`. The message records its
 sender: the crew member when a member's session sends it, otherwise the
 session. The recipient's reply line names the member, so a reply reaches the
-member's current session or wakes the member, even after the session that
+member's current session or starts one for the member, even after the session that
 sent it has ended. A session sender is named by its short id.
 
 attn refuses a peer message, and gives the reason, when:
@@ -121,7 +121,7 @@ typing into the agent, so attn types it into the agent's conversation as the
 user's message in a ring (see
 [Rings](#rings)), and harness auto-mode reviewers count an approval in the
 message as the user's. User input does not wait for the agent to finish its
-turn, for the 5 minutes between rings, or for a crew member's wake limit.
+turn, for the 5 minutes between rings, or for a crew member's mail-start limit.
 `attn agent inbox` never returns user input. Each piece of user input is its own
 item.
 
@@ -161,7 +161,7 @@ Notices are attn's own messages to an agent:
 - a seed sent to the chief
 - a reminder that came due on a seed (`attn seed remind`), addressed to the
   seed
-- crew sleep and auto-sleep requests
+- crew close requests, from the user or when the user is away
 
 ## Coalescing
 
@@ -189,7 +189,7 @@ and gets fresh attempts.
   names the words the tender last received as the ones it replaces. When the
   tender changes the words itself, attn withdraws the unread change, because
   the tender already knows its own words.
-- An auto-sleep request replaces the older unread auto-sleep request.
+- A close request sent because the user is away replaces the older unread one.
 
 Rings coalesce too. One ring covers every unread item at an address. See
 [Rings](#rings).
@@ -217,7 +217,7 @@ that input. A ring lost to an open menu in the harness stays lost.
   gets rings so that it does not wait forever, even though a ring can land on an
   open menu.
 - attn decides from the agent's state and never reads the agent's screen. attn
-  types nothing while the agent needs approval or is launching. A new or woken
+  types nothing while the agent needs approval or is launching. A new or resumed
   agent whose harness has hooks is launching until the harness itself reports,
   because a harness that has only just started loses what is typed
   ([Claude Code](harnesses/claude.md)). A resumed or reloaded agent keeps the
@@ -322,48 +322,48 @@ not settle that turn. The user settles the turn, or the agent runs
 stopped, not with `attn turn open`. With the queue flow off, both commands
 change nothing.
 
-## Wakes
+## Starts and resumes
 
 ### A crew member
 
-When a crew member's address has unread items and the member is asleep, attn
-wakes the member before it rings. When a restart interrupted the member's latest
+When a crew member's address has unread items and the member is between sessions, attn
+starts a session for the member before it rings. When a restart interrupted the member's latest
 session, attn resumes that session and rings it instead of starting a new one.
 
-- The wake is one attempt for every unread item. The new session gets the ring
+- The start is one attempt for every unread item. The new session gets the ring
   when the session first reaches a safe prompt, and gets the user input as
   soon as it works. That ring is part of the same attempt. Items that arrive
-  during the wake share the attempt.
-- The woken session's first prompt names what woke it: each unread seed
+  during the start share the attempt.
+- The new session's first prompt names what started it: each unread seed
   update and peer message with attempts left, up to 8, then a count of the
   rest. A seed update reads as the inbox prints it, with its
   `attn seed show <id> --since <n>` command. A peer message names only its
-  sender. A wake with neither, such as one for a notice, opens with the plain
+  sender. A start with neither, such as one for a notice, opens with the plain
   greeting. The prompt says the user did not open the
   session, and tells the member to run `attn agent inbox` first. A member with
   a charter then does what its charter says. A member without a charter, one
   with onboarding pending, and the Chief still greet the user after the cause.
-  When unread user input wakes the member, the user is the cause, and the
-  prompt is the plain greeting that every other wake gets.
-- A member has at most one inbox wake at a time.
-- An inbox wake counts against the member's wake limit: 8 wakes per 12 hours,
-  set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A wake from
-  the sidebar, a wake from `attn crew wake` and a wake for an unread user
-  message do not count, because the user causes each of them. A wake for seed
-  mail counts against the seed's wake limit instead (see
+  When unread user input starts the session, the user is the cause, and the
+  prompt is the plain greeting that every other start gets.
+- A member has at most one mail-started session starting at a time.
+- A mail-started session counts against the member's mail-start limit: 8 per 12 hours,
+  set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A start from
+  the sidebar, a start from `attn crew wake` and a start for an unread user
+  message do not count, because the user causes each of them. A start for seed
+  mail counts against the seed's limit instead (see
   [A seed on standby](#a-seed-on-standby)).
-- A wake that fails still uses an attempt, including one the wake limit
+- A start that fails still uses an attempt, including one the limit
   refuses. attn tries again after 5 minutes. After 3 attempts the items wait
   for a read or a new item.
-- attn never wakes a retired member, and attn refuses `attn agent msg` to a
+- attn never starts a session for a retired member, and attn refuses `attn agent msg` to a
   retired member, by name or by the member's session. Items that were unread at
   retirement keep their attempts and wait. When someone restores the member,
-  attn delivers those items, and the delivery can wake the member.
-- attn wakes a member again when the member goes back to sleep with unread
-  items that have attempts left. The wake comes 5 minutes after the last
+  attn delivers those items, and the delivery can start a session.
+- attn starts another session when a session closes with unread
+  items that have attempts left. The start comes 5 minutes after the last
   attempt, or at once for user input and for seed mail.
-- attn wakes the Chief member like any member.
-- A manual wake does not ring for items that have no attempts left. The agent
+- attn starts sessions for the Chief member like any member.
+- A manual start does not ring for items that have no attempts left. The agent
   still finds those items with `attn agent inbox`. attn types user input
   regardless of their attempts.
 
@@ -384,38 +384,38 @@ resumes the session only when all of these hold:
 - `garden.tender_wake` allows the item. `any`, the default, allows all seed
   mail. `watches` allows PR watch updates and reminders only. `off` allows
   nothing, and the mail waits.
-- The seed has had fewer than 48 tender wakes in the last 24 hours.
+- The seed has had fewer than 48 tender resumes in the last 24 hours.
 
 Who closed the session does not matter. The resume needs no connected app, and
-the session opens on its last desktop. A crew member that tends the seed is
-woken as a member under every value of `garden.tender_wake`.
+the session opens on its last desktop. A crew member that tends the seed
+gets a session as a member under every value of `garden.tender_wake`.
 
-The woken session gets its mail only through a path that knows when the agent
+The resumed session gets its mail only through a path that knows when the agent
 reads input. For Codex, attn rings once the resumed Codex first reports. For Claude, attn
 waits for the reopened session's first Claude mod poll and delivers through the
-mod. attn types nothing into a Claude terminal. A Claude session cannot be woken
-when its mod does not poll within 30 seconds of the resume; the wake's reason
+mod. attn types nothing into a Claude terminal. A Claude session cannot be resumed
+when its mod does not poll within 30 seconds of the resume; the block's reason
 names the Claude Code version.
 
 The first prompt carries the mail and the standby note. It says the user may
 not be watching, and names the ways to end the turn: put the seed on standby
-again, harvest it, ask the user with `attn ask`, or report. A woken session that
+again, harvest it, ask the user with `attn ask`, or report. A resumed session that
 stops owes the user a turn, as any resumed session does.
 
 Standby ends when the tender has read all of the seed's mail, whether the
-session was open or woken. The tender reads the mail with `attn agent inbox`,
+session was open or resumed. The tender reads the mail with `attn agent inbox`,
 or with `attn agent inbox <message-id>` for one message. A ring also reads the
 mail it types, such as the user's answer to an ask. A ring that only carries the
 📬 line reads nothing. Standby also ends when the seed is parked, harvested or
 withered, and when the seed gets a new tender.
 
 A tender that closes before it reads the mail leaves the seed on standby, and
-the unread mail wakes the tender again. Nobody holds the seed's mailbox while
+the unread mail resumes the tender again. Nobody holds the seed's mailbox while
 the tender session is closed, so attn does not wait 5 minutes between attempts
-for seed mail. The 3 attempts per item and the seed's wake limit bound the
+for seed mail. The 3 attempts per item and the seed's resume limit bound the
 repeats. attn delivers seed mail again when a session closes, when the daemon
-restarts, and, unless the wake is blocked, when the bridge to the tender's
-outpost connects. So a seed on standby with unread mail wakes its tender right
+restarts, and, unless the resume is blocked, when the bridge to the tender's
+outpost connects. So a seed on standby with unread mail resumes its tender right
 after any of them.
 
 `attn seed standby --close` and `attn agent close --self` refuse while a seed
@@ -439,7 +439,7 @@ state changes, so the close still waits for the turn that asked for it. A
 failure once the session is prompt-ready closes it. A ring placed before the
 compact starts a turn, and the compact waits for that turn's end. Once the compact is
 placed and taken, the lane holds every later item until the session has closed,
-and seed mail that arrives then wakes the closed tender as above. Nothing the
+and seed mail that arrives then resumes the closed tender as above. Nothing the
 user types or sends stops the close. User input that attn would place while the
 lane is held fails and tells the sender that the session is closing.
 If no outcome arrives within `compact_outcome_tripwire`, the session closes with
@@ -458,25 +458,25 @@ this means:
   open and takes later items, and a compact already running still finishes. The
   agent asks to close again, or the user closes it.
 
-Every tender wake for seed mail, of a session or of a crew member, counts
-against one limit for the seed: 48 wakes per 24 hours, held in memory. The count
-restarts empty when the daemon restarts. These wakes do not count against
+Every tender resume for seed mail, of a session or of a crew member, counts
+against one limit for the seed: 48 per 24 hours, held in memory. The count
+restarts empty when the daemon restarts. These resumes do not count against
 `crew.wake_limit`, so a member that tends several seeds is not capped across
-them. The daemon log records each tender wake with the seed and its cause.
+them. The daemon log records each tender resume with the seed and its cause.
 
-A wake that fails for a reason that does not fix itself writes a note on the
+A resume that fails for a reason that does not fix itself writes a note on the
 seed that names the reason and the item, and rings the seed's watchers and the
 tenders of the plots above it. It also raises a critical notification with an
 action that opens the seed. The reasons are a removed worktree, a missing
 conversation, a conversation that would reopen in another profile, a Claude
-session that cannot receive the mail through its mod, and the 48-wake limit. The
+session that cannot receive the mail through its mod, and the limit of 48. The
 seed row carries the reason as `wake_blocked`. The item stays queued. attn does
-not retry these wakes, except at the 48-wake limit: attn delivers the item when
+not retry these resumes, except at the limit of 48: attn delivers the item when
 the 24-hour window has room again.
 
 An outpost that is unreachable, or that does not answer while attn checks the
-tender's directory or conversation, is not a failed wake. The item stays queued
-and uses neither an attempt nor a wake. attn tries again when the outpost's
+tender's directory or conversation, is not a failed resume. The item stays queued
+and uses neither an attempt nor a resume. attn tries again when the outpost's
 bridge connects, or after 5 minutes.
 
 A failure that can fix itself leaves the item queued, and attn tries again after
@@ -486,9 +486,9 @@ times out or fails while attn checks whether it still has the conversation. A
 plugin that answers that the conversation is gone is a missing conversation. A
 failed launch closes the session again, so its row and tile do not stay open
 with nothing running, and the next attempt resumes it as itself. User input waits
-for the next attempt too, because nothing is running to type it into. Each wake
-uses one of the item's 3 attempts. A failure on the last attempt blocks the wake
-as above, naming the failure. New mail gives the wake fresh attempts.
+for the next attempt too, because nothing is running to type it into. Each resume
+uses one of the item's 3 attempts. A failure on the last attempt blocks the resume
+as above, naming the failure. New mail gives the resume fresh attempts.
 
 ## Reading and receipts
 
@@ -510,9 +510,9 @@ these:
 
 - attn rang the agent.
 - The message waits for a safe prompt or for an outstanding ring to be read.
-- attn is waking a member.
+- attn is starting a session for a member.
 - The message waits for a tender or a chief.
-- The wake limit is used up. The reply also names the setting to change.
+- The mail-start limit is used up. The reply also names the setting to change.
 
 `attn agent msg-status <id>` shows the sender whether the message is queued,
 notified, or read.
@@ -523,8 +523,8 @@ notified, or read.
 |---|---|---|---|
 | Time between attempts (user input and seed mail that nobody holds do not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items. The repeats were harness outages. |
-| Inbox wakes per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
-| Tender wakes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender wake with the seed and its cause. |
+| Mail-started sessions per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
+| Tender resumes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender resume with the seed and its cause. |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
 | Same text to one address | once per 10 s | `agentMessageDedupeWindow` | |
 | Peer messages from one sender to one address | 8 per 30 s | `agentMessageRateLimit` | |
@@ -542,17 +542,17 @@ requested count. Existing IDs still return their delivery receipts.
 
 The database keeps items, attempts and outstanding rings. After a daemon
 restart, attn resumes delivery for every address with unread items when
-recovery finishes, and the delivery can wake the tender of a seed on standby. A restart does not give items new attempts. A wake that a
-restart interrupts still counts as an attempt. The woken session's ring then
+recovery finishes, and the delivery can resume the tender of a seed on standby. A restart does not give items new attempts. A start or resume that a
+restart interrupts still counts as an attempt. That session's ring then
 waits 5 minutes and is a second attempt.
 
 ## Scenarios
 
-**A burst to an asleep member.** Alder tends four seeds and is asleep. In two
-minutes, 15 events happen on those seeds. The first update wakes Alder: one
-attempt, one wake against the limit. Later events on the same seed merge into
+**A burst to a member between sessions.** Alder tends four seeds and has no session. In two
+minutes, 15 events happen on those seeds. The first update starts a session: one
+attempt, one start against the limit. Later events on the same seed merge into
 that seed's update. The first event on each other seed adds one update, and
-that update shares the wake. Alder's new session gets one ring and finds four
+that update shares the start. Alder's new session gets one ring and finds four
 updates. If Alder does not read them, the next ring comes 5 minutes later.
 
 **An agent ignores its ring.** A message arrives at 10:00. attn rings at 10:00,
@@ -584,7 +584,7 @@ session, attn waits for the mod's first poll. The session gets the note and
 reads the reminder with `attn agent inbox`, and standby ends. The agent
 reports, or goes on standby again.
 
-**The wake limit is used up.** A message for an asleep member arrives after the
-member's 8th wake in 12 hours. The reply to the sender names `crew.wake_limit`.
+**The mail-start limit is used up.** A message for a member between sessions arrives after the
+member's 8th mail-started session in 12 hours. The reply to the sender names `crew.wake_limit`.
 attn tries at 0, 5 and 10 minutes, then stops. The message waits for the
 member's next session.

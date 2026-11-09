@@ -10,9 +10,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const crewWakeGreeting = "You have been woken. Get up to speed, confirming what your letter says against its sources, then greet the user in a few lines: who you are, where things stand now, and what you would do next."
+const crewWakeGreeting = "This is a new session. Get up to speed, confirming what your letter says against its sources, then greet the user in a few lines: who you are, where things stand now, and what you would do next."
 
-const updateWakeLead = "Updates woke you; the user did not open this session"
+const updateWakeLead = "attn started this session to deliver these items; the user did not open it"
 
 func wakePrompt(t *testing.T, w *world, sessionID string) string {
 	t.Helper()

@@ -1092,7 +1092,7 @@
               "field": {
                 "name": "garden_read",
                 "kind": "flag",
-                "description": "The garden was readable when the member woke."
+                "description": "The garden was readable when the session started."
               },
               "test": "enabled"
             },
@@ -1368,6 +1368,11 @@
                         ]
                       }
                     ]
+                  },
+                  {
+                    "kind": "text",
+                    "id": "crew.v2.sessions",
+                    "source": "content/crew/v2/sessions.md"
                   },
                   {
                     "kind": "text",
@@ -1670,16 +1675,16 @@
           }
         },
         {
-          "id": "wake",
+          "id": "new-session",
           "delivery": "user_message",
-          "description": "crew_wake.go: today's first message.",
+          "description": "crew_wake.go: the session's first message.",
           "body": {
             "kind": "choose",
             "condition": {
               "field": {
-                "name": "wake_cause",
+                "name": "start_cause",
                 "kind": "text",
-                "description": "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it."
+                "description": "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it."
               },
               "test": "present"
             },
@@ -1689,17 +1694,17 @@
                 "children": [
                   {
                     "kind": "text",
-                    "id": "crew.woken-by",
-                    "source": "content/crew/woken-by.md",
+                    "id": "crew.started-for-items",
+                    "source": "content/crew/started-for-items.md",
                     "bindings": [
                       {
-                        "name": "wake_cause",
+                        "name": "start_cause",
                         "node": {
                           "kind": "input",
                           "field": {
-                            "name": "wake_cause",
+                            "name": "start_cause",
                             "kind": "text",
-                            "description": "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it."
+                            "description": "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it."
                           }
                         }
                       }
@@ -1711,20 +1716,20 @@
                       "field": {
                         "name": "charter_decides",
                         "kind": "flag",
-                        "description": "The member has a charter and is not the Chief or onboarding, so its charter decides what an update wake does."
+                        "description": "The member has a charter and is not the Chief or onboarding, so its charter decides what a session started for updates does."
                       },
                       "test": "enabled"
                     },
                     "children": [
                       {
                         "kind": "text",
-                        "id": "crew.v2.woken-by-charter",
-                        "source": "content/crew/v2/woken-by-charter.md"
+                        "id": "crew.v2.started-for-items-charter",
+                        "source": "content/crew/v2/started-for-items-charter.md"
                       },
                       {
                         "kind": "text",
-                        "id": "crew.v2.wake",
-                        "source": "content/crew/v2/wake.md"
+                        "id": "crew.v2.new-session",
+                        "source": "content/crew/v2/new-session.md"
                       }
                     ]
                   }
@@ -1732,8 +1737,8 @@
               },
               {
                 "kind": "text",
-                "id": "crew.v2.wake",
-                "source": "content/crew/v2/wake.md"
+                "id": "crew.v2.new-session",
+                "source": "content/crew/v2/new-session.md"
               }
             ]
           }
@@ -1749,13 +1754,13 @@
           }
         },
         {
-          "id": "sleep-requested",
+          "id": "close-requested",
           "delivery": "user_message",
-          "description": "crew_sleep.go: user requested closure.",
+          "description": "crew_sleep.go: the user asked the member to close.",
           "body": {
             "kind": "text",
-            "id": "crew.sleep-requested",
-            "source": "content/crew/sleep-requested.md"
+            "id": "crew.close-requested",
+            "source": "content/crew/close-requested.md"
           }
         },
         {
@@ -1815,13 +1820,13 @@
           }
         },
         {
-          "id": "sleep-away",
+          "id": "close-away",
           "delivery": "user_message",
           "description": "crew_lifecycle.go: close after the user has been away.",
           "body": {
             "kind": "text",
-            "id": "crew.sleep-away",
-            "source": "content/crew/sleep-away.md"
+            "id": "crew.close-away",
+            "source": "content/crew/close-away.md"
           }
         }
       ]
@@ -5713,5 +5718,5 @@
       ]
     }
   ],
-  "definitions_hash": "5f4a323ad8a97b91351a0783e606a15e6789a2811966edb466173d78157479e6"
+  "definitions_hash": "b55fee9b370761f3ef80418f865645c37d05235ff99694d755926f529ab239a5"
 }

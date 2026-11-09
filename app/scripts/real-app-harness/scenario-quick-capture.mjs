@@ -229,7 +229,7 @@ try {
     runner.registerCleanup('capture-binding', () => client.request('capture_binding', { binding: initialBinding }));
     await client.request('capture_binding', { binding: testBinding });
     writeMockAgentFixture(home, { version: 1, turns: [
-      { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CAPTURE_CREW_AWAKE', state: 'idle' }] },
+      { includes: 'This is a new session', actions: [{ type: 'reply', text: 'CAPTURE_CREW_AWAKE', state: 'idle' }] },
       { includes: 'sent through Quick Capture', actions: [
         { type: 'capture', from: 'prompt', pattern: 'attn agent attachment ([0-9a-f-]{36}) ', name: 'capture' },
         { type: 'exec', cmd: process.execPath, args: [path.join(runner.runDir, 'inspect-capture.mjs'), '{{capture}}'] },

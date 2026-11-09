@@ -12,7 +12,7 @@ Build the measurement as a lever: one repeatable command that prints the metric,
 
 ## Find the limiter
 
-Profile the run or read counters during it, and map what bounds the result to the source code: a lock, a core, the disk, the network, an allocation path, the load generator itself. A guess from reading the code is not a limiter. For a leak or an idle spin, instrument what grows or wakes, and read the instrumentation while the system runs. The result of this step is a diagnosis with evidence, and the diagnosis may be the whole assignment.
+Profile the run or read counters during it, and map what bounds the result to the source code: a lock, a core, the disk, the network, an allocation path, the load generator itself. A guess from reading the code is not a limiter. For a leak or an idle spin, instrument what grows or keeps running, and read the instrumentation while the system runs. The result of this step is a diagnosis with evidence, and the diagnosis may be the whole assignment.
 
 ## Change one thing
 

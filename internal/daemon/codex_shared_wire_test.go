@@ -264,7 +264,7 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	if !slices.Contains(codex.Argv, "--remote") {
 		t.Fatalf("keel ran %q, want Codex connected to an app-server", codex.Argv)
 	}
-	if got := codex.Prompted(); !strings.Contains(got, "You have been woken") {
+	if got := codex.Prompted(); !strings.Contains(got, "This is a new session") {
 		t.Fatalf("keel's codex received %q, want its wake prompt", got)
 	}
 	if roots := w.CodexServer().WorkspaceRoots(codex.ConversationID); !slices.Equal(roots, []string{workDir, notes}) {

@@ -10,7 +10,7 @@ file gives the rules.
 
 `attn agent list` lists the sessions you can address. It prints a short id for
 each session. Any unique prefix works, and `--json` adds the full ids and the
-machine-readable shape. An awake crew member's stable name also works as the
+machine-readable shape. The stable name of a crew member in session also works as the
 address for `peek`, `msg` and `reload`.
 
 `attn session list --tree` shows every live session under its dispatcher, with
@@ -28,9 +28,9 @@ their dispatcher links.
 
 `attn agent peek <session-or-member>` reads a session's state, last assistant
 message, and rendered screen. A crew name follows the member's current session
-binding, and a sleeping member stays asleep. Peek is passive by construction.
+binding, and peeking at a member between sessions starts nothing. Peek is passive by construction.
 The daemon already holds everything peek shows, so peeking never types into the
-session, never wakes its agent, and never consumes the agent's tokens. Peek
+session, never starts a run of its agent, and never consumes the agent's tokens. Peek
 leaves no trace the observed agent can see.
 
 Text on a Claude session's `❯` line can be Claude's suggestion for the next
@@ -91,8 +91,8 @@ lose non-persistent state. Before you reload, save anything you need. The
 session stays in place and resumes its saved conversation when one is
 available.
 
-Use full session ids, unique prefixes, or an awake crew member's name. A
-sleeping member stays asleep. A session may reload itself and the agents below
+Use full session ids, unique prefixes, or the name of a crew member in session. Naming
+a member between sessions starts nothing. A session may reload itself and the agents below
 it in the delegation chain, including delegates of delegates.
 The profile's chief may reload any agent in that profile. These rules apply to
 chief and crew sessions too, even though they are protected from closing.
@@ -149,9 +149,9 @@ or the standby note. `--compact` goes only with `--self`. Only a Claude Code
 session with the Claude mod and a Codex session on the shared Codex app server
 compact, on the home machine or an outpost. attn refuses any other session, and
 the refusal says why. Compact when you will resume as yourself, as a
-seed's tender does when its standby wakes it (Standby (`attn skill --reference garden`)). A
-crew member cannot close itself, and its next wake starts a fresh session from
-its letter, so a compact before a crew sleep carries nothing over.
+seed's tender does when its standby resumes it (Standby (`attn skill --reference garden`)). A
+crew member cannot close itself, and its next session starts fresh from
+its letter, so a compact before a member's letter carries nothing over.
 
 To ask another agent to close itself, name `attn agent close --self`. When the
 user asks you to wrap up, or asks whether they can close you, follow

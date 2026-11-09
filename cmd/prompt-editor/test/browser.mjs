@@ -14,7 +14,7 @@ const fixture = await fs.mkdtemp(path.join(os.tmpdir(), "prompt-editor-browser-"
 const artifacts = process.env.PROMPT_EDITOR_ARTIFACTS;
 const git = (...args) => execFileSync("git", ["-C", fixture, ...args], { encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_NOSYSTEM: "1" } }).trim();
 const root = path.join(fixture, "internal/prompts");
-const wake = path.join(root, "content/crew/v2/wake.md");
+const wake = path.join(root, "content/crew/v2/new-session.md");
 let server, browser, context;
 const consoleErrors = [];
 try {
@@ -30,8 +30,8 @@ try {
   const manifest = JSON.parse(await fs.readFile(path.join(repo, "internal/prompts/catalog.generated.json"), "utf8"));
   delete manifest.definitions_hash;
   const crew = manifest.recipients.find((r) => r.id === "crew");
-  const wakeEvent = crew.events.find((e) => e.id === "wake");
-  wakeEvent.body = { kind: "text", id: "crew.wake", source: "content/crew/v2/wake.md" };
+  const wakeEvent = crew.events.find((e) => e.id === "new-session");
+  wakeEvent.body = { kind: "text", id: "crew.new-session", source: "content/crew/v2/new-session.md" };
   const currentManifest = JSON.stringify(manifest);
   wakeEvent.delivery = "launch_instructions";
   wakeEvent.body = { kind: "compose", children: [wakeEvent.body, { kind: "input", field: { name: "old_note", kind: "text", description: "A base-only input" } }] };
@@ -68,7 +68,7 @@ try {
   context = await browser.newContext({ colorScheme: "light", viewport: { width: 1440, height: 1000 }, ...(artifacts ? { recordVideo: { dir: artifacts, size: { width: 1440, height: 1000 } } } : {}) });
   const page = await context.newPage();
   page.on("pageerror", (error) => consoleErrors.push(String(error)));
-  await page.goto(`${url}/#crew/wake`);
+  await page.goto(`${url}/#crew/new-session`);
   await expect(page.locator("#base-status")).toContainText(ancestor.slice(0, 8));
   await expect(page.locator("#event-change")).toHaveText("definition changed");
   await expect(page.locator("#theme")).toHaveValue("system");
@@ -125,7 +125,7 @@ try {
   await expect(page.locator("#base-status")).toContainText(ancestor.slice(0, 8));
   await expect(page.locator("#event-name")).toHaveText("retired");
   await expect(page.locator("#prompt-diff")).toContainText("Retired guidance.");
-  await page.locator(".event-link").filter({ hasText: /^wake/ }).click();
+  await page.locator(".event-link").filter({ hasText: /^new-session/ }).click();
   await page.locator("#base-ref").fill("does-not-exist");
   await page.locator("#compare-base").click();
   await expect(page.locator("#base-status")).toHaveText("Comparison unavailable");

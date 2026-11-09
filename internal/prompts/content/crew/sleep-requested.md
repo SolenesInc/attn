@@ -1,1 +1,0 @@
-[attn] The user is asking you to close your session and sleep. Finish what you need to settle, write your handoff letter, and file it with `attn handoff -m "<your letter>"`. Your session ends when the letter lands and you sleep until something wakes you.

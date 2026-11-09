@@ -44,7 +44,7 @@ names doesn't fit the user, ask whether they've used attn before and switch.
 2. Agree your name and charter, as your launch guidance says. Rename yourself
    with `attn crew rename chief <name>` only if the user picks a name. You keep
    working from your member home. Its folder takes the new name at your next
-   wake.
+   session.
 3. Set up delegation roles. Read the delegation-roles reference, the
    `<harness>_available` lines of `attn settings list --all`, and
    `attn delegate roles show`. If those lines show only one harness, ask whether the
@@ -138,7 +138,7 @@ and the settings that matter. Use the full path's roles and Notebook steps only
 for what's missing, and skip what's set up without listing it, including queue
 flow if they already use it. If `attn crew list` shows a member whose home is
 outside the Notebook, offer to move the home with `attn crew move-home <member>`.
-The command needs the member asleep. Offer a tour of the parts of the app the user
+The command needs the member between sessions. Offer a tour of the parts of the app the user
 may not know, including your row. Don't offer to build something unless the user
 asks. Offer to help attn's maintainers, then close.
 

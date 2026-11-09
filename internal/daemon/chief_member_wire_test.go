@@ -121,7 +121,7 @@ func TestAChiefWithoutAHarnessKeepsItsMailUntilItIsConfigured(t *testing.T) {
 	if guidance := launchGuidance(t, w, run); !strings.Contains(guidance, "You are the Chief") || !strings.Contains(guidance, "CHARTER.md") || strings.Contains(guidance, "You are the chief of staff") {
 		t.Fatalf("the Chief's launch guidance: %s", guidance)
 	}
-	if prompt := run.Prompted(); !strings.Contains(prompt, "You have been woken") {
+	if prompt := run.Prompted(); !strings.Contains(prompt, "This is a new session") {
 		t.Fatalf("the Chief's first prompt: %s", prompt)
 	}
 	run.Reply("Ready. <!-- attn:state=idle -->")

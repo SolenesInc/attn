@@ -15,7 +15,7 @@ func crewRecipient() Recipient {
 	heldTotal := TextField("held_total", "How many seeds the member holds; blank unless the list was cut.")
 	heldLimit := TextField("held_limit", "How many held seeds this block lists.")
 	plotReady := TextField("plot_ready", "One line per plot with its ready count.")
-	gardenRead := FlagField("garden_read", "The garden was readable when the member woke.")
+	gardenRead := FlagField("garden_read", "The garden was readable when the session started.")
 	chief := FlagField("chief", "The member is its profile's Chief.")
 	chiefNotebook := TextField("notebook_root", "The Chief's profile Notebook directory.")
 	previousChief := TextField("previous_chief", "On the Chief's first day, the session that was the profile's Chief of Staff before the Chief was a crew member.")
@@ -38,6 +38,7 @@ func crewRecipient() Recipient {
 	awarenessDirectories := template("crew.awareness", "content/crew/awareness.md", awareness)
 	launchContext := Compose(
 		Join("", identity, Choose(Enabled(charter), existingCharter, firstDay), When(Present(cwd), launchDirectory), When(Present(awareness), awarenessDirectories)),
+		Use("crew.v2.sessions", "content/crew/v2/sessions.md"),
 		Use("crew.v2.compaction", "content/crew/v2/compaction.md"))
 	handoffName := TextField("handoff_name", "Handoff name")
 	letter := template("crew.v2.letter", "content/crew/v2/letter.md", handoffName)
@@ -53,10 +54,10 @@ func crewRecipient() Recipient {
 	plots := template("crew.garden-plots", "content/crew/garden-plots.md", plotReady)
 	noHoldings := Use("crew.garden-empty", "content/crew/garden-empty.md")
 
-	greeting := Use("crew.v2.wake", "content/crew/v2/wake.md")
-	wakeCause := TextField("wake_cause", "Rendered by inboxWakeCause: the unread items whose ring woke the member, one per line. Blank when the user woke it.")
-	charterDecides := FlagField("charter_decides", "The member has a charter and is not the Chief or onboarding, so its charter decides what an update wake does.")
-	wokenByCharter := Use("crew.v2.woken-by-charter", "content/crew/v2/woken-by-charter.md")
+	greeting := Use("crew.v2.new-session", "content/crew/v2/new-session.md")
+	startCause := TextField("start_cause", "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it.")
+	charterDecides := FlagField("charter_decides", "The member has a charter and is not the Chief or onboarding, so its charter decides what a session started for updates does.")
+	startedForItemsCharter := Use("crew.v2.started-for-items-charter", "content/crew/v2/started-for-items-charter.md")
 
 	return Recipient{ID: "crew", Description: "Permanent crew member: launch identity and lifecycle messages.", Events: []Event{
 		On("truncated-handoff", "message_fragment", "The adapter cuts the letter at a UTF-8 boundary; the catalog adds its full-file location.", template("crew.truncated-handoff", "content/crew/truncated-handoff.md", TextField("text", "Bounded letter."), TextField("limit", "Filing limit in bytes."), TextField("total", "Original bytes."), TextField("path", "Full letter path."))),
@@ -76,14 +77,14 @@ func crewRecipient() Recipient {
 					noLetter),
 				When(Present(holdings), Input(holdings)),
 				closure)),
-		On("wake", "user_message", "crew_wake.go: today's first message.", Choose(Present(wakeCause),
-			Compose(template("crew.woken-by", "content/crew/woken-by.md", wakeCause), Choose(Enabled(charterDecides), wokenByCharter, greeting)),
+		On("new-session", "user_message", "crew_wake.go: the session's first message.", Choose(Present(startCause),
+			Compose(template("crew.started-for-items", "content/crew/started-for-items.md", startCause), Choose(Enabled(charterDecides), startedForItemsCharter, greeting)),
 			greeting)),
 		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Use("crew.v2.successor", "content/crew/v2/successor.md")),
-		On("sleep-requested", "user_message", "crew_sleep.go: user requested closure.", Use("crew.sleep-requested", "content/crew/sleep-requested.md")),
+		On("close-requested", "user_message", "crew_sleep.go: the user asked the member to close.", Use("crew.close-requested", "content/crew/close-requested.md")),
 		On("settings-applied", "user_message", "crew_apply.go: the member's session reloaded in place with its saved settings.", Use("crew.settings-applied", "content/crew/settings-applied.md", Bind("charter_path", Input(TextField("charter_path", "Charter path."))))),
 		On("switch-requested", "user_message", "crew_apply.go: the member's saved harness differs from its running session.", Use("crew.switch-requested", "content/crew/switch-requested.md", Bind("agent", Input(TextField("agent", "Saved harness."))))),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),
-		On("sleep-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.sleep-away", "content/crew/sleep-away.md")),
+		On("close-away", "user_message", "crew_lifecycle.go: close after the user has been away.", Use("crew.close-away", "content/crew/close-away.md")),
 	}}
 }

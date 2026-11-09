@@ -52,4 +52,4 @@ first. attn adds the reason as a note on each seed you still tend, and the
 session stays in the ledger.
 
 A seed you tend that is on standby stays on standby after you close, so its next
-mail wakes your session. To stop that, run `attn seed standby <id> --clear`.
+mail resumes your session. To stop that, run `attn seed standby <id> --clear`.

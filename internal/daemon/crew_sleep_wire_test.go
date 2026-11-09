@@ -29,7 +29,7 @@ func TestSleepAsksTheLiveMemberToFileItsOwnLetter(t *testing.T) {
 			t.Fatalf("sleep = %+v, want a request to the live member", result)
 		}
 		items := readInbox(t, cli, day.id, 0).Items
-		if len(items) != 1 || items[0].Content != prompts.RenderText("crew", "sleep-requested", prompts.Values{}) {
+		if len(items) != 1 || items[0].Content != prompts.RenderText("crew", "close-requested", prompts.Values{}) {
 			t.Fatalf("sleep inbox = %+v", items)
 		}
 		if binding := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession); string(binding) != day.id {

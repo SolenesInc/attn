@@ -65,7 +65,7 @@ can't. Typing into the session while it compacts does not stop the close.
 
 A Claude session on an outpost takes messages and compacts through its mod, the
 same as a session on your home machine. If the mod gives a message back while the home is
-asleep or unreachable, the outpost keeps it and hands it to the home when the
+offline or unreachable, the outpost keeps it and hands it to the home when the
 link returns.
 
 ## Upgrades and restarts

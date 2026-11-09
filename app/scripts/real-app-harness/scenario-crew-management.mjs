@@ -238,7 +238,7 @@ try {
   writeMockAgentFixture(awakeHome, {
     version: 1,
     turns: [
-      { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CREW_PANEL_READY', state: 'idle' }] },
+      { includes: 'This is a new session', actions: [{ type: 'reply', text: 'CREW_PANEL_READY', state: 'idle' }] },
       { includes: '📬 You have unread items', submitHook: false, actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
         { type: 'wait_for_file', path: 'continue-sleep', timeoutMs: 30_000 },
@@ -249,7 +249,7 @@ try {
   writeMockAgentFixture(asleepHome, {
     version: 1,
     turns: [
-      { includes: 'You have been woken', actions: [{ type: 'reply', text: 'ASLEEP_MEMBER_READY', state: 'idle' }] },
+      { includes: 'This is a new session', actions: [{ type: 'reply', text: 'ASLEEP_MEMBER_READY', state: 'idle' }] },
       { includes: '📬 You have unread items', submitHook: false, actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
         { type: 'touch', path: claimReadReceipt },

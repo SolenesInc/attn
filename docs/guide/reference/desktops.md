@@ -155,7 +155,7 @@ An empty desktop closes on its own 30 seconds after you leave it. Attn never clo
 <details>
 <summary>What happens to my agents when I close a desktop?</summary>
 
-Closing a desktop closes every agent and shell on it, and their sessions wait in the ledger for you to resume. Attn asks first unless the desktop is empty, and it won't close your only desktop. Cmd+W (Ctrl+Shift+W on Linux) on an empty desktop closes it too. Attn refuses to close a desktop that holds the Chief or an awake crew member, and names them so you can move them to another desktop first. [The Chief](chief.md) says how to close the Chief. A crew member's session closes only when you put that member to sleep. When you close the desktop you're on, you land on the one above it in the sidebar, or the one below when it was at the top.
+Closing a desktop closes every agent and shell on it, and their sessions wait in the ledger for you to resume. Attn asks first unless the desktop is empty, and it won't close your only desktop. Cmd+W (Ctrl+Shift+W on Linux) on an empty desktop closes it too. Attn refuses to close a desktop that holds the Chief or a crew member in session, and names them so you can move them to another desktop first. [The Chief](chief.md) says how to close the Chief. A crew member's session closes only when that member files its letter. When you close the desktop you're on, you land on the one above it in the sidebar, or the one below when it was at the top.
 </details>
 
 <details>
@@ -209,5 +209,5 @@ Zoom stays on for its desktop while you switch desktops, and it applies to which
 <details>
 <summary>Why can't I delete a profile?</summary>
 
-Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, no awake Chief, no crew members other than the Chief and retired members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked), no pending delegations and no running garden reviews. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
+Attn deletes only an empty profile, and never your last one. Empty means the profile holds no running agents or shells, no Chief in session, no crew members other than the Chief and retired members, no automations, no browser, markdown, seed or editor tiles, no open seeds (planted, growing or parked), no pending delegations and no running garden reviews. [The Chief](chief.md) says how to close the Chief. When something is left, Attn refuses and counts each kind, so you can clean up or ask an agent to do it.
 </details>

@@ -110,7 +110,7 @@ Agents can do the same with `attn agent reload <session-or-member>...`. An
 agent may reload itself and the agents it delegated to, including delegates
 of delegates, and the Chief may reload any agent in its profile, or
 every agent there with `--all`. A crew member's name resolves to the member's
-current session, and a sleeping member stays asleep. Attn never reloads shells. Run
+current session, and naming a member between sessions starts nothing. Attn never reloads shells. Run
 `attn agent reload --help` for the details.
 
 ## Send files to an agent from outside Attn
@@ -161,7 +161,7 @@ The sweep removes a worktree after 14 days without activity, when removing it lo
 <details>
 <summary>Does closing an agent's tile stop the agent?</summary>
 
-Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session, and [the Chief](chief.md) says how to close it. Attn also refuses to close a crew member's session until you put the member to sleep. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and shows "Agent stopped", with Resume to continue the conversation and Close to close the session.
+Yes, when it is the agent's only tile. Cmd+W (Ctrl+Shift+W on Linux) on it, or Close session in the ••• menu on its sidebar row, stops the agent and puts its session in the ledger as closed by you, ready to resume. When another tile still shows the same agent, Cmd+W closes only the tile you're in. On a tile that isn't a terminal, such as markdown or a browser, Cmd+W closes only that tile. Attn refuses to close the Chief's session, and [the Chief](chief.md) says how to close it. Attn also refuses to close a crew member's session until the member files its letter. An agent that exits cleanly closes its session the same way. When the agent crashes or something kills it, the agent's tile stays and shows "Agent stopped", with Resume to continue the conversation and Close to close the session.
 </details>
 
 <details>

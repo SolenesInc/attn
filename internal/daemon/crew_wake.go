@@ -361,8 +361,8 @@ func (d *Daemon) crewCharterText(member crew.Member) string {
 
 func (d *Daemon) crewWakePrompt(member crew.Member, cause string) string {
 	_, onboarding := member.PendingOnboarding()
-	return prompts.RenderText("crew", "wake", prompts.Values{
-		"wake_cause":      cause,
+	return prompts.RenderText("crew", "new-session", prompts.Values{
+		"start_cause":     cause,
 		"charter_decides": fmt.Sprint(crew.CharterWritten(d.crewCharterText(member)) && !onboarding && !member.Chief),
 	})
 }

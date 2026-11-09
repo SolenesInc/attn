@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-close-away",
+  "description": "The away notice asks the member to file its letter and close.",
+  "recipient": "crew",
+  "event": "close-away",
+  "values": {}
+}

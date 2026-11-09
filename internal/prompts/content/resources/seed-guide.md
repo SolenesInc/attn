@@ -223,7 +223,7 @@ HANDOFFS AND STEERING
     attn seed show <id> --since <N>         only what was saved after bookmark N.
                                             show and notes print the bookmark to use next
     attn seed standby <id> -m "…"           wait on mail for the seed. The note goes to whoever
-                                            wakes for it. --close closes your session in the
+                                            takes the mail. --close closes your session in the
                                             same move, and --close --compact compacts its
                                             conversation first
 

@@ -62,7 +62,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 	}
 
 	d.clearCrewSwitching(member.ID)
-	prompt := prompts.RenderText("crew", "sleep-requested", prompts.Values{})
+	prompt := prompts.RenderText("crew", "close-requested", prompts.Values{})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
 		return nil, fmt.Errorf("record %s's sleep request: %w", member.Name, err)

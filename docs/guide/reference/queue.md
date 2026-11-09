@@ -69,8 +69,8 @@ close the agent but can't make a decision yet. Three controls open the snooze ch
 tomorrow, Saturday or Monday at 9:00. Snoozed agents wait at the end of the full
 agent list ("N more agents" in the sidebar, or Cmd+Shift+A, Ctrl+Alt+A on
 Linux), each with the time its snooze ends. To unsnooze an agent, click the unsnooze
-button on the agent's row (the app labels it Wake), or open the agent and run
-"Wake this agent now" from the command palette. A snooze ends early if the
+button on the agent's row, or open the agent and run the unsnooze command from
+the command palette. A snooze ends early if the
 agent's process exits or Attn loses track of the agent's state.
 
 ## Priority
@@ -161,11 +161,11 @@ Each profile has its own queue, and it holds only that profile's agents. Turning
 
 ## Quiet notifications
 
-Attn wakes agents all day: a delegate's message, a seed update, a pull request
-update, the answer to an ask. Those wake-ups don't send you to agents that do
+Attn notifies agents all day: a delegate's message, a seed update, a pull request
+update, the answer to an ask. Those notifications don't send you to agents that do
 not need you. In queue flow:
 
-- An agent a notification woke stays out of your queue when it stops, unless it
+- An agent whose run a notification started stays out of your queue when it stops, unless it
   needs an approval, Claude Code reports that its run failed, such as on a usage
   limit, or Attn can't tell what it's doing.
 - An agent waiting for you leaves the queue when a notification sets it working

@@ -45,11 +45,11 @@ when its work is done.
 ## Reach
 
 A target is a terminal id, or a unique prefix of one, as printed by `ls`.
-`open` prints the new terminal id. A session id or prefix, or an awake crew
-member's name, also works when that session shows in exactly one terminal.
+`open` prints the new terminal id. A session id or prefix, or the name of a
+crew member in session, also works when that session shows in exactly one terminal.
 Shared Codex can show one session in several tiles. When it does, choose a
 terminal id. Every target belongs to your profile. A crew name follows the
-member's current session and never wakes a sleeping member.
+member's current session and never starts a session for a member between sessions.
 
 If your session has tiles on several desktops, pass `--desktop` when you list,
 type, or close. If your session has several tiles on one desktop, `open` also

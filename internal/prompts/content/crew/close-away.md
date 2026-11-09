@@ -1,0 +1,1 @@
+[attn] The user has been away long enough that this session should end. Write your letter to your next session: what you were doing, what it will depend on, and what to pick up first. File it with `attn handoff -m "<your letter>"`. The session ends when the letter lands.

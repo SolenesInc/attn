@@ -141,17 +141,17 @@ Ownership:
 
     <internal/protocol/schema/main.tsp       new until_seed on SnoozeTurnMessage and turn_snoozed_for_seed on Session
      internal/store/turn.go                  new SnoozedForSeed in TurnStamps, persisted in session_runtime
-     internal/sessionmonitor/commands.go     snooze stores the seed with the time; wake clears both (F1)
+     internal/sessionmonitor/commands.go     snooze stores the seed with the time; unsnooze clears both (F1)
      internal/daemon/snooze.go               checks the seed is open before the snooze
-     internal/daemon/snooze_seed.go          new: durable consumer that wakes sessions when their seed closes (F2)
+     internal/daemon/snooze_seed.go          new: durable consumer that unsnoozes sessions when their seed closes (F2)
      app/src/components/SnoozeMenu.tsx       "Until a seed closes" choice with a seed picker>
 
 Interfaces:
 
 <```go
 for _, id := range d.store.SessionsSnoozedForSeed(ev.Subject) {
-    if _, err := d.monitorCommand(id, "wake", time.Time{}, ""); err != nil {
-        d.logf("seed snooze wake %s: %v", id, err)
+    if _, err := d.monitorCommand(id, "unsnooze", time.Time{}, ""); err != nil {
+        d.logf("seed unsnooze %s: %v", id, err)
     }
 }
 ```
@@ -192,7 +192,7 @@ Behavior:
 
     <garden  -> bus:     garden.seed.harvested{seed}
      bus     -> daemon:  snooze_seed consumer, from its cursor (F2)
-     daemon  -> monitor: wake, for each session snoozed for the seed>
+     daemon  -> monitor: unsnooze, for each session snoozed for the seed>
 
 State:
 
@@ -206,7 +206,7 @@ State:
        set by:      the snooze command, with SnoozedUntil
        read by:     the snooze_seed consumer; the session's wire record
        on failure:  a refused snooze leaves the prior stamps unchanged
-       twice:       a redelivered harvest wakes a session that is already awake, which changes nothing
+       twice:       a redelivered harvest unsnoozes a session that is not snoozed, which changes nothing
        on restart:  reloaded from session_runtime; the consumer replays from its cursor>
 
 ## Execution

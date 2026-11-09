@@ -1,1 +1,1 @@
-attn woke you to read these items. When you stop, attn does not notify the user's phone. If you cannot continue without the user, run `attn turn open` before you stop.
+attn started this run to deliver these items. When you stop, attn does not notify the user's phone. If you cannot continue without the user, run `attn turn open` before you stop.

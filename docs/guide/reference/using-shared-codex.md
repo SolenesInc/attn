@@ -195,7 +195,7 @@ closes the same way.
 
 To pick the session up again, resume the session from the Sessions ledger. Attn
 unarchives the conversation and resumes it in a new shared tile. A typed
-`/resume <id>` and a seed's tender waking do the same.
+`/resume <id>` and a tender resume for a seed do the same.
 
 An agent can compact a shared session's conversation just before it closes
 itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. A plain

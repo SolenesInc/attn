@@ -44,7 +44,7 @@ Put the map in the skill folder, as `features/README.md` and one file per featur
 
 - What the map is for, and its audiences.
 - The baseline preconditions: the fresh isolated instance from Launch, with the doctor passing. If a feature needs realistic data, write that in its preconditions and copy real data out, read-only. Never drive the user's real instance.
-- The driving conventions: which harness drives each audience's way in, the stable handles to prefer, and the real signals to wait on instead of sleeps.
+- The driving conventions: which harness drives each audience's way in, the stable handles to prefer, and the real signals to wait on instead of fixed delays.
 - The proof rules: the evidence to capture for each way in, and how to report a way in you could not reach, with the command you tried and the precondition that failed. A proof through one convenient way in is incomplete while the file lists others.
 - The feature entry contract below.
 - The contexts: the conditions this product's features can behave differently under, such as restarts, other platforms, remote machines, tenants, or profiles.

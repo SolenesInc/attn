@@ -1,0 +1,1 @@
+Then get up to speed as far as the items need, confirming what your letter says against its sources, and do what your charter says about them: act on them, record them, or file your letter with `attn handoff`. Greet the user only if your charter says to.

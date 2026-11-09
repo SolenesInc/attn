@@ -7,15 +7,15 @@ your day in the Notebook. Ask the Chief where things stand, or go straight to
 an agent and work beside that agent.
 
 The Chief is a [crew member](crew.md). Every profile has exactly one, named
-Chief, from the start. It has a charter and letters like any member, and sleeps
-and wakes like one.
+Chief, from the start. It has a charter and letters like any member, and its sessions
+start and close like any member's.
 
 ## Set up the Chief
 
 The Chief has its own row at the top of the sidebar's Crew section. A new Chief
-has no harness, so it stays asleep and keeps its mail. Until you set it up, its
+has no harness, so it stays between sessions and keeps its mail. Until you set it up, its
 row opens the setup: pick Claude Code or Codex, the model and effort, and the
-profile's Notebook folder, then press Enter to wake the Chief. The Chief's home
+profile's Notebook folder, then press Enter to start the Chief's first session. The Chief's home
 moves into the folder you pick. If neither harness is installed, the setup says
 so. Install one and choose "Check again".
 
@@ -53,17 +53,18 @@ applies as it does for any agent. To return the Chief to its home, run
 
 ## How the Chief differs from other members
 
-The [crew guide](crew.md) covers waking, sleeping, letters and launch settings.
+The [crew guide](crew.md) covers starting and closing sessions, letters and launch settings.
 The Chief follows it, with these differences:
 
 - `chief` always names the Chief in `attn agent msg`, `attn crew` and the other
   commands that take a member, even after you rename the Chief.
-- The Chief can sleep, but it can't be closed or retired, and Attn never sends
-  it heartbeats or puts it to sleep on its own. Deleting a profile needs its
-  Chief asleep, and retires the Chief.
+- You can ask the Chief to file its letter and close its session, but you can't
+  close its session without a letter or retire it, and Attn never sends it
+  heartbeats or asks it to close on its own. Deleting a profile needs its Chief
+  between sessions, and retires the Chief.
 - The Chief's menus offer "Harness and model…" to change what it runs on for
-  its next wake, "Edit charter", and Sleep in place of Close. The Chief wakes
-  with one click. The command palette has the same actions.
+  its next session, "Edit charter", and an action that asks for its letter in place of Close. One
+  click starts a Chief session. The command palette has the same actions.
 - With "Put the crew in the queue" on in Settings → Attention queue, a Chief
   that is owed a turn waits in the queue and keeps its row, and you settle or
   snooze it like any agent. When a delegate reports, the Chief asks you for a

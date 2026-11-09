@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-close-requested",
+  "description": "The user asks the member to file its letter and close.",
+  "recipient": "crew",
+  "event": "close-requested",
+  "values": {}
+}

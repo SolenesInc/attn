@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "id": "crew-v2-new-session",
+  "description": "First message of a new crew session.",
+  "recipient": "crew",
+  "event": "new-session",
+  "values": {}
+}

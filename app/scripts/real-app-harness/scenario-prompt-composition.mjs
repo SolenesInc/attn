@@ -94,7 +94,7 @@ async function main() {
     fs.mkdirSync(crewHome, { recursive: true });
     fs.writeFileSync(path.join(crewHome, 'CHARTER.md'), '# Promptprobe\nSynthetic prompt verification crew member.\n');
     writeMockAgentFixture(crewHome, { version: 1, agent: 'claude', turns: [
-      { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CREW_READY' }] },
+      { includes: 'This is a new session', actions: [{ type: 'reply', text: 'CREW_READY' }] },
       { includes: '📬 You have unread items', actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
         { type: 'touch', path: 'sleep-received' },
@@ -108,7 +108,7 @@ async function main() {
         const cwd = path.join(runner.sessionDir, name);
         fs.mkdirSync(cwd, { recursive: true });
         writeMockAgentFixture(cwd, { version: 1, agent, turns: chief ? [
-          { includes: 'You have been woken', submitHook: false, actions: [{ type: 'reply', text: 'CHIEF_READY', state: 'idle' }] },
+          { includes: 'This is a new session', submitHook: false, actions: [{ type: 'reply', text: 'CHIEF_READY', state: 'idle' }] },
           {
           includes: 'sent through Quick Capture',
           submitHook: false,
@@ -225,7 +225,7 @@ async function main() {
       const successor = await waitFor(() => transcripts(crewHome).find(file => file.name !== captured.name && file.text.includes('CREW_READY')), 'successor wake');
       runner.assert(instructions(successor.text, 'claude').includes('PROMPT_TEST_LETTER'), 'successor receives the filed letter');
       for (const file of [captured, successor]) {
-        const turns = transcriptTurns(file.text).filter(turn => turn.role === 'user' && turn.text.includes('You have been woken'));
+        const turns = transcriptTurns(file.text).filter(turn => turn.role === 'user' && turn.text.includes('This is a new session'));
         runner.assert(turns.length === 1, 'opening wake is delivered once', { file: file.name, count: turns.length });
       }
       runner.writeText('crew-first.jsonl', transcripts(crewHome).find(file => file.name === captured.name).text);

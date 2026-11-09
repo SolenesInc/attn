@@ -34,7 +34,7 @@ func expectConflict(t *testing.T, err error) {
 }
 func newDraft(t *testing.T, e *editor) sharedDraft {
 	t.Helper()
-	return operate(t, e, operationRequest{Op: "draft-create", Title: "Clarify wake", Focus: &focus{Event: "crew/wake", Values: prompts.Values{}}}).(sharedDraft)
+	return operate(t, e, operationRequest{Op: "draft-create", Title: "Clarify wake", Focus: &focus{Event: "crew/new-session", Values: prompts.Values{}}}).(sharedDraft)
 }
 func sourceTest(t *testing.T, e *editor, name string) source {
 	t.Helper()
@@ -89,7 +89,7 @@ func TestHeadlessDiscoveryUsesCheckoutDeclarations(t *testing.T) {
 func TestConcurrentDraftWritersAndIndependentFiles(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/v2/wake.md"
+	name := "content/crew/v2/new-session.md"
 	original := sourceTest(t, e, name)
 	start := make(chan struct{})
 	results := make(chan error, 2)
@@ -135,7 +135,7 @@ func TestConcurrentDraftWritersAndIndependentFiles(t *testing.T) {
 func TestReviewSurvivesEditsAndRestartWithAnchoredFeedback(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/v2/wake.md"
+	name := "content/crew/v2/new-session.md"
 	d = putTest(t, e, d, name, "Review this exact sentence.\n")
 	reviewed := operate(t, e, operationRequest{Op: "review-create", DraftID: d.ID, Revision: d.Revision}).(review)
 	d = operate(t, e, operationRequest{Op: "draft-get", ID: d.ID}).(sharedDraft)
@@ -169,7 +169,7 @@ func TestReviewSurvivesEditsAndRestartWithAnchoredFeedback(t *testing.T) {
 func TestDraftApplyValidatesWholeChangeAndRejectsDiskConflicts(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	a, b := "content/crew/v2/wake.md", "content/crew/heartbeat.md"
+	a, b := "content/crew/v2/new-session.md", "content/crew/heartbeat.md"
 	before := sourceTest(t, e, a)
 	d = putTest(t, e, d, a, "Valid new wake.")
 	d = putTest(t, e, d, b, "{{undeclared}}")
@@ -205,7 +205,7 @@ func TestInterruptedApplyRecovery(t *testing.T) {
 		t.Run(state, func(t *testing.T) {
 			e := testEditor(t)
 			d := newDraft(t, e)
-			a, b := "content/crew/v2/wake.md", "content/crew/heartbeat.md"
+			a, b := "content/crew/v2/new-session.md", "content/crew/heartbeat.md"
 			d = putTest(t, e, d, a, "After A")
 			d = putTest(t, e, d, b, "After B")
 			tx := applyTransaction{Files: map[string]fileWrite{a: {sourceTest(t, e, a).Text, "After A", 0644}, b: {sourceTest(t, e, b).Text, "After B", 0644}}, Draft: d}
@@ -290,10 +290,10 @@ func TestScenarioProducerDiffAndFrozenScenarios(t *testing.T) {
 
 func TestScenarioSaveAndDefinitionsRevision(t *testing.T) {
 	e := testEditor(t)
-	s := operate(t, e, operationRequest{Op: "scenario-save", ID: "wake", Event: "crew/wake", Values: prompts.Values{}}).(scenario)
-	_, err := e.operation(t.Context(), operationRequest{Op: "scenario-save", ID: s.ID, Event: "crew/wake", Values: prompts.Values{}})
+	s := operate(t, e, operationRequest{Op: "scenario-save", ID: "wake", Event: "crew/new-session", Values: prompts.Values{}}).(scenario)
+	_, err := e.operation(t.Context(), operationRequest{Op: "scenario-save", ID: s.ID, Event: "crew/new-session", Values: prompts.Values{}})
 	expectConflict(t, err)
-	operate(t, e, operationRequest{Op: "scenario-save", ID: s.ID, Event: "crew/wake", Expect: s.Revision, Values: prompts.Values{}})
+	operate(t, e, operationRequest{Op: "scenario-save", ID: s.ID, Event: "crew/new-session", Expect: s.Revision, Values: prompts.Values{}})
 	snapshot, err := e.snapshot()
 	if err != nil {
 		t.Fatal(err)
@@ -309,7 +309,7 @@ func TestScenarioSaveAndDefinitionsRevision(t *testing.T) {
 	data, _ := json.Marshal(m)
 	writeTest(t, e, prompts.ManifestPath, string(data))
 	writeTest(t, e, "new.go", "package prompts\n")
-	code, out := runTestCLI(t, e, "", "inspect", "crew/wake")
+	code, out := runTestCLI(t, e, "", "inspect", "crew/new-session")
 	if code != 2 || !strings.Contains(out, "composition declarations changed in Go") {
 		t.Fatalf("stale definitions unnoticed: %d %s", code, out)
 	}
@@ -341,7 +341,7 @@ func TestWatchReceivesConcurrentFeedback(t *testing.T) {
 
 func TestStateAndScenarioPathsStayInsideCheckout(t *testing.T) {
 	e := testEditor(t)
-	for _, q := range []operationRequest{{Op: "draft-get", ID: "../../outside"}, {Op: "review-get", ID: "../outside"}, {Op: "scenario-save", ID: "../outside", Event: "crew/wake"}} {
+	for _, q := range []operationRequest{{Op: "draft-get", ID: "../../outside"}, {Op: "review-get", ID: "../outside"}, {Op: "scenario-save", ID: "../outside", Event: "crew/new-session"}} {
 		if _, err := e.operation(t.Context(), q); err == nil {
 			t.Fatalf("accepted path traversal: %+v", q)
 		}
@@ -403,24 +403,24 @@ func TestRefreshReloadsChangedGoDeclarationsWithoutRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if strings.Contains(string(data), `On("wake",`) {
+		if strings.Contains(string(data), `On("new-session",`) {
 			declaration = filepath.Base(name)
-			writeTest(t, e, declaration, strings.Replace(string(data), `On("wake",`, `On("wake-renamed",`, 1))
+			writeTest(t, e, declaration, strings.Replace(string(data), `On("new-session",`, `On("new-session-renamed",`, 1))
 			break
 		}
 	}
 	if declaration == "" {
 		t.Fatal("wake declaration missing")
 	}
-	if _, err := e.operation(t.Context(), operationRequest{Op: "inspect", Event: "crew/wake"}); err == nil {
+	if _, err := e.operation(t.Context(), operationRequest{Op: "inspect", Event: "crew/new-session"}); err == nil {
 		t.Fatal("stale catalog accepted")
 	}
 	operate(t, e, operationRequest{Op: "refresh"})
-	result := operate(t, e, operationRequest{Op: "inspect", Event: "crew/wake-renamed", Values: prompts.Values{}}).(map[string]any)
+	result := operate(t, e, operationRequest{Op: "inspect", Event: "crew/new-session-renamed", Values: prompts.Values{}}).(map[string]any)
 	if result["result"].(prompts.Result).Text == "" {
 		t.Fatal("refreshed event not rendered")
 	}
-	if _, err := e.operation(t.Context(), operationRequest{Op: "inspect", Event: "crew/wake"}); err == nil {
+	if _, err := e.operation(t.Context(), operationRequest{Op: "inspect", Event: "crew/new-session"}); err == nil {
 		t.Fatal("old event survived refresh")
 	}
 	writeTest(t, e, declaration, "invalid Go syntax")
@@ -432,7 +432,7 @@ func TestRefreshReloadsChangedGoDeclarationsWithoutRestart(t *testing.T) {
 func TestDraftSyncAfterCompositionChangesAndSourceRemoval(t *testing.T) {
 	e := testEditor(t)
 	d := newDraft(t, e)
-	name := "content/crew/v2/wake.md"
+	name := "content/crew/v2/new-session.md"
 	d = putTest(t, e, d, name, "Keep this edited source.")
 	snapshot, err := e.snapshot()
 	if err != nil {
@@ -445,17 +445,17 @@ func TestDraftSyncAfterCompositionChangesAndSourceRemoval(t *testing.T) {
 	for i := range manifest.Recipients {
 		if manifest.Recipients[i].ID == "crew" {
 			for j := range manifest.Recipients[i].Events {
-				if manifest.Recipients[i].Events[j].ID == "wake" {
-					manifest.Recipients[i].Events[j].ID = "wake-new"
+				if manifest.Recipients[i].Events[j].ID == "new-session" {
+					manifest.Recipients[i].Events[j].ID = "new-session-new"
 				}
 			}
 		}
 	}
 	manifestTest(t, e, manifest.Recipients...)
-	_, err = e.operation(t.Context(), operationRequest{Op: "inspect", DraftID: d.ID, Event: "crew/wake-new"})
+	_, err = e.operation(t.Context(), operationRequest{Op: "inspect", DraftID: d.ID, Event: "crew/new-session-new"})
 	expectConflict(t, err)
 	d = operate(t, e, operationRequest{Op: "draft-sync", ID: d.ID, Revision: d.Revision}).(sharedDraft)
-	inspected := operate(t, e, operationRequest{Op: "inspect", DraftID: d.ID, Event: "crew/wake-new", Values: prompts.Values{}}).(map[string]any)
+	inspected := operate(t, e, operationRequest{Op: "inspect", DraftID: d.ID, Event: "crew/new-session-new", Values: prompts.Values{}}).(map[string]any)
 	if inspected["result"].(prompts.Result).Text != "Keep this edited source." {
 		t.Fatal("sync lost draft text")
 	}
@@ -463,7 +463,7 @@ func TestDraftSyncAfterCompositionChangesAndSourceRemoval(t *testing.T) {
 		if manifest.Recipients[i].ID == "crew" {
 			events := []prompts.Event{}
 			for _, event := range manifest.Recipients[i].Events {
-				if event.ID != "wake-new" {
+				if event.ID != "new-session-new" {
 					events = append(events, event)
 				}
 			}

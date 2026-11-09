@@ -28,7 +28,7 @@ func TestCrewReachesSharedCodexWithoutHarnessMemory(t *testing.T) {
 				}
 			})
 			run := w.Launched(string(day.SessionID))
-			if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
+			if got, want := run.Prompted(), prompts.RenderText("crew", "new-session", nil); got != want {
 				t.Fatalf("wake prompt = %q, want %q", got, want)
 			}
 			testworld.AwaitSession(app, string(day.SessionID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
@@ -51,7 +51,7 @@ func TestCrewDisablesClaudeMemoryAtLaunch(t *testing.T) {
 			setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
 			woken := wakeCrew(t, cli, "trellis", "")
 			run := w.Launched(string(woken.SessionID))
-			if got, want := run.Prompted(), prompts.RenderText("crew", "wake", nil); got != want {
+			if got, want := run.Prompted(), prompts.RenderText("crew", "new-session", nil); got != want {
 				t.Fatalf("wake prompt = %q, want %q", got, want)
 			}
 			if !strings.Contains(strings.Join(run.Argv, "\n"), "## How you work") {

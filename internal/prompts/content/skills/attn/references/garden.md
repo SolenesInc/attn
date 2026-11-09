@@ -190,7 +190,7 @@ reminder to the user.
 
 A seed on standby waits for mail without a session held open for it. The seed's
 tender puts it on standby with a note that says what to do next. When mail
-reaches the seed, attn wakes the tender and hands over the note.
+reaches the seed, attn resumes the tender's session, or starts one for a crew member, and hands over the note.
 
     attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."
     attn seed standby s-7k3f9m -m "Check the rollout of the new build" --close
@@ -203,27 +203,27 @@ with `attn agent msg <seed-id>`, the answer to an ask about the seed, and an
 update from a PR watch that addresses the seed.
 
 When seed mail arrives for a seed on standby and the tender's session is closed,
-attn resumes that session as itself, or wakes the crew member that tends the
-seed. A session the user closed wakes the same way. A closed session whose seed
+attn resumes that session as itself, or starts a session for the crew member that tends the
+seed. A session the user closed resumes the same way. A closed session whose seed
 is not on standby stays closed, and its mail waits for the next tender.
 
-The woken session reads the mail and your standby note. The user may not be
+The resumed session reads the mail and your standby note. The user may not be
 watching, so it ends its turn one of four ways: it puts the seed on standby
 again, harvests it, asks the user with `attn ask`, or reports.
 
 Standby ends once the tender has read all of the seed's mail with
-`attn agent inbox`, whether the session was open or woken. Input that attn types
+`attn agent inbox`, whether the session was open or resumed. Input that attn types
 into the session, such as the user's answer to an ask, counts as read. Standby
 also ends when the seed is parked, harvested or withered, and when the seed gets
 a new tender. If the session closes before you read the mail, the seed stays on
-standby and the mail wakes it again at once. A new standby replaces the note.
+standby and the mail resumes it again at once. A new standby replaces the note.
 Write down anything the user approved up front, such as "merge once approved".
-The session that wakes may have compacted its conversation, and the note is what
+The session that resumes may have compacted its conversation, and the note is what
 it reads first.
 
 `attn seed ls --standby` lists the seeds on standby. Each row names the pull
 requests the seed's mailbox watches with their readiness, the seed's reminder,
-and why attn cannot wake the tender when a wake is blocked:
+and why attn cannot resume the tender when it is blocked:
 
     s-7k3f9m  origin-check  growing  …  Enforce delivery origin  [standby: owner/repo#123 ready, reminder 2026-11-05 14:20]
     s-2b8n4q  zip-retry     growing  …  Retry zip unpack         [standby: owner/repo#118 open · wake blocked: worktree removed]
@@ -233,30 +233,30 @@ does. attn refuses it while the seed has unread mail and names
 `attn agent inbox`. Read the mail, then run the command again.
 
 `--close --compact` compacts your conversation before the close, as
-`attn agent close --self --compact` does, so the session that wakes resumes a
+`attn agent close --self --compact` does, so the next run resumes a
 shorter conversation. Closing a session (`attn skill --reference converse-and-observe`)
 says how it works and which sessions can compact. Seed mail you read before the
 compact ends the standby, and you stay open. Seed mail you leave unread does not
-cancel the close: the session compacts and closes, and the unread mail wakes it
+cancel the close: the session compacts and closes, and the unread mail resumes it
 again. Seed mail that arrives during the compact waits until the session has
-closed, then wakes it as above. When attn refuses `--compact`, it leaves standby
+closed, then resumes it as above. When attn refuses `--compact`, it leaves standby
 unset, so run the command again without it.
 
-attn delivers a woken Claude session's mail through the Claude mod and never
+attn delivers a resumed Claude session's mail through the Claude mod and never
 types it.
 
-The profile setting `garden.tender_wake` decides which mail wakes a closed
-session. `any` (the default) wakes for all seed mail. `watches` wakes for PR
-watch updates and reminders only. `off` wakes no session, and the mail waits in
-the inbox. A crew member that tends the seed wakes under every value.
+The profile setting `garden.tender_wake` decides which mail resumes a closed
+session. `any` (the default) resumes for all seed mail. `watches` resumes for PR
+watch updates and reminders only. `off` resumes no session, and the mail waits in
+the inbox. A crew member that tends the seed gets a session under every value.
 `attn settings set garden.tender_wake watches` changes it, and the user can
 change it in Settings.
 
-attn allows 48 wakes per seed in 24 hours. When it cannot wake the tender, it
+attn allows 48 tender resumes per seed in 24 hours. When it cannot resume the tender, it
 adds a note to the seed that names the reason and the item, and it sends the
 user a critical notification that opens the seed. The reasons are a removed
 worktree, a missing conversation, a Claude session whose mod does not poll
-after the resume, and the 48-wake limit. The mail stays unread. You can offer
+after the resume, and the limit of 48. The mail stays unread. You can offer
 standby to the user when a seed waits on someone else.
 
 ## Artifacts

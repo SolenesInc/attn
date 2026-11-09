@@ -51,7 +51,7 @@ func TestCrewV2PromptCompatibility(t *testing.T) {
 		"first-day": firstDay.Block(),
 		"existing":  existing.Block(),
 	}
-	for _, event := range []string{"wake", "successor"} {
+	for _, event := range []string{"new-session", "successor"} {
 		out[event] = prompts.RenderText("crew", event, nil)
 	}
 	prompttest.Equal(t, "crew-v2", out)

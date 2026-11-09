@@ -49,12 +49,12 @@ func manifestTest(t *testing.T, e *editor, recipients ...prompts.Recipient) {
 func TestComparisonUsesEachRevisionsCompositionAndDrafts(t *testing.T) {
 	e := testEditor(t)
 	gitTest(t, e, "init", "-b", "next")
-	path := "content/crew/v2/wake.md"
+	path := "content/crew/v2/new-session.md"
 	writeTest(t, e, path, "Wake from the base.\n")
 	writeTest(t, e, "content/removed.md", "A retired event.\n")
 	flag := prompts.FlagField("old_flag", "Only the base has this input")
 	manifestTest(t, e, prompts.Recipient{ID: "crew", Events: []prompts.Event{
-		prompts.On("wake", "launch_instructions", "Old composition", prompts.Compose(
+		prompts.On("new-session", "launch_instructions", "Old composition", prompts.Compose(
 			prompts.When(prompts.Enabled(flag), prompts.Use("old.wake", path)),
 			prompts.Input(prompts.TextField("base_suffix", "A base-only input")))),
 		prompts.On("retired", "user_message", "Removed", prompts.Document("retired", "content/removed.md")),
@@ -67,7 +67,7 @@ func TestComparisonUsesEachRevisionsCompositionAndDrafts(t *testing.T) {
 	if w.Code != 200 || !strings.Contains(w.Body.String(), base) {
 		t.Fatalf("base: %d %s", w.Code, w.Body)
 	}
-	body := editRequest{BaseCommit: base, Recipient: "crew", Event: "wake", Path: path,
+	body := editRequest{BaseCommit: base, Recipient: "crew", Event: "new-session", Path: path,
 		Values: prompts.Values{"old_flag": "true", "base_suffix": "Base tail", "current_only": "ignored"},
 		Drafts: map[string]string{path: "Wake from the unsaved draft.\n"}}
 	w = request(t, e, "compare", body)
@@ -96,7 +96,7 @@ func TestComparisonUsesEachRevisionsCompositionAndDrafts(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"base":{"status":"absent"}`) {
 		t.Fatalf("added event: %s", w.Body)
 	}
-	body.Event, body.Path = "wake", path
+	body.Event, body.Path = "new-session", path
 	body.Drafts[path] = "{{invalid}}"
 	w = request(t, e, "compare", body)
 	if !strings.Contains(w.Body.String(), `"current":{"status":"invalid"`) || !strings.Contains(w.Body.String(), "+{{invalid}}") {
@@ -115,10 +115,10 @@ func TestBaseModesPinCommitsAndReportMissingManifests(t *testing.T) {
 	}
 	ancestor := commitTest(t, e)
 	gitTest(t, e, "checkout", "-b", "feature")
-	writeTest(t, e, "content/crew/v2/wake.md", "Feature\n")
+	writeTest(t, e, "content/crew/v2/new-session.md", "Feature\n")
 	head := commitTest(t, e)
 	gitTest(t, e, "checkout", "next")
-	writeTest(t, e, "content/crew/v2/wake.md", "New base tip\n")
+	writeTest(t, e, "content/crew/v2/new-session.md", "New base tip\n")
 	tip := commitTest(t, e)
 	gitTest(t, e, "checkout", "feature")
 	for mode, want := range map[string]string{"merge-base": ancestor, "tip": tip} {
@@ -130,10 +130,10 @@ func TestBaseModesPinCommitsAndReportMissingManifests(t *testing.T) {
 	gitTest(t, e, "branch", "-f", "next", head)
 	manifestTest(t, e, prompts.Builtin().Recipients()...)
 	base, err := e.readBase(context.Background(), tip)
-	if err != nil || base.Sources["content/crew/v2/wake.md"].Text != "New base tip\n" {
+	if err != nil || base.Sources["content/crew/v2/new-session.md"].Text != "New base tip\n" {
 		t.Fatalf("moving ref changed pinned revision: %+v / %v", base, err)
 	}
-	w := request(t, e, "compare", editRequest{BaseCommit: ancestor, Recipient: "crew", Event: "wake", Path: "content/crew/v2/wake.md"})
+	w := request(t, e, "compare", editRequest{BaseCommit: ancestor, Recipient: "crew", Event: "new-session", Path: "content/crew/v2/new-session.md"})
 	if w.Code != 200 || !strings.Contains(w.Body.String(), `"status":"unavailable"`) || !strings.Contains(w.Body.String(), "+Feature") {
 		t.Fatalf("legacy source comparison: %d %s", w.Code, w.Body)
 	}

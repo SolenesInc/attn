@@ -49,7 +49,7 @@ Attn types your message into the agent's conversation as your own message. The
 message says you sent it through Quick Capture and that you are not looking at
 the session right now.
 
-A sleeping crew member, the Chief included, wakes for the message. Attn holds a message back for 30
+A crew member between sessions, the Chief included, gets a new session for the message. Attn holds a message back for 30
 seconds after your last keystroke in that agent's terminal, so it never lands on
 top of what you are typing.
 

@@ -162,9 +162,10 @@ garden                  a profile's issue tracker
    │  └─ verdict (at most 1)  confirmed or rejected
    └─ edge (0..n)       blocks or discovered-from
 tend                    claim a seed; like assigning a ticket to yourself
-tender wake             attn resumes the closed session that tends a seed on
-                        standby, or wakes the crew member that tends it, to read
-                        the seed's items; like paging whoever is on call
+tender resume           attn resumes the closed session that tends a seed on
+                        standby, or starts a session for the crew member that
+                        tends it, to read the seed's items; like paging whoever
+                        is on call
 seed bookmark           where a seed read stopped; a read --since a seed
                         bookmark returns only what was saved after it
 plot                    an epic: a seed with child seeds
@@ -181,9 +182,12 @@ crew member             an agent with a permanent identity
 │                       next sessions; like a shift handoff
 └─ session (at most 1)  the member's current session
 chief                   the crew member that coordinates one profile
-asleep                  the member has no session, until something wakes them
-awake                   the member has a session
-wake                    starts a session for the member
+in session              the member has a session
+between sessions        the member has no session
+start                   attn starts a session for the member
+mail-started session    a session attn started because items arrived for the
+                        member without the user
+close                   the member files a letter and its session ends
 apply                   puts a member's saved settings into their current
                         session
 ```
@@ -316,6 +320,12 @@ Temporary debt. Read the old name as the new term. Never write the old name.
 - nudge (inbox) → ring
 - queue mode → queue flow
 - wake (a snooze) → unsnooze
+- wake (a crew member) → start
+- sleep (a crew member) → close
+- asleep → between sessions
+- awake → in session
+- autosleep, auto-sleep → close when the user is away
+- tender wake → tender resume
 - hold (a seed) → claim
 - handoff (crew) → letter
 - day (crew) → session

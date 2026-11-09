@@ -103,7 +103,7 @@ func TestACrewDayIsAskedOnceToCloseWhenTheUserIsAway(t *testing.T) {
 		day.term.OnSubmit(nil)
 		w.advance(56 * time.Minute)
 		items := readInbox(t, day.cli, day.id, 0).Items
-		if len(items) != 1 || items[0].Content != prompts.RenderText("crew", "sleep-away", prompts.Values{}) {
+		if len(items) != 1 || items[0].Content != prompts.RenderText("crew", "close-away", prompts.Values{}) {
 			t.Fatalf("with the user away the day's inbox holds %q, want one ask to close its day", inboxContents(items))
 		}
 		w.advance(3 * time.Minute)
@@ -116,7 +116,7 @@ func TestACrewDayIsAskedOnceToCloseWhenTheUserIsAway(t *testing.T) {
 func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		_, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
-		sleepAsk := prompts.RenderText("crew", "sleep-away", prompts.Values{})
+		sleepAsk := prompts.RenderText("crew", "close-away", prompts.Values{})
 
 		w.advance(54 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {

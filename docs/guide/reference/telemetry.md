@@ -143,7 +143,7 @@ profile the vent belongs to.
 
 ### Quiet stop verdicts
 
-A `quiet_stop` record measures whether agents that a notification woke leave
+A `quiet_stop` record measures whether agents whose run a notification started leave
 results you never see. With `analytics.enabled` on, Attn makes one call per quiet
 stop to the small model that judges your sessions' states, through the session's
 harness or, for a harness with no classifier, Claude Code. The call sends the last
