@@ -55,6 +55,7 @@ type ConversationEvidence struct {
 	LastClassifier    *Observation
 	TurnOpen          bool
 	TurnEverOpened    bool
+	TurnSince         time.Time
 	ToolOpen          bool
 	BackgroundWork    bool
 	PendingCron       bool

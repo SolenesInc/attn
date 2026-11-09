@@ -324,6 +324,9 @@ func (m *Monitor) RecordBracket(state string) {
 	m.RecordEvidence(at, func(e *Evidence) {
 		switch state {
 		case protocol.StateWorking:
+			if !e.TurnOpen {
+				e.TurnSince = at
+			}
 			e.TurnOpen = true
 			e.TurnEverOpened = true
 			if e.InitialPromptOwed {
@@ -391,7 +394,7 @@ func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Ti
 	if at.IsZero() {
 		at = observedAt
 	}
-	m.RecordEvidence(observedAt, func(e *Evidence) {
+	m.UpdateEvidence(func(e *Evidence) bool { return at.Before(e.TurnSince) }, movedAt(observedAt, func(e *Evidence) {
 		m.input.userSubmit = false
 		recordAgentStopped(e)
 		e.LastHarnessEvent = &sessionstate.Observation{
@@ -400,7 +403,7 @@ func (m *Monitor) RecordTurnAborted(detail string, abortedAt, observedAt time.Ti
 			Detail:     detail,
 			ObservedAt: at,
 		}
-	})
+	}))
 }
 
 func (m *Monitor) RecordTurnEnded(classifies bool) {

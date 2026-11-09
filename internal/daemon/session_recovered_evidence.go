@@ -14,6 +14,9 @@ func (d *Daemon) seedRecoveredEvidence(sessionID protocol.SessionID, existing *p
 	if d == nil || existing == nil {
 		return
 	}
+	if since, ok := parseSessionStateSince(existing); ok {
+		d.sessionMonitor(sessionID).UpdateEvidence(nil, func(e *sessionmonitor.Evidence) { e.TurnSince = since })
+	}
 	var seeds []func(*sessionmonitor.Evidence)
 	var at time.Time
 	if route, ok := d.recoveredApprovalRoute(sessionID); ok {
