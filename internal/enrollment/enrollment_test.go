@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestHomePairingAndRelease(t *testing.T) {
+func TestHomePairingRefusesASecondHome(t *testing.T) {
 	for _, ensured := range []bool{false, true} {
 		t.Run(map[bool]string{false: "fresh", true: "standalone"}[ensured], func(t *testing.T) {
 			root := t.TempDir()
@@ -34,14 +34,8 @@ func TestHomePairingAndRelease(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), first) || !strings.Contains(err.Error(), second) || !strings.Contains(err.Error(), "attn enrollment leave") {
 				t.Fatalf("second home: %v", err)
 			}
-			if _, err := enrollment.Leave(root, ""); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := enrollment.RecordHome(root, second, "second"); err != nil {
-				t.Fatal(err)
-			}
 			status, err = enrollment.Ensure(root, own)
-			if err != nil || status.HomeDaemonID != second {
+			if err != nil || status.HomeDaemonID != first {
 				t.Fatalf("restart: %+v %v", status, err)
 			}
 		})

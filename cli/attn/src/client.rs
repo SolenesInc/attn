@@ -344,18 +344,23 @@ impl<'a> Client<'a> {
 
     fn exchange(&self, frame: &[u8]) -> Result<Vec<u8>, SendError> {
         let reply = self.round_trip(frame)?;
-        let head: ReplyHead = serde_json::from_slice(&reply)
-            .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
-        if head.ok {
-            return Ok(reply);
-        }
-        Err(SendError {
-            message: format!("daemon error: {}", head.error.unwrap_or_default()),
-            refusal: Some(
-                head.refusal
-                    .unwrap_or_else(|| REFUSAL_UNCLASSIFIED.to_string()),
-            ),
+        check_reply(reply)
+    }
+
+    pub fn open_stream<M: Serialize>(&self, message: &M) -> Result<ReplyStream, SendError> {
+        let frame = self.frame(message)?;
+        let mut connection = self.connect()?;
+        connection.write_all(&frame).map_err(|error| {
+            SendError::plain(format!("send message: {}", os_error_text(&error)))
+        })?;
+        Ok(ReplyStream {
+            connection,
+            buffer: Vec::new(),
         })
+    }
+
+    pub fn is_running(&self) -> bool {
+        UnixStream::connect(&self.socket_path).is_ok()
     }
 
     pub fn send<M: Serialize>(&self, message: &M) -> Result<(), SendError> {
@@ -383,6 +388,50 @@ impl<'a> Client<'a> {
             .and_then(|()| connection.write_all(&frame))
             .and_then(|()| io::copy(&mut connection, &mut io::sink()).map(|_| ()));
         exchange.map_err(|error| SendError::plain(os_error_text(&error)))
+    }
+}
+
+fn check_reply(reply: Vec<u8>) -> Result<Vec<u8>, SendError> {
+    let head: ReplyHead = serde_json::from_slice(&reply)
+        .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
+    if head.ok {
+        return Ok(reply);
+    }
+    Err(SendError {
+        message: format!("daemon error: {}", head.error.unwrap_or_default()),
+        refusal: Some(
+            head.refusal
+                .unwrap_or_else(|| REFUSAL_UNCLASSIFIED.to_string()),
+        ),
+    })
+}
+
+pub struct ReplyStream {
+    connection: UnixStream,
+    buffer: Vec<u8>,
+}
+
+impl ReplyStream {
+    pub fn next_reply(&mut self) -> Result<Reply, SendError> {
+        let value = self.next_value().map_err(|error| {
+            SendError::plain(format!("receive response: {}", reply_read_text(&error)))
+        })?;
+        check_reply(value).map(|raw| Reply { raw })
+    }
+
+    fn next_value(&mut self) -> io::Result<Vec<u8>> {
+        let mut chunk = [0_u8; 16 * 1024];
+        loop {
+            if let Some(at) = JsonValueEnd::default().scan(&self.buffer) {
+                return Ok(self.buffer.drain(..at).collect());
+            }
+            match self.connection.read(&mut chunk) {
+                Ok(0) => return Err(io::Error::from(io::ErrorKind::UnexpectedEof)),
+                Ok(read) => self.buffer.extend_from_slice(&chunk[..read]),
+                Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                Err(error) => return Err(error),
+            }
+        }
     }
 }
 

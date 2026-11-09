@@ -1,6 +1,7 @@
 use super::checks::{
     plot_tally, render_seed_checks, seed_or_plot_tally, tally_long, tally_short, unsettled,
 };
+use crate::commands::support::or_dash;
 use attn::garden::section::id_ranges;
 use attn::go::duration;
 use attn::go::quote::quote;
@@ -136,14 +137,6 @@ fn table(rows: &str) -> String {
 
 fn q(text: &str) -> String {
     quote(text.as_bytes())
-}
-
-pub fn or_dash(value: &str) -> String {
-    if value.trim().is_empty() {
-        "-".to_string()
-    } else {
-        value.to_string()
-    }
 }
 
 fn who_label(reference: &str, name: &str) -> String {

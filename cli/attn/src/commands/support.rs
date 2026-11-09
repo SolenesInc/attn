@@ -107,3 +107,25 @@ pub fn daemon_message(error: &SendError) -> String {
         None => message,
     }
 }
+
+pub fn parse_or_exit(
+    run: &mut Run<'_>,
+    flags: &mut FlagSet<'_>,
+    args: &[String],
+) -> Result<(), Stop> {
+    match parse_flags(run, flags, args) {
+        Ok(()) => Ok(()),
+        Err(error) => {
+            eprint!("{}", flags.output());
+            Err(Stop(u8::from(error != FlagError::Help) * 2))
+        }
+    }
+}
+
+pub fn or_dash(value: &str) -> String {
+    if value.trim().is_empty() {
+        "-".to_string()
+    } else {
+        value.to_string()
+    }
+}

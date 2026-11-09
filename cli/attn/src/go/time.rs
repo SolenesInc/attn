@@ -1,5 +1,6 @@
 use crate::go::duration::time_quote;
 use std::sync::Once;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const RFC3339: &str = "2006-01-02T15:04:05Z07:00";
 const RFC3339_NANO: &str = "2006-01-02T15:04:05.999999999Z07:00";
@@ -29,6 +30,17 @@ impl Time {
             rest: value,
         }
         .parse()
+    }
+
+    pub fn now_utc() -> Self {
+        let elapsed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        Self {
+            unix_seconds: i64::try_from(elapsed.as_secs()).unwrap_or(i64::MAX),
+            nanos: elapsed.subsec_nanos(),
+            offset_seconds: 0,
+        }
     }
 
     pub fn unix_nanos(&self) -> i128 {

@@ -143,56 +143,6 @@ func Load(dataRoot string) (Status, error) {
 	return Status{DaemonID: daemonID, HomeDaemonID: record.HomeDaemonID, HomeName: record.HomeName}, nil
 }
 
-func Leave(dataRoot, home string) (Result, error) {
-	daemonID, err := ReadDaemonID(dataRoot)
-	if err != nil {
-		return Result{}, err
-	}
-
-	recordPath := filepath.Join(dataRoot, RecordFileName)
-	unlock, err := lockPath(recordPath)
-	if err != nil {
-		return Result{}, err
-	}
-	defer unlock()
-
-	record, err := readRecord(recordPath)
-	if err != nil && !errors.Is(err, ErrNoRecord) {
-		return Result{}, err
-	}
-	previous := ""
-	if err == nil {
-		previous = record.HomeDaemonID
-	}
-	if home != "" && previous != "" && previous != daemonID && previous != home {
-		return Result{
-			Status:       "kept",
-			DaemonID:     daemonID,
-			HomeDaemonID: previous,
-			HomeName:     record.HomeName,
-			Message:      fmt.Sprintf("enrolled to home %s, not %s; kept the enrollment", previous, home),
-		}, nil
-	}
-	if previous == daemonID {
-		return Result{
-			Status:       "unchanged",
-			DaemonID:     daemonID,
-			HomeDaemonID: daemonID,
-			Message:      "not enrolled to another daemon",
-		}, nil
-	}
-	if err := writeRecord(recordPath, Record{HomeDaemonID: daemonID, RecordedAt: nowStamp()}); err != nil {
-		return Result{}, err
-	}
-	return Result{
-		Status:       "left",
-		DaemonID:     daemonID,
-		HomeDaemonID: daemonID,
-		PreviousHome: previous,
-		Message:      "no longer enrolled to another daemon",
-	}, nil
-}
-
 func RecordHome(dataRoot, homeID, homeName string) (Status, error) {
 	if !ValidDaemonID(homeID) {
 		return Status{}, fmt.Errorf("invalid home daemon id %q", homeID)

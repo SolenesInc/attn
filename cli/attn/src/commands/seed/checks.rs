@@ -1,6 +1,7 @@
 use super::Session;
-use super::render::{self, actor_label, or_dash, plural_rang};
+use super::render::{self, actor_label, plural_rang};
 use super::{Stop, usage_error};
+use crate::commands::support::or_dash;
 use attn::garden::valid_check_id;
 use attn::go::quote::quote;
 use attn::go::time::Time;

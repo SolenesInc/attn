@@ -1,5 +1,6 @@
 use crate::paths::{clean, dir, join, os_error_text};
 use attn::go::quote::quote;
+use serde::Serialize;
 use serde_json::Value;
 use std::cell::OnceCell;
 use std::fmt::Write as _;
@@ -13,6 +14,7 @@ const FNV_OFFSET: u32 = 2_166_136_261;
 const FNV_PRIME: u32 = 16_777_619;
 const DERIVED_PORT_BASE: u32 = 20_000;
 const DERIVED_PORT_SPAN: u32 = 9_849;
+const DERIVED_OFFSET_SPAN: u32 = 1_000;
 const DEFAULT_PORT: &str = "9849";
 const DEV_PORT: &str = "29849";
 
@@ -25,6 +27,90 @@ pub fn validate_instance_name(name: &str) -> Result<(), String> {
         "invalid instance name {}: must match {INSTANCE_PATTERN_TEXT}",
         quote(name.as_bytes())
     ))
+}
+
+pub fn normalize_instance_name(name: &str) -> Result<String, String> {
+    validate_instance_name(name)?;
+    let canonical = name.trim().to_lowercase();
+    Ok(if canonical == "default" {
+        String::new()
+    } else {
+        canonical
+    })
+}
+
+fn derivation_name(instance: &str) -> String {
+    let name = instance.trim().to_lowercase();
+    if name == "default" || !matches_instance_pattern(&name) {
+        String::new()
+    } else {
+        name
+    }
+}
+
+fn lock_label(instance: &str) -> String {
+    let name = instance.trim().to_lowercase();
+    if matches_instance_pattern(&name) {
+        name
+    } else {
+        "default".to_string()
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedInstance {
+    pub instance: String,
+    pub label: String,
+    pub data_dir: String,
+    pub socket: String,
+    pub db_path: String,
+    pub ws_port: String,
+    pub bundle_id: String,
+    pub app_name: String,
+    pub app_path: String,
+    pub app_executable: String,
+    pub app_daemon: String,
+    pub app_cli: String,
+    #[serde(rename = "appLocalDataDir")]
+    pub app_local_data: String,
+    pub app_lock_path: String,
+    pub deep_link_scheme: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub desktop_entry: String,
+    #[serde(rename = "e2eDaemonPort")]
+    pub e2e_daemon_port: String,
+    #[serde(rename = "e2eVitePort")]
+    pub e2e_vite_port: String,
+    #[serde(rename = "mockGitHubPort")]
+    pub mock_github_port: String,
+}
+
+impl ResolvedInstance {
+    pub fn field(&self, key: &str) -> Option<&str> {
+        Some(match key {
+            "instance" => &self.instance,
+            "label" => &self.label,
+            "dataDir" => &self.data_dir,
+            "socket" => &self.socket,
+            "dbPath" => &self.db_path,
+            "wsPort" => &self.ws_port,
+            "bundleId" => &self.bundle_id,
+            "appName" => &self.app_name,
+            "appPath" => &self.app_path,
+            "appExecutable" => &self.app_executable,
+            "appDaemon" => &self.app_daemon,
+            "appCli" => &self.app_cli,
+            "appLocalDataDir" => &self.app_local_data,
+            "appLockPath" => &self.app_lock_path,
+            "deepLinkScheme" => &self.deep_link_scheme,
+            "desktopEntry" => &self.desktop_entry,
+            "e2eDaemonPort" => &self.e2e_daemon_port,
+            "e2eVitePort" => &self.e2e_vite_port,
+            "mockGitHubPort" => &self.mock_github_port,
+            _ => return None,
+        })
+    }
 }
 
 pub type Getenv<'a> = &'a dyn Fn(&str) -> String;
@@ -99,7 +185,7 @@ impl<'a> Paths<'a> {
         (!home.is_empty()).then_some(home)
     }
 
-    fn attn_dir(&self) -> String {
+    pub fn attn_dir(&self) -> String {
         let data_dir = self.trimmed("ATTN_DATA_DIR");
         if !data_dir.is_empty() {
             return clean(&data_dir);
@@ -128,6 +214,89 @@ impl<'a> Paths<'a> {
 
     pub fn socket_path_for_instance(&self, instance: &str) -> String {
         join(&self.data_dir_for_instance(instance), "attn.sock")
+    }
+
+    fn xdg_data_home(&self, home: &str) -> String {
+        let configured = self.trimmed("XDG_DATA_HOME");
+        if configured.is_empty() {
+            join(home, ".local/share")
+        } else {
+            configured
+        }
+    }
+
+    pub fn resolve(&self, instance: &str) -> ResolvedInstance {
+        let home = self.home().unwrap_or_else(|| "/tmp".to_string());
+        let name = derivation_name(instance);
+        let with_suffix = |base: &str, separator: &str| {
+            if name.is_empty() {
+                base.to_string()
+            } else {
+                format!("{base}{separator}{name}")
+            }
+        };
+        let port = |base: u32, default: &str| {
+            if name.is_empty() {
+                default.to_string()
+            } else {
+                (base + fnv1a(&name) % DERIVED_OFFSET_SPAN).to_string()
+            }
+        };
+        let app_name = with_suffix("attn", "-");
+        let bundle_id = with_suffix("com.attn.manager", ".");
+        let macos = cfg!(target_os = "macos");
+        let xdg = self.xdg_data_home(&home);
+        let app_path = if macos {
+            join(&home, &format!("Applications/{app_name}.app"))
+        } else {
+            join(&xdg, &app_name)
+        };
+        let bin = |file: &str| {
+            if macos {
+                join(&app_path, &format!("Contents/MacOS/{file}"))
+            } else {
+                join(&app_path, &format!("bin/{file}"))
+            }
+        };
+        let app_daemon = bin("attnd");
+        let desktop_entry = if cfg!(target_os = "linux") {
+            join(&xdg, &format!("applications/{app_name}-handler.desktop"))
+        } else {
+            String::new()
+        };
+        let data_dir = self.data_dir_for_instance(instance);
+        ResolvedInstance {
+            instance: instance.to_string(),
+            label: if instance.is_empty() {
+                "default".to_string()
+            } else {
+                instance.to_string()
+            },
+            socket: join(&data_dir, "attn.sock"),
+            db_path: join(&data_dir, "attn.db"),
+            data_dir,
+            ws_port: ws_port_for_instance(instance),
+            app_local_data: if macos {
+                join(&home, &format!("Library/Application Support/{bundle_id}"))
+            } else {
+                join(&xdg, &bundle_id)
+            },
+            bundle_id,
+            app_executable: bin(if macos { "app" } else { "attn-app" }),
+            app_cli: join(&dir(&app_daemon), "attn"),
+            app_daemon,
+            app_path: app_path.clone(),
+            app_lock_path: join(
+                &home,
+                &format!(".attn.locks/app-{}.lock", lock_label(instance)),
+            ),
+            deep_link_scheme: with_suffix("attn", "-"),
+            app_name,
+            desktop_entry,
+            e2e_daemon_port: port(30_000, "19849"),
+            e2e_vite_port: port(31_000, "1421"),
+            mock_github_port: port(32_000, "19850"),
+        }
     }
 
     pub fn config_path(&self) -> String {
@@ -481,7 +650,7 @@ fn format_conflict(
     text.trim_end_matches('\n').to_string()
 }
 
-fn ws_port_for_instance(instance: &str) -> String {
+pub fn ws_port_for_instance(instance: &str) -> String {
     let name = instance.trim().to_lowercase();
     match name.as_str() {
         "" | "default" => DEFAULT_PORT.to_string(),

@@ -31,6 +31,17 @@ pub fn join(base: &str, rest: &str) -> String {
     clean(&format!("{base}/{rest}"))
 }
 
+pub fn base(path: &str) -> &str {
+    if path.is_empty() {
+        return ".";
+    }
+    let trimmed = path.trim_end_matches('/');
+    if trimmed.is_empty() {
+        return "/";
+    }
+    &trimmed[trimmed.rfind('/').map_or(0, |slash| slash + 1)..]
+}
+
 pub fn extension(path: &str) -> &str {
     let name_start = path.rfind('/').map_or(0, |slash| slash + 1);
     path[name_start..]

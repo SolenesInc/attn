@@ -39,9 +39,6 @@ func runInstance() {
 	case "status":
 		setCommandPath("instance status")
 		runInstanceStatus()
-	case "resolve":
-		setCommandPath("instance resolve")
-		runInstanceResolve(os.Args[3:])
 	case "tauri-config":
 		setCommandPath("instance tauri-config")
 		runInstanceTauriConfig(os.Args[3:])
@@ -120,50 +117,6 @@ func resolveInstance(instance string) instanceResolved {
 	}
 }
 
-func (r instanceResolved) field(key string) (string, bool) {
-	switch key {
-	case "instance":
-		return r.Instance, true
-	case "label":
-		return r.Label, true
-	case "dataDir":
-		return r.DataDir, true
-	case "socket":
-		return r.Socket, true
-	case "dbPath":
-		return r.DBPath, true
-	case "wsPort":
-		return r.WSPort, true
-	case "bundleId":
-		return r.BundleID, true
-	case "appName":
-		return r.AppName, true
-	case "appPath":
-		return r.AppPath, true
-	case "appExecutable":
-		return r.AppExecutable, true
-	case "appDaemon":
-		return r.AppDaemon, true
-	case "appCli":
-		return r.AppCli, true
-	case "appLocalDataDir":
-		return r.AppLocalData, true
-	case "appLockPath":
-		return r.AppLock, true
-	case "deepLinkScheme":
-		return r.DeepLinkScheme, true
-	case "desktopEntry":
-		return r.DesktopEntry, true
-	case "e2eDaemonPort":
-		return r.E2EDaemonPort, true
-	case "e2eVitePort":
-		return r.E2EVitePort, true
-	case "mockGitHubPort":
-		return r.MockGitHubPort, true
-	}
-	return "", false
-}
-
 func runInstanceStatus() {
 	r := resolveInstance(config.Instance())
 	socketUp := fileExists(r.Socket)
@@ -190,53 +143,6 @@ func runInstanceStatus() {
 	fmt.Println("Switch:   attn instance-env <name> | source   (fish: attn instance-env --fish <name> | source)")
 	fmt.Println("Resolve:  attn instance resolve --json         (single value: --field wsPort)")
 	fmt.Println("List:     attn instance list")
-}
-
-func runInstanceResolve(args []string) {
-	instance := config.Instance()
-	field := ""
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--json":
-		case "--instance":
-			if i+1 >= len(args) {
-				instanceFatal("--instance requires a value")
-			}
-			i++
-			p, err := config.NormalizeInstanceName(args[i])
-			if err != nil {
-				instanceFatal(err.Error())
-			}
-			instance = p
-		case "--field":
-			if i+1 >= len(args) {
-				instanceFatal("--field requires a key")
-			}
-			i++
-			field = args[i]
-		case "-h", "--help":
-			printInstanceHelp(os.Stdout)
-			return
-		default:
-			recordUsageError("instance resolve", usageErrorUnknownFlag)
-			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
-		}
-	}
-
-	r := resolveInstance(instance)
-	if field != "" {
-		v, ok := r.field(field)
-		if !ok {
-			instanceFatal(fmt.Sprintf("unknown field %q (valid: instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appCli,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
-		}
-		fmt.Println(v)
-		return
-	}
-	b, err := json.MarshalIndent(r, "", "  ")
-	if err != nil {
-		instanceFatal(err.Error())
-	}
-	fmt.Println(string(b))
 }
 
 func runInstanceTauriConfig(args []string) {

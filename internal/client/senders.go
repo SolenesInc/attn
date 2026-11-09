@@ -62,11 +62,3 @@ func (c *Client) UnpairSender(profile, sender string) error {
 	_, err := c.send(protocol.SenderUnpairMessage{Cmd: protocol.CmdSenderUnpair, Sender: sender, ProfileID: protocol.Ptr(profile)})
 	return err
 }
-
-func (c *Client) SenderSessions(token string) ([]protocol.SenderSession, error) {
-	resp, err := c.send(protocol.SenderSessionsMessage{Cmd: protocol.CmdSenderSessions, SenderToken: token})
-	if err != nil {
-		return nil, err
-	}
-	return resp.SenderSessions, nil
-}

@@ -1,12 +1,18 @@
 pub mod automation;
 pub mod callout;
+pub mod codex;
+pub mod conversation;
 pub mod crew;
+pub mod enrollment;
 pub mod instance_env;
+pub mod instance_resolve;
 pub mod seed;
+pub mod send;
 pub mod settings;
 pub mod support;
 pub mod ticket;
 pub mod top_level;
+pub mod worktree;
 
 use crate::client::{Reply, SendError};
 use crate::instance::Paths;
@@ -15,7 +21,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 pub const USAGE_UNKNOWN_COMMAND: &str = "unknown_command";
-const USAGE_UNKNOWN_FLAG: &str = "unknown_flag";
+pub const USAGE_UNKNOWN_FLAG: &str = "unknown_flag";
 const USAGE_MISSING_VALUE: &str = "missing_value";
 const USAGE_INVALID_VALUE: &str = "invalid_value";
 
@@ -66,6 +72,11 @@ pub fn print_json(raw: &[u8]) {
     let mut stdout = io::stdout().lock();
     let _ = stdout.write_all(&output);
     let _ = stdout.flush();
+}
+
+pub fn print_compact_line(raw: &str) {
+    print_stdout(raw);
+    print_stdout("\n");
 }
 
 pub fn print_reply_field(reply: &Reply, path: &[&str]) -> Result<(), SendError> {

@@ -1,0 +1,178 @@
+read send
+read send --help
+read send -h
+read send pair --help
+read send senders --help
+read send sessions --help
+read send unpair --help
+read send s1
+read send s1 --no-such-flag
+read send s1 -m hi
+read send s1 s2 -m hi --token-stdin
+read send s1 --token-stdin
+read send pair
+read send pair --name
+read send pair --name ""
+read send pair --name x extra
+read send pair --bogus
+read send senders extra
+read send senders --bogus
+read send senders
+read send senders --json
+read send senders --profile nope
+read send senders --profile nope --json
+read send unpair
+read send unpair a b
+read send unpair --bogus
+read send unpair nobody
+read send unpair nobody --profile nope
+read send sessions
+read send sessions extra --token-stdin
+read send sessions --bogus
+read conversation
+read conversation --help
+read conversation -h
+read conversation help
+read conversation nope
+read conversation list
+read conversation list --all
+read conversation list --json
+read conversation list --all --json
+read conversation list extra
+read conversation list --bogus
+read conversation list --help
+read conversation list -h
+read conversation keep
+read conversation keep ""
+read conversation keep a b
+read conversation keep s-nope
+read conversation unkeep
+read conversation unkeep s-nope
+read conversation forget
+read conversation forget ""
+read conversation forget s-nope extra
+read conversation forget s-nope --bogus
+read conversation forget --bogus s-nope
+read conversation forget --help
+read conversation forget s-nope
+read conversation forget s-nope --unlink-crew-letters
+read worktree
+read worktree --help
+read worktree -h
+read worktree help
+read worktree nope
+read worktree list
+read worktree list --json
+read worktree list --limit 1
+read worktree list --limit 1 --json
+read worktree list --limit 0
+read worktree list --limit -1
+read worktree list --limit abc
+read worktree list --repo /no/such/repo
+read worktree list --repo /no/such/repo --json
+read worktree list --repo relative/repo
+read worktree list --bogus
+read worktree list --help
+read worktree list -h
+read worktree keep
+read worktree keep ""
+read worktree keep /no/such/worktree
+read worktree keep relative/path
+read worktree unkeep
+read worktree unkeep /no/such/worktree
+read worktree delete
+read worktree delete --bogus
+read worktree delete --help
+read worktree delete /no/such/worktree
+read worktree delete relative/worktree --force
+read worktree log
+read worktree log --json
+read worktree log --limit 1
+read worktree log --limit 1 --json
+read worktree log --limit abc
+read worktree log --repo /no/such/repo
+read worktree log --help
+read enrollment
+read enrollment --json
+read enrollment -h
+read enrollment --help
+read enrollment help
+read enrollment nope
+read enrollment status
+read enrollment status --json
+read enrollment status --bogus
+read enrollment status --help
+read enrollment leave --bogus
+read enrollment leave --help
+read enrollment leave --home bad
+read enrollment leave --home bad --json
+read codex
+read codex --help
+read codex -h
+read codex status --help
+read codex status --bogus
+read codex status extra
+read codex status --now
+read codex update --json
+read codex update --now
+read codex restart --json
+read codex nope
+read codex nope --json
+read codex nope extra
+read codex status
+read codex status --json
+read codex status --profile nope
+read codex status --profile nope --json
+read codex restart --profile nope
+read codex restart --now --profile nope
+read codex update --profile nope
+read instance resolve
+read instance resolve --json
+read instance resolve --help
+read instance resolve -h
+read instance resolve --bogus
+read instance resolve --field
+read instance resolve --instance
+read instance resolve --instance Bad_Name
+read instance resolve --instance agent7
+read instance resolve --instance agent7 --json
+read instance resolve --instance dev
+read instance resolve --instance default
+read instance resolve --instance DEV
+read instance resolve --field nope
+read instance resolve --field instance
+read instance resolve --field label
+read instance resolve --field dataDir
+read instance resolve --field socket
+read instance resolve --field dbPath
+read instance resolve --field wsPort
+read instance resolve --field bundleId
+read instance resolve --field appName
+read instance resolve --field appPath
+read instance resolve --field appExecutable
+read instance resolve --field appDaemon
+read instance resolve --field appCli
+read instance resolve --field appLocalDataDir
+read instance resolve --field appLockPath
+read instance resolve --field deepLinkScheme
+read instance resolve --field desktopEntry
+read instance resolve --field e2eDaemonPort
+read instance resolve --field e2eVitePort
+read instance resolve --field mockGitHubPort
+read instance resolve --instance agent7 --field e2eDaemonPort
+read instance resolve --instance agent7 --field e2eVitePort
+read instance resolve --instance agent7 --field mockGitHubPort
+read instance resolve --instance agent7 --field wsPort
+write enrollment leave
+read send 00037bed-4348-4c17-9712-e3f82444f157 -m hi --token-stdin
+read send sessions --token-stdin
+write enrollment leave --home d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+write conversation keep 00fc4bc1-b033-4162-a556-19ae8848403a
+write conversation list --all
+write conversation unkeep 00fc4bc1-b033-4162-a556-19ae8848403a
+write conversation forget aa26f66d-e118-4c9e-b0e5-8e47d75bea37
+write conversation list --all --json
+write worktree keep /Users/victor/projects/pawport--ci-hosted-runners
+write worktree unkeep /Users/victor/projects/pawport--ci-hosted-runners
+write worktree delete /Users/victor/projects/pawport--ci-hosted-runners
+write worktree refresh

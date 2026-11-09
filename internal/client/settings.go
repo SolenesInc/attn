@@ -33,11 +33,6 @@ func (c *Client) Settings(caller SettingsCaller, key string, all bool) (*protoco
 	return resp.SettingsList, nil
 }
 
-func (c *Client) DropOutpostCopy() error {
-	_, err := c.send(protocol.DropOutpostCopyMessage{Cmd: protocol.CmdDropOutpostCopy})
-	return err
-}
-
 func (c *Client) SetSetting(caller SettingsCaller, key, value string) (*protocol.SettingEntry, error) {
 	sessionID, profile := caller.fields()
 	resp, err := c.send(protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, SourceSessionID: sessionID, ProfileID: profile, Key: key, Value: value})
