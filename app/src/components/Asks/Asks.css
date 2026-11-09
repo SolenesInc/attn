@@ -762,6 +762,7 @@
 
 .asks-accept-recommended + .asks-send {
   margin-left: 0;
+}
 
 .seed-mention {
   display: inline;
