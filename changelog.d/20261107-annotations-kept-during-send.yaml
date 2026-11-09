@@ -1,6 +1,0 @@
-kind: fixed
-area: annotations
-change: >
-  Marks added or changed in a markdown or seed tile while a send is under way
-  now stay, in the tile and in the saved draft, and the tile says how many
-  stayed. Only the marks that went are removed.

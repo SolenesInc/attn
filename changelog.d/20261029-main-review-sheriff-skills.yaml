@@ -1,3 +1,0 @@
-kind: internal
-area: development
-change: The review-main and sheriff skills describe how the review and sheriff automations review main and keep it green under trunk-based development.

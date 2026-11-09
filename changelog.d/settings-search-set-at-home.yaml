@@ -1,3 +1,0 @@
-kind: fixed
-area: settings
-change: Searching settings now finds Quick Capture, Claude mod, Nisse, Crew v2 and Outposts by name. On an outpost, attn settings list marks a home setting as set at the home, instead of read-only, because a set there changes it at the home.

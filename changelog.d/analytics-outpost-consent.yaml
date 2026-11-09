@@ -1,3 +1,0 @@
-kind: fixed
-area: analytics
-change: Records an outpost held while disconnected no longer reach the home or the server after you turned analytics off, cleared the record or forgot the install. Settings → Analytics now names outposts it can't reach.

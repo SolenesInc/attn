@@ -1,7 +1,0 @@
-kind: fixed
-area: notebook
-change: >
-  A note whose frontmatter refers to itself through a YAML alias no longer
-  crashes the daemon when backlinks are read. A folder in the notebook the daemon
-  cannot read no longer fails backlinks or stops live updates for the whole
-  notebook.

@@ -1,3 +1,0 @@
-kind: internal
-area: crew
-change: Correlate eval simulator turns with completed native responses, fail stalled handoffs, and preserve interrupted attempts.
