@@ -14,7 +14,7 @@ type worktreeMaintenanceCoordinator struct {
 	mu          sync.Mutex
 	sweepCancel context.CancelCauseFunc
 	sweepID     uint64
-	protections int
+	holds       int
 	whenIdle    []func()
 }
 
@@ -47,21 +47,25 @@ func (c *worktreeMaintenanceCoordinator) ProtectFromAutomaticCleanup(
 	ctx context.Context,
 	run func(foregroundCleanupProtection) error,
 ) error {
-	c.mu.Lock()
-	if c.sweepCancel != nil {
-		c.sweepCancel(errAutomaticWorktreeCleanupPreempted)
-	}
-	c.protections++
-	c.mu.Unlock()
-	defer c.releaseProtection()
+	c.beginHold()
+	defer c.releaseHold()
 	c.gate.RLock()
 	defer c.gate.RUnlock()
 	return run(foregroundCleanupProtection{ctx: ctx})
 }
 
-func (c *worktreeMaintenanceCoordinator) releaseProtection() {
+func (c *worktreeMaintenanceCoordinator) beginHold() {
 	c.mu.Lock()
-	c.protections--
+	if c.sweepCancel != nil {
+		c.sweepCancel(errAutomaticWorktreeCleanupPreempted)
+	}
+	c.holds++
+	c.mu.Unlock()
+}
+
+func (c *worktreeMaintenanceCoordinator) releaseHold() {
+	c.mu.Lock()
+	c.holds--
 	idle := c.takeWhenIdleLocked()
 	c.mu.Unlock()
 	for _, fn := range idle {
@@ -70,7 +74,7 @@ func (c *worktreeMaintenanceCoordinator) releaseProtection() {
 }
 
 func (c *worktreeMaintenanceCoordinator) takeWhenIdleLocked() []func() {
-	if c.protections > 0 || c.sweepCancel != nil {
+	if c.holds > 0 || c.sweepCancel != nil {
 		return nil
 	}
 	idle := c.whenIdle
@@ -78,51 +82,28 @@ func (c *worktreeMaintenanceCoordinator) takeWhenIdleLocked() []func() {
 	return idle
 }
 
-func (c *worktreeMaintenanceCoordinator) preemptSweep() {
-	c.mu.Lock()
-	if c.sweepCancel != nil {
-		c.sweepCancel(errAutomaticWorktreeCleanupPreempted)
-	}
-	c.mu.Unlock()
-}
-
 func (c *worktreeMaintenanceCoordinator) TryAutomaticRemoval(
 	ctx context.Context,
 	run func(automaticWorktreeCleanupProtection) error,
 ) error {
-	c.preemptSweep()
-	return c.tryRemoval(ctx, run)
+	c.beginHold()
+	defer c.releaseHold()
+	if !c.gate.TryLock() {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	defer c.gate.Unlock()
+	return run(automaticWorktreeCleanupProtection{ctx: ctx})
 }
 
 func (c *worktreeMaintenanceCoordinator) TryBackgroundRemoval(
 	ctx context.Context,
+	whenIdle func(),
 	run func(automaticWorktreeCleanupProtection) error,
 ) error {
-	// Hold mu through removal so a sweep cannot start after the active-lease check.
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.sweepCancel != nil {
-		return errAutomaticWorktreeCleanupPreempted
-	}
-	return c.tryRemoval(ctx, run)
-}
-
-// RunWhenIdle reports whether a sweep or a foreground protection is active; if so, fn runs once none is.
-func (c *worktreeMaintenanceCoordinator) RunWhenIdle(fn func()) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.protections == 0 && c.sweepCancel == nil {
-		return false
-	}
-	c.whenIdle = append(c.whenIdle, fn)
-	return true
-}
-
-func (c *worktreeMaintenanceCoordinator) tryRemoval(
-	ctx context.Context,
-	run func(automaticWorktreeCleanupProtection) error,
-) error {
-	if !c.gate.TryLock() {
+	if c.sweepCancel != nil || !c.gate.TryLock() {
+		c.whenIdle = append(c.whenIdle, whenIdle)
 		return errAutomaticWorktreeCleanupPreempted
 	}
 	defer c.gate.Unlock()
