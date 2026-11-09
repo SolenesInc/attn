@@ -742,6 +742,7 @@ func TestAQuickCaptureThroughTheModOpensTheUsersTurn(t *testing.T) {
 	working = testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
 	modEvent(t, run, fakeagent.ModEventHeld, "what did the reviewer say?")
+	run.ModToolBoundary()
 	run.Reply("They approved. <!-- attn:state=waiting_input -->")
 	steered := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if !protocol.Deref(steered.TurnOwed) || protocol.Deref(steered.TurnByAgent) {
