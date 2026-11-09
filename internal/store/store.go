@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -1263,38 +1264,74 @@ const selectPRs = `SELECT id, host, repo, number, title, url, author, role, stat
 	approved_by_me, heat_state, last_heat_activity_at
 	FROM prs`
 
-func (s *Store) ReplacePRsOfHosts(prsByHost map[string][]*protocol.PR) error {
+type PRChanges struct {
+	Appeared    []string
+	Updated     []string
+	Disappeared []string
+}
+
+func queryPRRecords(tx *sql.Tx) ([]*protocol.PR, error) {
+	rows, err := tx.Query(selectPRs + ` ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var prs []*protocol.PR
+	for rows.Next() {
+		pr, err := scanPRRecord(rows)
+		if err != nil {
+			return nil, err
+		}
+		prs = append(prs, pr)
+	}
+	return prs, rows.Err()
+}
+
+func comparePRRecords(before, after []*protocol.PR) PRChanges {
+	beforeByID := make(map[string]*protocol.PR, len(before))
+	for _, pr := range before {
+		beforeByID[pr.ID] = pr
+	}
+	var changes PRChanges
+	for _, pr := range after {
+		previous, existed := beforeByID[pr.ID]
+		switch {
+		case !existed:
+			changes.Appeared = append(changes.Appeared, pr.ID)
+		case !reflect.DeepEqual(previous, pr):
+			changes.Updated = append(changes.Updated, pr.ID)
+		}
+		delete(beforeByID, pr.ID)
+	}
+	for _, pr := range before {
+		if _, gone := beforeByID[pr.ID]; gone {
+			changes.Disappeared = append(changes.Disappeared, pr.ID)
+		}
+	}
+	return changes
+}
+
+func (s *Store) ReplacePRsOfHosts(prsByHost map[string][]*protocol.PR) (PRChanges, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	if s.db == nil {
-		return nil
+		return PRChanges{}, nil
 	}
 
 	tx, err := s.db.Begin()
 	if err != nil {
-		return err
+		return PRChanges{}, err
 	}
 	defer tx.Rollback()
 
-	existing := make(map[string]*protocol.PR)
-	rows, err := tx.Query(selectPRs)
+	before, err := queryPRRecords(tx)
 	if err != nil {
-		return err
+		return PRChanges{}, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		pr, err := scanPRRecord(rows)
-		if err != nil {
-			return err
-		}
+	existing := make(map[string]*protocol.PR, len(before))
+	for _, pr := range before {
 		existing[pr.ID] = pr
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if err := rows.Close(); err != nil {
-		return err
 	}
 
 	for _, prs := range prsByHost {
@@ -1327,7 +1364,7 @@ func (s *Store) ReplacePRsOfHosts(prsByHost map[string][]*protocol.PR) error {
 			}
 
 			if err := savePR(tx, pr); err != nil {
-				return err
+				return PRChanges{}, err
 			}
 			delete(existing, pr.ID)
 		}
@@ -1337,10 +1374,17 @@ func (s *Store) ReplacePRsOfHosts(prsByHost map[string][]*protocol.PR) error {
 			continue
 		}
 		if _, err := tx.Exec("DELETE FROM prs WHERE id = ?", id); err != nil {
-			return err
+			return PRChanges{}, err
 		}
 	}
-	return tx.Commit()
+	after, err := queryPRRecords(tx)
+	if err != nil {
+		return PRChanges{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PRChanges{}, err
+	}
+	return comparePRRecords(before, after), nil
 }
 
 func (s *Store) ForgetPRsOfHostsOtherThan(hosts map[string]bool) ([]string, error) {

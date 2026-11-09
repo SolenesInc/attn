@@ -1,6 +1,9 @@
 package daemon
 
-import "github.com/victorarias/attn/internal/protocol"
+import (
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
+)
 
 func (d *Daemon) handleApprovePRWS(client *wsClient, msg *protocol.ApprovePRMessage) {
 	d.logf("Processing approve for %s", msg.ID)
@@ -147,30 +150,16 @@ func (d *Daemon) handlePRVisitedWS(msg *protocol.PRVisitedMessage) {
 	})
 }
 
-func (d *Daemon) publishPRSetChanges(before, after []*protocol.PR) {
-	beforeByID := make(map[string]*protocol.PR, len(before))
-	for _, pr := range before {
-		beforeByID[pr.ID] = pr
-	}
-	afterByID := make(map[string]struct{}, len(after))
-	for _, pr := range after {
-		afterByID[pr.ID] = struct{}{}
-	}
-
+func (d *Daemon) publishPRChanges(changes store.PRChanges) {
 	d.coalesceSnapshots(func() {
-		for _, pr := range after {
-			previous, existed := beforeByID[pr.ID]
-			switch {
-			case !existed:
-				d.publishFact(FactPRAppeared, pr.ID, nil)
-			case !wireEqual(previous, pr):
-				d.publishFact(FactPRUpdated, pr.ID, nil)
-			}
+		for _, id := range changes.Appeared {
+			d.publishFact(FactPRAppeared, id, nil)
 		}
-		for _, pr := range before {
-			if _, still := afterByID[pr.ID]; !still {
-				d.publishFact(FactPRDisappeared, pr.ID, nil)
-			}
+		for _, id := range changes.Updated {
+			d.publishFact(FactPRUpdated, id, nil)
+		}
+		for _, id := range changes.Disappeared {
+			d.publishFact(FactPRDisappeared, id, nil)
 		}
 	})
 }

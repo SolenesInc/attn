@@ -3777,13 +3777,12 @@ func (d *Daemon) saveObservedPRs(observedByHost map[string]successfulPRObservati
 	for host, observation := range observedByHost {
 		prsByHost[host] = observation.prs
 	}
-	previousPRs := d.store.ListPRs("")
-	if err := d.store.ReplacePRsOfHosts(prsByHost); err != nil {
+	changes, err := d.store.ReplacePRsOfHosts(prsByHost)
+	if err != nil {
 		return nil, err
 	}
-	currentPRs := d.store.ListPRs("")
-	d.publishPRSetChanges(previousPRs, currentPRs)
-	return currentPRs, nil
+	d.publishPRChanges(changes)
+	return d.store.ListPRs(""), nil
 }
 
 func (d *Daemon) storePRPoll(observedByHost map[string]successfulPRObservation) {
