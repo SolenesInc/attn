@@ -12,9 +12,9 @@ export CGO_CFLAGS := $(shell cat go-cgo-cflags)
 BINARY_NAME=attn
 DAEMON_BINARY_NAME=attnd
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every
-# other instance's app path / bundle id / port comes at build+install time from
-# the single authority (`attn instance resolve`, and `attn instance claim-port`
-# for the port), never hardcoded here.
+# other instance's app path / bundle id comes at build+install time from
+# `attn instance resolve` and its port from `attn instance claim-port`, never
+# hardcoded here.
 APP_BUNDLE=$(HOME)/Applications/attn.app
 APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
 # Which instance to build/install. Empty = the default/prod bundle. A named
@@ -507,9 +507,9 @@ check-schema:
 		go run ./scripts/generate-schema --image > "$$image" && \
 		cmp internal/store/schema.sqlite.gz "$$image"
 
-# Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
-# derived from `attn instance resolve`, and the port claimed with
-# `attn instance claim-port`, by scripts/build-app-instance.sh: the
+# Build the packaged app for $(INSTANCE) (empty = prod).
+# scripts/build-app-instance.sh takes the bundle metadata from
+# `attn instance resolve` and claims the port with `attn instance claim-port`: the
 # default build uses the committed tauri.conf.json; a named instance gets a
 # generated tauri.<name>.gen.conf.json overlay and bakes ATTN_BUILD_INSTANCE /
 # ATTN_BUILD_WS_PORT / ATTN_BUILD_BUNDLE_ID into the binary so it can never

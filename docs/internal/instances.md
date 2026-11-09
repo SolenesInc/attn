@@ -19,11 +19,12 @@ Notebook in `<data folder>/notebook`, away from the user's real one.
 
 `default` uses WebSocket port 9849 and `dev` 29849. Any other instance keeps its
 port in `ws-port` in its data folder. `attn instance claim-port`, which the app
-build runs, writes that file once: the port derived from the instance name,
-unless another instance already uses it, then the next free one. An instance
-without the file uses the derived port, so two such instances can collide, and
-the daemon's bind error names the other instance. `attn instance clean` removes
-the file with the data folder.
+build runs, writes that file once: the port derived from the instance name, or the next
+port no other instance uses if another instance already uses the derived one.
+An instance without the file uses the derived port, so two such instances can
+collide, and the daemon's bind error names the other instance.
+`attn instance clean <name> --keep-app` writes the file back after it removes
+the data, because the kept app was built with that port.
 
 ## Starting a daemon from inside a session
 

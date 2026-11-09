@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 #
-# Build the packaged attn .app for a single instance, deriving ALL bundle
-# metadata (productName, bundle id, ws port, deep-link scheme) from the single
-# authority: `attn instance resolve`. The default/prod instance builds from the
+# Build the packaged attn .app for a single instance. Bundle metadata
+# (productName, bundle id, deep-link scheme) comes from `attn instance resolve`,
+# and the ws port from `attn instance claim-port`, which keeps it in the
+# instance's data dir. The default/prod instance builds from the
 # committed tauri.conf.json; every NAMED instance gets a generated, gitignored
 # `tauri.<appName>.gen.conf.json` overlay (from `attn instance tauri-config`) so
 # no per-instance bundle metadata is ever hand-maintained.

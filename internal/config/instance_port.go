@@ -25,6 +25,14 @@ func ClaimWSPortForInstance(instance string) (string, error) {
 	return instancePorts(DataDirForInstance("")).claim(instance)
 }
 
+func KeepWSPortForInstance(instance, port string) (bool, error) {
+	name, fixed := fixedOrNamedInstance(instance)
+	if fixed != "" {
+		return false, nil
+	}
+	return true, instancePorts(DataDirForInstance("")).store(name, port)
+}
+
 func InstancesHoldingWSPort(port, except string) []string {
 	return instancePorts(DataDirForInstance("")).holders(port, except)
 }

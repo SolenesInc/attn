@@ -45,6 +45,19 @@ func TestInstancePortClaim(t *testing.T) {
 		}
 	})
 
+	t.Run("a held top port wraps to the bottom of the range", func(t *testing.T) {
+		ports := instancePorts(filepath.Join(t.TempDir(), ".attn"))
+		if derivedInstancePort("w12536") != "29848" {
+			t.Fatalf("w12536 no longer derives 29848; pick a name that does")
+		}
+		if err := ports.store("other", "29848"); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := ports.claim("w12536"); err != nil || got != "20000" {
+			t.Fatalf("claim(w12536) = %q, %v; want 20000", got, err)
+		}
+	})
+
 	t.Run("default and dev keep fixed ports and store nothing", func(t *testing.T) {
 		root := t.TempDir()
 		ports := instancePorts(filepath.Join(root, ".attn"))
@@ -79,6 +92,11 @@ func TestInstancePortClaim_NamesNeverShareAPort(t *testing.T) {
 				rt.Fatalf("claim(%s) = %s, which %s already uses", claimed, port, owner)
 			}
 			inUse[port] = claimed
+		}
+		for _, claimed := range names[existing:] {
+			if again, _ := ports.claim(claimed); inUse[again] != claimed {
+				rt.Fatalf("second claim(%s) = %s, which belongs to %s", claimed, again, inUse[again])
+			}
 		}
 		for _, instance := range names {
 			if owner := inUse[ports.port(instance)]; owner != instance && !slices.Contains(names[:existing], instance) {

@@ -2407,9 +2407,10 @@ func wsBindError(addr string, err error) error {
 	if holders := config.InstancesHoldingWSPort(port, instance); len(holders) > 0 {
 		return fmt.Errorf(
 			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
-				"Port %s also belongs to attn instance %s. "+
-				"An instance keeps its port in ws-port in its data dir once claimed; `attn instance claim-port --instance <name>` gives an instance that has none a port no other instance holds. "+
-				"Claim for whichever of these instances has no ws-port yet and reinstall its app, or stop the other instance",
+				"Port %s is also used by attn instance: %s. "+
+				"Each instance keeps its port in ws-port in its data dir. "+
+				"Run `attn instance claim-port --instance <name>` for whichever of this instance or those has no ws-port yet, then reinstall its app. "+
+				"Or stop the other instance",
 			addr, label, err, port, strings.Join(holders, ", "),
 		)
 	}

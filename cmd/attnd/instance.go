@@ -300,7 +300,17 @@ func cleanInstance(w io.Writer, r instanceResolved) error {
 }
 
 func resetInstanceData(w io.Writer, r instanceResolved) error {
-	return stopAndRemoveInstance(w, r, func(io.Writer, instanceResolved) error { return nil })
+	if err := stopAndRemoveInstance(w, r, func(io.Writer, instanceResolved) error { return nil }); err != nil {
+		return err
+	}
+	kept, err := config.KeepWSPortForInstance(r.Instance, r.WSPort)
+	if err != nil {
+		return err
+	}
+	if kept {
+		fmt.Fprintf(w, "  port     kept %s for the kept app\n", r.WSPort)
+	}
+	return nil
 }
 
 func stopAndRemoveInstance(w io.Writer, r instanceResolved, removeApp func(io.Writer, instanceResolved) error) error {
