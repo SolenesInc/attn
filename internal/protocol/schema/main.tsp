@@ -4001,7 +4001,7 @@ model InitialStateMessage {
   // as well as on garden pushes so a client that connects to an over-large
   // garden knows it is short before anything moves.
   seeds_total?: int32;
-  // The crew roster, so the sidebar draws every member — awake or asleep — from
+  // The crew roster, so the sidebar draws every member — in session or between sessions — from
   // the first push rather than asking for one.
   crew?: CrewMember[];
   // The selected profile's asks, as asks_updated carries them.
@@ -5692,16 +5692,16 @@ model SeedReminder {
 }
 
 // A seed on standby: its tender set a note saying what to do next, and seed
-// mail wakes the tender. The tender reading all of the seed's mail ends it.
+// mail resumes the tender. The tender reading all of the seed's mail ends it.
 model SeedStandbyView {
   "note": string;
   "set_at": string;
   "set_by": ActorView;
   // The pull requests the seed's mailbox watches.
   "pull_requests": SeedWatchedPullRequest[];
-  // Why the last tender wake could not happen and will not retry by itself.
-  // Absent while nothing blocks a wake.
-  "wake_blocked"?: string;
+  // Why the last tender resume could not happen and will not retry by itself.
+  // Absent while nothing blocks a resume.
+  "resume_blocked"?: string;
 }
 
 // A pull request a seed's mailbox watches. `state` is the pull request's own
@@ -7136,8 +7136,8 @@ model Response {
   crew_charter_set_result?: CrewCharterSetResult;
   crew_handoffs_get_result?: CrewHandoffsGetResult;
   crew_handoff_get_result?: CrewHandoffGetResult;
-  crew_wake_result?: CrewWakeResult;
-  crew_sleep_result?: CrewSleepResult;
+  crew_start_result?: CrewStartResult;
+  crew_close_result?: CrewCloseResult;
   crew_apply_result?: CrewApplyResult;
   crew_set_result?: CrewSetResult;
   onboarding_result?: OnboardingResult;
@@ -7256,7 +7256,7 @@ model AgentPeekResult {
 // Crew
 // ============================================================================
 
-// Read the crew roster: every registered member, awake or asleep. The registry
+// Read the crew roster: every registered member, in session or between sessions. The registry
 // serves the read; the member's home stays plain markdown on disk and is never
 // copied onto the wire.
 @extension("x-on", #{ home: true })
@@ -7280,16 +7280,16 @@ model CrewMember {
   // Unique in the member's profile, ignoring case; the user can change it.
   name: string;
   // A retired member keeps its name, home and unread mail, takes no new mail
-  // or work, and does not wake until restored.
+  // or work, and attn starts no session for it until it is restored.
   retired: boolean;
-  // The profile's Chief: `chief` reaches it under any name; it sleeps but is
+  // The profile's Chief: `chief` reaches it under any name; it closes sessions but is
   // never closed or retired.
   chief?: boolean;
-  profile_id: string; // The profile the member belongs to; it wakes only there
+  profile_id: string; // The profile the member belongs to; attn starts its sessions only there
   revision: safeint;
   charter_path: string;
   home_dir: string;
-  // Where the member's sessions launch; absent until the wake slice records one.
+  // Where the member's sessions launch; absent until one is recorded.
   cwd?: string;
   agent?: string;
   // The model this member's days run on with its recorded harness. Absent takes
@@ -7305,7 +7305,7 @@ model CrewMember {
   awareness_dirs: string[];
   // The session living this member's current day. Present only while that
   // session is live — the daemon judges the binding at read, so presence IS
-  // "awake" and a caller never re-derives liveness.
+  // "in session" and a caller never re-derives liveness.
   binding_session?: SessionID;
   // True while the bound session was asked by `crew_apply` for its letter, so
   // that filing it starts the next session on the saved harness.
@@ -7444,61 +7444,61 @@ model CrewHandoffGetResultMessage {
 
 // Start a member's day: launch a session bound to it, in the member's own cwd,
 // with its awareness dirs and its priming. Home-only. A member whose day is
-// already live is not woken twice — the result names that session instead, so
+// already live is not started twice — the result names that session instead, so
 // the caller focuses it rather than racing the single-holder rule.
 @extension("x-on", #{ home: true })
-model CrewWakeMessage {
-  cmd: "crew_wake";
+model CrewStartMessage {
+  cmd: "crew_start";
   member: string;
   // The harness to launch; the daemon's default agent when absent.
   agent?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
-  // The profile the wake is asked from. Absent over WebSocket means the
+  // The profile the start is asked from. Absent over WebSocket means the
   // connection's selected profile. A member of another profile is refused.
   profile_id?: string;
-  // The calling session, for a wake asked by an agent; its profile applies as
+  // The calling session, for a start asked by an agent; its profile applies as
   // profile_id does.
   source_session_id?: SessionID;
 }
 
-// CrewWakeResultMessage replies to a websocket crew_wake, correlated by
+// CrewStartResultMessage replies to a websocket crew_start, correlated by
 // request_id. session_id is the day to focus — the member's, whether this call
 // started it or found it already running. The session and its pane reach the UI
 // through the normal broadcasts, so the sidebar seeds nothing.
-model CrewWakeResultMessage {
-  event: "crew_wake_result";
+model CrewStartResultMessage {
+  event: "crew_start_result";
   request_id: string;
   success: boolean;
   error?: string;
-  // The wake succeeded, but showing its session failed.
+  // The start succeeded, but showing its session failed.
   show_error?: string;
   member?: string;
   session_id?: SessionID;
   profile_id?: string;
-  already_awake?: boolean;
-  // Present when wake found a stale binding, released it, and started this
+  already_in_session?: boolean;
+  // Present when the start found a stale binding, released it, and started this
   // fresh day. The caller names the repair instead of silently focusing a
   // replacement for a process that had already exited.
   released_session_id?: SessionID;
 }
 
-model CrewWakeResult {
+model CrewStartResult {
   member: string;
   name: string;
   session_id: SessionID;
   profile_id: string;
-  // True when the member was already awake and session_id is the day that was
+  // True when the member was already in session and session_id is the day that was
   // already running — nothing was launched.
-  already_awake: boolean;
-  // The dead day whose stale binding this wake released before launching the
+  already_in_session: boolean;
+  // The dead day whose stale binding this start released before launching the
   // returned session. Absent when there was no stale binding.
   released_session_id?: SessionID;
 }
 
 // Rename a crew member. Its key, letters and mail stay; the bound session's
 // label follows the new name. A home in the Notebook moves to a folder named
-// after the new name: now when the member is asleep, at its next wake when it
-// is awake and working from that home.
+// after the new name: now when the member is between sessions, at its next session when it
+// is in session and working from that home.
 @extension("x-on", #{ home: true })
 model CrewRenameMessage {
   cmd: "crew_rename";
@@ -7513,17 +7513,17 @@ model CrewRenameResult {
   member: string;
   name: string;
   previous_name: string;
-  // The session whose label changed, when the member is awake.
+  // The session whose label changed, when the member is in session.
   session_id?: SessionID;
   // The member's new home, when the rename moved its folder in the Notebook.
   home_dir?: string;
-  // Set when the member is awake and works from its home in the Notebook:
-  // the folder takes the new name at the member's next wake.
-  home_moves_at_wake?: boolean;
+  // Set when the member is in session and works from its home in the Notebook:
+  // the folder takes the new name at the member's next session.
+  home_moves_at_start?: boolean;
 }
 
 // Move a member's home from attn's data folder into its profile's Notebook,
-// at crew/<name>/. The member must be asleep.
+// at crew/<name>/. The member must be between sessions.
 @extension("x-on", #{ home: true })
 model CrewMoveHomeMessage {
   cmd: "crew_move_home";
@@ -7562,7 +7562,7 @@ model CrewCreateResult {
 
 // Retire a crew member: it releases its claims (replanting each seed with a
 // note), drops its seed and pull request watches, closes its open asks, refuses
-// new mail and keeps its name taken. An awake member is asked to sleep. Retiring
+// new mail and keeps its name taken. A member in session is asked to close. Retiring
 // again releases anything left and reports already_retired.
 @extension("x-on", #{ home: true })
 model CrewRetireMessage {
@@ -7580,11 +7580,11 @@ model CrewRetireResult {
   closed_asks: string[];
   // Mail that arrived before retirement and waits for a restore.
   unread: int32;
-  // The sleep request sent to the member's live session, when it was awake.
-  sleep?: CrewSleepResult;
+  // The close request sent to the member's live session, when it was in session.
+  close?: CrewCloseResult;
 }
 
-// Restore a retired member. Its kept mail is delivered, which may wake it.
+// Restore a retired member. Its kept mail is delivered, which may start a session for it.
 @extension("x-on", #{ home: true })
 model CrewRestoreMessage {
   cmd: "crew_restore";
@@ -7598,13 +7598,13 @@ model CrewRestoreResult {
   already_active: boolean;
 }
 
-// Ask an awake member to close its day and sleep. This is consented closure:
+// Ask a member in session to close it. This is consented closure:
 // the daemon delivers a user-originated request telling the member to write its
 // handoff and file it with `attn handoff`; it does not kill the member.
-// Home-only. An asleep member is a named no-op rather than a silent success.
+// Home-only. A member between sessions is a named no-op rather than a silent success.
 @extension("x-on", #{ home: true })
-model CrewSleepMessage {
-  cmd: "crew_sleep";
+model CrewCloseMessage {
+  cmd: "crew_close";
   // The profile the request is asked from: the calling session's profile,
   // else this profile, else the connection's selected profile over WebSocket.
   // Member names resolve only inside it.
@@ -7614,39 +7614,39 @@ model CrewSleepMessage {
   request_id?: string; // set by the WS frontend to correlate the result event
 }
 
-// CrewSleepResultMessage replies to a websocket crew_sleep. The request may be
+// CrewCloseResultMessage replies to a websocket crew_close. The request may be
 // queued when the member cannot take input immediately; the durable message
 // rail retries it on the target's next state change.
-model CrewSleepResultMessage {
-  event: "crew_sleep_result";
+model CrewCloseResultMessage {
+  event: "crew_close_result";
   request_id: string;
   success: boolean;
   error?: string;
   member?: string;
   session_id?: SessionID;
-  already_asleep?: boolean;
+  already_closed?: boolean;
   delivery_status?: AgentMsgStatus;
   detail?: string;
 }
 
-model CrewSleepResult {
+model CrewCloseResult {
   member: string;
   name: string;
-  // Absent when the member was already asleep and no request was sent.
+  // Absent when the member was already between sessions and no request was sent.
   session_id?: SessionID;
-  already_asleep: boolean;
-  // Absent on the already-asleep no-op.
+  already_closed: boolean;
+  // Absent on the already-closed no-op.
   delivery_status?: AgentMsgStatus;
   detail: string;
 }
 
-// Apply an awake member's saved launch settings and charter to its running
+// Apply a member's saved launch settings and charter to its running
 // session. On the same harness the session reloads in place and keeps its
 // conversation. On a different harness the member is asked to file its letter;
 // that letter ends the session and starts the next one on the saved harness.
 // The caller may be the member itself, an agent above it in the delegation
-// chain, the profile's chief, or the app. An asleep member is a named no-op:
-// its next wake uses the saved settings.
+// chain, the profile's chief, or the app. A member between sessions is a named no-op:
+// its next session uses the saved settings.
 @extension("x-on", #{ home: true })
 model CrewApplyMessage {
   cmd: "crew_apply";
@@ -7665,15 +7665,15 @@ enum CrewApplyOutcome {
   reloaded,
   // Asked to file its letter so its next session starts on the saved harness.
   letter_requested,
-  // Asleep: nothing runs, and the next wake uses the saved settings.
-  asleep,
+  // Between sessions: nothing runs, and the next session uses the saved settings.
+  between_sessions,
 }
 
 model CrewApplyResult {
   member: string;
   name: string;
   outcome: CrewApplyOutcome;
-  // The running session the settings were applied to. Absent when asleep.
+  // The running session the settings were applied to. Absent between sessions.
   session_id?: SessionID;
   // How the letter request reached the session, for `letter_requested`.
   delivery_status?: AgentMsgStatus;
@@ -7742,7 +7742,7 @@ model CrewSetMessage {
   notebook_root?: string;
   // An existing folder holding the member's CHARTER.md, recorded as its home
   // after the folder was moved or renamed outside attn. The member must be
-  // asleep; outside attn's data folder the folder takes the member's name.
+  // between sessions; outside attn's data folder the folder takes the member's name.
   home?: string;
   launch_desktop_name?: string;
   launch_desktop_setting?: LaunchDesktopSetting;
@@ -7799,7 +7799,7 @@ model CrewHandoffMessage {
 // Only a harness switch asked by `crew_apply` starts the next session.
 enum CrewDayClose {
   successor,
-  sleep,
+  closed,
 }
 
 // Where the letter landed, and what became of the day. A filed letter is never
@@ -7813,14 +7813,14 @@ model CrewHandoffResult {
   session_id?: SessionID;
   // Why no successor started, when one was due.
   successor_error?: string;
-  // What the day did: `successor` started the next session, `sleep` ended it.
+  // What the day did: `successor` started the next session, `closed` ended it.
   // Absent when neither happened, which is what successor_error explains.
   outcome?: CrewDayClose;
 }
 
 // The roster, pushed on initial_state and whenever a member is registered,
-// woken, or released. Every member is here, awake or asleep: the sidebar shows
-// a sleeping member one action from waking, so it cannot ask per member.
+// started, or released. Every member is here, in session or not: the sidebar shows
+// a member between sessions one action from starting, so it cannot ask per member.
 model CrewUpdatedMessage {
   event: "crew_updated";
   members: CrewMember[];
@@ -8837,8 +8837,8 @@ alias DaemonEvent =
   | CrewCharterSetResultMessage
   | CrewHandoffsGetResultMessage
   | CrewHandoffGetResultMessage
-  | CrewWakeResultMessage
-  | CrewSleepResultMessage
+  | CrewStartResultMessage
+  | CrewCloseResultMessage
   | CrewApplyResultMessage
   | CrewSetResultMessage
   | CrewRenameResultMessage

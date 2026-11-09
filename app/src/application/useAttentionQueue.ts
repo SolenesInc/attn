@@ -168,7 +168,7 @@ export function useAttentionQueue({
     [agentOnScreen, agentOnScreenActions?.snooze, openSnoozeForSession],
   );
 
-  const handleWakeActiveSession = useMemo(
+  const handleUnsnoozeActiveSession = useMemo(
     () =>
       queueModeEnabled &&
       agentOnScreen?.turnSnoozedUntil &&
@@ -258,7 +258,7 @@ export function useAttentionQueue({
     queueHidden,
     activeGroupForCommands,
     activeSessionForCommands,
-    handleWakeActiveSession,
+    handleUnsnoozeActiveSession,
     wantsAttention,
     waitingLocalSessions,
     handleSettleActiveTurn,

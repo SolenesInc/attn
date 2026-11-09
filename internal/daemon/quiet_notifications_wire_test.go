@@ -75,7 +75,7 @@ func owingIdleAgent(t *testing.T, w *world, app *testworld.Peer, cli *client.Cli
 	return session, agent, owed
 }
 
-func TestAnAgentANotificationWokeStaysOutOfTheQueueWhenItStops(t *testing.T) {
+func TestAnAgentANotificationStartedStaysOutOfTheQueueWhenItStops(t *testing.T) {
 	w, app, cli := quietNotificationsWorld(t, true)
 	session, agent, owed := owingIdleAgent(t, w, app, cli)
 	settled := settleFromApp(app, owed)

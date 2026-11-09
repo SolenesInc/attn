@@ -72,6 +72,7 @@ var Placements = map[string][]Placement{
 	"crew_apply":                       {Placement{LocatorHome, ""}},
 	"crew_charter_get":                 {Placement{LocatorHome, ""}},
 	"crew_charter_set":                 {Placement{LocatorHome, ""}},
+	"crew_close":                       {Placement{LocatorHome, ""}},
 	"crew_create":                      {Placement{LocatorHome, ""}},
 	"crew_handoff":                     {Placement{LocatorHome, ""}},
 	"crew_handoff_get":                 {Placement{LocatorHome, ""}},
@@ -83,8 +84,7 @@ var Placements = map[string][]Placement{
 	"crew_restore":                     {Placement{LocatorHome, ""}},
 	"crew_retire":                      {Placement{LocatorHome, ""}},
 	"crew_set":                         {Placement{LocatorHome, ""}},
-	"crew_sleep":                       {Placement{LocatorHome, ""}},
-	"crew_wake":                        {Placement{LocatorHome, ""}},
+	"crew_start":                       {Placement{LocatorHome, ""}},
 	"decline_update":                   {Placement{LocatorHere, ""}},
 	"delegate":                         {Placement{LocatorHome, ""}},
 	"delegate_status":                  {Placement{LocatorHome, ""}},
@@ -824,6 +824,18 @@ func (m CrewCharterSetMessage) Locate() string {
 	return ""
 }
 
+func (CrewCloseMessage) CommandName() string {
+	return "crew_close"
+}
+
+func (m CrewCloseMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CrewCloseMessage) Locate() string {
+	return ""
+}
+
 func (CrewCreateMessage) CommandName() string {
 	return "crew_create"
 }
@@ -956,27 +968,15 @@ func (m CrewSetMessage) Locate() string {
 	return ""
 }
 
-func (CrewSleepMessage) CommandName() string {
-	return "crew_sleep"
+func (CrewStartMessage) CommandName() string {
+	return "crew_start"
 }
 
-func (m CrewSleepMessage) Placement() Placement {
+func (m CrewStartMessage) Placement() Placement {
 	return Placement{LocatorHome, ""}
 }
 
-func (m CrewSleepMessage) Locate() string {
-	return ""
-}
-
-func (CrewWakeMessage) CommandName() string {
-	return "crew_wake"
-}
-
-func (m CrewWakeMessage) Placement() Placement {
-	return Placement{LocatorHome, ""}
-}
-
-func (m CrewWakeMessage) Locate() string {
+func (m CrewStartMessage) Locate() string {
 	return ""
 }
 

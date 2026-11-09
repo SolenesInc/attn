@@ -17,7 +17,7 @@ import (
 func TestACrewClaimOutlivesItsSessionThroughAHarnessSwitch(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	first := wakeCrew(t, cli, "keel", "").SessionID
+	first := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(first))
 	seed := plantSeedAs(t, cli, string(first), "Keep the claim across sessions")
 	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
@@ -36,7 +36,7 @@ func TestACrewClaimOutlivesItsSessionThroughAHarnessSwitch(t *testing.T) {
 func TestAMembersWatchRingsItsNextSessionAfterAHarnessSwitch(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	first := wakeCrew(t, cli, "keel", "").SessionID
+	first := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(first))
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 	plot := plantSeedAs(t, cli, sender, "Watch this tree")
@@ -78,7 +78,7 @@ func TestTendingForAnUnknownNameIsRefused(t *testing.T) {
 	if after := lifeShow(t, cli, seed).Seed; after.Rev != before.Rev || after.Claimed || after.Tender != nil {
 		t.Fatalf("the refusals changed the seed: %+v", after)
 	}
-	day := wakeCrew(t, cli, "Keel", "").SessionID
+	day := startCrew(t, cli, "Keel", "").SessionID
 	w.Launched(string(day)).Prompted()
 	assigned, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "Keel"})
 	if err != nil {
@@ -95,7 +95,7 @@ func TestTendingForAnUnknownNameIsRefused(t *testing.T) {
 func TestAMembersNextSessionClosesTheDelegateItsLastSessionDispatched(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	first := wakeCrew(t, cli, "keel", "").SessionID
+	first := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(first))
 	seed := plantSeedAs(t, cli, string(first), "Pass this work to a delegate")
 	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
@@ -189,10 +189,10 @@ func TestAnExitedTenderKeepsSeedBellsUntilItsAgentResumes(t *testing.T) {
 	})
 }
 
-func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
+func TestResumingAMemberClaimedSeedStartsTheMember(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	first := wakeCrew(t, cli, "keel", "").SessionID
+	first := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(first))
 	seed := plantSeedAs(t, cli, string(first), "Resume the member")
 	if _, err := cli.SeedTransition(first, seed, "tend", "", false, client.SeedTransitionOptions{}); err != nil {
@@ -210,7 +210,7 @@ func TestResumingAMemberClaimedSeedWakesTheMember(t *testing.T) {
 	if !resumed.Success || resumed.SessionID == nil || *resumed.SessionID == first || protocol.Deref(resumed.AlreadyRunning) {
 		t.Fatalf("resuming an asleep member's seed = %+v, want a new session for the member", resumed)
 	}
-	if prompt := w.Launched(string(*resumed.SessionID)).Prompted(); prompt != crewWakeGreeting {
+	if prompt := w.Launched(string(*resumed.SessionID)).Prompted(); prompt != crewStartGreeting {
 		t.Errorf("a resumed member opened with %q, want today's greeting", prompt)
 	}
 	again := seedResumeRequest(app, seed)
@@ -227,7 +227,7 @@ func TestRetiredMembersCannotReclaimWorkThroughResume(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	createCrew(t, cli, "Keel")
-	first := wakeCrew(t, cli, "Keel", "").SessionID
+	first := startCrew(t, cli, "Keel", "").SessionID
 	w.Launched(string(first)).Prompted()
 	seed := plantSeedAs(t, cli, string(first), "Leave this work released")
 	lifeMove(t, cli, string(first), seed, "tend", "", "")
@@ -244,7 +244,7 @@ func TestRetiredMembersCannotReclaimWorkThroughResume(t *testing.T) {
 func TestGardenEventsNameWhoCausedThemAndWhoWasTold(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	day := wakeCrew(t, cli, "keel", "").SessionID
+	day := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(day))
 	plain := spawnPanes(w, app, w.Path("plain"))[0].session
 	seed := plantSeedAs(t, cli, plain, "Name the cause")
@@ -288,7 +288,7 @@ func TestGardenEventsNameWhoCausedThemAndWhoWasTold(t *testing.T) {
 func TestWorkASessionAssignsResumesWithTheMemberAfterItParks(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	member := wakeCrew(t, cli, "keel", "").SessionID
+	member := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(member))
 	assigner := spawnPanes(w, app, w.Path("assigner"))[0].session
 	seed := plantSeedAs(t, cli, assigner, "Work assigned by a session")
@@ -305,7 +305,7 @@ func TestWorkASessionAssignsResumesWithTheMemberAfterItParks(t *testing.T) {
 	}
 }
 
-func TestWorkTheUserAssignsToAnAsleepMemberResumesWithTheMember(t *testing.T) {
+func TestWorkTheUserAssignsToAMemberBetweenSessionsResumesWithTheMember(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	seed := plantSeedAs(t, cli, "", "Work assigned by the user")
@@ -337,7 +337,7 @@ func TestWorkTheUserAssignsToAnAsleepMemberResumesWithTheMember(t *testing.T) {
 func TestAWorkerThatExitsLapsesASessionsClaimButNotAMembers(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	member := wakeCrew(t, cli, "keel", "").SessionID
+	member := startCrew(t, cli, "keel", "").SessionID
 	w.Launched(string(member))
 	session := spawnPanes(w, app, w.Path("plain"))[0].session
 	memberSeed := plantSeedAs(t, cli, string(member), "Held by a member")

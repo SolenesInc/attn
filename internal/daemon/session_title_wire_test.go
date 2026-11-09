@@ -310,7 +310,7 @@ func TestACrewMembersDayKeepsTheMembersName(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
 	app, cli := w.App(), w.Client()
-	woken := wakeCrew(t, cli, "trellis", "")
+	woken := startCrew(t, cli, "trellis", "")
 	agent := w.Launched(string(woken.SessionID))
 	named := testworld.AwaitSession(app, string(woken.SessionID), func(s protocol.Session) bool { return protocol.Deref(s.CrewMember) == "trellis" })
 

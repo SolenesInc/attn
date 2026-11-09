@@ -31,7 +31,7 @@ func TestANewUsersChiefRunsTheFullPathUntilItSaysDoneOnBothHarnesses(t *testing.
 				t.Fatal("a fresh Chief reports a harness")
 			}
 			setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr(string(harness))})
-			first := wakeCrew(t, cli, "chief", "")
+			first := startCrew(t, cli, "chief", "")
 			run := w.Launched(string(first.SessionID))
 			guidance := launchGuidance(t, w, run)
 			for _, want := range []string{onboardingReference, "open with the full path", "attn onboarding done"} {
@@ -43,7 +43,7 @@ func TestANewUsersChiefRunsTheFullPathUntilItSaysDoneOnBothHarnesses(t *testing.
 			run.Prompted()
 			run.Reply("Ready. <!-- attn:state=idle -->")
 			crewHandoff(t, cli, string(first.SessionID), "Roles are set; the Notebook and the tour remain.", false)
-			second := wakeCrew(t, cli, "chief", "")
+			second := startCrew(t, cli, "chief", "")
 			if got := launchGuidance(t, w, w.Launched(string(second.SessionID))); !strings.Contains(got, onboardingReference) {
 				t.Fatalf("onboarding ended with the first letter: %s", got)
 			}
@@ -69,7 +69,7 @@ func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
 	w, old := upgradedFromTodaysChief(t, t.TempDir(), store.LaunchIntent{})
 	app, cli := w.App(), w.Client()
 	onboardingPending(t, cli, protocol.OnboardingActionShow, protocol.OnboardingPathTour)
-	woken := wakeCrew(t, cli, "chief", "")
+	woken := startCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))
 	guidance := launchGuidance(t, w, run)
 	for _, want := range []string{onboardingReference, "open with the tour", "attn agent msg " + old} {
@@ -80,7 +80,7 @@ func TestAnExistingUsersChiefTakesTheTourAndNamesItsPredecessor(t *testing.T) {
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	crewHandoff(t, cli, string(woken.SessionID), "Met the old session; the tour continues.", false)
-	next := launchGuidance(t, w, w.Launched(string(wakeCrew(t, cli, "chief", "").SessionID)))
+	next := launchGuidance(t, w, w.Launched(string(startCrew(t, cli, "chief", "").SessionID)))
 	if !strings.Contains(next, "open with the tour") || strings.Contains(next, old) {
 		t.Fatalf("the second day should keep the tour and drop the old session: %s", next)
 	}

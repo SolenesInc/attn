@@ -35,7 +35,7 @@ func switchCrewHarness(t *testing.T, cli *client.Client, member, agent string) *
 func TestApplyingAModelChangeReloadsTheMemberInPlaceWithItsConversation(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	first := w.Launched(string(day.SessionID))
 	first.Prompted()
 	letters := crewLetters(t, w, "trellis")
@@ -78,7 +78,7 @@ func TestApplyingAModelChangeReloadsTheMemberInPlaceWithItsConversation(t *testi
 func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
 	before := crewSessionCount(t, cli)
 
@@ -128,7 +128,7 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 
 	t.Run("the switch is spent: the successor's own letter ends the day", func(t *testing.T) {
 		slept := crewHandoff(t, cli, string(successor), "Signing off on codex.", false)
-		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep || slept.SessionID != nil {
+		if protocol.Deref(slept.Outcome) != protocol.CrewDayCloseClosed || slept.SessionID != nil {
 			t.Fatalf("handoff = %+v, want sleep with no successor", slept)
 		}
 	})
@@ -136,7 +136,7 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 	t.Run("an asleep member is told its next wake applies the settings", func(t *testing.T) {
 		count := crewSessionCount(t, cli)
 		asleep := applyCrew(t, cli, "trellis")
-		if asleep.Outcome != protocol.CrewApplyOutcomeAsleep || asleep.SessionID != nil || !strings.Contains(asleep.Detail, "next wake") {
+		if asleep.Outcome != protocol.CrewApplyOutcomeBetweenSessions || asleep.SessionID != nil || !strings.Contains(asleep.Detail, "next session") {
 			t.Fatalf("apply = %+v, want the asleep no-op", asleep)
 		}
 		if got := crewSessionCount(t, cli); got != count {
@@ -145,20 +145,20 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 	})
 
 	t.Run("saving the old harness back without applying cancels the switch", func(t *testing.T) {
-		day := wakeCrew(t, cli, "alder", "")
+		day := startCrew(t, cli, "alder", "")
 		w.Launched(string(day.SessionID))
 		switchCrewHarness(t, cli, "alder", "codex")
 		setCrew(t, cli, "alder", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		if protocol.Deref(crewRosterMember(t, cli, "alder").SwitchPending) {
 			t.Fatal("the roster still shows a switch to the harness alder already runs on")
 		}
-		if slept := crewHandoff(t, cli, string(day.SessionID), "Done for today.", false); protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
+		if slept := crewHandoff(t, cli, string(day.SessionID), "Done for today.", false); protocol.Deref(slept.Outcome) != protocol.CrewDayCloseClosed {
 			t.Fatalf("handoff after saving the old harness back = %+v, want sleep", slept)
 		}
 	})
 
 	t.Run("switching back before the letter reloads in place and cancels the switch", func(t *testing.T) {
-		day := wakeCrew(t, cli, "keel", "")
+		day := startCrew(t, cli, "keel", "")
 		first := w.Launched(string(day.SessionID))
 		first.Prompted()
 		switchCrewHarness(t, cli, "keel", "codex")
@@ -169,7 +169,7 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 		if again := w.Launched(string(day.SessionID)); again.ConversationID != first.ConversationID {
 			t.Fatalf("the reload ran conversation %s, want %s", again.ConversationID, first.ConversationID)
 		}
-		if slept := crewHandoff(t, cli, string(day.SessionID), "Staying on claude.", false); protocol.Deref(slept.Outcome) != protocol.CrewDayCloseSleep {
+		if slept := crewHandoff(t, cli, string(day.SessionID), "Staying on claude.", false); protocol.Deref(slept.Outcome) != protocol.CrewDayCloseClosed {
 			t.Fatalf("handoff after the cancelled switch = %+v, want sleep", slept)
 		}
 	})
@@ -181,7 +181,7 @@ func TestOnlyTheMemberItsChainAndTheChiefMayApplyItsSettings(t *testing.T) {
 	if err := w.InjectSession("errand", "errand", w.Path("errand"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
 	_, err := cli.WithGardenProfile("", "errand").CrewApply("trellis")
 	crewErrorContains(t, err, "delegation-chain rule")

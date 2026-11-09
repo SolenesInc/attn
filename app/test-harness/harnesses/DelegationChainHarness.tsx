@@ -75,7 +75,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
             run: () => chain.current?.open(current),
           }]}
           onOpenAgent={() => {}}
-          onWakeMember={() => {}}
+          onStartMember={() => {}}
           onOpenTile={() => {}}
           onSettle={() => {}}
           onSnooze={() => {}}

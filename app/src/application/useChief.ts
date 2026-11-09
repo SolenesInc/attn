@@ -5,7 +5,7 @@ import { useProfilesStore } from '../store/profiles';
 import { storedRouteModel, type HarnessRoute } from '../hooks/useHarnessRoute';
 import type { CrewMember } from '../types/generated';
 
-export type ChiefPhase = 'unconfigured' | 'configuring' | 'waking' | 'awake' | 'sleeping' | 'asleep';
+export type ChiefPhase = 'unconfigured' | 'configuring' | 'starting' | 'in-session' | 'closing' | 'between-sessions';
 export interface ChiefView {
   key: string;
   name: string;
@@ -20,24 +20,24 @@ export interface ChiefView {
 }
 export interface ChiefActions {
   setUp(route: HarnessRoute, notebookRoot?: string): Promise<boolean>;
-  wake(): void;
-  sleep(): void;
+  start(): void;
+  close(): void;
   edit(): void;
   dismiss(): void;
 }
-type Pending = { key: string; phase: 'configuring' | 'waking' | 'sleeping' };
+type Pending = { key: string; phase: 'configuring' | 'starting' | 'closing' };
 
 function chiefPhase(member: CrewMember, live: ReadonlySet<string>, pending: Pending | null): ChiefPhase {
   if (pending?.key === member.id) return pending.phase;
   if (!member.agent) return 'unconfigured';
-  if (!member.binding_session) return 'asleep';
-  return live.has(member.binding_session) ? 'awake' : 'waking';
+  if (!member.binding_session) return 'between-sessions';
+  return live.has(member.binding_session) ? 'in-session' : 'starting';
 }
 
 export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSession(id: string): void; showError(message: string): void }) {
   const crew = useDaemonStore(state => state.crew);
   const profileId = useProfilesStore(state => state.selectedProfileId);
-  const { sendCrewSet, sendCrewWake, sendCrewSleep } = useDaemonApi();
+  const { sendCrewSet, sendCrewStart, sendCrewClose } = useDaemonApi();
   const member = crew.find(candidate => candidate.chief && candidate.profile_id === profileId);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<{ key: string; message: string } | null>(null);
@@ -46,9 +46,9 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
   useLayoutEffect(() => { currentKey.current = member?.id; }, [member?.id]);
   const isCurrent = (key: string) => currentKey.current === key;
   const fail = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
-  const wakeChief = (key: string) => {
-    setPending({ key, phase: 'waking' });
-    return sendCrewWake(key).then(({ sessionId }) => { if (isCurrent(key)) input.selectSession(sessionId); })
+  const startChief = (key: string) => {
+    setPending({ key, phase: 'starting' });
+    return sendCrewStart(key).then(({ sessionId }) => { if (isCurrent(key)) input.selectSession(sessionId); })
       .catch(cause => { if (isCurrent(key)) input.showError(fail(cause)); })
       .finally(() => setPending(value => value?.key === key ? null : value));
   };
@@ -69,19 +69,19 @@ export function useChief(input: { liveSessionIds: ReadonlySet<string>; selectSes
         return false;
       }
       setEditor(value => value?.key === key ? { key, open: false } : value);
-      if (firstRun && isCurrent(key)) void wakeChief(key);
+      if (firstRun && isCurrent(key)) void startChief(key);
       else setPending(value => value?.key === key ? null : value);
       return isCurrent(key);
     },
-    wake() {
+    start() {
       if (!member?.agent || pending?.key === member.id) return;
-      void wakeChief(member.id);
+      void startChief(member.id);
     },
-    sleep() {
+    close() {
       if (!member?.binding_session || pending?.key === member.id) return;
       const key = member.id;
-      setPending({ key, phase: 'sleeping' });
-      void sendCrewSleep(key).catch(cause => {
+      setPending({ key, phase: 'closing' });
+      void sendCrewClose(key).catch(cause => {
         if (isCurrent(key)) input.showError(fail(cause));
       }).finally(() => setPending(value => value?.key === key ? null : value));
     },

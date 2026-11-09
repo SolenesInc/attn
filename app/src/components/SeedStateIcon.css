@@ -75,7 +75,7 @@
 .seed-state-icon .fleck {
   opacity: 0;
 }
-.seed-state-icon .sleep-mote {
+.seed-state-icon .dormant-mote {
   opacity: 0;
   stroke-width: 1.1;
 }
@@ -91,7 +91,7 @@
 .seed-state-icon .leaf-right {
   transform-origin: 16px 16px;
 }
-.seed-state-icon .sleeping-bud {
+.seed-state-icon .dormant-bud {
   transform-origin: 16px 26px;
 }
 .seed-state-icon .moon {
@@ -136,7 +136,7 @@
   animation: garden-leaf-unfold-right 1100ms cubic-bezier(.2,.7,.25,1);
 }
 
-.seed-state-icon.is-playing .sleeping-bud {
+.seed-state-icon.is-playing .dormant-bud {
   animation: garden-bud-rest 1400ms ease-in-out;
 }
 
@@ -144,8 +144,8 @@
   animation: garden-moon-nod 1400ms ease-in-out;
 }
 
-.seed-state-icon.is-playing .sleep-mote {
-  animation: garden-sleep-drift 1400ms ease-out;
+.seed-state-icon.is-playing .dormant-mote {
+  animation: garden-dormant-drift 1400ms ease-out;
 }
 
 .seed-state-icon.is-playing .berry-left {
@@ -270,7 +270,7 @@
   }
 }
 
-@keyframes garden-sleep-drift {
+@keyframes garden-dormant-drift {
   0%,20% {
     transform: translate(-1px,2px);
     opacity: 0;

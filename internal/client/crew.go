@@ -25,8 +25,8 @@ func (c *Client) crewList(msg protocol.CrewListMessage) (*protocol.CrewListResul
 	return resp.CrewListResult, nil
 }
 
-func (c *Client) CrewWake(member string, agent string, sourceSessionID protocol.SessionID) (*protocol.CrewWakeResult, error) {
-	msg := protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: member}
+func (c *Client) CrewStart(member string, agent string, sourceSessionID protocol.SessionID) (*protocol.CrewStartResult, error) {
+	msg := protocol.CrewStartMessage{Cmd: protocol.CmdCrewStart, Member: member}
 	if agent != "" {
 		msg.Agent = protocol.Ptr(agent)
 	}
@@ -37,21 +37,21 @@ func (c *Client) CrewWake(member string, agent string, sourceSessionID protocol.
 	if err != nil {
 		return nil, err
 	}
-	if resp.CrewWakeResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a wake result")
+	if resp.CrewStartResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a start result")
 	}
-	return resp.CrewWakeResult, nil
+	return resp.CrewStartResult, nil
 }
 
-func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
-	resp, err := c.send(protocol.CrewSleepMessage{Cmd: protocol.CmdCrewSleep, Member: member})
+func (c *Client) CrewClose(member string) (*protocol.CrewCloseResult, error) {
+	resp, err := c.send(protocol.CrewCloseMessage{Cmd: protocol.CmdCrewClose, Member: member})
 	if err != nil {
 		return nil, err
 	}
-	if resp.CrewSleepResult == nil {
-		return nil, fmt.Errorf("the daemon answered without a sleep result")
+	if resp.CrewCloseResult == nil {
+		return nil, fmt.Errorf("the daemon answered without a close result")
 	}
-	return resp.CrewSleepResult, nil
+	return resp.CrewCloseResult, nil
 }
 
 func (c *Client) CrewApply(member string) (*protocol.CrewApplyResult, error) {

@@ -69,26 +69,26 @@ describe('the title bar controls and the sidebar crew', () => {
     expect(restarted.daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key: 'queue_mode_enabled', value: 'false' }]);
   });
 
-  it('shows only sleeping crew above desktops and keeps the wake confirmation', async () => {
+  it('shows only crew between sessions above desktops and keeps the start confirmation', async () => {
     const { daemon } = await renderApp({ initialState: {
-      crew: [crewMember('asleep', { resolved_agent: 'codex' }), crewMember('awake', { binding_session: 's1' })],
-      sessions: [daemonSession('s1', { crew_member: 'awake' })], desktops: [soloDesktop('s1')],
+      crew: [crewMember('resting', { resolved_agent: 'codex' }), crewMember('present', { binding_session: 's1' })],
+      sessions: [daemonSession('s1', { crew_member: 'present' })], desktops: [soloDesktop('s1')],
     } });
-    expect(screen.queryByTestId('queue-crew-awake')).toBeNull();
+    expect(screen.queryByTestId('queue-crew-present')).toBeNull();
     expect(screen.getByTestId('sidebar-session-s1')).toBeInTheDocument();
-    const sleeping = within(screen.getByTestId('queue-crew-asleep'));
-    expect(sleeping.getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
-    const wake = sleeping.getByTestId('queue-crew-wake-asleep');
-    await gesture(daemon, () => fireEvent.click(wake));
-    expect(daemon.sentOf('crew_wake')).toEqual([]);
-    await gesture(daemon, () => fireEvent.click(wake));
-    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:asleep' })]);
+    const resting = within(screen.getByTestId('queue-crew-resting'));
+    expect(resting.getByRole('img', { name: 'Codex · idle' })).toBeInTheDocument();
+    const sun = resting.getByTestId('queue-crew-start-resting');
+    await gesture(daemon, () => fireEvent.click(sun));
+    expect(daemon.sentOf('crew_start')).toEqual([]);
+    await gesture(daemon, () => fireEvent.click(sun));
+    expect(daemon.sentOf('crew_start')).toEqual([expect.objectContaining({ member: 'member:resting' })]);
   });
 
-  it('keeps bound crew awake before their session and desktop arrive', async () => {
+  it('keeps bound crew in session before their session and desktop arrive', async () => {
     await renderApp({ initialState: {
-      crew: [crewMember('awake', { binding_session: 'pending-session' })],
+      crew: [crewMember('present', { binding_session: 'pending-session' })],
     } });
-    expect(screen.queryByTestId('queue-crew-awake')).toBeNull();
+    expect(screen.queryByTestId('queue-crew-present')).toBeNull();
   });
 });

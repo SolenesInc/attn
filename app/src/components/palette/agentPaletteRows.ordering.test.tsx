@@ -57,7 +57,7 @@ function describeRow(row: AgentPaletteRow<PaletteSession>): string {
     case 'agent':
       return `${row.anchored ? '*' : ''}${row.session.id}${row.queueHead ? ' ⌘J' : ''}`;
     case 'member':
-      return `asleep ${row.member}`;
+      return `between sessions ${row.member}`;
     case 'tile':
       return `tile ${row.title}`;
     case 'divider':
@@ -90,7 +90,7 @@ describe('agentPaletteRows', () => {
     expect(rows(fixture, '', { crewRoster: ['figgy', 'gardener'] }).map(describeRow)).toEqual([
       '*chief',
       '*figgy-day',
-      'asleep gardener',
+      'between sessions gardener',
       '---',
       'older-turn ⌘J',
       'newer-turn',
@@ -111,7 +111,7 @@ describe('agentPaletteRows', () => {
 
   it('filters every kind of row and drops the ⌘J tag', () => {
     expect(rows(fixture, 'turn').map(describeRow)).toEqual(['older-turn', 'newer-turn']);
-    expect(rows(fixture, 'garden', { crewRoster: ['gardener'] }).map(describeRow)).toEqual(['asleep gardener']);
+    expect(rows(fixture, 'garden', { crewRoster: ['gardener'] }).map(describeRow)).toEqual(['between sessions gardener']);
     expect(rows(fixture, 'release').map(describeRow)).toEqual(['tile release notes']);
     expect(rows(fixture, 'nightly').map(describeRow)).toEqual([
       'nightly-1',

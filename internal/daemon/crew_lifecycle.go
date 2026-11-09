@@ -36,27 +36,27 @@ const crewHeartbeatLeadDefault = 300
 const crewAwayDefault = 9000
 
 const (
-	crewWakeLimitDefault        = 8
-	crewWakeLimitWindowDefault  = 43200
-	crewWakeLimitMax            = 1000
-	crewWakeLimitWindowMinSecs  = 60
-	crewWakeLimitWindowMaxSecs  = 7 * 24 * 3600
-	crewCacheTTLMinSeconds      = 60
-	crewCacheTTLMaxSeconds      = 24 * 3600
-	crewHeartbeatLeadMinSeconds = 30
-	crewHeartbeatLeadMaxSeconds = 3600
-	crewAwayMinSeconds          = 60
-	crewAwayMaxSeconds          = 24 * 3600
+	crewMailStartLimitDefault       = 8
+	crewMailStartLimitWindowDefault = 43200
+	crewMailStartLimitMax           = 1000
+	crewMailStartLimitWindowMinSecs = 60
+	crewMailStartLimitWindowMaxSecs = 7 * 24 * 3600
+	crewCacheTTLMinSeconds          = 60
+	crewCacheTTLMaxSeconds          = 24 * 3600
+	crewHeartbeatLeadMinSeconds     = 30
+	crewHeartbeatLeadMaxSeconds     = 3600
+	crewAwayMinSeconds              = 60
+	crewAwayMaxSeconds              = 24 * 3600
 )
 
 func crewHeartbeatPrompt() string { return prompts.RenderText("crew", "heartbeat", prompts.Values{}) }
 
-const crewSleepPromptGrace = 10 * time.Minute
+const crewClosePromptGrace = 10 * time.Minute
 
 type crewLifecycleMemo struct {
 	mu                     sync.Mutex
 	lastHeartbeat          map[protocol.SessionID]crewHeartbeat
-	lastSleepPromptAttempt map[protocol.SessionID]time.Time
+	lastClosePromptAttempt map[protocol.SessionID]time.Time
 }
 
 type crewHeartbeat struct {
@@ -67,7 +67,7 @@ type crewHeartbeat struct {
 func newCrewLifecycleMemo() *crewLifecycleMemo {
 	return &crewLifecycleMemo{
 		lastHeartbeat:          make(map[protocol.SessionID]crewHeartbeat),
-		lastSleepPromptAttempt: make(map[protocol.SessionID]time.Time),
+		lastClosePromptAttempt: make(map[protocol.SessionID]time.Time),
 	}
 }
 
@@ -85,13 +85,13 @@ func (m *crewLifecycleMemo) recordHeartbeat(sessionID protocol.SessionID, genera
 	m.lastHeartbeat[sessionID] = crewHeartbeat{generation: generation, at: at}
 }
 
-func (m *crewLifecycleMemo) mayPromptSleep(sessionID protocol.SessionID, now time.Time, grace time.Duration) bool {
+func (m *crewLifecycleMemo) mayPromptClose(sessionID protocol.SessionID, now time.Time, grace time.Duration) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if last, ok := m.lastSleepPromptAttempt[sessionID]; ok && now.Sub(last) < grace {
+	if last, ok := m.lastClosePromptAttempt[sessionID]; ok && now.Sub(last) < grace {
 		return false
 	}
-	m.lastSleepPromptAttempt[sessionID] = now
+	m.lastClosePromptAttempt[sessionID] = now
 	return true
 }
 
@@ -99,7 +99,7 @@ func (m *crewLifecycleMemo) forget(sessionID protocol.SessionID) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.lastHeartbeat, sessionID)
-	delete(m.lastSleepPromptAttempt, sessionID)
+	delete(m.lastClosePromptAttempt, sessionID)
 }
 
 func (d *Daemon) crewBoolSetting(name *setting.Setting) bool {
@@ -149,16 +149,16 @@ func (d *Daemon) crewAwayLimit() time.Duration {
 	return d.crewSeconds(setting.CrewAwaySeconds, crewAwayDefault, crewAwayMinSeconds, crewAwayMaxSeconds)
 }
 
-func (d *Daemon) crewWakeLedger() crew.WakeLedger {
-	limit := crewWakeLimitDefault
+func (d *Daemon) crewStartLedger() crew.MailStartLedger {
+	limit := crewMailStartLimitDefault
 	if d.store != nil {
 		if raw := strings.TrimSpace(d.setting(setting.CrewMailStartLimit)); raw != "" {
-			limit = resolveBoundedIntSetting(raw, crewWakeLimitDefault, 0, crewWakeLimitMax)
+			limit = resolveBoundedIntSetting(raw, crewMailStartLimitDefault, 0, crewMailStartLimitMax)
 		}
 	}
-	return crew.WakeLedger{
+	return crew.MailStartLedger{
 		Limit:  limit,
-		Window: d.crewSeconds(setting.CrewMailStartWindowSeconds, crewWakeLimitWindowDefault, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs),
+		Window: d.crewSeconds(setting.CrewMailStartWindowSeconds, crewMailStartLimitWindowDefault, crewMailStartLimitWindowMinSecs, crewMailStartLimitWindowMaxSecs),
 	}
 }
 
@@ -215,7 +215,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	awayLimit := d.crewAwayLimit()
 	lead := d.crewHeartbeatLead()
 	heartbeat := d.crewBoolSetting(setting.CrewHeartbeatEnabled)
-	autoSleep := d.crewBoolSetting(setting.CrewAwayCloseEnabled)
+	awayClose := d.crewBoolSetting(setting.CrewAwayCloseEnabled)
 	for _, member := range members {
 		if member.Chief || !d.crewBindingLive(member) {
 			continue
@@ -234,9 +234,9 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 			MidTurn:          crewSessionMidTurn(session),
 			RunFailed:        attention.RunFailed(d.stateReason(session.ID)),
 			HeartbeatEnabled: heartbeat,
-			AutoSleepEnabled: autoSleep,
+			AwayCloseEnabled: awayClose,
 		})
-		if action == crew.ActionSleep && !d.crewMemo().mayPromptSleep(session.ID, now, crewSleepPromptGrace) {
+		if action == crew.ActionClose && !d.crewMemo().mayPromptClose(session.ID, now, crewClosePromptGrace) {
 			continue
 		}
 		d.actOnCrewMember(member, session.ID, action, cache, now)
@@ -269,7 +269,7 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		d.crewMemo().recordHeartbeat(sessionID, generation, attempt.At)
 		d.logf("crew: warmed %s's context in session %s (cache estimated %s old against a %s assumption)",
 			member.Name, sessionID, cache.Age.Round(time.Second), cache.TTL)
-	case crew.ActionSleep:
+	case crew.ActionClose:
 		session := d.store.Get(sessionID)
 		if session == nil {
 			return
@@ -277,9 +277,9 @@ func (d *Daemon) actOnCrewMember(member crew.Member, sessionID protocol.SessionI
 		generation := protocol.Deref(session.LastModelRequestAt)
 		d.clearCrewSwitching(member.ID)
 		prompt := prompts.RenderText("crew", "close-away", prompts.Values{})
-		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-auto-sleep/" + string(sessionID) + "/" + generation, To: who.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-auto-sleep", Text: prompt})
+		receipt, err := d.sendToInbox(inbox.Item{ID: "crew-away-close/" + string(sessionID) + "/" + generation, To: who.ToSession(sessionID), Kind: inbox.Notice, Source: member.ID, Key: "crew-away-close", Text: prompt})
 		if err != nil {
-			d.logf("crew: %s's sleep request could not be recorded: %v", member.Name, err)
+			d.logf("crew: %s's close request could not be recorded: %v", member.Name, err)
 			return
 		}
 		if !receipt.Rang {
@@ -296,17 +296,17 @@ func (d *Daemon) crewMemo() *crewLifecycleMemo {
 	return d.crewLifecycleState
 }
 
-func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
-	ledger := d.crewWakeLedger()
+func (d *Daemon) chargeMailStart(memberID string, now time.Time) error {
+	ledger := d.crewStartLedger()
 	var refusal error
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
-		ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
+		ledger.Stamps = parseStartStamps(member.MailStarts)
 		kept, err := ledger.Allows(member.Name, now)
 		if err != nil {
 			refusal = err
 			return false, nil
 		}
-		member.AutonomousWakes = formatWakeStamps(kept)
+		member.MailStarts = formatStartStamps(kept)
 		return true, nil
 	}); err != nil {
 		return err
@@ -317,7 +317,7 @@ func (d *Daemon) chargeAutonomousWake(memberID string, now time.Time) error {
 	return refusal
 }
 
-func parseWakeStamps(raw []string) []time.Time {
+func parseStartStamps(raw []string) []time.Time {
 	stamps := make([]time.Time, 0, len(raw))
 	for _, value := range raw {
 		at, err := time.Parse(time.RFC3339, value)
@@ -329,7 +329,7 @@ func parseWakeStamps(raw []string) []time.Time {
 	return stamps
 }
 
-func formatWakeStamps(stamps []time.Time) []string {
+func formatStartStamps(stamps []time.Time) []string {
 	out := make([]string, 0, len(stamps))
 	for _, at := range stamps {
 		out = append(out, at.UTC().Format(time.RFC3339))

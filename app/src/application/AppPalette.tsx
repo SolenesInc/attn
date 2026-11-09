@@ -69,7 +69,7 @@ function OpenPalette({
 }) {
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
   const { queueModeEnabled, crewQueueEnabled, queueHidden } = useAttentionQueueContext();
-  const { handleWakeCrewMember } = useAppGardenActionsContext();
+  const { handleStartCrewMember } = useAppGardenActionsContext();
   const chief = useChiefContext();
   const chiefKey = chief.view?.key;
   const chiefAgent = chief.view?.agent;
@@ -137,10 +137,10 @@ function OpenPalette({
       commandsLoading={usage === null}
       onCommandPick={recordCommand}
       onOpenAgent={(session) => handleSelectSession(session.id)}
-      onWakeMember={(member) => {
-        if (member !== chief.view?.key) { handleWakeCrewMember(member); return; }
+      onStartMember={(member) => {
+        if (member !== chief.view?.key) { handleStartCrewMember(member); return; }
         if (chief.view.phase === 'unconfigured') { setSidebarCollapsed(false); chief.actions.edit(); }
-        else chief.actions.wake();
+        else chief.actions.start();
       }}
       onOpenTile={handleSelectTile}
       onSettle={(session) => void sendSettleTurn(session.id)}

@@ -59,7 +59,7 @@ Preconditions:
 ]}
 ```
 
-`<terminal>` is the agent's terminal id from `wsctl list`. Re-read a state with a deadline that fails the run. Never sleep.
+`<terminal>` is the agent's terminal id from `wsctl list`. Re-read a state with a deadline that fails the run, never after a fixed delay.
 
 - **Launch.** Run `wsctl add-session --cwd $S --agent claude --label state-agent --id state-agent --place`. `./attn agent list` may show `state-agent` as `launching` for a moment. Re-read `./attn agent list` until the state is something else, with a deadline.
 - **Working, then waiting.** Run `wsctl input --id <terminal> --text "hello" --enter`. For at least 1.5 seconds `./attn agent list` shows `working`. Then `./attn agent list` shows `waiting_input` with TURN `owed`. `./attn agent peek state-agent` shows `state: waiting_input` and `turn: owed to this session`. In the app, `bridge dom_wait '{"selector":"[data-testid=\"sidebar-session-state-agent\"] .session-lead[data-state=\"waiting_input\"]","timeoutMs":5000}'` matches.

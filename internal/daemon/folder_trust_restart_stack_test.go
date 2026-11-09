@@ -18,7 +18,7 @@ func TestACaptureWaitsForTheFolderTrustAnswerAcrossADaemonRestart(t *testing.T) 
 	cli := s.Client()
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 	s.AskFolderTrustAtNextBoot()
-	id := string(wakeCrew(t, cli, "chief", "").SessionID)
+	id := string(startCrew(t, cli, "chief", "").SessionID)
 	app.AwaitScreen(id, folderTrustChoice)
 	s.Advance(10 * time.Second)
 	atQuestion := func(x protocol.Session) bool {

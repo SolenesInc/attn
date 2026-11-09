@@ -17,8 +17,8 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	if err != nil {
 		return nil, err
 	}
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	name := strings.TrimSpace(msg.Name)
 	validate := crew.ValidateName
 	if member.Chief {
@@ -34,8 +34,8 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 	d.publishArrangementChanged(member.ProfileID)
 	d.logf("crew: member %s renamed from %s to %s", member.ID, renamed.previous, name)
 	result := &protocol.CrewRenameResult{Member: member.ID, Name: name, PreviousName: renamed.previous, HomeDir: renamed.movedHome}
-	if renamed.homeMovesAtWake {
-		result.HomeMovesAtWake = protocol.Ptr(true)
+	if renamed.homeMovesAtStart {
+		result.HomeMovesAtStart = protocol.Ptr(true)
 	}
 	if d.crewBindingLive(member) {
 		if err := d.renameSession(&protocol.RenameSessionMessage{SessionID: member.BindingSession, Label: name}); err != nil {
@@ -48,9 +48,9 @@ func (d *Daemon) crewRename(msg *protocol.CrewRenameMessage) (*protocol.CrewRena
 }
 
 type crewRenaming struct {
-	previous        string
-	movedHome       *string
-	homeMovesAtWake bool
+	previous         string
+	movedHome        *string
+	homeMovesAtStart bool
 }
 
 func (d *Daemon) renameCrewMember(key, name string) (crewRenaming, error) {
@@ -65,7 +65,7 @@ func (d *Daemon) renameCrewMember(key, name string) (crewRenaming, error) {
 			return crewRenaming{}, err
 		}
 		d.publishFact(FactCrewUpdated, member.ID, nil)
-		return crewRenaming{previous: previous, homeMovesAtWake: !homeFits}, nil
+		return crewRenaming{previous: previous, homeMovesAtStart: !homeFits}, nil
 	}
 	if holder, taken, err := d.crewMemberIn(member.ProfileID, name); err != nil {
 		return crewRenaming{}, err

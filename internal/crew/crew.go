@@ -53,7 +53,7 @@ type Member struct {
 
 	LetterFile       string             `json:"letter_file"`
 	LetterSession    protocol.SessionID `json:"letter_session"`
-	AutonomousWakes  []string           `json:"autonomous_wakes"`
+	MailStarts       []string           `json:"autonomous_wakes"`
 	SwitchingSession protocol.SessionID `json:"switching_session,omitempty"`
 	FirstDay         *FirstDay          `json:"first_day,omitempty"`
 }
@@ -117,8 +117,8 @@ func (m Member) Encode() ([]byte, error) {
 	if m.AwarenessDirs == nil {
 		m.AwarenessDirs = []string{}
 	}
-	if m.AutonomousWakes == nil {
-		m.AutonomousWakes = []string{}
+	if m.MailStarts == nil {
+		m.MailStarts = []string{}
 	}
 	return json.Marshal(m)
 }

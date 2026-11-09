@@ -46,19 +46,19 @@ describe('chief and crew sessions are protected from close', () => {
     close();
 
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Chief is protected — put Chief to sleep to close the day.');
+    expect(toast()).toHaveTextContent('Chief is protected — ask Chief to close to end its session.');
   });
 
   it.each([
     ['the close action', closeFromSidebar],
     ['⌘W', pressCmdW],
-  ])('no-ops %s on a crew member and points to Sleep', async (_, close) => {
+  ])('no-ops %s on a crew member and points to Close', async (_, close) => {
     const { daemon } = await renderOrchestrator({ crew_member: 'coda', crew_member_name: 'Coda' });
 
     close();
 
     expect(closeCommands(daemon)).toEqual([]);
-    expect(toast()).toHaveTextContent('Coda is protected — put Coda to sleep to close the day.');
+    expect(toast()).toHaveTextContent('Coda is protected — ask Coda to close to end its session.');
   });
 
   it('closes only the tile when another tile still shows the chief', async () => {
@@ -95,7 +95,7 @@ describe('chief and crew sessions are protected from close', () => {
         d.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
         d.on('desktop_close_tile', (command) => ({
           event: 'profile_action_result', action: command.cmd, success: false, error_code: 'invalid',
-          error: 'Chief is protected from closing; put Chief to sleep first', request_id: command.request_id ?? '',
+          error: 'Chief is protected from closing; ask Chief to close first', request_id: command.request_id ?? '',
         }));
       },
     });

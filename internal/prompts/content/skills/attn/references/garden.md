@@ -226,7 +226,7 @@ requests the seed's mailbox watches with their readiness, the seed's reminder,
 and why attn cannot resume the tender when it is blocked:
 
     s-7k3f9m  origin-check  growing  …  Enforce delivery origin  [standby: owner/repo#123 ready, reminder 2026-11-05 14:20]
-    s-2b8n4q  zip-retry     growing  …  Retry zip unpack         [standby: owner/repo#118 open · wake blocked: worktree removed]
+    s-2b8n4q  zip-retry     growing  …  Retry zip unpack         [standby: owner/repo#118 open · resume blocked: worktree removed]
 
 `--close` closes your session in the same move, as `attn agent close --self`
 does. attn refuses it while the seed has unread mail and names

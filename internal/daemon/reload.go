@@ -508,8 +508,8 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		opts.AgentArgv = append([]string(nil), intent.Command.Argv...)
 	}
 	if member, bound := d.crewMemberForSession(sessionID); bound && strings.EqualFold(strings.TrimSpace(session.Agent), member.LaunchAgent()) {
-		opts.Model = protocol.Deref(d.crewWakeModel(member, session.Agent))
-		opts.Effort = protocol.Deref(d.crewWakeEffort(member, session.Agent))
+		opts.Model = protocol.Deref(d.crewStartModel(member, session.Agent))
+		opts.Effort = protocol.Deref(d.crewStartEffort(member, session.Agent))
 	}
 	if !params.UnattendedLaunch.IsZero() {
 		if err := params.UnattendedLaunch.Validate(); err != nil {

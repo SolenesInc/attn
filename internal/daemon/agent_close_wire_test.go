@@ -15,7 +15,7 @@ func TestTheChiefOfStaffClosesAnySessionButItself(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	stranger := spawnPanes(w, app, w.Path("stranger"))[0].session
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := string(chiefSession(t, cli))
 
 	closed, err := cli.AgentClose(stranger, protocol.SessionID(chief), "abandoned, nobody is driving it")
@@ -30,7 +30,7 @@ func TestTheChiefOfStaffClosesAnySessionButItself(t *testing.T) {
 	}
 
 	_, err = cli.AgentClose(chief, protocol.SessionID(chief), "done for the day")
-	agentCloseRefused(t, err, "session_close_protected", "Chief is protected from closing; put Chief to sleep first")
+	agentCloseRefused(t, err, "session_close_protected", "Chief is protected from closing; ask Chief to close first")
 	if live := queriedIDs(t, cli, ""); !slices.Contains(live, chief) {
 		t.Errorf("live sessions = %v, want the chief still there", live)
 	}
@@ -39,13 +39,13 @@ func TestTheChiefOfStaffClosesAnySessionButItself(t *testing.T) {
 func TestACrewMembersDayCannotBeClosedByAnAgent(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := string(chiefSession(t, cli))
 
 	_, err := cli.AgentClose(string(day.SessionID), protocol.SessionID(chief), "looks finished to me")
-	agentCloseRefused(t, err, "session_close_protected", "Trellis is protected from closing; put Trellis to sleep first")
+	agentCloseRefused(t, err, "session_close_protected", "Trellis is protected from closing; ask Trellis to close first")
 	if live := queriedIDs(t, cli, ""); !slices.Contains(live, string(day.SessionID)) {
 		t.Errorf("live sessions = %v, want the crew day still there", live)
 	}
@@ -91,7 +91,7 @@ func TestAgentCloseRefusalsCloseNothing(t *testing.T) {
 	for _, dupe := range dupes {
 		w.Launched(dupe)
 	}
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := string(chiefSession(t, cli))
 	seedling := strings.Repeat("🌱", 400)
 
@@ -142,7 +142,7 @@ func agentCloseSortedIDs(ids []string) []string {
 func TestAChiefCannotCloseAnAgentOfAnotherProfile(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := string(chiefSession(t, cli))
 	profile := createProfile(app, "Work")
 	work := w.AppOn(profile.ID)

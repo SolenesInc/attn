@@ -194,7 +194,7 @@ func (d *Daemon) writeSeedChangeProtected(
 			return docstore.Document{}, nil, err
 		}
 		if garden.Closed(seed.Status) {
-			d.tenderWakes.forget(seed.ID)
+			d.tenderResumes.forget(seed.ID)
 		}
 		d.coalesceSnapshots(func() {
 			for i, commit := range commits {

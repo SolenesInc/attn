@@ -1,24 +1,24 @@
 import { expect, test, type Page } from '@playwright/test';
 
 test('queue rows share the tree geometry and reveal actions on hover', async ({ page }) => {
-  await openFlow(page, 'queue', 'awake');
+  await openFlow(page, 'queue', 'in-session');
 
   const sidebar = page.getByTestId('queue-sidebar');
   const chief = page.getByTestId('queue-crew-chief-member');
-  const awakeCrew = page.getByTestId('queue-crew-alder');
+  const liveCrew = page.getByTestId('queue-crew-alder');
   const turn = page.getByTestId('queue-turn-owed-1');
-  const sun = page.getByTestId('queue-crew-wake-birch');
+  const sun = page.getByTestId('queue-crew-start-birch');
   const actions = page.getByTestId('session-actions-chief').locator('..');
 
   await expect(sidebar).toHaveCSS('width', '240px');
   await expect(chief).toHaveCSS('display', 'grid');
   await expect(chief).toHaveCSS('height', '32px');
   await expect(turn).toHaveCSS('height', '32px');
-  await expect(awakeCrew).toHaveCSS('height', '32px');
+  await expect(liveCrew).toHaveCSS('height', '32px');
   await expect(page.getByTestId('queue-crew-birch')).toHaveCSS('border-left-width', '0px');
   await expect(chief.locator('.session-lead')).toHaveCount(1);
   await expect(chief.locator('.queue-lead-badge')).toHaveText('1');
-  await expect(awakeCrew.locator('.queue-lead-badge')).toHaveText('1');
+  await expect(liveCrew.locator('.queue-lead-badge')).toHaveText('1');
   await expect(sun).toBeVisible();
   await expect(actions).toHaveCSS('opacity', '0');
 
@@ -29,7 +29,7 @@ test('queue rows share the tree geometry and reveal actions on hover', async ({ 
   await expect(page.getByTestId('session-actions-chief')).toHaveCSS('opacity', '1');
 
   await sun.click();
-  await expect(page.getByTestId('queue-crew-birch')).toHaveAttribute('data-crew-wake', 'armed');
+  await expect(page.getByTestId('queue-crew-birch')).toHaveAttribute('data-crew-start', 'armed');
   await expect(page.getByTestId('queue-crew-birch').locator('.session-actions'))
     .toHaveCSS('background-image', /linear-gradient/);
 });
@@ -52,7 +52,7 @@ async function crewRuleGapBelowHome(page: Page) {
 }
 
 for (const flow of ['desktop', 'queue'] as const) {
-  for (const chief of ['awake', 'asleep', 'unconfigured']) {
+  for (const chief of ['in-session', 'between-sessions', 'unconfigured']) {
     test(`${flow} flow rows share one inset and icon column with the chief ${chief}`, async ({ page }) => {
       await openFlow(page, flow, chief);
       const geometry = async (testId: string) => {
@@ -77,8 +77,8 @@ for (const flow of ['desktop', 'queue'] as const) {
 }
 
 test('the crew section starts the same distance below Home in both flows', async ({ page }) => {
-  await openFlow(page, 'queue', 'awake');
+  await openFlow(page, 'queue', 'in-session');
   const queueGap = await crewRuleGapBelowHome(page);
-  await openFlow(page, 'desktop', 'awake');
+  await openFlow(page, 'desktop', 'in-session');
   expect(await crewRuleGapBelowHome(page)).toBe(queueGap);
 });

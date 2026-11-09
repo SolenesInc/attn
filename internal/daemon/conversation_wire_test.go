@@ -266,7 +266,7 @@ func TestResumeToARecoverableSessionsConversationMovesItIntoThePane(t *testing.T
 func TestACrewMembersClearKeepsItsDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	woken := wakeCrew(t, cli, "trellis", "")
+	woken := startCrew(t, cli, "trellis", "")
 	day := w.Launched(string(woken.SessionID))
 	day.Prompted()
 	day.Reply("Ready. <!-- attn:state=idle -->")
@@ -290,7 +290,7 @@ func TestASharedCodexCrewMembersNewKeepsItsDayInItsTerminal(t *testing.T) {
 	}
 	w.SetCodexFolderTrust(workDir, "trusted")
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), Agent: protocol.Ptr("codex")})
-	keel := string(wakeCrew(t, cli, "keel", "").SessionID)
+	keel := string(startCrew(t, cli, "keel", "").SessionID)
 	codex := w.Launched(keel)
 	codex.Prompted()
 	codex.Reply("Ready. <!-- attn:state=idle -->")

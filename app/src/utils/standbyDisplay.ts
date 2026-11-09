@@ -13,7 +13,7 @@ export interface StandbyDisplay {
   note: string;
   pullRequests: StandbyPullRequest[];
   reminderAt: string;
-  wakeBlocked: string;
+  resumeBlocked: string;
 }
 
 export function standbyDisplay(seed: Seed, now: number): StandbyDisplay | null {
@@ -27,6 +27,6 @@ export function standbyDisplay(seed: Seed, now: number): StandbyDisplay | null {
       return { id: pr.pr_id, label: number, word, title: `${pullRequest} ${word}` };
     }),
     reminderAt: formatWakeTimeShort(seed.reminder?.at, now),
-    wakeBlocked: standby.wake_blocked ?? '',
+    resumeBlocked: standby.resume_blocked ?? '',
   };
 }

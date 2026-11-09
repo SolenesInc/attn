@@ -434,11 +434,11 @@ function StandbyRowMarker({ standby }: { standby: StandbyDisplay }) {
     standby.note,
     ...standby.pullRequests.map((pr) => pr.title),
     standby.reminderAt && `reminder ${standby.reminderAt}`,
-    standby.wakeBlocked && `wake blocked: ${standby.wakeBlocked}`,
+    standby.resumeBlocked && `resume blocked: ${standby.resumeBlocked}`,
   ].filter(Boolean);
   return (
-    <span className={`garden-row__standby${standby.wakeBlocked ? ' is-blocked' : ''}`} title={details.join('\n')}>
-      {standby.wakeBlocked ? 'standby · wake blocked' : 'standby'}
+    <span className={`garden-row__standby${standby.resumeBlocked ? ' is-blocked' : ''}`} title={details.join('\n')}>
+      {standby.resumeBlocked ? 'standby · resume blocked' : 'standby'}
     </span>
   );
 }

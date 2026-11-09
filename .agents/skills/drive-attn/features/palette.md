@@ -10,7 +10,7 @@ top. Commands the user picks often rise in the list.
 
 ## Sub-features
 
-- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or wakes a sleeping crew member. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
+- `agent-palette`: ⌘K lists the chief and crew, then turns in queue order, the other agents, snoozed agents and tiles. Enter opens one, or starts a session for a crew member between sessions. An off-screen tile on the current desktop comes beside the active tile ([desktops.md](desktops.md)).
 - `command-palette`: ⌘⇧K, or `>` in the agent palette, lists every command attn offers, with its shortcut.
 - `palette-switch`: ⌘K and ⌘⇧K switch between the two and keep the typed text. The same key again closes the palette.
 - `palette-actions`: in the agent palette, ⌘⇧E settles, ⌘⇧I marks priority and ⌘⇧S snoozes the highlighted agent, without closing.
@@ -26,7 +26,7 @@ top. Commands the user picks often rise in the list.
 - In the palette (`app/src/components/palette/UnifiedPalette.tsx`, `app/src/components/palette/Palette.tsx`): the input is `[role="combobox"][aria-label="Agents"]`, or `[aria-label="Commands"]` in command mode. ↑ and ↓ move, Enter runs, and Escape closes. Typing `>` switches to commands, and deleting it switches back. `.unified-palette-count` reads `<shown> of <all>`. Rows are `.unified-palette-option`, agents `[data-testid="palette-agent-<session>"]` and tiles `[data-testid="palette-tile-<tile>"]`. The footer names the settle and snooze keys (`[data-testid="palette-settle-hint"]`, `[data-testid="palette-snooze-hint"]`).
 - The commands come from `app/src/application/useAppCommands.tsx` and `app/src/application/useSharedCodex.tsx`. Each command belongs to a feature, and that feature's file covers how to drive it.
 - ⌘P opens other finders, not this palette: the markdown opener ([markdown.md](markdown.md)), or the note finder inside the notebook or an editor tile ([notebook.md](notebook.md)).
-- Where people see what agents do: each agent row's status (`chief`, `waiting`, `approval`, `working`, `idle`, `snoozed`, or `asleep` for a crew member), its turn age, its desktop's number, the priority flag, and ⌘J beside the head of the queue.
+- Where people see what agents do: each agent row's status (`chief`, `waiting`, `approval`, `working`, `idle`, `snoozed`, or `between sessions` for a crew member), its turn age, its desktop's number, the priority flag, and ⌘J beside the head of the queue.
 
 ### Agents
 

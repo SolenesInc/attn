@@ -11,16 +11,16 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestARetiredMembersSleepRequestReachesItsConversationDuringBinding(t *testing.T) {
+func TestARetiredMembersCloseRequestReachesItsConversationDuringBinding(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	sleep := s.PauseAt(pausepoint.MemberRetiredClearSleep)
+	sleep := s.PauseAt(pausepoint.MemberRetiredClearClose)
 	binding := s.PauseAt(pausepoint.ConversationCandidateStart)
 	s.Start()
 	app, cli := s.App(), s.Client()
 	if _, err := cli.CrewCreate("Keel"); err != nil {
 		t.Fatal(err)
 	}
-	wake := wakeCrew(t, cli, "Keel", "")
+	wake := startCrew(t, cli, "Keel", "")
 	agent := s.Launched(string(wake.SessionID))
 	agent.Prompted()
 	endTurn := func() {

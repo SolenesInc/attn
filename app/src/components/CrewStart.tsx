@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
-import './CrewWake.css';
+import './CrewStart.css';
 
-export type WakePhase = 'rest' | 'armed' | 'breaking';
+export type StartPhase = 'rest' | 'armed' | 'breaking';
 
 // A tripwire, not a deadline: a confirming second click takes a few hundred milliseconds,
 // so four seconds is about ten times the gesture it must never interrupt.
@@ -9,14 +9,14 @@ export const WAKE_ARM_TIMEOUT_MS = 4000;
 
 const WAKE_BREAK_MS = 620;
 
-interface WakeConfirm {
-  phase: WakePhase;
+interface StartConfirm {
+  phase: StartPhase;
   trigger: () => void;
   rowRef: RefObject<HTMLDivElement | null>;
 }
 
-export function useWakeConfirm(onWake: (() => void) | undefined, oneClick = false): WakeConfirm {
-  const [phase, setPhase] = useState<WakePhase>('rest');
+export function useStartConfirm(onStart: (() => void) | undefined, oneClick = false): StartConfirm {
+  const [phase, setPhase] = useState<StartPhase>('rest');
   const rowRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -52,18 +52,18 @@ export function useWakeConfirm(onWake: (() => void) | undefined, oneClick = fals
   }, [phase]);
 
   // Reads `phase` rather than an updater: StrictMode runs an updater twice, which would
-  // wake the member twice.
+  // start the member twice.
   const trigger = useCallback(() => {
-    if (!onWake) return;
-    // The flare is not a target: a click landing in it would re-arm a row whose wake is already sent.
+    if (!onStart) return;
+    // The flare is not a target: a click landing in it would re-arm a row whose start is already sent.
     if (phase === 'breaking') return;
     if (!oneClick && phase !== 'armed') {
       setPhase('armed');
       return;
     }
     setPhase('breaking');
-    onWake();
-  }, [onWake, phase, oneClick]);
+    onStart();
+  }, [onStart, phase, oneClick]);
 
   return { phase, trigger, rowRef };
 }
@@ -86,7 +86,7 @@ function rayPath(angle: number): string {
 
 // Arming animates to a held frame and stops there: a loop that never stops repainting is
 // a battery bug on a machine that runs attn all day.
-export function CrewWakeSun({ phase }: { phase: WakePhase }) {
+export function CrewStartSun({ phase }: { phase: StartPhase }) {
   const lit = phase !== 'rest';
   return (
     <svg

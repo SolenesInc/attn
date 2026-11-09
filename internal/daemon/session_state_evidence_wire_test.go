@@ -176,7 +176,7 @@ func TestTheChiefStopsWithoutWaitingOnItsBackgroundWork(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief := w.bootBubbleClaude(t, string(startCrew(t, cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")
 
 		chief.take("watch the deploy")

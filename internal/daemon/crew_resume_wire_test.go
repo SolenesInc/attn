@@ -11,11 +11,11 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestOpeningAMembersOldDayWhileItIsAwakeElsewhereIsRefused(t *testing.T) {
+func TestOpeningAMembersOldDayWhileItIsInSessionElsewhereIsRefused(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	old := crewDayLeftRecoverable(t, w, "alder")
 	app, cli := w.App(), w.Client()
-	current := wakeCrew(t, cli, "alder", "")
+	current := startCrew(t, cli, "alder", "")
 	w.Launched(string(current.SessionID))
 
 	revived := attachRevive(app, string(old), 80, 24)
@@ -33,7 +33,7 @@ func TestOpeningAMembersOldDayWhileItIsAwakeElsewhereIsRefused(t *testing.T) {
 	}
 }
 
-func TestOpeningAMembersOldDayWhileItIsAsleepMakesThatDayTheMember(t *testing.T) {
+func TestOpeningAMembersOldDayWhileItIsBetweenSessionsMakesThatDayTheMember(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	old := crewDayLeftRecoverable(t, w, "alder")
 	app, cli := w.App(), w.Client()
@@ -49,13 +49,13 @@ func TestOpeningAMembersOldDayWhileItIsAsleepMakesThatDayTheMember(t *testing.T)
 	if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != old {
 		t.Fatalf("after the revive alder is bound to %q, want %s", got, old)
 	}
-	woken := wakeCrew(t, cli, "alder", "")
-	if !woken.AlreadyAwake || woken.SessionID != old {
+	woken := startCrew(t, cli, "alder", "")
+	if !woken.AlreadyInSession || woken.SessionID != old {
 		t.Fatalf("wake after the revive = %+v, want alder already awake in %s", woken, old)
 	}
 }
 
-func TestAWakeDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
+func TestAStartDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	old := crewDayLeftRecoverable(t, w, "alder")
 	app, cli := w.App(), w.Client()
@@ -64,10 +64,10 @@ func TestAWakeDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
 	revived := make(chan protocol.AttachResultMessage, 1)
 	go func() { revived <- attachRevive(app, string(old), 80, 24) }()
 	starting.Await()
-	woke := make(chan *protocol.CrewWakeResult, 1)
+	woke := make(chan *protocol.CrewStartResult, 1)
 	failed := make(chan error, 1)
 	go func() {
-		woken, err := cli.CrewWake("alder", "", "")
+		woken, err := cli.CrewStart("alder", "", "")
 		if err != nil {
 			failed <- err
 			return
@@ -83,7 +83,7 @@ func TestAWakeDuringARevivedDaysLaunchFindsThatDay(t *testing.T) {
 	case err := <-failed:
 		t.Fatalf("wake during the revive: %v", err)
 	case woken := <-woke:
-		if !woken.AlreadyAwake || woken.SessionID != old {
+		if !woken.AlreadyInSession || woken.SessionID != old {
 			t.Fatalf("wake during the revive = %+v, want alder already awake in %s", woken, old)
 		}
 	}
@@ -112,7 +112,7 @@ func TestMailForAMemberResumesItsInterruptedDayRatherThanAFreshOne(t *testing.T)
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	day := wakeCrew(t, cli, "alder", "")
+	day := startCrew(t, cli, "alder", "")
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("Morning. <!-- attn:state=idle -->")
@@ -147,7 +147,7 @@ func TestMailForAMemberWhoseLatestDayEndedStartsFreshAndLeavesAnOlderDayAlone(t 
 	old := crewDayLeftRecoverable(t, w, "alder")
 	app, cli := w.App(), w.Client()
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	current := wakeCrew(t, cli, "alder", "")
+	current := startCrew(t, cli, "alder", "")
 	run := w.Launched(string(current.SessionID))
 	run.Prompted()
 	run.Exit(0)
@@ -169,7 +169,7 @@ func TestMailForAMemberWhoseLatestDayEndedStartsFreshAndLeavesAnOlderDayAlone(t 
 func crewDayLeftRecoverable(t *testing.T, w *world, member string) protocol.SessionID {
 	t.Helper()
 	app := w.App()
-	day := wakeCrew(t, w.Client(), member, "")
+	day := startCrew(t, w.Client(), member, "")
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("Working. <!-- attn:state=idle -->")
@@ -199,10 +199,10 @@ func crewRunningSessions(t *testing.T, cli *client.Client) []protocol.SessionID 
 	return running
 }
 
-func TestTheEndOfASleepingDaysRunLeavesItsResumedRunAwake(t *testing.T) {
+func TestTheEndOfAClosedSessionsRunLeavesItsResumedRunInSession(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "alder", "")
+	day := startCrew(t, cli, "alder", "")
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
@@ -229,8 +229,8 @@ func TestTheEndOfASleepingDaysRunLeavesItsResumedRunAwake(t *testing.T) {
 	}
 	w.Launched(string(day.SessionID))
 
-	woken := wakeCrew(t, cli, "alder", "")
-	if !woken.AlreadyAwake || woken.SessionID != day.SessionID {
+	woken := startCrew(t, cli, "alder", "")
+	if !woken.AlreadyInSession || woken.SessionID != day.SessionID {
 		t.Fatalf("wake after the resume = %+v, want alder already awake in %s", woken, day.SessionID)
 	}
 	if running := crewRunningSessions(t, cli); len(running) != 1 || running[0] != day.SessionID {

@@ -81,7 +81,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     activeSessionForCommands,
     togglePriority,
     handleSnoozeActiveSession,
-    handleWakeActiveSession,
+    handleUnsnoozeActiveSession,
   } = useAttentionQueueContext();
   const { sendSetSetting, sendDesktopSetOrder } = useDaemonApi();
   const { showAction, showError } = useToast();
@@ -528,8 +528,8 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       {
         id: 'manage-crew',
         title: 'Manage crew',
-        description: 'Wake, charter and hand off to crew members',
-        keywords: ['crew', 'member', 'charter', 'wake', 'sleep'],
+        description: 'Start, charter and hand off to crew members',
+        keywords: ['crew', 'member', 'charter', 'start', 'close'],
         icon: <ContextActionIcon />,
         run: (opener) => handleOpenCrew(undefined, opener ?? undefined),
       },
@@ -755,15 +755,15 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
   ]);
 
   const actionMenuItemsWithQueueActions = useMemo<PaletteCommand[]>(() => {
-    if (handleWakeActiveSession) {
+    if (handleUnsnoozeActiveSession) {
       return [...actionMenuItemsWithDesktopActions, {
-        id: 'wake-active-session',
+        id: 'unsnooze-active-session',
         pinned: true,
-        title: 'Wake this agent now',
+        title: 'Unsnooze this agent',
         description: 'End the snooze and let it back into the queue',
-        keywords: ['wake', 'snooze', 'defer', 'queue', 'turn'],
+        keywords: ['unsnooze', 'snooze', 'defer', 'queue', 'turn'],
         icon: <AttentionActionIcon />,
-        run: handleWakeActiveSession,
+        run: handleUnsnoozeActiveSession,
       }];
     }
     if (handleSnoozeActiveSession) {
@@ -779,7 +779,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       }];
     }
     return actionMenuItemsWithDesktopActions;
-  }, [actionMenuItemsWithDesktopActions, handleWakeActiveSession, handleSnoozeActiveSession]);
+  }, [actionMenuItemsWithDesktopActions, handleUnsnoozeActiveSession, handleSnoozeActiveSession]);
 
   const chiefCommands = useMemo<PaletteCommand[]>(() => {
     const view = chief.view;
@@ -787,8 +787,8 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     const openSetup = () => { setSidebarCollapsed(false); chief.actions.edit(); };
     const commands: PaletteCommand[] = [];
     if (view.phase === 'unconfigured') commands.push({ id: 'chief-setup', title: `Set up ${view.name}`, keywords: ['chief', 'harness', 'model'], icon: '⌁', run: openSetup });
-    if (view.phase === 'asleep') commands.push({ id: 'chief-wake', title: `Wake ${view.name}`, keywords: ['chief', 'wake'], icon: '☀', run: chief.actions.wake });
-    if (view.phase === 'awake') commands.push({ id: 'chief-sleep', title: `Put ${view.name} to sleep`, keywords: ['chief', 'sleep'], icon: '☾', run: chief.actions.sleep });
+    if (view.phase === 'between-sessions') commands.push({ id: 'chief-start', title: `Start ${view.name}`, keywords: ['chief', 'start'], icon: '☀', run: chief.actions.start });
+    if (view.phase === 'in-session') commands.push({ id: 'chief-close', title: `Ask ${view.name} to close`, keywords: ['chief', 'close'], icon: '☾', run: chief.actions.close });
     if (view.agent) commands.push({ id: 'chief-route', title: `Change ${view.name}'s harness and model`, keywords: ['chief', 'harness', 'model', 'effort'], icon: '⌁', run: openSetup });
     return commands;
   }, [chief, setSidebarCollapsed]);

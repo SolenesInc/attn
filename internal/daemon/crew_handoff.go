@@ -70,8 +70,8 @@ func (d *Daemon) boundCrewMember(sessionID protocol.SessionID) (crew.Member, boo
 }
 
 func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bool) (*protocol.CrewHandoffResult, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	if sessionID == "" {
 		return nil, fmt.Errorf("a handoff is filed by the member's own session; none was named (run from its terminal or pass --session)")
 	}
@@ -97,8 +97,8 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 			d.cancelSessionTeardown(sessionID, teardown)
 			return nil, err
 		}
-		d.logf("crew: %s went to sleep — session %s ended and nobody was woken behind it", member.Name, sessionID)
-		result.Outcome = protocol.Ptr(protocol.CrewDayCloseSleep)
+		d.logf("crew: %s is between sessions — session %s ended and no successor started", member.Name, sessionID)
+		result.Outcome = protocol.Ptr(protocol.CrewDayCloseClosed)
 		return result, nil
 	}
 	newSessionID, err := d.crewSwitchHarness(member, sessionID, teardown)
@@ -191,7 +191,7 @@ func (d *Daemon) crewSwitchHarness(member crew.Member, oldSessionID protocol.Ses
 	}
 	now := time.Now()
 	if d.UserAwayFor(now) >= d.crewAwayLimit() {
-		if err := d.chargeAutonomousWake(member.ID, now); err != nil {
+		if err := d.chargeMailStart(member.ID, now); err != nil {
 			return "", err
 		}
 	}
@@ -252,8 +252,8 @@ func (d *Daemon) crewSuccessorSpawn(member crew.Member, session *protocol.Sessio
 	spawnMsg.InitialPrompt = protocol.Ptr(prompts.RenderText("crew", "successor", nil))
 	previousAgent := spawnMsg.Agent
 	spawnMsg.Agent = member.LaunchAgent()
-	spawnMsg.Model = d.crewWakeModel(member, spawnMsg.Agent)
-	spawnMsg.Effort = d.crewWakeEffort(member, spawnMsg.Agent)
+	spawnMsg.Model = d.crewStartModel(member, spawnMsg.Agent)
+	spawnMsg.Effort = d.crewStartEffort(member, spawnMsg.Agent)
 	if !strings.EqualFold(previousAgent, spawnMsg.Agent) {
 		spawnMsg.Executable = nil
 		spawnMsg.ClaudeExecutable = nil

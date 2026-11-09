@@ -30,8 +30,8 @@ interface CrewPanelProps {
   seeds: Seed[];
   seedsTotal: number;
   onClose: () => void;
-  onWakeMember: (member: string) => void;
-  onSleepMember: (member: string) => void;
+  onStartMember: (member: string) => void;
+  onCloseMember: (member: string) => void;
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }
 
@@ -45,7 +45,7 @@ const tabs: { id: CrewTab; label: string }[] = [
 
 function MemberHeading({ member }: { member: CrewMember }) {
   const [renaming, setRenaming] = useState(false);
-  const awake = Boolean(member.binding_session);
+  const inSession = Boolean(member.binding_session);
   return (
     <div className="crew-member-heading">
       <div className="crew-member-identity">
@@ -59,10 +59,10 @@ function MemberHeading({ member }: { member: CrewMember }) {
               <button type="button" className="crew-rename" data-testid="crew-rename" onClick={() => setRenaming(true)}>Rename</button>
             </div>
           )}
-          <span>{awake ? 'Awake' : 'Asleep'}</span>
+          <span>{inSession ? 'In session' : 'Between sessions'}</span>
         </div>
       </div>
-      <span className={`crew-presence ${awake ? 'is-awake' : ''}`}>{awake ? 'Current day active' : 'Between days'}</span>
+      <span className={`crew-presence ${inSession ? 'is-in-session' : ''}`}>{inSession ? 'In session' : 'Between sessions'}</span>
     </div>
   );
 }
@@ -187,8 +187,8 @@ function CrewPanelSurface({
   seeds,
   seedsTotal,
   onClose,
-  onWakeMember,
-  onSleepMember,
+  onStartMember,
+  onCloseMember,
   onOpenSeed,
   stores,
 }: Omit<CrewPanelProps, 'visit'> & { stores: CrewPanelStores }) {
@@ -277,8 +277,8 @@ function CrewPanelSurface({
                       autosave,
                       loadModels,
                       isConnected,
-                      onSleep: () => onSleepMember(member.id),
-                      onWake: () => onWakeMember(member.id),
+                      onAskClose: () => onCloseMember(member.id),
+                      onStart: () => onStartMember(member.id),
                     }}
                     charterEdit={charterEdit}
                     charterAutosave={charterAutosave}

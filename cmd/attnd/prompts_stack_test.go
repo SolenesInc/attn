@@ -107,7 +107,7 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 	ordinary := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
 	primed := func(member string) (protocol.SessionID, string) {
 		t.Helper()
-		woken, err := s.Client().CrewWake(member, string(fakeagent.Claude), "")
+		woken, err := s.Client().CrewStart(member, string(fakeagent.Claude), "")
 		if err != nil {
 			t.Fatalf("crew start %s: %v", member, err)
 		}

@@ -13,7 +13,7 @@ func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	x, xRun := mailIdleAgent(w, app, "peer")
-	day := wakeCrew(t, cli, "Keel", "")
+	day := startCrew(t, cli, "Keel", "")
 	old := string(day.SessionID)
 	run := w.Launched(old)
 	run.Prompted()

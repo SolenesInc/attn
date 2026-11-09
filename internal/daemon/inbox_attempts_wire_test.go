@@ -147,7 +147,7 @@ func TestAReadReleasesTheOutstandingRingForNewMail(t *testing.T) {
 	})
 }
 
-func TestInboxDeliveryWakesAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) {
+func TestInboxDeliveryStartsAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -191,7 +191,7 @@ func TestInboxDeliveryWakesAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) 
 	})
 }
 
-func TestInboxWakeLimitRefusesWakeButKeepsTheItem(t *testing.T) {
+func TestMailStartLimitRefusesTheStartButKeepsTheItem(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -211,7 +211,7 @@ func TestInboxWakeLimitRefusesWakeButKeepsTheItem(t *testing.T) {
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
 			t.Fatalf("exhausted item woke %s", *binding)
 		}
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if day.promptsContaining(inboxDoorbell) != 0 {
 			t.Fatal("exhausted inbox rang after manual wake")
@@ -387,7 +387,7 @@ func TestAGardenBellForACaseVariantTenderReachesTheRegisteredMember(t *testing.T
 	})
 }
 
-func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
+func TestMailForAMemberTendedSeedResumesTheTender(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -418,7 +418,7 @@ func TestMailForAMemberTendedSeedWakesTheTender(t *testing.T) {
 	})
 }
 
-func TestAnInboxWakeThatPrimesForTenMinutesStillWaitsFiveMinutesBetweenRings(t *testing.T) {
+func TestAMailStartThatPrimesForTenMinutesStillWaitsFiveMinutesBetweenRings(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -449,7 +449,7 @@ func TestAnInboxWakeThatPrimesForTenMinutesStillWaitsFiveMinutesBetweenRings(t *
 	})
 }
 
-func TestTheThirdInboxWakeCompletesItsRingAndNeverWakesAFourthDay(t *testing.T) {
+func TestTheThirdMailStartCompletesItsRingAndNeverStartsAFourthSession(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -538,7 +538,7 @@ func TestMailArrivingDuringPrimingSharesTheRingAndItsThreeAttemptBudget(t *testi
 	})
 }
 
-func TestRestartDuringAnInboxWakeWaitsAndSpendsAnotherAttempt(t *testing.T) {
+func TestRestartDuringAMailStartWaitsAndSpendsAnotherAttempt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -595,7 +595,7 @@ func TestAPartialInboxReadAcknowledgesEveryHeldAddress(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "chief", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "Session watch")
@@ -630,13 +630,13 @@ func TestAMessageToACrewDaysSessionIDFollowsTheMemberIntoItsNextDay(t *testing.T
 		w.restart()
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
-		first := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		first := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		first.reply("Ready. <!-- attn:state=idle -->")
 		sent := sendAgentMessage(t, cli, "sender", first.id, "Reply for the next day")
 		if _, err := cli.CrewHandoff(protocol.SessionID(first.id), "sleep unread", false); err != nil {
 			t.Fatal(err)
 		}
-		next := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		next := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		items := readInbox(t, cli, next.id, 0).Items
 		if len(items) != 1 || items[0].ItemID != sent.MessageID || items[0].Address != "member:trellis" {
 			t.Fatalf("successor inbox=%+v", items)

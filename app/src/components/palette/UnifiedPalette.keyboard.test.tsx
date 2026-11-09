@@ -43,7 +43,7 @@ function renderPalette({
   const handlers = {
     onClose: vi.fn(),
     onOpenAgent: vi.fn(),
-    onWakeMember: vi.fn(),
+    onStartMember: vi.fn(),
     onOpenTile: vi.fn(),
     onSettle: vi.fn(),
     onSnooze: vi.fn(),
@@ -228,7 +228,7 @@ describe('UnifiedPalette keyboard flow', () => {
               commands={[{ id: 'crew', title: 'Manage crew', run }]}
               onClose={() => setOpen(false)}
               onOpenAgent={vi.fn()}
-              onWakeMember={vi.fn()}
+              onStartMember={vi.fn()}
               onOpenTile={vi.fn()}
               onSettle={vi.fn()}
               onSnooze={vi.fn()}

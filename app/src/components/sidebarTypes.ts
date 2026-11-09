@@ -77,8 +77,8 @@ export interface SidebarProps {
   chiefSetupOpen?: boolean;
   chiefSetupOpenedByUser?: boolean;
   onChiefSettings?: () => void;
-  onWakeCrewMember?: (member: string) => void;
-  onSleepCrewMember?: (member: string) => void;
+  onStartCrewMember?: (member: string) => void;
+  onCloseCrewMember?: (member: string) => void;
   onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement, tab?: CrewTab) => void;
   onSettleTurn?: (id: string) => void;

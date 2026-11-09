@@ -778,7 +778,7 @@ fn standby(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         ));
     }
     if !clear && note.is_empty() {
-        return Err(session.usage("-m says what to do when mail wakes you"));
+        return Err(session.usage("-m says what to do when mail resumes you"));
     }
     let id = seed_id_of(&mut session, &positionals[0])?;
     if close_self {

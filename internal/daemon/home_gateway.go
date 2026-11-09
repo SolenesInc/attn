@@ -423,7 +423,7 @@ func (d *Daemon) homeGatewayRoster(profileID string) homeGatewayRoster {
 
 func (d *Daemon) homeGatewayCrewWake(conn *homeGatewayConn, command homegateway.HomeGatewayCrewWake) {
 	result := homegateway.HomeGatewayCrewWakeResult{Event: "crew_wake_result", RequestID: command.RequestID, CrewMember: command.CrewMember}
-	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: crew.KeyRefPrefix + command.CrewMember, ProfileID: protocol.Ptr(conn.phone.ProfileID)}, crewWakeRequest{RequestedBy: d.phoneName(conn.phone)}); err != nil {
+	if _, err := d.crewStartAsked(&protocol.CrewStartMessage{Member: crew.KeyRefPrefix + command.CrewMember, ProfileID: protocol.Ptr(conn.phone.ProfileID)}, crewStartRequest{RequestedBy: d.phoneName(conn.phone)}); err != nil {
 		result.Error = protocol.Ptr(err.Error())
 	}
 	_ = homeGatewaySend(conn, result)

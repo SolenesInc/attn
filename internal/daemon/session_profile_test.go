@@ -148,8 +148,8 @@ func TestWebSocketCommandsWithoutAProfileUseTheConnectionsProfile(t *testing.T) 
 	}
 }
 
-func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
+func TestAppStartFromAnotherProfileIsRefused(t *testing.T) {
+	d, backend, _ := newStartableDaemon(t)
 	d.clientToken = "the-token"
 	w := &profilesTestDaemon{t: t, d: d}
 	client, _ := w.connect("")
@@ -157,12 +157,12 @@ func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
 	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": work.ID})
 	drainClientPayloads(t, client)
 
-	wake := &protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: "trellis", RequestID: protocol.Ptr("wake-1")}
+	wake := &protocol.CrewStartMessage{Cmd: protocol.CmdCrewStart, Member: "trellis", RequestID: protocol.Ptr("wake-1")}
 	wake.ProfileID = client.profileOr(wake.ProfileID)
-	d.handleCrewWakeWS(client, wake)
-	var result protocol.CrewWakeResultMessage
+	d.handleCrewStartWS(client, wake)
+	var result protocol.CrewStartResultMessage
 	for _, payload := range drainClientPayloads(t, client) {
-		if eventName(t, payload) == protocol.EventCrewWakeResult {
+		if eventName(t, payload) == protocol.EventCrewStartResult {
 			decodeInto(t, payload, &result)
 		}
 	}

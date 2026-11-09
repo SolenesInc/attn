@@ -94,7 +94,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
     () => allCrew.filter((member) => member.profile_id === selectedProfileId),
     [allCrew, selectedProfileId],
   );
-  const { handleWakeCrewMember, handleSleepCrewMember } = useAppGardenActionsContext();
+  const { handleStartCrewMember, handleCloseCrewMember } = useAppGardenActionsContext();
   const { handleOpenCrew } = useCrewPanelContext();
   const {
     crewQueueEnabled,
@@ -153,8 +153,8 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
       chiefSetupOpen={chief.setupOpen}
       chiefSetupOpenedByUser={chief.setupOpenedByUser}
       onChiefSettings={() => { void settingsModalRef.current?.selectSection('agents'); setSettingsOpen(true); }}
-      onWakeCrewMember={handleWakeCrewMember}
-      onSleepCrewMember={handleSleepCrewMember}
+      onStartCrewMember={handleStartCrewMember}
+      onCloseCrewMember={handleCloseCrewMember}
       onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
       onOpenCrewMemberDetails={handleOpenCrew}
       crewQueueEnabled={crewQueueEnabled}

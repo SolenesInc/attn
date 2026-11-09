@@ -49,7 +49,7 @@ func TestAMirroredSessionFactCarriesItsSessionAndRepoTraitsAndNoFreeText(t *test
 		w.bootBubbleClaude(t, string(delegated.SessionID))
 		synctest.Wait()
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		member := string(wakeCrew(t, cli, "chief", "").SessionID)
+		member := string(startCrew(t, cli, "chief", "").SessionID)
 		w.bootBubbleClaude(t, member)
 		synctest.Wait()
 
@@ -387,7 +387,7 @@ func TestMirroredActorAndTerminalIDsJoinToTheSessionsAndTerminalsTheyName(t *tes
 		app, cli := w.App(), w.Client()
 		setAnalyticsEnabled(app, "true")
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
+		chief := string(startCrew(t, cli, "chief", "").SessionID)
 		w.bootBubbleClaude(t, chief)
 		target := w.bubbleClaude(t, app, "target")
 		closedByUser := w.bubbleClaude(t, app, "closed-by-user")

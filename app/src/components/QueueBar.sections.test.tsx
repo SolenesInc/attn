@@ -225,10 +225,10 @@ describe('the waiting peek', () => {
     expect(screen.getByTestId('queue-bar-peek-more')).toHaveTextContent(/^4 more\b/);
   });
 
-  it('opens an agent, wakes a member, and closes after either', () => {
+  it('opens an agent, starts a member, and closes after either', () => {
     const onSelectSession = vi.fn();
-    const onWakeCrewMember = vi.fn();
-    renderBar(crewAndBands, { crew: [{ id: 'scout', name: 'Scout' }], onSelectSession, onWakeCrewMember });
+    const onStartCrewMember = vi.fn();
+    renderBar(crewAndBands, { crew: [{ id: 'scout', name: 'Scout' }], onSelectSession, onStartCrewMember });
 
     hover('queue-bar-pill');
     fireEvent.click(screen.getByTestId('queue-bar-peek-agent:older'));
@@ -237,7 +237,7 @@ describe('the waiting peek', () => {
 
     hover('queue-bar-pill');
     fireEvent.click(screen.getByTestId('queue-bar-peek-member:scout'));
-    expect(onWakeCrewMember).toHaveBeenCalledWith('scout');
+    expect(onStartCrewMember).toHaveBeenCalledWith('scout');
   });
 
   it('closes when the pointer leaves and stays silent under an overlay', () => {

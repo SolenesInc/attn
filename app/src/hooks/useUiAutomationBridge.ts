@@ -2183,8 +2183,8 @@ export function useUiAutomationBridge({
               id: (row.getAttribute('data-testid') || '').slice('session-'.length),
               label: row.querySelector('.session-name')?.textContent?.trim() || '',
               state: row.getAttribute('data-state') || '',
-              wake: row.querySelector('.session-wake-at')?.textContent?.trim() || '',
-              canWake: Boolean(row.querySelector('.session-wake-btn')),
+              snoozedUntil: row.querySelector('.session-snoozed-until')?.textContent?.trim() || '',
+              canUnsnooze: Boolean(row.querySelector('.session-unsnooze-btn')),
             })),
           },
           // Read from the groups that mark themselves, not from the testid prefix: the turn band
@@ -2208,7 +2208,7 @@ export function useUiAutomationBridge({
             state: row.getAttribute('data-state') || '',
             desktopId: row.getAttribute('data-desktop-id') || '',
             age: row.querySelector('.queue-row-age')?.textContent?.trim() || '',
-            wake: row.querySelector('.queue-row-wake-at')?.textContent?.trim() || '',
+            snoozedUntil: row.querySelector('.queue-row-snoozed-until')?.textContent?.trim() || '',
             selected: row.classList.contains('selected'),
             open: open
               ? {

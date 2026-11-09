@@ -83,31 +83,31 @@ describe('App garden standby', () => {
     const opened = await showBoard([standing]);
     expect(card('merge the readiness check')).toHaveTextContent('standby');
 
-    const { standby: _ended, ...woken } = standing;
-    await replace(opened, standing, { ...woken, rev: 2 });
+    const { standby: _ended, ...resumed } = standing;
+    await replace(opened, standing, { ...resumed, rev: 2 });
 
     expect(card('merge the readiness check')).not.toHaveTextContent('standby');
     expect(card('merge the readiness check')).not.toHaveTextContent('Merge once approved');
     expect(card('merge the readiness check')).not.toHaveTextContent('#123');
   });
 
-  it('says why a wake is blocked, and stops saying it once the reason is gone', async () => {
+  it('says why a resume is blocked, and stops saying it once the reason is gone', async () => {
     const standing = onStandby();
     const opened = await showBoard([standing]);
-    expect(card('merge the readiness check')).not.toHaveTextContent('wake blocked');
+    expect(card('merge the readiness check')).not.toHaveTextContent('resume blocked');
 
-    const blocked = onStandby({ wake_blocked: 'worktree removed' });
+    const blocked = onStandby({ resume_blocked: 'worktree removed' });
     await replace(opened, standing, blocked);
 
-    const blockedMarker = within(card('merge the readiness check')).getByText('wake blocked: worktree removed');
+    const blockedMarker = within(card('merge the readiness check')).getByText('resume blocked: worktree removed');
     expect(blockedMarker).toHaveAttribute('title', 'worktree removed');
 
     await replace(opened, blocked, standing);
 
-    expect(card('merge the readiness check')).not.toHaveTextContent('wake blocked');
+    expect(card('merge the readiness check')).not.toHaveTextContent('resume blocked');
   });
 
-  it('marks a standby row in the list, with its note, pull request and blocked wake in the tooltip', async () => {
+  it('marks a standby row in the list, with its note, pull request and blocked resume in the tooltip', async () => {
     const standing = onStandby();
     const opened = await openGarden([standing, growing]);
     const row = (title: string) => within(gardenRegion()).getByRole('button', { name: new RegExp(`^${title}`) });
@@ -119,14 +119,14 @@ describe('App garden standby', () => {
     expect(row('ship the other thing')).not.toHaveTextContent('standby');
     expect(row('ship the other thing')).toHaveTextContent('growing');
 
-    const blocked = onStandby({ wake_blocked: 'worktree removed' });
+    const blocked = onStandby({ resume_blocked: 'worktree removed' });
     await replace(opened, standing, blocked);
 
-    const blockedMarker = within(row('merge the readiness check')).getByText('standby · wake blocked');
-    expect(blockedMarker.getAttribute('title')).toContain('wake blocked: worktree removed');
+    const blockedMarker = within(row('merge the readiness check')).getByText('standby · resume blocked');
+    expect(blockedMarker.getAttribute('title')).toContain('resume blocked: worktree removed');
 
-    const { standby: _ended, ...woken } = blocked;
-    await replace(opened, blocked, { ...woken, rev: 2 });
+    const { standby: _ended, ...resumed } = blocked;
+    await replace(opened, blocked, { ...resumed, rev: 2 });
 
     expect(row('merge the readiness check')).not.toHaveTextContent('standby');
     expect(row('merge the readiness check')).toHaveTextContent('growing');
@@ -148,15 +148,15 @@ describe('App garden standby', () => {
     expect(row('waits its turn')).toHaveTextContent('blocked by 1');
     expect(row('waits its turn')).not.toHaveTextContent('standby');
 
-    const wakeBlocked = onStandby({ wake_blocked: 'worktree removed' });
-    await replace(opened, standing, wakeBlocked);
+    const resumeBlocked = onStandby({ resume_blocked: 'worktree removed' });
+    await replace(opened, standing, resumeBlocked);
 
-    expect(within(row('merge the readiness check')).getByText('standby · wake blocked')).toBeVisible();
+    expect(within(row('merge the readiness check')).getByText('standby · resume blocked')).toBeVisible();
     expect(row('merge the readiness check')).toHaveTextContent('blocked by 1');
 
     await replace(opened, blocker, { ...blocker, status: 'harvested', rev: 2 });
 
-    expect(row('merge the readiness check')).toHaveTextContent('standby · wake blocked');
+    expect(row('merge the readiness check')).toHaveTextContent('standby · resume blocked');
     expect(row('merge the readiness check')).not.toHaveTextContent('blocked by');
   });
 
@@ -174,8 +174,8 @@ describe('App garden standby', () => {
     expect(listed()).not.toContain('not started yet');
     expect(screen.queryByText(/no filter called/)).toBeNull();
 
-    const { standby: _ended, ...woken } = standing;
-    await replace(opened, standing, { ...woken, rev: 2 });
+    const { standby: _ended, ...resumed } = standing;
+    await replace(opened, standing, { ...resumed, rev: 2 });
 
     expect(listed()).not.toContain('merge the readiness check');
   });

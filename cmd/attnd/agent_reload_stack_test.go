@@ -15,7 +15,7 @@ func TestAgentReloadCLIUsesThePaletteLifecycleAndReportsBatchFailures(t *testing
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.App()
-	caller := wakeChief(t, s)
+	caller := startChief(t, s)
 	target := s.Spawn(app, fakeagent.Claude, s.Path("target"), func(m *protocol.SpawnSessionMessage) {
 		m.Model = protocol.Ptr("claude-sonnet-5")
 		m.Effort = protocol.Ptr("high")
@@ -91,7 +91,7 @@ func TestAgentReloadContinuesAfterARelaunchFailure(t *testing.T) {
 	if app.Initial.Settings["plug_available"] != "true" {
 		testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["plug_available"] == "true" })
 	}
-	chief := wakeChief(t, w)
+	chief := startChief(t, w)
 	plugin := w.Spawn(app, fakeagent.Plug, w.Path("plugin"))
 	first := w.Launched(plugin)
 	worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"))

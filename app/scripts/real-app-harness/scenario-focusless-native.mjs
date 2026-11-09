@@ -97,9 +97,9 @@ try {
     await click('[data-testid="snooze-choice-1h"]');
     await wait(`[data-testid="queue-turn-${sessionId}"]`, { absent: true });
     await click('[data-testid="queue-agents-toggle"]');
-    await wait('[aria-label="Wake Focusless native"]');
+    await wait('[aria-label="Unsnooze Focusless native"]');
     await driver.hover(`[data-testid="queue-snoozed-${sessionId}"]`);
-    await click('[aria-label="Wake Focusless native"]');
+    await click('[aria-label="Unsnooze Focusless native"]');
     await wait(`[data-testid="queue-turn-${sessionId}"]`);
     const sessions = JSON.parse(await cli('agent', 'list', '--json'));
     runner.assert(sessions.find(session => session.id === sessionId)?.turn_owed, 'the native unsnooze is visible through the CLI');

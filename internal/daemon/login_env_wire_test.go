@@ -413,7 +413,7 @@ func TestANewDelegationThroughARoleOnAPluginHarnessDuringTheCaptureWaitsAndRuns(
 	}
 }
 
-func TestMailDuringTheCaptureWakesAMemberOnAPluginHarness(t *testing.T) {
+func TestMailDuringTheCaptureStartsAMemberOnAPluginHarness(t *testing.T) {
 	w, shell := plugWorldBehindALoginShell(t)
 	setCrew(t, w.Client(), "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("plug")})
 
@@ -435,7 +435,7 @@ func TestMailDuringTheCaptureWakesAMemberOnAPluginHarness(t *testing.T) {
 	if result == nil {
 		t.FailNow()
 	}
-	if !strings.Contains(result.Detail, "woke Keel") {
+	if !strings.Contains(result.Detail, "started Keel") {
 		t.Fatalf("mail during the capture = %+v, want Keel woken", result)
 	}
 	bound := crewRosterMember(t, w.Client(), "keel").BindingSession

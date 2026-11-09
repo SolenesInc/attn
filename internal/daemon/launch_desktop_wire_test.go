@@ -85,7 +85,7 @@ func TestANewDesktopChoiceExistsAtOnceAndItemsChoosingItShareIt(t *testing.T) {
 		t.Fatalf("shared choice: %+v", shared)
 	}
 	for member, name := range map[string]string{"trellis": "Trellis", "alder": "Alder"} {
-		day, err := cli.CrewWake(member, "", protocol.SessionID(caller))
+		day, err := cli.CrewStart(member, "", protocol.SessionID(caller))
 		if err != nil {
 			t.Fatal(err)
 		}

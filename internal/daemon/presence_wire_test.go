@@ -115,7 +115,7 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				}
 				days := make(map[string]string)
 				for _, member := range []string{"trellis", "alder"} {
-					day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, member, "codex").SessionID))
+					day := w.bootBubbleClaude(t, string(startCrew(t, cli, member, "codex").SessionID))
 					day.reply("Ready. <!-- attn:state=idle -->")
 					days[member] = day.id
 					applyCrew(t, cli, member)

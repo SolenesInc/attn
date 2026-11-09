@@ -111,7 +111,7 @@ func TestCloseDesktopRefusesProtectedSessionsBeforeClosingAnything(t *testing.T)
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, ordinary)
 			setCrew(t, w.Client(), member, protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 			writeLaunchChoice(app, "crew", member, protocol.LaunchDesktopSetting{DesktopID: protocol.Ptr(desktop.ID)})
-			protected := string(wakeCrew(t, w.Client(), member, "").SessionID)
+			protected := string(startCrew(t, w.Client(), member, "").SessionID)
 			w.Launched(protected)
 			before := viewProfile(t, w, profile)
 			result := requestCloseDesktop(app, before.desktops[desktop.ID])
@@ -130,7 +130,7 @@ func TestCloseDesktopRefusesProtectedSessionsBeforeClosingAnything(t *testing.T)
 	}
 }
 
-func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
+func TestCrewStartRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	for _, numbered := range []bool{false, true} {
 		t.Run(fmt.Sprint(numbered), func(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
@@ -161,7 +161,7 @@ func TestCrewWakeRecreatesItsClosedLaunchDesktop(t *testing.T) {
 			if _, exists := viewProfile(t, w, profile).desktops[old]; exists {
 				t.Fatal("settings save recreated the closed launch desktop")
 			}
-			wake := wakeCrew(t, w.Client(), "alder", "")
+			wake := startCrew(t, w.Client(), "alder", "")
 			w.Launched(string(wake.SessionID))
 			desktop, _ := viewProfile(t, w, profile).paneOf(t, string(wake.SessionID))
 			if numbered && desktop.ID != old {
@@ -282,7 +282,7 @@ func TestAutomationRunRecreatesItsClosedLaunchDesktop(t *testing.T) {
 	if !crewFresh.Success {
 		t.Fatalf("crew edit after replacement: %s", protocol.Deref(crewFresh.Error))
 	}
-	wake := wakeCrew(t, cli, "alder", "")
+	wake := startCrew(t, cli, "alder", "")
 	w.Launched(string(wake.SessionID))
 	crewDesktop, _ := viewProfile(t, w, profile).paneOf(t, string(wake.SessionID))
 	if crewDesktop.ID != desktop.ID || crewDesktop.Name != "Nightly check" {

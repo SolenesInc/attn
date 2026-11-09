@@ -742,13 +742,13 @@
           }
         },
         {
-          "id": "tender-wake",
+          "id": "tender-resume",
           "delivery": "user_message",
-          "description": "Typed before the seed mail that woke the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.",
+          "description": "Typed before the seed mail that resumed the closed session tending a seed on standby. Carries the standby note and the ways to end the turn.",
           "body": {
             "kind": "text",
-            "id": "session.tender-wake",
-            "source": "content/session/tender-wake.md",
+            "id": "session.tender-resume",
+            "source": "content/session/tender-resume.md",
             "bindings": [
               {
                 "name": "seed_id",
@@ -787,13 +787,13 @@
           }
         },
         {
-          "id": "wake-cause-message",
+          "id": "start-cause-message",
           "delivery": "message_fragment",
-          "description": "inboxWakeCause: an unread peer message that woke the recipient. Names the sender, never the body.",
+          "description": "inboxStartCause: an unread peer message that started the recipient's run. Names the sender, never the body.",
           "body": {
             "kind": "text",
-            "id": "session.wake-cause-message",
-            "source": "content/session/wake-cause-message.md",
+            "id": "session.start-cause-message",
+            "source": "content/session/start-cause-message.md",
             "bindings": [
               {
                 "name": "sender",
@@ -810,13 +810,13 @@
           }
         },
         {
-          "id": "wake-cause-more",
+          "id": "start-cause-more",
           "delivery": "message_fragment",
-          "description": "inboxWakeCause: the unread items past the listing's tripwire.",
+          "description": "inboxStartCause: the unread items past the listing's tripwire.",
           "body": {
             "kind": "text",
-            "id": "session.wake-cause-more",
-            "source": "content/session/wake-cause-more.md",
+            "id": "session.start-cause-more",
+            "source": "content/session/start-cause-more.md",
             "bindings": [
               {
                 "name": "count",
@@ -1677,14 +1677,14 @@
         {
           "id": "new-session",
           "delivery": "user_message",
-          "description": "crew_wake.go: the session's first message.",
+          "description": "crew_start.go: the session's first message.",
           "body": {
             "kind": "choose",
             "condition": {
               "field": {
                 "name": "start_cause",
                 "kind": "text",
-                "description": "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it."
+                "description": "Rendered by inboxStartCause: the unread items that started this session, one per line. Blank when the user started it."
               },
               "test": "present"
             },
@@ -1704,7 +1704,7 @@
                           "field": {
                             "name": "start_cause",
                             "kind": "text",
-                            "description": "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it."
+                            "description": "Rendered by inboxStartCause: the unread items that started this session, one per line. Blank when the user started it."
                           }
                         }
                       }
@@ -1756,7 +1756,7 @@
         {
           "id": "close-requested",
           "delivery": "user_message",
-          "description": "crew_sleep.go: the user asked the member to close.",
+          "description": "crew_close.go: the user asked the member to close.",
           "body": {
             "kind": "text",
             "id": "crew.close-requested",
@@ -5737,5 +5737,5 @@
       ]
     }
   ],
-  "definitions_hash": "2ca15264a986d108238e3c1115cf839428316d813baaeadd376c659b0d6a0ebd"
+  "definitions_hash": "3afc25bf45e4d9811d2b93f2db92c7f4fec7e3563a4514f742ed5589c054eedb"
 }

@@ -709,7 +709,7 @@ func (d *Daemon) readClaudeModReach(_ context.Context, msg protocol.ClaudeModRea
 
 func (d *Daemon) receiveClaudeModReachReport(_ context.Context, msg protocol.ClaudeModReachReportMessage) (struct{}, error) {
 	if msg.Change == protocol.ClaudeModReachChangeFirstPollMissed {
-		d.tenderWakeModMissed(msg.SessionID, protocol.Deref(msg.ClaudeVersion))
+		d.tenderResumeModMissed(msg.SessionID, protocol.Deref(msg.ClaudeVersion))
 	} else {
 		d.kickSessionInboxAddresses(msg.SessionID)
 	}

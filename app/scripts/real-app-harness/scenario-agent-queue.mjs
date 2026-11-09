@@ -835,7 +835,7 @@ async function main() {
       runner.assert(queue.snoozed.count === 1, `the band counts what is in it: ${JSON.stringify(queue.snoozed)}`);
       const row = queue.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
       runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(queue))}`);
-      runner.assert(row.wake, `the row says when it comes back: ${JSON.stringify(row)}`);
+      runner.assert(row.snoozedUntil, `the row says when it comes back: ${JSON.stringify(row)}`);
       runner.log('deferred row', row);
 
       const session = await pollFor(
@@ -884,7 +884,7 @@ async function main() {
     });
 
     await runner.step('waking_early_returns_it_to_the_tail', async () => {
-      await client.request('dom_click', { selector: `[data-testid="queue-wake-${alpha.sessionId}"]` });
+      await client.request('dom_click', { selector: `[data-testid="queue-unsnooze-${alpha.sessionId}"]` });
       const queue = await waitForTurns(
         client,
         [beta.sessionId, alpha.sessionId],

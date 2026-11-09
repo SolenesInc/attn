@@ -36,9 +36,9 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		t.Fatalf("Side roster besides its Chief: %+v", roster)
 	}
 	for _, name := range []string{"Keel", "Nobody", "member:keel"} {
-		_, err := scoped.CrewWake(name, "", "")
+		_, err := scoped.CrewStart(name, "", "")
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
-		_, err = scoped.CrewSleep(name)
+		_, err = scoped.CrewClose(name)
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
 		_, err = scoped.CrewSet(name, protocol.Ptr(w.Path("side")), nil, nil, nil, nil)
 		crewErrorContains(t, err, "no crew member named", `profile "Side"`)
@@ -49,7 +49,7 @@ func TestACrewNameResolvesOnlyInItsProfile(t *testing.T) {
 		_, err = scoped.AgentMsg(name, protocol.SessionID(plain), "Hello")
 		crewErrorContains(t, err, "no session or crew member matches")
 		reloaded, err := scoped.AgentReload([]string{name}, protocol.SessionID(plain), false)
-		if err != nil || len(reloaded.Outcomes) != 1 || !strings.Contains(protocol.Deref(reloaded.Outcomes[0].Error), "no session or awake crew member matches") {
+		if err != nil || len(reloaded.Outcomes) != 1 || !strings.Contains(protocol.Deref(reloaded.Outcomes[0].Error), "no session or crew member in session matches") {
 			t.Fatalf("reload %s from Side: %+v %v", name, reloaded, err)
 		}
 		response := testworld.Request(app, protocol.CrewCharterGetMessage{Cmd: protocol.CmdCrewCharterGet, Member: name, RequestID: protocol.Ptr(name)}, protocol.EventCrewCharterGetResult, func(r protocol.CrewCharterGetResultMessage) bool { return r.RequestID == name })
@@ -88,7 +88,7 @@ func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	app := w.App()
-	day := wakeCrew(t, cli, "Keel", "")
+	day := startCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	before := crewRosterMember(t, cli, "keel")
 	seed := plantSeedAs(t, cli, string(day.SessionID), "Remember this across a rename")
@@ -107,10 +107,10 @@ func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
 	if after.Name != "Alfred" || after.HomeDir != before.HomeDir || after.CharterPath != before.CharterPath || protocol.Deref(after.BindingSession) != day.SessionID {
 		t.Fatalf("references changed: %+v -> %+v", before, after)
 	}
-	if _, err := cli.CrewWake("Keel", "", ""); err == nil {
+	if _, err := cli.CrewStart("Keel", "", ""); err == nil {
 		t.Fatal("the old name still resolves")
 	}
-	if woken, err := cli.CrewWake("member:keel", "", ""); err != nil || !woken.AlreadyAwake || woken.Name != "Alfred" {
+	if woken, err := cli.CrewStart("member:keel", "", ""); err != nil || !woken.AlreadyInSession || woken.Name != "Alfred" {
 		t.Fatalf("wake by key: %+v %v", woken, err)
 	}
 	priming, err := cli.CrewPrime(day.SessionID)
@@ -121,7 +121,7 @@ func TestRenamingAMemberKeepsEveryReference(t *testing.T) {
 	if sent, err := cli.AgentMsg("Alfred", protocol.SessionID(plain), "same mailbox"); err != nil || sent.TargetSessionID != day.SessionID {
 		t.Fatalf("message by the new name: %+v %v", sent, err)
 	}
-	if _, err := cli.CrewSleep("alfred"); err != nil {
+	if _, err := cli.CrewClose("alfred"); err != nil {
 		t.Fatal(err)
 	}
 	w.restart()
@@ -159,7 +159,7 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	plainRun := w.Launched(plain)
 	plainRun.Reply("Keep this conversation. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return s.State == protocol.StateIdle })
-	day := wakeCrew(t, cli, "Keel", "")
+	day := startCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	for _, agent := range []string{"codex", "claude"} {
 		switchCrewHarness(t, cli, "Keel", agent)
@@ -196,17 +196,17 @@ func TestAMemberIsOneLedgerRow(t *testing.T) {
 	check()
 }
 
-func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
+func TestAFailedCrewStartKeepsItsLastLedgerRow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "keel")
 		w.restart()
 		cli := w.Client()
-		day := wakeCrew(t, cli, "Keel", "")
+		day := startCrew(t, cli, "Keel", "")
 		if _, err := cli.CrewHandoff(day.SessionID, "Keep this day in the ledger.", false); err != nil {
 			t.Fatal(err)
 		}
 		w.terms.RefuseNextSpawn(errors.New("PTY allocation failed"))
-		_, err := cli.CrewWake("Keel", "", "")
+		_, err := cli.CrewStart("Keel", "", "")
 		crewErrorContains(t, err, "PTY allocation failed")
 		check := func() {
 			page := ledger(t, cli, client.SessionListOptions{All: true})
@@ -221,10 +221,10 @@ func TestAFailedCrewWakeKeepsItsLastLedgerRow(t *testing.T) {
 	})
 }
 
-func TestASleepingMemberKeepsItsLastDayInTheLedger(t *testing.T) {
+func TestAMemberBetweenSessionsKeepsItsLastDayInTheLedger(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "Keel", "")
+	day := startCrew(t, cli, "Keel", "")
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
@@ -235,11 +235,11 @@ func TestASleepingMemberKeepsItsLastDayInTheLedger(t *testing.T) {
 	}
 }
 
-func TestAnUnclosedCrewDayStaysInTheOpenLedgerAfterANewWake(t *testing.T) {
+func TestAnUnclosedCrewDayStaysInTheOpenLedgerAfterANewStart(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	day := crewDayLeftRecoverable(t, w, "Keel")
 	cli := w.Client()
-	next := wakeCrew(t, cli, "Keel", "")
+	next := startCrew(t, cli, "Keel", "")
 	w.Launched(string(next.SessionID))
 	page := ledger(t, cli, client.SessionListOptions{})
 	found := map[protocol.SessionID]bool{}
@@ -255,7 +255,7 @@ func TestACrewRequesterRefusesAConflictingProfile(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	cli := w.Client()
-	day := wakeCrew(t, cli, "Keel", "")
+	day := startCrew(t, cli, "Keel", "")
 	w.Launched(string(day.SessionID))
 	side := createProfile(app, "Side")
 	_, err := cli.WithGardenProfile(side.ID, day.SessionID).CrewList()
@@ -272,7 +272,7 @@ func TestAPlotKeepsItsPlanterAcrossCrewRenames(t *testing.T) {
 	if _, err := cli.CrewRename("Keel", "Alfred"); err != nil {
 		t.Fatal(err)
 	}
-	day := wakeCrew(t, cli, "Alfred", "").SessionID
+	day := startCrew(t, cli, "Alfred", "").SessionID
 	w.Launched(string(day))
 	plot, err := cli.SeedPlot(day, protocol.SeedPlotMessage{Title: "renamed planter", Children: []protocol.SeedPlotChild{{Title: "its child"}}})
 	if err != nil {

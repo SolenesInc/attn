@@ -16,7 +16,7 @@ describe('snoozeInstant', () => {
     expect(snoozeInstant('8h', now)).toEqual(at(2026, 8, 2, 22, 20));
   });
 
-  it('wakes tomorrow at the wake hour, not 24 hours later', () => {
+  it('ends tomorrow at the snooze hour, not 24 hours later', () => {
     const now = at(2026, 8, 2, 23, 45);
     expect(snoozeInstant('tomorrow', now)).toEqual(at(2026, 8, 3, SNOOZE_WAKE_HOUR));
   });
@@ -38,19 +38,19 @@ describe('snoozeInstant', () => {
     expect(snoozeInstant('monday', sunday)).toEqual(at(2026, 8, 3, SNOOZE_WAKE_HOUR));
   });
 
-  it('finds later the same day when the wake hour has not passed', () => {
+  it('finds later the same day when the snooze hour has not passed', () => {
     const mondayEarly = at(2026, 8, 3, 7, 30);
     expect(snoozeInstant('monday', mondayEarly)).toEqual(at(2026, 8, 3, SNOOZE_WAKE_HOUR));
   });
 
   // The one that matters: a deferral has to defer something. "Until Monday"
   // pressed on a Monday afternoon means next Monday, not an instant already gone.
-  it('skips to next week when the day has already had its wake hour', () => {
+  it('skips to next week when the day has already had its snooze hour', () => {
     const mondayAfternoon = at(2026, 8, 3, 15, 0);
     expect(snoozeInstant('monday', mondayAfternoon)).toEqual(at(2026, 8, 10, SNOOZE_WAKE_HOUR));
   });
 
-  it('skips a day whose wake hour is exactly now', () => {
+  it('skips a day whose snooze hour is exactly now', () => {
     const mondayAtNine = at(2026, 8, 3, SNOOZE_WAKE_HOUR);
     expect(snoozeInstant('monday', mondayAtNine)).toEqual(at(2026, 8, 10, SNOOZE_WAKE_HOUR));
   });
@@ -85,9 +85,9 @@ describe('isSnoozed', () => {
 describe('formatWakeTimeShort', () => {
   it('keeps the row label compact across today, tomorrow and later days', () => {
     const now = at(2026, 8, 2, 8);
-    const wake = (day: number) => formatWakeTimeShort(at(2026, 8, day, 9).toISOString(), now.getTime());
-    expect(wake(2)).toBe('9:00');
-    expect(wake(3)).toBe('tmrw 9:00');
-    expect(wake(6)).toBe('Thu 9:00');
+    const until = (day: number) => formatWakeTimeShort(at(2026, 8, day, 9).toISOString(), now.getTime());
+    expect(until(2)).toBe('9:00');
+    expect(until(3)).toBe('tmrw 9:00');
+    expect(until(6)).toBe('Thu 9:00');
   });
 });

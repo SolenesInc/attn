@@ -72,21 +72,21 @@ export function agentPaletteRows<S extends PaletteSession>(
     agentRow(session, anchored, matches(terms, sessionDisplayName(session), session.crewMember, session.automation?.definition_name));
 
   const anchored: AgentPaletteRow<S>[] = bands.chief ? bandRow(bands.chief.session, true) : [];
-  const awakeByMember = new Map<string, typeof bands.crew>();
+  const liveByMember = new Map<string, typeof bands.crew>();
   for (const row of bands.crew) {
     const member = row.session.crewMember ?? '';
-    awakeByMember.set(member, [...(awakeByMember.get(member) ?? []), row]);
+    liveByMember.set(member, [...(liveByMember.get(member) ?? []), row]);
   }
   const names = new Map(crewRoster.map((member) => [member.id, member.name]));
   if (chief && !bands.chief && matches(terms, chief.key, names.get(chief.key) ?? chief.key, 'chief')) {
     anchored.push({ kind: 'member', key: `member:${chief.key}`, member: chief.key, chief: true, unconfigured: !chief.agent });
   }
-  const members = [...new Set([...names.keys(), ...awakeByMember.keys()])].sort();
+  const members = [...new Set([...names.keys(), ...liveByMember.keys()])].sort();
   for (const member of members) {
     if (member === chief?.key) continue;
-    const awake = awakeByMember.get(member);
-    if (awake) {
-      for (const row of awake) anchored.push(...bandRow(row.session, true));
+    const live = liveByMember.get(member);
+    if (live) {
+      for (const row of live) anchored.push(...bandRow(row.session, true));
     } else if (matches(terms, member, names.get(member) ?? member)) {
       anchored.push({ kind: 'member', key: `member:${member}`, member });
     }

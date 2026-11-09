@@ -49,7 +49,7 @@ func TestCreatingAMemberGivesItAHomeWithAnEmptyCharter(t *testing.T) {
 	_, err = cli.CrewCreate("chief")
 	crewErrorContains(t, err, `"chief" is reserved`)
 
-	wake := wakeCrew(t, cli, "Keel", "")
+	wake := startCrew(t, cli, "Keel", "")
 	run := w.Launched(string(wake.SessionID))
 	if instructions := crewLaunchFlag(run.Argv, "--append-system-prompt"); !strings.Contains(instructions, "this is your first session") {
 		t.Fatalf("first wake instructions = %q", instructions)
@@ -86,7 +86,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 	cli := w.Client()
 	keel := createCrew(t, cli, "Keel")
 	sender := w.Spawn(app, fakeagent.Claude, w.Path("sender"))
-	wake := wakeCrew(t, cli, "Keel", "")
+	wake := startCrew(t, cli, "Keel", "")
 	day := w.Launched(string(wake.SessionID))
 	day.Prompted()
 	seed := plantSeedAs(t, cli, string(wake.SessionID), "Keep building")
@@ -98,7 +98,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 
 	retired := retireCrew(t, cli, "Keel")
 	if !retired.Member.Retired || retired.AlreadyRetired || len(retired.ReleasedSeeds) != 1 || retired.ReleasedSeeds[0] != seed ||
-		retired.Unread != 1 || retired.Sleep == nil || protocol.Deref(retired.Sleep.SessionID) != wake.SessionID {
+		retired.Unread != 1 || retired.Close == nil || protocol.Deref(retired.Close.SessionID) != wake.SessionID {
 		t.Fatalf("retirement = %+v", retired)
 	}
 	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || tenderMemberOf(shown) != "" || tenderSessionOf(shown) != "" {
@@ -144,7 +144,7 @@ func TestRetiringAndRestoringAMemberKeepsItsMailAndReleasesItsClaims(t *testing.
 		t.Fatal(err)
 	}
 	awaitClosed(app, string(wake.SessionID))
-	_, err = cli.CrewWake("Keel", "", "")
+	_, err = cli.CrewStart("Keel", "", "")
 	crewErrorContains(t, err, "Keel is retired", "attn crew restore Keel")
 
 	w.restart()
@@ -197,7 +197,7 @@ func TestRetiringAMemberRemovesItsGardenAndPullRequestWatches(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN"})
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	wake := wakeCrew(t, cli, "trellis", "")
+	wake := startCrew(t, cli, "trellis", "")
 	w.Launched(string(wake.SessionID)).Prompted()
 	watchPullRequestAs(t, cli, string(wake.SessionID), "", protocol.PullRequestWatchModeCodex, "")
 	awaitWatchedPullRequest(app, string(wake.SessionID), func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.Watching) })
@@ -252,7 +252,7 @@ func TestARetiredMembersLetterClosesTheDayWithoutASuccessor(t *testing.T) {
 			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 			app, cli := w.App(), w.Client()
 			keel := createCrew(t, cli, "Keel")
-			wake := wakeCrew(t, cli, "Keel", "")
+			wake := startCrew(t, cli, "Keel", "")
 			w.Launched(string(wake.SessionID)).Prompted()
 			if how.switching {
 				switchCrewHarness(t, cli, "Keel", "codex")
@@ -262,7 +262,7 @@ func TestARetiredMembersLetterClosesTheDayWithoutASuccessor(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseSleep || filed.SessionID != nil || filed.SuccessorError != nil {
+			if protocol.Deref(filed.Outcome) != protocol.CrewDayCloseClosed || filed.SessionID != nil || filed.SuccessorError != nil {
 				t.Fatalf("retired closure = %+v", filed)
 			}
 			letter, err := os.ReadFile(filed.Path)
@@ -285,7 +285,7 @@ func TestRetiringAMemberClosesItsAsksRefusesNewOnesAndRestoringKeepsThemClosed(t
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "asks_enabled", "true")
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
 	asked, err := cli.AskOpen(day.SessionID, "", cacheAsk, "", w.Path("trellis"))
 	if err != nil {

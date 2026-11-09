@@ -5,12 +5,12 @@ import { renderApp } from './test/renderApp';
 
 describe('App queue rows', () => {
   it('shows crew names in the queue popup and launch destinations in the full palette', async () => {
-    const awake = daemonSession('keel-session', { label: 'Keel', crew_member: 'keel', state: 'working' });
+    const inSession = daemonSession('keel-session', { label: 'Keel', crew_member: 'keel', state: 'working' });
     const { daemon } = await renderApp({
       initialState: {
         settings: { queue_mode_enabled: 'true' },
-        sessions: [awake],
-        desktops: [soloDesktop(awake.id)],
+        sessions: [inSession],
+        desktops: [soloDesktop(inSession.id)],
         crew: [crewMember('alder', { launch_desktop: { label: 'Review' } }), crewMember('keel')],
       },
     });
@@ -52,7 +52,7 @@ describe('App queue rows', () => {
     expect(within(screen.getByTestId('queue-settled-coordinator')).getByText('Profiles epic coordinator')).toBeInTheDocument();
   });
 
-  it('keeps a snoozed agent name beside its wake time', async () => {
+  it('keeps a snoozed agent name beside its unsnooze time', async () => {
     const snoozed = daemonSession('check', {
       label: 'Neovim Configuration Check', state: 'idle',
       turn_snoozed_until: '2099-01-01T09:00:00Z',
@@ -68,7 +68,7 @@ describe('App queue rows', () => {
     fireEvent.click(screen.getByTestId('queue-agents-toggle'));
     const row = screen.getByTestId('queue-snoozed-check');
     expect(within(row).getByText('Neovim Configuration Check')).toBeInTheDocument();
-    expect(row.querySelector('.queue-row-wake-at')?.textContent).toBeTruthy();
+    expect(row.querySelector('.queue-row-snoozed-until')?.textContent).toBeTruthy();
     expect(daemon.sentOf('snooze_turn')).toEqual([]);
   });
 });

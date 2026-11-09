@@ -18,7 +18,7 @@ interface SnoozeMenuProps {
 
 const VIEWPORT_MARGIN = 8;
 
-// Freeze the clock on opening so the displayed wake time is the instant sent.
+// Freeze the clock on opening so the displayed unsnooze time is the instant sent.
 export function SnoozeMenu({ sessionLabel, placement, onSnooze, onClose, onRestoreFocus }: SnoozeMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0 });

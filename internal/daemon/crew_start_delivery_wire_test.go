@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-const wokenAnswer = "Answer: Postgres (the recommended choice)"
+const startedAnswer = "Answer: Postgres (the recommended choice)"
 
 func answerAsk(t *testing.T, app *testworld.Peer, askID string) {
 	t.Helper()
@@ -41,16 +41,16 @@ func memberTendsASeed(t *testing.T, w *world, day protocol.SessionID) string {
 	return seed
 }
 
-func TestTheUsersWordsThatWakeAMemberAreTypedOnlyOnceItsHarnessHasStarted(t *testing.T) {
+func TestTheUsersWordsThatStartAMemberAreTypedOnlyOnceItsHarnessHasStarted(t *testing.T) {
 	const capture = "look at the flaky test"
 	for _, item := range []struct {
 		name, words string
 		prepare     func(t *testing.T, w *world, day protocol.SessionID) (deliver func(*testworld.Peer))
 	}{
-		{"an answer to the member's ask", wokenAnswer, func(t *testing.T, w *world, day protocol.SessionID) func(*testworld.Peer) {
+		{"an answer to the member's ask", startedAnswer, func(t *testing.T, w *world, day protocol.SessionID) func(*testworld.Peer) {
 			return memberAsks(t, w, day, "")
 		}},
-		{"an answer to the member's ask about a seed", wokenAnswer, func(t *testing.T, w *world, day protocol.SessionID) func(*testworld.Peer) {
+		{"an answer to the member's ask about a seed", startedAnswer, func(t *testing.T, w *world, day protocol.SessionID) func(*testworld.Peer) {
 			return memberAsks(t, w, day, memberTendsASeed(t, w, day))
 		}},
 		{"a quick capture", capture, func(t *testing.T, w *world, _ protocol.SessionID) func(*testworld.Peer) {

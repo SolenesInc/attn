@@ -20,7 +20,7 @@ func TestARingAModHeldThroughTheUpgradeToChiefMembersComesBackToTheChiefOnce(t *
 	if set := s.Attn("crew", "set", "chief", "--agent", "claude"); set.Code != 0 {
 		t.Fatalf("crew set chief: %+v", set)
 	}
-	var woken protocol.CrewWakeResult
+	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", "chief", "--json").JSON(t, &woken)
 	chief := string(woken.SessionID)
 	run := s.Launched(chief)

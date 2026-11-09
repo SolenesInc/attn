@@ -68,7 +68,7 @@ first, harvested and withered included. --stale narrows to open seeds
 whose log has not moved for the window (default {stale_window}) — a query for
 your judgment, never a reaper. --standby narrows to seeds on standby,
 each with the pull requests it watches and their readiness, its
-reminder, and why a wake is blocked when one is. --json prints the
+reminder, and why a resume is blocked when one is. --json prints the
 table's rows, without bodies or checks; attn seed show <id> reads one
 seed whole.",
         flags: &["plot", "stale", "window", "standby", "flat", "json"],
@@ -264,9 +264,9 @@ attn agent close --self does; it refuses while the seed's mailbox holds mail
 you have not read.
 --close --compact first waits for your turn to end and compacts your
 conversation, as attn agent close --self --compact does, so the session that
-wakes resumes a shorter conversation. End your turn right after the command.
+resumes picks up a shorter conversation. End your turn right after the command.
 Mail you read before the compact ends the standby, and you stay open. Mail you
-leave unread does not cancel the close: the session closes and the mail wakes it
+leave unread does not cancel the close: the session closes and the mail resumes it
 again. Mail that arrives during the compact waits until the session has closed.
 Only a Claude session with the Claude mod and a Codex session on the shared Codex
 app server compact, on the home machine or an outpost: attn refuses --compact for

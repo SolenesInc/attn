@@ -11,9 +11,9 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func wakeMember(t *testing.T, s *testworld.Stack, name string) string {
+func startMember(t *testing.T, s *testworld.Stack, name string) string {
 	t.Helper()
-	var woken protocol.CrewWakeResult
+	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", name, "--json").JSON(t, &woken)
 	s.Launched(string(woken.SessionID)).Prompted()
 	return string(woken.SessionID)
@@ -55,7 +55,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	writeCharter(t, s, "keel")
 	writeCharter(t, s, "trellis")
 	s.Start()
-	keel := wakeMember(t, s, "keel")
+	keel := startMember(t, s, "keel")
 	letter := "Dear next keel,\nthe join test is the gate.\n"
 	slept := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "-"}, Session: keel, Stdin: letter})
 	requireStdout(t, slept, "Keel's letter is filed at ", "Keel is between sessions.")
@@ -71,7 +71,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--cwd", workdir), "Trellis launches in "+workdir)
-	trellis := wakeMember(t, s, "trellis")
+	trellis := startMember(t, s, "trellis")
 	requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", "codex"))
 	requireStdout(t, s.Attn("crew", "apply", "trellis"), "Trellis's session "+trellis[:8]+" is busy; it will be asked to file its letter when it can take input, and its next session starts on codex from it.")
 	if err := os.Remove(workdir); err != nil {
@@ -111,7 +111,7 @@ func TestCrewApplyReloadsAModelChangeInPlace(t *testing.T) {
 	writeCharter(t, s, "keel")
 	s.Start()
 	requireStdout(t, s.Attn("crew", "apply", "keel"), "Keel is between sessions; its next session uses the saved settings.")
-	var woken protocol.CrewWakeResult
+	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", "keel", "--json").JSON(t, &woken)
 	keel := string(woken.SessionID)
 	first := s.Launched(keel)

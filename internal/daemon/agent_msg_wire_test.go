@@ -232,7 +232,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 
-	keel := wakeCrew(t, cli, "keel", "")
+	keel := startCrew(t, cli, "keel", "")
 	keelDay := w.Launched(string(keel.SessionID))
 	keelDay.Prompted()
 	keelDay.Reply("Morning. <!-- attn:state=idle -->")
@@ -249,7 +249,7 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	}
 
 	first := sendAgentMessage(t, cli, sender, "trellis", "please inspect the broken build")
-	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || first.TargetSessionID == "" {
+	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "started Trellis") || first.TargetSessionID == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)
 	}
 	trellisDay := w.Launched(string(first.TargetSessionID))
@@ -316,7 +316,7 @@ func TestMailForAMemberWhoseLaunchFailsWaitsForItsNextDay(t *testing.T) {
 	}
 
 	allow()
-	woke := wakeCrew(t, cli, "keel", "")
+	woke := startCrew(t, cli, "keel", "")
 	sendAgentMessage(t, cli, sender, "keel", "the build is green")
 	day := w.Launched(string(woke.SessionID))
 	day.Prompted()

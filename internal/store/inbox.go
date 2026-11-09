@@ -372,7 +372,7 @@ func (s *Store) StampInboxAttempt(to who.Address, at time.Time) (bool, error) {
 }
 func InboxRingStamp(at time.Time) string { return at.UTC().Format(sortableTimeFormat) }
 
-func (s *Store) RingInbox(to who.Address, finishingWake bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
+func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	stamp := InboxRingStamp(at)
@@ -390,7 +390,7 @@ func (s *Store) RingInbox(to who.Address, finishingWake bool, typed []string, re
 		return stamp, tx.Commit()
 	}
 	// A wake's completion charges only items added since the wake began.
-	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+CASE WHEN attempts<? AND (NOT ? OR attempts=0) THEN 1 ELSE 0 END,attempted_at=?,notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END WHERE address=? AND read_at=''`, inbox.MaxAttempts, finishingWake, stamp, stamp, to.String())
+	result, err := tx.Exec(`UPDATE inbox_items SET attempts=attempts+CASE WHEN attempts<? AND (NOT ? OR attempts=0) THEN 1 ELSE 0 END,attempted_at=?,notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END WHERE address=? AND read_at=''`, inbox.MaxAttempts, finishingStart, stamp, stamp, to.String())
 	if err != nil {
 		return "", err
 	}

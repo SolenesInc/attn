@@ -45,7 +45,7 @@ async function openLaunchSettings(members: CrewMember[], saves: Answer[], settin
 
 const panel = () => within(screen.getByTestId('crew-panel'));
 const saveState = () => within(panel().getByRole('heading', { name: 'Launch settings' }).closest('section')!).getAllByRole('status')[0];
-const nextWake = () => panel().getByText('Acknowledged next wake').parentElement!;
+const nextSession = () => panel().getByText('Acknowledged next session').parentElement!;
 const crewSets = (daemon: ScriptedDaemon) => daemon.sentOf('crew_set').map(({ expected_revision, agent, model, effort }) => ({ expected_revision, agent, model, effort }));
 
 async function setEffort(daemon: ScriptedDaemon, effort: string) {
@@ -110,16 +110,16 @@ describe('App crew launch settings', () => {
     await gesture(daemon, () => fireEvent.click(within(routeDialog().getByRole('listbox', { name: 'Harness' })).getByRole('option', { name: 'Crew default' })));
     expect(crewSets(daemon)).toEqual([{ expected_revision: 1, effort: '', agent: '', model: '' }]);
   });
-  it('shows the next wake the roster reports while a save is out, and ignores an older roster', async () => {
+  it('shows the next session the roster reports while a save is out, and ignores an older roster', async () => {
     const daemon = await openLaunchSettings([member('trellis', 1)], [HOLD]);
     await setEffort(daemon, 'high');
     expect(saveState()).toHaveTextContent('Saving…');
 
     await roster(daemon, [member('trellis', 2, { effort: 'high', resolved_effort: 'high' })]);
-    expect(nextWake()).toHaveTextContent(/Claude.*default.*high/);
+    expect(nextSession()).toHaveTextContent(/Claude.*default.*high/);
 
     await roster(daemon, [member('trellis', 1)]);
-    expect(nextWake()).toHaveTextContent(/Claude.*default.*high/);
+    expect(nextSession()).toHaveTextContent(/Claude.*default.*high/);
   });
 
   it('keeps a write whose answer was lost as not saved, even when the roster shows the same values', async () => {
@@ -138,7 +138,7 @@ describe('App crew launch settings', () => {
   it('follows what the daemon derives at the same revision, and drops a write answer older than the roster', async () => {
     const daemon = await openLaunchSettings([member('alder', 3)], [HOLD, saved(member('alder', 7, { effort: 'latest', resolved_effort: 'latest' }))]);
     await roster(daemon, [member('alder', 3, { binding_session: 'session-new', resolved_agent: 'codex' })]);
-    expect(nextWake()).toHaveTextContent(/Codex.*default/);
+    expect(nextSession()).toHaveTextContent(/Codex.*default/);
 
     await setEffort(daemon, 'first');
     await setEffort(daemon, 'latest');
@@ -147,7 +147,7 @@ describe('App crew launch settings', () => {
 
     expect(crewSets(daemon)[1]).toEqual({ expected_revision: 6, agent: '', model: 'external', effort: 'latest' });
     expect(saveState()).toHaveTextContent('Saved');
-    expect(nextWake()).toHaveTextContent(/Claude.*default.*latest/);
+    expect(nextSession()).toHaveTextContent(/Claude.*default.*latest/);
   });
 
   it('merges what changed elsewhere into a conflicting edit, keeps what the user cleared, and asks for a retry', async () => {

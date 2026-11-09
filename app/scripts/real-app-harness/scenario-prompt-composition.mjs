@@ -69,7 +69,7 @@ async function main() {
     }
   };
   runner.registerCleanup('end_chief_day', endChiefDay);
-  const wakeChief = (cwd, agent) => {
+  const startChief = (cwd, agent) => {
     const chief = readChief();
     if (chief.binding_session) {
       throw new Error(`The Chief of instance ${instance} is in session ${chief.binding_session}, and this scenario starts a Chief session of its own. Close the Chief's session first with attn crew close chief.`);
@@ -129,7 +129,7 @@ async function main() {
             { type: 'reply', text: 'PEER_READ', state: 'idle' },
           ],
         }] });
-        const result = chief ? wakeChief(cwd, agent) : await client.request('create_session', { cwd, label: name, agent });
+        const result = chief ? startChief(cwd, agent) : await client.request('create_session', { cwd, label: name, agent });
         sessions.push(result.sessionId);
         await observer.waitForSession({ id: result.sessionId });
         await waitForFirstDesktopPane(client, result.sessionId, name, 20_000);
@@ -198,7 +198,7 @@ async function main() {
       runner.assert(decoded.width > 0 && decoded.height > 0 && decoded.data.length === decoded.width * decoded.height * 4,
         'agent image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
     });
-    await runner.step('crew_wake_sleep_and_successor', async () => {
+    await runner.step('crew_start_close_and_successor', async () => {
       cli(['crew', 'set', crewName, '--agent', 'claude', '--model', 'claude-haiku-4-5']);
       const first = JSON.parse(cli(['crew', 'start', crewName, '--json']));
       sessions.push(first.session_id);
@@ -208,18 +208,18 @@ async function main() {
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
       runner.assert(instructions(captured.text, 'claude').includes(`You are **${crewLabel}**`), 'crew identity reaches the appended instructions');
       const duplicate = JSON.parse(cli(['crew', 'start', crewName, '--json']));
-      runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
+      runner.assert(duplicate.already_in_session === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
       observer.send({ cmd: 'set_client_presence', visible: true, dashboard_visible: false, idle_seconds: 0 });
       await observer.requestResult({ cmd: 'set_setting', key: 'crew.heartbeat_enabled', value: 'false' }, 'settings_updated');
       const presence = JSON.parse(cli(['activity', '--json']));
       runner.assert(presence.presence_tier === 'present' || presence.presence_tier === 'watching', 'the user is present before plain handoff', presence);
       cli(['crew', 'close', crewName, '--json']);
       await waitFor(() => fs.existsSync(path.join(crewHome, 'sleep-received')), 'sleep prompt receipt');
-      runner.assert(transcripts(crewHome).some(file => file.text.includes('user is asking you to close')), 'inbox read delivers the sleep request');
+      runner.assert(transcripts(crewHome).some(file => file.text.includes('user is asking you to close')), 'inbox read delivers the close request');
       await waitFor(() => fs.existsSync(path.join(crewHome, 'handoffs')) && fs.readdirSync(path.join(crewHome, 'handoffs')).length, 'filed handoff');
       await waitFor(() => !observer.sessionsById.has(first.session_id), 'first day closed');
       const sleeping = JSON.parse(cli(['crew', 'list', '--json'])).find(member => member.id === crewName);
-      runner.assert(sleeping && !sleeping.binding_session, 'plain handoff leaves the member asleep while the user is present', sleeping);
+      runner.assert(sleeping && !sleeping.binding_session, 'plain handoff leaves the member between sessions while the user is present', sleeping);
       const second = JSON.parse(cli(['crew', 'start', crewName, '--json']));
       sessions.push(second.session_id);
       const successor = await waitFor(() => transcripts(crewHome).find(file => file.name !== captured.name && file.text.includes('CREW_READY')), 'successor wake');
@@ -240,7 +240,7 @@ async function main() {
     await runner.step('chief_day_ends_with_its_settings_unchanged', async () => {
       await endChiefDay();
       const after = readChief();
-      runner.assert(!after.binding_session, 'the Chief is asleep after the scenario', after);
+      runner.assert(!after.binding_session, 'the Chief is between sessions after the scenario', after);
       runner.assert(JSON.stringify(launchSettings(after)) === JSON.stringify(chiefExpected),
         'the Chief keeps the launch settings it had before the scenario, gaining a harness only when it had none',
         { before: chiefBefore, after: launchSettings(after) });

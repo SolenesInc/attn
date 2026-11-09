@@ -34,13 +34,13 @@ const drawings: Record<string, ReactNode> = {
     <>
       <path className="soil" d="M7 28h18" />
       <path d="M16 27v-3" />
-      <g className="sleeping-bud">
+      <g className="dormant-bud">
         <path className="wash" d="M16 11.5c-5.6.5-8.6 5.1-6.8 9.1 1.9 4.1 11.2 4.5 13.3.4 2.1-4-1-8.8-6.5-9.5Z" />
         <path className="fine" d="M16 11.7c-.7 2.4.3 4 2.7 4.7" />
         <path d="M11.5 18.8q1.7 1.6 3.4 0m3 .2q1.3 1.2 2.6-.2" />
       </g>
       <path className="moon wash" d="M24.8 3.8c-1 3.8.9 5.6 4 5-1.2 3.7-6 4-7.5.9-1.2-2.6.5-5.2 3.5-5.9Z" />
-      <path className="sleep-mote" d="M5.2 9.3h2.6l-2.6 2.3h2.6" />
+      <path className="dormant-mote" d="M5.2 9.3h2.6l-2.6 2.3h2.6" />
     </>
   ),
   harvested: (

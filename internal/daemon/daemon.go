@@ -208,7 +208,7 @@ type Daemon struct {
 	terminalState            *terminalRegistry
 	noAgentSockets           bool
 	claudeModOnce            sync.Once
-	tenderWakes              tenderWakeLedger
+	tenderResumes            tenderResumeLedger
 	compactions              compactionLedger
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
@@ -220,7 +220,7 @@ type Daemon struct {
 	inboxStates              map[who.Address]*inboxDeliveryState
 	inboxUnsubscribe         func()
 	monitorPolicyUnsubscribe func()
-	crewWakeMu               sync.Mutex
+	crewStartMu              sync.Mutex
 	crewExitedMu             sync.Mutex
 	crewExitedSessions       map[string]string
 	supportInputTraceOnce    sync.Once
@@ -3121,10 +3121,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
 	case protocol.CmdCrewHandoffGet:
 		d.handleCrewHandoffGet(conn, msg.(*protocol.CrewHandoffGetMessage))
-	case protocol.CmdCrewWake:
-		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
-	case protocol.CmdCrewSleep:
-		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
+	case protocol.CmdCrewStart:
+		d.handleCrewStart(conn, msg.(*protocol.CrewStartMessage))
+	case protocol.CmdCrewClose:
+		d.handleCrewClose(conn, msg.(*protocol.CrewCloseMessage))
 	case protocol.CmdCrewApply:
 		d.handleCrewApply(conn, msg.(*protocol.CrewApplyMessage))
 	case protocol.CmdCrewRename:

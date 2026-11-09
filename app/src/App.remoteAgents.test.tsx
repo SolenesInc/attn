@@ -209,7 +209,7 @@ describe('Remote agents in the app', () => {
   it('hides unsnooze for an offline turn', async () => {
     const { daemon } = await setup(offline, { turn_snoozed_until: '2999-01-01T00:00:00Z' });
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /more agents?/i })));
-    expect(screen.queryByTestId('queue-wake-remote')).toBeNull();
+    expect(screen.queryByTestId('queue-unsnooze-remote')).toBeNull();
     expect(screen.getByTestId('queue-snoozed-remote')).toHaveAttribute('data-offline', 'true');
   });
 

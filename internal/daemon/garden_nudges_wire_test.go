@@ -273,7 +273,7 @@ func gardenNudgeOneBell(t *testing.T, cli *client.Client, session, seedID, event
 	}
 }
 
-func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) {
+func TestASeedBellStartsItsMemberTenderBetweenSessionsAndStaysWithTheMember(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()

@@ -245,33 +245,33 @@ describe('App dashboard', () => {
   });
 
   describe('snoozed agents', () => {
-    it('collects deferred agents under a collapsed Snoozed group that lists each wake time, soonest first', async () => {
+    it('collects deferred agents under a collapsed Snoozed group that lists each unsnooze time, soonest first', async () => {
       await renderHome(
         [
-          agent('wakes-later', { state: 'idle', turn_snoozed_until: tomorrowAt(10, 15) }),
-          agent('wakes-sooner', { state: 'working', turn_snoozed_until: tomorrowAt(9, 30) }),
+          agent('back-later', { state: 'idle', turn_snoozed_until: tomorrowAt(10, 15) }),
+          agent('back-sooner', { state: 'working', turn_snoozed_until: tomorrowAt(9, 30) }),
           agent('running', { state: 'working' }),
         ],
         { settings: QUEUE },
       );
       expect(rowsIn('working')).toEqual(['running']);
       expect(group('snoozed')).toHaveTextContent('Snoozed2');
-      expect(row('wakes-later')).toBeNull();
+      expect(row('back-later')).toBeNull();
 
       fireEvent.click(within(group('snoozed')!).getByRole('button', { name: /Snoozed/ }));
 
-      expect(rowsIn('snoozed')).toEqual(['wakes-sooner', 'wakes-later']);
-      expect(row('wakes-sooner')).toHaveTextContent(/tomorrow 0?9:30/);
-      expect(row('wakes-later')).toHaveTextContent(/tomorrow 10:15/);
-      expect(within(group('snoozed')!).getByRole('button', { name: 'Wake wakes-sooner' })).toBeInTheDocument();
+      expect(rowsIn('snoozed')).toEqual(['back-sooner', 'back-later']);
+      expect(row('back-sooner')).toHaveTextContent(/tomorrow 0?9:30/);
+      expect(row('back-later')).toHaveTextContent(/tomorrow 10:15/);
+      expect(within(group('snoozed')!).getByRole('button', { name: 'Unsnooze back-sooner' })).toBeInTheDocument();
     });
 
-    it('wakes one early, with the queue off too', async () => {
+    it('unsnoozes one early, with the queue off too', async () => {
       const { daemon } = await renderHome([agent('deferred', { state: 'idle', turn_snoozed_until: fromNow(HOUR) })]);
       expect(group('idle')).toBeNull();
       fireEvent.click(within(group('snoozed')!).getByRole('button', { name: /Snoozed/ }));
 
-      await gesture(daemon, () => fireEvent.click(within(group('snoozed')!).getByRole('button', { name: 'Wake deferred' })));
+      await gesture(daemon, () => fireEvent.click(within(group('snoozed')!).getByRole('button', { name: 'Unsnooze deferred' })));
 
       expect(daemon.sentOf('wake_turn')).toEqual([{ cmd: 'wake_turn', session_id: 'deferred' }]);
     });
@@ -296,10 +296,10 @@ describe('App dashboard', () => {
     });
 
     it('leaves a lapsed deadline alone', async () => {
-      await renderHome([agent('awake', { state: 'working', turn_snoozed_until: fromNow(-60 * 1000) })], { settings: QUEUE });
+      await renderHome([agent('unsnoozed', { state: 'working', turn_snoozed_until: fromNow(-60 * 1000) })], { settings: QUEUE });
 
       expect(group('snoozed')).toBeNull();
-      expect(rowsIn('working')).toEqual(['awake']);
+      expect(rowsIn('working')).toEqual(['unsnoozed']);
     });
   });
 });

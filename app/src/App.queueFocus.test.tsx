@@ -191,7 +191,7 @@ describe('acting on the queue sidebar row that holds focus', () => {
     expect(menu.style.left).toBe('40px');
   });
 
-  it('acts on no agent from a focused row that holds none, like a sleeping crew member', async () => {
+  it('acts on no agent from a focused row that holds none, like a crew member between sessions', async () => {
     const { daemon } = await launch({ owed: ['s2'], crew: [crewMember('fern')] });
     await openS2(daemon);
 

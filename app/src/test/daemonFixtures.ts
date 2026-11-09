@@ -158,9 +158,9 @@ export function sessionActor(sessionId: string, name = sessionId): DaemonActor {
   return { ref: `session:${sessionId}`, name };
 }
 
-export function memberClaim(key: string, awakeSessionId?: string): DaemonClaim {
+export function memberClaim(key: string, liveSessionId?: string): DaemonClaim {
   return {
-    tender: { ref: `member:${key}`, name: memberName(key), ...(awakeSessionId ? { session_id: awakeSessionId } : {}) },
+    tender: { ref: `member:${key}`, name: memberName(key), ...(liveSessionId ? { session_id: liveSessionId } : {}) },
     claimed: true,
   };
 }

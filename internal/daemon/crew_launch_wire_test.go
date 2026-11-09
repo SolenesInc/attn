@@ -19,7 +19,7 @@ func TestCrewReachesSharedCodexWithoutHarnessMemory(t *testing.T) {
 			cli, app := w.Client(), w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
 			setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
-			day := wakeCrew(t, cli, "keel", "")
+			day := startCrew(t, cli, "keel", "")
 			t.Cleanup(func() {
 				if t.Failed() {
 					if peek, err := cli.AgentPeek(string(day.SessionID)); err == nil && peek.Screen != nil {
@@ -49,7 +49,7 @@ func TestCrewDisablesClaudeMemoryAtLaunch(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Claude)
 			app, cli := w.App(), w.Client()
 			setSetting(t, app, "direct_agent_launch_enabled", fmt.Sprint(direct))
-			woken := wakeCrew(t, cli, "trellis", "")
+			woken := startCrew(t, cli, "trellis", "")
 			run := w.Launched(string(woken.SessionID))
 			if got, want := run.Prompted(), prompts.RenderText("crew", "new-session", nil); got != want {
 				t.Fatalf("wake prompt = %q, want %q", got, want)
@@ -71,7 +71,7 @@ func TestCrewDisablesClaudeMemoryAtLaunch(t *testing.T) {
 func TestCrewSuccessorGetsTheOperatingModelAndDiscoveryPrompt(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID)).Prompted()
 	switchCrewHarness(t, cli, "trellis", "codex")
 	handed := crewHandoff(t, cli, string(day.SessionID), "Follow s-example to the current work.", false)

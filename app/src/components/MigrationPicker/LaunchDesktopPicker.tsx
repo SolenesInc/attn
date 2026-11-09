@@ -322,7 +322,7 @@ export function LaunchDesktopPicker() {
                     <span>
                       {group.length} ·{' '}
                       {kind === LaunchDesktopKind.Crew
-                        ? 'woken by you or by other agents'
+                        ? 'started by you or by other agents'
                         : 'each run starts a fresh agent'}
                     </span>
                     {kind === LaunchDesktopKind.Crew && <CrewDesktopHelp />}

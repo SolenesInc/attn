@@ -470,7 +470,7 @@ tenders of the plots above it. It also raises a critical notification with an
 action that opens the seed. The reasons are a removed worktree, a missing
 conversation, a conversation that would reopen in another profile, a Claude
 session that cannot receive the mail through its mod, and the limit of 48. The
-seed row carries the reason as `wake_blocked`. The item stays queued. attn does
+seed row carries the reason as `resume_blocked`. The item stays queued. attn does
 not retry these resumes, except at the limit of 48: attn delivers the item when
 the 24-hour window has room again.
 
@@ -524,7 +524,7 @@ notified, or read.
 | Time between attempts (user input and seed mail that nobody holds do not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items. The repeats were harness outages. |
 | Mail-started sessions per member | 8 per 12 hours | `crew.mail_start_limit`, `crew.mail_start_window_seconds` | |
-| Tender resumes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender resume with the seed and its cause. |
+| Tender resumes per seed, for seed mail | 48 per 24 hours | `tenderResumeLimit`, `tenderResumeWindow` | None yet. The daemon logs each tender resume with the seed and its cause. |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
 | Same text to one address | once per 10 s | `agentMessageDedupeWindow` | |
 | Peer messages from one sender to one address | 8 per 30 s | `agentMessageRateLimit` | |

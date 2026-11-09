@@ -18,11 +18,11 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 
 	panes := spawnPanes(w, app, shared, shared)
 	worker, unregistered := panes[0], panes[1]
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := sessionPane{session: string(chiefSession(t, cli))}
 	chiefDesktop, chiefPane := placedPane(t, w, chief.session)
 	chief.desktop, chief.pane = chiefDesktop.ID, chiefPane
-	woken := wakeCrew(t, cli, "trellis", "")
+	woken := startCrew(t, cli, "trellis", "")
 	w.Launched(string(woken.SessionID))
 	crewPane := sessionPane{session: string(woken.SessionID)}
 
@@ -30,8 +30,8 @@ func TestTheChiefAndCrewMembersCannotBeClosedButTheirNeighboursCan(t *testing.T)
 		pane    sessionPane
 		refusal string
 	}{
-		{chief, "Chief is protected from closing; put Chief to sleep first"},
-		{crewPane, "Trellis is protected from closing; put Trellis to sleep first"},
+		{chief, "Chief is protected from closing; ask Chief to close first"},
+		{crewPane, "Trellis is protected from closing; ask Trellis to close first"},
 	}
 	for _, p := range protected {
 		app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: protocol.SessionID(p.pane.session)})

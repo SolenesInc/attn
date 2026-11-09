@@ -111,7 +111,7 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 		fmt.Fprintf(os.Stderr, "handoff: the next session did not start: %s\nThis session is still running and %s is still bound to it. `attn handoff --retry` tries again. The letter above is filed, so do not write another.\n", successorErr, result.Name)
 		exit(1)
 	}
-	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
+	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseClosed {
 		fmt.Printf("%s is between sessions. attn started no session behind you; the sidebar has %[1]s one click from a new session.\n", result.Name)
 		return
 	}

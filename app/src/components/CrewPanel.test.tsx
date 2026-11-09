@@ -175,10 +175,10 @@ describe('CrewPanel', () => {
     expect(panel().getByLabelText('Find a seed')).toHaveValue('Artifact presence');
   });
 
-it('keeps actual running values separate from acknowledged next-wake settings', async () => {
+it('keeps actual running values separate from acknowledged next-session settings', async () => {
     const { daemon } = await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis', agent: 'codex', model: 'gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high' })], sessions: [daemonSession('session-trellis', { agent: 'claude' })] });
     expect(panel().getByLabelText('Running now')).toHaveTextContent(/Claude.*Model not reported.*Effort not reported/);
-    expect(panel().getByText('Acknowledged next wake').parentElement).toHaveTextContent(/Codex.*gpt-6-astra.*high/);
+    expect(panel().getByText('Acknowledged next session').parentElement).toHaveTextContent(/Codex.*gpt-6-astra.*high/);
     await openRoute(daemon, 'Crew launch model');
     expect(routeDialog().getByRole('option', { name: /^Astra/ })).toBeInTheDocument();
     expect(daemon.sentOf('harness_models').map(command => command.harness)).toEqual(['codex']);
@@ -200,14 +200,14 @@ it('keeps actual running values separate from acknowledged next-wake settings', 
     expect(daemon.sentOf('crew_set')[1].model).toBe('openai/gpt-6-astra');
   });
 
-it('saves a full atomic selection, leaves Sleep available while saving, and clears to defaults', async () => {
+it('saves a full atomic selection, leaves Close available while saving, and clears to defaults', async () => {
     const { daemon, answer } = await renderPanel({ script: { crew_set: [HOLD] }, members: [member('alder', 7, { binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high' })] });
     await openRoute(daemon, 'Crew launch model');
     await gesture(daemon, () => fireEvent.click(routeDialog().getByRole('option', { name: 'Crew default' })));
     expect(crewSets(daemon)).toEqual([{ member: 'member:alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
-    expect(panel().getByRole('button', { name: 'Sleep' })).toBeEnabled();
+    expect(panel().getByRole('button', { name: 'Close' })).toBeEnabled();
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }) }));
-    expect(panel().getByRole('button', { name: 'Sleep' })).toBeEnabled();
+    expect(panel().getByRole('button', { name: 'Close' })).toBeEnabled();
     expect(panel().getByRole('button', { name: 'Crew launch model' })).toHaveTextContent('Crew default');
   });
 
@@ -253,20 +253,20 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     expect(daemon.sentOf('crew_rename')).toEqual([]);
   });
 
-  it('asks an awake member to sleep through the ordinary crew action', async () => {
+  it('asks a member in session to close through the ordinary crew action', async () => {
     const { daemon } = await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis' })] });
-    daemon.on('crew_sleep', () => ({
-      event: 'crew_sleep_result', success: true, member: 'trellis', session_id: 'session-trellis',
+    daemon.on('crew_close', () => ({
+      event: 'crew_close_result', success: true, member: 'trellis', session_id: 'session-trellis',
       delivery_status: 'queued', detail: 'The request is queued',
     }));
 
-    await click(daemon, 'Sleep');
-    expect(daemon.sentOf('crew_sleep')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
-    expect(daemon.sentOf('crew_wake')).toEqual([]);
-    expect(screen.getByTestId('crew-panel').querySelector('.crew-member-heading')).toHaveTextContent('Awake');
+    await click(daemon, 'Close');
+    expect(daemon.sentOf('crew_close')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
+    expect(daemon.sentOf('crew_start')).toEqual([]);
+    expect(screen.getByTestId('crew-panel').querySelector('.crew-member-heading')).toHaveTextContent('In session');
   });
 
-  it('applies an awake member’s saved settings and shows what happened', async () => {
+  it('applies a member in session’s saved settings and shows what happened', async () => {
     const { daemon } = await renderPanel({ members: [member('trellis', 4, { binding_session: 'session-trellis' })] });
     daemon.on('crew_apply', () => ({
       event: 'crew_apply_result', success: true,
@@ -276,7 +276,7 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     await click(daemon, 'Apply');
     expect(daemon.sentOf('crew_apply')).toEqual([expect.objectContaining({ member: 'member:trellis' })]);
     expect(panel().getByText(/its next session starts on codex from it/)).toBeInTheDocument();
-    expect(daemon.sentOf('crew_sleep')).toEqual([]);
+    expect(daemon.sentOf('crew_close')).toEqual([]);
   });
 
   it('shows a pending harness switch until the member files its letter', async () => {
@@ -284,26 +284,26 @@ it('keeps a failed member edit through roster navigation and retries it', async 
     expect(panel().getByTestId('crew-switch-pending')).toHaveTextContent('continue on codex');
   });
 
-  it('offers no apply while the member is asleep', async () => {
+  it('offers no apply while the member is between sessions', async () => {
     await renderPanel({ members: [member('trellis', 4)] });
     expect(panel().queryByTestId('crew-apply')).toBeNull();
   });
 
-  it('closes with Escape and an app wake shows the sleeping member’s day', async () => {
+  it('closes with Escape and an app start shows the member’s new session', async () => {
     const { daemon, openCrew, closeWithEscape } = await renderPanel({
       members: [member('keel', 5)],
       sessions: [daemonSession('session-keel')],
     });
-    daemon.on('crew_wake', () => ({
-      event: 'crew_wake_result', success: true, member: 'keel', session_id: 'session-keel',
+    daemon.on('crew_start', () => ({
+      event: 'crew_start_result', success: true, member: 'keel', session_id: 'session-keel',
     }));
 
     await closeWithEscape();
     expect(isPanelOpen()).toBe(false);
 
     await openCrew();
-    await click(daemon, 'Wake');
-    expect(daemon.sentOf('crew_wake')).toEqual([expect.objectContaining({ member: 'member:keel' })]);
+    await click(daemon, 'Start');
+    expect(daemon.sentOf('crew_start')).toEqual([expect.objectContaining({ member: 'member:keel' })]);
     expect(isPanelOpen()).toBe(false);
     expect(document.querySelector('.session-terminal-desktop[data-session-visible="1"]'))
       .toHaveAttribute('data-desktop-id', 'desktop-session-keel');
@@ -579,8 +579,8 @@ it('commits a launch field on the inner Escape, then closes Crew on the next Esc
   });
 
   it.each([
-    ['an asleep member opens the seed as a standalone reader', undefined],
-    ['an awake member places the seed beside its current day', 'session-trellis'],
+    ['a member between sessions opens the seed as a standalone reader', undefined],
+    ['a member in session places the seed beside its current day', 'session-trellis'],
   ])('renders complete dated handoffs and %s', async (_, bindingSession) => {
     const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-w0rk11)\n';
     const { daemon } = await renderPanel({

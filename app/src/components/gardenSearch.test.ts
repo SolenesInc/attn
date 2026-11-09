@@ -110,17 +110,17 @@ describe('the status lens', () => {
   const done = seed({ id: 's-done01', title: 'finished work', status: 'harvested' });
   const dropped = seed({ id: 's-drop01', title: 'abandoned work', status: 'withered' });
   const ready = seed({ id: 's-redy01', title: 'ready work', ready: true });
-  const sleeping = seed({ id: 's-dorm01', title: 'sleeping work', status: 'parked' });
-  const all = [open, done, dropped, ready, sleeping];
+  const dormant = seed({ id: 's-dorm01', title: 'dormant work', status: 'parked' });
+  const all = [open, done, dropped, ready, dormant];
 
   it('hides closed seeds until a token asks for them', () => {
-    expect(titles(all, 'work')).toEqual(['open work', 'ready work', 'sleeping work']);
+    expect(titles(all, 'work')).toEqual(['open work', 'ready work', 'dormant work']);
     expect(titles(all, 'work is:any')).toHaveLength(5);
     expect(titles(all, 'work is:closed')).toEqual(['finished work', 'abandoned work']);
   });
 
   it('unions several lenses rather than intersecting them', () => {
-    expect(titles(all, 'work is:ready is:parked')).toEqual(['ready work', 'sleeping work']);
+    expect(titles(all, 'work is:ready is:parked')).toEqual(['ready work', 'dormant work']);
   });
 
   it('counts a seed blocked only while something open blocks it', () => {

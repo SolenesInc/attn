@@ -997,7 +997,7 @@
 
 /* When a deferred agent comes back. Takes the age column's place — the turn it
    would have aged is already closed. */
-.session-wake-at {
+.session-snoozed-until {
   margin-left: auto;
   padding-left: 8px;
   font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
@@ -1005,7 +1005,7 @@
   color: var(--color-text-dimmed);
 }
 
-.session-wake-btn {
+.session-unsnooze-btn {
   background: transparent;
   border: 0;
   border-radius: 4px;
@@ -1018,12 +1018,12 @@
   padding: 3px 5px;
 }
 
-.session-row:hover .session-wake-btn,
-.session-wake-btn:focus-visible {
+.session-row:hover .session-unsnooze-btn,
+.session-unsnooze-btn:focus-visible {
   opacity: 1;
 }
 
-.session-wake-btn:hover {
+.session-unsnooze-btn:hover {
   background: var(--color-bg-elevated);
   color: var(--color-text-primary);
 }

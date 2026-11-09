@@ -423,7 +423,7 @@ func TestAnAskFollowsItsAddresseeNotTheSessionThatFiledIt(t *testing.T) {
 	}
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 0 })
 
-	day := wakeCrew(t, cli, "trellis", "")
+	day := startCrew(t, cli, "trellis", "")
 	w.Launched(string(day.SessionID))
 	asked, err := cli.AskOpen(day.SessionID, "", cacheAsk, "", w.Path("trellis"))
 	if err != nil {

@@ -131,7 +131,7 @@ describe('sidebar harness identity', () => {
       <Sidebar
         {...baseProps}
         {...data}
-        crew={[{ id: 'fern', name: 'Fern' }, { id: 'sleeping', name: 'Sleeping' }]}
+        crew={[{ id: 'fern', name: 'Fern' }, { id: 'resting', name: 'Resting' }]}
         queue={queueMode ? buildQueueBands(data.desktops) : null}
         onManageCrew={onManageCrew}
       />,
@@ -148,7 +148,7 @@ describe('sidebar harness identity', () => {
       <Sidebar
         {...baseProps}
         {...data}
-        crew={[{ id: 'fern', name: 'Fern' }, { id: 'sleeping', name: 'Sleeping' }]}
+        crew={[{ id: 'fern', name: 'Fern' }, { id: 'resting', name: 'Resting' }]}
         queue={buildQueueBands(data.desktops)}
         agentListOpen
         harnessLogosEnabled={false}

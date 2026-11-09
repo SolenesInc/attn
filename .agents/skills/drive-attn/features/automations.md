@@ -133,7 +133,7 @@ EOF
 ./attn automation apply --file $P/scheduled.yaml
 ```
 
-  `<schedule-id>` is the `id` that `apply` prints. The scheduler wakes every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run. Then re-read for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: true`. Disable it when done.
+  `<schedule-id>` is the `id` that `apply` prints. The scheduler runs every minute, so re-read `./attn automation runs <schedule-id>` for up to two minutes until it lists a `delivered` run. Then re-read for up to two more minutes until a second run appears with the same `session_id`. `bridge automations_get_state` shows the definition with `canRunNow: true`. Disable it when done.
 - **Edit a singleton with previous sessions.**
   - On an enabled schedule, rename it and change the guard or catch-up setting, keeping the same `id`. The schedule's next run keeps the session.
   - Have that agent harvest its seed. The next occurrence replants the seed and reuses the session.
@@ -211,7 +211,7 @@ EOF
 - **Linux**: `attn automation` works the same where the daemon and CLI run on Linux. `session.nextRun` is Ctrl+Alt+J there (`LINUX_SHORTCUTS`).
 - **Outposts**: a definition has no host. Its runs start on the home's machine.
 - **Profiles**: an automation belongs to the profile that applied it, and its runs, seeds and launch desktop stay there. Outside attn, `--profile` picks the profile on every verb.
-- **Performance and idle cost**: the scheduler wakes once a minute whether or not anything is due. A cleanup removes the worktrees of finished runs. Until then, the worktrees stay on disk.
+- **Performance and idle cost**: the scheduler runs once a minute whether or not anything is due. A cleanup removes the worktrees of finished runs. Until then, the worktrees stay on disk.
 - **Harnesses**: `launch.driver` picks claude, codex or a plugin driver, with `model`, `effort` and `executable`. The run's agent gets the same opening in every harness.
 - **Keyboard and native input**: ⌘⇧J and the palette reach runs. The drawer and the form are pointer-first, and their controls take Tab and Enter like any form.
 - **Compatibility across versions**: a definition carrying `enabled` is refused with `enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'`, and one carrying `policy` with `policy has been removed; scheduled triggers take continuity and catch_up directly`. Unknown fields are refused by name.

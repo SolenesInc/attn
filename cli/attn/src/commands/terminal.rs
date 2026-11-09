@@ -26,8 +26,8 @@ const HELP: &str = r#"usage: attn terminal <command>
   close <terminal> [--desktop <ref>]
 
 Run inside an attn agent. A target is a terminal id or unique terminal-id
-prefix printed by ls. A session id/prefix or awake crew name also works when
-that session shows in exactly one terminal; otherwise choose a terminal id.
+prefix printed by ls. A session id/prefix or the name of a crew member in session also
+works when that session shows in exactly one terminal; otherwise choose a terminal id.
 All targets belong to the caller's profile.
 Reads and moves reach every desktop; typing and closing on another desktop
 require --desktop. Any agent may type into or move a shell. Typing into or

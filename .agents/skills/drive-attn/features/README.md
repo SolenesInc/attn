@@ -289,8 +289,8 @@ gotcha quotes. Link another feature as `[<id>.md](<id>.md)`. Use the terms in
 Exact handles and output are literal. Write a command, flag, id, selector,
 JSON key, CLI output or UI label as the product has it, in backticks or
 quotes, even when the item carries an older name the glossary lists
-(`waiting_input`, `activeLeaf`, `panes`, `runtime_id`, "Close Pane", "Reopen",
-"Wake"). In the file's Gotchas, name such a label as working but wrong. Every
+(`waiting_input`, `activeLeaf`, `panes`, `runtime_id`, "Close Pane",
+"Reopen"). In the file's Gotchas, name such a label as working but wrong. Every
 command, shortcut id, palette id, verb, path and scenario id must exist at
 HEAD.
 

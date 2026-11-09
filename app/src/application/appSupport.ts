@@ -17,7 +17,7 @@ import { type SessionAgent } from '../types/sessionAgent';
 export const UPDATE_BANNER_DISMISSED_STORAGE_KEY = 'attn.update_banner.dismissed_version';
 
 export function crewMemberCloseHint(name: string): string {
-  return `${name} is protected — put ${name} to sleep to close the day.`;
+  return `${name} is protected — ask ${name} to close to end its session.`;
 }
 
 export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string): string | null {

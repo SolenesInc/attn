@@ -84,7 +84,7 @@ func TestSeedMailReopensACodexTenderOnStandbyAsItselfWithItsNote(t *testing.T) {
 	}
 }
 
-func TestATenderClosedBeforeReadingItsSeedMailIsWokenAgainForIt(t *testing.T) {
+func TestATenderClosedBeforeReadingItsSeedMailIsResumedAgainForIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
@@ -121,7 +121,7 @@ func TestATenderClosedBeforeReadingItsSeedMailIsWokenAgainForIt(t *testing.T) {
 	awaitStandbyEnded(t, app, mark, seed)
 }
 
-func TestAWokenCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
+func TestAResumedCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
@@ -206,7 +206,7 @@ func TestOnlySeedMailForASeedOnStandbyReopensAClosedTender(t *testing.T) {
 	stillClosed(t, cli, direct, "a session: message to a tender whose seed is on standby")
 }
 
-func TestSeedMailReachesAWokenClaudeTenderThroughItsModAfterTheFirstPoll(t *testing.T) {
+func TestSeedMailReachesAResumedClaudeTenderThroughItsModAfterTheFirstPoll(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
@@ -241,7 +241,7 @@ func TestSeedMailReachesAWokenClaudeTenderThroughItsModAfterTheFirstPoll(t *test
 	nothingElsePrompted(t, app, relaunched, string(session))
 }
 
-func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.T) {
+func TestAResumedClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
@@ -262,7 +262,7 @@ func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.
 	w.clock.Fire(daemon.ClaudeModFirstPollTimer)
 	testworld.AwaitSince(app, beforeMiss, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
 	reason := "the mod in Claude Code " + fakeagent.ClaudeVersion + " never polled"
-	wakeBlockedNotice(t, app, cli, seed, reason)
+	resumeBlockedNotice(t, app, cli, seed, reason)
 	if later := sendAgentMessage(t, cli, "sender", seed, "and the checks passed"); later.Status != protocol.AgentMsgStatusQueued || !strings.Contains(later.Detail, "first poll") {
 		t.Fatalf("mail after the mod missed its first poll = %+v, want it queued for the mod", later)
 	}
@@ -451,7 +451,7 @@ func seedPullRequestReadiness(t *testing.T, cli *client.Client, seed string) str
 	return protocol.Deref(watched[0].ReadinessState)
 }
 
-func TestTheTenderWakeSettingDecidesWhichSeedMailWakesATenderOnStandby(t *testing.T) {
+func TestTheTenderResumeSettingDecidesWhichSeedMailResumesATenderOnStandby(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN"})
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -539,7 +539,7 @@ func TestTheTenderWakeSettingDecidesWhichSeedMailWakesATenderOnStandby(t *testin
 	}
 }
 
-func wakeBlockedNotice(t *testing.T, app *testworld.Peer, cli *client.Client, seed, reason string) {
+func resumeBlockedNotice(t *testing.T, app *testworld.Peer, cli *client.Client, seed, reason string) {
 	t.Helper()
 	notes := lifeShow(t, cli, seed).Notes
 	if !slices.ContainsFunc(notes, func(n protocol.SeedNote) bool { return strings.Contains(n.Body, reason) }) {
@@ -555,7 +555,7 @@ func wakeBlockedNotice(t *testing.T, app *testworld.Peer, cli *client.Client, se
 	}
 }
 
-func TestTheFortyNinthTenderWakeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow(t *testing.T) {
+func TestTheFortyNinthTenderResumeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -592,7 +592,7 @@ func TestTheFortyNinthTenderWakeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow
 		if refused.TargetSessionID != "" || !strings.Contains(refused.Detail, "tender_resume_tripwire") {
 			t.Fatalf("the 49th wake within a day = %+v, want it refused by the tripwire", refused)
 		}
-		wakeBlockedNotice(t, app, cli, seed, "tender_resume_tripwire")
+		resumeBlockedNotice(t, app, cli, seed, "tender_resume_tripwire")
 		if bound := crewRosterMember(t, cli, "trellis").BindingSession; bound != nil {
 			t.Fatalf("the tripwire still woke %s", *bound)
 		}
@@ -613,7 +613,7 @@ func TestTheFortyNinthTenderWakeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow
 	})
 }
 
-func TestSeedMailWakesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
+func TestSeedMailResumesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -654,7 +654,7 @@ func TestSeedMailWakesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
 	})
 }
 
-func TestATenderWakeRefusedForARemovedWorktreeNotesAndNotifiesTheReason(t *testing.T) {
+func TestATenderResumeRefusedForARemovedWorktreeNotesAndNotifiesTheReason(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
@@ -671,14 +671,14 @@ func TestATenderWakeRefusedForARemovedWorktreeNotesAndNotifiesTheReason(t *testi
 		t.Fatalf("mail for a tender whose worktree is gone = %+v, want it queued naming %q", sent, reason)
 	}
 	stillClosed(t, cli, delegated, "mail for a removed worktree")
-	wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+	resumeBlockedNotice(t, app, cli, delegated.SeedID, reason)
 	testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
 		return slices.ContainsFunc(m.Seeds, func(s protocol.Seed) bool {
-			return s.ID == delegated.SeedID && s.Standby != nil && strings.Contains(protocol.Deref(s.Standby.WakeBlocked), reason)
+			return s.ID == delegated.SeedID && s.Standby != nil && strings.Contains(protocol.Deref(s.Standby.ResumeBlocked), reason)
 		})
 	})
-	if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
-		t.Errorf("the seed's standby is %+v, want wake_blocked naming %q", standby, reason)
+	if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.ResumeBlocked), reason) {
+		t.Errorf("the seed's standby is %+v, want resume_blocked naming %q", standby, reason)
 	}
 }
 
@@ -991,9 +991,9 @@ func serveResumeStorage(t *testing.T, driver *driverPeer) *resumeStorage {
 	return storage
 }
 
-func noWakeBlocked(t *testing.T, app *testworld.Peer, cli *client.Client, seed string) {
+func noResumeBlocked(t *testing.T, app *testworld.Peer, cli *client.Client, seed string) {
 	t.Helper()
-	if standby := lifeShow(t, cli, seed).Seed.Standby; standby == nil || protocol.Deref(standby.WakeBlocked) != "" {
+	if standby := lifeShow(t, cli, seed).Seed.Standby; standby == nil || protocol.Deref(standby.ResumeBlocked) != "" {
 		t.Fatalf("the standby of %s is %+v, want it on standby with no blocked wake", seed, standby)
 	}
 	if slices.ContainsFunc(listNotifications(app).Notifications, func(n protocol.Notification) bool { return n.Severity == protocol.NotificationSeverityCritical }) {
@@ -1001,7 +1001,7 @@ func noWakeBlocked(t *testing.T, app *testworld.Peer, cli *client.Client, seed s
 	}
 }
 
-func retriedWakeDeliversTheOriginalMail(t *testing.T, w *world, driver *driverPeer, delegated *protocol.DelegateResult, retried driverLaunch) {
+func retriedResumeDeliversTheOriginalMail(t *testing.T, w *world, driver *driverPeer, delegated *protocol.DelegateResult, retried driverLaunch) {
 	t.Helper()
 	session, seed := string(delegated.SessionID), delegated.SeedID
 	if retried.Method != "driver.resume" || retried.ResumeSessionID != "saved-conversation" {
@@ -1019,7 +1019,7 @@ func retriedWakeDeliversTheOriginalMail(t *testing.T, w *world, driver *driverPe
 	}
 }
 
-func TestATenderWakeThatFailsToLaunchRetriesAndDeliversTheOriginalMail(t *testing.T) {
+func TestATenderResumeThatFailsToLaunchRetriesAndDeliversTheOriginalMail(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
@@ -1033,14 +1033,14 @@ func TestATenderWakeThatFailsToLaunchRetriesAndDeliversTheOriginalMail(t *testin
 		driver.launched()
 		synctest.Wait()
 		stillClosed(t, cli, delegated, "a failed launch")
-		noWakeBlocked(t, app, cli, delegated.SeedID)
+		noResumeBlocked(t, app, cli, delegated.SeedID)
 
 		w.advance(5 * time.Minute)
-		retriedWakeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
+		retriedResumeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
 	})
 }
 
-func TestATenderWakeWhoseResumeInspectionFailsRetriesAndDeliversTheOriginalMail(t *testing.T) {
+func TestATenderResumeWhoseInspectionFailsRetriesAndDeliversTheOriginalMail(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
@@ -1060,14 +1060,14 @@ func TestATenderWakeWhoseResumeInspectionFailsRetriesAndDeliversTheOriginalMail(
 		storage.stalled.Store(false)
 		synctest.Wait()
 		stillClosed(t, cli, delegated, "a failed inspection")
-		noWakeBlocked(t, app, cli, delegated.SeedID)
+		noResumeBlocked(t, app, cli, delegated.SeedID)
 
 		w.advance(5 * time.Minute)
-		retriedWakeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
+		retriedResumeDeliversTheOriginalMail(t, w, driver, delegated, driver.launched())
 	})
 }
 
-func TestATenderWakeForAConversationThePluginReportsGoneStaysBlockedWithoutRetrying(t *testing.T) {
+func TestATenderResumeForAConversationThePluginReportsGoneStaysBlockedWithoutRetrying(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
@@ -1079,7 +1079,7 @@ func TestATenderWakeForAConversationThePluginReportsGoneStaysBlockedWithoutRetry
 		if sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved"); !strings.Contains(sent.Detail, reason) {
 			t.Fatalf("mail for a lost conversation = %+v, want it queued naming %q", sent, reason)
 		}
-		wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+		resumeBlockedNotice(t, app, cli, delegated.SeedID, reason)
 
 		w.advance(5 * time.Minute)
 		synctest.Wait()
@@ -1089,13 +1089,13 @@ func TestATenderWakeForAConversationThePluginReportsGoneStaysBlockedWithoutRetry
 		default:
 		}
 		stillClosed(t, cli, delegated, "a blocked wake")
-		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
-			t.Fatalf("the standby of %s is %+v, want wake_blocked naming %q", delegated.SeedID, standby, reason)
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.ResumeBlocked), reason) {
+			t.Fatalf("the standby of %s is %+v, want resume_blocked naming %q", delegated.SeedID, standby, reason)
 		}
 	})
 }
 
-func TestAnAnswerWaitsForTheRetryOfATenderWakeThatFailedToLaunch(t *testing.T) {
+func TestAnAnswerWaitsForTheRetryOfATenderResumeThatFailedToLaunch(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "asks_enabled", "true")
@@ -1136,7 +1136,7 @@ func TestAnAnswerWaitsForTheRetryOfATenderWakeThatFailedToLaunch(t *testing.T) {
 	})
 }
 
-func TestATenderWakeThatFailsOnItsLastAttemptIsBlockedUntilNewMailWakesIt(t *testing.T) {
+func TestATenderResumeThatFailsOnItsLastAttemptIsBlockedUntilNewMailResumesIt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
@@ -1147,20 +1147,20 @@ func TestATenderWakeThatFailsOnItsLastAttemptIsBlockedUntilNewMailWakesIt(t *tes
 		sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
 		driver.launched()
 		synctest.Wait()
-		noWakeBlocked(t, app, cli, delegated.SeedID)
+		noResumeBlocked(t, app, cli, delegated.SeedID)
 		w.terms.RefuseNextSpawn(errors.New(reason))
 		w.advance(5 * time.Minute)
 		driver.launched()
 		synctest.Wait()
-		noWakeBlocked(t, app, cli, delegated.SeedID)
+		noResumeBlocked(t, app, cli, delegated.SeedID)
 		w.terms.RefuseNextSpawn(errors.New(reason))
 		w.advance(5 * time.Minute)
 		driver.launched()
 		synctest.Wait()
 		stillClosed(t, cli, delegated, "the last failed attempt")
-		wakeBlockedNotice(t, app, cli, delegated.SeedID, reason)
-		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.WakeBlocked), reason) {
-			t.Fatalf("the standby of %s is %+v, want wake_blocked naming %q", delegated.SeedID, standby, reason)
+		resumeBlockedNotice(t, app, cli, delegated.SeedID, reason)
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || !strings.Contains(protocol.Deref(standby.ResumeBlocked), reason) {
+			t.Fatalf("the standby of %s is %+v, want resume_blocked naming %q", delegated.SeedID, standby, reason)
 		}
 
 		sendAgentMessage(t, cli, "sender", delegated.SeedID, "the checks passed too")
@@ -1170,7 +1170,7 @@ func TestATenderWakeThatFailsOnItsLastAttemptIsBlockedUntilNewMailWakesIt(t *tes
 			t.Fatal(err)
 		}
 		synctest.Wait()
-		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || protocol.Deref(standby.WakeBlocked) != "" {
+		if standby := lifeShow(t, cli, delegated.SeedID).Seed.Standby; standby == nil || protocol.Deref(standby.ResumeBlocked) != "" {
 			t.Fatalf("after new mail woke the tender the standby is %+v, want no blocked wake", standby)
 		}
 		if mail := seedMail(t, cli, string(delegated.SessionID), delegated.SeedID); len(mail) != 2 {

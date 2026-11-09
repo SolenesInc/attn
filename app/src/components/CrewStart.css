@@ -1,4 +1,4 @@
-/* The two-step wake on a sleeping crew row: a sunrise you arm, then let break.
+/* The two-step start on a crew row between sessions: a sunrise you arm, then let break.
    Every motion here is one-shot — a transition into the armed state, an
    animation out of it. Nothing loops: attn draws GPU terminals all day, and a
    permanent repaint is a battery bug no test catches. */
@@ -189,7 +189,7 @@
    are all small caps. It sits to the LEFT of the sun and the controls strip is
    anchored to the row's right edge, so arming grows the strip leftward and the
    confirm target does not move a pixel. */
-.crew-wake-confirm {
+.crew-start-confirm {
   flex: 0 0 auto;
   padding-right: 5px;
   font-size: var(--font-size-xs);
@@ -197,10 +197,10 @@
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--accent);
-  animation: crew-wake-confirm-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: crew-start-confirm-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes crew-wake-confirm-in {
+@keyframes crew-start-confirm-in {
   from {
     opacity: 0;
     transform: translateX(6px);
@@ -216,23 +216,23 @@
    spelled out rather than inherited so a keyboard-armed row looks the same as a
    pointer-armed one, and the controls strip takes the identical pair — it is
    opaque over the row and would otherwise sit on the warmth as a grey patch. */
-.queue-row.queue-row--crew[data-crew-wake='armed'],
-.queue-row.queue-row--crew[data-crew-wake='armed'] .session-actions {
+.queue-row.queue-row--crew[data-crew-start='armed'],
+.queue-row.queue-row--crew[data-crew-start='armed'] .session-actions {
   background-color: var(--color-bg-elevated);
   background-image: linear-gradient(var(--accent-glow), var(--accent-glow));
 }
 
 /* Confirmed: the strip gets out of the light's way. */
-.queue-row.queue-row--crew[data-crew-wake='breaking'] .session-actions {
+.queue-row.queue-row--crew[data-crew-start='breaking'] .session-actions {
   background: none;
 }
 
-/* Daybreak across the row. One pass, left to right, then gone — the wake is
+/* Daybreak across the row. One pass, left to right, then gone — the start is
    the member's, not the button's.
    The band travels by background-position rather than a transform, so nothing
    leaves the row and the row needs no clip; a clip here would cut the sun's
    own flare off at the row's edge. */
-.queue-row--crew[data-crew-wake='breaking']::after {
+.queue-row--crew[data-crew-start='breaking']::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -247,10 +247,10 @@
     transparent 70%
   );
   background-size: 300% 100%;
-  animation: crew-wake-daybreak 620ms ease-out both;
+  animation: crew-start-daybreak 620ms ease-out both;
 }
 
-@keyframes crew-wake-daybreak {
+@keyframes crew-start-daybreak {
   0% {
     background-position: 100% 0;
     opacity: 0;
@@ -281,15 +281,15 @@
   .crew-sun--breaking .crew-sun-body,
   .crew-sun--breaking .crew-sun-glow,
   .crew-sun--breaking .crew-sun-horizon,
-  .crew-wake-confirm,
-  .queue-row--crew[data-crew-wake='breaking']::after {
+  .crew-start-confirm,
+  .queue-row--crew[data-crew-start='breaking']::after {
     animation: none;
   }
 
   /* Without its animation the shockwave would sit on the sun as a static ring;
      it exists only as motion. */
   .crew-sun-shock,
-  .queue-row--crew[data-crew-wake='breaking']::after {
+  .queue-row--crew[data-crew-start='breaking']::after {
     display: none;
   }
 }

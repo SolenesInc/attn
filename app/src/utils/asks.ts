@@ -37,7 +37,7 @@ export function askBelongsTo(ask: Ask, session: AskHolderSession, seeds: readonl
 
 export function askFrom(ask: Ask, holder: (AskHolderSession & { label: string }) | undefined): string {
   if (holder?.chiefOfStaff) return 'Chief';
-  if (ask.crew_member) return holder ? crewDisplayName(ask.crew_member) : `${crewDisplayName(ask.crew_member)} (asleep)`;
+  if (ask.crew_member) return holder ? crewDisplayName(ask.crew_member) : `${crewDisplayName(ask.crew_member)} (between sessions)`;
   if (!holder && ask.seed_id) return `waiting for the next tender of ${ask.seed_title || ask.seed_id}`;
   return holder?.label ?? 'Closed agent';
 }

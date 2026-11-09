@@ -48,23 +48,23 @@ func (d *Daemon) crewApply(asker crewAsker, name string) (*protocol.CrewApplyRes
 }
 
 func (d *Daemon) crewApplyTarget(asker crewAsker, name string) (crew.Member, *protocol.Session, *protocol.CrewApplyResult, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	member, err := d.crewAskedMember(asker, name)
 	if err != nil {
 		return crew.Member{}, nil, nil, err
 	}
-	sessionID, asleep, err := d.crewAwakeSession(member)
+	sessionID, between, err := d.crewLiveSession(member)
 	if err != nil {
 		return crew.Member{}, nil, nil, err
 	}
 	session := d.store.Get(sessionID)
-	if asleep != "" || session == nil {
+	if between != "" || session == nil {
 		return member, nil, &protocol.CrewApplyResult{
 			Member:  member.ID,
 			Name:    member.Name,
-			Outcome: protocol.CrewApplyOutcomeAsleep,
-			Detail:  asleep + "; its next session uses the saved settings",
+			Outcome: protocol.CrewApplyOutcomeBetweenSessions,
+			Detail:  between + "; its next session uses the saved settings",
 		}, nil
 	}
 	if err := d.mayActOnSession(asker.session, session, "apply settings to"); err != nil {

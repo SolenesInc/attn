@@ -93,7 +93,7 @@ try {
     await screenshot('01-chief-setup');
   });
 
-  await runner.step('keyboard_only_setup_wakes_the_chief', async () => {
+  await runner.step('keyboard_only_setup_starts_the_chief', async () => {
     const notebookRoot = setting('notebook.root.effective');
     const { text: shownFolder } = await client.request('dom_text', { selector: folder });
     runner.assert(shownFolder === notebookRoot, "the folder shows the profile's Notebook", { shownFolder, notebookRoot });
@@ -103,16 +103,16 @@ try {
     await driver.pressKey('Tab');
     await waitDom(wake, { focused: true });
     await driver.pressEnter();
-    await waitDom(`${slot}[data-chief-phase="awake"]`, { timeoutMs: 30_000 });
+    await waitDom(`${slot}[data-chief-phase="in-session"]`, { timeoutMs: 30_000 });
     await waitDom(setup, { absent: true });
     const configured = chiefOfRoster();
     const shown = (await client.request('get_state')).activeLeaf;
-    runner.writeJson('first-wake.json', { configured, shown });
+    runner.writeJson('first-start.json', { configured, shown });
     runner.assert(configured?.agent === 'claude' && configured?.model === MOCK_AGENT_MODEL, 'setup saved the preselected harness and model', { configured });
     runner.assert(Boolean(configured?.binding_session) && shown?.sessionId === configured.binding_session, 'the Chief woke and is shown', { configured, shown });
     runner.assert(path.dirname(configured.home_dir) === path.join(notebookRoot, 'crew'), "the Chief's home is in the Notebook", { home: configured.home_dir });
     runner.assert(fs.existsSync(path.join(configured.home_dir, 'CHARTER.md')), "the Chief's charter is in the Notebook");
-    await screenshot('03-chief-awake');
+    await screenshot('03-chief-in-session');
   });
 
   await runner.step('nothing_marks_a_session_chief', async () => {

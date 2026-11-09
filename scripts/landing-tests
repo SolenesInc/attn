@@ -21,13 +21,13 @@ group go \.go$|^go\.(mod|sum)$
 go ./internal/daemon TestARestartBringsBackEveryAgentItLostAndLeavesShellsToBeOpened
 go ./internal/daemon TestOpeningAnAgentJustAsTheDaemonRevivesItAttachesToTheRevivedAgent
 go ./internal/daemon TestAResumedSharedConversationsRunSurvivesItsOutcome
-go ./internal/daemon TestAHomeMovedAwayIsRepointedAndWakesThere
+go ./internal/daemon TestAHomeMovedAwayIsRepointedAndStartsThere
 go ./internal/daemon TestABellStoredBeforeBellsKeptAPositionReadsTheWholeSeed
 go ./internal/daemon TestSimultaneousIDIntroductionsNeverShareAnID
 go ./internal/daemon TestACodexAutomationStartsInsideARepositoryTheUserTrustsAndLeavesCodexsConfigAlone
 go ./internal/daemon TestACodexAutomationConfirmedJustBeforeACrashIsDeliveredOnceWithoutRelaunching
 go ./internal/daemon TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin
-go ./internal/daemon TestSendingASeedToASleepingChiefMemberWakesIt
+go ./internal/daemon TestSendingASeedToAChiefBetweenSessionsStartsIt
 go ./internal/daemon TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose
 go ./internal/daemon TestAReloadedPluginSessionResumesWithItsPins
 go ./internal/daemon TestAChiefCannotCloseAnAgentOfAnotherProfile
@@ -89,7 +89,7 @@ go ./cmd/attnd TestARingIsNotTypedWhenTheDaemonDiesBeforeRecordingWhatTheModHold
 go ./cmd/attnd TestMailArrivingWhileAnOutpostModRedialsAfterARestartWaitsForTheMod
 go ./cmd/attnd TestAClaudeWhoseModNeverComesBackAfterARestartIsTypedInto
 go ./cmd/attnd TestARingCaughtWhileTheModDropsAfterARestartIsTypedInto
-go ./cmd/attnd TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns
+go ./cmd/attnd TestAnOutpostLostDuringTheResumesDirectoryCheckResumesTheTenderWhenItReturns
 go ./internal/daemon TestTheDaemonAnswersWhileTheLoginShellRuns
 go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer
 go ./internal/daemon TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture

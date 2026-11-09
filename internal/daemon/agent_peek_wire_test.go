@@ -50,7 +50,7 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 	} {
 		w.Launched(session)
 	}
-	firstDay := wakeCrew(t, cli, "keel", "")
+	firstDay := startCrew(t, cli, "keel", "")
 	firstDayAgent := w.Launched(string(firstDay.SessionID))
 	peekResolves := func(address, want string) {
 		t.Helper()
@@ -73,7 +73,7 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 
 	firstDayAgent.Exit(1)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == firstDay.SessionID })
-	nextDay := wakeCrew(t, cli, "keel", "")
+	nextDay := startCrew(t, cli, "keel", "")
 	w.Launched(string(nextDay.SessionID))
 	peekResolves("keel", string(nextDay.SessionID))
 	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("keel-session"), func(m *protocol.SpawnSessionMessage) { m.ID = "keel" }))

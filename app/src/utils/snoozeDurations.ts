@@ -10,7 +10,7 @@ export interface SnoozeChoice {
   detail: (now: Date) => string;
 }
 
-/** The hour a day-named snooze wakes at. Deliberately not configurable. */
+/** The hour a day-named snooze ends at. Deliberately not configurable. */
 export const SNOOZE_WAKE_HOUR = 9;
 
 const MINUTE = 60 * 1000;
@@ -44,7 +44,7 @@ function tomorrowAtWakeHour(now: Date): Date {
   return at;
 }
 
-/** When a choice wakes, as an absolute instant. Day choices use Date arithmetic, not
+/** When a choice ends, as an absolute instant. Day choices use Date arithmetic, not
  * millisecond addition: +24h across a DST boundary lands at 8am or 10am. */
 export function snoozeInstant(choice: SnoozeChoiceId, now: Date): Date {
   switch (choice) {
@@ -67,7 +67,7 @@ export function snoozeInstant(choice: SnoozeChoiceId, now: Date): Date {
   }
 }
 
-/** A wake instant as the user reads it: a clock time, plus the day when it is not today. */
+/** An unsnooze instant as the user reads it: a clock time, plus the day when it is not today. */
 export function formatWakeTime(until: string | undefined, now: number): string {
   if (!until) return '';
   const at = new Date(until);
@@ -81,7 +81,7 @@ export function formatWakeTime(until: string | undefined, now: number): string {
   return `${at.toLocaleDateString(undefined, { weekday: 'short' })} ${time}`;
 }
 
-/** Compact wake time for narrow agent rows. */
+/** Compact unsnooze time for narrow agent rows. */
 export function formatWakeTimeShort(until: string | undefined, now: number): string {
   if (!until) return '';
   const at = new Date(until);

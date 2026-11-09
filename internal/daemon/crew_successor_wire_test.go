@@ -15,7 +15,7 @@ func TestASuccessorKeepsItsDaysApprovalModeAndReturnsToTheMembersSavedPins(t *te
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("claude"), Effort: protocol.Ptr("high")})
 	setSetting(t, app, "auto_approve_enabled", "true")
 
-	day := wakeCrew(t, cli, "keel", "codex")
+	day := startCrew(t, cli, "keel", "codex")
 	oneDay := w.Launched(string(day.SessionID))
 	if model := crewLaunchFlag(oneDay.Argv, "--model"); oneDay.Harness != fakeagent.Codex || model != "gpt-5.6-sol" {
 		t.Fatalf("a one-day codex wake launched %s on model %q, want codex on its own default gpt-5.6-sol", oneDay.Harness, model)

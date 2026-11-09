@@ -12,19 +12,19 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
-	result, err := d.crewSleep(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
+func (d *Daemon) handleCrewClose(conn net.Conn, msg *protocol.CrewCloseMessage) {
+	result, err := d.crewClose(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		d.sendCrewError(conn, "close", err)
 		return
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSleepResult: result})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewCloseResult: result})
 }
 
-func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMessage) {
-	result, err := d.crewSleep(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
-	response := protocol.CrewSleepResultMessage{
-		Event:     protocol.EventCrewSleepResult,
+func (d *Daemon) handleCrewCloseWS(client *wsClient, msg *protocol.CrewCloseMessage) {
+	result, err := d.crewClose(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
+	response := protocol.CrewCloseResultMessage{
+		Event:     protocol.EventCrewCloseResult,
 		RequestID: protocol.Deref(msg.RequestID),
 		Success:   err == nil,
 	}
@@ -33,31 +33,31 @@ func (d *Daemon) handleCrewSleepWS(client *wsClient, msg *protocol.CrewSleepMess
 	} else {
 		response.Member = protocol.Ptr(result.Member)
 		response.SessionID = result.SessionID
-		response.AlreadyAsleep = protocol.Ptr(result.AlreadyAsleep)
+		response.AlreadyClosed = protocol.Ptr(result.AlreadyClosed)
 		response.DeliveryStatus = result.DeliveryStatus
 		response.Detail = protocol.Ptr(result.Detail)
 	}
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepResult, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+func (d *Daemon) crewClose(asker crewAsker, name string) (*protocol.CrewCloseResult, error) {
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 
 	member, err := d.crewAskedMember(asker, name)
 	if err != nil {
 		return nil, err
 	}
-	sessionID, asleep, err := d.crewAwakeSession(member)
+	sessionID, between, err := d.crewLiveSession(member)
 	if err != nil {
 		return nil, err
 	}
-	if asleep != "" {
-		return &protocol.CrewSleepResult{
+	if between != "" {
+		return &protocol.CrewCloseResult{
 			Member:        member.ID,
 			Name:          member.Name,
-			AlreadyAsleep: true,
-			Detail:        asleep + "; no close request was sent",
+			AlreadyClosed: true,
+			Detail:        between + "; no close request was sent",
 		}, nil
 	}
 
@@ -73,7 +73,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 		status = protocol.AgentMsgStatusQueued
 		detail = receipt.Detail
 	}
-	return &protocol.CrewSleepResult{
+	return &protocol.CrewCloseResult{
 		Member:         member.ID,
 		Name:           member.Name,
 		SessionID:      protocol.Ptr(sessionID),
@@ -82,7 +82,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 	}, nil
 }
 
-func (d *Daemon) crewAwakeSession(member crew.Member) (sessionID protocol.SessionID, asleep string, err error) {
+func (d *Daemon) crewLiveSession(member crew.Member) (sessionID protocol.SessionID, between string, err error) {
 	sessionID = protocol.TrimID(member.BindingSession)
 	if sessionID == "" {
 		return "", fmt.Sprintf("%s is between sessions", member.Name), nil

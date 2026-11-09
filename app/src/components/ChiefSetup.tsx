@@ -128,7 +128,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
     }
     if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); submit(); }
   };
-  const primaryLabel = chief.phase === 'configuring' ? firstRun ? 'Waking…' : 'Saving…' : firstRun ? `Wake ${chief.name}` : chief.sessionId ? 'Save for next wake' : 'Save';
+  const primaryLabel = chief.phase === 'configuring' ? firstRun ? 'Starting…' : 'Saving…' : firstRun ? `Start ${chief.name}` : chief.sessionId ? 'Save for next session' : 'Save';
   return createPortal(<div ref={root} tabIndex={-1} className="chief-pop" data-testid="chief-setup" role="dialog" aria-label={firstRun ? `Set up ${chief.name}` : `${chief.name}'s harness`} style={position ? { top: position.top, left: position.left } : { top: 0, left: 0 }} onKeyDown={moveRadio} onBlur={event => {
     if (isDomInstance(event.relatedTarget, 'Node') && !event.currentTarget.contains(event.relatedTarget) && !anchor?.contains(event.relatedTarget)) onClose(false);
   }}>
@@ -139,7 +139,7 @@ export function ChiefSetup({ chief, anchor, onSave, onClose, onReturnFocus, onOp
     </header>
     <div className="chief-pop-body">
     {checking ? <p className="chief-quiet" role="status">Checking harnesses…</p> : !harnesses.length || catalog.error ? <>
-      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the Chief. Install Claude Code or Codex to wake it.</p>}
+      {catalog.error ? <p className="chief-setup-error" role="alert">{catalog.error}</p> : <p className="chief-quiet">No harness here can run the Chief. Install Claude Code or Codex to start it.</p>}
       <div className="chief-link-row">
         <button ref={retainFocus} type="button" className="chief-link" onClick={recheck}>Check again</button>
         {onOpenSettings && <button type="button" className="chief-link" onClick={onOpenSettings}>Settings › Agents</button>}

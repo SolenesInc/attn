@@ -48,7 +48,7 @@ async function main() {
     await pressShortcutKeys(client, driver, 'ui.commandPalette');
     await waitDom('[role="combobox"][aria-label="Commands"]', { focused: true });
     await driver.typeText(query);
-    await waitDom('.unified-palette-option', { textIncludes: query === 'snooze' ? 'Snooze this agent' : 'Wake this agent' });
+    await waitDom('.unified-palette-option', { textIncludes: query === 'snooze' ? 'Snooze this agent' : 'Unsnooze this agent' });
     await driver.pressEnter();
   };
   const openPicker = async () => {
@@ -242,7 +242,7 @@ async function main() {
         await driver.typeText(`HANDOVER_${choice}`);
         await waitForPaneText(client, beta.sessionId, beta.paneId, (text) => text.includes(`HANDOVER_${choice}`), 'typing after handover');
         await select(alpha);
-        await palette('wake');
+        await palette('unsnooze');
         await observer.waitFor(() => !observer.getSession(alpha.sessionId)?.turn_snoozed_until, 'keyboard wake cleared deadline');
         await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
       }
@@ -271,7 +271,7 @@ async function main() {
           await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('NON_ACTIVE_ROW'), 'typing after non-active snooze');
         }
         await select(beta);
-        await palette('wake');
+        await palette('unsnooze');
         await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'non-active row woken');
       }
     });
@@ -302,7 +302,7 @@ async function main() {
       await observer.profileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: tileId });
       await waitDom(selector, { absent: true });
       await select(beta);
-      await palette('wake');
+      await palette('unsnooze');
       await observer.waitFor(() => !observer.getSession(beta.sessionId)?.turn_snoozed_until, 'other agent woken after document focus check');
     });
     await runner.step('changed_selection_cancels_into_current_pane', async () => {
@@ -329,7 +329,7 @@ async function main() {
     });
     await runner.step('snoozed_section_inspection_and_keyboard_wake', async () => {
       await pressShortcutKeys(client, driver, 'sidebar.agentList');
-      const selector = `[data-testid="queue-wake-${alpha.sessionId}"]`;
+      const selector = `[data-testid="queue-unsnooze-${alpha.sessionId}"]`;
       await waitDom(selector);
       await client.request('dom_focus', { selector });
       await driver.pressEnter();

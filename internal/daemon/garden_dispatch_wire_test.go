@@ -19,7 +19,7 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	firstDay := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
+	firstDay := startCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
 	firstDayRun := w.Launched(string(firstDay))
 	fromAlder := gardenDispatchDelegate(t, w, cli, string(firstDay), cwd, "Map the checkout")
 	plain, workspace, pane := w.RequestSpawn(app, fakeagent.Codex, w.Path("plain"))
@@ -46,7 +46,7 @@ func TestADelegateShowsItsDispatcherAcrossTheDispatchersLife(t *testing.T) {
 	})
 	shows("once alder's day ended and alder sleeps", fromAlder, "", "alder")
 
-	secondDay := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
+	secondDay := startCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
 	w.Launched(string(secondDay))
 	shows("once alder woke into a new day", fromAlder, string(secondDay), "alder")
 
@@ -62,7 +62,7 @@ func TestADelegateKeepsItsDispatcherAcrossARestartAfterManySessionsClosed(t *tes
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	alder := wakeCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
+	alder := startCrew(t, cli, "alder", string(fakeagent.Codex)).SessionID
 	w.Launched(string(alder))
 	delegate := gardenDispatchDelegate(t, w, cli, string(alder), cwd, "Map the checkout")
 	for i := range 100 {

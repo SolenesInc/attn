@@ -91,8 +91,8 @@ export function useAppController({
     sendSeedHandover,
     sendSeedToChief,
     sendSeedResume,
-    sendCrewWake,
-    sendCrewSleep,
+    sendCrewStart,
+    sendCrewClose,
     sendSupportSnapshot,
   } = useDaemonApi();
 
@@ -554,8 +554,8 @@ export function useAppController({
     handleSelectSession,
     sendSeedHandover,
     sendSeedToChief,
-    sendCrewWake,
-    sendCrewSleep,
+    sendCrewStart,
+    sendCrewClose,
     setCrewSeedTile,
     closeCrewPanel,
   });

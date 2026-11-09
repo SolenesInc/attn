@@ -115,7 +115,7 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 		}
 		body := "Cleared standby."
 		if standby != nil {
-			body = "On standby. Seed mail wakes the tender with this note:\n" + standby.Note
+			body = "On standby. Seed mail resumes the tender with this note:\n" + standby.Note
 		}
 		cause, _ := d.sessionOfActor(setter)
 		entry := seedMoveNote{
@@ -131,7 +131,7 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 		if err != nil {
 			return nil, err
 		}
-		d.unblockTenderWake(seed.ID)
+		d.unblockTenderResume(seed.ID)
 		return &protocol.SeedStandbyResult{Seed: d.seedWire(seed, written), Changed: true}, nil
 	}
 	return nil, protocol.Refuse(protocol.RefusalConflict,
@@ -222,8 +222,8 @@ func (g gardenRead) standbyView(seed garden.Seed) *protocol.SeedStandbyView {
 			PRID: w.Watch.PRID, URL: w.Record.URL, State: w.Record.State, ReadinessState: w.Watch.ReadinessState,
 		})
 	}
-	if blocked := g.daemon.tenderWakes.blockedReason(seed.ID); blocked != "" {
-		view.WakeBlocked = protocol.Ptr(blocked)
+	if blocked := g.daemon.tenderResumes.blockedReason(seed.ID); blocked != "" {
+		view.ResumeBlocked = protocol.Ptr(blocked)
 	}
 	return view
 }

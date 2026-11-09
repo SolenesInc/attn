@@ -21,7 +21,7 @@ func crewDayInBubble(t *testing.T, w *world, settings map[string]string) (*testw
 	for key, value := range settings {
 		setSetting(t, app, key, value)
 	}
-	day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+	day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 	day.reply("Ready. <!-- attn:state=idle -->")
 	return app, day
 }
@@ -116,7 +116,7 @@ func TestACrewDayIsAskedOnceToCloseWhenTheUserIsAway(t *testing.T) {
 func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		_, day := crewDayInBubble(t, w, map[string]string{"crew.away_seconds": "60"})
-		sleepAsk := prompts.RenderText("crew", "close-away", prompts.Values{})
+		closeAsk := prompts.RenderText("crew", "close-away", prompts.Values{})
 
 		w.advance(54 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
@@ -126,7 +126,7 @@ func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWind
 		if got := pastedContaining(day.term, inboxDoorbell); got != 1 || pastedContaining(day.term, crewHeartbeat) != 0 {
 			t.Fatalf("with the user away the day was sent %q, want the inbox doorbell and no heartbeat", day.term.Pasted())
 		}
-		if got := inboxContents(readInbox(t, day.cli, day.id, 0).Items); got != sleepAsk {
+		if got := inboxContents(readInbox(t, day.cli, day.id, 0).Items); got != closeAsk {
 			t.Fatalf("the day's inbox holds %q, want the ask to close its day", got)
 		}
 		day.reply("Not yet. <!-- attn:state=idle -->")
@@ -136,7 +136,7 @@ func TestACrewDayIsAskedToCloseWhenTheUserIsAwayAndAgainOnlyAfterItsNextWarmWind
 			t.Fatalf("the day was asked again inside its warm window: %q", inboxContents(got))
 		}
 		w.advance(10 * time.Minute)
-		if got := inboxContents(readInbox(t, day.cli, day.id, 0).Items); got != sleepAsk {
+		if got := inboxContents(readInbox(t, day.cli, day.id, 0).Items); got != closeAsk {
 			t.Fatalf("once its context neared lapsing again the inbox holds %q, want a fresh ask", got)
 		}
 	})
@@ -249,7 +249,7 @@ func TestAHarnessCacheLifetimeSettingMovesTheHeartbeat(t *testing.T) {
 	})
 }
 
-func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
+func TestMailStartsResumeAfterTheMailStartWindow(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -258,7 +258,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		setSetting(t, app, "crew.mail_start_window_seconds", "3600")
 		registerSessions(t, w, cli, "sender")
 		first := sendAgentMessage(t, cli, "sender", "trellis", "the build broke")
-		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
+		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "started Trellis") {
 			t.Fatalf("first wake=%+v", first)
 		}
 		w.terminal(string(first.TargetSessionID)).Exit(0)
@@ -272,7 +272,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		}
 		w.advance(31 * time.Minute)
 		fresh := sendAgentMessage(t, cli, "sender", "trellis", "the build broke a third time")
-		if fresh.TargetSessionID == "" || !strings.Contains(fresh.Detail, "woke Trellis") {
+		if fresh.TargetSessionID == "" || !strings.Contains(fresh.Detail, "started Trellis") {
 			t.Fatalf("after limit window=%+v", fresh)
 		}
 	})

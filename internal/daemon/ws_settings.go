@@ -203,7 +203,7 @@ func (d *Daemon) withProfileSettings(base map[string]interface{}, profileID stri
 		settings[setting.NotebookRoot.Key] = own
 	}
 	settings[setting.PullRequestOwnComments.Key] = string(d.pullRequestOwnComments(profileID))
-	settings[setting.GardenTenderResume.Key] = string(d.tenderWakeSetting(profileID))
+	settings[setting.GardenTenderResume.Key] = string(d.tenderResumeSetting(profileID))
 	if root, err := d.notebookRoot(profileID); err == nil {
 		settings[setting.NotebookRootEffective.Key] = root
 	}
@@ -316,9 +316,9 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	settings[setting.CrewCacheTTLSeconds.Key] = strconv.Itoa(int(d.crewCacheTTL("") / time.Second))
 	settings[setting.CrewHeartbeatLeadSeconds.Key] = strconv.Itoa(int(d.crewHeartbeatLead() / time.Second))
 	settings[setting.CrewAwaySeconds.Key] = strconv.Itoa(int(d.crewAwayLimit() / time.Second))
-	crewWakes := d.crewWakeLedger()
-	settings[setting.CrewMailStartLimit.Key] = strconv.Itoa(crewWakes.Limit)
-	settings[setting.CrewMailStartWindowSeconds.Key] = strconv.Itoa(int(crewWakes.Window / time.Second))
+	crewStarts := d.crewStartLedger()
+	settings[setting.CrewMailStartLimit.Key] = strconv.Itoa(crewStarts.Limit)
+	settings[setting.CrewMailStartWindowSeconds.Key] = strconv.Itoa(int(crewStarts.Window / time.Second))
 
 	settings[setting.OutpostsEnabled.Key] = strconv.FormatBool(d.outpostsEnabled())
 	state, home, lastError := d.outpostSettings()

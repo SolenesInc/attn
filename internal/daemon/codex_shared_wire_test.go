@@ -248,7 +248,7 @@ func TestASharedCodexLaunchWhoseTerminalCannotStartLetsItsAppServerStop(t *testi
 	w.CodexServer().AwaitStopped()
 }
 
-func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
+func TestASharedCodexCrewMemberStartsWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	workDir, notes := w.Path("keel-work"), w.Path("keel-notes")
@@ -259,7 +259,7 @@ func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *test
 	}
 	w.SetCodexFolderTrust(workDir, "trusted")
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), Agent: protocol.Ptr("codex"), AwarenessDirs: []string{notes}})
-	keel := string(wakeCrew(t, cli, "keel", "").SessionID)
+	keel := string(startCrew(t, cli, "keel", "").SessionID)
 	codex := w.Launched(keel)
 	if !slices.Contains(codex.Argv, "--remote") {
 		t.Fatalf("keel ran %q, want Codex connected to an app-server", codex.Argv)

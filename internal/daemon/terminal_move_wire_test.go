@@ -241,7 +241,7 @@ func TestTerminalMoveReachesShellsAcrossDesktopsAndHonorsProfiles(t *testing.T) 
 		}
 	}
 	call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: caller, Target: string(shell.TerminalID), Desktop: "1"})
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
 	call(protocol.TerminalMoveMessage{Cmd: protocol.CmdTerminalMove, CallerSessionID: chief, Target: string(caller), Desktop: "8"})
 	id := uuid.NewString()

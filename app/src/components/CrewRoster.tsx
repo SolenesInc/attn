@@ -29,7 +29,7 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
       )}
       <div ref={listRef} className="crew-roster-list" onKeyDown={moveSelection}>
         {visibleMembers.map((candidate) => {
-          const awake = Boolean(candidate.binding_session);
+          const inSession = Boolean(candidate.binding_session);
           const state = saveState(candidate.id);
           return (
             <button
@@ -45,7 +45,7 @@ export function CrewRoster({ members, visibleMembers, selectedId, filter, listRe
               <span className="crew-roster-identity">
                 <strong>{candidate.name}</strong>
                 <small>{candidate.launch_desktop?.label}</small>
-                <small><i className={awake ? 'is-awake' : ''} />{awake ? 'Awake' : 'Asleep'}</small>
+                <small><i className={inSession ? 'is-in-session' : ''} />{inSession ? 'In session' : 'Between sessions'}</small>
               </span>
               {state !== 'saved' && <span className={`crew-roster-save is-${state}`} aria-label={state} />}
             </button>

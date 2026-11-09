@@ -979,7 +979,7 @@
   margin: 0 6px;
 }
 
-.queue-row--crew[data-crew-state='asleep'] .session-label {
+.queue-row--crew[data-crew-state='between-sessions'] .session-label {
   color: var(--color-text-tertiary);
 }
 
@@ -1006,8 +1006,8 @@
 
 .queue-row-settle,
 .queue-row-snooze,
-.queue-row-sleep,
-.queue-row-wake {
+.queue-row-crew-close,
+.queue-row-unsnooze {
   flex: 0 0 auto;
   background: none;
   border: none;
@@ -1019,15 +1019,15 @@
 
 .queue-row-settle:hover,
 .queue-row-snooze:hover,
-.queue-row-sleep:hover,
-.queue-row-wake:hover {
+.queue-row-crew-close:hover,
+.queue-row-unsnooze:hover {
   color: var(--color-text-primary);
 }
 
-.queue-row-wake {
+.queue-row-unsnooze {
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.sidebar-sleeping-crew { margin-top: 8px; }
+.sidebar-crew-between-sessions { margin-top: 8px; }

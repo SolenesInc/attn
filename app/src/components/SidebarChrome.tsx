@@ -143,18 +143,18 @@ export function SidebarFooter() {
 }
 
 export function SidebarCrew() {
-  const { crew, chief, onManageCrew, onWakeCrewMember, openCrewMemberActions } = useSidebarContext();
-  const sleeping = (crew ?? []).filter((member) => !member.binding_session && member.id !== chief?.key);
+  const { crew, chief, onManageCrew, onStartCrewMember, openCrewMemberActions } = useSidebarContext();
+  const betweenSessions = (crew ?? []).filter((member) => !member.binding_session && member.id !== chief?.key);
   if (!chief && !crew?.length) return null;
   return (
-    <div className="sidebar-sleeping-crew" data-callout-anchor="crew">
+    <div className="sidebar-crew-between-sessions" data-callout-anchor="crew">
       <div className="queue-section-rule queue-crew-rule">
         <span>Crew</span>
         <span className="queue-rule-line" aria-hidden="true" />
         {onManageCrew && <button type="button" data-testid="manage-crew" onClick={onManageCrew}>manage</button>}
       </div>
       <ChiefSlot />
-      {sleeping.map((member) => (
+      {betweenSessions.map((member) => (
         <CrewRowView
           key={member.id}
           member={member.id}
@@ -162,7 +162,7 @@ export function SidebarCrew() {
           agent={member.resolved_agent}
           selected={false}
           delegates={[]}
-          onWake={onWakeCrewMember && (() => onWakeCrewMember(member.id))}
+          onStart={onStartCrewMember && (() => onStartCrewMember(member.id))}
           onOpenMemberActions={(event) => openCrewMemberActions(member.id, event)}
         />
       ))}
@@ -231,7 +231,7 @@ export function SidebarPopovers() {
             });
           }}
           ending={chiefSession && chief && chiefActions
-            ? { kind: 'sleep', name: chief.name, run: chiefActions.sleep }
+            ? { kind: 'ask-close', name: chief.name, run: chiefActions.close }
             : { kind: 'close', run: () => onCloseSession(sessionActionsTarget.id) }}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
           onMemberDetails={
@@ -250,7 +250,7 @@ export function SidebarPopovers() {
           desktopLabel={crew?.find((member) => member.id === crewActionsTarget.member)?.launch_desktop?.label}
           memberDetailsLabel={crewActionsTarget.member === chief?.key ? 'Edit charter' : undefined}
           onEditHarnessRoute={crewActionsTarget.member === chief?.key ? chiefActions?.edit : undefined}
-          onWake={crewActionsTarget.member === chief?.key && chief?.agent ? chiefActions?.wake : undefined}
+          onStart={crewActionsTarget.member === chief?.key && chief?.agent ? chiefActions?.start : undefined}
           anchor={crewActionsTarget.anchor}
           onOpenDetails={() => {
             const target = crewActionsTarget;

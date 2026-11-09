@@ -72,7 +72,7 @@ func TestPriorityDelegationAndHandover(t *testing.T) {
 func TestCrewSuccessorInheritsPriority(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	cli := w.Client()
-	day := wakeCrew(t, cli, "keel", "claude")
+	day := startCrew(t, cli, "keel", "claude")
 	w.Launched(string(day.SessionID))
 	if err := cli.SetSessionPriority(day.SessionID, true); err != nil {
 		t.Fatal(err)

@@ -440,7 +440,7 @@ func TestACrewHeartbeatThroughTheModRecordsAHeartbeatRun(t *testing.T) {
 	w.restart()
 	app, cli := w.App(), w.Client()
 	setAnalyticsEnabled(app, "true")
-	session := string(wakeCrew(t, cli, "trellis", "").SessionID)
+	session := string(startCrew(t, cli, "trellis", "").SessionID)
 	agent := w.Launched(session)
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
 	agent.Prompted()

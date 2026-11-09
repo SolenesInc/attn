@@ -395,7 +395,7 @@ describe('walking the queue sidebar from the keyboard', () => {
 describe('snoozing from the sidebar', () => {
   const inAnHour = () => new Date(Date.now() + 3600_000).toISOString();
 
-  it('shows when each deferred agent comes back, and wakes it without selecting it', () => {
+  it('shows when each deferred agent comes back, and unsnoozes it without selecting it', () => {
     const onWakeTurn = vi.fn();
     const onSelectSession = vi.fn();
     const deferred: TestSession[] = [
@@ -404,10 +404,10 @@ describe('snoozing from the sidebar', () => {
     renderSidebar(deferred, true, { onWakeTurn, onSelectSession, agentListOpen: true });
 
     const row = screen.getByTestId('queue-snoozed-later');
-    expect(row.querySelector('.queue-row-wake-at')?.textContent).toBeTruthy();
+    expect(row.querySelector('.queue-row-snoozed-until')?.textContent).toBeTruthy();
     expect(screen.queryByTestId('queue-settle-later')).toBeNull();
 
-    fireEvent.click(screen.getByTestId('queue-wake-later'));
+    fireEvent.click(screen.getByTestId('queue-unsnooze-later'));
     expect(onWakeTurn).toHaveBeenCalledWith('later');
     expect(onSelectSession).not.toHaveBeenCalled();
   });
@@ -445,7 +445,7 @@ describe('the crew in the sidebar', () => {
     return renderSidebar([...sessions, ...crewSessions], true, { crew, ...overrides });
   }
 
-  it('anchors every member, awake or asleep, beside the chief', () => {
+  it('anchors every member, in session or between sessions, beside the chief', () => {
     const { container } = renderCrew([
       { id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' },
     ]);
@@ -455,8 +455,8 @@ describe('the crew in the sidebar', () => {
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
     expect(within(block).getByTestId('queue-chief-chief')).toBeInTheDocument();
 
-    expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
-    expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
+    expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('in-session');
+    expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('between-sessions');
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
@@ -474,47 +474,47 @@ describe('the crew in the sidebar', () => {
     expect(moreAgents()).toBe(withoutChiefOnRoster);
   });
 
-  it('wakes a sleeping member on the second click, asks an awake one to sleep, and focuses its day', () => {
-    const onWakeCrewMember = vi.fn();
-    const onSleepCrewMember = vi.fn();
+  it('starts a member between sessions on the second click, asks one in session to close, and focuses its session', () => {
+    const onStartCrewMember = vi.fn();
+    const onCloseCrewMember = vi.fn();
     const onSelectSession = vi.fn();
     renderCrew(
       [{ id: 'sess-keel', label: 'keel of the day', state: 'working', desktopId: 'ws-a', crewMember: 'keel' }] as TestSession[],
-      { onWakeCrewMember, onSleepCrewMember, onSelectSession },
+      { onStartCrewMember, onCloseCrewMember, onSelectSession },
     );
 
-    fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
-    expect(onWakeCrewMember).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
-    expect(onWakeCrewMember.mock.calls).toEqual([['trellis']]);
+    fireEvent.click(screen.getByTestId('queue-crew-start-trellis'));
+    expect(onStartCrewMember).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('queue-crew-start-trellis'));
+    expect(onStartCrewMember.mock.calls).toEqual([['trellis']]);
 
-    fireEvent.click(screen.getByTestId('queue-crew-sleep-keel'));
-    expect(onSleepCrewMember.mock.calls).toEqual([['keel']]);
+    fireEvent.click(screen.getByTestId('queue-crew-close-keel'));
+    expect(onCloseCrewMember.mock.calls).toEqual([['keel']]);
     expect(onSelectSession).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByTestId('queue-crew-select-keel'));
     expect(onSelectSession.mock.calls).toEqual([['sess-keel']]);
 
-    expect(screen.queryByTestId('queue-crew-wake-keel')).toBeNull();
-    expect(screen.queryByTestId('queue-crew-sleep-trellis')).toBeNull();
-    expect(screen.getByTestId('queue-crew-sleep-keel').getAttribute('aria-label')).toBe('Ask Keel to sleep');
+    expect(screen.queryByTestId('queue-crew-start-keel')).toBeNull();
+    expect(screen.queryByTestId('queue-crew-close-trellis')).toBeNull();
+    expect(screen.getByTestId('queue-crew-close-keel').getAttribute('aria-label')).toBe('Ask Keel to close');
   });
 
-  it('writes a sleeping member as a name while the id stays the address', () => {
-    renderCrew([], { onWakeCrewMember: vi.fn() });
+  it('writes a member between sessions as a name while the id stays the address', () => {
+    renderCrew([], { onStartCrewMember: vi.fn() });
     const row = screen.getByTestId('queue-crew-trellis');
     expect(row.textContent).toContain('Trellis');
     expect(row.textContent).not.toContain('trellis');
     expect(row.getAttribute('data-crew-member')).toBe('trellis');
-    expect(screen.getByTestId('queue-crew-wake-trellis').getAttribute('aria-label')).toBe('Wake Trellis');
+    expect(screen.getByTestId('queue-crew-start-trellis').getAttribute('aria-label')).toBe('Start Trellis');
   });
 
-  describe('arming a wake', () => {
-      // Waking starts a day of a durable identity and cannot be un-rung, so an unconfirmed arm must never wake anyone.
+  describe('arming a start', () => {
+      // Starting a session of a durable identity cannot be un-rung, so an unconfirmed arm must never start anyone.
 
-    it('wakes once even where React runs the click path twice', () => {
-      // StrictMode double-invokes state updaters, so sending the wake inside one would spend two days on one click.
-      const onWakeCrewMember = vi.fn();
+    it('starts once even where React runs the click path twice', () => {
+      // StrictMode double-invokes state updaters, so sending the start inside one would spend two sessions on one click.
+      const onStartCrewMember = vi.fn();
       const data = sidebarData(sessions);
       render(
         <StrictMode>
@@ -522,16 +522,16 @@ describe('the crew in the sidebar', () => {
             {...baseProps}
             {...data}
             crew={roster}
-            onWakeCrewMember={onWakeCrewMember}
+            onStartCrewMember={onStartCrewMember}
             queue={buildQueueBands(data.desktops)}
           />
         </StrictMode>,
       );
 
-      fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
-      fireEvent.click(screen.getByTestId('queue-crew-wake-trellis'));
+      fireEvent.click(screen.getByTestId('queue-crew-start-trellis'));
+      fireEvent.click(screen.getByTestId('queue-crew-start-trellis'));
 
-      expect(onWakeCrewMember.mock.calls).toEqual([['trellis']]);
+      expect(onStartCrewMember.mock.calls).toEqual([['trellis']]);
     });
   });
 });

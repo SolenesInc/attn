@@ -69,7 +69,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 		d.announceCommittedWrite(documentChangedFact(crew.Namespace, crew.CollectionMembers, sc.Member, false), outcome.MemberDay.Seq)
 		d.publishFact(FactCrewUpdated, sc.Member, nil)
 		d.crewBindingMoved(sc.Member, from.ID, sc.To)
-		d.life.Go("crew-retired-clear", func() { d.askRetiredMemberToSleep(sc.Member) })
+		d.life.Go("crew-retired-clear", func() { d.askRetiredMemberToClose(sc.Member) })
 	}
 	d.publishFact(FactSessionRegistered, string(sc.To), nil)
 	d.publishArrangementChanged(from.ProfileID)
@@ -90,7 +90,7 @@ func (d *Daemon) succeed(t harness.TerminalID, from *protocol.Session, sc store.
 	return nil
 }
 
-func (d *Daemon) askRetiredMemberToSleep(key string) {
+func (d *Daemon) askRetiredMemberToClose(key string) {
 	member, _, err := d.crewMember(key)
 	if err != nil {
 		d.logf("crew: reading whether cleared member %s is retired: %v", key, err)
@@ -99,8 +99,8 @@ func (d *Daemon) askRetiredMemberToSleep(key string) {
 	if !member.Retired {
 		return
 	}
-	pausepoint.At(pausepoint.MemberRetiredClearSleep)
-	if _, err := d.crewSleep(crewAsker{profileID: member.ProfileID}, crew.KeyRefPrefix+key); err != nil {
-		d.logf("crew: asking retired member %s to sleep after its clear: %v", member.Name, err)
+	pausepoint.At(pausepoint.MemberRetiredClearClose)
+	if _, err := d.crewClose(crewAsker{profileID: member.ProfileID}, crew.KeyRefPrefix+key); err != nil {
+		d.logf("crew: asking retired member %s to close after its clear: %v", member.Name, err)
 	}
 }

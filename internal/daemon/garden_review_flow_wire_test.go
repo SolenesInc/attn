@@ -67,7 +67,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 		t.Fatalf("after a restart the canceled review is %+v", after.Review)
 	}
 
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	withChief := gardenReviewStart(t, cli)
 	if withChief.Run.ID == first.Run.ID || len(withChief.Items) != 2 {
 		t.Fatalf("a review after the cancel = %+v, want a new one over both abandoned seeds", withChief.Run)

@@ -26,7 +26,7 @@ export function useQuickCaptureHost(daemon: DaemonApi, settings: Record<string, 
   const state: QuickCaptureHostState = {
     profileId, connected: !!profileId && daemon.isReady,
     mailboxes: crew.filter(member => member.profile_id === profileId).sort((a, b) => Number(Boolean(b.chief)) - Number(Boolean(a.chief))).map(member => ({
-      id: member.id, name: member.name, detail: member.binding_session ? 'Awake' : 'Asleep',
+      id: member.id, name: member.name, detail: member.binding_session ? 'In session' : 'Between sessions',
     })),
     connectionError: daemon.connectionError ?? undefined,
     binding: native.binding, activeBinding: native.active, shortcutError: native.error,

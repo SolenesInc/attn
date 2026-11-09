@@ -396,8 +396,8 @@ fn standby_suffix(standby: Option<&SeedStandbyView>, reminder: Option<&SeedRemin
     if !waits.is_empty() {
         let _ = write!(line, ": {}", waits.join(", "));
     }
-    if let Some(blocked) = standby.wake_blocked.as_deref().filter(|b| !b.is_empty()) {
-        let _ = write!(line, " · wake blocked: {blocked}");
+    if let Some(blocked) = standby.resume_blocked.as_deref().filter(|b| !b.is_empty()) {
+        let _ = write!(line, " · resume blocked: {blocked}");
     }
     format!("  [{line}]")
 }
@@ -1011,8 +1011,8 @@ fn header(seed: &Seed, watching: bool) -> String {
             q(&standby.note),
             or_dash(&actor_label(&standby.set_by))
         );
-        if let Some(blocked) = standby.wake_blocked.as_deref().filter(|b| !b.is_empty()) {
-            let _ = writeln!(rows, "wake blocked\t{blocked}");
+        if let Some(blocked) = standby.resume_blocked.as_deref().filter(|b| !b.is_empty()) {
+            let _ = writeln!(rows, "resume blocked\t{blocked}");
         }
     }
     if seed.ready {

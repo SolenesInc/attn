@@ -9,7 +9,7 @@ interface SessionActionsPopoverProps {
   anchor: { top: number; left: number };
   canRename: boolean;
   onRename: () => void;
-  ending: { kind: 'close'; run: () => void } | { kind: 'sleep'; name: string; run: () => void };
+  ending: { kind: 'close'; run: () => void } | { kind: 'ask-close'; name: string; run: () => void };
   onReloadSession: () => void;
   onMemberDetails?: () => void;
   memberDetailsLabel?: string;
@@ -110,8 +110,8 @@ export function SessionActionsPopover({
         Reload session
       </button>
       <button type="button" role="menuitem" onClick={() => run(ending.run)}>
-        <span aria-hidden="true">{ending.kind === 'sleep' ? '☾' : '×'}</span>
-        {ending.kind === 'sleep' ? `Sleep ${ending.name}` : 'Close session'}
+        <span aria-hidden="true">{ending.kind === 'ask-close' ? '☾' : '×'}</span>
+        {ending.kind === 'ask-close' ? `Ask ${ending.name} to close` : 'Close session'}
       </button>
     </div>
   );

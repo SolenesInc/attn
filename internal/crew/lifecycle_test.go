@@ -18,7 +18,7 @@ func TestDecide(t *testing.T) {
 
 	base := Signals{
 		AwayLimit: limit, Lead: lead, Reachable: true,
-		HeartbeatEnabled: true, AutoSleepEnabled: true,
+		HeartbeatEnabled: true, AwayCloseEnabled: true,
 	}
 	with := func(mutate func(*Signals)) Signals {
 		s := base
@@ -54,7 +54,7 @@ func TestDecide(t *testing.T) {
 		{
 			name:    "the user is gone and the cache is about to lapse, so end the day",
 			signals: with(func(s *Signals) { s.Cache = expiring; s.AwayFor = 3 * time.Hour }),
-			want:    ActionSleep,
+			want:    ActionClose,
 		},
 		{
 			name:    "an absence shorter than the limit is not an absence",
@@ -88,7 +88,7 @@ func TestDecide(t *testing.T) {
 		},
 		{
 			name:    "auto-sleep off does not become a heartbeat while the user is gone",
-			signals: with(func(s *Signals) { s.Cache = expiring; s.AwayFor = 3 * time.Hour; s.AutoSleepEnabled = false }),
+			signals: with(func(s *Signals) { s.Cache = expiring; s.AwayFor = 3 * time.Hour; s.AwayCloseEnabled = false }),
 			want:    ActionNone,
 		},
 		{
@@ -112,7 +112,7 @@ func TestDecide(t *testing.T) {
 	}
 }
 
-func TestWakeLedger(t *testing.T) {
+func TestMailStartLedger(t *testing.T) {
 	now := time.Date(2026, 8, 14, 22, 0, 0, 0, time.UTC)
 	window := 12 * time.Hour
 	cases := []struct {
@@ -150,7 +150,7 @@ func TestWakeLedger(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			kept, err := WakeLedger{Limit: tc.limit, Window: window, Stamps: tc.stamps}.Allows("Trellis", now)
+			kept, err := MailStartLedger{Limit: tc.limit, Window: window, Stamps: tc.stamps}.Allows("Trellis", now)
 			if len(kept) != tc.kept {
 				t.Fatalf("kept %d stamps (%v), want %d", len(kept), kept, tc.kept)
 			}

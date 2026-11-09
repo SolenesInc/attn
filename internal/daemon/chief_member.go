@@ -172,7 +172,7 @@ func chiefRefusesRetire(member crew.Member) error {
 	return fmt.Errorf("%s is this profile's Chief and can't be retired; its session can close: attn crew close chief", member.Name)
 }
 
-func (d *Daemon) chiefWakeRefusal(member crew.Member) error {
+func (d *Daemon) chiefStartRefusal(member crew.Member) error {
 	if member.Chief && strings.TrimSpace(member.Agent) == "" {
 		return errChiefHasNoHarness
 	}

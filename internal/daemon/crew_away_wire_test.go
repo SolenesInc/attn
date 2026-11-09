@@ -24,7 +24,7 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDay(t *testing.T) {
 		presenceTierIs(t, cli, "with no app since startup", "away")
 
 		ended := crewHandoff(t, cli, "trellis-day", "Nobody is around; resting.", false)
-		if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseSleep || ended.SessionID != nil || ended.SuccessorError != nil {
+		if protocol.Deref(ended.Outcome) != protocol.CrewDayCloseClosed || ended.SessionID != nil || ended.SuccessorError != nil {
 			t.Fatalf("a handoff while the user is away = %+v, want the day ended with nobody woken behind it", ended)
 		}
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
@@ -37,7 +37,7 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDay(t *testing.T) {
 	})
 }
 
-func TestSuccessorsWithoutAnAppUseTheAutonomousWakeBudget(t *testing.T) {
+func TestSuccessorsWithoutAnAppUseTheMailStartBudget(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -46,7 +46,7 @@ func TestSuccessorsWithoutAnAppUseTheAutonomousWakeBudget(t *testing.T) {
 			setSetting(t, app, key, value)
 		}
 		app.Close()
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "codex").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "codex").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		applyCrew(t, cli, "trellis")
 		w.advance(150 * time.Minute)

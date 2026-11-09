@@ -719,8 +719,8 @@ function StandbyMarker({ seed }: { seed: Seed }) {
         {standby.reminderAt && <span>reminder {standby.reminderAt}</span>}
       </span>
       {standby.note && <span className="garden-card__standby-note" title={standby.note}>{standby.note}</span>}
-      {standby.wakeBlocked && (
-        <span className="garden-card__standby-blocked" title={standby.wakeBlocked}>wake blocked: {standby.wakeBlocked}</span>
+      {standby.resumeBlocked && (
+        <span className="garden-card__standby-blocked" title={standby.resumeBlocked}>resume blocked: {standby.resumeBlocked}</span>
       )}
     </span>
   );

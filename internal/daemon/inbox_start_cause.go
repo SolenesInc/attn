@@ -11,9 +11,9 @@ import (
 )
 
 // Tripwire: of 651 production inbox attempts from 2026-08-11 to 2026-11-04, 649 covered at most 6 items.
-const wakeCauseListLimit = 8
+const startCauseListLimit = 8
 
-func (d *Daemon) inboxWakeCause(a who.Address) (string, error) {
+func (d *Daemon) inboxStartCause(a who.Address) (string, error) {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
 		return "", err
@@ -27,8 +27,8 @@ func (d *Daemon) inboxWakeCause(a who.Address) (string, error) {
 		if delivery.Item.Attempts >= inbox.MaxAttempts {
 			continue
 		}
-		line := d.wakeCauseLine(delivery)
-		if line == "" || len(lines) == wakeCauseListLimit {
+		line := d.startCauseLine(delivery)
+		if line == "" || len(lines) == startCauseListLimit {
 			unlisted++
 			continue
 		}
@@ -38,18 +38,18 @@ func (d *Daemon) inboxWakeCause(a who.Address) (string, error) {
 		return "", nil
 	}
 	if unlisted > 0 {
-		lines = append(lines, "- "+prompts.RenderText("session", "wake-cause-more", prompts.Values{"count": strconv.Itoa(unlisted)}))
+		lines = append(lines, "- "+prompts.RenderText("session", "start-cause-more", prompts.Values{"count": strconv.Itoa(unlisted)}))
 	}
 	return strings.Join(lines, "\n"), nil
 }
 
-func (d *Daemon) wakeCauseLine(delivery store.InboxDelivery) string {
+func (d *Daemon) startCauseLine(delivery store.InboxDelivery) string {
 	switch delivery.Item.Kind {
 	case inbox.SeedUpdate:
 		return mailboxItemContent(delivery)
 	case inbox.PeerMessage:
 		if delivery.Peer != nil {
-			return prompts.RenderText("session", "wake-cause-message", prompts.Values{"sender": d.peerSenderName(delivery.Peer.Sender)})
+			return prompts.RenderText("session", "start-cause-message", prompts.Values{"sender": d.peerSenderName(delivery.Peer.Sender)})
 		}
 	}
 	return ""

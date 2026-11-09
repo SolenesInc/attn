@@ -9,7 +9,7 @@ interface CrewMemberActionsPopoverProps {
   onOpenDetails: () => void;
   memberDetailsLabel?: string;
   onEditHarnessRoute?: () => void;
-  onWake?: () => void;
+  onStart?: () => void;
   onClose: () => void;
 }
 
@@ -22,7 +22,7 @@ export function CrewMemberActionsPopover({
   onOpenDetails,
   memberDetailsLabel = 'Member details',
   onEditHarnessRoute,
-  onWake,
+  onStart,
   onClose,
 }: CrewMemberActionsPopoverProps) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -66,7 +66,7 @@ export function CrewMemberActionsPopover({
         <span aria-hidden="true">⌁</span>
         {memberDetailsLabel}
       </button>
-      {onWake && <button type="button" role="menuitem" onClick={() => { onClose(); onWake(); }}>Wake {memberName}</button>}
+      {onStart && <button type="button" role="menuitem" onClick={() => { onClose(); onStart(); }}>Start {memberName}</button>}
     </div>
   );
 }

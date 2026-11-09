@@ -20,7 +20,7 @@ func chiefMemberInQueue(t *testing.T, settings ...string) (*testworld.Peer, *cli
 	}
 	profileChief(t, w)
 	registerSessions(t, w, cli, "reviewer")
-	run := wakeConfiguredChief(t, w, cli)
+	run := startConfiguredChief(t, w, cli)
 	session := string(chiefSession(t, cli))
 	greeted := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 		return s.State == protocol.SessionStateIdle && protocol.Deref(s.TurnOwed)

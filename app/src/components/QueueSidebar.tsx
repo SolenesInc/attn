@@ -136,8 +136,8 @@ function CrewBlock() {
     chief: chiefMember,
     selectedId,
     onSelectSession,
-    onWakeCrewMember,
-    onSleepCrewMember,
+    onStartCrewMember,
+    onCloseCrewMember,
     openCrewMemberActions,
     openSessionActions,
     delegates,
@@ -179,8 +179,8 @@ function CrewBlock() {
           where={row ? where(row) : undefined}
           selected={row ? selectedId === row.session.id : false}
           onSelect={row ? () => onSelectSession(row.session.id) : undefined}
-          onWake={onWakeCrewMember && (() => onWakeCrewMember(member))}
-          onSleep={row && onSleepCrewMember ? () => onSleepCrewMember(member) : undefined}
+          onStart={onStartCrewMember && (() => onStartCrewMember(member))}
+          onAskClose={row && onCloseCrewMember ? () => onCloseCrewMember(member) : undefined}
           onOpenActions={row ? (event) => openSessionActions(row.session, event) : undefined}
           delegates={row ? (delegates.get(row.session.id) ?? []) : []}
           onOpenMemberActions={(event) => openCrewMemberActions(member, event)}
@@ -348,9 +348,9 @@ function WaitingCard({ leadRef, leadCount }: { leadRef: RefObject<HTMLDivElement
                   row={row}
                   selected={selectedId === row.session.id}
                   where={where(row)}
-                  wake={formatWakeTimeShort(row.session.turnSnoozedUntil, now)}
+                  snoozedUntil={formatWakeTimeShort(row.session.turnSnoozedUntil, now)}
                   onSelect={() => onSelectSession(row.session.id)}
-                  onWake={onWakeTurn && (() => onWakeTurn(row.session.id))}
+                  onUnsnooze={onWakeTurn && (() => onWakeTurn(row.session.id))}
                   delegates={delegates.get(row.session.id) ?? []}
                   testIdPrefix="queue-snoozed"
                 />

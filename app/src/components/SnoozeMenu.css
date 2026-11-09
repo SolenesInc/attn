@@ -43,7 +43,7 @@
   outline: none;
 }
 
-/* The concrete wake time is the supporting half of the row: present on every
+/* The concrete unsnooze time is the supporting half of the row: present on every
    line so the promise is legible, quiet enough that the durations still scan as
    a list. */
 .snooze-menu-detail {

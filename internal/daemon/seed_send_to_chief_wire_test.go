@@ -13,7 +13,7 @@ func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender", "observer")
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief := w.bootBubbleClaude(t, string(startCrew(t, cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")
 		member := chiefOfRoster(t, crewRoster(t, cli)).ID
 		seed := plantSeedAs(t, cli, "sender", "Place this work")

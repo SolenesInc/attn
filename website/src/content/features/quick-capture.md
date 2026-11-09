@@ -5,8 +5,8 @@ order: 2
 guide:
   - link: quick-capture
     label: Quick Capture, the full guide
-  - link: crew#waking-a-member
-    label: Waking a member, which a quick capture does
+  - link: crew#starting-a-session
+    label: Starting a member's session, which a quick capture does
   - link: sessions#send-files-to-an-agent-from-outside-attn
     label: Send files to an agent from outside Attn
 ---
@@ -15,7 +15,7 @@ guide:
 
 Quick Capture opens over the app you are using, with a global shortcut. You write the message, attach files if you have them, and press Enter. The window hides, and you are back where you were.
 
-The message goes to the Chief unless you pick another crew member. Attn types it into the member's conversation as your message, and a sleeping member wakes for it.
+The message goes to the Chief unless you pick another crew member. Attn types it into the member's conversation as your message, and attn starts a session for a member between sessions.
 
 ## How you use it
 

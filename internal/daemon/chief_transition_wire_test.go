@@ -18,7 +18,7 @@ import (
 
 func TestAnUpgradedChiefWithNoRecordedModelRunsOnTheHarnessDefault(t *testing.T) {
 	w, _ := upgradedFromTodaysChief(t, t.TempDir(), store.LaunchIntent{})
-	day := wakeCrew(t, w.Client(), "chief", "")
+	day := startCrew(t, w.Client(), "chief", "")
 	run := w.Launched(string(day.SessionID))
 	if model, pinned := flagValue(run.Argv, "--model"); pinned {
 		t.Fatalf("the upgraded Chief launched with --model %s, want the harness default", model)
@@ -27,7 +27,7 @@ func TestAnUpgradedChiefWithNoRecordedModelRunsOnTheHarnessDefault(t *testing.T)
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	setSetting(t, w.App(), "default_model_claude", "claude-sonnet-fake")
 	crewHandoff(t, w.Client(), string(day.SessionID), "Next day.", false)
-	next := wakeCrew(t, w.Client(), "chief", "")
+	next := startCrew(t, w.Client(), "chief", "")
 	if model, _ := flagValue(w.Launched(string(next.SessionID)).Argv, "--model"); model != "claude-sonnet-fake" {
 		t.Fatalf("with default_model_claude set the Chief launched with --model %q, want claude-sonnet-fake", model)
 	}
@@ -61,7 +61,7 @@ func upgradedWithChiefAsk(t *testing.T, answeredBeforeUpgrade bool) (*testworld.
 		t.Fatal(err)
 	}
 	if answeredBeforeUpgrade {
-		answer := inbox.Item{ID: uuid.NewString(), To: legacy, Kind: inbox.AskAnswer, Source: askID, Text: wokenAnswer}
+		answer := inbox.Item{ID: uuid.NewString(), To: legacy, Kind: inbox.AskAnswer, Source: askID, Text: startedAnswer}
 		if err := before.AnswerAsk(askID, protocol.AskReply{Answers: []protocol.AskAnswer{{Key: "q1", Picked: []string{"Postgres"}}}}, answer, time.Now()); err != nil {
 			t.Fatal(err)
 		}
@@ -88,7 +88,7 @@ func awaitWokenChiefAnswer(t *testing.T, w *world) {
 	}
 }
 
-func TestAnAnswerToTodaysChiefsAskWakesTheUpgradedChief(t *testing.T) {
+func TestAnAnswerToTodaysChiefsAskStartsTheUpgradedChief(t *testing.T) {
 	prepared, askID := upgradedWithChiefAsk(t, false)
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
@@ -100,7 +100,7 @@ func TestAnAnswerToTodaysChiefsAskWakesTheUpgradedChief(t *testing.T) {
 	})
 }
 
-func TestAnAnswerQueuedForTodaysChiefWakesTheChiefAfterTheUpgrade(t *testing.T) {
+func TestAnAnswerQueuedForTodaysChiefStartsTheChiefAfterTheUpgrade(t *testing.T) {
 	prepared, _ := upgradedWithChiefAsk(t, true)
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared

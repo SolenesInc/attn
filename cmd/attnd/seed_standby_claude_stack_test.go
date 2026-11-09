@@ -14,7 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
+func TestSeedMailResumesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 	t.Parallel()
 	claude, err := exec.LookPath("claude")
 	if err != nil {

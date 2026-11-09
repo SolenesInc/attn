@@ -12,7 +12,7 @@ func (d *Daemon) launchRequester(sessionID protocol.SessionID, fallback string) 
 	return fallback
 }
 
-func (d *Daemon) showCrewWake(result *protocol.CrewWakeResult, client *wsClient, requestID string) error {
+func (d *Daemon) showCrewStart(result *protocol.CrewStartResult, client *wsClient, requestID string) error {
 	profile, _, _, err := d.store.ShowSession(result.SessionID)
 	if err != nil {
 		return err

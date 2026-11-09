@@ -29,7 +29,7 @@ function notification(overrides: Partial<Notification>): Notification {
   };
 }
 
-async function openNotifications(notifications: Notification[], seeds = [daemonSeed('s-wake', { title: 'Watch the deploy' })]) {
+async function openNotifications(notifications: Notification[], seeds = [daemonSeed('s-resume', { title: 'Watch the deploy' })]) {
   const { daemon } = await renderApp({
     initialState: { sessions: [daemonSession('s1'), daemonSession('session-1')], desktops: [soloDesktop('s1'), soloDesktop('session-1')], seeds },
   });
@@ -46,24 +46,24 @@ async function openNotifications(notifications: Notification[], seeds = [daemonS
   return daemon;
 }
 
-const blockedWake = notification({
-  id: 'wake',
+const blockedResume = notification({
+  id: 'resume',
   kind: 'tender_wake_blocked',
   severity: 'critical',
-  title: 's-wake could not wake its tender',
+  title: 's-resume could not resume its tender',
   source_kind: 'seed',
-  source_id: 's-wake',
-  actions: [{ kind: 'open_seed', label: 'Open seed', target_id: 's-wake' }],
+  source_id: 's-resume',
+  actions: [{ kind: 'open_seed', label: 'Open seed', target_id: 's-resume' }],
 });
 
 const searchField = () => within(gardenRegion()).getByRole('combobox');
 
 async function openGardenWithSearch(search: string) {
-  const { daemon } = await openGarden([daemonSeed('s-wake', { title: 'Watch the deploy' })]);
+  const { daemon } = await openGarden([daemonSeed('s-resume', { title: 'Watch the deploy' })]);
   daemon.on('notification_list', () => ({
     event: 'notification_list_result',
     success: true,
-    notifications: [blockedWake],
+    notifications: [blockedResume],
     unread_count: 1,
     unread_critical_count: 1,
   }));
@@ -73,7 +73,7 @@ async function openGardenWithSearch(search: string) {
 
 async function openBlockedSeedFromNotification(daemon: ScriptedDaemon) {
   await click(daemon, 'Show Notifications');
-  await gesture(daemon, () => fireEvent.click(row(blockedWake.title)));
+  await gesture(daemon, () => fireEvent.click(row(blockedResume.title)));
   await click(daemon, 'Open seed');
 }
 
@@ -135,10 +135,10 @@ describe('App notifications', () => {
     expect(daemon.sentOf('desktop_show_session').pop()).toMatchObject({ session_id: 'session-1' });
   });
 
-  it('opens the seed of a blocked tender wake in the Garden', async () => {
-    const daemon = await openNotifications([blockedWake]);
+  it('opens the seed of a blocked tender resume in the Garden', async () => {
+    const daemon = await openNotifications([blockedResume]);
 
-    await gesture(daemon, () => fireEvent.click(row(blockedWake.title)));
+    await gesture(daemon, () => fireEvent.click(row(blockedResume.title)));
     await click(daemon, 'Open seed');
     expect(screen.queryByRole('dialog', { name: 'Notifications' })).toBeNull();
     expect(within(screen.getByTestId('garden-frame')).getAllByText('Watch the deploy').length).toBeGreaterThan(0);

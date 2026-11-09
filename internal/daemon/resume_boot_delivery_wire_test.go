@@ -76,8 +76,8 @@ func wantTypedOnlyOnceTheHarnessStarted(t *testing.T, w *world, session string) 
 		t.Fatalf("attn typed into a harness that had not started: %+v", inputs)
 	}
 	started := w.bootBubbleClaude(t, session)
-	if got := started.promptsContaining(wokenAnswer); got != 1 {
-		t.Fatalf("the started agent took %q, want %q once", started.prompts(), wokenAnswer)
+	if got := started.promptsContaining(startedAnswer); got != 1 {
+		t.Fatalf("the started agent took %q, want %q once", started.prompts(), startedAnswer)
 	}
 }
 

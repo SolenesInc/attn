@@ -177,7 +177,7 @@ func TestUserAndPeerMessagesShareInboxWithoutChangingAuthorship(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli, app := w.Client(), w.TrustedApp()
 	registerSessions(t, w, cli, "peer")
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
 	capture := sendQuickCapture(t, app, toTheChief(), "user request")
 	sendAgentMessage(t, cli, "peer", "chief", "peer suggestion")
@@ -293,7 +293,7 @@ func TestQuickCaptureAuthoringRequiresTheTrustedAppIdentity(t *testing.T) {
 	}
 }
 
-func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
+func TestAQuickCaptureWaitsForTheChiefToStartAndReadsAsTheUsers(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	cli, app := w.Client(), w.TrustedApp()
 	msg := sendQuickCapture(t, app, toTheChief(), "Please investigate this")
@@ -301,7 +301,7 @@ func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
 		t.Fatalf("a quick capture for the asleep Chief is read: %+v", r)
 	}
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-	woken := wakeCrew(t, cli, "chief", "")
+	woken := startCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))
 	run.Prompted()
 	receipt := testworld.Await(app, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool { return e.CaptureID == msg.CaptureID })
@@ -326,7 +326,7 @@ func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
 	}
 }
 
-func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
+func TestQuickCapturesStartAMemberWithoutSpendingItsMailStartLimit(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -380,7 +380,7 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 	})
 }
 
-func TestAWokenMemberIsTypedItsQuickCaptureMidTurnAndRungAtItsFirstPrompt(t *testing.T) {
+func TestAStartedMemberIsTypedItsQuickCaptureMidTurnAndRungAtItsFirstPrompt(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -403,7 +403,7 @@ func TestAWokenMemberIsTypedItsQuickCaptureMidTurnAndRungAtItsFirstPrompt(t *tes
 	})
 }
 
-func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
+func TestAQuickCaptureOutlastsFailedStartsUntilTheMemberIsUp(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
@@ -428,7 +428,7 @@ func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
 		if err := os.MkdirAll(workDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if got := day.promptsContaining(sent.Content); got != 1 {
 			t.Fatalf("after the failed wakes the manual wake typed the quick capture %d times, want once: %q", got, day.prompts())
@@ -449,7 +449,7 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 			scoped := cli.WithGardenProfile(profile, "")
 			chiefMailboxes[profile] = toMember(chiefOfRoster(t, crewRoster(t, scoped)).ID)
 			setCrew(t, scoped, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-			chiefs[profile] = w.bootBubbleClaude(t, string(wakeCrew(t, scoped, "chief", "").SessionID))
+			chiefs[profile] = w.bootBubbleClaude(t, string(startCrew(t, scoped, "chief", "").SessionID))
 			chiefs[profile].reply("Ready. <!-- attn:state=idle -->")
 		}
 		chiefA, chiefB := protocol.SessionID(chiefs[profileA].id), protocol.SessionID(chiefs[profileB].id)
@@ -559,13 +559,13 @@ func TestQuickCapturesBelongToTheirProfileAcrossInboxReadsAndRestart(t *testing.
 	})
 }
 
-func TestAQuickCaptureForTheChiefReachesItAwakeAndWakesItsNextDay(t *testing.T) {
+func TestAQuickCaptureForTheChiefReachesItInSessionAndStartsItsNextSession(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, trusted, cli := w.App(), w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
 		setSetting(t, app, "crew.away_close_enabled", "false")
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chief := w.bootBubbleClaude(t, string(startCrew(t, cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")
 		chiefMailbox := toTheChief()
 

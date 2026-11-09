@@ -34,14 +34,14 @@ const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const memberSuffix = runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6);
-const awake = `alder-${memberSuffix}`;
-const asleep = `keel-${memberSuffix}`;
+const inSession = `alder-${memberSuffix}`;
+const resting = `keel-${memberSuffix}`;
 const history = `trellis-${memberSuffix}`;
-const awakeHome = path.join(resources.dataDir, 'crew', awake);
-const asleepHome = path.join(resources.dataDir, 'crew', asleep);
+const inSessionHome = path.join(resources.dataDir, 'crew', inSession);
+const restingHome = path.join(resources.dataDir, 'crew', resting);
 const historyHome = path.join(resources.dataDir, 'crew', history);
-const wakeReceipt = path.join(awakeHome, 'wake-received');
-const claimReadReceipt = path.join(asleepHome, 'claim-read');
+const wakeReceipt = path.join(inSessionHome, 'wake-received');
+const claimReadReceipt = path.join(restingHome, 'claim-read');
 let firstSession = '';
 let successor = '';
 let linkedSeed = '';
@@ -49,7 +49,7 @@ const plantedSeeds = new Set();
 let membersRegistered = false;
 let crewPlot = '';
 let crewChild = '';
-let asleepHeld = '';
+let restingHeld = '';
 
 const runAttn = (args) => execFileSync(appCliInTree(options.appPath), args, {
   encoding: 'utf8',
@@ -181,22 +181,22 @@ runner.registerCleanup('restore_queue_mode', () => (
   client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {})
 ));
 runner.registerCleanup('remove_member_homes', () => {
-  for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
+  for (const home of [inSessionHome, restingHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
 });
 runner.registerCleanup('retire_crew', async () => {
   if (!membersRegistered) return;
   const observed = [...observer.sessionsById.values()]
-    .filter((session) => [awake, asleep, history].includes(session.crew_member))
+    .filter((session) => [inSession, resting, history].includes(session.crew_member))
     .map((session) => session.id);
   const crewSessions = [...new Set([successor, firstSession, ...observed].filter(Boolean))];
-  for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
+  for (const member of [inSession, resting, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
   for (const id of crewSessions.filter((sessionId) => observer.sessionsById.has(sessionId))) observer.send({ cmd: 'unregister', id });
   await observer.waitFor(() => crewSessions.every((sessionId) => !observer.sessionsById.has(sessionId)),
     `crew sessions ${crewSessions.join(', ')} closed once their members are deleted`);
 });
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
-  const handoffs = path.join(awakeHome, 'handoffs');
+  const handoffs = path.join(inSessionHome, 'handoffs');
   if (!fs.existsSync(handoffs)) return;
   for (const name of fs.readdirSync(handoffs)) {
     fs.renameSync(path.join(handoffs, name), path.join(runner.runDir, `letter-${name}`));
@@ -207,11 +207,11 @@ runner.registerCleanup('settle_seeds', () => {
 });
 const tendBetweenDays = async (seed) => {
   const read = waitForFileSignal(claimReadReceipt, 'the member reads its claim update');
-  json(['seed', 'tend', seed, '--for', asleep, '--json']);
+  json(['seed', 'tend', seed, '--for', resting, '--json']);
   await read;
   fs.unlinkSync(claimReadReceipt);
-  const day = crewMember(asleep).binding_session;
-  const closed = waitForCrew(asleep, (member) => !member.binding_session, 'the member returns between days');
+  const day = crewMember(resting).binding_session;
+  const closed = waitForCrew(resting, (member) => !member.binding_session, 'the member returns between days');
   json(['handoff', '-m', 'Read the Garden claim update', '--session', day, '--json']);
   await closed;
 };
@@ -226,8 +226,8 @@ try {
   await client.quitApp();
   runAttn(['daemon', 'stop']);
   for (const [home, fixture, filename] of [
-    [awakeHome, crewManagementFixture.alder, '2026-09-06T04-45Z-alder.md'],
-    [asleepHome, crewManagementFixture.keel, '2026-08-19T00-11Z-keel.md'],
+    [inSessionHome, crewManagementFixture.alder, '2026-09-06T04-45Z-alder.md'],
+    [restingHome, crewManagementFixture.keel, '2026-08-19T00-11Z-keel.md'],
     [historyHome, crewManagementFixture.trellis, '2026-09-01T21-37Z-trellis.md'],
   ]) {
     fs.mkdirSync(home, { recursive: true });
@@ -235,7 +235,7 @@ try {
     fs.mkdirSync(path.join(home, 'handoffs'), { recursive: true });
     fs.writeFileSync(path.join(home, 'handoffs', filename), fixture.letter);
   }
-  writeMockAgentFixture(awakeHome, {
+  writeMockAgentFixture(inSessionHome, {
     version: 1,
     turns: [
       { includes: 'This is a new session', actions: [{ type: 'reply', text: 'CREW_PANEL_READY', state: 'idle' }] },
@@ -246,7 +246,7 @@ try {
       ] },
     ],
   });
-  writeMockAgentFixture(asleepHome, {
+  writeMockAgentFixture(restingHome, {
     version: 1,
     turns: [
       { includes: 'This is a new session', actions: [{ type: 'reply', text: 'ASLEEP_MEMBER_READY', state: 'idle' }] },
@@ -260,29 +260,29 @@ try {
     agentExecutables: { codex: wrapper, claude: wrapper },
   });
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-  runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'claude']);
+  runAttn(['crew', 'set', inSession, '--cwd', inSessionHome, '--agent', 'claude']);
   membersRegistered = true;
-  runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);
+  runAttn(['crew', 'set', resting, '--cwd', restingHome]);
   runAttn(['crew', 'set', history, '--cwd', historyHome]);
   linkedSeed = plant(['Crew charter history link receipt', '-m', 'Opened from a full handoff letter.']).id;
   fs.writeFileSync(
     path.join(historyHome, 'handoffs', '2026-08-31T18-05Z-trellis.md'),
     `# Linked handoff\n\nContinue from [Crew charter history link receipt](${linkedSeed}).\n`,
   );
-  const awakeBinding = waitForCrew(
-    awake,
+  const inSessionBinding = waitForCrew(
+    inSession,
     (member) => Boolean(member.binding_session),
-    'the awake member binding broadcast',
+    'the in-session member binding broadcast',
   );
-  firstSession = json(['crew', 'start', awake, '--json']).session_id;
-  const boundMember = await awakeBinding;
+  firstSession = json(['crew', 'start', inSession, '--json']).session_id;
+  const boundMember = await inSessionBinding;
   runner.assert(boundMember.binding_session === firstSession, 'the roster binds the requested first day', { boundMember, firstSession });
   await observer.waitForSession({ id: firstSession, timeoutMs: 30_000 });
   await waitForFileSignal(wakeReceipt, 'the first crew day mock launch');
   fs.unlinkSync(wakeReceipt);
   await waitForDom('[data-testid="sidebar-queue"]');
-  await waitForDom(`[data-testid="queue-crew-${awake}"][data-crew-state="awake"]`);
-  await waitForDom(`[data-testid="queue-crew-${asleep}"]`);
+  await waitForDom(`[data-testid="queue-crew-${inSession}"][data-crew-state="in-session"]`);
+  await waitForDom(`[data-testid="queue-crew-${resting}"]`);
   await waitForDom(`[data-testid="queue-crew-${history}"]`);
   const dashboardSessions = await client.request('list_sessions');
   runner.assert(shownAgentId(dashboardSessions) === null,
@@ -294,36 +294,36 @@ try {
   const child = plant([`Crew planted navigation ${memberSuffix}`, '-m', 'The plot link navigates this same native tile.', '--part-of', crewPlot, '--session', firstSession]);
   crewChild = child.id;
   json(['seed', 'tend', crewChild, '--session', firstSession, '--json']);
-  const held = plant([`Crew asleep claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.']);
-  asleepHeld = held.id;
-  await tendBetweenDays(asleepHeld);
+  const held = plant([`Crew resting claim ${memberSuffix}`, '-m', 'A permanent member claim remains visible between days.']);
+  restingHeld = held.id;
+  await tendBetweenDays(restingHeld);
 
   await runner.step('seed_lists_follow_durable_attribution_and_native_tile_navigation', async () => {
     await click('[data-testid="manage-crew"]');
-    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click(`[data-testid="crew-roster-${resting}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
-    runner.assert((await panelText()).includes('Tending 1'), 'an asleep member keeps its permanent member claim');
+    await waitForDom(`[data-testid="crew-seed-${restingHeld}"]`);
+    runner.assert((await panelText()).includes('Tending 1'), 'a resting member keeps its permanent member claim');
 
-    await click(`[data-testid="crew-seed-${asleepHeld}"]`);
-    await waitForDom(`.seed-document[data-seed-id="${asleepHeld}"]`);
-    await waitForDom(`[data-pane-id="tile-seed-${asleepHeld}"] .desktop-dock-tile-body--seed`, { focused: true });
-    await screenshot('00-asleep-dashboard-seed.png');
+    await click(`[data-testid="crew-seed-${restingHeld}"]`);
+    await waitForDom(`.seed-document[data-seed-id="${restingHeld}"]`);
+    await waitForDom(`[data-pane-id="tile-seed-${restingHeld}"] .desktop-dock-tile-body--seed`, { focused: true });
+    await screenshot('00-resting-dashboard-seed.png');
     await click('[data-testid="crew-seed-back"]');
-    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    await waitForDom(`[data-testid="crew-seed-${restingHeld}"]`);
     runner.assert((await panelText()).includes('Tending 1'),
-      'Back to Crew restores the asleep member and Tending filter');
+      'Back to Crew restores the resting member and Tending filter');
     await pressEscapeAndWaitFor('crew-seed-back');
-    await click(`[data-pane-id="tile-seed-${asleepHeld}"] [aria-label="Close tile"]`);
-    await waitForDom(`.seed-document[data-seed-id="${asleepHeld}"]`, { absent: true });
-    const closedAsleepReader = await client.request('seed_document_get_state', { seedId: asleepHeld });
-    runner.assert(!closedAsleepReader.present, 'the standalone asleep-member reader closes', closedAsleepReader);
+    await click(`[data-pane-id="tile-seed-${restingHeld}"] [aria-label="Close tile"]`);
+    await waitForDom(`.seed-document[data-seed-id="${restingHeld}"]`, { absent: true });
+    const closedAsleepReader = await client.request('seed_document_get_state', { seedId: restingHeld });
+    runner.assert(!closedAsleepReader.present, 'the standalone resting-member reader closes', closedAsleepReader);
     await click('[data-testid="manage-crew"]');
-    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click(`[data-testid="crew-roster-${resting}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    await waitForDom(`[data-testid="crew-seed-${restingHeld}"]`);
 
-    await click(`[data-testid="crew-roster-${awake}"]`);
+    await click(`[data-testid="crew-roster-${inSession}"]`);
     await waitForDom(`[data-testid="crew-seed-${crewChild}"]`);
     runner.assert((await panelText()).includes('Tending 1'), 'the current day session claim appears once even with member attribution');
     await click('[data-testid="crew-seed-filter-planted"]');
@@ -379,7 +379,7 @@ try {
   await runner.step('manage_entry_retains_the_sidebar_and_returns_keyboard_focus', async () => {
     await click('[data-testid="manage-crew"]');
     const text = await panelText();
-    runner.assert(text.includes('Manage crew') && text.includes('Awake') && text.includes('Asleep'), 'the roster keeps both member states visible', { text });
+    runner.assert(text.includes('Manage crew') && text.includes('In session') && text.includes('Between sessions'), 'the roster keeps both member states visible', { text });
     const [sidebarGeometry, panelGeometry] = await Promise.all([
       client.request('dom_bounds', { selector: '.sidebar' }),
       client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' }),
@@ -397,34 +397,34 @@ try {
   });
 
   await runner.step('asleep_member_entry_round_trips_defaults_and_focus', async () => {
-    await click(`[data-testid="crew-actions-${asleep}"]`);
+    await click(`[data-testid="crew-actions-${resting}"]`);
     await click('[data-testid="crew-member-details-action"]');
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Between days' });
-    runner.assert((await panelText()).includes('Wake member'), 'asleep details offer Wake');
-    const savedClaude = waitForCrew(asleep, (member) => member.agent === 'claude', 'the explicit asleep harness save');
+    await waitForDom('[data-testid="crew-panel"] .crew-presence', { textIncludes: 'Between sessions' });
+    runner.assert((await panelText()).includes('Start session'), 'details between sessions offer Start');
+    const savedClaude = waitForCrew(resting, (member) => member.agent === 'claude', 'the explicit resting harness save');
     await click('[data-testid="crew-route"]');
     await click('dialog[aria-label="Choose a model"] [data-harness="claude"]');
     await click('dialog[aria-label="Choose a model"] [data-model=""]');
     await savedClaude;
     await client.request('dom_key', { selector: 'dialog[aria-label="Choose a model"]', key: 'Escape' });
-    const savedDefault = waitForCrew(asleep, (member) => !member.agent, 'the crew-default clear');
+    const savedDefault = waitForCrew(resting, (member) => !member.agent, 'the crew-default clear');
     await click('[data-testid="crew-route"]');
     await click('dialog[aria-label="Choose a model"] [data-harness=""]');
     await savedDefault;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' });
     runner.assert((await panelText()).includes('Saved'), 'the cleared default is acknowledged');
-    await screenshot('02-asleep-defaults.png');
-    await pressEscapeAndWaitFor(`crew-actions-${asleep}`);
+    await screenshot('02-resting-defaults.png');
+    await pressEscapeAndWaitFor(`crew-actions-${resting}`);
   });
 
   await runner.step('park_and_retend_restore_the_member_seed_list', async () => {
     await click('[data-testid="manage-crew"]');
-    await click(`[data-testid="crew-roster-${asleep}"]`);
+    await click(`[data-testid="crew-roster-${resting}"]`);
     await click('[data-testid="crew-tab-seeds"]');
-    json(['seed', 'park', asleepHeld, '--force', '--json']);
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${asleep[0].toUpperCase()}${asleep.slice(1)} isn't tending a seed.` });
-    json(['seed', 'tend', asleepHeld, '--for', asleep, '--json']);
-    await waitForDom(`[data-testid="crew-seed-${asleepHeld}"]`);
+    json(['seed', 'park', restingHeld, '--force', '--json']);
+    await waitForDom('[data-testid="crew-panel"]', { textIncludes: `${resting[0].toUpperCase()}${resting.slice(1)} isn't tending a seed.` });
+    json(['seed', 'tend', restingHeld, '--for', resting, '--json']);
+    await waitForDom(`[data-testid="crew-seed-${restingHeld}"]`);
     await pressEscapeAndWaitFor('manage-crew');
   });
 
@@ -513,12 +513,12 @@ try {
     runner.assert(!closedLinkedReader.present, 'the handoff-linked seed reader closes', closedLinkedReader);
   });
 
-  await runner.step('awake_member_entry_saves_a_complete_next_wake_selection', async () => {
+  await runner.step('in_session_member_entry_saves_a_complete_next_session_selection', async () => {
     await click(`[data-testid="session-actions-${firstSession}"]`);
     await click('[data-testid="crew-member-details-action"]');
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Current day active' });
+    await waitForDom('[data-testid="crew-panel"] .crew-presence', { textIncludes: 'In session' });
     const running = await client.request('dom_text', { selector: '[aria-label="Running now"]' });
-    runner.assert(running.text.includes('Claude') && running.text.includes('Model not reported') && running.text.includes('Effort not reported'), 'running truth stays separate from next-wake pins', running);
+    runner.assert(running.text.includes('Claude') && running.text.includes('Model not reported') && running.text.includes('Effort not reported'), 'running truth stays separate from next-session pins', running);
     await pressEscapeAndWaitFor(`session-actions-${firstSession}`);
     await click(`[data-testid="session-actions-${firstSession}"]`);
     await click('[data-testid="crew-member-details-action"]');
@@ -526,7 +526,7 @@ try {
     await click('dialog[aria-label="Choose a model"] [data-harness="claude"]');
     await waitForDom('dialog[aria-label="Choose a model"] [data-model="crew-claude"]');
     const fullSave = waitForCrew(
-      awake,
+      inSession,
       (member) => member.agent === 'claude' && member.model === 'crew-claude' && member.effort === 'high',
       'the full launch selection to be acknowledged',
     );
@@ -534,8 +534,8 @@ try {
     await click('dialog[aria-label="Choose a model"] [data-effort="high"]');
     const saved = await fullSave;
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' });
-    runner.writeJson('saved-next-wake.json', saved);
-    await screenshot('07-next-wake-saved.png');
+    runner.writeJson('saved-next-session.json', saved);
+    await screenshot('07-next-session-saved.png');
   });
 
   await runner.step('a_disconnected_save_recovers_after_the_socket_reconnects', async () => {
@@ -551,9 +551,9 @@ try {
     runAttn(['daemon', 'ensure']);
     await observer.connect();
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Saved' }, 45_000);
-    const reconnected = crewMember(awake);
+    const reconnected = crewMember(inSession);
     runner.assert(reconnected?.effort === 'low', 'the reconnect retry persisted the draft', reconnected);
-    runner.writeJson('reconnected-next-wake.json', reconnected);
+    runner.writeJson('reconnected-next-session.json', reconnected);
     await click('[data-testid="crew-tab-seeds"]');
     await click('[data-testid="crew-seed-filter-planted"]');
     await waitForDom(`[data-testid="crew-seed-${crewPlot}"]`);
@@ -561,29 +561,29 @@ try {
     await click('[data-testid="crew-tab-launch"]');
   });
 
-  await runner.step('sleep_requests_a_letter_then_wake_uses_saved_settings', async () => {
-    await click('[data-testid="crew-sleep"]');
-    await screenshot('09-sleep-requested.png');
-    const sleptEvent = waitForCrew(awake, (member) => !member.binding_session, 'the member sleeping', 45_000);
-    fs.writeFileSync(path.join(awakeHome, 'continue-sleep'), 'continue\n');
-    await sleptEvent;
-    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Asleep' });
-    await screenshot('10-member-asleep.png');
+  await runner.step('close_requests_a_letter_then_start_uses_saved_settings', async () => {
+    await click('[data-testid="crew-close"]');
+    await screenshot('09-close-requested.png');
+    const closedEvent = waitForCrew(inSession, (member) => !member.binding_session, 'the member closing its session', 45_000);
+    fs.writeFileSync(path.join(inSessionHome, 'continue-sleep'), 'continue\n');
+    await closedEvent;
+    await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Between sessions' });
+    await screenshot('10-member-between-sessions.png');
     await click('[data-testid="crew-tab-handoffs"]');
     await waitForDom('[data-testid="crew-handoff-reader"]', { textIncludes: 'CREW_PANEL_HANDOFF' });
     runner.assert((await panelText()).includes('2 letters'), 'v2 session records stay out of the letter history');
     await click('[data-testid="crew-tab-launch"]');
-    const wokenEvent = waitForCrew(awake, (member) => member.binding_session && member.binding_session !== firstSession, 'the next wake', 45_000);
+    const wokenEvent = waitForCrew(inSession, (member) => member.binding_session && member.binding_session !== firstSession, 'the next wake', 45_000);
     const wakeLaunchReceipt = waitForFileSignal(wakeReceipt, 'the next mock launch', 45_000);
-    await click('[data-testid="crew-wake"]');
+    await click('[data-testid="crew-start"]');
     const [woken] = await Promise.all([wokenEvent, wakeLaunchReceipt]);
     successor = woken.binding_session;
     await observer.waitForSession({ id: successor, timeoutMs: 30_000 });
     await waitForDom('[data-testid="crew-panel"][open]', { absent: true });
-    const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === awake);
+    const bound = [...observer.sessionsById.values()].filter((session) => session.crew_member === inSession);
     runner.assert(bound.length === 1 && bound[0].id === successor, 'exactly one live session owns the member binding', { bound, woken });
     const successorTerminal = observer.terminalOf(successor);
-    const launch = transcriptLaunches(awakeHome).find((entry) => entry.id === successorTerminal);
+    const launch = transcriptLaunches(inSessionHome).find((entry) => entry.id === successorTerminal);
     runner.assert(Boolean(launch), 'the next wake wrote its launch receipt', { successor, successorTerminal });
     const argv = launch.launch?.argv ?? [];
     runner.assert(argv.includes('--model') && argv[argv.indexOf('--model') + 1] === 'crew-claude', 'the saved model reaches the next wake argv', { argv });
@@ -598,9 +598,9 @@ try {
     runner.writeJson('idle.json', { desktop: desktopIdle, crewPanel: await sampleIdle(webkitBaseline) });
   });
 
-  console.log(JSON.stringify(await runner.finishSuccess({ awake, asleep, history, linkedSeed, firstSession, successor, crewPlot, crewChild, asleepHeld }), null, 2));
+  console.log(JSON.stringify(await runner.finishSuccess({ inSession, resting, history, linkedSeed, firstSession, successor, crewPlot, crewChild, restingHeld }), null, 2));
 } catch (error) {
   await screenshot('failure.png').catch(() => {});
-  console.error(JSON.stringify(await runner.finishFailure(error, { awake, asleep, history, linkedSeed, firstSession, successor, crewPlot, crewChild, asleepHeld }), null, 2));
+  console.error(JSON.stringify(await runner.finishFailure(error, { inSession, resting, history, linkedSeed, firstSession, successor, crewPlot, crewChild, restingHeld }), null, 2));
   process.exitCode = 1;
 }

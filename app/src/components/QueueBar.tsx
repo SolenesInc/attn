@@ -115,7 +115,7 @@ function useSlotOf(): SlotOf {
 }
 
 function WaitingPeek() {
-  const { queue, crew, desktops, tileContents, onSelectSession, onWakeCrewMember, onSelectTile } =
+  const { queue, crew, desktops, tileContents, onSelectSession, onStartCrewMember, onSelectTile } =
     useSidebarContext();
   const now = useNow(TURN_AGE_TICK_MS);
   const seeds = useDaemonStore((state) => state.seeds);
@@ -146,7 +146,7 @@ function WaitingPeek() {
 
   const pick = (row: AgentPaletteRow<LocalSession>) => {
     if (row.kind === 'agent') onSelectSession(row.session.id);
-    else if (row.kind === 'member') onWakeCrewMember?.(row.member);
+    else if (row.kind === 'member') onStartCrewMember?.(row.member);
     else if (row.kind === 'tile') onSelectTile?.(row.desktopId, row.tile.tileId);
   };
 

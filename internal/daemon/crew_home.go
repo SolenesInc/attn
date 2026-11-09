@@ -62,12 +62,12 @@ func (d *Daemon) moveHomeToItsName(member crew.Member) crew.Member {
 	}
 	current, doc, err := d.crewMember(member.ID)
 	if err != nil {
-		d.logf("crew: %s's home stays at %s for this wake: %v", member.Name, member.Home, err)
+		d.logf("crew: %s's home stays at %s for this session: %v", member.Name, member.Home, err)
 		return member
 	}
 	moved, _, err := d.relocateCrewHome(current, doc.Rev, filepath.Dir(current.Home), current.Name, d.commitCrewHomeMove)
 	if err != nil {
-		d.logf("crew: %s's home stays at %s for this wake: %v", current.Name, current.Home, err)
+		d.logf("crew: %s's home stays at %s for this session: %v", current.Name, current.Home, err)
 		return current
 	}
 	return moved
@@ -122,8 +122,8 @@ func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, na
 }
 
 func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string) (crew.Member, int64, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	if d.crewBindingLive(member) {
 		return member, revision, fmt.Errorf("%s is in session and works from its home; close its session first: attn crew close %s", member.Name, member.Name)
 	}
@@ -151,7 +151,7 @@ func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string)
 	}
 	named, revision, err := d.relocateCrewHome(moved, written[0].Rev, filepath.Dir(moved.Home), moved.Name, d.commitCrewHomeMove)
 	if err != nil {
-		d.logf("crew: %s's home stays at %s until its next wake renames it: %v", moved.Name, moved.Home, err)
+		d.logf("crew: %s's home stays at %s until its next session renames it: %v", moved.Name, moved.Home, err)
 	}
 	return named, revision, nil
 }
@@ -309,8 +309,8 @@ func (d *Daemon) crewMoveHome(msg *protocol.CrewMoveHomeMessage) (*protocol.Crew
 	if err != nil {
 		return nil, err
 	}
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	member, doc, err := d.crewMember(asked.ID)
 	if err != nil {
 		return nil, err

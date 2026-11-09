@@ -255,7 +255,7 @@ func TestTerminalCLIUsesTransitiveAuthority(t *testing.T) {
 	if moved.Code != 0 {
 		t.Fatalf("transitive move: %+v", moved)
 	}
-	chief := wakeChief(t, s)
+	chief := startChief(t, s)
 	if got := s.Run(testworld.Invocation{Session: chief, Args: []string{"terminal", "send", root, "--text", "from-chief\r", "--desktop", "1"}}); got.Code != 0 {
 		t.Fatalf("chief typing: %+v", got)
 	}

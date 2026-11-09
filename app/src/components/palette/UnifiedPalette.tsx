@@ -42,7 +42,7 @@ interface UnifiedPaletteProps<S extends PaletteSession> {
   commandsLoading?: boolean;
   onCommandPick?: (commandId: string) => void;
   onOpenAgent: (session: S) => void;
-  onWakeMember: (member: string) => void;
+  onStartMember: (member: string) => void;
   onOpenTile: (desktopId: string, tileId: string) => void;
   onSettle: (session: S) => void;
   onPriority?: (session: S) => void;
@@ -186,7 +186,7 @@ export function UnifiedPalette<S extends PaletteSession>({
   commandsLoading = false,
   onCommandPick,
   onOpenAgent,
-  onWakeMember,
+  onStartMember,
   onOpenTile,
   onSettle,
   onPriority,
@@ -236,7 +236,7 @@ export function UnifiedPalette<S extends PaletteSession>({
     }
     const { row } = item;
     if (row.kind === 'agent') onOpenAgent(row.session);
-    else if (row.kind === 'member') onWakeMember(row.member);
+    else if (row.kind === 'member') onStartMember(row.member);
     else if (row.kind === 'tile') onOpenTile(row.desktopId, row.tile.tileId);
   };
 

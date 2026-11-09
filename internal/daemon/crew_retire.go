@@ -31,9 +31,9 @@ func (d *Daemon) retireCrewMember(member crew.Member) (*protocol.CrewRetireResul
 	if err := chiefRefusesRetire(member); err != nil {
 		return nil, err
 	}
-	d.crewWakeMu.Lock()
+	d.crewStartMu.Lock()
 	retirement, err := d.store.RetireCrewMember(member.Key, time.Now())
-	d.crewWakeMu.Unlock()
+	d.crewStartMu.Unlock()
 	if err != nil {
 		return nil, err
 	}
@@ -48,12 +48,12 @@ func (d *Daemon) retireCrewMember(member crew.Member) (*protocol.CrewRetireResul
 	if result.ReleasedSeeds, err = d.releaseRetiredClaims(member); err != nil {
 		return nil, err
 	}
-	sleep, err := d.crewSleep(crewAsker{profileID: member.ProfileID}, crew.KeyRefPrefix+member.ID)
+	closed, err := d.crewClose(crewAsker{profileID: member.ProfileID}, crew.KeyRefPrefix+member.ID)
 	if err != nil {
 		return nil, err
 	}
-	if !sleep.AlreadyAsleep {
-		result.Sleep = sleep
+	if !closed.AlreadyClosed {
+		result.Close = closed
 	}
 	attempt, err := d.store.InboxAttempt(who.Member(member.Key).Address())
 	if err != nil {
@@ -128,9 +128,9 @@ func (d *Daemon) handleCrewRestore(conn net.Conn, msg *protocol.CrewRestoreMessa
 		d.sendCrewError(conn, "restore", err)
 		return
 	}
-	d.crewWakeMu.Lock()
+	d.crewStartMu.Lock()
 	restored, err := d.store.RestoreCrewMember(member.ID)
-	d.crewWakeMu.Unlock()
+	d.crewStartMu.Unlock()
 	if err != nil {
 		d.sendCrewError(conn, "restore", err)
 		return

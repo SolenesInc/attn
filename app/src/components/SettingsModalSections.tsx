@@ -1203,7 +1203,7 @@ export function HygieneSettings({
         <div className="settings-block-intro">
           <h3>Quiet notifications</h3>
           <p className="settings-description">
-            Keeps agents that only woke up for a notification from sending you to them. On by default.
+            Keeps agents whose run attn started only to deliver a notification from sending you to them. On by default.
           </p>
         </div>
         <div className="settings-block-body">
@@ -1211,7 +1211,7 @@ export function HygieneSettings({
             <div>
               <p className="settings-row-title">Quiet notifications in the queue</p>
               <p className="settings-row-copy" id="queue-quiet-notifications-description">
-                When attn wakes an agent with a notification (a message, a seed update, a pull request update), the agent
+                When attn starts an agent's run to deliver a notification (a message, a seed update, a pull request update), the agent
                 stays out of your queue when it stops, unless it needs an approval or opens its turn to ask for you. An
                 agent that was waiting for you leaves the queue when a notification sets it working, without moving you.
               </p>

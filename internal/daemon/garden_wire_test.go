@@ -621,7 +621,7 @@ func TestSeedMovesFollowTheChainAndChiefStandingOfAgentCloseAndTellTheDelegate(t
 		app, cli := w.App(), w.Client()
 		parent := w.bubbleClaude(t, app, "parent").id
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chiefDay := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
+		chiefDay := w.bootBubbleClaude(t, string(startCrew(t, cli, "chief", "").SessionID))
 		chiefDay.reply("Ready. <!-- attn:state=idle -->")
 		chief := chiefDay.id
 		registerSessions(t, w, cli, "stranger")

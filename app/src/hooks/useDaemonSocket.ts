@@ -206,7 +206,7 @@ export interface SeedReviewOverview {
 export type GardenReview = GeneratedGardenReview;
 export type GardenReviewItem = GeneratedGardenReview['items'][number];
 export type CrewMember = GeneratedCrewMember;
-export interface CrewSleepResult {
+export interface CrewCloseResult {
   member: string;
   sessionId?: string;
   detail?: string;
@@ -1569,12 +1569,12 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'crew_wake_result': {
+          case 'crew_start_result': {
             const requestId = data.request_id;
             if (typeof requestId !== 'string') {
               break;
             }
-            const key = `crew_wake:${requestId}`;
+            const key = `crew_start:${requestId}`;
             const pending = pendingActionsRef.current.get(key);
             if (!pending) {
               break;
@@ -1582,13 +1582,13 @@ export function useDaemonSocket({
             pendingActionsRef.current.delete(key);
             if (data.success && typeof data.session_id === 'string') {
               if (data.show_error) {
-                callbacksRef.current.onSettingError?.(`Member is awake, but showing it failed: ${data.show_error}`);
+                callbacksRef.current.onSettingError?.(`The member's session started, but showing it failed: ${data.show_error}`);
               }
               pending.resolve({
                 sessionId: data.session_id,
               });
             } else {
-              pending.reject(new Error(data.error || 'Waking the member failed'));
+              pending.reject(new Error(data.error || 'Starting the member failed'));
             }
             break;
           }
@@ -1603,12 +1603,12 @@ export function useDaemonSocket({
             );
             break;
 
-          case 'crew_sleep_result':
+          case 'crew_close_result':
             settlePendingRequest(
               pendingActionsRef.current,
-              'crew_sleep',
+              'crew_close',
               data,
-              (event): CrewSleepResult | undefined => {
+              (event): CrewCloseResult | undefined => {
                 if (typeof event.member !== 'string') return undefined;
                 return {
                   member: event.member,
@@ -1616,7 +1616,7 @@ export function useDaemonSocket({
                   ...(typeof event.detail === 'string' ? { detail: event.detail } : {}),
                 };
               },
-              'Asking the member to sleep failed',
+              'Asking the member to close failed',
             );
             break;
 
@@ -3398,18 +3398,18 @@ export function useDaemonSocket({
     )
   ), [sendRequest]);
 
-  const sendCrewWake = useCallback(
+  const sendCrewStart = useCallback(
     (member: string): Promise<{ sessionId: string }> => {
-      return sendRequest('crew_wake', { member: crewRef(member) }, 'Waking the crew member timed out');
+      return sendRequest('crew_start', { member: crewRef(member) }, 'Starting the crew member timed out');
     },
     [sendRequest],
   );
 
-  const sendCrewSleep = useCallback(
-    (member: string): Promise<CrewSleepResult> => sendRequest(
-      'crew_sleep',
+  const sendCrewClose = useCallback(
+    (member: string): Promise<CrewCloseResult> => sendRequest(
+      'crew_close',
       { member: crewRef(member) },
-      'Asking the crew member to sleep timed out',
+      'Asking the crew member to close timed out',
     ),
     [sendRequest],
   );
@@ -4364,8 +4364,8 @@ export function useDaemonSocket({
     sendSeedReviewRetry,
     sendSeedReviewKeep,
     sendSeedReviewDraft,
-    sendCrewWake,
-    sendCrewSleep,
+    sendCrewStart,
+    sendCrewClose,
     sendCrewApply,
     sendCrewRename,
     sendCrewSet,

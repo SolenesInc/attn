@@ -19,57 +19,57 @@ import (
 )
 
 const (
-	tenderWakeLimit             = 48
-	tenderWakeWindow            = 24 * time.Hour
-	notificationKindWakeBlocked = "tender_wake_blocked"
-	notificationActionOpenSeed  = "open_seed"
+	tenderResumeLimit             = 48
+	tenderResumeWindow            = 24 * time.Hour
+	notificationKindResumeBlocked = "tender_wake_blocked"
+	notificationActionOpenSeed    = "open_seed"
 )
 
-var errTenderOutpostLost = errors.New("the tender's outpost did not answer the wake's checks")
+var errTenderOutpostLost = errors.New("the tender's outpost did not answer the resume's checks")
 
-type tenderWakeSetting string
+type tenderResumeSetting string
 
 const (
-	tenderWakeAny     tenderWakeSetting = "any"
-	tenderWakeWatches tenderWakeSetting = "watches"
-	tenderWakeOff     tenderWakeSetting = "off"
+	tenderResumeAny     tenderResumeSetting = "any"
+	tenderResumeWatches tenderResumeSetting = "watches"
+	tenderResumeOff     tenderResumeSetting = "off"
 )
 
-func parseTenderWakeSetting(value string) (tenderWakeSetting, error) {
-	switch setting := tenderWakeSetting(strings.ToLower(strings.TrimSpace(value))); setting {
+func parseTenderResumeSetting(value string) (tenderResumeSetting, error) {
+	switch setting := tenderResumeSetting(strings.ToLower(strings.TrimSpace(value))); setting {
 	case "":
-		return tenderWakeAny, nil
-	case tenderWakeAny, tenderWakeWatches, tenderWakeOff:
+		return tenderResumeAny, nil
+	case tenderResumeAny, tenderResumeWatches, tenderResumeOff:
 		return setting, nil
 	}
 	return "", fmt.Errorf("garden.tender_resume is any, watches or off, not %q", value)
 }
 
-func (d *Daemon) tenderWakeSetting(profileID string) tenderWakeSetting {
-	setting, err := parseTenderWakeSetting(d.store.ProfileSetting(profileID, setting.GardenTenderResume.Key))
+func (d *Daemon) tenderResumeSetting(profileID string) tenderResumeSetting {
+	setting, err := parseTenderResumeSetting(d.store.ProfileSetting(profileID, setting.GardenTenderResume.Key))
 	if err != nil {
-		return tenderWakeAny
+		return tenderResumeAny
 	}
 	return setting
 }
 
-type tenderWakeLedger struct {
+type tenderResumeLedger struct {
 	mu      sync.Mutex
 	stamps  map[string][]time.Time
 	blocked map[string]string
 }
 
-func (l *tenderWakeLedger) reopensAt(seedID string, now time.Time) (time.Time, bool) {
+func (l *tenderResumeLedger) reopensAt(seedID string, now time.Time) (time.Time, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	kept := l.pruneLocked(seedID, now)
-	if len(kept) < tenderWakeLimit {
+	if len(kept) < tenderResumeLimit {
 		return time.Time{}, false
 	}
-	return kept[0].Add(tenderWakeWindow), true
+	return kept[0].Add(tenderResumeWindow), true
 }
 
-func (l *tenderWakeLedger) charge(seedID string, now time.Time) int {
+func (l *tenderResumeLedger) charge(seedID string, now time.Time) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.stamps == nil {
@@ -82,8 +82,8 @@ func (l *tenderWakeLedger) charge(seedID string, now time.Time) int {
 	return len(l.stamps[seedID])
 }
 
-func (l *tenderWakeLedger) pruneLocked(seedID string, now time.Time) []time.Time {
-	cutoff := now.Add(-tenderWakeWindow)
+func (l *tenderResumeLedger) pruneLocked(seedID string, now time.Time) []time.Time {
+	cutoff := now.Add(-tenderResumeWindow)
 	kept := slices.DeleteFunc(l.stamps[seedID], func(at time.Time) bool { return !at.After(cutoff) })
 	if len(kept) == 0 {
 		delete(l.stamps, seedID)
@@ -93,14 +93,14 @@ func (l *tenderWakeLedger) pruneLocked(seedID string, now time.Time) []time.Time
 	return kept
 }
 
-func (l *tenderWakeLedger) forget(seedID string) {
+func (l *tenderResumeLedger) forget(seedID string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.stamps, seedID)
 	delete(l.blocked, seedID)
 }
 
-func (l *tenderWakeLedger) block(seedID, reason string) bool {
+func (l *tenderResumeLedger) block(seedID, reason string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.blocked[seedID] == reason {
@@ -113,7 +113,7 @@ func (l *tenderWakeLedger) block(seedID, reason string) bool {
 	return true
 }
 
-func (l *tenderWakeLedger) unblock(seedID string) bool {
+func (l *tenderResumeLedger) unblock(seedID string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	_, blocked := l.blocked[seedID]
@@ -121,13 +121,13 @@ func (l *tenderWakeLedger) unblock(seedID string) bool {
 	return blocked
 }
 
-func (l *tenderWakeLedger) blockedReason(seedID string) string {
+func (l *tenderResumeLedger) blockedReason(seedID string) string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.blocked[seedID]
 }
 
-type tenderWakeDelivery struct {
+type tenderResumeDelivery struct {
 	session protocol.SessionID
 	seedID  string
 	title   string
@@ -135,11 +135,11 @@ type tenderWakeDelivery struct {
 	claude  bool
 }
 
-func newTenderWake(session protocol.SessionID, seed garden.Seed, standby *garden.Standby, claude bool) *tenderWakeDelivery {
-	return &tenderWakeDelivery{session: session, seedID: seed.ID, title: seed.Title, note: standby.Note, claude: claude}
+func newTenderResume(session protocol.SessionID, seed garden.Seed, standby *garden.Standby, claude bool) *tenderResumeDelivery {
+	return &tenderResumeDelivery{session: session, seedID: seed.ID, title: seed.Title, note: standby.Note, claude: claude}
 }
 
-func (d *Daemon) memberTenderWake(seedID string, session protocol.SessionID) (*tenderWakeDelivery, error) {
+func (d *Daemon) memberTenderResume(seedID string, session protocol.SessionID) (*tenderResumeDelivery, error) {
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
 		return nil, err
@@ -148,41 +148,41 @@ func (d *Daemon) memberTenderWake(seedID string, session protocol.SessionID) (*t
 	if err != nil || standby == nil {
 		return nil, err
 	}
-	return newTenderWake(session, seed, standby, false), nil
+	return newTenderResume(session, seed, standby, false), nil
 }
 
-type tenderWakeTripwire struct{ reopensAt time.Time }
+type tenderResumeTripwire struct{ reopensAt time.Time }
 
-func (e tenderWakeTripwire) Error() string {
+func (e tenderResumeTripwire) Error() string {
 	return fmt.Sprintf("tender_resume_tripwire=%d per %s; attn resumed the seed's tender %d times in the last %s, which no healthy seed does, so attn stopped resuming it until %s",
-		tenderWakeLimit, tenderWakeWindow, tenderWakeLimit, tenderWakeWindow, e.reopensAt.UTC().Format(time.RFC3339))
+		tenderResumeLimit, tenderResumeWindow, tenderResumeLimit, tenderResumeWindow, e.reopensAt.UTC().Format(time.RFC3339))
 }
 
-func (d *Daemon) seedMailWakes(a who.Address, profileID string) (bool, tenderWakeSetting, error) {
-	wake := d.tenderWakeSetting(profileID)
-	switch wake {
-	case tenderWakeOff:
-		return false, wake, nil
-	case tenderWakeAny:
-		return true, wake, nil
+func (d *Daemon) seedMailResumes(a who.Address, profileID string) (bool, tenderResumeSetting, error) {
+	chosen := d.tenderResumeSetting(profileID)
+	switch chosen {
+	case tenderResumeOff:
+		return false, chosen, nil
+	case tenderResumeAny:
+		return true, chosen, nil
 	}
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil {
-		return false, wake, err
+		return false, chosen, err
 	}
 	for _, delivery := range deliveries {
 		if delivery.Item.Attempts < inbox.MaxAttempts && watchOrReminder(delivery.Item.Item) {
-			return true, wake, nil
+			return true, chosen, nil
 		}
 	}
-	return false, wake, nil
+	return false, chosen, nil
 }
 
 func watchOrReminder(item inbox.Item) bool {
 	return item.Kind == inbox.Notice && (item.Source == seedReminderSource || item.Hint == pullRequestWatchHint)
 }
 
-func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *inboxDeliveryState, now time.Time) (inbox.Receipt, error) {
+func (d *Daemon) resumeStandbyTenderLocked(a who.Address, seedID string, state *inboxDeliveryState, now time.Time) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{Detail: "queued (seed has no reachable tender; waits for its next tender)"}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
@@ -196,12 +196,12 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	if !session || standby == nil {
 		return receipt, nil
 	}
-	wakes, wake, err := d.seedMailWakes(a, seed.ProfileID)
+	resumes, chosen, err := d.seedMailResumes(a, seed.ProfileID)
 	if err != nil {
 		return receipt, err
 	}
-	if !wakes {
-		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_resume=%s does not resume its tender for this mail", seed.ID, wake)
+	if !resumes {
+		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_resume=%s does not resume its tender for this mail", seed.ID, chosen)
 		return receipt, nil
 	}
 	waitForOutpost := func() (inbox.Receipt, error) {
@@ -216,8 +216,8 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
 		claude = true
 	}
-	if reopensAt, tripped := d.tenderWakes.reopensAt(seed.ID, d.clock.Now()); tripped {
-		receipt.Detail = d.blockTenderWake(a, seed, tenderWakeTripwire{reopensAt: reopensAt}.Error())
+	if reopensAt, tripped := d.tenderResumes.reopensAt(seed.ID, d.clock.Now()); tripped {
+		receipt.Detail = d.blockTenderResume(a, seed, tenderResumeTripwire{reopensAt: reopensAt}.Error())
 		d.armInboxLocked(a, state, reopensAt.Sub(d.clock.Now()))
 		return receipt, nil
 	}
@@ -226,7 +226,7 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	err = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		continuation := d.continuationOnItsMachine(seed)
 		if continuation != nil && continuation.OutpostLost {
-			d.logf("tender wake: seed %s waits for its tender's outpost: %s", seed.ID, continuation.ResumeReason)
+			d.logf("tender resume: seed %s waits for its tender's outpost: %s", seed.ID, continuation.ResumeReason)
 			return errTenderOutpostLost
 		}
 		started, stampErr := d.store.StampInboxAttempt(a, now)
@@ -237,14 +237,14 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 			return errInboxNoUnread
 		}
 		d.logInboxExhaustion(a)
-		count = d.tenderWakes.charge(seed.ID, d.clock.Now())
-		var wakeErr error
-		outcome, wakeErr = d.wakeFromContinuation(protection, seed, continuation, tenderWakeCause{
+		count = d.tenderResumes.charge(seed.ID, d.clock.Now())
+		var resumeErr error
+		outcome, resumeErr = d.resumeFromContinuation(protection, seed, continuation, tenderResumeCause{
 			mail:   true,
 			tend:   func(who.Party, who.Actor) error { return nil },
 			settle: func() {},
 		})
-		return wakeErr
+		return resumeErr
 	})
 	if errors.Is(err, errTenderOutpostLost) {
 		return waitForOutpost()
@@ -252,30 +252,30 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	if errors.Is(err, errInboxNoUnread) {
 		return receipt, nil
 	}
-	if blocked := (tenderWakeBlocked{}); errors.As(err, &blocked) {
-		receipt.Detail = d.blockTenderWake(a, seed, blocked.Error())
+	if blocked := (tenderResumeBlocked{}); errors.As(err, &blocked) {
+		receipt.Detail = d.blockTenderResume(a, seed, blocked.Error())
 		return receipt, nil
 	}
 	if err != nil {
-		d.logf("tender wake: seed %s: reopening session %s failed, retrying in %s: %v", seed.ID, sessionID, inbox.AttemptDelay, err)
-		d.closeTenderAfterFailedWake(sessionID, err)
+		d.logf("tender resume: seed %s: reopening session %s failed, retrying in %s: %v", seed.ID, sessionID, inbox.AttemptDelay, err)
+		d.closeTenderAfterFailedResume(sessionID, err)
 		if remaining, attemptErr := d.store.InboxAttempt(a); attemptErr == nil && remaining.Live == 0 {
-			receipt.Detail = d.blockTenderWake(a, seed, err.Error())
+			receipt.Detail = d.blockTenderResume(a, seed, err.Error())
 			return receipt, nil
 		}
 		receipt.Detail = err.Error()
 		d.armInboxLocked(a, state, inbox.AttemptDelay)
 		return receipt, nil
 	}
-	d.unblockTenderWake(seed.ID)
-	d.logf("tender wake: seed %s reopened session %s for %s (wake %d of %d in %s)", seed.ID, outcome.SessionID, d.seedMailCause(a), count, tenderWakeLimit, tenderWakeWindow)
+	d.unblockTenderResume(seed.ID)
+	d.logf("tender resume: seed %s reopened session %s for %s (resume %d of %d in %s)", seed.ID, outcome.SessionID, d.seedMailCause(a), count, tenderResumeLimit, tenderResumeWindow)
 	if outcome.AlreadyRunning {
 		d.kickInbox(a)
 		receipt.Detail = "notified the running tender of " + seed.ID
 		return receipt, nil
 	}
-	state.wakeSession = outcome.SessionID
-	state.tenderWake = newTenderWake(outcome.SessionID, seed, standby, claude)
+	state.startedSession = outcome.SessionID
+	state.tenderResume = newTenderResume(outcome.SessionID, seed, standby, claude)
 	d.kickInbox(a)
 	receipt.Detail = fmt.Sprintf("reopened session %s, the tender of %s on standby; the mail is delivered once it reads input", shortSessionID(outcome.SessionID), seed.ID)
 	return receipt, nil
@@ -289,7 +289,7 @@ func (d *Daemon) kickStandbyTendersOn(host string) {
 	}
 	for _, address := range addresses {
 		seedID, seedMail := address.TenderOf()
-		if !seedMail || d.tenderWakes.blockedReason(seedID) != "" {
+		if !seedMail || d.tenderResumes.blockedReason(seedID) != "" {
 			continue
 		}
 		seed, _, err := d.readSeed(seedID)
@@ -303,13 +303,13 @@ func (d *Daemon) kickStandbyTendersOn(host string) {
 	}
 }
 
-func (d *Daemon) closeTenderAfterFailedWake(sessionID protocol.SessionID, failure error) {
+func (d *Daemon) closeTenderAfterFailedResume(sessionID protocol.SessionID, failure error) {
 	if d.store.Get(sessionID) == nil || d.sessionHasLiveWorker(sessionID) {
 		return
 	}
 	closing, err := d.beginSessionClose(sessionID, store.SessionClose{By: who.Attn(), Reason: "attn could not resume it for seed mail: " + failure.Error()}, nil)
 	if err != nil {
-		d.logf("tender wake: closing session %s after its failed wake: %v", sessionID, err)
+		d.logf("tender resume: closing session %s after its failed resume: %v", sessionID, err)
 		return
 	}
 	d.finishSessionClose(sessionID, closing)
@@ -336,25 +336,25 @@ func describeInboxItem(item store.InboxItem) string {
 	return fmt.Sprintf("%s (inbox item %s)", what, item.ID)
 }
 
-func (d *Daemon) blockTenderWake(a who.Address, seed garden.Seed, reason string) string {
-	detail := fmt.Sprintf("queued: %s is on standby, but attn cannot wake its tender: %s", seed.ID, reason)
-	if !d.tenderWakes.block(seed.ID, reason) {
+func (d *Daemon) blockTenderResume(a who.Address, seed garden.Seed, reason string) string {
+	detail := fmt.Sprintf("queued: %s is on standby, but attn cannot resume its tender: %s", seed.ID, reason)
+	if !d.tenderResumes.block(seed.ID, reason) {
 		return detail
 	}
 	d.publishStandbyViewChanged(who.ToTenderOf(seed.ID))
 	item := d.seedMailCause(a)
-	d.logf("tender wake: seed %s blocked for %s: %s", seed.ID, item, reason)
-	body := fmt.Sprintf("attn could not wake this seed's tender for %s: %s. The mail waits in the seed's mailbox, and attn does not retry this wake by itself.", item, reason)
+	d.logf("tender resume: seed %s blocked for %s: %s", seed.ID, item, reason)
+	body := fmt.Sprintf("attn could not resume this seed's tender for %s: %s. The mail waits in the seed's mailbox, and attn does not retry this resume by itself.", item, reason)
 	_, memberTender := seed.Tender.Member()
 	sessionTender, _ := seed.Tender.Session()
 	if _, err := d.appendSeedNote(seed.ID, body, who.Attn(), garden.NoteKindNote, nil, !memberTender, sessionTender); err != nil {
-		d.logf("tender wake: note the block on %s: %v", seed.ID, err)
+		d.logf("tender resume: note the block on %s: %v", seed.ID, err)
 	}
 	record, err := d.store.AddNotification(store.NotificationRecord{
-		Kind:       notificationKindWakeBlocked,
+		Kind:       notificationKindResumeBlocked,
 		Severity:   store.NotificationCritical,
-		Title:      fmt.Sprintf("%s could not wake its tender", seed.ID),
-		Body:       fmt.Sprintf("%s %q is on standby and got %s, but attn could not wake its tender: %s", seed.ID, seed.Title, item, reason),
+		Title:      fmt.Sprintf("%s could not resume its tender", seed.ID),
+		Body:       fmt.Sprintf("%s %q is on standby and got %s, but attn could not resume its tender: %s", seed.ID, seed.Title, item, reason),
 		Impact:     "The mail waits in the seed's mailbox until someone tends the seed.",
 		Actions:    []store.NotificationAction{{Kind: notificationActionOpenSeed, Label: "Open seed", TargetID: protocol.SessionID(seed.ID)}},
 		SourceKind: "seed",
@@ -362,51 +362,51 @@ func (d *Daemon) blockTenderWake(a who.Address, seed garden.Seed, reason string)
 		ProfileID:  seed.ProfileID,
 	}, time.Now())
 	if err != nil {
-		d.logf("tender wake: notify about %s: %v", seed.ID, err)
+		d.logf("tender resume: notify about %s: %v", seed.ID, err)
 		return detail
 	}
 	d.publishFact(FactNotificationCreated, record.ID, nil)
 	return detail
 }
 
-func (d *Daemon) unblockTenderWake(seedID string) {
-	if d.tenderWakes.unblock(seedID) {
+func (d *Daemon) unblockTenderResume(seedID string) {
+	if d.tenderResumes.unblock(seedID) {
 		d.publishStandbyViewChanged(who.ToTenderOf(seedID))
 	}
 }
 
-func (d *Daemon) tenderWakeText(wake *tenderWakeDelivery) string {
-	return prompts.RenderText("session", "tender-wake", prompts.Values{
-		"seed_id":    wake.seedID,
-		"seed_title": wake.title,
-		"note":       wake.note,
+func (d *Daemon) tenderResumeText(delivery *tenderResumeDelivery) string {
+	return prompts.RenderText("session", "tender-resume", prompts.Values{
+		"seed_id":    delivery.seedID,
+		"seed_title": delivery.title,
+		"note":       delivery.note,
 	})
 }
 
-func (d *Daemon) tenderWakeModMissed(session protocol.SessionID, claudeVersion string) {
+func (d *Daemon) tenderResumeModMissed(session protocol.SessionID, claudeVersion string) {
 	addresses, err := d.inboxAddressesOf(session)
 	if err != nil {
-		d.logf("tender wake: addresses of %s: %v", session, err)
+		d.logf("tender resume: addresses of %s: %v", session, err)
 		return
 	}
 	for _, a := range addresses {
 		if _, seedMail := a.TenderOf(); seedMail {
-			d.blockClaudeWakeWithoutMod(a, session, claudeVersion)
+			d.blockClaudeResumeWithoutMod(a, session, claudeVersion)
 		}
 	}
 }
 
-func (d *Daemon) blockClaudeWakeWithoutMod(a who.Address, session protocol.SessionID, claudeVersion string) {
+func (d *Daemon) blockClaudeResumeWithoutMod(a who.Address, session protocol.SessionID, claudeVersion string) {
 	state := d.lockInboxState(a)
 	defer state.unlock()
-	wake := state.tenderWake
-	if wake == nil || !wake.claude || wake.session != session || state.wakeSession != session {
+	delivery := state.tenderResume
+	if delivery == nil || !delivery.claude || delivery.session != session || state.startedSession != session {
 		return
 	}
-	seed, _, err := d.readSeed(wake.seedID)
+	seed, _, err := d.readSeed(delivery.seedID)
 	if err != nil {
-		d.logf("tender wake: %s: %v", wake.seedID, err)
+		d.logf("tender resume: %s: %v", delivery.seedID, err)
 		return
 	}
-	d.blockTenderWake(a, seed, fmt.Sprintf("attn resumed Claude session %s, but the mod in %s never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later. If this Claude Code version broke the mod, attn needs a fix for that version", shortSessionID(session), claudeVersion, claudeModFirstPollTripwire))
+	d.blockTenderResume(a, seed, fmt.Sprintf("attn resumed Claude session %s, but the mod in %s never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later. If this Claude Code version broke the mod, attn needs a fix for that version", shortSessionID(session), claudeVersion, claudeModFirstPollTripwire))
 }

@@ -148,7 +148,7 @@ func TestAStopANotificationStartedSendsThePhoneNothing(t *testing.T) {
 			t.Run("the Chief member", func(t *testing.T) {
 				w, app, cli, phone := phonePushWorld(t, flow.queue, flow.quiet)
 				profileChief(t, w)
-				run := wakeConfiguredChief(t, w, cli)
+				run := startConfiguredChief(t, w, cli)
 				session := string(chiefSession(t, cli))
 				greeted := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
 					return s.State == protocol.SessionStateIdle && protocol.Deref(s.TurnOwed)
@@ -313,7 +313,7 @@ func TestAnOpenTurnAnnouncedAfterTheUsersPromptDoesNotPushAgainForANotifications
 	}
 }
 
-func TestAnAgentANotificationWokeIsToldThePhoneStaysSilentWhenItsStopStillOpensATurn(t *testing.T) {
+func TestAnAgentANotificationStartedIsToldThePhoneStaysSilentWhenItsStopStillOpensATurn(t *testing.T) {
 	for _, flow := range phonePushFlows {
 		t.Run(flow.name, func(t *testing.T) {
 			w, app, cli, _ := phonePushWorld(t, flow.queue, flow.quiet)

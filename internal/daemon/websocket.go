@@ -979,10 +979,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdQuickCaptureSend, protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList, protocol.CmdQuickCaptureAttachmentPut, protocol.CmdQuickCaptureAttachmentGet, protocol.CmdQuickCaptureAttachmentDiscard:
 		selected := client.selectedProfile()
 		d.life.Go("handleQuickCaptureWS", func() { d.handleQuickCaptureWS(client, selected, msg) })
-	case protocol.CmdCrewWake:
-		wake := msg.(*protocol.CrewWakeMessage)
-		wake.ProfileID = client.profileOr(wake.ProfileID)
-		d.life.Go("handleCrewWakeWS", func() { d.handleCrewWakeWS(client, wake) })
+	case protocol.CmdCrewStart:
+		start := msg.(*protocol.CrewStartMessage)
+		start.ProfileID = client.profileOr(start.ProfileID)
+		d.life.Go("handleCrewStartWS", func() { d.handleCrewStartWS(client, start) })
 	case protocol.CmdCrewCharterGet:
 		asked := msg.(*protocol.CrewCharterGetMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)
@@ -999,10 +999,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		asked := msg.(*protocol.CrewHandoffGetMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)
 		d.life.Go("handleCrewHandoffGetWS", func() { d.handleCrewHandoffGetWS(client, asked) })
-	case protocol.CmdCrewSleep:
-		asked := msg.(*protocol.CrewSleepMessage)
+	case protocol.CmdCrewClose:
+		asked := msg.(*protocol.CrewCloseMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)
-		d.life.Go("handleCrewSleepWS", func() { d.handleCrewSleepWS(client, asked) })
+		d.life.Go("handleCrewCloseWS", func() { d.handleCrewCloseWS(client, asked) })
 	case protocol.CmdCrewApply:
 		asked := msg.(*protocol.CrewApplyMessage)
 		asked.ProfileID = client.profileOr(asked.ProfileID)

@@ -150,7 +150,7 @@ func TestARealClaudeOnAnOutpostClosesAfterTheHomeLinkReturnsWhenItWasDownForTheC
 	c.compactedAfter(t, "once its conversation is compacted")
 }
 
-func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndWakesOnSeedMailWithItsConversation(t *testing.T) {
+func TestARealClaudeOnAnOutpostOnStandbyCompactsClosesAndResumesOnSeedMailWithItsConversation(t *testing.T) {
 	t.Parallel()
 	c := newRealOutpostClaude(t, true)
 	app := c.pair.App

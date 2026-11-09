@@ -39,8 +39,8 @@ func (d *Daemon) resumeAsMember(sessionID protocol.SessionID, resume func() erro
 	if key == "" {
 		return resume()
 	}
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
 	members, _, err := d.readCrewMembers()
 	if err != nil {
 		return err
@@ -52,19 +52,19 @@ func (d *Daemon) resumeAsMember(sessionID protocol.SessionID, resume func() erro
 	if member.Retired {
 		return retiredMemberError(member)
 	}
-	awakeIn, _, err := d.crewAwakeSession(member)
+	liveIn, _, err := d.crewLiveSession(member)
 	if err != nil {
 		return err
 	}
-	if awakeIn != "" && awakeIn != sessionID {
+	if liveIn != "" && liveIn != sessionID {
 		return fmt.Errorf("%s is in session %s; session %s comes back only while %s is between sessions",
-			member.Name, shortSessionID(awakeIn), shortSessionID(sessionID), member.Name)
+			member.Name, shortSessionID(liveIn), shortSessionID(sessionID), member.Name)
 	}
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return err
 	}
 	if err := resume(); err != nil {
-		if awakeIn == "" {
+		if liveIn == "" {
 			d.releaseCrewBindingIfSession(sessionID)
 		}
 		return err

@@ -46,7 +46,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != before.HomeDir {
 		t.Fatalf("legacy home moved at startup: %+v", got)
 	}
-	awake := wakeCrew(t, cli, "Keel", "")
+	awake := startCrew(t, cli, "Keel", "")
 	run := w.Launched(string(awake.SessionID))
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
@@ -118,7 +118,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	if got := crewRosterMember(t, cli, "keel"); got.HomeDir != after.HomeDir {
 		t.Fatalf("home after restart: %+v", got)
 	}
-	wake := wakeCrew(t, cli, "Keeper", "")
+	wake := startCrew(t, cli, "Keeper", "")
 	w.Launched(string(wake.SessionID))
 	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != notes {
 		t.Fatalf("launch directory after the move: %s", session.Directory)
@@ -210,16 +210,16 @@ func TestAnUnavailableNotebookHomeStopsOnlyItsMember(t *testing.T) {
 	if read.Success || !strings.Contains(protocol.Deref(read.Error), member.HomeDir) {
 		t.Fatalf("charter of a member whose home is unavailable: %+v", read)
 	}
-	_, err := cli.CrewWake("Keel", "", "")
+	_, err := cli.CrewStart("Keel", "", "")
 	crewErrorContains(t, err, member.HomeDir, "unavailable")
-	w.Launched(string(wakeCrew(t, cli, "Trellis", "").SessionID))
+	w.Launched(string(startCrew(t, cli, "Trellis", "").SessionID))
 	if _, err := os.Stat(member.HomeDir); !os.IsNotExist(err) {
 		t.Fatalf("the unavailable home was recreated: %v", err)
 	}
 	if err := os.Rename(aside, member.HomeDir); err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(string(wakeCrew(t, cli, "Keel", "").SessionID))
+	w.Launched(string(startCrew(t, cli, "Keel", "").SessionID))
 }
 
 func TestAMemberWithANotebookHomeKeepsItsProfile(t *testing.T) {
@@ -263,7 +263,7 @@ func TestCreatedMembersLiveInTheirProfilesNotebook(t *testing.T) {
 	if read := fsAskRead(app, "", "crew/keel/CHARTER.md"); !read.Success || read.Result == nil || read.Result.Content != "" {
 		t.Fatalf("the new charter in the Notebook: %+v", read)
 	}
-	wake := wakeCrew(t, cli, "Keel", "")
+	wake := startCrew(t, cli, "Keel", "")
 	w.Launched(string(wake.SessionID))
 	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != keel.HomeDir {
 		t.Fatalf("launch directory: %s", session.Directory)
@@ -292,13 +292,13 @@ func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 				moveCrewHome(t, w, "Keel")
 			}
 			home := crewRosterMember(t, cli, "keel").HomeDir
-			atHome := sleepAfterADay(t, w, "Keel")
+			atHome := closeAfterASession(t, w, "Keel")
 			notes := filepath.Join(home, "notes")
 			if err := os.MkdirAll(notes, 0o755); err != nil {
 				t.Fatal(err)
 			}
 			setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes)})
-			inNotes := sleepAfterADay(t, w, "Keel")
+			inNotes := closeAfterASession(t, w, "Keel")
 
 			switch relocation {
 			case "move":
@@ -308,13 +308,13 @@ func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 					t.Fatal(err)
 				}
 			case "rename while awake":
-				day := wakeCrew(t, cli, "Keel", "")
+				day := startCrew(t, cli, "Keel", "")
 				w.Launched(string(day.SessionID)).Prompted()
 				if _, err := cli.CrewRename("Keel", "Keeper"); err != nil {
 					t.Fatal(err)
 				}
 				crewHandoff(t, cli, string(day.SessionID), "Renamed today.", false)
-				sleepAfterADay(t, w, "Keeper")
+				closeAfterASession(t, w, "Keeper")
 			}
 			moved := crewRosterMember(t, cli, "keel").HomeDir
 			if moved == home {
@@ -337,10 +337,10 @@ func TestClosedCrewConversationsResumeFromAMovedOrRenamedHome(t *testing.T) {
 	}
 }
 
-func sleepAfterADay(t *testing.T, w *world, member string) *fakeagent.Run {
+func closeAfterASession(t *testing.T, w *world, member string) *fakeagent.Run {
 	t.Helper()
 	cli := w.Client()
-	day := wakeCrew(t, cli, member, "")
+	day := startCrew(t, cli, member, "")
 	run := w.Launched(string(day.SessionID))
 	run.Prompted()
 	run.Reply("A day worth keeping. <!-- attn:state=idle -->")
@@ -352,7 +352,7 @@ func repointCrewHome(cli *client.Client, member, home string) (*protocol.CrewSet
 	return cli.CrewSetMessage(protocol.CrewSetMessage{Member: member, Home: protocol.Ptr(home)})
 }
 
-func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
+func TestAHomeMovedAwayIsRepointedAndStartsThere(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	home := moveCrewHome(t, w, "Keel").Member.HomeDir
@@ -361,7 +361,7 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 		t.Fatal(err)
 	}
 	setCrew(t, cli, "Keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(notes), AwarenessDirs: []string{notes}})
-	day := sleepAfterADay(t, w, "Keel")
+	day := closeAfterASession(t, w, "Keel")
 
 	tidied := w.Path("tidied")
 	if err := os.MkdirAll(tidied, 0o755); err != nil {
@@ -371,7 +371,7 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 	if err := os.Rename(home, aside); err != nil {
 		t.Fatal(err)
 	}
-	_, err := cli.CrewWake("Keel", "", "")
+	_, err := cli.CrewStart("Keel", "", "")
 	crewErrorContains(t, err, home, "unavailable")
 
 	empty := w.Path("empty")
@@ -409,8 +409,8 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 		t.Fatalf("resume after the repoint started %+v", resumed)
 	}
 
-	wake := wakeCrew(t, cli, "Keel", "")
-	if !wake.AlreadyAwake || string(wake.SessionID) != day.SessionID {
+	wake := startCrew(t, cli, "Keel", "")
+	if !wake.AlreadyInSession || string(wake.SessionID) != day.SessionID {
 		t.Fatalf("wake after the resume = %+v, want Keel awake in the resumed session %s", wake, day.SessionID)
 	}
 	if session := queriedSession(t, cli, string(wake.SessionID)); session.Directory != movedNotes {
@@ -505,14 +505,14 @@ func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	w.Launched(string(wakeCrew(t, cli, "Keel", "claude").SessionID))
+	w.Launched(string(startCrew(t, cli, "Keel", "claude").SessionID))
 	if !trusted(claudeHome) {
 		t.Fatalf("Claude's config doesn't trust Keel's home %s", claudeHome)
 	}
 
 	codexHome := crewRosterMember(t, cli, "alder").HomeDir
 	w.LeaveCodexFolderTrustUnanswered(codexHome)
-	w.Launched(string(wakeCrew(t, cli, "Alder", "codex").SessionID))
+	w.Launched(string(startCrew(t, cli, "Alder", "codex").SessionID))
 	if got := w.CodexFolderTrust(codexHome); got != "trusted" {
 		t.Fatalf("Codex saves Alder's home as %q, want trusted", got)
 	}
@@ -522,7 +522,7 @@ func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 	setCrew(t, cli, "Trellis", protocol.CrewSetMessage{Cwd: protocol.Ptr(chosen)})
-	w.Launched(string(wakeCrew(t, cli, "Trellis", "claude").SessionID))
+	w.Launched(string(startCrew(t, cli, "Trellis", "claude").SessionID))
 	if resolved, _ := filepath.EvalSymlinks(chosen); trusted(resolved) {
 		t.Fatalf("a folder the user chose was trusted without asking: %s", resolved)
 	}
@@ -540,7 +540,7 @@ func TestACodexMemberInAFolderTheUserChoseStillGetsCodexsQuestion(t *testing.T) 
 		t.Fatal(err)
 	}
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Agent: protocol.Ptr("codex"), Cwd: protocol.Ptr(chosen)})
-	session := string(wakeCrew(t, cli, "keel", "").SessionID)
+	session := string(startCrew(t, cli, "keel", "").SessionID)
 	app.AwaitScreen(session, "Trust this folder?")
 	if got := w.CodexFolderTrust(resolved); got != "" {
 		t.Fatalf("Codex saves the folder the user chose as %q before the user answered", got)

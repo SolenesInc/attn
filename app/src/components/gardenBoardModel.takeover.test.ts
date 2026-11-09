@@ -46,8 +46,8 @@ describe('who still holds a seed', () => {
   const session = { ref: 'session:sess-a', name: 'Garden polish' };
 
   it.each<[string, Pick<Seed, 'tender' | 'claimed'>, string]>([
-    ['a member that is awake', { tender: { ...alder, session_id: 'sess-alder' }, claimed: true }, 'Alder'],
-    ['a member that is asleep, since its claim outlives its session', { tender: alder, claimed: true }, 'Alder'],
+    ['a member in session', { tender: { ...alder, session_id: 'sess-alder' }, claimed: true }, 'Alder'],
+    ['a member between sessions, since its claim outlives its session', { tender: alder, claimed: true }, 'Alder'],
     ['a session that is alive', { tender: { ...session, session_id: 'sess-a' }, claimed: true }, 'Garden polish'],
     ['a session that has ended', { tender: session, claimed: false }, ''],
     ['a party the daemon could not name', { tender: { ref: 'session:sess-a', name: '', session_id: 'sess-a' }, claimed: true }, 'session:sess-a'],

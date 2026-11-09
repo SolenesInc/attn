@@ -10,7 +10,7 @@ import '../../src/App.css';
 const noop = () => {};
 const sessions = [
   { id: 'chief', label: 'chief', state: 'idle' as const, chiefOfStaff: true, crewMember: 'chief' },
-  { id: 'crew-awake', label: 'awake crew', state: 'working' as const, crewMember: 'alder' },
+  { id: 'crew-live', label: 'crew in session', state: 'working' as const, crewMember: 'alder' },
   ...Array.from({ length: 5 }, (_, index) => ({
     id: `owed-${index + 1}`,
     label: `waiting agent ${index + 1}`,
@@ -46,15 +46,15 @@ const desktops = buildDesktopViewModels([desktop], sessions);
 export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const params = new URLSearchParams(window.location.search);
   const desktopFlow = params.has('desktop');
-  const chiefPhase = (params.get('chief') ?? 'awake') as ChiefPhase;
+  const chiefPhase = (params.get('chief') ?? 'in-session') as ChiefPhase;
   const crew = [
-    { id: 'chief-member', name: 'Chief', agent: 'claude', binding_session: chiefPhase === 'awake' ? 'chief' : undefined },
-    { id: 'alder', name: 'Alder', binding_session: 'crew-awake' },
+    { id: 'chief-member', name: 'Chief', agent: 'claude', binding_session: chiefPhase === 'in-session' ? 'chief' : undefined },
+    { id: 'alder', name: 'Alder', binding_session: 'crew-live' },
     { id: 'birch', name: 'Birch' },
     { id: 'cedar', name: 'Cedar' },
   ];
   if (params.has('largeCrew')) {
-    crew.push(...sessions.map((session) => ({ id: `sleeping-${session.id}`, name: `Sleeping ${session.label}` })));
+    crew.push(...sessions.map((session) => ({ id: `resting-${session.id}`, name: `Resting ${session.label}` })));
   }
   useEffect(() => {
     onReady();
@@ -72,12 +72,12 @@ export function QueueSidebarFitHarness({ onReady, setTriggerRerender }: HarnessP
           desktops={desktops}
           visualIndexByDesktopId={new Map([['desk-1', 0]])}
           queue={desktopFlow ? null : buildQueueBands(desktops)}
-          chief={{ key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: chiefPhase, requestPending: false, sessionId: chiefPhase === 'awake' ? 'chief' : undefined }}
-          chiefActions={{ setUp: async () => true, wake: noop, sleep: noop, edit: noop, dismiss: noop }}
+          chief={{ key: 'chief-member', name: 'Chief', agent: 'claude', revision: 1, phase: chiefPhase, requestPending: false, sessionId: chiefPhase === 'in-session' ? 'chief' : undefined }}
+          chiefActions={{ setUp: async () => true, start: noop, close: noop, edit: noop, dismiss: noop }}
           crew={crew}
           profileName="Harness"
           onSelectSession={noop}
-          onWakeCrewMember={(member) => window.__HARNESS__.recordCall('wake', [member])}
+          onStartCrewMember={(member) => window.__HARNESS__.recordCall('start', [member])}
           onSelectDesktop={noop}
           onNewSession={noop}
           onCloseSession={noop}

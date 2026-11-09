@@ -89,7 +89,7 @@ describe('the Chief member in the queue', () => {
     const { daemon } = await launchChiefMember(chiefMember(OWED), true);
 
     expect(screen.getAllByTestId('queue-turn-chief')).toHaveLength(1);
-    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
+    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'in-session');
     expect(screen.getByTestId('queue-waiting-card')).toHaveAttribute('data-waiting', '1');
     expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent(/1 more agent(?!s)/);
     expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('1 working');
@@ -123,7 +123,7 @@ describe('the Chief member in the queue', () => {
     const { daemon } = await launchChiefMember(chiefMember(OWED), false);
 
     expect(screen.queryByTestId('queue-turn-chief')).toBeNull();
-    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'awake');
+    expect(screen.getByTestId('chief-slot')).toHaveAttribute('data-chief-phase', 'in-session');
     expect(queue().getByText('Nothing owed')).toBeInTheDocument();
     expect(queue().queryByRole('button', { name: 'Settle chief' })).toBeNull();
     expect(queue().queryByRole('button', { name: 'Snooze chief' })).toBeNull();
@@ -220,7 +220,7 @@ describe('App queue', () => {
       const sessions = [
         agent('chief', { chief_of_staff: true, crew_member: CHIEF_MEMBER }),
         ...[1, 2, 3, 4, 5].map((n) => agent(`owed-${n}`, { turn_owed: true, turn_opened_at: ago(n * HOUR) })),
-        agent('crew-awake', { crew_member: 'alder' }),
+        agent('crew-live', { crew_member: 'alder' }),
         agent('working'),
         agent('snoozed-1', { turn_snoozed_until: fromNow(HOUR) }),
         agent('snoozed-2', { turn_snoozed_until: fromNow(2 * HOUR) }),
@@ -349,7 +349,7 @@ describe('App queue', () => {
     expect(daemon.sentOf('desktop_set_current')).toEqual([]);
   });
 
-  it('collects deferred agents under Snoozed in the agent list, and wakes one without opening it', async () => {
+  it('collects deferred agents under Snoozed in the agent list, and unsnoozes one without opening it', async () => {
     const { daemon } = await launch({ sessions: [...team(), agent('later', { turn_snoozed_until: fromNow(HOUR) })] });
 
     expect(bandRows()).not.toContain('queue-settled-later');
@@ -357,7 +357,7 @@ describe('App queue', () => {
     const later = within(screen.getByTestId('queue-snoozed-later'));
     expect(later.queryByRole('button', { name: 'Settle later' })).toBeNull();
 
-    await gesture(daemon, () => fireEvent.click(later.getByRole('button', { name: 'Wake later' })));
+    await gesture(daemon, () => fireEvent.click(later.getByRole('button', { name: 'Unsnooze later' })));
 
     expect(daemon.sentOf('wake_turn')).toEqual([{ cmd: 'wake_turn', session_id: 'later' }]);
     expect(daemon.sentOf('desktop_set_current')).toEqual([]);

@@ -77,7 +77,7 @@ func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Sess
 		if session := d.store.Get(member.BindingSession); session != nil && d.crewBindingLive(member) {
 			return session, nil
 		}
-		return nil, fmt.Errorf("crew member %s is asleep; reload does not wake members", member.Name)
+		return nil, fmt.Errorf("crew member %s is between sessions; reload does not start sessions for members", member.Name)
 	}
 	target, code := d.resolveSessionReference(ref, profileID)
 	switch {
@@ -86,6 +86,6 @@ func (d *Daemon) resolveAgentReloadTarget(ref, profileID string) (*protocol.Sess
 	case code == "ambiguous_session":
 		return nil, fmt.Errorf("%q matches more than one session; use more of the id", ref)
 	default:
-		return nil, fmt.Errorf("no session or awake crew member matches %q in the caller's profile", ref)
+		return nil, fmt.Errorf("no session or crew member in session matches %q in the caller's profile", ref)
 	}
 }

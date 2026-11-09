@@ -53,7 +53,7 @@ func writeCharter(t *testing.T, s *testworld.Stack, name string) {
 	}
 }
 
-func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
+func TestCrewMembersStartCloseAndKeepTheirLaunchSettings(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
 	requireRefusals(t, s, []argvRefusal{
@@ -137,9 +137,9 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "close", "trellis"), string("Close request for Trellis is queued in session "+next[:8]+" — "))
 	requireStdout(t, s.Attn("crew", "close", "keel"), "Keel is between sessions", "no close request was sent")
 
-	var woken protocol.CrewWakeResult
+	var woken protocol.CrewStartResult
 	s.Attn("crew", "start", "keel", "--agent", "codex", "--json").JSON(t, &woken)
-	if woken.Member != "keel" || woken.AlreadyAwake || woken.SessionID == "" {
+	if woken.Member != "keel" || woken.AlreadyInSession || woken.SessionID == "" {
 		t.Fatalf("crew start keel --agent codex --json = %+v", woken)
 	}
 	if codex := s.Launched(string(woken.SessionID)); codex.Harness != fakeagent.Codex {
@@ -251,7 +251,7 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 		t.Fatalf("move-home without a member: %+v", parse)
 	}
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
-	var wake protocol.CrewWakeResult
+	var wake protocol.CrewStartResult
 	s.Attn("crew", "start", "Anchor", "--json").JSON(t, &wake)
 	s.Launched(string(wake.SessionID)).Prompted()
 	requireStdout(t, s.Attn("crew", "rename", "Anchor", "Keeper"), "Anchor is now Keeper; its home keeps its folder while it is in session and moves to one named after Keeper when its next session starts. Its key member:keel, letters and mail stay.")
@@ -288,7 +288,7 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	writeCharter(t, s, "keel")
 	s.Start()
 	s.App()
-	var wake protocol.CrewWakeResult
+	var wake protocol.CrewStartResult
 	s.Attn("crew", "start", "Keel", "--json").JSON(t, &wake)
 	day := s.Launched(string(wake.SessionID))
 	day.Prompted()
@@ -320,9 +320,9 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 
 	requireStdout(t, s.Run(testworld.Invocation{Args: []string{"crew", "prime"}, Terminal: terminal}), "You are **Keel**")
 	requireFailure(t, s.Attn("crew", "prime"), "crew prime: ", "this session is not a crew member's")
-	var again protocol.CrewWakeResult
+	var again protocol.CrewStartResult
 	s.Attn("crew", "start", "Keel", "--json").JSON(t, &again)
-	if !again.AlreadyAwake || again.SessionID != next.ID {
+	if !again.AlreadyInSession || again.SessionID != next.ID {
 		t.Fatalf("wake after the clear = %+v, want the successor %s", again, next.ID)
 	}
 	requireStdout(t, s.Attn("crew", "retire", "Keel"), "Keel is retired.", "Asked Keel in session "+string(next.ID)[:8])

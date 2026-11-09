@@ -8,24 +8,24 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func sleepCrew(t *testing.T, w *world, member string) *protocol.CrewSleepResult {
+func closeCrew(t *testing.T, w *world, member string) *protocol.CrewCloseResult {
 	t.Helper()
-	slept, err := w.Client().CrewSleep(member)
+	slept, err := w.Client().CrewClose(member)
 	if err != nil {
 		t.Fatalf("sleep %s: %v", member, err)
 	}
 	return slept
 }
 
-func TestSleepAsksTheLiveMemberToFileItsOwnLetter(t *testing.T) {
+func TestCloseAsksTheLiveMemberToFileItsOwnLetter(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli := w.Client()
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
-		result := sleepCrew(t, w, "trellis")
-		if result.AlreadyAsleep || string(protocol.Deref(result.SessionID)) != day.id {
+		result := closeCrew(t, w, "trellis")
+		if result.AlreadyClosed || string(protocol.Deref(result.SessionID)) != day.id {
 			t.Fatalf("sleep = %+v, want a request to the live member", result)
 		}
 		items := readInbox(t, cli, day.id, 0).Items
@@ -38,20 +38,20 @@ func TestSleepAsksTheLiveMemberToFileItsOwnLetter(t *testing.T) {
 	})
 }
 
-func TestAskingAnAsleepMemberToSleepSendsNothingAndWakesNobody(t *testing.T) {
+func TestAskingAMemberBetweenSessionsToCloseSendsNothingAndStartsNothing(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		cli := w.Client()
 		before := crewSessionCount(t, cli)
-		if slept := sleepCrew(t, w, "trellis"); !slept.AlreadyAsleep {
+		if slept := closeCrew(t, w, "trellis"); !slept.AlreadyClosed {
 			t.Fatalf("sleep=%+v", slept)
 		}
 		w.advance(time.Hour)
 		if got := crewSessionCount(t, cli); got != before {
 			t.Fatalf("sleep woke a session: before=%d after=%d", before, got)
 		}
-		day := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "trellis", "").SessionID))
+		day := w.bootBubbleClaude(t, string(startCrew(t, cli, "trellis", "").SessionID))
 		day.reply("Ready. <!-- attn:state=idle -->")
 		if items := readInbox(t, cli, day.id, 0).Items; len(items) != 0 {
 			t.Fatalf("sleep queued mail=%+v", items)

@@ -106,11 +106,11 @@ use attn::go::flag::{Flag, FlagDefault, FlagSet};
 use attn::go::quote::quote;
 use attn_protocol::go_values::{AGENT_MSG_STATUS_QUEUED, CREW_KEY_REF_PREFIX};
 use attn_protocol::{
-    CrewApplyMessage, CrewApplyResult, CrewCreateMessage, CrewCreateResult, CrewListMessage,
-    CrewListResult, CrewMember, CrewMoveHomeMessage, CrewMoveHomeResult, CrewPrimeMessage,
-    CrewPrimeResult, CrewRenameMessage, CrewRenameResult, CrewRestoreMessage, CrewRestoreResult,
-    CrewRetireMessage, CrewRetireResult, CrewSetMessage, CrewSetResult, CrewSleepMessage,
-    CrewSleepResult, CrewWakeMessage, CrewWakeResult, LaunchDesktopSetting,
+    CrewApplyMessage, CrewApplyResult, CrewCloseMessage, CrewCloseResult, CrewCreateMessage,
+    CrewCreateResult, CrewListMessage, CrewListResult, CrewMember, CrewMoveHomeMessage,
+    CrewMoveHomeResult, CrewPrimeMessage, CrewPrimeResult, CrewRenameMessage, CrewRenameResult,
+    CrewRestoreMessage, CrewRestoreResult, CrewRetireMessage, CrewRetireResult, CrewSetMessage,
+    CrewSetResult, CrewStartMessage, CrewStartResult, LaunchDesktopSetting,
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -325,25 +325,25 @@ fn start(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut flags = FlagSet::new(label, &[JSON, PROFILE, string_flag("agent")]);
     let member = parse_member(run, &mut flags, args, label)?;
     let request = Request::from_flags(label, &flags);
-    let mut message = CrewWakeMessage::new();
+    let mut message = CrewStartMessage::new();
     message.member = member;
     let agent = flags.string("agent").trim();
     if !agent.is_empty() {
         message.agent = Some(agent.to_string());
     }
     let answer = Answer {
-        field: "crew_wake_result",
-        json_path: &["crew_wake_result"],
+        field: "crew_start_result",
+        json_path: &["crew_start_result"],
         missing: "the daemon answered without a start result",
     };
-    request.respond(run, &message, &answer, |result: CrewWakeResult| {
+    request.respond(run, &message, &answer, |result: CrewStartResult| {
         start_lines(&result)
     })
 }
 
-fn start_lines(result: &CrewWakeResult) -> String {
+fn start_lines(result: &CrewStartResult) -> String {
     let session = short_id(&result.session_id);
-    if result.already_awake {
+    if result.already_in_session {
         return format!(
             "{} is already in session {session} — nothing was launched.\n",
             result.name
@@ -368,22 +368,22 @@ fn start_lines(result: &CrewWakeResult) -> String {
 
 fn close(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let (member, request) = member_request(run, "crew close", args)?;
-    let mut message = CrewSleepMessage::new();
+    let mut message = CrewCloseMessage::new();
     message.member = member;
     let answer = Answer {
-        field: "crew_sleep_result",
-        json_path: &["crew_sleep_result"],
+        field: "crew_close_result",
+        json_path: &["crew_close_result"],
         missing: "the daemon answered without a close result",
     };
-    request.respond(run, &message, &answer, |result: CrewSleepResult| {
+    request.respond(run, &message, &answer, |result: CrewCloseResult| {
         format!("{}\n", close_outcome(&result))
     })
 }
 
-fn close_outcome(result: &CrewSleepResult) -> String {
+fn close_outcome(result: &CrewCloseResult) -> String {
     let name = &result.name;
     let detail = result.detail.trim();
-    if result.already_asleep {
+    if result.already_closed {
         if !detail.is_empty() {
             return format!("{detail}.");
         }
@@ -605,7 +605,7 @@ fn rename_line(result: &CrewRenameResult) -> String {
             "{old} is now {new}, and its home moved to {home}; its key {key}, letters and mail stay.\n"
         );
     }
-    if result.home_moves_at_wake == Some(true) {
+    if result.home_moves_at_start == Some(true) {
         return format!(
             "{old} is now {new}; its home keeps its folder while it is in session and moves to one named after {new} when its next session starts. Its key {key}, letters and mail stay.\n"
         );
@@ -684,8 +684,8 @@ fn retirement(result: &CrewRetireResult) -> String {
         or_dash(&result.closed_asks.join(", "))
     );
     let _ = writeln!(out, "unread mail kept: {}", result.unread);
-    if let Some(sleep) = &result.sleep {
-        let _ = writeln!(out, "{}", close_outcome(sleep));
+    if let Some(closed) = &result.close {
+        let _ = writeln!(out, "{}", close_outcome(closed));
     }
     let _ = writeln!(out, "`attn crew restore {name}` brings them back.");
     out

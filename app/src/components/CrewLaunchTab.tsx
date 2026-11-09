@@ -63,7 +63,7 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
   return (
     <section className="crew-launch-card">
       <div className="crew-launch-title">
-        <div><span className="crew-kicker">Next wake</span><h3>Launch settings</h3></div>
+        <div><span className="crew-kicker">Next session</span><h3>Launch settings</h3></div>
         <div className={`crew-save-state is-${edit.state}`} role="status" aria-live="polite">
           {launchSaveCopy(edit.state)}
           {edit.state === 'error' && <button type="button" onClick={() => autosave.retry(member.id)}>Retry</button>}
@@ -87,8 +87,8 @@ function LaunchCard({ member, edit, harnesses, harness, effectiveAgent, catalogL
         </div>
       )}
       <div className="crew-acknowledged" data-testid="crew-acknowledged">
-        <span>Acknowledged next wake</span>
-        <HarnessRouteBadge value={routeFromStored(edit.acknowledged.resolved_agent || '', edit.acknowledged.resolved_model || '', edit.acknowledged.resolved_effort || '')} label="Acknowledged next wake" />
+        <span>Acknowledged next session</span>
+        <HarnessRouteBadge value={routeFromStored(edit.acknowledged.resolved_agent || '', edit.acknowledged.resolved_model || '', edit.acknowledged.resolved_effort || '')} label="Acknowledged next session" />
       </div>
       {edit.error && <div className="crew-save-error">{edit.error}</div>}
     </section>
@@ -139,8 +139,8 @@ export interface CrewLaunchTabProps {
   autosave: LaunchAutosave;
   loadModels: (harness: string, refresh?: boolean) => Promise<HarnessModelCatalog>;
   isConnected: boolean;
-  onSleep: () => void;
-  onWake: () => void;
+  onAskClose: () => void;
+  onStart: () => void;
 }
 
 export function CrewLaunchTab({
@@ -153,8 +153,8 @@ export function CrewLaunchTab({
   onRetryCatalog,
   autosave,
   isConnected,
-  onSleep,
-  onWake,
+  onAskClose,
+  onStart,
 }: CrewLaunchTabProps) {
   const selection = edit.draft;
   const clearingAgent = selection.agent === '' && Boolean(edit.acknowledged.agent);
@@ -177,15 +177,15 @@ export function CrewLaunchTab({
       />
       {member.binding_session && <ApplySettings key={member.id} member={member} saved={edit.state === 'saved'} isConnected={isConnected} />}
       <section className="crew-session-action">
-        <h3>{member.binding_session ? 'Sleep member' : 'Wake member'}</h3>
+        <h3>{member.binding_session ? 'Close session' : 'Start session'}</h3>
         <button
           type="button"
-          data-testid={member.binding_session ? 'crew-sleep' : 'crew-wake'}
+          data-testid={member.binding_session ? 'crew-close' : 'crew-start'}
           disabled={!isConnected || (!member.binding_session && edit.state !== 'saved')}
           title={!member.binding_session && edit.state !== 'saved' ? 'Wait for launch settings to be saved' : undefined}
-          onClick={member.binding_session ? onSleep : onWake}
+          onClick={member.binding_session ? onAskClose : onStart}
         >
-          {member.binding_session ? 'Sleep' : 'Wake'}
+          {member.binding_session ? 'Close' : 'Start'}
         </button>
       </section>
     </>

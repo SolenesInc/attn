@@ -23,7 +23,7 @@
 }
 
 .queue-row .queue-row-age,
-.queue-row .queue-row-wake-at {
+.queue-row .queue-row-snoozed-until {
   margin: 0;
   color: inherit;
   font-size: inherit;
@@ -61,7 +61,7 @@
   height: 14px;
 }
 
-.queue-row--crew[data-crew-wake] > .session-actions {
+.queue-row--crew[data-crew-start] > .session-actions {
   opacity: 1;
   pointer-events: auto;
 }

@@ -55,7 +55,7 @@ func crewRecipient() Recipient {
 	noHoldings := Use("crew.garden-empty", "content/crew/garden-empty.md")
 
 	greeting := Use("crew.v2.new-session", "content/crew/v2/new-session.md")
-	startCause := TextField("start_cause", "Rendered by inboxWakeCause: the unread items that started this session, one per line. Blank when the user started it.")
+	startCause := TextField("start_cause", "Rendered by inboxStartCause: the unread items that started this session, one per line. Blank when the user started it.")
 	charterDecides := FlagField("charter_decides", "The member has a charter and is not the Chief or onboarding, so its charter decides what a session started for updates does.")
 	startedForItemsCharter := Use("crew.v2.started-for-items-charter", "content/crew/v2/started-for-items-charter.md")
 
@@ -77,11 +77,11 @@ func crewRecipient() Recipient {
 					noLetter),
 				When(Present(holdings), Input(holdings)),
 				closure)),
-		On("new-session", "user_message", "crew_wake.go: the session's first message.", Choose(Present(startCause),
+		On("new-session", "user_message", "crew_start.go: the session's first message.", Choose(Present(startCause),
 			Compose(template("crew.started-for-items", "content/crew/started-for-items.md", startCause), Choose(Enabled(charterDecides), startedForItemsCharter, greeting)),
 			greeting)),
 		On("successor", "user_message", "crew_handoff.go: successor on a new harness after crew apply.", Use("crew.v2.successor", "content/crew/v2/successor.md")),
-		On("close-requested", "user_message", "crew_sleep.go: the user asked the member to close.", Use("crew.close-requested", "content/crew/close-requested.md")),
+		On("close-requested", "user_message", "crew_close.go: the user asked the member to close.", Use("crew.close-requested", "content/crew/close-requested.md")),
 		On("settings-applied", "user_message", "crew_apply.go: the member's session reloaded in place with its saved settings.", Use("crew.settings-applied", "content/crew/settings-applied.md", Bind("charter_path", Input(TextField("charter_path", "Charter path."))))),
 		On("switch-requested", "user_message", "crew_apply.go: the member's saved harness differs from its running session.", Use("crew.switch-requested", "content/crew/switch-requested.md", Bind("agent", Input(TextField("agent", "Saved harness."))))),
 		On("heartbeat", "user_message", "crew_lifecycle.go: keep the context cache warm.", Use("crew.heartbeat", "content/crew/heartbeat.md")),

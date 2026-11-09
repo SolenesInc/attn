@@ -64,7 +64,7 @@ export const scenarioCatalog = [
   {
     id: 'launch-desktops',
     runnerId: 'LAUNCH-DESKTOPS',
-    label: 'Launch desktops: mandatory review, named pending sharing, settings, protected errors and quiet background wakes',
+    label: 'Launch desktops: mandatory review, named pending sharing, settings, protected errors and quiet background starts',
     command: ['node', 'scripts/real-app-harness/scenario-launch-desktops.mjs'],
   },
   {
@@ -92,7 +92,7 @@ export const scenarioCatalog = [
   {
     id: 'prompt-composition',
     runnerId: 'PromptComposition',
-    label: 'Prompt delivery: ordinary/chief channels, peer/user attribution, quick capture file retrieval, crew wake/sleep and successor',
+    label: 'Prompt delivery: ordinary/chief channels, peer/user attribution, quick capture file retrieval, crew start, close and successor',
     command: ['node', 'scripts/real-app-harness/scenario-prompt-composition.mjs'],
     timeoutMs: 240_000,
   },

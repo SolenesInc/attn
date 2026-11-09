@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "1ae7aa23a8c1";
+pub const PROTOCOL_VERSION: &str = "1f44dc54d8b9";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2389,6 +2389,66 @@ impl CrewCharterSetResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CrewCloseMessage {
+    pub cmd: String,
+    pub member: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_session_id: Option<SessionID>,
+}
+
+impl CrewCloseMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "crew_close".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CrewCloseResult {
+    pub already_closed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_status: Option<AgentMsgStatus>,
+    pub detail: String,
+    pub member: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CrewCloseResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub already_closed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery_status: Option<AgentMsgStatus>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member: Option<String>,
+    pub request_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
+    pub success: bool,
+}
+
+impl CrewCloseResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "crew_close_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CrewCreateMessage {
     pub cmd: String,
     pub name: String,
@@ -2690,7 +2750,7 @@ pub struct CrewRenameResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_dir: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub home_moves_at_wake: Option<bool>,
+    pub home_moves_at_start: Option<bool>,
     pub member: String,
     pub name: String,
     pub previous_name: String,
@@ -2763,14 +2823,14 @@ impl CrewRetireMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CrewRetireResult {
     pub already_retired: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub close: Option<CrewCloseResult>,
     #[serde(deserialize_with = "null_as_default")]
     pub closed_asks: Vec<String>,
     pub member: CrewMember,
     #[serde(deserialize_with = "null_as_default")]
     pub released_seeds: Vec<String>,
     pub removed_watches: i64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sleep: Option<CrewSleepResult>,
     pub unread: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -2844,83 +2904,7 @@ impl CrewSetResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewSleepMessage {
-    pub cmd: String,
-    pub member: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub source_session_id: Option<SessionID>,
-}
-
-impl CrewSleepMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            cmd: "crew_sleep".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewSleepResult {
-    pub already_asleep: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delivery_status: Option<AgentMsgStatus>,
-    pub detail: String,
-    pub member: String,
-    pub name: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<SessionID>,
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewSleepResultMessage {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub already_asleep: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub delivery_status: Option<AgentMsgStatus>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-    pub event: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub member: Option<String>,
-    pub request_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub session_id: Option<SessionID>,
-    pub success: bool,
-}
-
-impl CrewSleepResultMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "crew_sleep_result".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewUpdatedMessage {
-    pub event: String,
-    #[serde(deserialize_with = "null_as_default")]
-    pub members: Vec<CrewMember>,
-}
-
-impl CrewUpdatedMessage {
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
-            event: "crew_updated".to_string(),
-            ..Self::default()
-        }
-    }
-}
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewWakeMessage {
+pub struct CrewStartMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<String>,
     pub cmd: String,
@@ -2933,18 +2917,18 @@ pub struct CrewWakeMessage {
     pub source_session_id: Option<SessionID>,
 }
 
-impl CrewWakeMessage {
+impl CrewStartMessage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            cmd: "crew_wake".to_string(),
+            cmd: "crew_start".to_string(),
             ..Self::default()
         }
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewWakeResult {
-    pub already_awake: bool,
+pub struct CrewStartResult {
+    pub already_in_session: bool,
     pub member: String,
     pub name: String,
     pub profile_id: String,
@@ -2953,9 +2937,9 @@ pub struct CrewWakeResult {
     pub session_id: SessionID,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct CrewWakeResultMessage {
+pub struct CrewStartResultMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub already_awake: Option<bool>,
+    pub already_in_session: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub event: String,
@@ -2973,11 +2957,27 @@ pub struct CrewWakeResultMessage {
     pub success: bool,
 }
 
-impl CrewWakeResultMessage {
+impl CrewStartResultMessage {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            event: "crew_wake_result".to_string(),
+            event: "crew_start_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CrewUpdatedMessage {
+    pub event: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub members: Vec<CrewMember>,
+}
+
+impl CrewUpdatedMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "crew_updated".to_string(),
             ..Self::default()
         }
     }
@@ -8794,6 +8794,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_charter_set_result: Option<CrewCharterSetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crew_close_result: Option<CrewCloseResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_create_result: Option<CrewCreateResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_handoff_get_result: Option<CrewHandoffGetResult>,
@@ -8816,9 +8818,7 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub crew_set_result: Option<CrewSetResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crew_sleep_result: Option<CrewSleepResult>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub crew_wake_result: Option<CrewWakeResult>,
+    pub crew_start_result: Option<CrewStartResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -10424,10 +10424,10 @@ pub struct SeedStandbyView {
     pub note: String,
     #[serde(deserialize_with = "null_as_default")]
     pub pull_requests: Vec<SeedWatchedPullRequest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_blocked: Option<String>,
     pub set_at: String,
     pub set_by: ActorView,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub wake_blocked: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedTransitionMessage {
@@ -13833,6 +13833,9 @@ impl ResponseField for CrewCharterGetResult {
 impl ResponseField for CrewCharterSetResult {
     const FIELD: &'static str = "crew_charter_set_result";
 }
+impl ResponseField for CrewCloseResult {
+    const FIELD: &'static str = "crew_close_result";
+}
 impl ResponseField for CrewCreateResult {
     const FIELD: &'static str = "crew_create_result";
 }
@@ -13866,11 +13869,8 @@ impl ResponseField for CrewRetireResult {
 impl ResponseField for CrewSetResult {
     const FIELD: &'static str = "crew_set_result";
 }
-impl ResponseField for CrewSleepResult {
-    const FIELD: &'static str = "crew_sleep_result";
-}
-impl ResponseField for CrewWakeResult {
-    const FIELD: &'static str = "crew_wake_result";
+impl ResponseField for CrewStartResult {
+    const FIELD: &'static str = "crew_start_result";
 }
 impl ResponseField for DelegateResult {
     const FIELD: &'static str = "delegate_result";

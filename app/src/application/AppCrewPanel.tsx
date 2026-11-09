@@ -15,7 +15,7 @@ export function AppCrewPanel() {
   const seeds = useDaemonStore((state) => state.seeds);
   const seedsTotal = useDaemonStore((state) => state.seedsTotal);
   const { crewPanel, handleCloseCrew } = useCrewPanelContext();
-  const { handleOpenSeedFromCrew, handleWakeCrewMember, handleSleepCrewMember } = useAppGardenActionsContext();
+  const { handleOpenSeedFromCrew, handleStartCrewMember, handleCloseCrewMember } = useAppGardenActionsContext();
   return (
     <CrewPanel
       visit={crewPanel.visit}
@@ -27,8 +27,8 @@ export function AppCrewPanel() {
       seeds={seeds}
       seedsTotal={seedsTotal}
       onClose={handleCloseCrew}
-      onWakeMember={handleWakeCrewMember}
-      onSleepMember={handleSleepCrewMember}
+      onStartMember={handleStartCrewMember}
+      onCloseMember={handleCloseCrewMember}
       onOpenSeed={handleOpenSeedFromCrew}
     />
   );

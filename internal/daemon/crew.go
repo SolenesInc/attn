@@ -553,10 +553,10 @@ func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.Cre
 	if member.Effort != "" {
 		wire.Effort = protocol.Ptr(member.Effort)
 	}
-	if model := d.crewWakeModel(member, member.LaunchAgent()); model != nil {
+	if model := d.crewStartModel(member, member.LaunchAgent()); model != nil {
 		wire.ResolvedModel = model
 	}
-	if effort := d.crewWakeEffort(member, member.LaunchAgent()); effort != nil {
+	if effort := d.crewStartEffort(member, member.LaunchAgent()); effort != nil {
 		wire.ResolvedEffort = effort
 	}
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)

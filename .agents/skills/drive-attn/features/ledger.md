@@ -68,7 +68,7 @@ Preconditions:
 
 ```json
 {"version": 1, "resumable": true, "turns": [
-  {"includes": "You have been woken", "actions": [{"type": "reply", "text": "Quill here."}]}
+  {"includes": "This is a new session", "actions": [{"type": "reply", "text": "Quill here."}]}
 ]}
 ```
 
@@ -95,7 +95,7 @@ Preconditions:
   - Run `./attn handoff --session <day> -m "Dear successor, keep the reasons." --json`. It prints the letter's `path` (`<letter>`), and the day closes. `ls "$Q/handoffs"` lists the letter with `<letter>.json` beside it.
   - Copy the letter into `$P`.
   - Re-read `./attn conversation list --json` until the row whose `session_ids` holds `<day>` has `kept` and `crew_letters` naming `quill` and the letter's file name. The row's `resume_id` is `<copy>`, and `./attn conversation list` shows the row kept because of `crew letter quill <letter file>`.
-  - Wake, wait and hand off once more the same way for a second copy, `<copy2>` with `<letter2>`, for the app step.
+  - Start, wait and hand off once more the same way for a second copy, `<copy2>` with `<letter2>`, for the app step.
 - **Forget refuses a crew copy.** Run `./attn conversation forget conversation:<copy>`. It exits 1 with `error: daemon error: conversation <copy> is kept by crew letters: quill <letter file>; to leave the letters and delete their transcript, rerun with --unlink-crew-letters`. The letter and `<letter>.json` are unchanged.
 - **Forget with consent.** Run `./attn conversation forget conversation:<copy> --unlink-crew-letters`. It prints `deleted attn's copy of conversation conversation:<copy>; Claude's own files are untouched`, then `letters that lost their transcript (letters are unchanged):` and `quill <letter file>`. `cmp <letter> $P/<letter file>` exits 0, `<letter>.json` is gone, and `./attn conversation list --all --json` shows the row with `kept.deleted_at` set and no `crew_letters`.
 - **Forget a crew copy in the app.** Open the ledger on Conversations (⌘⇧L, then `]` as above), click `.ledger-row[data-row-key="claude:<copy2>"] .ledger-row-title` natively and press `bridge native_key '{"key":"2"}'`. `bridge dom_text '{"selector":".ledger-inspector"}'` includes `These letters stay, but will no longer point to this transcript: Quill · <date>.` beside `Delete attn’s copy of`. Press Enter, which is Cancel: the confirmation goes and `<letter2>.json` is still there. Press `2` to ask again and `2` once more for "Forget now". Re-read `./attn conversation list --all --json` until the row for `<copy2>` has `kept.deleted_by` `"user"` and no `crew_letters`. `<letter2>` is unchanged, and `<letter2>.json` is gone. Press Escape.

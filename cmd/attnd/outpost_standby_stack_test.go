@@ -43,16 +43,16 @@ func (m *outpostMod) awaitClosed() {
 	})
 }
 
-func (m *outpostMod) wakeBlocked(t *testing.T, seed string) string {
+func (m *outpostMod) resumeBlocked(t *testing.T, seed string) string {
 	t.Helper()
 	standby := showSeed(t, m.home, outpostModSender, seed).Seed.Standby
 	if standby == nil {
 		t.Fatalf("%s left standby", seed)
 	}
-	return protocol.Deref(standby.WakeBlocked)
+	return protocol.Deref(standby.ResumeBlocked)
 }
 
-func TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns(t *testing.T) {
+func TestAnOutpostLostDuringTheResumesDirectoryCheckResumesTheTenderWhenItReturns(t *testing.T) {
 	var inspecting *testworld.Pause
 	m := newOutpostModPrepared(t, func(home, _ *testworld.Stack) { inspecting = home.PauseAt(pausepoint.TenderDirectoryInspecting) })
 	seed := m.onStandbyAndClosed(t)
@@ -68,7 +68,7 @@ func TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns(t 
 	if result := <-sent; result.Code != 0 || !strings.Contains(result.Stdout+result.Stderr, "unreachable") {
 		t.Fatalf("mail sent while the outpost was lost: %+v, want it queued naming the outpost", result)
 	}
-	if blocked := m.wakeBlocked(t, seed); blocked != "" {
+	if blocked := m.resumeBlocked(t, seed); blocked != "" {
 		t.Fatalf("a lost link blocked the wake: %s", blocked)
 	}
 
@@ -82,7 +82,7 @@ func TestAnOutpostLostDuringTheWakesDirectoryCheckWakesTheTenderWhenItReturns(t 
 	}
 }
 
-func TestAnOutpostDirectoryThatIsGoneOrUnusableBlocksTheWake(t *testing.T) {
+func TestAnOutpostDirectoryThatIsGoneOrUnusableBlocksTheResume(t *testing.T) {
 	for name, c := range map[string]struct {
 		leave func(t *testing.T, path string)
 		want  string
@@ -104,7 +104,7 @@ func TestAnOutpostDirectoryThatIsGoneOrUnusableBlocksTheWake(t *testing.T) {
 			c.leave(t, path)
 
 			m.sendMail(t, seed, "the pull request is approved")
-			if blocked := m.wakeBlocked(t, seed); !strings.Contains(blocked, c.want) {
+			if blocked := m.resumeBlocked(t, seed); !strings.Contains(blocked, c.want) {
 				t.Fatalf("the wake is blocked for %q, want %q", blocked, c.want)
 			}
 		})
@@ -125,7 +125,7 @@ func (m *outpostMod) answerReturnedBeforeItsPlacementAnswers(t *testing.T, answe
 	m.esc(t, "the answer")
 	answering.Release()
 	m.modEvent(t, fakeagent.ModEventRefusedStop, "Answer: Postgres")
-	if blocked := m.wakeBlocked(t, seed); blocked != "" {
+	if blocked := m.resumeBlocked(t, seed); blocked != "" {
 		t.Fatalf("the returned answer blocked the wake: %s", blocked)
 	}
 	return seed
@@ -152,7 +152,7 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersReachesClaudeOnTheNextTurn(t *
 	})
 }
 
-func TestAnAnswerReturnedBeforeItsPlacementAnswersWakesATenderThatCloses(t *testing.T) {
+func TestAnAnswerReturnedBeforeItsPlacementAnswersResumesATenderThatCloses(t *testing.T) {
 	var answering *testworld.Pause
 	m := newOutpostModPrepared(t, func(_, outpost *testworld.Stack) { answering = outpost.PauseAt(pausepoint.RingPlacementAnswering) })
 	m.answerReturnedBeforeItsPlacementAnswers(t, answering)

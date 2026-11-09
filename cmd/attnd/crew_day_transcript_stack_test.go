@@ -22,7 +22,7 @@ func TestForgetCrewLetterTranscriptRequiresConsent(t *testing.T) {
 			s.Start()
 			app := s.App()
 			awaitAgentAvailable(app, fakeagent.Claude)
-			var day protocol.CrewWakeResult
+			var day protocol.CrewStartResult
 			s.Attn("crew", "start", "trellis", "--json").JSON(t, &day)
 			run := s.Launched(string(day.SessionID))
 			run.Prompted()
@@ -138,7 +138,7 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			app := s.App()
 			awaitAgentAvailable(app, agent)
 			requireStdout(t, s.Attn("crew", "set", "trellis", "--agent", string(agent)), string(agent))
-			var day protocol.CrewWakeResult
+			var day protocol.CrewStartResult
 			s.Attn("crew", "start", "trellis", "--json").JSON(t, &day)
 			run := s.Launched(string(day.SessionID))
 			run.Prompted()

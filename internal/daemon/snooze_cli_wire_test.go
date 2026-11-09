@@ -98,7 +98,7 @@ func TestSnoozePermissionsIncludeDispatchersAndProfileChief(t *testing.T) {
 	if err := cli.SnoozeSession(protocol.SessionID(other), delegated.SessionID, until); err == nil || !strings.Contains(err.Error(), "may snooze itself") {
 		t.Fatalf("other dispatcher: %v", err)
 	}
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := chiefSession(t, cli)
 	if err := cli.SnoozeSession(chief, protocol.SessionID(other), until); err != nil {
 		t.Fatal(err)

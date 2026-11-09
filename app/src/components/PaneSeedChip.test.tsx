@@ -219,16 +219,16 @@ describe('seed lifecycle and context', () => {
 });
 
 describe('what the chip shows', () => {
-  const awakeMemberWork = daemonSeed('s-member', { title: 'Member work', ...memberClaim('fern', 's1') });
-  const asleepMemberWork = daemonSeed('s-member', { title: 'Member work', ...memberClaim('fern') });
+  const liveMemberWork = daemonSeed('s-member', { title: 'Member work', ...memberClaim('fern', 's1') });
+  const idleMemberWork = daemonSeed('s-member', { title: 'Member work', ...memberClaim('fern') });
   const sessionWork = daemonSeed('s-session', { title: 'Session work', ...sessionClaim('s1') });
   const oldDayWork = daemonSeed('s-oldday', { title: 'Old day work', ...sessionClaim('sess-old', { live: false }) });
   const otherMemberWork = daemonSeed('s-other', { title: 'Other work', ...memberClaim('oak', 's-oak') });
 
   it.each<[string, DaemonSeed[], Partial<DaemonSession>, string, string]>([
-    ['a crew day, its own claims and its member’s', [awakeMemberWork, sessionWork, otherMemberWork], { crew_member: 'fern' }, 'multi', 'tending 2'],
-    ['a new crew day, its member’s claims but not the last day’s', [awakeMemberWork, oldDayWork], { crew_member: 'fern' }, 'seed', 'Member work'],
-    ['an ordinary session, never a member’s claims', [asleepMemberWork, sessionWork], {}, 'seed', 'Session work'],
+    ['a crew day, its own claims and its member’s', [liveMemberWork, sessionWork, otherMemberWork], { crew_member: 'fern' }, 'multi', 'tending 2'],
+    ['a new crew day, its member’s claims but not the last day’s', [liveMemberWork, oldDayWork], { crew_member: 'fern' }, 'seed', 'Member work'],
+    ['an ordinary session, never a member’s claims', [idleMemberWork, sessionWork], {}, 'seed', 'Session work'],
     ['a tended seed as the plot when the rest sit under it', [
       daemonSeed('s-plot11', { title: 'the arc', ...sessionClaim('s1') }),
       daemonSeed('s-a', { title: 'a', ...sessionClaim('s1'), edges: [{ kind: 'part-of', to: 's-plot11' }] }),
@@ -245,10 +245,10 @@ describe('what the chip shows', () => {
   });
 
   it('drops a crew claim once its tender is cleared on release', async () => {
-    const daemon = await openAgent([awakeMemberWork], { crew_member: 'fern' });
+    const daemon = await openAgent([liveMemberWork], { crew_member: 'fern' });
     expect(chip()).toHaveTextContent('Member work');
 
-    pushSeeds(daemon, [{ ...awakeMemberWork, status: 'harvested', tender: undefined, claimed: false }]);
+    pushSeeds(daemon, [{ ...liveMemberWork, status: 'harvested', tender: undefined, claimed: false }]);
     await daemon.idle();
 
     expect(screen.queryByTestId('seed-chip-s1')).toBeNull();

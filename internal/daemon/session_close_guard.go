@@ -22,7 +22,7 @@ func (d *Daemon) sessionCloseError(sessionID protocol.SessionID) error {
 	for _, member := range members {
 		if member.BindingSession == sessionID {
 			name := member.Name
-			return fmt.Errorf("%s is protected from closing; put %s to sleep first", name, name)
+			return fmt.Errorf("%s is protected from closing; ask %s to close first", name, name)
 		}
 	}
 	return nil

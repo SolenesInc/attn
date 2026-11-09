@@ -482,7 +482,7 @@ func TestAUserMessageTheOutpostModReturnsReachesTheSessionOnce(t *testing.T) {
 	}
 }
 
-func TestSeedMailWakesAnOutpostClaudeTenderThroughTheMod(t *testing.T) {
+func TestSeedMailResumesAnOutpostClaudeTenderThroughTheMod(t *testing.T) {
 	m := newOutpostMod(t)
 	app := m.pair.App
 	m.workingOn(t, app, "write the essay")

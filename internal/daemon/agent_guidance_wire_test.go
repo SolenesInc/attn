@@ -108,7 +108,7 @@ func TestCrewLaunchesWithQuickCaptureGuidance(t *testing.T) {
 			w := newCrewWorld(t, fakeagent.Codex)
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-			day := w.Launched(string(wakeCrew(t, w.Client(), "alder", "codex").SessionID))
+			day := w.Launched(string(startCrew(t, w.Client(), "alder", "codex").SessionID))
 			if !strings.Contains(launchGuidance(t, w, day), "The user can send you messages from Quick Capture") {
 				t.Fatal("a crew member launched without the Quick Capture guidance")
 			}

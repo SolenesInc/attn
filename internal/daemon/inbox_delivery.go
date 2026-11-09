@@ -21,7 +21,7 @@ import (
 
 func inboxRingText() string { return prompts.RenderText("session", "inbox-notification", nil) }
 
-var errInboxNoUnread = errors.New("agent inbox has no unread items to wake for")
+var errInboxNoUnread = errors.New("agent inbox has no unread items to start a session for")
 var errInboxNoPromptReader = errors.New("agent inbox recipient is a shell pane")
 var errInboxDoorbellOutstanding = errors.New("agent inbox ring already outstanding")
 var errInboxDoorbellInFlight = errors.New("agent inbox ring already being placed")
@@ -31,13 +31,13 @@ func sessionReadsInboxDoorbells(session *protocol.Session) bool {
 }
 
 type inboxDeliveryState struct {
-	gate        chan struct{}
-	timer       *time.Timer
-	stopped     bool
-	wakeSession protocol.SessionID
-	tenderWake  *tenderWakeDelivery
-	pending     *inboxRing
-	rang        protocol.SessionID
+	gate           chan struct{}
+	timer          *time.Timer
+	stopped        bool
+	startedSession protocol.SessionID
+	tenderResume   *tenderResumeDelivery
+	pending        *inboxRing
+	rang           protocol.SessionID
 }
 
 func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
@@ -47,7 +47,7 @@ type inboxRing struct {
 	session            protocol.SessionID
 	input              sessionmonitor.Delivery
 	paste              inboxPaste
-	finishingWake      bool
+	finishingStart     bool
 	bellWaitsForPrompt bool
 	heldUntil          time.Time
 	at                 time.Time
@@ -109,8 +109,8 @@ func (d *Daemon) inboxRecipient(a who.Address) (*protocol.Session, string, error
 	return d.store.Get(id), memberID, nil
 }
 
-// inboxWakeRequester names who a wake for this address answers: the oldest unread message's sender.
-func (d *Daemon) inboxWakeRequester(a who.Address) string {
+// inboxStartRequester names who a mail start for this address answers: the oldest unread message's sender.
+func (d *Daemon) inboxStartRequester(a who.Address) string {
 	deliveries, err := d.store.UnreadInboxDeliveries(a)
 	if err != nil || len(deliveries) == 0 {
 		return ""
@@ -152,7 +152,7 @@ func (d *Daemon) deliverInbox(a who.Address) (inbox.Receipt, error) {
 func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (inbox.Receipt, error) {
 	receipt := inbox.Receipt{}
 	defer func() {
-		if state.timer != nil || state.wakeSession != "" || state.pending != nil {
+		if state.timer != nil || state.startedSession != "" || state.pending != nil {
 			return
 		}
 		d.inboxMu.Lock()
@@ -182,7 +182,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	}
 	if attempt.Unread == 0 {
 		state.pending = nil
-		state.wakeSession, state.tenderWake = "", nil
+		state.startedSession, state.tenderResume = "", nil
 		return receipt, nil
 	}
 	holder, memberID, err := d.inboxRecipient(a)
@@ -196,17 +196,17 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			return receipt, nil
 		}
 	}
-	finishingWake := holder != nil && holder.ID == state.wakeSession
-	if holder == nil || !finishingWake {
-		state.wakeSession, state.tenderWake = "", nil
+	finishingStart := holder != nil && holder.ID == state.startedSession
+	if holder == nil || !finishingStart {
+		state.startedSession, state.tenderResume = "", nil
 	}
-	tenderWake := state.tenderWake
-	if finishingWake && tenderWake != nil && tenderWake.claude && !d.claudeModReaches(holder.ID) {
+	tenderResume := state.tenderResume
+	if finishingStart && tenderResume != nil && tenderResume.claude && !d.claudeModReaches(holder.ID) {
 		receipt.Detail = fmt.Sprintf("queued: %s is reopening, and its mail waits for the Claude Code mod's first poll", sessionDisplayName(holder))
 		return receipt, nil
 	}
 	var bellHeldUntil time.Time
-	if !finishingWake {
+	if !finishingStart {
 		if attempt.Live == 0 && (holder == nil || attempt.FromUser == 0) {
 			return receipt, nil
 		}
@@ -225,8 +225,8 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			receipt.Detail = agentMessageQueuedDetail(errInboxDoorbellOutstanding)
 			if memberID != "" && holder == nil {
 				if member, _, err := d.crewMember(memberID); err == nil {
-					ledger := d.crewWakeLedger()
-					ledger.Stamps = parseWakeStamps(member.AutonomousWakes)
+					ledger := d.crewStartLedger()
+					ledger.Stamps = parseStartStamps(member.MailStarts)
 					if _, refusal := ledger.Allows(member.Name, now); refusal != nil {
 						receipt.Detail = refusal.Error()
 					}
@@ -240,16 +240,16 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					d.kickInbox(a)
 					return receipt, nil
 				}
-				cause, err := d.inboxWakeCause(a)
+				cause, err := d.inboxStartCause(a)
 				if err != nil {
 					return receipt, err
 				}
 				seedID, seedMail := a.TenderOf()
-				d.crewWakeMu.Lock()
-				result, err := d.crewWakeDayWithChargeLocked(member, "", attempt.FromUser == 0 && !seedMail, func() error {
+				d.crewStartMu.Lock()
+				result, err := d.crewStartSessionLocked(member, "", attempt.FromUser == 0 && !seedMail, func() error {
 					if seedMail {
-						if reopensAt, tripped := d.tenderWakes.reopensAt(seedID, d.clock.Now()); tripped {
-							return tenderWakeTripwire{reopensAt: reopensAt}
+						if reopensAt, tripped := d.tenderResumes.reopensAt(seedID, d.clock.Now()); tripped {
+							return tenderResumeTripwire{reopensAt: reopensAt}
 						}
 					}
 					started, err := d.store.StampInboxAttempt(a, now)
@@ -261,53 +261,53 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 					}
 					d.logInboxExhaustion(a)
 					if seedMail {
-						count := d.tenderWakes.charge(seedID, d.clock.Now())
-						d.unblockTenderWake(seedID)
-						d.logf("tender wake: seed %s woke %s for %s (wake %d of %d in %s)", seedID, d.crewMemberName(member), d.seedMailCause(a), count, tenderWakeLimit, tenderWakeWindow)
+						count := d.tenderResumes.charge(seedID, d.clock.Now())
+						d.unblockTenderResume(seedID)
+						d.logf("tender resume: seed %s started %s for %s (resume %d of %d in %s)", seedID, d.crewMemberName(member), d.seedMailCause(a), count, tenderResumeLimit, tenderResumeWindow)
 					}
 					return nil
-				}, crewWakeRequest{RequestedBy: d.inboxWakeRequester(a), Cause: cause})
-				d.crewWakeMu.Unlock()
+				}, crewStartRequest{RequestedBy: d.inboxStartRequester(a), Cause: cause})
+				d.crewStartMu.Unlock()
 				if errors.Is(err, errInboxNoUnread) {
 					return receipt, nil
 				}
-				if tripwire := (tenderWakeTripwire{}); errors.As(err, &tripwire) {
+				if tripwire := (tenderResumeTripwire{}); errors.As(err, &tripwire) {
 					seed, _, readErr := d.readSeed(seedID)
 					if readErr != nil {
 						return receipt, readErr
 					}
-					receipt.Detail = d.blockTenderWake(a, seed, tripwire.Error())
+					receipt.Detail = d.blockTenderResume(a, seed, tripwire.Error())
 					d.armInboxLocked(a, state, tripwire.reopensAt.Sub(d.clock.Now()))
 					return receipt, nil
 				}
 				if retired := (errRetiredMember{}); errors.As(err, &retired) || errors.Is(err, errChiefHasNoHarness) {
-					state.wakeSession = ""
+					state.startedSession = ""
 					receipt.Detail = err.Error()
 					return receipt, nil
 				}
 				if err != nil {
-					state.wakeSession = ""
-					d.logf("inbox: wake %s refused: %v", a, err)
+					state.startedSession = ""
+					d.logf("inbox: mail start for %s refused: %v", a, err)
 					receipt.Detail = err.Error()
 					d.armInboxLocked(a, state, inbox.AttemptDelay)
 					return receipt, nil
 				}
-				if result.AlreadyAwake {
-					state.wakeSession = ""
+				if result.AlreadyInSession {
+					state.startedSession = ""
 					d.kickInbox(a)
 					return receipt, nil
 				}
-				state.wakeSession = result.SessionID
+				state.startedSession = result.SessionID
 				if seedMail {
-					if state.tenderWake, err = d.memberTenderWake(seedID, result.SessionID); err != nil {
+					if state.tenderResume, err = d.memberTenderResume(seedID, result.SessionID); err != nil {
 						return receipt, err
 					}
 				}
-				receipt.Detail = fmt.Sprintf("woke %s in session %s; notification queued until it reaches a safe prompt", d.crewMemberName(member), shortSessionID(result.SessionID))
+				receipt.Detail = fmt.Sprintf("started %s in session %s; notification queued until it reaches a safe prompt", d.crewMemberName(member), shortSessionID(result.SessionID))
 				return receipt, nil
 			}
 			if seedID, seed := a.TenderOf(); seed {
-				return d.wakeStandbyTenderLocked(a, seedID, state, now)
+				return d.resumeStandbyTenderLocked(a, seedID, state, now)
 			} else {
 				receipt.Detail = "queued (recipient is gone; waits for it to return)"
 			}
@@ -328,8 +328,8 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if err != nil {
 			return receipt, err
 		}
-		if finishingWake && tenderWake != nil {
-			paste.text = d.tenderWakeText(tenderWake) + "\n\n" + paste.text
+		if finishingStart && tenderResume != nil {
+			paste.text = d.tenderResumeText(tenderResume) + "\n\n" + paste.text
 		}
 		when := sessionmonitor.WhenWorkingOrPromptReady
 		if paste.notified {
@@ -339,20 +339,20 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		input.BypassInitialGate = true
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
-		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingWake: finishingWake, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil, at: at}
+		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingStart: finishingStart, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil, at: at}
 		state.pending = pending
 	}
 	paste := pending.paste
-	finishingWake, bellWaitsForPrompt, bellHeldUntil := pending.finishingWake, pending.bellWaitsForPrompt, pending.heldUntil
+	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.finishingStart, pending.bellWaitsForPrompt, pending.heldUntil
 	placement := d.placeDelivery(context.Background(), holder.ID, pending.input)
 	if placement.Stage == sessionmonitor.Placed {
-		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, pending.at)
+		readAt, err := d.store.RingInbox(a, finishingStart, paste.typed, holder.ID, paste.notified, pending.at)
 		pausepoint.Done(pausepoint.InboxRingRecorded, err)
 		if err != nil {
 			return receipt, err
 		}
 		state.pending = nil
-		state.tenderWake = nil
+		state.tenderResume = nil
 		state.rang = holder.ID
 		for _, captureID := range paste.captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
@@ -364,9 +364,9 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			d.endStandbyOnceMailRead(a)
 		}
 		if !bellWaitsForPrompt {
-			state.wakeSession = ""
+			state.startedSession = ""
 		}
-		if !finishingWake {
+		if !finishingStart {
 			d.logInboxExhaustion(a)
 		}
 		if paste.notified {

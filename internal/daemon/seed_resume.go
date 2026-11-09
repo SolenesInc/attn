@@ -55,7 +55,7 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	if garden.Closed(seed.Status) {
 		return nil, protocol.Refuse(protocol.RefusalWrongState, "%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
-	return d.wakeSeedTender(protection, seed, tenderWakeCause{
+	return d.resumeSeedTender(protection, seed, tenderResumeCause{
 		tend: func(claimant who.Party, actor who.Actor) error {
 			_, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 				seedID, garden.VerbTend, garden.Ask{Actor: actor, Claimant: claimant}, "", expectedRev)
@@ -69,24 +69,24 @@ func (d *Daemon) resumeSeedFromReviewProtected(
 	})
 }
 
-type tenderWakeCause struct {
+type tenderResumeCause struct {
 	tend   func(claimant who.Party, actor who.Actor) error
 	settle func()
 	mail   bool
 }
 
-type tenderWakeBlocked struct{ err error }
+type tenderResumeBlocked struct{ err error }
 
-func (e tenderWakeBlocked) Error() string { return e.err.Error() }
-func (e tenderWakeBlocked) Unwrap() error { return e.err }
+func (e tenderResumeBlocked) Error() string { return e.err.Error() }
+func (e tenderResumeBlocked) Unwrap() error { return e.err }
 
-func blockedWake(err error) error { return tenderWakeBlocked{err: err} }
+func blockedResume(err error) error { return tenderResumeBlocked{err: err} }
 
-func (d *Daemon) wakeSeedTender(protection foregroundCleanupProtection, seed garden.Seed, cause tenderWakeCause) (*seedResumeOutcome, error) {
-	return d.wakeFromContinuation(protection, seed, d.continuationOnItsMachine(seed), cause)
+func (d *Daemon) resumeSeedTender(protection foregroundCleanupProtection, seed garden.Seed, cause tenderResumeCause) (*seedResumeOutcome, error) {
+	return d.resumeFromContinuation(protection, seed, d.continuationOnItsMachine(seed), cause)
 }
 
-func (d *Daemon) wakeFromContinuation(protection foregroundCleanupProtection, seed garden.Seed, continuation *seedContinuation, cause tenderWakeCause) (*seedResumeOutcome, error) {
+func (d *Daemon) resumeFromContinuation(protection foregroundCleanupProtection, seed garden.Seed, continuation *seedContinuation, cause tenderResumeCause) (*seedResumeOutcome, error) {
 	seedID := seed.ID
 	tend, settle := cause.tend, cause.settle
 	var executed protocol.SessionID
@@ -98,23 +98,23 @@ func (d *Daemon) wakeFromContinuation(protection foregroundCleanupProtection, se
 	}
 	if continuation == nil {
 		if !seed.Tender.IsZero() {
-			return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender)))
+			return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "%s was tended by %s, but no continuation was saved", seedID, d.partyName(seed.Tender)))
 		}
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
 	}
 	execution := continuation.Execution
 	sessionID := protocol.TrimID(execution.SessionID)
 	if sessionID == "" {
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "%s has no agent conversation to resume", seedID))
 	}
 	if tender, _ := seed.Tender.Session(); cause.mail && tender != sessionID {
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s names session %s as its tender, but its saved conversation is session %s's; resume it from the Garden to choose", seedID, shortSessionID(tender), shortSessionID(sessionID)))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "%s names session %s as its tender, but its saved conversation is session %s's; resume it from the Garden to choose", seedID, shortSessionID(tender), shortSessionID(sessionID)))
 	}
 	actor := who.Session(sessionID)
 	if existing := d.store.Get(sessionID); existing != nil && existing.ProfileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		caller, _ := d.store.GetProfile(existing.ProfileID)
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its previous agent now belongs to profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, caller.Name))
 	}
 	if existing := d.store.Get(sessionID); existing != nil && d.sessionHasLiveWorker(sessionID) {
 		if err := tend(actor, actor.Actor()); err != nil {
@@ -134,18 +134,18 @@ func (d *Daemon) wakeFromContinuation(protection foregroundCleanupProtection, se
 		if continuation.ResumeCheckFailed {
 			return nil, refusal
 		}
-		return nil, blockedWake(refusal)
+		return nil, blockedResume(refusal)
 	}
 	recorded := sessionReopenVerdict{SessionID: sessionID}
 	d.planReopenProfile(&recorded)
 	if recorded.ProfileDeleted {
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: its profile was deleted", seedID))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "%s cannot resume: its profile was deleted", seedID))
 	}
 	profileID := recorded.ProfileID
 	if profileID != seed.ProfileID {
 		owner, _ := d.store.GetProfile(seed.ProfileID)
 		target, _ := d.store.GetProfile(profileID)
-		return nil, blockedWake(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name))
+		return nil, blockedResume(protocol.Refuse(protocol.RefusalWrongState, "seed %s belongs to profile %q; its conversation would reopen in profile %q: hand the seed to a new agent in its own profile", seed.ID, owner.Name, target.Name))
 	}
 	if err := tend(actor, actor.Actor()); err != nil {
 		return nil, err
@@ -184,23 +184,23 @@ func (d *Daemon) resumeMemberSeed(
 	seed garden.Seed, key who.MemberKey, tend func(who.Party, who.Actor) error, settle func(), claim bool,
 ) (*seedResumeOutcome, error) {
 	if retired, ok := d.retiredCrewMember(key.String()); ok {
-		return nil, blockedWake(retiredMemberError(retired))
+		return nil, blockedResume(retiredMemberError(retired))
 	}
 	if claim {
 		if err := tend(who.Member(key), who.User()); err != nil {
 			return nil, err
 		}
 	}
-	woken, err := d.crewWake(key.String(), "")
+	started, err := d.crewStart(key.String(), "")
 	if err != nil {
 		return nil, err
 	}
 	settle()
-	profileID := woken.ProfileID
+	profileID := started.ProfileID
 	if profileID == "" {
 		profileID = seed.ProfileID
 	}
-	return &seedResumeOutcome{SessionID: woken.SessionID, ProfileID: profileID, AlreadyRunning: woken.AlreadyAwake}, nil
+	return &seedResumeOutcome{SessionID: started.SessionID, ProfileID: profileID, AlreadyRunning: started.AlreadyInSession}, nil
 }
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {

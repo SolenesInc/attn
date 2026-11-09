@@ -177,7 +177,7 @@ func sessionOfDelegate(t *testing.T, w *world, sessionID string) protocol.Sessio
 func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	wakeConfiguredChief(t, w, cli)
+	startConfiguredChief(t, w, cli)
 	chief := string(chiefSession(t, cli))
 	cwd := w.Path("chief")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
@@ -212,7 +212,7 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	crewHandoff(t, cli, chief, "The backlog audit is delegated.", false)
 	w.restart()
 	if marked := sessionOfDelegate(t, w, string(result.SessionID)); !protocol.Deref(marked.DelegatedFromChief) {
-		t.Errorf("after the Chief went to sleep and the daemon restarted, the chief's delegate reads as %+v; want it still delegated_from_chief", marked)
+		t.Errorf("after the Chief closed its session and the daemon restarted, the chief's delegate reads as %+v; want it still delegated_from_chief", marked)
 	}
 }
 

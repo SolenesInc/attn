@@ -145,7 +145,7 @@ export function Dashboard({
       .sort(compareWakeOrder);
   }, [queue, chiefSession, sessions, now]);
 
-  const awakeSessions = useMemo(() => {
+  const unsnoozedSessions = useMemo(() => {
     const deferred = new Set(snoozedSessions.map((s) => s.id));
     return sessions.filter((s) => !deferred.has(s.id));
   }, [sessions, snoozedSessions]);
@@ -156,8 +156,8 @@ export function Dashboard({
 
   const settledSessions = useMemo(() => {
     const turns = new Set(turnSessions.map((session) => session.id));
-    return awakeSessions.filter((session) => !turns.has(session.id));
-  }, [awakeSessions, turnSessions]);
+    return unsnoozedSessions.filter((session) => !turns.has(session.id));
+  }, [unsnoozedSessions, turnSessions]);
 
   const stateGroups = useMemo(() => (
     STATE_GROUPS
@@ -200,7 +200,7 @@ export function Dashboard({
 
   const renderSessionRow = (
     s: DashboardSession,
-    { age, wake }: { age?: string; wake?: string } = {},
+    { age, snoozedUntil }: { age?: string; snoozedUntil?: string } = {},
   ) => (
     <div
       key={s.id}
@@ -218,14 +218,14 @@ export function Dashboard({
       </div>
       {s.chiefOfStaff && <ChiefOfStaffBadge compact />}
       {age && <span className="session-turn-age">{age}</span>}
-      {wake && <span className="session-wake-at">{wake}</span>}
-      {wake && !s.offline && onWakeTurn && (
+      {snoozedUntil && <span className="session-snoozed-until">{snoozedUntil}</span>}
+      {snoozedUntil && !s.offline && onWakeTurn && (
         <button
           type="button"
-          className="session-wake-btn"
-          data-testid={`session-wake-${s.id}`}
-          title="Wake now — bring it back to the queue"
-          aria-label={`Wake ${sessionDisplayName(s)}`}
+          className="session-unsnooze-btn"
+          data-testid={`session-unsnooze-${s.id}`}
+          title="Unsnooze — bring it back to the queue"
+          aria-label={`Unsnooze ${sessionDisplayName(s)}`}
           onClick={(event) => {
             event.stopPropagation();
             onWakeTurn(s.id);
@@ -512,7 +512,7 @@ export function Dashboard({
                       <span className="group-count">{snoozedSessions.length}</span>
                     </button>
                     {snoozedExpanded && snoozedSessions.map((s) => (
-                      renderSessionRow(s, { wake: formatWakeTime(s.turnSnoozedUntil, now) })
+                      renderSessionRow(s, { snoozedUntil: formatWakeTime(s.turnSnoozedUntil, now) })
                     ))}
                   </div>
                 )}

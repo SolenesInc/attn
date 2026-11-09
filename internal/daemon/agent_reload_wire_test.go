@@ -79,9 +79,9 @@ func TestAgentReloadAllIncludesChiefAndCrewButOnlyInTheirProfile(t *testing.T) {
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
+		chief := string(startCrew(t, cli, "chief", "").SessionID)
 		worker := w.Spawn(app, fakeagent.Claude, w.Path("worker"), withIDPrefix("shared-"))
-		crew := string(wakeCrew(t, cli, "trellis", "").SessionID)
+		crew := string(startCrew(t, cli, "trellis", "").SessionID)
 		w.Spawn(app, shellHarness, w.Path("shell"))
 		profile := createProfile(app, "Other profile")
 		foreignApp := w.AppOn(profile.ID)
@@ -114,15 +114,15 @@ func TestAgentReloadAllIncludesChiefAndCrewButOnlyInTheirProfile(t *testing.T) {
 	})
 }
 
-func TestAgentReloadReachesAnAwakeCrewMemberByName(t *testing.T) {
+func TestAgentReloadReachesACrewMemberInSessionByName(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		writeCrewCharter(t, w, "trellis")
 		writeCrewCharter(t, w, "fern")
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-		chief := string(wakeCrew(t, cli, "chief", "").SessionID)
-		member := wakeCrew(t, cli, "trellis", "").SessionID
+		chief := string(startCrew(t, cli, "chief", "").SessionID)
+		member := startCrew(t, cli, "trellis", "").SessionID
 		result, err := cli.AgentReload([]string{"Trellis"}, protocol.SessionID(chief), false)
 		if err != nil || len(result.Outcomes) != 1 || !result.Outcomes[0].Success || protocol.Deref(result.Outcomes[0].SessionID) != member {
 			t.Fatalf("reload Trellis = %+v, %v; want crew session %s", result, err, member)
@@ -131,8 +131,8 @@ func TestAgentReloadReachesAnAwakeCrewMemberByName(t *testing.T) {
 		testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
 
 		asleep, err := cli.AgentReload([]string{"fern"}, protocol.SessionID(chief), false)
-		if err != nil || len(asleep.Outcomes) != 1 || asleep.Outcomes[0].Success || !strings.Contains(protocol.Deref(asleep.Outcomes[0].Error), "asleep") {
-			t.Fatalf("reload of a sleeping member = %+v, %v; want a refusal saying it is asleep", asleep, err)
+		if err != nil || len(asleep.Outcomes) != 1 || asleep.Outcomes[0].Success || !strings.Contains(protocol.Deref(asleep.Outcomes[0].Error), "between sessions") {
+			t.Fatalf("reload of a sleeping member = %+v, %v; want a refusal saying it is between sessions", asleep, err)
 		}
 		if roster := crewRosterMember(t, cli, "fern"); protocol.Deref(roster.BindingSession) != "" {
 			t.Fatalf("reload woke fern into %s", protocol.Deref(roster.BindingSession))

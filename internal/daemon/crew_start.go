@@ -21,11 +21,11 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-const crewWakeAgent = crew.DefaultAgent
+const crewStartAgent = crew.DefaultAgent
 
-const crewWakeFallbackModel = "fable"
+const crewStartFallbackModel = "fable"
 
-func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
+func (d *Daemon) crewStartModel(member crew.Member, agent string) *string {
 	ownHarness := strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent())
 	chosen := strings.TrimSpace(member.Model)
 	if ownHarness && chosen != "" && chosen != crew.HarnessDefaultModel {
@@ -34,13 +34,13 @@ func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
 	if model := d.defaultLaunchModel(agent); model != "" {
 		return protocol.Ptr(model)
 	}
-	if strings.TrimSpace(strings.ToLower(agent)) == crewWakeAgent && !(ownHarness && chosen == crew.HarnessDefaultModel) {
-		return protocol.Ptr(crewWakeFallbackModel)
+	if strings.TrimSpace(strings.ToLower(agent)) == crewStartAgent && !(ownHarness && chosen == crew.HarnessDefaultModel) {
+		return protocol.Ptr(crewStartFallbackModel)
 	}
 	return nil
 }
 
-func (d *Daemon) crewWakeEffort(member crew.Member, agent string) *string {
+func (d *Daemon) crewStartEffort(member crew.Member, agent string) *string {
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if effort := strings.TrimSpace(member.Effort); effort != "" {
 			return protocol.Ptr(effort)
@@ -62,8 +62,8 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 	return false
 }
 
-// A wake the user did not start is announced with who asked for it.
-type crewWakeRequest struct {
+// A start the user did not ask for is announced with who asked for it.
+type crewStartRequest struct {
 	RequestedBy string
 	UserStarted bool
 	Cause       string
@@ -191,33 +191,33 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, member crew.Member) {
 	}
 }
 
-func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewStartAsked(msg *protocol.CrewStartMessage, request crewStartRequest) (*protocol.CrewStartResult, error) {
 	member, err := d.crewAskedMember(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
 		return nil, err
 	}
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
-	return d.crewWakeDayWithChargeLocked(member.ID, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
+	return d.crewStartSessionLocked(member.ID, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))), false, nil, request)
 }
 
-func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg, crewWakeRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew start")})
+func (d *Daemon) handleCrewStart(conn net.Conn, msg *protocol.CrewStartMessage) {
+	result, err := d.crewStartAsked(msg, crewStartRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew start")})
 	if err != nil {
 		d.sendCrewError(conn, "start", err)
 		return
 	}
-	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewWakeResult: result})
+	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewStartResult: result})
 }
 
-func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg, crewWakeRequest{UserStarted: true})
+func (d *Daemon) handleCrewStartWS(client *wsClient, msg *protocol.CrewStartMessage) {
+	result, err := d.crewStartAsked(msg, crewStartRequest{UserStarted: true})
 	var showErr error
 	if err == nil {
-		showErr = d.showCrewWake(result, client, protocol.Deref(msg.RequestID))
+		showErr = d.showCrewStart(result, client, protocol.Deref(msg.RequestID))
 	}
-	response := protocol.CrewWakeResultMessage{
-		Event:     protocol.EventCrewWakeResult,
+	response := protocol.CrewStartResultMessage{
+		Event:     protocol.EventCrewStartResult,
 		RequestID: protocol.Deref(msg.RequestID),
 		Success:   err == nil,
 	}
@@ -227,8 +227,8 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 		response.Member = protocol.Ptr(result.Member)
 		response.SessionID = protocol.Ptr(result.SessionID)
 		response.ProfileID = protocol.Ptr(result.ProfileID)
-		if result.AlreadyAwake {
-			response.AlreadyAwake = protocol.Ptr(true)
+		if result.AlreadyInSession {
+			response.AlreadyInSession = protocol.Ptr(true)
 		}
 		response.ReleasedSessionID = result.ReleasedSessionID
 		if showErr != nil {
@@ -238,53 +238,53 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 	d.sendToClient(client, response)
 }
 
-func (d *Daemon) crewWake(name, agent string) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeWithCharge(name, agent, false)
+func (d *Daemon) crewStart(name, agent string) (*protocol.CrewStartResult, error) {
+	return d.crewStartWithCharge(name, agent, false)
 }
 
-func (d *Daemon) crewWakeWithCharge(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	d.crewWakeMu.Lock()
-	defer d.crewWakeMu.Unlock()
-	return d.crewWakeWithChargeLocked(name, agent, autonomous)
+func (d *Daemon) crewStartWithCharge(name, agent string, autonomous bool) (*protocol.CrewStartResult, error) {
+	d.crewStartMu.Lock()
+	defer d.crewStartMu.Unlock()
+	return d.crewStartWithChargeLocked(name, agent, autonomous)
 }
 
-func (d *Daemon) crewWakeWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewWakeResult, error) {
-	return d.crewWakeDayWithChargeLocked(name, agent, autonomous, nil, crewWakeRequest{})
+func (d *Daemon) crewStartWithChargeLocked(name, agent string, autonomous bool) (*protocol.CrewStartResult, error) {
+	return d.crewStartSessionLocked(name, agent, autonomous, nil, crewStartRequest{})
 }
-func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool, beforeWake func() error, request crewWakeRequest) (*protocol.CrewWakeResult, error) {
+func (d *Daemon) crewStartSessionLocked(name, agent string, autonomous bool, beforeStart func() error, request crewStartRequest) (*protocol.CrewStartResult, error) {
 	member, _, err := d.crewMember(name)
 	if err != nil {
 		return nil, err
 	}
-	boundSessionID, _, err := d.crewAwakeSession(member)
+	boundSessionID, _, err := d.crewLiveSession(member)
 	if err != nil {
 		return nil, err
 	}
 	if boundSessionID != "" {
-		awake := &protocol.CrewWakeResult{
-			Member:       member.ID,
-			Name:         member.Name,
-			SessionID:    boundSessionID,
-			AlreadyAwake: true,
+		running := &protocol.CrewStartResult{
+			Member:           member.ID,
+			Name:             member.Name,
+			SessionID:        boundSessionID,
+			AlreadyInSession: true,
 		}
 		if session := d.store.Get(boundSessionID); session != nil {
-			awake.ProfileID = session.ProfileID
+			running.ProfileID = session.ProfileID
 		}
-		return awake, nil
+		return running, nil
 	}
 	releasedSessionID := protocol.SessionID(d.takeCrewExitedSession(member.ID))
 	if member.Retired {
 		return nil, retiredMemberError(member)
 	}
-	if err := d.chiefWakeRefusal(member); err != nil {
+	if err := d.chiefStartRefusal(member); err != nil {
 		return nil, err
 	}
 	if agent == "" {
 		agent = member.LaunchAgent()
 	}
 	d.awaitHarness(agent)
-	if beforeWake != nil {
-		if err := beforeWake(); err != nil {
+	if beforeStart != nil {
+		if err := beforeStart(); err != nil {
 			return nil, err
 		}
 	}
@@ -301,7 +301,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		return nil, err
 	}
 	if autonomous {
-		if err := d.chargeAutonomousWake(member.ID, time.Now()); err != nil {
+		if err := d.chargeMailStart(member.ID, time.Now()); err != nil {
 			return nil, fmt.Errorf("%w; nothing was delivered", err)
 		}
 	}
@@ -312,15 +312,15 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	}
 
 	d.trustCrewHome(member, agent, directory)
-	initialPrompt := d.crewWakePrompt(member, request.Cause)
+	initialPrompt := d.crewStartPrompt(member, request.Cause)
 	_, rejection := d.runSpawnPipelineReporting(&protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
 		Cwd:           directory,
 		ProfileID:     profile.ID,
 		Agent:         agent,
-		Model:         d.crewWakeModel(member, agent),
-		Effort:        d.crewWakeEffort(member, agent),
+		Model:         d.crewStartModel(member, agent),
+		Effort:        d.crewStartEffort(member, agent),
 		Cols:          80,
 		Rows:          24,
 		Label:         protocol.Ptr(member.Name),
@@ -338,8 +338,8 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 		}
 		d.announceBackgroundLaunch("crew", member.ID, sessionID, requester)
 	}
-	d.logf("crew: woke %s in session %s at %s", member.Name, sessionID, directory)
-	result := &protocol.CrewWakeResult{
+	d.logf("crew: started %s in session %s at %s", member.Name, sessionID, directory)
+	result := &protocol.CrewStartResult{
 		Member:    member.ID,
 		Name:      member.Name,
 		SessionID: sessionID,
@@ -359,7 +359,7 @@ func (d *Daemon) crewCharterText(member crew.Member) string {
 	return string(charter)
 }
 
-func (d *Daemon) crewWakePrompt(member crew.Member, cause string) string {
+func (d *Daemon) crewStartPrompt(member crew.Member, cause string) string {
 	_, onboarding := member.PendingOnboarding()
 	return prompts.RenderText("crew", "new-session", prompts.Values{
 		"start_cause":     cause,

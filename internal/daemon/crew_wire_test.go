@@ -89,9 +89,9 @@ func memberOf(members []protocol.CrewMember, id string) (protocol.CrewMember, bo
 	return members[at], true
 }
 
-func wakeCrew(t *testing.T, cli *client.Client, member, agent string) *protocol.CrewWakeResult {
+func startCrew(t *testing.T, cli *client.Client, member, agent string) *protocol.CrewStartResult {
 	t.Helper()
-	woken, err := cli.CrewWake(member, agent, "")
+	woken, err := cli.CrewStart(member, agent, "")
 	if err != nil {
 		t.Fatalf("wake %s: %v", member, err)
 	}
@@ -146,8 +146,8 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 	}
 	setCrew(t, cli, "trellis", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir)})
 
-	woken := wakeCrew(t, cli, "Trellis", "")
-	if woken.Member != "trellis" || woken.AlreadyAwake || woken.ProfileID != app.SelectedProfile() {
+	woken := startCrew(t, cli, "Trellis", "")
+	if woken.Member != "trellis" || woken.AlreadyInSession || woken.ProfileID != app.SelectedProfile() {
 		t.Fatalf("wake = %+v, want a fresh trellis day in the member's profile %s", woken, app.SelectedProfile())
 	}
 	w.Launched(string(woken.SessionID))
@@ -164,12 +164,12 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 		t.Fatalf("roster binding = %q, want %q", got, woken.SessionID)
 	}
 
-	again := wakeCrew(t, cli, "trellis", "")
-	if !again.AlreadyAwake || again.SessionID != woken.SessionID {
+	again := startCrew(t, cli, "trellis", "")
+	if !again.AlreadyInSession || again.SessionID != woken.SessionID {
 		t.Fatalf("second wake = %+v, want the live day %s", again, woken.SessionID)
 	}
 
-	keel := wakeCrew(t, cli, "keel", "")
+	keel := startCrew(t, cli, "keel", "")
 	w.Launched(string(keel.SessionID))
 	homeDay := testworld.AwaitSession(app, string(keel.SessionID), func(s protocol.Session) bool { return s.Directory != "" })
 	if homeDay.Directory != crewHome(w, "keel") {
@@ -181,7 +181,7 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 	}
 }
 
-func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T) {
+func TestCrewHomesJoinTheRosterBetweenSessionsAndAClosedDayReleasesItsMember(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
@@ -198,7 +198,7 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 		}
 	}
 
-	woken := wakeCrew(t, cli, "trellis", "")
+	woken := startCrew(t, cli, "trellis", "")
 	w.Launched(string(woken.SessionID))
 	peek, err := cli.AgentPeek(string(woken.SessionID))
 	if err != nil {
@@ -216,12 +216,12 @@ func TestCrewHomesJoinTheRosterAsleepAndAClosedDayReleasesItsMember(t *testing.T
 	}
 }
 
-func TestAMembersDayThatEndsIsReleasedAndTheNextWakeStartsFresh(t *testing.T) {
+func TestAMembersSessionThatEndsIsReleasedAndTheNextStartIsFresh(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	cli := w.Client()
 
-	first := wakeCrew(t, cli, "alder", "")
+	first := startCrew(t, cli, "alder", "")
 	w.Launched(string(first.SessionID)).Exit(1)
 	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == first.SessionID })
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
@@ -235,8 +235,8 @@ func TestAMembersDayThatEndsIsReleasedAndTheNextWakeStartsFresh(t *testing.T) {
 		t.Error("releasing the member erased the exited day's session")
 	}
 
-	second := wakeCrew(t, cli, "alder", "")
-	if second.AlreadyAwake || second.SessionID == first.SessionID || protocol.Deref(second.ReleasedSessionID) != first.SessionID {
+	second := startCrew(t, cli, "alder", "")
+	if second.AlreadyInSession || second.SessionID == first.SessionID || protocol.Deref(second.ReleasedSessionID) != first.SessionID {
 		t.Fatalf("wake after exit = %+v, want a fresh day naming %s released", second, first.SessionID)
 	}
 	day := w.Launched(string(second.SessionID))
@@ -255,20 +255,20 @@ func TestAMembersDayThatEndsIsReleasedAndTheNextWakeStartsFresh(t *testing.T) {
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Fatalf("the recoverable day still holds alder after the restart: %s", *binding)
 	}
-	third := wakeCrew(t, cli, "alder", "")
+	third := startCrew(t, cli, "alder", "")
 	w.Launched(string(third.SessionID))
 	if protocol.Deref(third.ReleasedSessionID) != second.SessionID {
 		t.Fatalf("wake after the restart released %q, want %s", protocol.Deref(third.ReleasedSessionID), second.SessionID)
 	}
 }
 
-func TestConcurrentWakesOfOneMemberShareOneDay(t *testing.T) {
+func TestConcurrentStartsOfOneMemberShareOneSession(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
-	results := make(chan *protocol.CrewWakeResult, 2)
+	results := make(chan *protocol.CrewStartResult, 2)
 	failures := make(chan error, 2)
 	for range 2 {
 		go func() {
-			woken, err := w.Client().CrewWake("keel", "", "")
+			woken, err := w.Client().CrewStart("keel", "", "")
 			if err != nil {
 				failures <- err
 				return
@@ -276,7 +276,7 @@ func TestConcurrentWakesOfOneMemberShareOneDay(t *testing.T) {
 			results <- woken
 		}()
 	}
-	var wakes []*protocol.CrewWakeResult
+	var wakes []*protocol.CrewStartResult
 	for range 2 {
 		select {
 		case err := <-failures:
@@ -285,7 +285,7 @@ func TestConcurrentWakesOfOneMemberShareOneDay(t *testing.T) {
 			wakes = append(wakes, woken)
 		}
 	}
-	if wakes[0].SessionID != wakes[1].SessionID || wakes[0].AlreadyAwake == wakes[1].AlreadyAwake {
+	if wakes[0].SessionID != wakes[1].SessionID || wakes[0].AlreadyInSession == wakes[1].AlreadyInSession {
 		t.Fatalf("concurrent wakes = %+v and %+v, want one launch and one answer naming the same day", wakes[0], wakes[1])
 	}
 	w.Launched(string(wakes[0].SessionID))
@@ -294,11 +294,11 @@ func TestConcurrentWakesOfOneMemberShareOneDay(t *testing.T) {
 	}
 }
 
-func TestCrewWakeAndSetRefusalsNameWhatToDo(t *testing.T) {
+func TestCrewStartAndSetRefusalsNameWhatToDo(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	_, err := cli.CrewWake("nobody", "", "")
+	_, err := cli.CrewStart("nobody", "", "")
 	crewErrorContains(t, err, "attn crew list")
 
 	moved := w.Path("moved")
@@ -309,7 +309,7 @@ func TestCrewWakeAndSetRefusalsNameWhatToDo(t *testing.T) {
 	if err := os.RemoveAll(moved); err != nil {
 		t.Fatal(err)
 	}
-	_, err = cli.CrewWake("alder", "", "")
+	_, err = cli.CrewStart("alder", "", "")
 	crewErrorContains(t, err, "Alder launches in", moved, "attn crew set Alder --cwd")
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Errorf("a refused wake left alder bound to %s", *binding)
@@ -365,7 +365,7 @@ func TestCrewSetRecordsAndClearsEachFieldIndependently(t *testing.T) {
 	}
 }
 
-func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
+func TestAStartLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app := w.App()
 	cli := w.Client()
@@ -376,7 +376,7 @@ func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 	}
 	wake := func(step, member, flag string, want launch) {
 		t.Helper()
-		woken := wakeCrew(t, cli, member, flag)
+		woken := startCrew(t, cli, member, flag)
 		run := w.Launched(string(woken.SessionID))
 		if run.Harness != want.harness {
 			t.Errorf("%s: woke on %s, want %s", step, run.Harness, want.harness)
@@ -434,7 +434,7 @@ func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", effort: "high", roster: "claude-opus-4-1"})
 
 	setCrew(t, cli, "alder", protocol.CrewSetMessage{Effort: protocol.Ptr("high")})
-	codexDay := wakeCrew(t, cli, "alder", "")
+	codexDay := startCrew(t, cli, "alder", "")
 	if run := w.Launched(string(codexDay.SessionID)); !slices.Contains(run.Argv, `model_reasoning_effort="high"`) {
 		t.Errorf("a codex member's effort did not reach its launch: argv %q", run.Argv)
 	}
@@ -546,9 +546,9 @@ func TestACopiedCrewUsesOnlyItsOwnFilesAndCanCloseSessions(t *testing.T) {
 		}
 	}
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
-	_, err = cli.CrewWake("chief", "", "")
+	_, err = cli.CrewStart("chief", "", "")
 	crewErrorContains(t, err, "outside instance harness root")
-	woken := wakeCrew(t, cli, "trellis", "")
+	woken := startCrew(t, cli, "trellis", "")
 	day := copied.Launched(string(woken.SessionID))
 	day.Prompted()
 	priming := crewPriming(t, cli, string(woken.SessionID))
@@ -592,12 +592,12 @@ func TestMissingCrewFilesAffectOnlyTheirMember(t *testing.T) {
 			if got, want := rosterIDs(crewRoster(t, cli)), []string{"alder", "chief", "keel", "trellis"}; !slices.Equal(got, want) {
 				t.Fatalf("missing %s changed the roster to %v, want %v", missing, got, want)
 			}
-			_, err := cli.CrewWake("trellis", "", "")
+			_, err := cli.CrewStart("trellis", "", "")
 			crewErrorContains(t, err, "Trellis", path)
 			if got := crewSessionCount(t, cli); got != 0 {
 				t.Fatalf("a member with missing %s launched %d sessions", missing, got)
 			}
-			keel := wakeCrew(t, cli, "keel", "")
+			keel := startCrew(t, cli, "keel", "")
 			w.Launched(string(keel.SessionID))
 			if err := cli.Unregister(keel.SessionID); err != nil {
 				t.Fatalf("another member could not close: %v", err)
@@ -651,7 +651,7 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 	crewErrorContains(t, err, "Trellis")
 }
 
-func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
+func TestAStartedMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 	if err := w.InjectSession("planter", "planter", w.Path("planter"), protocol.SessionAgentClaude); err != nil {
@@ -684,7 +684,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	trellis := wakeCrew(t, cli, "trellis", "")
+	trellis := startCrew(t, cli, "trellis", "")
 	w.Launched(string(trellis.SessionID))
 	primed := crewPriming(t, cli, string(trellis.SessionID))
 	for _, want := range []string{
@@ -713,7 +713,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 		}
 	}
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), AwarenessDirs: []string{notes}})
-	keel := wakeCrew(t, cli, "keel", "")
+	keel := startCrew(t, cli, "keel", "")
 	keelRun := w.Launched(string(keel.SessionID))
 	if instructions := crewLaunchFlag(keelRun.Argv, "--append-system-prompt"); !strings.Contains(instructions, "You are **Keel**") {
 		t.Errorf("keel launched without its priming in the system prompt:\n%s", instructions)
@@ -737,7 +737,7 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	for i := range claims {
 		tendAs(plant(fmt.Sprintf("Held seed number %d", i), ""), "alder")
 	}
-	alder := wakeCrew(t, cli, "alder", "")
+	alder := startCrew(t, cli, "alder", "")
 	w.Launched(string(alder.SessionID))
 	primed = crewPriming(t, cli, string(alder.SessionID))
 	cut := fmt.Sprintf("You hold %d seeds, and this block lists the %d you claimed most recently. `attn seed ls --flat` lists them all.", claims+1, crew.MaxHeldSeeds)

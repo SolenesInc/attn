@@ -17,7 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
+func newStartableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
 	t.Helper()
 	d := newCrewDaemon(t)
 	binDir := t.TempDir()
@@ -52,7 +52,7 @@ func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string)
 }
 
 func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
+	d, _, _ := newStartableDaemon(t)
 	userHome := t.TempDir()
 	foreign := filepath.Join(userHome, ".attn-fixture", crew.HomesDirName, "ember", "project")
 	if err := os.MkdirAll(foreign, 0o755); err != nil {
@@ -71,7 +71,7 @@ func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
 }
 
 func TestCrewSet_AMissingPathInsideAnotherInstancesCrewIsRefused(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
+	d, _, _ := newStartableDaemon(t)
 	userHome := t.TempDir()
 	foreignRoot := filepath.Join(userHome, ".attn-fixture", crew.HomesDirName)
 	if err := os.MkdirAll(foreignRoot, 0o755); err != nil {
@@ -91,7 +91,7 @@ func TestCrewSet_AMissingPathInsideAnotherInstancesCrewIsRefused(t *testing.T) {
 }
 
 func TestCrewSet_ASymlinkedForeignInstanceRootIsRefused(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
+	d, _, _ := newStartableDaemon(t)
 	userHome := t.TempDir()
 	foreignTarget := filepath.Join(t.TempDir(), "foreign-instance")
 	foreign := filepath.Join(foreignTarget, crew.HomesDirName, "quartz", "project")
@@ -122,8 +122,8 @@ func TestCrewSet_ASymlinkedForeignInstanceRootIsRefused(t *testing.T) {
 	}
 }
 
-func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
+func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillStartsWithItsMember(t *testing.T) {
+	d, _, _ := newStartableDaemon(t)
 	d.ensureGardenCollections()
 	schema, err := d.seedsCollection()
 	if err != nil {
@@ -159,7 +159,7 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 		}
 	}
 
-	result, err := d.crewWake("trellis", "")
+	result, err := d.crewStart("trellis", "")
 	if err != nil {
 		t.Fatalf("wake: %v", err)
 	}
@@ -220,17 +220,17 @@ func crewList(t *testing.T, d *Daemon) []protocol.CrewMember {
 	return resp.CrewListResult.Members
 }
 
-func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
+func TestCrewStart_RefusesAMemberOfAnotherProfile(t *testing.T) {
+	d, backend, _ := newStartableDaemon(t)
 	work := createTestProfile(t, d.store, "Work")
 	d.store.Add(&protocol.Session{ID: "work-agent", Label: "Work agent", Agent: protocol.SessionAgentCodex, Directory: t.TempDir(), ProfileID: work.ID})
 
-	for _, msg := range []*protocol.CrewWakeMessage{
+	for _, msg := range []*protocol.CrewStartMessage{
 		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent"))},
 		{Member: "trellis", SourceSessionID: protocol.Ptr(protocol.SessionID("work-agent")), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
 	} {
-		if _, err := d.crewWakeAsked(msg, crewWakeRequest{}); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
+		if _, err := d.crewStartAsked(msg, crewStartRequest{}); err == nil || !strings.Contains(err.Error(), `profile "Work"`) {
 			t.Fatalf("wake %+v = %v, want a refusal naming profile Work", msg, err)
 		}
 	}
@@ -238,7 +238,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 		t.Fatal("a refused wake spawned a session")
 	}
 
-	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))}, crewWakeRequest{})
+	result, err := d.crewStartAsked(&protocol.CrewStartMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))}, crewStartRequest{})
 	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
 		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
 	}

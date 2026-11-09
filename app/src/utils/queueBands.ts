@@ -157,9 +157,9 @@ export interface QueueBands<TSession extends QueueBandSession> {
   turns: QueueRow<TSession>[];
   settled: QueueRow<TSession>[];
   /** The days crew members are living right now, member id order. A member's row is
-     * permanent, so it renders in the crew region awake or asleep. */
+     * permanent, so it renders in the crew region in session or between sessions. */
   crew: QueueRow<TSession>[];
-  /** Agents the user deferred, soonest wake first. */
+  /** Agents the user deferred, soonest unsnooze first. */
   snoozed: QueueRow<TSession>[];
 }
 
@@ -262,7 +262,7 @@ function compareCrewOrder(a: QueueBandSession, b: QueueBandSession): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
 
-/** Soonest wake first, tie-broken by id so the order is total. Home lists the same
+/** Soonest unsnooze first, tie-broken by id so the order is total. Home lists the same
  * deferred agents in the same order as the sidebar. */
 export function compareWakeOrder(a: QueueBandSession, b: QueueBandSession): number {
   const untilA = a.turnSnoozedUntil ?? '';

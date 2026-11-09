@@ -19,8 +19,8 @@ interface Options {
   handleSelectSession: (sessionId: string) => boolean;
   sendSeedHandover: ReturnType<typeof useDaemonApi>['sendSeedHandover'];
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
-  sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
-  sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
+  sendCrewStart: ReturnType<typeof useDaemonApi>['sendCrewStart'];
+  sendCrewClose: ReturnType<typeof useDaemonApi>['sendCrewClose'];
   setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
@@ -36,8 +36,8 @@ export function useAppGardenActions({
   handleSelectSession,
   sendSeedHandover,
   sendSeedToChief,
-  sendCrewWake,
-  sendCrewSleep,
+  sendCrewStart,
+  sendCrewClose,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -148,35 +148,35 @@ export function useAppGardenActions({
     [contextSessionId, sendSeedToChief],
   );
 
-  const handleWakeCrewMember = useCallback(
+  const handleStartCrewMember = useCallback(
     (member: string) => {
-      sendCrewWake(member)
+      sendCrewStart(member)
         .then((result) => handleSelectSession(result.sessionId))
         .catch((error) =>
           showError(
-            error instanceof Error ? error.message : `Failed to wake ${crewDisplayName(member)}`,
+            error instanceof Error ? error.message : `Failed to start ${crewDisplayName(member)}`,
           ),
         );
     },
-    [sendCrewWake, handleSelectSession, showError],
+    [sendCrewStart, handleSelectSession, showError],
   );
 
-  const handleSleepCrewMember = useCallback(
+  const handleCloseCrewMember = useCallback(
     (member: string) => {
-      sendCrewSleep(member).catch((error) =>
+      sendCrewClose(member).catch((error) =>
         showError(
           error instanceof Error
             ? error.message
-            : `Failed to ask ${crewDisplayName(member)} to sleep`,
+            : `Failed to ask ${crewDisplayName(member)} to close`,
         ),
       );
     },
-    [sendCrewSleep, showError],
+    [sendCrewClose, showError],
   );
 
   return {
-    handleWakeCrewMember,
-    handleSleepCrewMember,
+    handleStartCrewMember,
+    handleCloseCrewMember,
     handleOpenSeedTile,
     handleOpenSeedFromCrew,
     handleRevealSeedInGarden,

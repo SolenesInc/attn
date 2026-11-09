@@ -4,7 +4,7 @@ import { SessionLabel } from './SessionLabel';
 import { harnessLabel } from './harnessLabel';
 import { SessionLead } from './SessionLead';
 import { SidebarSettlingBar } from './SettlingIndicator';
-import { CrewWakeSun, useWakeConfirm } from './CrewWake';
+import { CrewStartSun, useStartConfirm } from './CrewStart';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { UISessionState } from '../types/sessionState';
 import type { QueueRow } from '../utils/queueBands';
@@ -52,29 +52,29 @@ function QueueRowControls({
   session,
   onSettle,
   onSnooze,
-  onWake,
+  onUnsnooze,
   onOpenActions,
 }: {
   session: Pick<QueueBandSessionView, 'id' | 'label' | 'offline'>;
   onSettle?: () => void;
   onSnooze?: (event: ReactMouseEvent) => void;
-  onWake?: () => void;
+  onUnsnooze?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
 }) {
-  if (!onOpenActions && !onSettle && !onSnooze && !onWake) return null;
+  if (!onOpenActions && !onSettle && !onSnooze && !onUnsnooze) return null;
 
   return (
     <div className="session-actions">
-      {onWake && !session.offline && (
+      {onUnsnooze && !session.offline && (
         <button
           type="button"
-          className="queue-row-wake"
-          data-testid={`queue-wake-${session.id}`}
-          title="Wake now — bring it back to the queue"
-          aria-label={`Wake ${sessionDisplayName(session)}`}
+          className="queue-row-unsnooze"
+          data-testid={`queue-unsnooze-${session.id}`}
+          title="Unsnooze — bring it back to the queue"
+          aria-label={`Unsnooze ${sessionDisplayName(session)}`}
           onClick={(event) => {
             event.stopPropagation();
-            onWake();
+            onUnsnooze();
           }}
         >
           ↩
@@ -131,11 +131,11 @@ export function QueueRowView({
   selected,
   where,
   age,
-  wake,
+  snoozedUntil,
   onSelect,
   onSettle,
   onSnooze,
-  onWake,
+  onUnsnooze,
   onOpenActions,
   showSettling,
   delegates,
@@ -145,11 +145,11 @@ export function QueueRowView({
   selected: boolean;
   where?: RowWhere;
   age?: string;
-  wake?: string;
+  snoozedUntil?: string;
   onSelect: () => void;
   onSettle?: () => void;
   onSnooze?: (event: ReactMouseEvent) => void;
-  onWake?: () => void;
+  onUnsnooze?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   showSettling?: boolean;
   delegates: readonly QueueBandSessionView[];
@@ -193,13 +193,13 @@ export function QueueRowView({
         {session.chiefOfStaff && <span className="queue-chief-glyph" title="Chief of staff" aria-label="Chief of staff">⌁</span>}
         <AskMarker session={session} />
         {age && <span className="queue-row-age">{age}</span>}
-        {wake && <span className="queue-row-wake-at">{wake}</span>}
+        {snoozedUntil && <span className="queue-row-snoozed-until">{snoozedUntil}</span>}
       </span>
       <QueueRowControls
         session={session}
         onSettle={onSettle}
         onSnooze={onSnooze}
-        onWake={onWake}
+        onUnsnooze={onUnsnooze}
         onOpenActions={onOpenActions}
       />
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) && (
@@ -216,7 +216,7 @@ export interface RowWhere {
 
 interface CrewRowProps {
   chief?: boolean;
-  sleeping?: boolean;
+  closing?: boolean;
   agent?: string;
   member: string;
   name: string;
@@ -224,8 +224,8 @@ interface CrewRowProps {
   where?: RowWhere;
   selected: boolean;
   onSelect?: () => void;
-  onWake?: () => void;
-  onSleep?: () => void;
+  onStart?: () => void;
+  onAskClose?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   onOpenMemberActions?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   delegates: readonly QueueBandSessionView[];
@@ -233,70 +233,70 @@ interface CrewRowProps {
 
 export function CrewRowView(props: CrewRowProps) {
   return props.row ? (
-    <AwakeCrewRow {...props} row={props.row} />
+    <CrewRowInSession {...props} row={props.row} />
   ) : (
-    <SleepingCrewRow
+    <CrewRowBetweenSessions
       chief={props.chief}
       member={props.member}
       name={props.name}
       agent={props.agent}
       selected={props.selected}
-      onWake={props.onWake}
+      onStart={props.onStart}
       onOpenMemberActions={props.onOpenMemberActions}
     />
   );
 }
 
-function SleepingCrewRow({
+function CrewRowBetweenSessions({
   chief,
   member,
   name,
   agent,
   selected,
-  onWake,
+  onStart,
   onOpenMemberActions,
-}: Pick<CrewRowProps, 'chief' | 'member' | 'name' | 'selected' | 'onWake' | 'onOpenMemberActions' | 'agent'>) {
-  const { phase, trigger, rowRef } = useWakeConfirm(onWake, chief);
+}: Pick<CrewRowProps, 'chief' | 'member' | 'name' | 'selected' | 'onStart' | 'onOpenMemberActions' | 'agent'>) {
+  const { phase, trigger, rowRef } = useStartConfirm(onStart, chief);
   const armed = phase === 'armed';
-  const wakeLabel = armed ? `Wake ${name} — click again to confirm` : `Wake ${name}`;
+  const startLabel = armed ? `Start ${name} — click again to confirm` : `Start ${name}`;
   return (
     <div
       ref={rowRef}
       className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
-      data-crew-state="asleep"
-      data-crew-wake={phase === 'rest' ? undefined : phase}
+      data-crew-state="between-sessions"
+      data-crew-start={phase === 'rest' ? undefined : phase}
     >
       <button
         type="button"
         className="queue-row-select"
         data-testid={`queue-crew-select-${member}`}
-        aria-label={wakeLabel}
+        aria-label={startLabel}
         onClick={trigger}
-        disabled={!onWake}
+        disabled={!onStart}
       />
       <SessionLead agent={agent} state="idle" seed={member} />
       <SessionLabel label={name} />
       <span className="session-trailing">
         {chief && <span className="queue-chief-glyph" title={name}>⌁</span>}
-        {chief && <span className="queue-row-age">asleep</span>}
+        {chief && <span className="queue-row-age">between sessions</span>}
         <AskMarker session={{ id: '', crewMember: member }} />
         <button
           type="button"
           className="queue-crew-sun"
-          data-testid={`queue-crew-wake-${member}`}
-          title={armed ? `Click again to wake ${name}` : `Wake ${name} — start its day`}
-          aria-label={wakeLabel}
+          data-testid={`queue-crew-start-${member}`}
+          title={armed ? `Click again to start ${name}` : `Start ${name}`}
+          aria-label={startLabel}
           onClick={trigger}
-          disabled={!onWake}
+          disabled={!onStart}
         >
-          <CrewWakeSun phase={phase} />
+          <CrewStartSun phase={phase} />
         </button>
       </span>
-      {(onWake || onOpenMemberActions) && (
+      {(onStart || onOpenMemberActions) && (
         <div className="session-actions">
-          {armed && <span className="crew-wake-confirm">confirm</span>}
+          {armed && <span className="crew-start-confirm">confirm</span>}
           {onOpenMemberActions && (
             <button
               type="button"
@@ -318,16 +318,16 @@ function SleepingCrewRow({
   );
 }
 
-function AwakeCrewRow({
+function CrewRowInSession({
   chief,
-  sleeping,
+  closing,
   member,
   name,
   row,
   where,
   selected,
   onSelect,
-  onSleep,
+  onAskClose,
   onOpenActions,
   delegates,
 }: CrewRowProps & {
@@ -340,7 +340,7 @@ function AwakeCrewRow({
       className={`session-item sidebar-leaf-row queue-row queue-row--crew ${selected ? 'selected' : ''}`.trim()}
       data-testid={`queue-crew-${member}`}
       data-crew-member={member}
-      data-crew-state={sleeping ? 'sleeping' : 'awake'}
+      data-crew-state={closing ? 'closing' : 'in-session'}
       data-session-id={session.id}
       data-state={session.state}
       data-offline={session.offline || undefined}
@@ -363,20 +363,20 @@ function AwakeCrewRow({
       <SessionLabel label={label} session={session} hasDelegates={delegates.length > 0} />
       <span className="session-trailing">
         {chief && <span className="queue-chief-glyph" title={name}>⌁</span>}
-        {sleeping && <span className="queue-row-age">going to sleep</span>}
+        {closing && <span className="queue-row-age">closing</span>}
         <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
         <AskMarker session={session} />
       </span>
-      {(onSleep || onOpenActions) && (
+      {(onAskClose || onOpenActions) && (
         <div className="session-actions">
-          {onSleep && (
+          {onAskClose && (
             <button
               type="button"
-              className="queue-row-sleep"
-              data-testid={`queue-crew-sleep-${member}`}
-              title={`Ask ${name} to close its day and sleep`}
-              aria-label={`Ask ${name} to sleep`}
-              onClick={onSleep}
+              className="queue-row-crew-close"
+              data-testid={`queue-crew-close-${member}`}
+              title={`Ask ${name} to close`}
+              aria-label={`Ask ${name} to close`}
+              onClick={onAskClose}
             >
               ☾
             </button>

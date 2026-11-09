@@ -133,14 +133,14 @@ try {
   });
   await runner.step('a_user_wake_goes_there_and_background_wake_stays_quiet', async () => {
     const memberHeading = await client.request('dom_text', { selector: '.crew-member-heading h2' });
-    const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew wake');
-    await click('[data-testid="crew-wake"]');
+    const userLaunched = observer.waitForMessage((message) => message.event === 'crew_updated' && message.members?.find((member) => member.id === members[0].item_id && member.binding_session), 'app crew start');
+    await click('[data-testid="crew-start"]');
     const launched = await userLaunched;
-    const userWake = { session_id: launched.binding_session };
-    await observer.waitForSession({ id: userWake.session_id });
+    const userStart = { session_id: launched.binding_session };
+    await observer.waitForSession({ id: userStart.session_id });
     await wait('dialog[aria-labelledby="crew-panel-title"][open]', { absent: true });
     const userState = await client.request('get_state');
-    runner.assert(shownAgentId(userState) === userWake.session_id, 'An app wake shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
+    runner.assert(shownAgentId(userState) === userStart.session_id, 'An app start shows the member in the app', { view: userState.view, activeLeaf: userState.activeLeaf });
     await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
     await wait('.toast', { textIncludes: 'is protected' });
     const error = await client.request('dom_text', { selector: '.toast' });
@@ -156,13 +156,13 @@ try {
     await openCrew();
     const output = cli('crew', 'start', members[1].item_id, '--json');
     const arrival = JSON.parse(output.slice(output.indexOf('{')));
-    runner.assert(Boolean(arrival.session_id), 'The CLI wake succeeds', arrival);
-    await wait(`[data-testid="crew-roster-${members[1].item_id}"] .is-awake`);
+    runner.assert(Boolean(arrival.session_id), 'The CLI start succeeds', arrival);
+    await wait(`[data-testid="crew-roster-${members[1].item_id}"] .is-in-session`);
     await wait('.toast', { absent: true });
     const state = await client.request('get_state');
-    runner.assert(shownAgentId(state) === userWake.session_id, 'A background wake keeps the currently shown agent', state);
+    runner.assert(shownAgentId(state) === userStart.session_id, 'A background start keeps the currently shown agent', state);
     await wait('[data-testid="crew-panel"]');
-    await capture('07-quiet-background-wake.png');
+    await capture('07-quiet-background-start.png');
     runner.writeJson('launch-choices.json', { members: crew().filter((member) => members.some((item) => item.item_id === member.id)), arrival });
   });
   await runner.finishSuccess({ realCopy, members: members.map((item) => item.item_id) });

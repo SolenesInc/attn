@@ -21,7 +21,7 @@ type Signals struct {
 	MidTurn          bool
 	RunFailed        bool
 	HeartbeatEnabled bool
-	AutoSleepEnabled bool
+	AwayCloseEnabled bool
 }
 
 type Action int
@@ -29,15 +29,15 @@ type Action int
 const (
 	ActionNone Action = iota
 	ActionHeartbeat
-	ActionSleep
+	ActionClose
 )
 
 func (a Action) String() string {
 	switch a {
 	case ActionHeartbeat:
 		return "heartbeat"
-	case ActionSleep:
-		return "sleep"
+	case ActionClose:
+		return "close"
 	default:
 		return "none"
 	}
@@ -54,10 +54,10 @@ func Decide(s Signals) Action {
 		return ActionNone
 	}
 	if s.AwayFor >= s.AwayLimit {
-		if !s.AutoSleepEnabled {
+		if !s.AwayCloseEnabled {
 			return ActionNone
 		}
-		return ActionSleep
+		return ActionClose
 	}
 	if !s.HeartbeatEnabled {
 		return ActionNone
@@ -65,13 +65,13 @@ func Decide(s Signals) Action {
 	return ActionHeartbeat
 }
 
-type WakeLedger struct {
+type MailStartLedger struct {
 	Stamps []time.Time
 	Limit  int
 	Window time.Duration
 }
 
-func (l WakeLedger) Within(now time.Time) []time.Time {
+func (l MailStartLedger) Within(now time.Time) []time.Time {
 	cutoff := now.Add(-l.Window)
 	kept := make([]time.Time, 0, len(l.Stamps))
 	for _, at := range l.Stamps {
@@ -82,7 +82,7 @@ func (l WakeLedger) Within(now time.Time) []time.Time {
 	return kept
 }
 
-func (l WakeLedger) Allows(name string, now time.Time) ([]time.Time, error) {
+func (l MailStartLedger) Allows(name string, now time.Time) ([]time.Time, error) {
 	kept := l.Within(now)
 	if l.Limit <= 0 {
 		return kept, fmt.Errorf("mail-started sessions are turned off (crew.mail_start_limit=%d), so attn did not start a session for %s; start one yourself from the sidebar, or raise the limit", l.Limit, name)

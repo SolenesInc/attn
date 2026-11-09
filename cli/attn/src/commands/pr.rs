@@ -44,7 +44,7 @@ wait-ready options:
   --mode green|codex|formal-review
   --reviewer login                optional only with formal-review
   --timeout duration              default 30m
-  --interval duration             default 20s; Codex deadlines wake independently
+  --interval duration             default 20s; Codex deadlines fire independently
   --since RFC3339                 report feedback after this time instead of resuming
   --reset                         baseline feedback from the current state
   --ignore-author login           repeatable
