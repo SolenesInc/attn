@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -97,7 +98,13 @@ func (d *Daemon) handleUpdateRequest(conn net.Conn, msg *protocol.UpdateRequestM
 		d.sendError(conn, err.Error())
 		return
 	}
-	result, err := d.requestUpdate(protocol.Deref(msg.CallerSessionID), protocol.Deref(msg.Reason))
+	caller := protocol.SessionID(protocol.Deref(msg.CallerSessionID))
+	profile, err := d.resolveGardenProfile(caller, protocol.Deref(msg.ProfileID), "")
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	result, err := d.requestUpdate(profile.ID, string(caller), protocol.Deref(msg.Reason))
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
@@ -105,11 +112,11 @@ func (d *Daemon) handleUpdateRequest(conn net.Conn, msg *protocol.UpdateRequestM
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, UpdateRequestResult: result})
 }
 
-func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateRequestResult, error) {
+func (d *Daemon) requestUpdate(profileID, requester, reason string) (*protocol.UpdateRequestResult, error) {
 	d.updateRuns.mu.Lock()
 	defer d.updateRuns.mu.Unlock()
 	now := time.Now()
-	request := store.UpdateRequest{ID: uuid.NewString(), Requester: requester, Reason: reason}
+	request := store.UpdateRequest{ID: uuid.NewString(), ProfileID: profileID, Requester: requester, Reason: reason}
 	if run := d.latestUpdateRun(); run != nil && run.Open() {
 		if err := d.store.AddUpdateRequest(request, store.UpdateRequestStarted, run.ID, now); err != nil {
 			return nil, err
@@ -122,7 +129,8 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 	if err != nil {
 		return nil, err
 	}
-	if err := d.resolvePendingRequestNotifications(); err != nil {
+	pending = updateRequestsOfProfile(pending, profileID)
+	if err := d.resolveRequestNotifications(pending); err != nil {
 		return nil, err
 	}
 	note, _, err := d.store.EnsureNotification(store.NotificationRecord{
@@ -139,6 +147,7 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 		},
 		SourceKind: "update",
 		SourceID:   request.ID,
+		ProfileID:  profileID,
 	}, now)
 	if err != nil {
 		return nil, err
@@ -149,6 +158,16 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 	}
 	d.publishFact(FactNotificationCreated, note.ID, nil)
 	return &protocol.UpdateRequestResult{RequestID: request.ID}, nil
+}
+
+func updateRequestsOfProfile(requests []store.UpdateRequest, profileID string) []store.UpdateRequest {
+	var inProfile []store.UpdateRequest
+	for _, request := range requests {
+		if request.ProfileID == profileID {
+			inProfile = append(inProfile, request)
+		}
+	}
+	return inProfile
 }
 
 func updateRequestTrigger(requests []store.UpdateRequest) string {
@@ -208,19 +227,19 @@ func (d *Daemon) startUpdate() (*store.UpdateRun, error) {
 }
 
 func (d *Daemon) attachPendingRequests(runID string) error {
-	if err := d.resolvePendingRequestNotifications(); err != nil {
+	pending, err := d.store.PendingUpdateRequests()
+	if err != nil {
+		return err
+	}
+	if err := d.resolveRequestNotifications(pending); err != nil {
 		return err
 	}
 	return d.store.AttachPendingUpdateRequests(runID)
 }
 
-func (d *Daemon) resolvePendingRequestNotifications() error {
-	pending, err := d.store.PendingUpdateRequests()
-	if err != nil {
-		return err
-	}
+func (d *Daemon) resolveRequestNotifications(requests []store.UpdateRequest) error {
 	seen := map[string]bool{}
-	for _, request := range pending {
+	for _, request := range requests {
 		if request.NotificationID == "" || seen[request.NotificationID] {
 			continue
 		}
@@ -238,27 +257,33 @@ func (d *Daemon) resolvePendingRequestNotifications() error {
 
 func (d *Daemon) handleDeclineUpdate(client *wsClient, msg *protocol.DeclineUpdateMessage) {
 	result := protocol.DeclineUpdateResultMessage{Event: protocol.EventDeclineUpdateResult, RequestID: msg.RequestID, Success: true}
-	if err := d.declineUpdate(); err != nil {
+	if err := d.declineUpdate(msg.UpdateRequestID); err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
 	}
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) declineUpdate() error {
+func (d *Daemon) declineUpdate(requestID string) error {
 	d.updateRuns.mu.Lock()
 	defer d.updateRuns.mu.Unlock()
 	pending, err := d.store.PendingUpdateRequests()
 	if err != nil {
 		return err
 	}
-	if err := d.resolvePendingRequestNotifications(); err != nil {
+	index := slices.IndexFunc(pending, func(request store.UpdateRequest) bool { return request.ID == requestID })
+	if index < 0 {
+		return nil
+	}
+	profileID := pending[index].ProfileID
+	declined := updateRequestsOfProfile(pending, profileID)
+	if err := d.resolveRequestNotifications(declined); err != nil {
 		return err
 	}
-	if err := d.store.DeclinePendingUpdateRequests(); err != nil {
+	if err := d.store.DeclinePendingUpdateRequests(profileID); err != nil {
 		return err
 	}
-	for _, request := range pending {
+	for _, request := range declined {
 		d.tellRequester(request.Requester, "update-declined/"+request.ID, "The user declined your request to update attn.")
 	}
 	return nil

@@ -13,13 +13,15 @@ import (
 )
 
 const updateUsage = `usage: attn update status [--json]
-       attn update request [--reason <text>]
+       attn update request [--reason <text>] [--profile <name|id>]
 
 status shows how attn was installed, the current build, what is available, and
 the current update run. On an outpost, the home answers.
 
 request asks the user to update attn. The user decides in the app; the asking
-session gets an inbox notice when the update finishes.`
+session gets an inbox notice when the update finishes. The request belongs to
+the session's profile; outside a session with more than one profile, name one
+with --profile.`
 
 func runUpdate() {
 	if len(os.Args) >= 3 && os.Args[2] == "request" {
@@ -79,6 +81,7 @@ func runUpdateRequest() {
 	flags := flag.NewFlagSet("update request", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	reason := flags.String("reason", "", "")
+	profile := flags.String("profile", "", "")
 	if err := flags.Parse(os.Args[3:]); err != nil || flags.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, updateUsage)
 		os.Exit(2)
@@ -89,7 +92,7 @@ func runUpdateRequest() {
 		fmt.Fprintf(os.Stderr, "attn update request: %v\n", err)
 		os.Exit(1)
 	}
-	result, err := c.RequestUpdate(caller, *reason)
+	result, err := c.RequestUpdate(caller, *profile, *reason)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "attn update request: %v\n", err)
 		os.Exit(1)

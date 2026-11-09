@@ -29,6 +29,7 @@ func (r UpdateRun) Open() bool { return r.FinishedAt.IsZero() }
 
 type UpdateRequest struct {
 	ID             string
+	ProfileID      string
 	Requester      string
 	Reason         string
 	NotificationID string
@@ -111,8 +112,8 @@ func (s *Store) updateRunRequesters(runID string) ([]string, error) {
 
 func (s *Store) AddUpdateRequest(request UpdateRequest, state, runID string, now time.Time) error {
 	_, err := s.db.Exec(
-		`INSERT INTO update_requests (id, requester, reason, state, run_id, notification_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		request.ID, request.Requester, request.Reason, state, runID, request.NotificationID, now.UTC().Format(sortableTimeFormat),
+		`INSERT INTO update_requests (id, profile_id, requester, reason, state, run_id, notification_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		request.ID, request.ProfileID, request.Requester, request.Reason, state, runID, request.NotificationID, now.UTC().Format(sortableTimeFormat),
 	)
 	if err != nil {
 		return fmt.Errorf("store: add update request: %w", err)
@@ -122,7 +123,7 @@ func (s *Store) AddUpdateRequest(request UpdateRequest, state, runID string, now
 
 func (s *Store) PendingUpdateRequests() ([]UpdateRequest, error) {
 	rows, err := s.db.Query(
-		`SELECT id, requester, reason, notification_id FROM update_requests WHERE state = ? ORDER BY created_at, id`, UpdateRequestPending)
+		`SELECT id, profile_id, requester, reason, notification_id FROM update_requests WHERE state = ? ORDER BY created_at, id`, UpdateRequestPending)
 	if err != nil {
 		return nil, fmt.Errorf("store: pending update requests: %w", err)
 	}
@@ -130,7 +131,7 @@ func (s *Store) PendingUpdateRequests() ([]UpdateRequest, error) {
 	var requests []UpdateRequest
 	for rows.Next() {
 		var request UpdateRequest
-		if err := rows.Scan(&request.ID, &request.Requester, &request.Reason, &request.NotificationID); err != nil {
+		if err := rows.Scan(&request.ID, &request.ProfileID, &request.Requester, &request.Reason, &request.NotificationID); err != nil {
 			return nil, err
 		}
 		requests = append(requests, request)
@@ -143,7 +144,7 @@ func (s *Store) AttachPendingUpdateRequests(runID string) error {
 	return err
 }
 
-func (s *Store) DeclinePendingUpdateRequests() error {
-	_, err := s.db.Exec(`UPDATE update_requests SET state = ? WHERE state = ?`, UpdateRequestDeclined, UpdateRequestPending)
+func (s *Store) DeclinePendingUpdateRequests(profileID string) error {
+	_, err := s.db.Exec(`UPDATE update_requests SET state = ? WHERE state = ? AND profile_id = ?`, UpdateRequestDeclined, UpdateRequestPending, profileID)
 	return err
 }

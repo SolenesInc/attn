@@ -524,8 +524,11 @@ func (c *Client) UpdateStatus() (*protocol.UpdateStatus, error) {
 	return resp.UpdateStatus, nil
 }
 
-func (c *Client) RequestUpdate(caller protocol.SessionID, reason string) (*protocol.UpdateRequestResult, error) {
+func (c *Client) RequestUpdate(caller protocol.SessionID, profile, reason string) (*protocol.UpdateRequestResult, error) {
 	msg := protocol.UpdateRequestMessage{Cmd: protocol.CmdUpdateRequest}
+	if profile != "" {
+		msg.ProfileID = protocol.Ptr(profile)
+	}
 	if reason != "" {
 		msg.Reason = protocol.Ptr(reason)
 	}

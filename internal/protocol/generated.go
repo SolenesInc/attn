@@ -14058,6 +14058,9 @@ type UpdateRequestMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
 }

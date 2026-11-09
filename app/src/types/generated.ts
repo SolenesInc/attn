@@ -13148,6 +13148,7 @@ export enum UpdateOutpostMessageCmd {
 export interface UpdateRequestMessage {
     caller_session_id?: string;
     cmd:                UpdateRequestMessageCmd;
+    profile_id?:        string;
     reason?:            string;
     [property: string]: any;
 }
@@ -28579,6 +28580,7 @@ const typeMap: any = {
     "UpdateRequestMessage": o([
         { json: "caller_session_id", js: "caller_session_id", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("UpdateRequestMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
     ], "any"),
     "UpdateRequestResult": o([

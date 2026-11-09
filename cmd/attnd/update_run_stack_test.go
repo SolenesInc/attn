@@ -292,6 +292,132 @@ func TestEveryPendingRequestReasonReachesTheOneOpenNotification(t *testing.T) {
 	}
 }
 
+type twoProfileRequests struct {
+	home, side               *testworld.Peer
+	homeSession, sideSession string
+}
+
+func requestUpdatesFromTwoProfiles(t *testing.T, install *sourceInstall, app *testworld.Peer) twoProfileRequests {
+	t.Helper()
+	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"},
+		protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
+	if !created.Success {
+		t.Fatalf("create Side: %+v", created)
+	}
+	side := install.stack.AppOn(created.Profile.ID)
+	shell := fakeagent.Harness(protocol.SessionAgentShell)
+	requests := twoProfileRequests{
+		home: app, side: side,
+		homeSession: install.stack.Spawn(app, shell, install.stack.Path("home")),
+		sideSession: install.stack.Spawn(side, shell, install.stack.Path("side")),
+	}
+	requestUpdateBecause(t, install.stack, requests.homeSession, "the home reason")
+	requestUpdateBecause(t, install.stack, requests.sideSession, "the side reason")
+	return requests
+}
+
+func openNotifications(notes []protocol.Notification) []protocol.Notification {
+	var open []protocol.Notification
+	for _, n := range notes {
+		if n.ReadAt == "" {
+			open = append(open, n)
+		}
+	}
+	return open
+}
+
+func TestUpdateRequestReasonsStayInTheRequestersProfile(t *testing.T) {
+	install := newSourceInstall(t)
+	requests := requestUpdatesFromTwoProfiles(t, install, install.start(t))
+
+	for _, view := range []struct {
+		name          string
+		peer          *testworld.Peer
+		reason, other string
+	}{
+		{"home", requests.home, "the home reason", "the side reason"},
+		{"side", requests.side, "the side reason", "the home reason"},
+	} {
+		listed := updateRequestNotifications(view.peer)
+		if len(listed) != 1 || !strings.Contains(listed[0].Trigger, view.reason) || strings.Contains(listed[0].Trigger, view.other) {
+			t.Fatalf("%s lists %+v", view.name, listed)
+		}
+	}
+}
+
+func TestAPlainTerminalRequestNamesItsProfile(t *testing.T) {
+	install := newSourceInstall(t)
+	requests := requestUpdatesFromTwoProfiles(t, install, install.start(t))
+
+	refused := install.stack.Attn("update", "request", "--reason", "from a terminal")
+	if refused.Code == 0 || !strings.Contains(refused.Stderr, "choose --profile") {
+		t.Fatalf("a plain terminal with two profiles: %+v", refused)
+	}
+	if result := install.stack.Attn("update", "request", "--profile", "Side", "--reason", "from a terminal"); result.Code != 0 {
+		t.Fatalf("request with --profile: %+v", result)
+	}
+	if open := openNotifications(updateRequestNotifications(requests.side)); len(open) != 1 || !strings.Contains(open[0].Trigger, "from a terminal") {
+		t.Fatalf("side lists %+v", open)
+	}
+	if open := openNotifications(updateRequestNotifications(requests.home)); len(open) != 1 || strings.Contains(open[0].Trigger, "from a terminal") {
+		t.Fatalf("home lists %+v", open)
+	}
+}
+
+func TestDeclineStaysInItsProfileAndUpdateFromEitherFinishesEveryRequest(t *testing.T) {
+	hold := filepath.Join(t.TempDir(), "hold")
+	if err := exec.Command("mkfifo", hold).Run(); err != nil {
+		t.Fatal(err)
+	}
+	install := newSourceInstall(t, "HOLD="+hold)
+	install.expectRestart()
+	requests := requestUpdatesFromTwoProfiles(t, install, install.start(t))
+	third := install.stack.Spawn(requests.home, fakeagent.Harness(protocol.SessionAgentShell), install.stack.Path("third"))
+	requestUpdateBecause(t, install.stack, third, "another home reason")
+
+	declined := openNotifications(updateRequestNotifications(requests.side))
+	requests.side.Send(protocol.DeclineUpdateMessage{Cmd: protocol.CmdDeclineUpdate, RequestID: protocol.Ptr("decline"), UpdateRequestID: declined[0].Actions[1].TargetID})
+	testworld.Await(requests.side, protocol.EventDeclineUpdateResult, func(m protocol.DeclineUpdateResultMessage) bool { return m.Success })
+	if open := openNotifications(updateRequestNotifications(requests.side)); len(open) != 0 {
+		t.Fatalf("Decline left side open: %+v", open)
+	}
+	if inbox := inboxText(t, install.stack, requests.sideSession); !strings.Contains(inbox, "declined") {
+		t.Fatalf("the side requester was not told: %q", inbox)
+	}
+	if inbox := inboxText(t, install.stack, requests.homeSession); strings.Contains(inbox, "declined") {
+		t.Fatalf("Decline in side reached home: %q", inbox)
+	}
+	if open := openNotifications(updateRequestNotifications(requests.home)); len(open) != 1 || len(open[0].Actions) != 2 {
+		t.Fatalf("Decline in side changed home: %+v", open)
+	}
+
+	requestUpdateBecause(t, install.stack, requests.sideSession, "the side asks again")
+	started := sendStartUpdate(requests.side)
+	if !started.Success || started.Run == nil {
+		t.Fatalf("Update from side: %+v", started)
+	}
+	again := sendStartUpdate(requests.home)
+	if !again.Success || again.Run.ID != started.Run.ID {
+		t.Fatalf("Update from home did not join the one run: %+v", again)
+	}
+	for _, peer := range []*testworld.Peer{requests.home, requests.side} {
+		if open := openNotifications(updateRequestNotifications(peer)); len(open) != 0 {
+			t.Fatalf("Update left a notification open: %+v", open)
+		}
+	}
+
+	writeFixtureFile(t, hold, "", 0o644)
+	awaitRunPhase(requests.home, protocol.UpdatePhaseApplying)
+	if done := finalRun(install.restarted()); done.Phase != protocol.UpdatePhaseDone {
+		t.Fatalf("final run = %+v", done)
+	}
+	for _, session := range []string{requests.homeSession, requests.sideSession, third} {
+		if inbox := inboxText(t, install.stack, session); !strings.Contains(inbox, "attn update finished") {
+			t.Fatalf("session %s got no final notice: %q", session, inbox)
+		}
+	}
+}
+
 func TestUpdateBuildsOriginMainLeavesTheCheckoutAloneAndJoinsRequesters(t *testing.T) {
 	hold := filepath.Join(t.TempDir(), "hold")
 	if err := exec.Command("mkfifo", hold).Run(); err != nil {

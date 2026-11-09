@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "26cd22d55d40";
+pub const PROTOCOL_VERSION: &str = "4c919b846a0a";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -13020,6 +13020,8 @@ pub struct UpdateRequestMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub caller_session_id: Option<String>,
     pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
