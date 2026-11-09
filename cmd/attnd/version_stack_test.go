@@ -2,8 +2,12 @@ package main_test
 
 import (
 	"fmt"
+	"net"
+	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -76,6 +80,38 @@ func TestTheCLIWarnsWhenItsReleaseDiffersFromTheRunningDaemons(t *testing.T) {
 		warned := strings.Contains(got.Stderr, "this CLI is "+tc.cli+" but the running attn app is 0.10.2") && strings.Contains(got.Stderr, "`which -a attn`")
 		if got.Code != 0 || warned != tc.warn || (!tc.warn && strings.Contains(got.Stderr, "warning")) {
 			t.Errorf("attn %s list against a 0.10.2 daemon exited %d with stderr %q, want a warning: %t", tc.cli, got.Code, got.Stderr, tc.warn)
+		}
+	}
+}
+
+func TestTheCLIWarnsWhenItsProtocolDiffersFromTheRunningDaemons(t *testing.T) {
+	t.Parallel()
+	s := testworld.NewStack(t)
+	port := s.WSPort()
+	s.FreeWSPort()
+	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reported atomic.Value
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `{"protocol":%q}`, reported.Load())
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Close() })
+
+	for _, tc := range []struct {
+		daemon string
+		warn   bool
+	}{
+		{daemon: "not-this-protocol", warn: true},
+		{daemon: protocol.ProtocolVersion},
+	} {
+		reported.Store(tc.daemon)
+		got := s.Run(testworld.Invocation{Args: []string{"conversation", "list"}})
+		warned := strings.Contains(got.Stderr, "the running attn app speaks "+tc.daemon) && strings.Contains(got.Stderr, "`which -a attn`")
+		if warned != tc.warn {
+			t.Errorf("attn conversation list against protocol %s printed %q, want a warning: %t", tc.daemon, got.Stderr, tc.warn)
 		}
 	}
 }

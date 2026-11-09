@@ -23,8 +23,11 @@ pub mod worktree;
 use crate::client::{Reply, SendError};
 use crate::instance::Paths;
 use attn::go::json;
+use attn_protocol::PROTOCOL_VERSION;
 use std::io::{self, Write};
+use std::net::{Ipv4Addr, SocketAddr, TcpStream};
 use std::path::Path;
+use std::time::Duration;
 
 pub const USAGE_UNKNOWN_COMMAND: &str = "unknown_command";
 pub const USAGE_UNKNOWN_FLAG: &str = "unknown_flag";
@@ -108,4 +111,36 @@ fn working_directory() -> Result<String, io::Error> {
         return Ok(pwd.to_string_lossy().into_owned());
     }
     Ok(std::env::current_dir()?.to_string_lossy().into_owned())
+}
+
+const HEALTH_DEADLINE: Duration = Duration::from_millis(400);
+
+pub fn warn_if_stale(paths: &Paths<'_>) {
+    let daemon = daemon_protocol(&paths.ws_port()).unwrap_or_default();
+    let daemon = daemon.trim();
+    if !daemon.is_empty() && daemon != PROTOCOL_VERSION {
+        eprintln!(
+            "attn: warning: this CLI speaks protocol {PROTOCOL_VERSION} but the running attn app speaks {daemon}. You may be running a stale attn — check `which -a attn`, then reinstall or use $ATTN_WRAPPER_PATH."
+        );
+    }
+}
+
+fn daemon_protocol(port: &str) -> Option<String> {
+    let port: u16 = port.parse().ok()?;
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    let mut stream = TcpStream::connect_timeout(&address, HEALTH_DEADLINE).ok()?;
+    stream.set_read_timeout(Some(HEALTH_DEADLINE)).ok()?;
+    stream.set_write_timeout(Some(HEALTH_DEADLINE)).ok()?;
+    stream
+        .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .ok()?;
+    let mut response = Vec::new();
+    std::io::Read::read_to_end(&mut stream, &mut response).ok()?;
+    let text = std::str::from_utf8(&response).ok()?;
+    let (head, body) = text.split_once("\r\n\r\n")?;
+    if head.split_ascii_whitespace().nth(1) != Some("200") {
+        return None;
+    }
+    let health: serde_json::Value = serde_json::from_str(body).ok()?;
+    health["protocol"].as_str().map(str::to_string)
 }

@@ -81,6 +81,7 @@ fn keep(run: &mut Run<'_>, args: &[String], keep: bool) -> Result<(), Stop> {
     let mut message = KeptConversationKeepMessage::new();
     message.session_id.clone_from(id);
     message.keep = keep;
+    super::warn_if_stale(run.paths);
     client(run)
         .send(&message)
         .map_err(|error| failed(run, &error))?;
@@ -112,6 +113,7 @@ fn forget(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut message = KeptConversationForgetMessage::new();
     message.session_id.clone_from(id);
     message.unlink_crew_letters = Some(flags.bool("unlink-crew-letters"));
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &message,
@@ -148,6 +150,7 @@ fn list(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     let mut message = KeptConversationListMessage::new();
     message.include_deleted = Some(flags.bool("all"));
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &message,

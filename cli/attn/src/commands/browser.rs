@@ -356,6 +356,7 @@ const fn text_flag(name: &'static str, default: &'static str) -> Flag<'static> {
 }
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    super::warn_if_stale(run.paths);
     let Some(command) = args.first() else {
         eprint!("{USAGE}");
         return Err(Stop(1));

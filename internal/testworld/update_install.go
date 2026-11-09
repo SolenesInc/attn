@@ -3,6 +3,7 @@ package testworld
 import (
 	"crypto/sha256"
 	"fmt"
+	"net"
 	"path/filepath"
 	"testing"
 )
@@ -25,6 +26,11 @@ func AttnSourceBinaryFrom(t testing.TB, version, repository string) string {
 // FreeWSPort stops the harness holding the WebSocket port, so a daemon attn starts by itself can bind it.
 func (s *Stack) FreeWSPort() {
 	_ = s.wsListener.Close()
+}
+
+// WSPort names the port the CLI reads the daemon's /health from.
+func (s *Stack) WSPort() int {
+	return s.wsListener.Addr().(*net.TCPAddr).Port
 }
 
 // AwaitDaemonReplaced waits for the daemon the harness started to exit after attn replaced it.

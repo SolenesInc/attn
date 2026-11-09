@@ -116,6 +116,7 @@ fn list(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut message = WorktreeListMessage::new();
     message.main_repo = query.repo;
     message.limit = query.limit;
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &message,
@@ -257,6 +258,7 @@ fn keep(run: &mut Run<'_>, args: &[String], keep: bool) -> Result<(), Stop> {
     let mut message = WorktreeKeepMessage::new();
     message.path = path_argument(path);
     message.keep = keep;
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &message,
@@ -294,6 +296,7 @@ fn delete(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut message = DeleteWorktreeMessage::new();
     message.path.clone_from(&path);
     message.force = Some(flags.bool("force"));
+    super::warn_if_stale(run.paths);
     client(run)
         .send(&message)
         .map_err(|error| failed(run, &error))?;
@@ -306,6 +309,7 @@ fn log(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut message = WorktreeSweepLogMessage::new();
     message.main_repo = query.repo;
     message.limit = query.limit;
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &message,
@@ -349,6 +353,7 @@ fn log(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
 }
 
 fn refresh(run: &mut Run<'_>) -> Result<(), Stop> {
+    super::warn_if_stale(run.paths);
     let reply = client(run)
         .call_field(
             &WorktreeRefreshMessage::new(),

@@ -367,7 +367,7 @@ impl<'a> Paths<'a> {
         }
     }
 
-    fn ws_port(&self) -> String {
+    pub fn ws_port(&self) -> String {
         let port = self.trimmed("ATTN_WS_PORT");
         if port.is_empty() {
             ws_port_for_instance(&self.instance())

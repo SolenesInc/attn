@@ -12,6 +12,7 @@ fn usage_failure(message: &str) -> Stop {
 }
 
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    super::warn_if_stale(run.paths);
     let definitions = [string_flag("session"), string_flag("profile")];
     let mut flags = FlagSet::new("open", &definitions);
     let positionals = parse_interspersed(run, &mut flags, args)

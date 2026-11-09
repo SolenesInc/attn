@@ -121,6 +121,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         print_stdout(HELP);
         return Ok(());
     }
+    super::warn_if_stale(run.paths);
     if verb != "append" {
         run.usage_error = Some(USAGE_UNKNOWN_COMMAND);
         eprint!(
