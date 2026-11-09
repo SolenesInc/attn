@@ -51,7 +51,7 @@ function scriptPopOut(daemon: ScriptedDaemon) {
   });
 }
 
-async function openBrowserOnA({ popped = false }: { popped?: boolean } = {}) {
+async function openBrowserOnA({ popped = false, settings = {} }: { popped?: boolean; settings?: Record<string, string> } = {}) {
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockImplementation(async (command: string) => (command === 'tile_window_frame_over' ? FRAME : undefined));
   const tileWindows = await letTileWindowsOpen();
@@ -59,13 +59,14 @@ async function openBrowserOnA({ popped = false }: { popped?: boolean } = {}) {
   const view = await renderApp({ initialState: {
     sessions: [daemonSession('s1', { state: 'idle' })],
     profiles: [defaultProfile('A')],
+    settings,
     desktops: [
       daemonDesktop('A', { root: layout(popped), panes: [agentPane('s1', 'A')] }, { shortcut_slot: 1 }),
       emptyDesktop('B', { shortcut_slot: 2 }),
       emptyDesktop('C', { shortcut_slot: 3 }),
     ],
   } });
-  serveSettings(view.daemon, {});
+  serveSettings(view.daemon, settings);
   scriptPopOut(view.daemon);
   await act(async () => { await openSession(view.daemon, 's1'); });
   return { ...view, tileWindows };
@@ -179,16 +180,24 @@ describe('a browser tile in its own window', () => {
     expect(vi.mocked(invoke).mock.calls.some(([command]) => command === 'tile_window_raise_main')).toBe(true);
     expect(screen.getByTestId('settings-nav-desktop')).toBeTruthy();
   });
+
+  it('runs a row action from a native shared chord in the main window', async () => {
+    const { daemon } = await openBrowserOnA({ settings: { narrowest_tile_cols: '66' } });
+    await gesture(daemon, () => window.dispatchEvent(new CustomEvent('attn:native-browser-shortcut', {
+      detail: { label: browserHostLabel('A', 'tile-browser'), id: 'shelf.fewerTiles' },
+    })));
+    expect(daemon.sentOf('set_setting')).toEqual([expect.objectContaining({ key: 'narrowest_tile_cols' })]);
+  });
 });
 
 describe('a terminal in its own window', () => {
-  async function openPoppedTerminal(settings: Record<string, string> = {}, firstSession: Parameters<typeof daemonSession>[1] = {}, secondSession: Parameters<typeof daemonSession>[1] = {}, twoPopped = false) {
+  async function openPoppedTerminal(settings: Record<string, string> = {}, firstSession: Parameters<typeof daemonSession>[1] = {}, secondSession: Parameters<typeof daemonSession>[1] = {}, twoPopped = false, mainGrid = false) {
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockImplementation(async (command: string) => (command === 'tile_window_frame_over' ? FRAME : undefined));
     const tileWindows = await letTileWindowsOpen();
     fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, 1500, 1000) : null));
     const { daemon } = await renderApp({ initialState: {
-      sessions: [daemonSession('s1', { state: 'idle', ...firstSession }), daemonSession('s2', { state: 'idle', ...secondSession }), ...(twoPopped ? [daemonSession('s3', { state: 'idle' })] : [])],
+      sessions: [daemonSession('s1', { state: 'idle', ...firstSession }), daemonSession('s2', { state: 'idle', ...secondSession }), ...(twoPopped ? [daemonSession('s3', { state: 'idle' })] : []), ...(mainGrid ? ['s3', 's4', 's5', 's6'].map((id) => daemonSession(id, { state: 'idle' })) : [])],
       profiles: [defaultProfile('B')],
       settings,
       desktops: [
@@ -196,7 +205,10 @@ describe('a terminal in its own window', () => {
           root: twoPopped ? split('a-split', 'vertical', [{ ...pane('s1'), window: FRAME }, { ...pane('s3'), window: FRAME }]) : { ...pane('s1'), window: FRAME },
           panes: [agentPane('s1', 'A'), ...(twoPopped ? [agentPane('s3', 'A')] : [])],
         }, { shortcut_slot: 1 }),
-        daemonDesktop('B', { root: pane('s2'), panes: [agentPane('s2', 'B')] }, { shortcut_slot: 2 }),
+        daemonDesktop('B', {
+          root: mainGrid ? split('b-left', 'vertical', [pane('s3'), split('b-right', 'vertical', [split('b-top', 'horizontal', [pane('s4'), split('b-bottom', 'horizontal', [pane('s2'), pane('s5')])]), pane('s6')])]) : pane('s2'),
+          panes: ['s2', ...(mainGrid ? ['s3', 's4', 's5', 's6'] : [])].map((id) => agentPane(id, 'B')),
+        }, { shortcut_slot: 2 }),
       ],
     } });
     serveSettings(daemon, settings);
@@ -256,13 +268,17 @@ describe('a terminal in its own window', () => {
   });
 
   it('leaves the desktop unchanged for row and directional shortcuts in a popped tile', async () => {
-    const { daemon, tileWindow } = await openPoppedTerminal();
+    const { daemon, tileWindow } = await openPoppedTerminal({ narrowest_tile_cols: '30' }, {}, {}, false, true);
     const target = tileWindow.document.querySelector('.session-terminal-desktop')!;
     const mainSurface = document.querySelector('[data-session-terminal-desktop="B"]')!;
     const switches = daemon.sentOf('desktop_set_current').length;
+    const focusMoves = daemon.sentOf('desktop_show_leaf').length;
     expect(mainSurface.getAttribute('data-zoomed-pane-id')).toBe('');
     expect(mainSurface.getAttribute('data-maximized-pane-id')).toBe('');
     expect(mainSurface.getAttribute('data-active-pane-id')).toBe('pane-s2');
+    for (const id of ['s3', 's4', 's5', 's6']) {
+      expect(mainSurface.querySelector(`[data-pane-id="pane-${id}"]`)).toBeTruthy();
+    }
     for (const id of [
       'shelf.carryLeft', 'shelf.carryRight', 'shelf.sendToShelf',
       'shelf.fewerTiles', 'shelf.moreTiles', 'terminal.toggleZoom', 'terminal.toggleMaximize',
@@ -280,6 +296,9 @@ describe('a terminal in its own window', () => {
     expect(daemon.sentOf('set_setting')).toEqual([]);
     expect(daemon.sentOf('desktop_bring_back_leaf')).toEqual([]);
     expect(daemon.sentOf('desktop_set_current')).toHaveLength(switches);
+    expect(daemon.sentOf('desktop_show_leaf')).toHaveLength(focusMoves);
+    await gesture(daemon, () => pressShortcut('terminal.focusRight'));
+    expect(daemon.sentOf('desktop_show_leaf')).toHaveLength(focusMoves + 1);
   });
 
   it.each(['true', 'false'])('keeps the popped tile as split origin through the location picker (launcher %s)', async (launcher) => {

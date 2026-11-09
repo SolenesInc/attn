@@ -59,11 +59,11 @@ struct Key {
 
 impl Combo {
     fn matches(&self, key: &Key) -> bool {
-        let key_matches = if self.alt && self.code.is_some() {
-            self.code.as_deref() == Some(key.code.as_str())
+        let code = self.code.as_deref().filter(|code| !code.is_empty());
+        let key_matches = if self.alt && code.is_some() {
+            code == Some(key.code.as_str())
         } else {
-            self.key.to_lowercase() == key.key.to_lowercase()
-                || self.code.as_deref() == Some(key.code.as_str())
+            self.key.to_lowercase() == key.key.to_lowercase() || code == Some(key.code.as_str())
         };
         key_matches
             && (if self.meta {

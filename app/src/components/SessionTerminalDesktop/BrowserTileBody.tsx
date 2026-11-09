@@ -171,11 +171,13 @@ export function BrowserTileBody({
       const detail = (event as CustomEvent<{ label?: unknown; id?: unknown }>).detail;
       if (detail?.label !== label || typeof detail.id !== 'string'
         || !Object.prototype.hasOwnProperty.call(SHORTCUTS, detail.id)) return;
-      dispatchShortcut(detail.id as ShortcutId, { desktopId, leafId: tileId }, tileWindow);
+      const id = detail.id as ShortcutId;
+      const source = inMainWindow && id !== 'tile.popOut' ? undefined : { desktopId, leafId: tileId };
+      dispatchShortcut(id, source, tileWindow);
     };
     window.addEventListener('attn:native-browser-shortcut', handleShortcut);
     return () => window.removeEventListener('attn:native-browser-shortcut', handleShortcut);
-  }, [desktopId, label, tileId, tileWindow]);
+  }, [desktopId, inMainWindow, label, tileId, tileWindow]);
 
   return (
     <div className="browser-tile-host" ref={hostRef}>
