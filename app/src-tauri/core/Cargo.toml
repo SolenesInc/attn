@@ -37,6 +37,7 @@ zbus = "5.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
+tao = { version = "=0.35.3", default-features = false }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "6e595d776e9ac594b73e5a180155800f4da6c87d" }
 global-hotkey = { path = "../vendor/global-hotkey" }
 objc2 = "0.6"

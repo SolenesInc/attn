@@ -49,6 +49,7 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
     handleGhosttyTerminalReady,
     handleClosePane,
     paneShown,
+    poppedLeafIdSet,
   } = useDesktopContext();
   const notice = paneNotice(agentPane, paneSession, paneTitle);
   const stopped = Boolean(paneSession && sessionHasStopped(paneSession));
@@ -109,7 +110,8 @@ export function DesktopAgentBody({ agentPane, paneSession, paneTitle, keysNotSen
             annotationApi={annotationApi}
             unavailableReason={paneSession?.offline ? `${paneSession.hostName} is unreachable` : undefined}
             // At most one pane owns ⌘Enter for the annotation send shortcut.
-            paneActive={isActiveSession && sessionVisible && shortcutsEnabled && activeLeafId === agentPane.id}
+            paneActive={(shortcutsEnabled && isActiveSession && sessionVisible && activeLeafId === agentPane.id) || poppedLeafIdSet.has(agentPane.id)}
+            shortcutScope={{ desktopId, leafId: agentPane.id, active: isActiveSession && sessionVisible && activeLeafId === agentPane.id && !poppedLeafIdSet.has(agentPane.id) }}
             fontSize={fontSize}
             resolvedTheme={resolvedTheme}
             cwd={paneSession?.cwd}

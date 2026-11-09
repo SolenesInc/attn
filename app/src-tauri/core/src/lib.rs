@@ -1,6 +1,8 @@
 mod browser_alerts;
 mod browser_host;
 #[cfg(target_os = "macos")]
+mod browser_shortcut;
+#[cfg(target_os = "macos")]
 mod hotkeys;
 mod instance;
 mod migration_failure;
@@ -590,6 +592,7 @@ fn quit_app(app: tauri::AppHandle) {
 }
 
 const CLOSE_ACTIVE_PANE_MENU_ID: &str = "attn-close-active-pane";
+const POP_OUT_TILE_MENU_ID: &str = "attn-pop-out-tile";
 // macOS consumes Command-period as the system cancel gesture before any DOM
 // keydown, so a menu item is the only way it reaches attn (hence nativeDelivery).
 const CANCEL_COUNTDOWN_MENU_ID: &str = "attn-cancel-countdown";
@@ -615,6 +618,13 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
         "Stop Countdown",
         true,
         Some("CmdOrCtrl+."),
+    )?;
+    let pop_out_tile = MenuItem::with_id(
+        app,
+        POP_OUT_TILE_MENU_ID,
+        "Pop Out or Bring Back Tile",
+        true,
+        None::<&str>,
     )?;
     // Always enabled: a disabled NSMenuItem stops responding to its key equivalent.
     let mut inserted_cancel_countdown = false;
@@ -666,6 +676,7 @@ fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wr
         }
 
         if is_file_menu {
+            submenu.append(&pop_out_tile)?;
             submenu.append(&MenuItem::with_id(
                 app,
                 "quick-capture",
@@ -1166,11 +1177,27 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             }
 
             if event.id() == CANCEL_COUNTDOWN_MENU_ID {
+                if tile_window::focused_tile_window(app).is_some() {
+                    if let Err(error) = tile_window::tile_window_raise_main(app.clone()) {
+                        eprintln!("[TileWindow] {error}");
+                        return;
+                    }
+                }
                 dispatch_native_shortcut(app, "session.cancelCountdown");
                 return;
             }
 
+            if event.id() == POP_OUT_TILE_MENU_ID {
+                if !tile_window::bring_back_focused(app) {
+                    dispatch_native_shortcut(app, "tile.popOut");
+                }
+                return;
+            }
+
             if event.id() == CLOSE_ACTIVE_PANE_MENU_ID {
+                if tile_window::bring_back_focused(app) {
+                    return;
+                }
                 #[cfg(target_os = "macos")]
                 if let Some(capture) = app.get_webview_window("capture") {
                     if capture.is_focused().unwrap_or(false) {
@@ -1213,6 +1240,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             tile_window::tile_window_show,
             tile_window::tile_window_hide,
             tile_window::tile_window_raise,
+            tile_window::tile_window_raise_main,
             tile_window::tile_window_frame_over,
             browser_host::browser_host_mount,
             browser_host::browser_host_update,
@@ -1222,6 +1250,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             browser_host::browser_host_clear_focus,
             browser_host::browser_host_claim_focus,
             browser_host::browser_host_focus_state,
+            #[cfg(target_os = "macos")]
+            browser_shortcut::browser_shortcut_configure,
+            #[cfg(target_os = "macos")]
+            browser_shortcut::browser_shortcut_capture,
             native_input_diagnostics::native_input_diagnostics_snapshot,
         ])
         .setup(|app| {
@@ -1232,6 +1264,8 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             instance::hold_app_lock()?;
             instance::write_app_pid_file();
             native_input_diagnostics::install();
+            #[cfg(target_os = "macos")]
+            browser_shortcut::install(app.handle());
             build_main_window(app.handle())?;
             #[cfg(target_os = "macos")]
             if let Some(window) = app.get_webview_window("main") {

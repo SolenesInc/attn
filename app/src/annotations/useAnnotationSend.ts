@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useShortcut } from '../shortcuts/useShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
+import type { ShortcutScope } from '../shortcuts/useShortcut';
 
 type AnnotationSendResult =
   | { kind: 'sent' }
@@ -19,6 +20,7 @@ interface UseAnnotationSendOptions<T extends AnnotationSendResult> {
   shortcutId: ShortcutId;
   enabled: boolean;
   sentClearMs: number;
+  shortcutScope?: ShortcutScope;
 }
 
 export function useAnnotationSend<T extends AnnotationSendResult>({
@@ -26,6 +28,7 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
   shortcutId,
   enabled,
   sentClearMs,
+  shortcutScope,
 }: UseAnnotationSendOptions<T>) {
   const sendRef = useRef(send);
   const sendingRef = useRef(false);
@@ -87,7 +90,7 @@ export function useAnnotationSend<T extends AnnotationSendResult>({
     [runSend],
   );
 
-  useShortcut(shortcutId, sendNow, enabled);
+  useShortcut(shortcutId, sendNow, enabled, shortcutScope);
 
   useEffect(() => {
     if (outcome?.kind !== 'sent') {

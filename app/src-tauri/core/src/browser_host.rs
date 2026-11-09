@@ -544,6 +544,13 @@ pub fn browser_host_unmount(
     stop_cookie_sync(&label);
     browser_alerts::remove(&label);
     if let Some(webview) = app.get_webview(&label) {
+        #[cfg(target_os = "macos")]
+        {
+            let closing_label = label.clone();
+            webview
+                .with_webview(move |_| crate::browser_shortcut::forget_browser(&closing_label))
+                .map_err(|error| format!("forget browser shortcut target: {error}"))?;
+        }
         let persist_error = persist_cookie_jar(&app, &webview).err();
         #[cfg(target_os = "linux")]
         return_focus_to_main(&webview)?;
@@ -630,6 +637,10 @@ fn register_focus_handler(webview: &tauri::Webview) -> Result<(), String> {
     webview
         .with_webview(move |platform| unsafe {
             let view: &WKWebView = &*platform.inner().cast();
+            crate::browser_shortcut::register_browser(
+                std::ptr::from_ref(view) as usize,
+                label.clone(),
+            );
             let handler = BrowserFocusHandler::new(label, app);
             let protocol: Retained<ProtocolObject<dyn WKScriptMessageHandler>> =
                 ProtocolObject::from_retained(handler);

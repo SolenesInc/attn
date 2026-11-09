@@ -239,6 +239,8 @@ export function useRowSettling(input: RowSettlingInput) {
 
 interface ShelfControlsInput {
   active: boolean;
+  desktopId: string;
+  poppedShortcutsActive: boolean;
   rowInput: Omit<RowLayoutInput, 'view'> | null;
   narrowestCols: number;
   onSetNarrowestCols?: (cols: number) => void;
@@ -253,6 +255,8 @@ export interface ShelfWidthLabelState {
 
 export function useShelfControls({
   active,
+  desktopId,
+  poppedShortcutsActive,
   rowInput,
   narrowestCols,
   onSetNarrowestCols,
@@ -281,8 +285,13 @@ export function useShelfControls({
     labelTimer.current = window.setTimeout(() => setClearedWidths(null), WIDTH_LABEL_MS);
   };
 
-  useShortcut('shelf.fewerTiles', () => step('fewer'), active);
-  useShortcut('shelf.moreTiles', () => step('more'), active);
+  const scope = { desktopId, active };
+  useShortcut('shelf.fewerTiles', (source) => {
+    if (!source) step('fewer');
+  }, active || poppedShortcutsActive, scope);
+  useShortcut('shelf.moreTiles', (source) => {
+    if (!source) step('more');
+  }, active || poppedShortcutsActive, scope);
   if (clearedWidths === null || !rowInput) return null;
   const { narrowestPx: _narrowestPx, ...input } = rowInput;
   return { clearedWidths, tileCounts: reachableTileCounts(input, narrowestCols) };

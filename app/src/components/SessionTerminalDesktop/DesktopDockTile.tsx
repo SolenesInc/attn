@@ -140,6 +140,9 @@ export function DesktopDockTile({
     [isSeed, path],
   );
   const annotations = useTileAnnotations({
+    desktopId,
+    leafId: tile.tileId,
+    popped,
     isSeed,
     visible: visible && isAnnotatedDocument,
     path,

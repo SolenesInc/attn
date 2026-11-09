@@ -10,7 +10,10 @@ import {
   ReactNode,
 } from 'react';
 import { useSettings } from './SettingsContext';
-import { Binding, ShortcutId } from '../shortcuts/registry';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { Binding, ShortcutId, defaultShortcut, isChord } from '../shortcuts/registry';
+import { isMacLikePlatform } from '../shortcuts/platform';
+import { LEADER_TIMEOUT_MS } from '../shortcuts/chordState';
 import { isProtectedShortcut } from '../shortcuts/metadata';
 import {
   KeybindingsConfig,
@@ -21,6 +24,7 @@ import {
   serializeKeybindingsConfig,
   setShortcutOverrides,
   resolveBinding,
+  resolvedShortcutEntries,
   findConflict,
 } from '../shortcuts/resolver';
 
@@ -77,6 +81,21 @@ export function KeybindingsProvider({ children }: { children: ReactNode }) {
     setConfig(next);
     setSetting(KEYBINDINGS_SETTING_KEY, serialized);
   }, [setSetting]);
+
+  useEffect(() => {
+    if (!isTauri() || !isMacLikePlatform()) return;
+    const popOut = resolveBinding('tile.popOut');
+    const defaultBinding = defaultShortcut('tile.popOut');
+    const defaultMenu = !!popOut && !isChord(popOut)
+      && popOut.key === defaultBinding.key && popOut.code === defaultBinding.code
+      && !!popOut.meta === !!defaultBinding.meta && !!popOut.ctrl === !!defaultBinding.ctrl
+      && !!popOut.alt === !!defaultBinding.alt && !!popOut.shift === !!defaultBinding.shift;
+    const chords = resolvedShortcutEntries().flatMap(([id, binding]) =>
+      isChord(binding) ? [{ id, leader: binding.leader, then: binding.then }] : []);
+    void invoke('browser_shortcut_configure', {
+      config: { popOut, chords, timeoutMs: LEADER_TIMEOUT_MS, defaultMenu },
+    }).catch((error) => console.error('[BrowserHost] Failed to configure shortcuts:', error));
+  }, [config]);
 
   const applyOverrides = useCallback((changes: Partial<Record<ShortcutId, OverrideChange>>) => {
     const overrides = { ...configRef.current.overrides };

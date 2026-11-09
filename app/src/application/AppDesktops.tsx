@@ -215,7 +215,8 @@ export function AppDesktops() {
           connected={isReady}
           eventRouter={eventRouter}
           onSplitPane={(targetPaneId, direction) => {
-            void createSplitSession('shell', direction, targetPaneId);
+            const baseSessionId = terminalState.agents.find((pane) => pane.id === targetPaneId)?.sessionId;
+            void createSplitSession('shell', direction, targetPaneId, { desktopId: desktop.id, baseSessionId });
           }}
           onClosePane={(paneId) => {
             const paneSessionId = terminalState.agents.find((pane) => pane.id === paneId)?.sessionId;

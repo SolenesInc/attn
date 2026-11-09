@@ -191,6 +191,25 @@ fn tell_main(app: &AppHandle, event: &str, detail: &serde_json::Value) {
     ));
 }
 
+pub fn focused_tile_window(app: &AppHandle) -> Option<String> {
+    app.windows()
+        .into_iter()
+        .find(|(label, window)| is_tile_window(label) && window.is_focused().unwrap_or(false))
+        .map(|(label, _)| label)
+}
+
+pub fn bring_back_focused(app: &AppHandle) -> bool {
+    let Some(label) = focused_tile_window(app) else {
+        return false;
+    };
+    tell_main(
+        app,
+        "attn:tile-window-close",
+        &serde_json::json!({ "label": label }),
+    );
+    true
+}
+
 fn title_bar_height() -> f64 {
     TITLE_BAR_HEIGHT.get().copied().unwrap_or(0.0)
 }
@@ -371,6 +390,22 @@ pub fn tile_window_raise(app: AppHandle, label: String) -> Result<(), String> {
     window
         .set_focus()
         .map_err(|error| format!("focus tile window: {error}"))
+}
+
+#[tauri::command]
+pub fn tile_window_raise_main(app: AppHandle) -> Result<(), String> {
+    let main = app
+        .get_window("main")
+        .ok_or_else(|| "main window is not open".to_string())?;
+    main.show()
+        .map_err(|error| format!("show main window: {error}"))?;
+    if !harness_window() {
+        main.unminimize()
+            .map_err(|error| format!("unminimize main window: {error}"))?;
+        main.set_focus()
+            .map_err(|error| format!("focus main window: {error}"))?;
+    }
+    Ok(())
 }
 
 fn any_tile_window_visible(app: &AppHandle) -> bool {

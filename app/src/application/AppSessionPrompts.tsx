@@ -21,6 +21,7 @@ export function AppSessionPrompts() {
   const {
     locationPickerOpen,
     locationPickerInitialAgent,
+    locationPickerOrigin,
     startLocation,
     startWorktreeSession,
     closeLocationPicker,
@@ -70,15 +71,15 @@ export function AppSessionPrompts() {
       {experimental ? (
         <NewSessionLauncher
           {...pickerProps}
-          desktopId={currentDesktopId ?? undefined}
-          onSelect={startLocation}
-          onCreateWorktreeSession={startWorktreeSession}
+          desktopId={locationPickerOrigin?.desktopId ?? currentDesktopId ?? undefined}
+          onSelect={(path, agent, yolo, placement) => startLocation(path, agent, yolo, { ...placement, origin: locationPickerOrigin ?? undefined })}
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo, placement) => startWorktreeSession(repo, branch, from, agent, yolo, { ...placement, origin: locationPickerOrigin ?? undefined })}
         />
       ) : (
         <LocationPicker
           {...pickerProps}
-          onSelect={launchLocation}
-          onCreateWorktreeSession={handleCreateWorktreeSession}
+          onSelect={(path, agent, yolo) => launchLocation(path, agent, yolo, locationPickerOrigin?.desktopId, locationPickerOrigin ?? undefined)}
+          onCreateWorktreeSession={(repo, branch, from, agent, yolo) => handleCreateWorktreeSession(repo, branch, from, agent, yolo, locationPickerOrigin?.desktopId, locationPickerOrigin ?? undefined)}
         />
       )}
       <SessionCreationProgress

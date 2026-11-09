@@ -80,6 +80,7 @@ export interface AnnotatedTerminalProps extends TerminalProps {
   // Gates the send shortcut's *registration*: the dispatcher consumes ⌘Enter
   // whenever a handler exists, so every mounted pane registering would eat it.
   paneActive?: boolean;
+  shortcutScope?: import('../../shortcuts/useShortcut').ShortcutScope;
   unavailableReason?: string;
 }
 
@@ -112,7 +113,7 @@ function deliveredUnchanged(current: readonly TerminalAnnotation[], sent: readon
 
 export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerminalProps>(
   function AnnotatedTerminal(
-    { desktopId, sessionId, annotationApi, paneActive = false, unavailableReason, ...terminalProps },
+    { desktopId, sessionId, annotationApi, paneActive = false, shortcutScope, unavailableReason, ...terminalProps },
     ref,
   ) {
     const tileWindow = useTileWindow();
@@ -618,6 +619,7 @@ export const AnnotatedTerminal = forwardRef<GhosttyTerminalHandle, AnnotatedTerm
       send: performSend,
       shortcutId: 'terminal.sendAnnotations',
       enabled: enabled && !unavailableReason && paneActive && annotations.length > 0,
+      shortcutScope,
       sentClearMs: 2200,
     });
 

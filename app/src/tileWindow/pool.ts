@@ -1,8 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
 import type { TileWindowFrame } from '../types/generated';
-import { SHORTCUTS, matchesShortcut } from '../shortcuts/registry';
-import { listenForShortcuts } from '../shortcuts/useShortcut';
+import { listenForShortcuts, type ShortcutSource } from '../shortcuts/useShortcut';
 import { listenForEscape } from '../hooks/useEscapeStack';
 import { recordUiDiag } from '../utils/uiDiagnosticsLog';
 import { nameNativeWindow } from '.';
@@ -17,6 +16,7 @@ export interface OpenTileWindow {
 
 interface PooledWindow extends OpenTileWindow {
   leafKey: string | null;
+  source: ShortcutSource | undefined;
   daemonFrame: TileWindowFrame | null;
   reportedFrame: TileWindowFrame | null;
   settleTimer: number | null;
@@ -31,6 +31,16 @@ export const useTileWindowStore = create<TileWindowState>(() => ({ byLeaf: new M
 const pool: PooledWindow[] = [];
 let queue: Promise<void> = Promise.resolve();
 let nextLabel = 1;
+
+export function _resetTileWindowsForTest(): void {
+  for (const entry of pool) {
+    if (entry.settleTimer !== null) window.clearTimeout(entry.settleTimer);
+    entry.window.close();
+  }
+  pool.length = 0;
+  queue = Promise.resolve();
+  nextLabel = 1;
+}
 
 export function tileWindowKey(desktopId: string, leafId: string): string {
   return `${desktopId}::${leafId}`;
@@ -74,15 +84,6 @@ function mirrorLook(target: Document): void {
   new MutationObserver(copyHead).observe(source.head, { childList: true, subtree: true, characterData: true });
 }
 
-function bringBackOnToggleKey(tileWindow: Window, label: string): void {
-  tileWindow.addEventListener('keydown', (event) => {
-    if (!matchesShortcut(event, SHORTCUTS['tile.popOut'])) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label } }));
-  }, true);
-}
-
 function buildDocument(tileWindow: Window): HTMLElement {
   const target = tileWindow.document;
   const meta = target.createElement('meta');
@@ -108,14 +109,20 @@ async function openWindow(frame: TileWindowFrame): Promise<PooledWindow> {
   recordUiDiag({ kind: 'tile_window_open', label, opened: tileWindow !== null });
   if (!tileWindow) throw new Error(`tile window ${label} did not open`);
   nameNativeWindow(tileWindow, label);
-  bringBackOnToggleKey(tileWindow, label);
-  listenForShortcuts(tileWindow);
+  tileWindow.addEventListener('keydown', (event) => {
+    if (!event.metaKey || event.ctrlKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'w') return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label } }));
+  }, true);
+  listenForShortcuts(tileWindow, () => pool.find((candidate) => candidate.label === label)?.source);
   listenForEscape(tileWindow);
   const entry: PooledWindow = {
     label,
     window: tileWindow,
     mount: buildDocument(tileWindow),
     leafKey: null,
+    source: undefined,
     daemonFrame: frame,
     reportedFrame: null,
     settleTimer: null,
@@ -124,7 +131,7 @@ async function openWindow(frame: TileWindowFrame): Promise<PooledWindow> {
   return entry;
 }
 
-async function place(leafKey: string, frame: TileWindowFrame, title: string): Promise<void> {
+async function place(leafKey: string, source: ShortcutSource, frame: TileWindowFrame, title: string): Promise<void> {
   const held = pool.find((entry) => entry.leafKey === leafKey);
   if (held) {
     held.daemonFrame = frame;
@@ -135,6 +142,7 @@ async function place(leafKey: string, frame: TileWindowFrame, title: string): Pr
   const pooled = pool.find((entry) => entry.leafKey === null);
   const entry = pooled ?? await openWindow(frame);
   entry.leafKey = leafKey;
+  entry.source = source;
   entry.daemonFrame = frame;
   entry.reportedFrame = null;
   entry.window.document.title = title;
@@ -153,8 +161,8 @@ function enqueue(work: () => Promise<void>): Promise<void> {
   return next;
 }
 
-export function showTileWindow(leafKey: string, frame: TileWindowFrame, title: string): Promise<void> {
-  return enqueue(() => place(leafKey, frame, title));
+export function showTileWindow(leafKey: string, source: ShortcutSource, frame: TileWindowFrame, title: string): Promise<void> {
+  return enqueue(() => place(leafKey, source, frame, title));
 }
 
 export function hideTileWindow(leafKey: string): Promise<void> {
@@ -163,6 +171,7 @@ export function hideTileWindow(leafKey: string): Promise<void> {
     if (!entry) return;
     settle(entry);
     entry.leafKey = null;
+    entry.source = undefined;
     entry.daemonFrame = null;
     entry.reportedFrame = null;
     publish();

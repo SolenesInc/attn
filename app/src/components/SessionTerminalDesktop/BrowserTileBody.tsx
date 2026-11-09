@@ -9,6 +9,8 @@ import {
 import { useDesktopShelfStore } from '../../store/desktopShelf';
 import { useSidebarDrag } from '../../store/sidebarDrag';
 import { nativeWindowLabel, useTileWindow } from '../../tileWindow';
+import { SHORTCUTS, type ShortcutId } from '../../shortcuts/registry';
+import { dispatchShortcut } from '../../shortcuts/useShortcut';
 
 function hostRect(element: HTMLElement): BrowserHostRect {
   const rect = element.getBoundingClientRect();
@@ -163,6 +165,17 @@ export function BrowserTileBody({
       window.removeEventListener('attn:native-browser-close', handleNativeClose);
     };
   }, [label, onClose]);
+
+  useEffect(() => {
+    const handleShortcut = (event: Event) => {
+      const detail = (event as CustomEvent<{ label?: unknown; id?: unknown }>).detail;
+      if (detail?.label !== label || typeof detail.id !== 'string'
+        || !Object.prototype.hasOwnProperty.call(SHORTCUTS, detail.id)) return;
+      dispatchShortcut(detail.id as ShortcutId, { desktopId, leafId: tileId }, tileWindow);
+    };
+    window.addEventListener('attn:native-browser-shortcut', handleShortcut);
+    return () => window.removeEventListener('attn:native-browser-shortcut', handleShortcut);
+  }, [desktopId, label, tileId, tileWindow]);
 
   return (
     <div className="browser-tile-host" ref={hostRef}>

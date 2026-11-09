@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
-import { isTauri } from '@tauri-apps/api/core';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
@@ -84,6 +84,16 @@ const filter = () => screen.getByLabelText('Filter shortcuts') as HTMLInputEleme
 const newSessionDialog = () => screen.queryByTestId('location-picker-overlay');
 
 describe('App shortcut editor', () => {
+  it('releases the pop-out menu key while recording a new binding', async () => {
+    const { daemon } = await renderEditor({ quickCapture: true });
+    await gesture(daemon, () => fireEvent.click(row('Pop out or bring back tile').querySelector('.key-capture-button')!));
+    expect(vi.mocked(invoke).mock.calls.some(([command, args]) =>
+      command === 'browser_shortcut_capture' && (args as { suspended: boolean }).suspended)).toBe(true);
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'y', metaKey: true, shiftKey: true }));
+    expect(saved(daemon).overrides['tile.popOut']).toMatchObject({ key: 'y', meta: true, shift: true });
+    expect(vi.mocked(invoke).mock.calls.filter(([command]) => command === 'browser_shortcut_capture').pop()?.[1]).toEqual({ suspended: false });
+  });
+
   it('lists every category with the current bindings, and protects the required ones', async () => {
     const { editor } = await renderEditor();
 

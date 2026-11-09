@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { ptySpawn } from '../pty/bridge';
@@ -7,7 +8,7 @@ import { stackRoomPx } from '../store/desktopShelf';
 import { currentDesktopIn, useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
-import { parseLayoutJSON, type TerminalSplitDirection } from '../types/desktop';
+import { leafSlotId, parseLayoutJSON, poppedLeaves, type TerminalSplitDirection } from '../types/desktop';
 import type { Desktop } from '../types/generated';
 import {
   getAgentAvailability,
@@ -15,6 +16,7 @@ import {
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
 import { launchTarget } from '../utils/launchPlacement';
+import type { ShortcutSource } from '../shortcuts/useShortcut';
 import {
   AppContentProps,
   SessionCreationJob,
@@ -76,6 +78,7 @@ export function useSessionLaunch({
     SessionAgent | undefined
   >();
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+  const [locationPickerOrigin, setLocationPickerOrigin] = useState<ShortcutSource | null>(null);
   const locationPickerSessionDirection = useRef<TerminalSplitDirection>('vertical');
 
   const nextSplitSessionLabel = useCallback(
@@ -101,12 +104,13 @@ export function useSessionLaunch({
   }, []);
 
   const handleNewSession = useCallback(
-    (direction: TerminalSplitDirection = 'vertical', agent?: SessionAgent) => {
-      if (inlineLauncherFocusRef.current && !agent) {
+    (direction: TerminalSplitDirection = 'vertical', agent?: SessionAgent, source?: ShortcutSource) => {
+      if (!source && inlineLauncherFocusRef.current && !agent) {
         inlineLauncherFocusRef.current();
         return;
       }
       setLocationPickerInitialAgent(agent);
+      setLocationPickerOrigin(source ?? null);
       locationPickerSessionDirection.current = direction;
       setLocationPickerOpen(true);
     },
@@ -203,12 +207,15 @@ export function useSessionLaunch({
         showError('No desktop is open yet; choose a profile before starting an agent.');
         return;
       }
+      const targetDesktop = options.desktopId
+        ? useProfilesStore.getState().desktops.find((desktop) => desktop.id === options.desktopId) ?? currentDesktop
+        : currentDesktop;
       const focusedSessionId = launchTarget(
-        currentDesktop,
+        targetDesktop,
         direction,
         targetPaneId,
       ).focusedSessionId;
-      const baseId = options.baseSessionId ?? activeLocalSession?.id ?? focusedSessionId;
+      const baseId = options.baseSessionId ?? (targetDesktop.id === currentDesktop.id ? activeLocalSession?.id : undefined) ?? focusedSessionId;
       const base = sessions.find((session) => session.id === baseId) ?? null;
       if (base?.offline) {
         showError(`${base.hostName} is unreachable; this needs it now`);
@@ -216,7 +223,16 @@ export function useSessionLaunch({
       }
       const cwd = options.cwd || base?.cwd;
       if (!cwd) {
-        handleNewSession(direction);
+        const tree = parseLayoutJSON(targetDesktop.tree_json);
+        if (isTauri() && targetPaneId && poppedLeaves(tree).some((leaf) => leafSlotId(leaf) === targetPaneId)) {
+          try {
+            await invoke('tile_window_raise_main');
+          } catch (error) {
+            showError(`Could not show the location picker: ${String(error)}`);
+            return;
+          }
+        }
+        handleNewSession(direction, undefined, targetPaneId ? { desktopId: targetDesktop.id, leafId: targetPaneId } : undefined);
         return;
       }
       try {
@@ -255,10 +271,16 @@ export function useSessionLaunch({
       yoloMode: boolean;
       desktopId?: string;
       host?: string;
+      origin?: ShortcutSource;
     }): Promise<string | null> => {
-      const desktop = currentDesktopForLaunch();
+      const current = currentDesktopForLaunch();
+      const desktopId = pick.desktopId ?? pick.origin?.desktopId;
+      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === desktopId) ?? current;
+      const origin = pick.origin?.desktopId === desktop.id ? pick.origin : undefined;
       const direction = locationPickerSessionDirection.current;
-      const baseId = activeLocalSession?.id ?? launchTarget(desktop, direction).focusedSessionId;
+      const baseId = origin
+        ? desktop.panes.find((pane) => pane.pane_id === origin.leafId)?.session_id
+        : (desktop.id === current.id ? activeLocalSession?.id : undefined) ?? launchTarget(desktop, direction).focusedSessionId;
       return await spawnOnCurrentDesktop({
         sessionId: crypto.randomUUID(),
         label: pick.label,
@@ -267,7 +289,8 @@ export function useSessionLaunch({
         yoloMode: pick.yoloMode,
         direction,
         spawnedFrom: baseId || undefined,
-        desktopId: pick.desktopId,
+        desktopId,
+        anchorPaneId: origin?.leafId,
         host: pick.host,
       });
     },
@@ -279,7 +302,7 @@ export function useSessionLaunch({
       path: string,
       agent: SessionAgent,
       yoloMode = false,
-      { desktopId, host }: { desktopId?: string; host?: string } = {},
+      { desktopId, host, origin }: { desktopId?: string; host?: string; origin?: ShortcutSource } = {},
     ) => {
       if (!host && agent !== TERMINAL_AGENT && !hasAvailableAgents)
         throw new Error('No supported agent CLI found in PATH.');
@@ -294,6 +317,7 @@ export function useSessionLaunch({
         yoloMode,
         desktopId,
         host,
+        origin,
       });
     },
     [agentAvailability, hasAvailableAgents, launchPicked],
@@ -305,6 +329,7 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode = false,
       desktopId?: string,
+      origin?: ShortcutSource,
     ) => {
       if (agent !== TERMINAL_AGENT && !hasAvailableAgents) {
         showError('No supported agent CLI found in PATH.');
@@ -321,6 +346,7 @@ export function useSessionLaunch({
           agent: selectedAgent,
           yoloMode,
           desktopId,
+          origin,
         });
       } catch (error) {
         showError(error instanceof Error ? error.message : 'Failed to start the agent');
@@ -339,10 +365,11 @@ export function useSessionLaunch({
       {
         desktopId,
         host,
+        origin,
         onCreated,
-      }: { desktopId?: string; host?: string; onCreated?: (path: string) => void } = {},
+      }: { desktopId?: string; host?: string; origin?: ShortcutSource; onCreated?: (path: string) => void } = {},
     ) => {
-      const pickedDesktopId = desktopId ?? currentDesktopForLaunch().id;
+      const pickedDesktopId = desktopId ?? origin?.desktopId ?? currentDesktopForLaunch().id;
       const result = await sendCreateWorktree(mainRepo, branch, undefined, startingFrom, host);
       if (!result.success || !result.path)
         throw new Error(result.error || 'Failed to create worktree');
@@ -350,6 +377,7 @@ export function useSessionLaunch({
       return startLocation(result.path, agent, yoloMode, {
         desktopId: pickedDesktopId,
         host,
+        origin,
       });
     },
     [sendCreateWorktree, startLocation],
@@ -363,6 +391,7 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode: boolean,
       pickedOnDesktopId?: string,
+      origin?: ShortcutSource,
     ) => {
       if (worktreeSessionCreatingRef.current) {
         showError('A worktree session is already being created.');
@@ -386,6 +415,7 @@ export function useSessionLaunch({
           yoloMode,
           {
             desktopId: pickedOnDesktopId,
+            origin,
             onCreated: (path) => {
               setSessionCreationJob((current) =>
                 current?.id === jobId ? { ...current, path, phase: 'starting_session' } : current,
@@ -412,6 +442,7 @@ export function useSessionLaunch({
 
   const closeLocationPicker = useCallback(() => {
     setLocationPickerOpen(false);
+    setLocationPickerOrigin(null);
   }, []);
 
   return {
@@ -421,6 +452,7 @@ export function useSessionLaunch({
     createSessionForUiAutomation,
     locationPickerOpen,
     locationPickerInitialAgent,
+    locationPickerOrigin,
     startLocation,
     startWorktreeSession,
     closeLocationPicker,

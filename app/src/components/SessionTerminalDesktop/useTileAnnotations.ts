@@ -21,6 +21,9 @@ const SEND_SENT_CLEAR_MS = 4000;
 const SKIPPED_APPROVAL_MESSAGE = 'Target is waiting for approval — not sent';
 const NOT_HYDRATED_MESSAGE = 'Annotations are still syncing — try again in a moment';
 interface Options {
+  desktopId: string;
+  leafId: string;
+  popped: boolean;
   isSeed: boolean;
   visible: boolean;
   path: string;
@@ -31,6 +34,9 @@ interface Options {
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
 }
 export function useTileAnnotations({
+  desktopId,
+  leafId,
+  popped,
   isSeed,
   visible,
   path,
@@ -115,6 +121,7 @@ export function useTileAnnotations({
     send: () => performAnnotationSend(primaryDestination),
     shortcutId: 'markdown.sendAnnotations',
     enabled: sendEnabled,
+    shortcutScope: { desktopId, leafId, active: !popped },
     sentClearMs: SEND_SENT_CLEAR_MS,
   });
   const sendStatus = sendOutcome ?? { kind: 'idle' as const };

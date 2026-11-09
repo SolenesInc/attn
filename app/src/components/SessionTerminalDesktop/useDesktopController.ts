@@ -787,13 +787,13 @@ export function useDesktopController(
   // Splitting needs an agent pane to anchor on: with a tile focused this is
   // deliberately a no-op.
   const handleSplit = useCallback(
-    (direction: TerminalSplitDirection) => {
-      if (activeLeafIsTile || !activeLeafId) {
+    (direction: TerminalSplitDirection, leafId = activeLeafId) => {
+      if (!agentPaneById.has(leafId)) {
         return;
       }
-      onSplitPane(activeLeafId, direction);
+      onSplitPane(leafId, direction);
     },
-    [activeLeafId, activeLeafIsTile, onSplitPane],
+    [activeLeafId, agentPaneById, onSplitPane],
   );
 
   const handleClosePane = useCallback(
@@ -803,16 +803,16 @@ export function useDesktopController(
     [onClosePane],
   );
 
-  const handleCloseFocusedLeaf = useCallback(() => {
-    if (!activeLeafId) {
+  const handleCloseFocusedLeaf = useCallback((leafId = activeLeafId) => {
+    if (!leafId) {
       return;
     }
-    if (activeLeafIsTile) {
-      onUndockTile?.(activeLeafId);
+    if (tileLeafById.has(leafId)) {
+      onUndockTile?.(leafId);
       return;
     }
-    handleClosePane(activeLeafId);
-  }, [activeLeafId, activeLeafIsTile, handleClosePane, onUndockTile]);
+    handleClosePane(leafId);
+  }, [activeLeafId, tileLeafById, handleClosePane, onUndockTile]);
 
   const toggleMaximizeActivePane = useCallback(() => {
     onSetZoomActive?.(false);
@@ -949,45 +949,72 @@ export function useDesktopController(
   );
 
   const workspaceShortcutsActive = sessionVisible && shortcutsEnabled;
-  useShortcut('terminal.open', focusActivePane, workspaceShortcutsActive);
+  const poppedShortcutsActive = poppedLeafIdSet.size > 0;
+  const desktopShortcutScope = { desktopId, active: workspaceShortcutsActive };
+  useShortcut('terminal.open', (source) => {
+    if (source) focusShownLeaf(source.leafId);
+    else focusActivePane();
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
   useShortcut(
     'terminal.find',
-    () => {
-      runtime.openFindInActivePane();
+    (source) => {
+      runtime.openFindInPane(source?.leafId ?? activeAgentPaneId);
     },
-    workspaceShortcutsActive,
+    workspaceShortcutsActive || poppedShortcutsActive,
+    desktopShortcutScope,
   );
   useShortcut(
     'terminal.splitVertical',
-    () => {
-      handleSplit('vertical');
+    (source) => {
+      handleSplit('vertical', source?.leafId);
     },
-    workspaceShortcutsActive,
+    workspaceShortcutsActive || poppedShortcutsActive,
+    desktopShortcutScope,
   );
   useShortcut(
     'terminal.splitHorizontal',
-    () => {
-      handleSplit('horizontal');
+    (source) => {
+      handleSplit('horizontal', source?.leafId);
     },
-    workspaceShortcutsActive,
+    workspaceShortcutsActive || poppedShortcutsActive,
+    desktopShortcutScope,
   );
-  useShortcut('terminal.toggleZoom', toggleZoomActivePane, workspaceShortcutsActive);
-  useShortcut('terminal.toggleMaximize', toggleMaximizeActivePane, workspaceShortcutsActive);
-  useShortcut('terminal.close', handleCloseFocusedLeaf, workspaceShortcutsActive && splitLayoutActive);
-  useShortcut('terminal.focusLeft', () => handleMovePane('left'), workspaceShortcutsActive);
-  useShortcut('terminal.focusRight', () => handleMovePane('right'), workspaceShortcutsActive);
-  useShortcut('terminal.focusUp', () => handleMovePane('up'), workspaceShortcutsActive);
-  useShortcut('terminal.focusDown', () => handleMovePane('down'), workspaceShortcutsActive);
+  useShortcut('terminal.toggleZoom', (source) => {
+    if (!source) toggleZoomActivePane();
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
+  useShortcut('terminal.toggleMaximize', (source) => {
+    if (!source) toggleMaximizeActivePane();
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
+  useShortcut('terminal.close', (source) => handleCloseFocusedLeaf(source?.leafId), (workspaceShortcutsActive && splitLayoutActive) || poppedShortcutsActive, { desktopId, active: workspaceShortcutsActive && splitLayoutActive });
+  useShortcut('terminal.focusLeft', (source) => {
+    if (!source) handleMovePane('left');
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
+  useShortcut('terminal.focusRight', (source) => {
+    if (!source) handleMovePane('right');
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
+  useShortcut('terminal.focusUp', (source) => {
+    if (!source) handleMovePane('up');
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
+  useShortcut('terminal.focusDown', (source) => {
+    if (!source) handleMovePane('down');
+  }, workspaceShortcutsActive || poppedShortcutsActive, desktopShortcutScope);
   const shelfMovesActive = desktopDrawn && shortcutsEnabled;
-  useShortcut('shelf.carryLeft', () => carryActiveColumn(-1), shelfMovesActive);
-  useShortcut('shelf.carryRight', () => carryActiveColumn(1), shelfMovesActive);
-  useShortcut('shelf.sendToShelf', sendActiveToShelf, shelfMovesActive);
+  const shelfShortcutScope = { desktopId, active: shelfMovesActive };
+  useShortcut('shelf.carryLeft', (source) => {
+    if (!source) carryActiveColumn(-1);
+  }, shelfMovesActive || poppedShortcutsActive, shelfShortcutScope);
+  useShortcut('shelf.carryRight', (source) => {
+    if (!source) carryActiveColumn(1);
+  }, shelfMovesActive || poppedShortcutsActive, shelfShortcutScope);
+  useShortcut('shelf.sendToShelf', (source) => {
+    if (!source) sendActiveToShelf();
+  }, shelfMovesActive || poppedShortcutsActive, shelfShortcutScope);
   const toggleTileWindow = useCallback((leafId: string) => {
     if (!leafId) return;
     if (poppedLeafIdSet.has(leafId)) onBringBackLeaf?.(leafId);
     else onPopOutLeaf?.(leafId);
   }, [onBringBackLeaf, onPopOutLeaf, poppedLeafIdSet]);
-  useShortcut('tile.popOut', () => toggleTileWindow(activeLeafId), tileWindowsEnabled && shelfMovesActive);
+  useShortcut('tile.popOut', (source) => toggleTileWindow(source?.leafId ?? activeLeafId), tileWindowsEnabled && (shelfMovesActive || poppedShortcutsActive), { desktopId, active: shelfMovesActive });
 
   const onShelfLimitRef = useRef(onShelfLimit);
   useLayoutEffect(() => {
@@ -1335,6 +1362,8 @@ export function useDesktopController(
 
   const shelfWidthLabel = useShelfControls({
     active: desktopDrawn && shortcutsEnabled,
+    desktopId,
+    poppedShortcutsActive,
     rowInput,
     narrowestCols: shelfNarrowestCols,
     onSetNarrowestCols,

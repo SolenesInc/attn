@@ -54,7 +54,7 @@ export function useTileWindows(enabled: boolean, showError: (message: string) =>
       }
     }
     for (const entry of wanted) {
-      void showTileWindow(entry.key, entry.frame, entry.title).catch((error) => {
+      void showTileWindow(entry.key, { desktopId: entry.desktopId, leafId: entry.leafId }, entry.frame, entry.title).catch((error) => {
         recordUiDiag({ kind: 'tile_window_error', action: 'show', key: entry.key, error: String(error) });
         sendDesktopBringBackLeaf({ desktopId: entry.desktopId, leafId: entry.leafId });
       });
