@@ -1,0 +1,327 @@
+{"input":"","output":"","error":""}
+{"input":"Zg==","output":"66","error":""}
+{"input":"Zm8=","output":"666f","error":""}
+{"input":"Zm9v","output":"666f6f","error":""}
+{"input":"Zm9vYg==","output":"666f6f62","error":""}
+{"input":"Zm9vYmE=","output":"666f6f6261","error":""}
+{"input":"Zm9vYmFy","output":"666f6f626172","error":""}
+{"input":"Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Zg","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Zg=","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"Zm8","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Zg==x","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"Zg=\n=","output":"66","error":""}
+{"input":"Zg\r\n==","output":"66","error":""}
+{"input":"Zm8=\n","output":"666f","error":""}
+{"input":"Zm8=Zg==","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"==","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"Zm9*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"*Zm9","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Zm9v\n","output":"666f6f","error":""}
+{"input":"\n","output":"","error":""}
+{"input":"Zm9v-_","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"Zg==\n\nx","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"Zg=x","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"+/+/","output":"fbffbf","error":""}
+{"input":"m*A/","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-Z*mmAm=mm\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"+gA/","output":"fa003f","error":""}
+{"input":"A*m","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"Zg\n","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"g=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*/9=gg-9\r\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"=mZ+-Z\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9++A+\rZ","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"-9/+m*+=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n","output":"","error":""}
+{"input":"*Ag\rZ*\ng*","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"=+=+gAm=mZ9","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"m+Z*9","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"m\n==g*+=g\n","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"-ggA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/*=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*\n-/9A9-A\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-\r-\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"mg=9","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"","output":"","error":""}
+{"input":"Ag=\ng=m\nA*-A\r","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"","output":"","error":""}
+{"input":"+*//A\r=g","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*/Agm\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-\n//++\n--AA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"m-g\rg-AAg\nA/\n","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"m9A*\n-Z-+","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"","output":"","error":""}
+{"input":"-/=--m9=**","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"/g/=\n\r*-g-Z=*","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"-m9m9AA/Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"gA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/A-=*9--\n\n*","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"\rgg=\nm*/m","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\r","output":"","error":""}
+{"input":"\rZ*A\rZ","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"/mm*+gm\n-=*\ng","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"gA\rmZ=","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"Z-*m*+/=-","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"AZ/g/*//\n9","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"9\r-/9","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"-=*=m\r//m/-Zg","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"A9m+\nm9\nA\r*","output":"","error":"illegal base64 data at input byte 10"}
+{"input":"\r+*\n","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"AA/-+","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"/=g\r=Z9\n9/\r\r\r","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"mZ\nm","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"\n9g+-m\n*/m","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"g*\ng+A=*A\rg/","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"/-Z*m\n=\n","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"/\nA\rA-g\r=Z\n","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"m-**g/\r-=\n+","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"*m\nAmA-g*=9\nZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"m","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"+9\r\r/\r","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"+-Z/+mA","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"99A*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"gA/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/\n/\nm-","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"=m*=-m9\rA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"*g*++\nggZ+","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n/AZ++=","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"99*\ng*-\r*mm-g","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"\nZ9Z","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"\n=99-mg9Zm\r\ng","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"\r+-","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"/*+g9*=/9","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-\nA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"ZZ\r**-9","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"*\nZ9g*/\r/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z+g/+","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"=ZgAZ//*A*\n=\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"+/=g*g-Z-Z","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"m\n=\r\nm+/+m","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"\ngm\rZ","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"","output":"","error":""}
+{"input":"-//mg*A+*m","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"","output":"","error":""}
+{"input":"\r","output":"","error":""}
+{"input":"/\r9+A\n9mgmAZ/","output":"","error":"illegal base64 data at input byte 10"}
+{"input":"\r=Z*+-Z\r-Zmm","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-\n\rA=A\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z=+","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*\n*ZAZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g\r/*-9*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"\r\rZ","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"ggmg\rg\n-=","output":"","error":"illegal base64 data at input byte 7"}
+{"input":"Agm9\r=9*mA*+\r","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"=--\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-9\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g/=9-\rZ","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"/*\n/\rgZA","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-\n*9\n+\n=+","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n9*gg","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"=g\r99gA\r=9gZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"=9A\r=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g\n-\r","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"\rg\r=*9/*m*A99","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"/=Zm-+\r999*","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"A+=/\r\n9*mg\n-m","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"/9/A9+9/=g","output":"","error":"illegal base64 data at input byte 8"}
+{"input":"+-9\nm9m=\r","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"/+*+=-/\nA=+","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"","output":"","error":""}
+{"input":"m*=**Z-*","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"9m9Zm\r","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9Z\rA+\n/Z/*/Z","output":"","error":"illegal base64 data at input byte 9"}
+{"input":"+*==\rg+=\ng/g-","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-\n=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"**\r*\nAAZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9AA/gg**","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"\rA=\r","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\ng/+","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"9/*=-\rAm*/","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"*\r9g\nZ\n\n\rAA/-","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-+-*+AA++/gA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\r=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"=A9\nm9\r-/=Z\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"9=m+9\nm*=Z9","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"gZ=A\r\r/AA-","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"A-AAg","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"+A==\rm9\n","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"\r\nAmZ*/\n=/\r","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"gg++*+\n=","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\n-\n=\r","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\nm++9","output":"9befbd","error":""}
+{"input":"*+=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g\rmm\n*9Z/+++=","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"++*\r\n+-g\r","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"9==\rm\n\rgA","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"99=99Am=A","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"=m*+9+\n\r\r\n=-g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-9+gZZ+m/++/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n-9g*=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"-*m\rZA=\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"+99","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\rm\nm=\nZ","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"=g-AZmg+\rZ/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"m-gA*g=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*\n\n\rA+m\r/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"//*Z","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"A+=g\rm---AZ\n=","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"+*gg","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"A/-*\r\n=","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"9\r\r","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z\n*mAgg","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"Zm//","output":"666fff","error":""}
+{"input":"-\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"\r\rg*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"\r\r+-mZZgZ\n/","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"++=\r9","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"\r/Z\r=A=/mm","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\r--","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"\rmmZ*Z/\n\rgm","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"=+\nA\rA\rAZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9\r=-*/+gZm\r","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"gA\r\r9/","output":"800f7f","error":""}
+{"input":"ZA+\nZ\n+gg-","output":"","error":"illegal base64 data at input byte 9"}
+{"input":"/A\n/9\r*/\n/Z","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"A/=\n","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"","output":"","error":""}
+{"input":"\n9mZmg/Z*Amg","output":"","error":"illegal base64 data at input byte 8"}
+{"input":"gm\r9\r\n9mZ9-=","output":"","error":"illegal base64 data at input byte 10"}
+{"input":"ZZgZ\n=\n9\n**A","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"*-A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"gZg9/\nm","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"/+A+\rm+m+=Z\r\n","output":"","error":"illegal base64 data at input byte 9"}
+{"input":"","output":"","error":""}
+{"input":"","output":"","error":""}
+{"input":"==A*Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"g=\r","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"=-ZmZm","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"mA\r+//Z*\nZm","output":"","error":"illegal base64 data at input byte 7"}
+{"input":"\rAm9","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"ZAZm","output":"640666","error":""}
+{"input":"","output":"","error":""}
+{"input":"-A+A==9/\r==+-","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"99\rZ=*\ngm","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"+*\n\nmA\n","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"*\rg+AAmg","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9mg+m","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\n\r\r\n/g9*9/\r","output":"","error":"illegal base64 data at input byte 7"}
+{"input":"","output":"","error":""}
+{"input":"AZ\rZAZ=","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"\r\r//\n\n","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\rm=gZg/++","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"*==Z/-g/\r=A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9m","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"*\nm9+","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"m==A","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"gZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9\n","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"g*=Z\r=-","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"AA-ZA\r\r9","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"gm-9Am","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"gZ\r=+=g\n+\nA","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"g/A/==m*9gA-","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"AgA\r9A**-\n","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"-g\nZZ/-g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"g\n/-AA9Z","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"+-ZZ=m\n\nm=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"","output":"","error":""}
+{"input":"","output":"","error":""}
+{"input":"/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"9\rA\n*-g","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"ZZg\nmA//+++=A","output":"","error":"illegal base64 data at input byte 11"}
+{"input":"","output":"","error":""}
+{"input":"-\n+\rgZAg-","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"AZ9-m\n*/9","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"/*-=*/*/\r\nZA+","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"9/\r-Z","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"gmgA\n\n/*A9","output":"","error":"illegal base64 data at input byte 7"}
+{"input":"m\nA*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"","output":"","error":""}
+{"input":"/+==A+AZ/=","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"*A-\r-m","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Ag9+9Z","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"/\n*","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"=Ag\rA9Z\n9+*","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"*ZA","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\rZ-gmmgg-","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"g\r-++g*+g","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"-/+-ZZgZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"+=Zg*ZA-m-","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"A/gg-\r-+9\n\r","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"+//\n=*=m+g","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"*\r\n==m","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"m*A--","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"","output":"","error":""}
+{"input":"/g\rAmm/","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"=mZ=/g\n/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/mg=/\r","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"/AZZ/m*=","output":"","error":"illegal base64 data at input byte 6"}
+{"input":"","output":"","error":""}
+{"input":"=+g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"=-\n\n+\r\r9\r","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/+\n\n=gA","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"\r\n*\n=\n=\n\rm","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"\rZg+Z-\n+*","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"*Z*\n","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"A+Am","output":"03e026","error":""}
+{"input":"","output":"","error":""}
+{"input":"+Z","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"*","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n/ZA9","output":"fd903d","error":""}
+{"input":"mA+m","output":"980fa6","error":""}
+{"input":"\r+m-9ZmggZ\r-\n","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"\n\n\n","output":"","error":""}
+{"input":"","output":"","error":""}
+{"input":"=mZ=mg=Z-=-\n=","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"\r+*","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"*","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"\n**","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"","output":"","error":""}
+{"input":"//Z-9+**=\n*","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"+","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"","output":"","error":""}
+{"input":"A","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"/+9/\nmm","output":"","error":"illegal base64 data at input byte 5"}
+{"input":"*=/Z/=AAA-g","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"-\nA\ng*g=A\nZ","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"99+9","output":"f7dfbd","error":""}
+{"input":"gZ=A*/","output":"","error":"illegal base64 data at input byte 2"}
+{"input":"/\n\n\r=Z++Zg-m","output":"","error":"illegal base64 data at input byte 4"}
+{"input":"m9+-/mm","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"=+g\rA=gm","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"+=gZ/","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"+mZ--g\n\rZ/mA","output":"","error":"illegal base64 data at input byte 3"}
+{"input":"g=+","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"m*Am9A\nm-+9Ag","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"","output":"","error":""}
+{"input":"Z*\n=","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"+*\r/=9Z/*\rm","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"g*A**\n-=--g","output":"","error":"illegal base64 data at input byte 1"}
+{"input":"=g=-/","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"=\n=mA-Z=+/*","output":"","error":"illegal base64 data at input byte 0"}
+{"input":"Z9g=g*g9\n/g-","output":"","error":"illegal base64 data at input byte 4"}

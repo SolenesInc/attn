@@ -1,7 +1,8 @@
 use attn::go::flag::{Flag, FlagDefault, FlagError, FlagSet};
-use attn::go::{duration, json, quote::quote, tabwriter};
+use attn::go::{base64, duration, json, quote::quote, tabwriter};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
 use std::fs;
 
 fn corpus(file: &str) -> Vec<Value> {
@@ -107,6 +108,34 @@ fn parse_duration_matches_go() {
         })
         .collect();
     assert_all_match("parse_duration", cases.len(), &mismatches);
+}
+
+fn hex(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        let _ = write!(out, "{byte:02x}");
+    }
+    out
+}
+
+#[test]
+fn base64_decode_matches_go() {
+    let cases = corpus("base64.jsonl");
+    let mismatches: Vec<_> = cases
+        .iter()
+        .filter_map(|case| {
+            let actual = match base64::decode(text(case, "input")) {
+                Ok(bytes) => hex(&bytes),
+                Err(error) => error.to_string(),
+            };
+            let expected = match text(case, "error") {
+                "" => text(case, "output"),
+                error => error,
+            };
+            (actual != expected).then(|| format!("{case} got {actual}"))
+        })
+        .collect();
+    assert_all_match("base64", cases.len(), &mismatches);
 }
 
 #[test]

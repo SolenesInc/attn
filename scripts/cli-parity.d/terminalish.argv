@@ -1,0 +1,169 @@
+# terminal
+read terminal
+read terminal help
+read terminal --help
+read terminal -h
+read terminal ls --help
+read terminal open -- --help
+read terminal no-such-verb
+read terminal no-such-verb --bogus
+read terminal ls --bogus
+read terminal ls extra
+read terminal ls --all --desktop 2
+read terminal ls --host x
+read terminal ls --desktop
+read terminal ls
+read terminal ls --json
+read terminal ls --all --json
+read terminal ls --desktop 99
+read terminal open --cwd
+read terminal open extra
+read terminal open --timeout 1
+read terminal open --bogus
+read terminal open --host no-such-outpost -- ls
+read terminal run t
+read terminal run --wait t "ls" extra
+read terminal run t ls --timeout 0
+read terminal run t ls --timeout x
+read terminal run t ls --timeout -1
+read terminal run t ls --until exit
+read terminal run no-such-terminal "ls"
+read terminal run no-such-terminal "ls" --json
+read terminal run no-such-terminal "ls" --wait --timeout 3
+read terminal send t
+read terminal send t --text a --keys b
+read terminal send t --keys
+read terminal send t --keys --text a
+read terminal send t --keys NoSuchKey
+read terminal send t --keys c-a escape f12 C-]
+read terminal send t --text hello
+read terminal send t --text hello --json
+read terminal read
+read terminal read t --last --scrollback
+read terminal read t --lines 3
+read terminal read t --scrollback --lines 0
+read terminal read t --scrollback --lines x
+read terminal read t --scrollback --lines +3
+read terminal read no-such-terminal
+read terminal read no-such-terminal --json
+read terminal wait t
+read terminal wait t --until later
+read terminal wait no-such-terminal --until exit
+read terminal wait no-such-terminal --until prompt --timeout 2 --json
+read terminal move
+read terminal move a b c
+read terminal move 8
+read terminal move t 8 --json
+read terminal move t 8 --bogus
+read terminal close
+read terminal close t --desktop
+read terminal close t --json
+read terminal close no-such-terminal
+read terminal close no-such-terminal --desktop 99
+read terminal ls -- a
+
+# open
+read open
+read open -h
+read open --help
+read open help
+read open --bogus
+read open --session
+read open a.md b.md c.md
+read open -h a.md
+read open --session no-such-session no-such.md
+read open no-such.md
+read open /tmp/no-such.md
+read open " spaced.md "
+read open s-000000
+read open s-000000 --profile no-such-profile
+read open s-000000 --session no-such-session
+write seed plant "parity open target" => $opened
+write open $opened --session no-such-session
+write open $opened
+
+# browser
+read browser
+read browser -h
+read browser --help
+read browser help
+read browser no-such-command
+read browser no-such-command --bogus
+read browser no-such-command --session no-such-session
+read browser open
+read browser open a b
+read browser open -h
+read browser open --bogus
+read browser open https://example.invalid
+read browser open https://example.invalid --session no-such-session
+read browser snapshot extra
+read browser snapshot
+read browser snapshot --session no-such-session
+read browser find
+read browser find --using css
+read browser find --using css --value " "
+read browser find --using css --value a extra
+read browser find --using css --value a --session no-such-session
+read browser find --using css --value a --all --name b --session no-such-session
+read browser wait
+read browser wait --using css --value a --session no-such-session
+read browser wait --using css --value a --timeout x
+read browser wait --using css --value a --timeout 0x10 --state visible --session no-such-session
+read browser click
+read browser click extra --selector a
+read browser click --selector a --session no-such-session
+read browser click --element e --session no-such-session
+read browser type
+read browser type --selector a
+read browser type --selector a --text b --session no-such-session
+read browser type --element e --text "" --session no-such-session
+read browser back extra
+read browser forward extra
+read browser reload extra
+read browser back --session no-such-session
+read browser forward --session no-such-session
+read browser reload --session no-such-session
+read browser press
+read browser press --text ""
+read browser press --text Enter --session no-such-session
+read browser scroll extra
+read browser scroll --x 1 --y 2 --session no-such-session
+read browser scroll --x x
+read browser cookies --session no-such-session
+read browser cookies extra --session no-such-session
+read browser command
+read browser command a b
+read browser command act --params nope
+read browser command act --params null
+read browser command act --params []
+read browser command act --params {} --session no-such-session
+read browser screenshot a b
+read browser screenshot --session no-such-session
+read browser screenshot /tmp/no-such/a.png --session no-such-session
+read browser pdf a b
+read browser pdf --params nope
+read browser pdf --session no-such-session
+
+# journal
+read journal
+read journal -h
+read journal --help
+read journal help
+read journal no-such-verb
+read journal append --help
+read journal append x -h
+read journal append
+read journal append --bogus
+read journal append --entry
+read journal append extra
+read journal append --entry a extra
+read journal append --entry a --entry-file b
+read journal append --entry "  "
+read journal append --entry-file /tmp/no-such-entry-file
+read journal append --entry-file /tmp
+read journal append --entry a --session no-such-session
+read journal append --entry a --date nope --session no-such-session
+read journal append --entry a --session no-such-session --json
+read journal append --entry a
+write journal append --entry "parity entry" --date 2026-01-01
+write journal append --entry "parity entry" --date 2026-01-01 --json

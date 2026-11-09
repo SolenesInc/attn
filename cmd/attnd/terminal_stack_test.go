@@ -157,12 +157,15 @@ func TestTerminalCLIDesktopAndProfileReach(t *testing.T) {
 		return s.Run(testworld.Invocation{Session: caller, Args: append([]string{"terminal"}, args...)})
 	}
 	var opened protocol.TerminalOpenResult
-	got := run("open", "--desktop", "Ops", "--json", "--", "printf remote-ready")
+	got := run("open", "--desktop", "Ops", "--json", "--", "printf remote-%s ready")
 	if got.Code != 0 {
 		t.Fatal(got)
 	}
 	got.JSON(t, &opened)
-	testworld.AwaitSession(app, string(opened.SessionID), func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	app.AwaitScreen(string(opened.SessionID), "remote-ready")
+	if got := run("wait", string(opened.TerminalID), "--until", "prompt"); got.Code != 0 {
+		t.Fatal(got)
+	}
 	denied := run("send", string(opened.TerminalID), "--text", "x")
 	if denied.Code != 1 || !strings.Contains(denied.Stderr, "--desktop "+opened.DesktopID) {
 		t.Fatalf("desktop refusal: %+v", denied)

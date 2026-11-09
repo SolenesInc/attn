@@ -35,11 +35,6 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"pr"}, run: runPRCommand},
 		{names: []string{"agent"}, run: runAgent, banner: true},
 		{names: []string{"session"}, run: runSession, banner: true},
-		{names: []string{"terminal"}, run: runTerminal, banner: true},
-		{names: []string{"open"}, run: runOpen, banner: true,
-			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn open <file.md|seed-id> [--session <id>]") }},
-		{names: []string{"browser"}, run: runBrowser, banner: true, help: printBrowserUsage},
-		{names: []string{"journal"}, run: runJournal, banner: true},
 
 		{names: []string{"presence"}, run: runPresence,
 			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") }},

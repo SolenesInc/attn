@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -45,6 +46,7 @@ func writeCorpus(directory string) error {
 		{"json_encode.jsonl", jsonEncodeCases(random)},
 		{"step_slug.jsonl", stepSlugCases(random)},
 		{"check_id.jsonl", checkIDCases(random)},
+		{"base64.jsonl", base64Cases(random)},
 	} {
 		var out bytes.Buffer
 		encoder := json.NewEncoder(&out)
@@ -470,4 +472,38 @@ func runJSONEncode(input string) textCase {
 		fatal(fmt.Errorf("json encode of %q: %w", input, err))
 	}
 	return textCase{input, string(output)}
+}
+
+type base64Case struct {
+	Input  string `json:"input"`
+	Output string `json:"output"`
+	Error  string `json:"error"`
+}
+
+var base64Tables = []string{
+	"", "Zg==", "Zm8=", "Zm9v", "Zm9vYg==", "Zm9vYmE=", "Zm9vYmFy", "Z", "Zg", "Zg=", "Zm8", "Zg==x", "Zg=\n=", "Zg\r\n==", "Zm8=\n", "Zm8=Zg==", "=", "==", "Z=", "Zm9*", "*Zm9", "Zm9v\n", "\n", "Zm9v-_", "Zg==\n\nx", "Zg=x", "+/+/",
+}
+
+func base64Cases(random *rand.Rand) []any {
+	var cases []any
+	for _, input := range base64Tables {
+		cases = append(cases, runBase64(input))
+	}
+	alphabet := []string{"A", "Z", "g", "m", "9", "+", "/", "=", "\n", "\r", "*", "-"}
+	for range generatedCasesPerTable {
+		var input strings.Builder
+		for range random.IntN(14) {
+			input.WriteString(pick(random, alphabet))
+		}
+		cases = append(cases, runBase64(input.String()))
+	}
+	return cases
+}
+
+func runBase64(input string) base64Case {
+	output, err := base64.StdEncoding.DecodeString(input)
+	if err != nil {
+		return base64Case{Input: input, Error: err.Error()}
+	}
+	return base64Case{Input: input, Output: hex.EncodeToString(output)}
 }
