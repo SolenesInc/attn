@@ -65,3 +65,49 @@ func TestABusyFrameReadBeforeTheVerdictLeavesTheSettledTurnAlone(t *testing.T) {
 		}
 	})
 }
+
+func TestABusyFrameReadAfterAnApprovalAndBeforeTheVerdictStillAnswersTheApproval(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "run the migration")
+		w.advance(0)
+
+		w.advance(10 * time.Millisecond)
+		agent.term.Heartbeat("approval", "Allow the command to run?")
+		w.advance(10 * time.Millisecond)
+		answeredFrameRead := time.Now()
+		w.advance(10 * time.Millisecond)
+		agent.reply("Ran it. <!-- attn:state=idle -->")
+
+		agent.term.HeartbeatReadAt("busy", "Claude Code", answeredFrameRead)
+		w.advance(2 * time.Minute)
+		if s := queriedSession(t, agent.cli, agent.id); s.State != protocol.SessionStateIdle {
+			t.Fatalf("the approval answered before the verdict left the session %s (%s), want idle", s.State, protocol.Deref(s.StateReason))
+		}
+	})
+}
+
+func TestAWorkingStatusReadBeforeTheVerdictLeavesTheSettledTurnAlone(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "plan the release")
+		w.advance(0)
+
+		statusRead := time.Now()
+		w.advance(10 * time.Millisecond)
+		agent.reply("Should I ship version one? <!-- attn:state=waiting_input -->")
+		waiting := queriedSession(t, agent.cli, agent.id)
+
+		before := len(sessionUpdatesOf(app, agent.id))
+		agent.term.ProgramStatusReadAt("working", statusRead)
+		w.advance(0)
+		if updates := sessionUpdatesOf(app, agent.id)[before:]; len(updates) != 0 {
+			t.Fatalf("a status read before the verdict moved the session: %s", describeUpdates(updates))
+		}
+		if s := queriedSession(t, agent.cli, agent.id); s.State != protocol.SessionStateWaitingInput || s.StateSince != waiting.StateSince {
+			t.Fatalf("a status read before the verdict left the session %s since %s, want waiting_input since %s", s.State, s.StateSince, waiting.StateSince)
+		}
+	})
+}

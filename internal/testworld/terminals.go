@@ -458,6 +458,10 @@ func (t *Terminal) HeartbeatReadAt(claim, detail string, readAt time.Time) {
 	t.report(pty.Observation{Source: pty.SourceHeartbeat, Claim: claim, Detail: detail, At: readAt})
 }
 
+func (t *Terminal) ProgramStatusReadAt(claim string, readAt time.Time) {
+	t.report(pty.Observation{Source: pty.SourceProgramStatus, Claim: claim, At: readAt})
+}
+
 func (t *Terminal) ProgramStatus(claim string) {
 	t.observe(pty.SourceProgramStatus, claim, "")
 }
