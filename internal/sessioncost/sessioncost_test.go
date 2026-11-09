@@ -209,6 +209,12 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 			want:  37.2,
 		},
 		{
+			name:  "Sonnet 5.5 discounted cache read",
+			model: "claude-sonnet-5-5",
+			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000},
+			want:  18.6,
+		},
+		{
 			name:  "Astra standard input output and cache rates",
 			model: "gpt-6-astra",
 			usage: Usage{InputTokens: 1_000_000, OutputTokens: 2_000_000, CacheReadInputTokens: 3_000_000, CacheWrite5mInputTokens: 4_000_000, CacheWrite1hInputTokens: 5_000_000},
