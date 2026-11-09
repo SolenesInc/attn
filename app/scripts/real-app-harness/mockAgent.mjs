@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -197,6 +197,9 @@ export function validateMockAgentConfig(config) {
   }
   if (config.ignoreSigterm !== undefined && typeof config.ignoreSigterm !== 'boolean') {
     throw new Error('mock agent ignoreSigterm must be a boolean');
+  }
+  if (config.refuseThreadStart !== undefined && (typeof config.refuseThreadStart?.text !== 'string' || typeof config.refuseThreadStart?.releasePath !== 'string')) {
+    throw new Error('mock agent refuseThreadStart needs text and releasePath strings');
   }
   for (const [index, turn] of config.turns.entries()) {
     if (typeof turn?.includes !== 'string' || !turn.includes) {
@@ -485,12 +488,77 @@ export function readMockAgentConfig(cwd) {
   }
 }
 
+function runProcess(command, args, { cwd, env, input = '' }) {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd, env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk; });
+    child.stderr.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => resolve({ status: null, stdout, stderr, error }));
+    child.on('close', (status) => resolve({ status, stdout, stderr }));
+    child.stdin.on('error', () => {});
+    child.stdin.end(input);
+  });
+}
+
+export function createMockActionRunner({ cwd, env, reply, captures = new Map() }) {
+  const fill = (value) => interpolateCaptures(value, captures);
+
+  const runExec = async (action) => {
+    const args = (action.args || []).map((arg) => fill(arg));
+    const command = fill(action.cmd);
+    const result = await runProcess(command, args, {
+      cwd: action.cwd ? resolveFixturePath(cwd, fill(action.cwd)) : cwd,
+      env,
+    });
+    const printed = [result.stdout, result.stderr].map((part) => (part || '').trim()).filter(Boolean).join('\n');
+    const label = [command, ...args].join(' ');
+    if (result.error || result.status !== 0) {
+      const detail = printed || result.error?.message || 'no output';
+      const failure = `${label} exited ${result.status ?? 'without status'}: ${detail}`;
+      if (!action.allowFailure) throw new Error(failure);
+      await reply(`✗ ${failure}`, action);
+      return;
+    }
+    await reply(printed ? `$ ${label}\n${printed}` : `$ ${label}`, action);
+  };
+
+  const runAttnAction = async (action) => {
+    const args = (action.args || []).map((arg) => fill(arg));
+    const result = await runProcess(env.ATTN_WRAPPER_PATH || 'attn', args, { env, input: fill(action.input || '') });
+    if (result.error || result.status !== 0) {
+      const detail = (result.stderr || result.stdout || result.error?.message || 'unknown error').trim();
+      throw new Error(`attn ${args.join(' ')} failed: ${detail}`);
+    }
+    await reply(result.stdout.trim() || String(action.emptyReply || 'done'), action);
+  };
+
+  return async (action, prompt) => {
+    if (action.type === 'capture') captures.set(action.name, captureFromPrompt(action, prompt));
+    else if (action.type === 'exec') await runExec(action);
+    else if (action.type === 'reply') await reply(String(action.text ?? ''), action);
+    else if (action.type === 'delay') await delay(Number(action.ms) || 0);
+    else if (action.type === 'touch') {
+      const target = resolveFixturePath(cwd, String(action.path || ''));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `${action.content ?? 'ready'}\n`, 'utf8');
+    } else if (action.type === 'wait_for_file') {
+      const target = resolveFixturePath(cwd, String(action.path || ''));
+      const deadline = Date.now() + (Number(action.timeoutMs) || 120_000);
+      while (!fs.existsSync(target)) {
+        if (Date.now() >= deadline) throw new Error(`timed out waiting for ${target}`);
+        await delay(Number(action.pollMs) || 25);
+      }
+    } else if (action.type === 'attn') await runAttnAction(action);
+  };
+}
+
 async function runMockAgent() {
   const cwd = process.cwd();
   const config = readMockAgentConfig(cwd);
   if (config.ignoreSigterm) process.on('SIGTERM', () => {});
   const launch = parseMockAgentArgv(process.argv.slice(2));
-  const captures = new Map();
   const agent = mockAgentName(config.agent || process.env.ATTN_AGENT);
   const flavor = mockAgentFlavor(agent);
   const resumable = Boolean(config.resumable);
@@ -578,65 +646,7 @@ async function runMockAgent() {
     emit(`• ${text.replaceAll('\n', '\n  ')}`);
   };
 
-  const fill = (value) => interpolateCaptures(value, captures);
-
-  const runExec = (action) => {
-    const args = (action.args || []).map((arg) => fill(arg));
-    const command = fill(action.cmd);
-    const result = spawnSync(command, args, {
-      cwd: action.cwd ? resolveFixturePath(cwd, fill(action.cwd)) : cwd,
-      encoding: 'utf8',
-      env: process.env,
-    });
-    const printed = [result.stdout, result.stderr].map((part) => (part || '').trim()).filter(Boolean).join('\n');
-    const label = [command, ...args].join(' ');
-    if (result.error || result.status !== 0) {
-      const detail = printed || result.error?.message || 'no output';
-      const failure = `${label} exited ${result.status ?? 'without status'}: ${detail}`;
-      if (!action.allowFailure) throw new Error(failure);
-      reply(`✗ ${failure}`);
-      return;
-    }
-    reply(printed ? `$ ${label}\n${printed}` : `$ ${label}`);
-  };
-
-  const runAction = async (action, prompt) => {
-    if (action.type === 'capture') {
-      captures.set(action.name, captureFromPrompt(action, prompt));
-      return;
-    }
-    if (action.type === 'exec') {
-      runExec(action);
-      return;
-    }
-    if (action.type === 'reply') {
-      reply(String(action.text ?? ''));
-      return;
-    }
-    if (action.type === 'delay') {
-      await delay(Number(action.ms) || 0);
-      return;
-    }
-    if (action.type === 'touch') {
-      const target = resolveFixturePath(cwd, String(action.path || ''));
-      fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.writeFileSync(target, `${action.content ?? 'ready'}\n`, 'utf8');
-      return;
-    }
-    if (action.type === 'wait_for_file') {
-      const target = resolveFixturePath(cwd, String(action.path || ''));
-      const deadline = Date.now() + (Number(action.timeoutMs) || 120_000);
-      while (!fs.existsSync(target)) {
-        if (Date.now() >= deadline) throw new Error(`timed out waiting for ${target}`);
-        await delay(Number(action.pollMs) || 25);
-      }
-      return;
-    }
-    if (action.type === 'attn') {
-      const output = requireAttn((action.args || []).map((arg) => fill(arg)), fill(action.input || '')).trim();
-      reply(output || String(action.emptyReply || 'done'));
-    }
-  };
+  const runAction = createMockActionRunner({ cwd, env: process.env, reply });
 
   const stop = (state) => {
     appendMessage('assistant', stateMarker(state));

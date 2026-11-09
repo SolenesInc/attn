@@ -8,6 +8,7 @@ import {
   agentHomeRoots,
   codexTranscriptPath,
   conversationHeaderRecords,
+  createMockActionRunner,
   findMockTranscript,
   markerStateForActions,
   messageRecords,
@@ -20,6 +21,7 @@ import {
   selectMockAgentTurn,
   stateMarker,
   transcriptMessages,
+  transcriptTurns,
 } from './mockAgent.mjs';
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,6 +45,16 @@ function hookCommands(args) {
   return commands;
 }
 
+function shellEnvironmentOverrides(args) {
+  const env = {};
+  args.forEach((arg, index) => {
+    if (args[index - 1] !== '-c') return;
+    const match = /^shell_environment_policy\.set\.(\w+)=(".*")$/.exec(arg);
+    if (match) env[match[1]] = JSON.parse(match[2]);
+  });
+  return env;
+}
+
 function runShell(command, cwd, env, input) {
   return new Promise((resolve, reject) => {
     const child = execFile('/bin/sh', ['-c', command], { cwd, env }, (error, stdout, stderr) => {
@@ -57,6 +69,7 @@ export async function runSharedMockServer() {
   const args = process.argv.slice(3);
   const version = mockCodexVersion();
   const hooks = hookCommands(args);
+  const toolEnv = shellEnvironmentOverrides(args);
   const sessionsDir = agentHomeRoots().codexSessions;
   const codexHome = path.dirname(sessionsDir);
   const archivedDir = path.join(codexHome, 'archived_sessions');
@@ -111,12 +124,17 @@ export async function runSharedMockServer() {
 
   const newThread = ({ id, cwd, file, source, config, conn }) => ({
     id, cwd, path: file, config, sessionSource: source, sessionStarted: false, written: false, active: false,
-    turnId: '', sequence: 0, approval: null, subscribers: new Set([conn]),
+    turnId: '', sequence: 0, approval: null, captures: new Map(), subscribers: new Set([conn]),
   });
 
   const speak = (thread, role, text) => {
     thread.sequence += 1;
     write(thread, messageRecords({ agent: 'codex', role, text, sequence: thread.sequence }));
+  };
+
+  const speakUser = (thread, text) => {
+    speak(thread, 'user', text);
+    tell(thread, { method: 'item/completed', params: { threadId: thread.id, turnId: thread.turnId, item: { type: 'userMessage', text } } });
   };
 
   const askApproval = async (thread) => {
@@ -130,25 +148,29 @@ export async function runSharedMockServer() {
     await answered;
   };
 
-  const playTurn = async (thread, text) => {
+  const playTurn = async (thread, text, turn) => {
     const config = readMockAgentConfig(thread.cwd);
-    const turn = selectMockAgentTurn(config, text);
     const started = Date.now();
     const replies = [];
-    for (const action of turn.actions) {
-      if (action.type === 'delay') await delay(Number(action.ms) || 0);
-      else if (action.type === 'reply') {
-        replies.push(String(action.text ?? ''));
-        if (action.approval) await askApproval(thread);
-      } else throw new Error(`the shared Codex mock does not play ${action.type} actions`);
+    let failure = null;
+    const reply = async (spoken, action) => {
+      if (action.approval) await askApproval(thread);
+      replies.push(spoken);
+      speak(thread, 'assistant', spoken);
+      tell(thread, { method: 'item/completed', params: { threadId: thread.id, turnId: thread.turnId, item: { type: 'agentMessage', text: spoken } } });
+    };
+    const runAction = createMockActionRunner({ cwd: thread.cwd, env: { ...process.env, ...toolEnv, CODEX_THREAD_ID: thread.id }, reply, captures: thread.captures });
+    try {
+      for (const action of turn.actions) await runAction(action, text);
+    } catch (error) {
+      failure = error;
+      await reply(`mock agent error: ${error.message}`, {});
     }
     await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - started)));
-    const state = markerStateForActions(turn.actions);
-    const reply = replies.join('\n');
-    speak(thread, 'assistant', `${reply} ${stateMarker(state)}`.trim());
-    await runHooks(thread, 'Stop', { stop_hook_active: false, last_assistant_message: `${reply} ${stateMarker(state)}`.trim() });
+    const marker = stateMarker(failure ? 'idle' : markerStateForActions(turn.actions));
+    speak(thread, 'assistant', marker);
+    await runHooks(thread, 'Stop', { stop_hook_active: false, last_assistant_message: `${replies.join('\n')} ${marker}`.trim() });
     thread.active = false;
-    tell(thread, { method: 'item/completed', params: { threadId: thread.id, turnId: thread.turnId, item: { type: 'agentMessage', text: reply } } });
     tell(thread, { method: 'turn/completed', params: { threadId: thread.id, turn: { id: thread.turnId, status: 'completed' } } });
     announceStatus(thread);
   };
@@ -250,14 +272,15 @@ export async function runSharedMockServer() {
         write(thread, []);
         await runHooks(thread, 'SessionStart', { source: thread.sessionSource });
       }
-      await runHooks(thread, 'UserPromptSubmit', { prompt: text });
-      speak(thread, 'user', text);
+      const turn = selectMockAgentTurn(readMockAgentConfig(thread.cwd), text);
+      if (turn.submitHook !== false) await runHooks(thread, 'UserPromptSubmit', { prompt: text });
+      speakUser(thread, text);
       return {
         result: { turn: { id: thread.turnId, status: 'inProgress' } },
         after: () => {
           tell(thread, { method: 'turn/started', params: { threadId: thread.id, turn: { id: thread.turnId, status: 'inProgress' } } });
           announceStatus(thread);
-          playTurn(thread, text).catch((error) => {
+          playTurn(thread, text, turn).catch((error) => {
             console.error(`shared Codex mock turn failed: ${error.message}`);
             thread.active = false;
             announceStatus(thread);
@@ -269,7 +292,7 @@ export async function runSharedMockServer() {
       const thread = loadedThread(params.threadId);
       if (!thread.active) throw new Error('no active turn to steer');
       if (params.expectedTurnId !== thread.turnId) throw new Error(`expected turn ${params.expectedTurnId}, but turn ${thread.turnId} is active`);
-      speak(thread, 'user', promptOf(params));
+      speakUser(thread, promptOf(params));
       return { result: { turnId: thread.turnId } };
     },
   };
@@ -338,6 +361,7 @@ export async function runSharedMockView() {
   const launch = remoteLaunch(process.argv.slice(2));
   const flavor = mockAgentFlavor('codex');
   const config = readMockAgentConfig(launch.cwd);
+  if (config.ignoreSigterm) process.on('SIGTERM', () => {});
   const peer = new WebSocket(`ws+unix://${launch.socket}:/`);
   await new Promise((resolve, reject) => { peer.once('open', resolve); peer.once('error', reject); });
 
@@ -349,6 +373,8 @@ export async function runSharedMockView() {
   const answering = new Set();
   const busy = new Set();
   const blocks = [];
+  const typedHere = new Set();
+  const queuedInputs = [];
   let beat = null;
 
   const needsAnswer = () => approvals.has(selected) && !answering.has(approvals.get(selected));
@@ -382,6 +408,14 @@ export async function runSharedMockView() {
     showPrompt();
   };
 
+  const showConversation = (thread) => {
+    blocks.push(`Conversation ${thread.id}`);
+    if (!thread.path || !fs.existsSync(thread.path)) return;
+    for (const turn of transcriptTurns(fs.readFileSync(thread.path, 'utf8'))) {
+      blocks.push(turn.role === 'assistant' ? `• ${turn.text.replaceAll('\n', '\n  ')}` : `${flavor.prompt}${turn.text}`);
+    }
+  };
+
   const call = (method, params) => new Promise((resolve, reject) => {
     sequence += 1;
     pending.set(sequence, { resolve, reject });
@@ -404,10 +438,14 @@ export async function runSharedMockView() {
       if (params.threadId === selected) pace();
     } else if (message.method === 'turn/completed') {
       busy.delete(params.threadId);
-      if (params.threadId === selected) pace();
+      if (params.threadId === selected) {
+        showPrompt();
+        if (queuedInputs.length > 0) startTurn(queuedInputs.shift());
+      }
     } else if (message.method === 'item/completed' && params.threadId === selected && params.item?.type === 'agentMessage') {
       emit(`• ${params.item.text.replaceAll('\n', '\n  ')}`);
-      showPrompt();
+    } else if (message.method === 'item/completed' && params.threadId === selected && params.item?.type === 'userMessage') {
+      if (!typedHere.delete(params.item.text)) emit(`${flavor.prompt}${params.item.text}`);
     } else if (message.id !== undefined && !message.method) {
       const waiting = pending.get(message.id);
       pending.delete(message.id);
@@ -418,6 +456,13 @@ export async function runSharedMockView() {
 
   await call('initialize', { clientInfo: { name: 'codex-tui', version: mockCodexVersion() } });
   peer.send(JSON.stringify({ method: 'initialized' }));
+  if (config.refuseThreadStart && !launch.resumeSessionId) {
+    console.log(config.refuseThreadStart.text);
+    while (!fs.existsSync(config.refuseThreadStart.releasePath)) await delay(25);
+    peer.close();
+    process.exitCode = 1;
+    return;
+  }
   let shown;
   try {
     shown = launch.resumeSessionId
@@ -430,37 +475,48 @@ export async function runSharedMockView() {
     return;
   }
   selected = shown.thread.id;
-  blocks.push(`Conversation ${selected}`);
+  showConversation(shown.thread);
   repaint();
   if (needsAnswer()) showApproval();
   process.stdout.on('resize', repaint);
 
   const switchTo = async (conversation) => {
     const previous = selected;
-    selected = conversation;
+    selected = conversation.id;
     blocks.length = 0;
-    blocks.push(`Conversation ${selected}`);
+    showConversation(conversation);
     await call('thread/unsubscribe', { threadId: previous });
     repaint();
     if (needsAnswer()) showApproval();
+  };
+
+  const startTurn = async (input) => {
+    busy.add(selected);
+    pace();
+    try {
+      await call('turn/start', { threadId: selected, input: [{ type: 'text', text: input, text_elements: [] }] });
+    } catch (error) {
+      if (!error.message.startsWith('turn already active')) throw error;
+      queuedInputs.unshift(input);
+    }
   };
 
   const submit = async (input) => {
     const [command, argument = ''] = [input.split(' ')[0], input.split(' ').slice(1).join(' ').trim()];
     if (command === '/new' || command === '/clear') {
       const started = await call('thread/start', { cwd: launch.cwd, model: launch.model, ephemeral: false, threadSource: 'user', config: {} });
-      await switchTo(started.thread.id);
+      await switchTo(started.thread);
     } else if ((command === '/resume' || command === '/agents') && argument) {
-      await call('thread/resume', { threadId: argument, excludeTurns: true });
-      await switchTo(argument);
+      const resumed = await call('thread/resume', { threadId: argument, excludeTurns: true });
+      await switchTo(resumed.thread);
     } else if (command === '/rename' && argument) {
       await call('thread/name/set', { threadId: selected, name: argument });
       showPrompt();
     } else {
       blocks.push(`${flavor.prompt}${input}`);
-      busy.add(selected);
-      pace();
-      await call('turn/start', { threadId: selected, input: [{ type: 'text', text: input, text_elements: [] }] });
+      typedHere.add(input);
+      if (busy.has(selected)) queuedInputs.push(input);
+      else await startTurn(input);
     }
   };
 

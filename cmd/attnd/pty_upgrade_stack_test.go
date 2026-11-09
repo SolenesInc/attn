@@ -40,10 +40,16 @@ func writeUpgradeCodexFixture(t *testing.T, root string) string {
 set -eu
 stty -echo
 terminal_id="${ATTN_TERMINAL_ID:-${ATTN_SESSION_ID:-}}"
-transcript="$ATTN_TOOL_HOME/.codex/sessions/native-$terminal_id.jsonl"
+conversation="native-$terminal_id"
+previous=''
+for arg in "$@"; do
+  if [ "$previous" = --session-id ]; then conversation="$arg"; fi
+  previous="$arg"
+done
+transcript="$ATTN_TOOL_HOME/.codex/sessions/$conversation.jsonl"
 mkdir -p "$ATTN_TOOL_HOME/.codex/sessions"
-printf '{"type":"session_meta","payload":{"id":"native-%s","cwd":"%s"}}\n' "$terminal_id" "$PWD" > "$transcript"
-printf '{"session_id":"native-%s","transcript_path":"%s"}' "$terminal_id" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
+printf '{"type":"session_meta","payload":{"id":"%s","cwd":"%s"}}\n' "$conversation" "$PWD" > "$transcript"
+printf '{"session_id":"%s","transcript_path":"%s"}' "$conversation" "$transcript" | "$ATTN_WRAPPER_PATH" _hook-session-start
 while IFS= read -r line; do
   previous=''; resume=''; model=''; effort=''
   for arg in "$@"; do
@@ -174,11 +180,11 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		current.probe(id, identities[id].ChildPID, "new-daemon")
 	}
 	current.setSharedSetting(false)
-	current.spawn("stored-off-agent", "codex", fixture)
+	current.spawn("stored-off-agent", "claude", fixture)
 	identities["stored-off-agent"] = current.identity("stored-off-agent", false)
 	current.probe("stored-off-agent", identities["stored-off-agent"].ChildPID, "stored-off")
 	current.setSharedSetting(true)
-	current.spawn("new-agent", "codex", fixture)
+	current.spawn("new-agent", "claude", fixture)
 	identities["new-agent"] = current.identity("new-agent", true)
 	current.probe("new-agent", identities["new-agent"].ChildPID, "rust-agent")
 	current.command(map[string]any{"cmd": "reload_session", "id": "promote-agent", "cols": 80, "rows": 24}, "reload_session_result", "promote-agent")
@@ -225,7 +231,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	if !strings.Contains(output, "__RESUME_native-promote-agent__") || agentPIDs["promote-agent"] == priorAgentPID {
 		t.Fatalf("reload while disabled lost native conversation identity: %q", output)
 	}
-	current.spawn("disabled-agent", "codex", fixture)
+	current.spawn("disabled-agent", "claude", fixture)
 	identities["disabled-agent"] = current.identity("disabled-agent", false)
 	assertAll(current, "disabled-live")
 	current.stop()
@@ -233,7 +239,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current = start(newBinary, hostBinary)
 	current.assertSharedSetting(false, false)
 	assertAll(current, "disabled-restart")
-	current.spawn("restart-off-agent", "codex", fixture)
+	current.spawn("restart-off-agent", "claude", fixture)
 	identities["restart-off-agent"] = current.identity("restart-off-agent", false)
 	assertAll(current, "new-after-disabled-restart")
 	current.setSharedSetting(true)
@@ -247,7 +253,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
 	current.waitForLog("shared PTY host artifact promoted", nil)
-	current.spawn("next-agent", "codex", fixture)
+	current.spawn("next-agent", "claude", fixture)
 	next := current.identity("next-agent", true)
 	identities["next-agent"] = next
 	sharedSessions["next-agent"] = true
@@ -271,7 +277,7 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 		t.Fatalf("rejection notifications = %d, want exactly one", got)
 	}
 	assertAll(current, "rejected-candidate")
-	current.spawn("last-known-good-agent", "codex", fixture)
+	current.spawn("last-known-good-agent", "claude", fixture)
 	lastKnownGood := current.identity("last-known-good-agent", true)
 	identities["last-known-good-agent"] = lastKnownGood
 	sharedSessions["last-known-good-agent"] = true
@@ -292,14 +298,14 @@ func TestSessionsSurviveDaemonUpgradesAndSharedHostGenerations(t *testing.T) {
 	current = start(newBinary, filepath.Join(root, "missing-host"))
 	current.assertSharedSetting(true, true)
 	assertAll(current, "missing-bundle-restart")
-	current.spawn("missing-bundle-agent", "codex", fixture)
+	current.spawn("missing-bundle-agent", "claude", fixture)
 	identities["missing-bundle-agent"] = current.identity("missing-bundle-agent", true)
 	sharedSessions["missing-bundle-agent"] = true
 	if identities["missing-bundle-agent"].WorkerPID != next.WorkerPID {
 		t.Fatal("a missing bundle host moved new launches off the last-known-good host")
 	}
 	current.setSharedSetting(false)
-	current.spawn("fallback-agent", "codex", fixture)
+	current.spawn("fallback-agent", "claude", fixture)
 	identities["fallback-agent"] = current.identity("fallback-agent", false)
 	assertAll(current, "fallback-new-agent")
 	for _, id := range slices.Sorted(maps.Keys(identities)) {
@@ -1583,7 +1589,7 @@ func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 
 func (d *upgradeDaemon) spawn(id, agent, executable string, options ...func(map[string]any)) {
 	d.t.Helper()
-	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}
+	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, agent + "_executable": executable, "cols": 80, "rows": 24}
 	for _, option := range options {
 		option(spawn)
 	}

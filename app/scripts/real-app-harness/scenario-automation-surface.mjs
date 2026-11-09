@@ -5,13 +5,11 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { createCodexProbe } from './codexProbe.mjs';
 import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
-import { fileURLToPath } from 'node:url';
 import { pressShortcutKeys, shownAgentId } from './common.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
@@ -108,16 +106,15 @@ const API_VERSION = 'attn.dev/automations/v1alpha1';
 
 // A YAML carrying `enabled:` is rejected outright (errEnabledManagedOutsideSpec
 // in internal/automation/automation.go), so no template below emits it.
-function manualDefinitionYAML({ id, locationPath, executable }) {
+function manualDefinitionYAML({ id, locationPath }) {
   return `api_version: ${API_VERSION}
 ${id ? `id: ${id}\n` : ''}name: Slice 6 packaged automations-panel proof (manual)
 trigger:
   type: manual
 prompt: |
-  Slice 6 packaged automations-panel proof. Do nothing; this executable is a test double.
+  Slice 6 packaged automations-panel proof. Do nothing.
 launch:
   driver: codex
-  executable: ${JSON.stringify(executable)}
   model: slice6-manual-probe
   effort: high
 location:
@@ -126,7 +123,7 @@ location:
 `;
 }
 
-function scheduledDefinitionYAML({ id, locationPath, executable }) {
+function scheduledDefinitionYAML({ id, locationPath }) {
   return `api_version: ${API_VERSION}
 ${id ? `id: ${id}\n` : ''}name: Slice 6 packaged automations-panel proof (non-manual)
 trigger:
@@ -142,7 +139,6 @@ prompt: |
   non-manual trigger.
 launch:
   driver: codex
-  executable: ${JSON.stringify(executable)}
   model: slice6-scheduled-probe
   effort: high
 location:
@@ -208,7 +204,6 @@ async function main() {
 
   let daemonEnv = null;
   let fixturePath = null;
-  let probe = null;
   let manualApplied = false;
   let scheduledApplied = false;
   let failingID = 0;
@@ -220,7 +215,6 @@ async function main() {
   try {
     daemonEnv = instanceEnv(instance);
     fixturePath = createFixture(runner.sessionDir);
-    probe = createCodexProbe(runner.sessionDir);
     writeMockAgentFixture(fixturePath, { name: 'automation desktop proof', turns: [{
       includes: 'Slice 6 packaged automations-panel proof',
       actions: [{ type: 'reply', text: 'Which change should I review next?', state: 'waiting_input' }],
@@ -243,7 +237,7 @@ async function main() {
     await runner.step('leg1_apply_manual_and_panel_shows_it', async () => {
       fs.writeFileSync(
         manualDefinitionFile,
-        manualDefinitionYAML({ id: manualID, locationPath: fixturePath, executable: fileURLToPath(new URL('./mockAgent.mjs', import.meta.url)) }),
+        manualDefinitionYAML({ id: manualID, locationPath: fixturePath }),
       );
       manualID = runJSON(binary, ['automation', 'apply', '--file', manualDefinitionFile, '--launch-desktop', 'own', '--desktop-name', 'Testing automations'], daemonEnv).id;
       manualApplied = true;
@@ -355,7 +349,7 @@ async function main() {
     await runner.step('leg3_failure_shown_not_hidden', async () => {
       fs.writeFileSync(
         scheduledDefinitionFile,
-        scheduledDefinitionYAML({ id: scheduledID, locationPath: fixturePath, executable: probe.executable }),
+        scheduledDefinitionYAML({ id: scheduledID, locationPath: fixturePath }),
       );
       scheduledID = runJSON(binary, ['automation', 'apply', '--file', scheduledDefinitionFile], daemonEnv).id;
       scheduledApplied = true;
@@ -395,11 +389,12 @@ async function main() {
 
     await runner.step('leg3b_codex_that_exits_before_its_first_turn_stays_pending_then_fails', async () => {
       const release = path.join(runner.sessionDir, 'codex-exits.release');
-      execFileSync('mkfifo', [release]);
-      const exiting = path.join(runner.sessionDir, 'codex-exits');
-      fs.writeFileSync(exiting, `#!/bin/sh\necho "thread/start failed during TUI bootstrap: harness refusal (code -32603)"\nread line < '${release}'\nexit 1\n`, { mode: 0o700 });
+      const exitingDir = path.join(runner.sessionDir, 'codex-exits');
+      fs.mkdirSync(exitingDir, { recursive: true });
+      await workInFolder({ observer, cwd: exitingDir });
+      writeMockAgentFixture(exitingDir, { name: 'codex exits', turns: [], refuseThreadStart: { text: 'thread/start failed during TUI bootstrap: harness refusal (code -32603)', releasePath: release } });
       const definitionFile = path.join(runner.sessionDir, 'codex-exits.yml');
-      fs.writeFileSync(definitionFile, `api_version: ${API_VERSION}\nname: Codex launch failure proof\ntrigger:\n  type: manual\nprompt: |\n  Codex launch failure proof.\nlaunch:\n  driver: codex\n  executable: ${JSON.stringify(exiting)}\nlocation:\n  type: directory\n  path: ${JSON.stringify(fixturePath)}\n`);
+      fs.writeFileSync(definitionFile, `api_version: ${API_VERSION}\nname: Codex launch failure proof\ntrigger:\n  type: manual\nprompt: |\n  Codex launch failure proof.\nlaunch:\n  driver: codex\nlocation:\n  type: directory\n  path: ${JSON.stringify(exitingDir)}\n`);
       failingID = runJSON(binary, ['automation', 'apply', '--file', definitionFile], daemonEnv).id;
       await client.request('automations_open_panel');
       await poll(async () => findDefinitionRow(await client.request('automations_get_state'), failingID), `definition ${failingID} to appear in the panel`, PANEL_APPEAR_TIMEOUT_MS);

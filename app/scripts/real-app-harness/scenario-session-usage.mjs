@@ -15,7 +15,7 @@ import { delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
-import { writeMockAgentFixture } from './mockAgent.mjs';
+import { latestMockCodexRollout, writeMockAgentFixture } from './mockAgent.mjs';
 import { recordingEnabled } from './windowRecording.mjs';
 
 const PACE_MS = recordingEnabled() ? 2_500 : 0;
@@ -222,12 +222,10 @@ async function main() {
         promptReadyFn: ensureCodexPromptReadyViaPty,
       });
       await client.request('select_session', { sessionId: codexSessionId });
-      const transcriptDir = path.join(cwd, '.attn-mock-agent');
-      const transcript = await poll(() => {
-        const names = fs.existsSync(transcriptDir)
-          ? fs.readdirSync(transcriptDir).filter((name) => name.endsWith('.jsonl')) : [];
-        return names.length === 1 ? path.join(transcriptDir, names[0]) : null;
-      }, 'the mock Codex transcript');
+      const codexPane = await waitForFirstDesktopPane(client, codexSessionId, 'the Codex pane', 20_000);
+      await client.request('type_pane_via_ui', { sessionId: codexSessionId, paneId: codexPane.paneId, text: 'start the conversation' });
+      await client.request('write_pane', { sessionId: codexSessionId, paneId: codexPane.paneId, text: '\r', submit: false });
+      const transcript = await poll(() => latestMockCodexRollout(cwd)?.file ?? null, 'the mock Codex transcript');
       const badge = `[data-testid="session-usage-${codexSessionId}"]`;
       for (const turn of [
         { tier: 'priority', input: 100_000, cached: 50_000, tokens: 110_000, usd: 0.41, badge: '$0.41' },

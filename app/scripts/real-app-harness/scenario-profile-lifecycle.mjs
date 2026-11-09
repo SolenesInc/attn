@@ -19,7 +19,7 @@ import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './ha
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appCliInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
-import { sleep } from './scenarioAssertions.mjs';
+import { sleep, waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -47,6 +47,12 @@ const waitForSessions = (client, predicate, description, timeoutMs) =>
   waitUntil(() => client.request('sessions_get_state', {}), predicate, description, timeoutMs);
 const profileNamed = (state, name) => state.profiles.find((profile) => profile.name === name) ?? null;
 const rowFor = (state, sessionId) => state.rows.find((row) => row.id === sessionId) ?? null;
+
+async function takeFirstTurn(client, sessionId) {
+  const pane = await waitForFirstDesktopPane(client, sessionId, 'the agent pane', 20_000);
+  await client.request('type_pane_via_ui', { sessionId, paneId: pane.paneId, text: 'start the conversation' });
+  await client.request('write_pane', { sessionId, paneId: pane.paneId, text: '\r', submit: false });
+}
 
 async function waitForBoundConversation(dbPath, sessionId, timeoutMs) {
   return waitUntil(
@@ -142,6 +148,7 @@ async function main() {
       sessionId = await createSessionAndWaitForInitialPane({
         client, observer, cwd: directory, label: `profile-lifecycle-${runner.runId}`, agent: 'codex', sessionWaitMs: 30_000,
       });
+      await takeFirstTurn(client, sessionId);
       await waitForBoundConversation(dbPath, sessionId, 60_000);
       const profile = before.profiles.find((entry) => entry.id === before.selectedProfileId);
       runner.assert(!!profile, 'the app must know the selected profile', { before });
@@ -169,6 +176,7 @@ async function main() {
       await client.request('dom_key', { selector: '.ledger-panel', key: 'Escape' });
       await client.request('close_session', { sessionId });
       sessionId = await createSessionAndWaitForInitialPane({ client, observer, cwd: directory, label: `profile-lifecycle-work-${runner.runId}`, agent: 'codex', sessionWaitMs: 30_000, ownDesktop: false });
+      await takeFirstTurn(client, sessionId);
       await waitForBoundConversation(dbPath, sessionId, 60_000);
       runner.assert(observer.getSession(sessionId)?.profile_id === work.id, 'the new agent starts in Work');
     });
