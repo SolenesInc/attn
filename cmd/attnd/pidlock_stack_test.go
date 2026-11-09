@@ -6,8 +6,10 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -57,8 +59,15 @@ func TestADaemonWaitsOutTheLockAGoneDaemonLeftWithItsChild(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = child.Close() })
-		if err := syscall.Flock(int(child.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-			t.Fatalf("taking the gone daemon's lock: %v", err)
+		locked := make(chan error, 1)
+		go func() { locked <- syscall.Flock(int(child.Fd()), syscall.LOCK_EX) }()
+		select {
+		case err := <-locked:
+			if err != nil {
+				t.Fatalf("taking the gone daemon's lock: %v", err)
+			}
+		case <-time.After(fakeagent.HangGuard):
+			t.Fatalf("the gone daemon's lock on %s was still held after %s", pidPath, fakeagent.HangGuard)
 		}
 		return child
 	}
