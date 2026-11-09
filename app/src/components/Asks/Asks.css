@@ -757,4 +757,18 @@
 
 .asks-accept-recommended + .asks-send {
   margin-left: 0;
+
+.seed-mention {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent, #5b8cff);
+  font: inherit;
+  cursor: pointer;
+}
+
+.seed-mention:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

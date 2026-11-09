@@ -9,6 +9,9 @@ import { askQuestions, draftAnswers, draftSendable, recommendedAnswers, type Ask
 import { formatTurnAge } from '../../utils/queueBands';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
+import { SeedMentionText } from '../SeedMentionText';
+import { useDaemonStore } from '../../store/daemonSessions';
+import { createSeedMentionIndex } from '../../utils/seedMentions';
 import { SessionLead } from '../SessionLead';
 import { AskQuestionCard } from './AskQuestionCard';
 import { AskRowSummary } from './AskRowSummary';
@@ -56,6 +59,8 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const focusRequest = useAsksStore((state) => state.focusRequest);
   const { selectAsk, setDraft, toggleReplied } = useAsksStore.getState();
   const { sendAskAnswer, sendAskImage } = useDaemonApi();
+  const gardenSeeds = useDaemonStore((state) => state.seeds);
+  const seedMentions = useMemo(() => createSeedMentionIndex(gardenSeeds), [gardenSeeds]);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const index = Math.max(0, items.findIndex((item) => item.ask.id === selectedAskId));
@@ -181,7 +186,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
           )}
         </div>
         <AskSeedLine ask={ask} onOpenSeed={onOpenSeed} />
-        <h2 className="asks-ask-subject">{ask.subject}</h2>
+        <h2 className="asks-ask-subject"><SeedMentionText text={ask.subject} index={seedMentions} onOpenSeed={onOpenSeed} /></h2>
         {ask.parts.map((part, partIndex) => (
           part.question ? (
             <AskQuestionCard
@@ -192,11 +197,13 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
               answer={shownAnswers[part.question.key]}
               source={source}
               loadImage={loadImage}
+              seedMentions={seedMentions}
+              onOpenSeed={onOpenSeed}
               onChange={reply ? undefined : changeAnswer}
             />
           ) : (
             <div key={`markdown-${partIndex}`} className="asks-markdown">
-              <MarkdownReader content={part.markdown ?? ''} source={source} loadLocalImage={loadImage} />
+              <MarkdownReader content={part.markdown ?? ''} source={source} loadLocalImage={loadImage} seedMentions={seedMentions} onOpenSeed={onOpenSeed} />
             </div>
           )
         ))}

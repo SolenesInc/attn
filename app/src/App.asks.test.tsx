@@ -328,6 +328,30 @@ describe('App asks', () => {
     expect(seedHeading()).toBe('Cache store migration');
   });
 
+  it('opens the seeds an ask mentions by id or slug, and leaves code and unknown ids alone', async () => {
+    const mentioned = daemonSeed('s-cache1', { title: 'Cache store migration', step_slug: 'cache-migration' });
+    const mentioning: Ask = {
+      ...cacheStore,
+      subject: 'Review s-cache1',
+      parts: [
+        { markdown: 'Blocked on cache-migration and s-zzzzzz; run `attn seed show s-cache1`.\n\n```\ns-cache1\n```' },
+        { question: { key: 'q1', kind: 'text', prompt: 'Is cache-migration done?', choices: [] } },
+      ],
+    };
+    const daemon = await renderAsks([mentioning], [apiWorking], [mentioned]);
+    daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: true, document: seedDocument(mentioned) }));
+    await openDrawer(daemon);
+
+    const ask = screen.getByRole('article', { name: 'Review s-cache1' });
+    const links = within(ask).getAllByRole('button').filter((button) => button.hasAttribute('data-seed-target'));
+    expect(links.map((link) => link.textContent)).toEqual(['s-cache1', 'cache-migration', 'cache-migration']);
+    expect(within(ask).queryByRole('button', { name: 's-zzzzzz' })).toBeNull();
+    expect(ask.querySelectorAll('code [data-seed-target], pre [data-seed-target]')).toHaveLength(0);
+
+    await gesture(daemon, () => fireEvent.click(links[1]));
+    expect(seedHeading()).toBe('Cache store migration');
+  });
+
   it('counts open asks on the collapsed rail and marks the desktops that hold them', async () => {
     const daemon = await renderAsks([cacheStore], [apiWorking, daemonSession('idle')]);
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Collapse sidebar' })));

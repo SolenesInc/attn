@@ -1,6 +1,8 @@
 import type { AskAnswer, AskQuestion } from '../../types/generated';
 import { MarkdownReader, type LocalImageLoader } from '../MarkdownReader';
 import type { MarkdownDocumentSource } from '../MarkdownReader/documentSource';
+import { SeedMentionText } from '../SeedMentionText';
+import type { SeedMentionIndex } from '../../utils/seedMentions';
 
 interface AskQuestionCardProps {
   askId: string;
@@ -9,6 +11,8 @@ interface AskQuestionCardProps {
   answer: AskAnswer | undefined;
   source: MarkdownDocumentSource;
   loadImage: LocalImageLoader;
+  seedMentions: SeedMentionIndex | null;
+  onOpenSeed: (seedId: string) => void;
   onChange?: (answer: AskAnswer) => void;
 }
 
@@ -18,16 +22,16 @@ interface AnswerProps {
   onChange?: (answer: AskAnswer) => void;
 }
 
-export function AskQuestionCard({ askId, index, question, answer, source, loadImage, onChange }: AskQuestionCardProps) {
+export function AskQuestionCard({ askId, index, question, answer, source, loadImage, seedMentions, onOpenSeed, onChange }: AskQuestionCardProps) {
   return (
     <fieldset className="ask-question" data-testid={`ask-question-${question.key}`}>
       <legend className="ask-question-prompt">
         <span className="ask-question-index">{index}</span>
-        {question.prompt}
+        <SeedMentionText text={question.prompt} index={seedMentions} onOpenSeed={onOpenSeed} />
       </legend>
       {question.context && (
         <div className="asks-markdown ask-question-context">
-          <MarkdownReader content={question.context} source={source} loadLocalImage={loadImage} />
+          <MarkdownReader content={question.context} source={source} loadLocalImage={loadImage} seedMentions={seedMentions} onOpenSeed={onOpenSeed} />
         </div>
       )}
       {question.kind === 'text'

@@ -23,6 +23,7 @@ import {
 import rehypeAlerts, { type AlertKind } from './rehypeAlerts';
 import rehypeHeadingSlugs from './rehypeHeadingSlugs';
 import rehypeProseTransforms from './proseTransforms';
+import rehypeSeedMentions from './rehypeSeedMentions';
 import rehypeSourceAnchors from './rehypeSourceAnchors';
 import { readerSanitizeSchema } from './sanitizeSchema';
 import { scrollToAnchor } from './scrollToAnchor';
@@ -31,6 +32,8 @@ import { useAnnotations } from './annotations/useAnnotations';
 import { markdownDocumentPath, type MarkdownDocumentSource } from './documentSource';
 import { tilePathBasename } from '../../utils/tilePresentation';
 import { isSeedId } from '../../utils/seedId';
+import type { SeedMentionIndex } from '../../utils/seedMentions';
+import { SeedMentionButton } from '../SeedMentionText';
 import type { SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
 import type { MarkdownAnnotationsDraft } from './annotations/transport';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
@@ -49,6 +52,9 @@ const rehypePlugins: PluggableList = [
   rehypeHeadingSlugs,
   rehypeProseTransforms,
 ];
+function pluginsWithSeedMentions(index: SeedMentionIndex | null | undefined): PluggableList {
+  return index ? [...rehypePlugins, [rehypeSeedMentions, { index }]] : rehypePlugins;
+}
 const EMPTY_SEED_ARTIFACTS: readonly SeedArtifact[] = [];
 
 const ALERT_TITLES: Record<AlertKind, string> = {
@@ -360,6 +366,13 @@ function readerComponents(
         </div>
       );
     },
+    span({ node: _node, children, ...props }) {
+      const mention = (props as Record<string, unknown>)['data-seed-mention'];
+      if (typeof mention === 'string' && onOpenSeed) {
+        return <SeedMentionButton seedId={mention} onOpenSeed={onOpenSeed}>{children}</SeedMentionButton>;
+      }
+      return <span {...(props as HTMLAttributes<HTMLSpanElement>)}>{children}</span>;
+    },
     a({ node: _node, href, children }) {
       const sanitized = href ? sanitizeLinkUrl(href) : null;
       let target = sanitized ? resolveMarkdownTarget(documentPath, sanitized) : null;
@@ -484,6 +497,7 @@ export interface MarkdownReaderProps {
   annotationsSendRef?: Ref<MarkdownAnnotationsSendHandle | null>;
   seedArtifacts?: readonly SeedArtifact[];
   onOpenSeed?: (seedId: string) => void;
+  seedMentions?: SeedMentionIndex | null;
   loadLocalImage?: LocalImageLoader;
 }
 
@@ -495,6 +509,7 @@ interface MarkdownReaderBodyProps {
   rootRef: RefObject<HTMLDivElement | null>;
   onImageClick: (src: string, alt: string) => void;
   onOpenSeed?: (seedId: string) => void;
+  plugins: PluggableList;
 }
 
 // The live-reload poller re-reads the file every 750ms, so an unchanged file must
@@ -507,6 +522,7 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   rootRef,
   onImageClick,
   onOpenSeed,
+  plugins,
 }: MarkdownReaderBodyProps) {
   const frontmatter = extractFrontmatter(content);
   const components = readerComponents(path, allowLocalTargets, seedDocument, rootRef, onImageClick, onOpenSeed);
@@ -515,7 +531,7 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
     <article className="md-reader-card">
       <FrontmatterCard entries={frontmatter.entries} />
       <ReaderPresentation>
-        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
+        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={plugins} components={components}>
           {content}
         </ReactMarkdown>
       </ReaderPresentation>
@@ -532,6 +548,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   annotationsSendRef,
   seedArtifacts = EMPTY_SEED_ARTIFACTS,
   onOpenSeed,
+  seedMentions,
   loadLocalImage,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
@@ -539,6 +556,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const localTargetsEnabled = allowLocalTargets && source.kind === 'file';
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const plugins = useMemo(() => pluginsWithSeedMentions(seedMentions), [seedMentions]);
   const annotationLayerRef = useRef<AnnotationLayerHandle | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string; artifactVersion: string } | null>(null);
   const seedArtifactVersion = useMemo(() => seedArtifacts
@@ -611,6 +629,7 @@ export const MarkdownReader = memo(function MarkdownReader({
                 rootRef={rootRef}
                 onImageClick={handleImageClick}
                 onOpenSeed={onOpenSeed}
+                plugins={plugins}
               />
             </LocalImageLoaderContext.Provider>
           </SeedArtifactReaderContext.Provider>
