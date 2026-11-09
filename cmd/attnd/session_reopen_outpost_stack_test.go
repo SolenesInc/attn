@@ -155,11 +155,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.Rename(cwd+".saved", cwd); err != nil {
 		t.Fatal(err)
 	}
-	rollouts, err := filepath.Glob(filepath.Join(outpost.Dir, "toolhome", ".codex", "archived_sessions", "*-"+run.ConversationID+".jsonl"))
-	if err != nil || len(rollouts) != 1 {
-		t.Fatalf("rollouts=%v, %v", rollouts, err)
-	}
-	if err := os.Remove(rollouts[0]); err != nil {
+	if err := os.Remove(outpost.CodexServer().AwaitArchived(run.ConversationID)); err != nil {
 		t.Fatal(err)
 	}
 	checkRefusal(true, `on outpost "outpost"`, "conversation "+run.ConversationID, "no longer in codex's storage")

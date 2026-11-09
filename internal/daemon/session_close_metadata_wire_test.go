@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -42,7 +43,9 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 	reaped := tenders["reaped"]
 	runGit(t, reaped.repo, "checkout", "-b", "feature/reaped")
 	w.stop()
-	removeCodexRollout(t, w, "sessions/*/*/*", reaped.run.ConversationID)
+	if err := os.Remove(codexRollout(t, w, reaped.run.ConversationID)); err != nil {
+		t.Fatal(err)
+	}
 	w.restart()
 	w.App()
 	cli = w.Client()

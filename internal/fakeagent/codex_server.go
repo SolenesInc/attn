@@ -38,7 +38,6 @@ const (
 	methodFakeGuardian   = "attn-fake/guardian-review"
 	methodFakeSettings   = "attn-fake/codex-settings"
 	methodThreadName     = "thread_name"
-	methodAwaitArchived  = "await_archived"
 	methodAskQuestion    = "ask_question"
 	methodWork           = "work"
 	methodInstructions   = "instructions"
@@ -78,7 +77,6 @@ type codexAppServer struct {
 	nextID          int
 	prompts         map[string]chan string
 	named           chan struct{}
-	archived        chan struct{}
 	terminalsListed chan struct{}
 	listed          chan struct{}
 	held            map[string]*codexHeldReply
@@ -166,7 +164,6 @@ func runCodexAppServer(cfg config) int {
 		conns:           map[*codexServerConn]bool{},
 		prompts:         map[string]chan string{},
 		named:           make(chan struct{}),
-		archived:        make(chan struct{}),
 		terminalsListed: make(chan struct{}, 1),
 		listed:          make(chan struct{}),
 		held:            map[string]*codexHeldReply{},
@@ -964,18 +961,10 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 	if err := os.Rename(path, filepath.Join(archived, filepath.Base(path))); err != nil {
 		return nil, nil, err
 	}
-	s.mu.Lock()
-	close(s.archived)
-	s.archived = make(chan struct{})
-	s.mu.Unlock()
 	return map[string]any{}, func() {
 		s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
 		s.broadcast("thread/archived", map[string]any{"threadId": id})
 	}, nil
-}
-
-func (s *codexAppServer) archivedRollout(id string) string {
-	return codexArchivedRollout(s.cfg.CodexHome, id)
 }
 
 func codexArchivedRollout(codexHome, id string) string {
@@ -1030,7 +1019,7 @@ func (s *codexAppServer) threadName(id string) string {
 }
 
 func (s *codexAppServer) unarchive(id string) (any, func(), error) {
-	name := s.archivedRollout(id)
+	name := codexArchivedRollout(s.cfg.CodexHome, id)
 	if name == "" {
 		return nil, nil, fmt.Errorf("no archived rollout found for thread id %s", id)
 	}
@@ -1101,21 +1090,6 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			case <-named:
 			case <-deadline:
 				return nil, fmt.Errorf("conversation %s is named %q, not %q, after %s", p.ThreadID, name, p.Text, HangGuard)
-			}
-		}
-	case methodAwaitArchived:
-		deadline := time.After(HangGuard)
-		for {
-			s.mu.Lock()
-			archived := s.archived
-			s.mu.Unlock()
-			if s.archivedRollout(p.ThreadID) != "" {
-				return struct{}{}, nil
-			}
-			select {
-			case <-archived:
-			case <-deadline:
-				return nil, fmt.Errorf("conversation %s is not archived after %s", p.ThreadID, HangGuard)
 			}
 		}
 	case methodAskApproval:

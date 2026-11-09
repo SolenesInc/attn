@@ -2,7 +2,6 @@ package main_test
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -163,18 +162,15 @@ func TestGardenReadsNeverAskTheOutpostAndResumeRefusesWithWhatItFindsThere(t *te
 		t.Logf("refused: %s", protocol.Deref(result.Error))
 	}
 
-	rollouts, err := filepath.Glob(filepath.Join(w.outpost.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "*-"+w.conversation+".jsonl"))
-	if err != nil || len(rollouts) != 1 {
-		t.Fatalf("rollouts=%v, %v", rollouts, err)
-	}
-	if err := os.Rename(rollouts[0], rollouts[0]+".saved"); err != nil {
+	rollout := w.outpost.CodexServer().AwaitArchived(w.conversation)
+	if err := os.Rename(rollout, rollout+".saved"); err != nil {
 		t.Fatal(err)
 	}
 	if card := w.card(t); !card.ResumeAvailable || card.DirectoryState != "unchecked" {
 		t.Fatalf("a read saw the outpost's storage: %+v", card)
 	}
 	refused(`on outpost "outpost"`, "conversation "+w.conversation, "no longer in codex's storage")
-	if err := os.Rename(rollouts[0]+".saved", rollouts[0]); err != nil {
+	if err := os.Rename(rollout+".saved", rollout); err != nil {
 		t.Fatal(err)
 	}
 

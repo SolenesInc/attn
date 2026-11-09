@@ -680,9 +680,7 @@ func TestClosingASharedCodexSessionFromTheCLIArchivesItsConversation(t *testing.
 		return e.Session != nil && string(e.Session.ID) == checkout
 	})
 	server.AwaitStopped()
-	if !archivedInCodex(t, w, codex.ConversationID) {
-		t.Errorf("closing %s from the CLI left conversation %s unarchived", checkout, codex.ConversationID)
-	}
+	server.AwaitArchived(codex.ConversationID)
 }
 
 func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {

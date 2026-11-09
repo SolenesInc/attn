@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 type CodexServer struct {
@@ -85,13 +87,32 @@ func (s *CodexServer) AwaitName(conversation, name string) {
 	s.call(methodThreadName, serverThreadParams{ThreadID: conversation, Text: name}, nil)
 }
 
-func (s *CodexServer) AwaitArchived(conversation string) {
+func (s *CodexServer) AwaitArchived(conversation string) string {
 	s.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
-	defer cancel()
-	err := s.fake.peer.call(ctx, methodAwaitArchived, serverThreadParams{ThreadID: conversation}, nil)
-	if err != nil && codexArchivedRollout(s.codexHome, conversation) == "" {
-		s.t.Fatalf("Codex app-server %s: %v", methodAwaitArchived, err)
+	archive := filepath.Join(s.codexHome, "archived_sessions")
+	if err := os.MkdirAll(archive, 0o755); err != nil {
+		s.t.Fatalf("create Codex's archive: %v", err)
+	}
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		s.t.Fatalf("watch Codex's archive: %v", err)
+	}
+	defer watcher.Close()
+	if err := watcher.Add(archive); err != nil {
+		s.t.Fatalf("watch Codex's archive: %v", err)
+	}
+	deadline := time.After(HangGuard)
+	for {
+		if name := codexArchivedRollout(s.codexHome, conversation); name != "" {
+			return filepath.Join(archive, name)
+		}
+		select {
+		case <-watcher.Events:
+		case err := <-watcher.Errors:
+			s.t.Fatalf("watch Codex's archive: %v", err)
+		case <-deadline:
+			s.t.Fatalf("conversation %s is not archived after %s", conversation, HangGuard)
+		}
 	}
 }
 
