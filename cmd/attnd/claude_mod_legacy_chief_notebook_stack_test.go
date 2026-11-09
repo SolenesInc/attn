@@ -99,12 +99,23 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 	if got := recreated.Prompted(); !strings.Contains(got, words) {
 		t.Fatalf("the recreated Chief took %q, want the returned Quick Capture", got)
 	}
-	testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
+	awaitReadAsAConnectingAppLearnsIt(t, app, capture)
 	recreated.Reply("Thanks. <!-- attn:state=idle -->")
 	probe := "probe-" + uuid.NewString()[:8]
 	recreated.Input(probe)
 	if got := recreated.Prompted(); got != probe {
 		t.Fatalf("the Chief took %q before %q, want the Quick Capture only once", got, probe)
+	}
+}
+
+func awaitReadAsAConnectingAppLearnsIt(t *testing.T, app *testworld.Peer, capture string) {
+	t.Helper()
+	got, err := app.QuickCapture(protocol.QuickCaptureGetMessage{Cmd: protocol.CmdQuickCaptureGet, CaptureID: capture})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Record.ReadAt == nil {
+		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture })
 	}
 }
 
