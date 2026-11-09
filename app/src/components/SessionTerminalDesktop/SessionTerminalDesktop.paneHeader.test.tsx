@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, within } from '@testing-library/react';
+import { fireEvent, render, within } from '@testing-library/react';
+import * as clipboard from '../../utils/clipboardBridge';
 import { SessionTerminalDesktop } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalDesktopState } from '../../types/desktop';
@@ -121,4 +122,17 @@ describe('SessionTerminalDesktop pane header', () => {
     expect(header.getByLabelText('Session usage $2.61')).toBeInTheDocument();
   });
 
+  it('shows the session’s short id and copies the full id on click', () => {
+    const write = vi.spyOn(clipboard, 'writeClipboardText').mockResolvedValue();
+    const id = '8e164800-98f1-4e33-8046-a05a2dee73f9';
+    const { container } = renderLonePane({
+      desktopSessions: [{ id, label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project' }],
+      terminalState: { agents: [{ id: 'pane-1', runtimeId: 'rt-1', sessionId: id, title: 'shell' }], layoutTree: { type: 'pane', paneId: 'pane-1' } },
+    });
+
+    const button = within(container.querySelector<HTMLElement>('.desktop-pane-header')!).getByRole('button', { name: 'Copy session id 8e164800' });
+    expect(button).toHaveTextContent('8e164800');
+    fireEvent.click(button);
+    expect(write).toHaveBeenCalledWith(id);
+  });
 });

@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { writeClipboardText } from '../../utils/clipboardBridge';
 import { DelegationChainTrigger } from '../DelegationChain';
 import { PaneSeedChip } from '../PaneSeedChip';
 import { SessionProvenance } from '../SessionProvenance';
@@ -7,7 +8,7 @@ import { derivePaneSeedDisplay, seedChipPresentation } from '../paneSeedDisplay'
 import { HeaderSessionUsage } from './SessionUsage';
 import { useDesktopContext } from './DesktopContext';
 import { FitPiece } from './FitPiece';
-import { SUBLINE_RANK, hostMark, titlesRepeat, type HeaderPiece } from './headerFit';
+import { SUBLINE_RANK, hostMark, shortSessionId, titlesRepeat, type HeaderPiece } from './headerFit';
 import { useHeaderFit } from './useHeaderFit';
 import type { DesktopAgentProps } from './desktopTypes';
 
@@ -89,6 +90,22 @@ export function DesktopAgentSubline({ agentPane, paneSession, paneTitle }: Deskt
             onOpen: setProvenancePopoverOwner,
           }}
         />
+      </FitPiece>
+      <FitPiece piece="id" levels={levels} fitLevels={['full']}>
+        <button
+          type="button"
+          className="desktop-pane-session-id"
+          data-testid={`copy-session-id-${agentPane.id}`}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            void writeClipboardText(agentPane.sessionId);
+          }}
+          title={`Copy session id ${agentPane.sessionId}`}
+          aria-label={`Copy session id ${shortSessionId(agentPane.sessionId)}`}
+        >
+          {shortSessionId(agentPane.sessionId)}
+        </button>
       </FitPiece>
       <span className="desktop-pane-harness" data-label={harnessLabel(paneSession?.agent)} aria-hidden="true" />
     </div>

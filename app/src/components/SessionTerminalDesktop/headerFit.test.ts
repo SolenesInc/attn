@@ -55,11 +55,12 @@ describe('fitHeaderRow on the headline', () => {
 });
 
 describe('fitHeaderRow on the subline', () => {
-  const widths: Record<'seed' | 'role' | 'host' | 'usage' | 'provenance', PieceWidths> = {
+  const widths: Record<'seed' | 'role' | 'host' | 'usage' | 'id' | 'provenance', PieceWidths> = {
     seed: { full: 220, short: 140, icon: 16 },
     role: { full: 80, icon: 22 },
     host: { full: 70, short: 24 },
     usage: { full: 40 },
+    id: { full: 60 },
     provenance: { full: 160, icon: 14 },
   };
   const SUBLINE_GAP = 10;
@@ -72,17 +73,18 @@ describe('fitHeaderRow on the subline', () => {
   };
 
   const steps: HeaderLevels[] = [
-    { seed: 'full', role: 'full', host: 'full', usage: 'full', provenance: 'full' },
-    { seed: 'full', role: 'full', host: 'full', usage: 'hidden', provenance: 'full' },
-    { seed: 'full', role: 'full', host: 'full', usage: 'hidden', provenance: 'icon' },
-    { seed: 'full', role: 'full', host: 'short', usage: 'hidden', provenance: 'icon' },
-    { seed: 'full', role: 'icon', host: 'short', usage: 'hidden', provenance: 'icon' },
-    { seed: 'short', role: 'icon', host: 'short', usage: 'hidden', provenance: 'icon' },
-    { seed: 'icon', role: 'icon', host: 'short', usage: 'hidden', provenance: 'icon' },
-    { seed: 'icon', role: 'icon', host: 'short', usage: 'hidden', provenance: 'hidden' },
-    { seed: 'icon', role: 'hidden', host: 'short', usage: 'hidden', provenance: 'hidden' },
-    { seed: 'icon', role: 'hidden', host: 'hidden', usage: 'hidden', provenance: 'hidden' },
-    { seed: 'hidden', role: 'hidden', host: 'hidden', usage: 'hidden', provenance: 'hidden' },
+    { seed: 'full', role: 'full', host: 'full', usage: 'full', id: 'full', provenance: 'full' },
+    { seed: 'full', role: 'full', host: 'full', usage: 'hidden', id: 'full', provenance: 'full' },
+    { seed: 'full', role: 'full', host: 'full', usage: 'hidden', id: 'hidden', provenance: 'full' },
+    { seed: 'full', role: 'full', host: 'full', usage: 'hidden', id: 'hidden', provenance: 'icon' },
+    { seed: 'full', role: 'full', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'icon' },
+    { seed: 'full', role: 'icon', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'icon' },
+    { seed: 'short', role: 'icon', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'icon' },
+    { seed: 'icon', role: 'icon', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'icon' },
+    { seed: 'icon', role: 'icon', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'hidden' },
+    { seed: 'icon', role: 'hidden', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'hidden' },
+    { seed: 'icon', role: 'hidden', host: 'hidden', usage: 'hidden', id: 'hidden', provenance: 'hidden' },
+    { seed: 'hidden', role: 'hidden', host: 'hidden', usage: 'hidden', id: 'hidden', provenance: 'hidden' },
   ];
 
   it.each(steps.slice(1).map((expected, index) => [index + 1, steps[index], expected] as const))(
@@ -94,7 +96,7 @@ describe('fitHeaderRow on the subline', () => {
   );
 
   it('keeps the host while the session is offline, as its short mark', () => {
-    expect(fit(0, ['host'])).toEqual({ seed: 'hidden', role: 'hidden', host: 'short', usage: 'hidden', provenance: 'hidden' });
+    expect(fit(0, ['host'])).toEqual({ seed: 'hidden', role: 'hidden', host: 'short', usage: 'hidden', id: 'hidden', provenance: 'hidden' });
   });
 
   it('skips a level a piece does not have', () => {

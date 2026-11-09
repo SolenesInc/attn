@@ -425,6 +425,20 @@
   margin-left: auto;
 }
 
+.desktop-pane-session-id {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--font-mono, monospace);
+  cursor: copy;
+}
+
+.desktop-pane-session-id:hover {
+  color: var(--color-text-secondary);
+}
+
 .desktop-pane-harness {
   display: none;
 }

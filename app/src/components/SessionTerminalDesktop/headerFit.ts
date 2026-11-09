@@ -1,6 +1,6 @@
 export type PieceLevel = 'full' | 'short' | 'icon' | 'hidden';
 export type MeasuredLevel = Exclude<PieceLevel, 'hidden'>;
-export type HeaderPiece = 'seed' | 'role' | 'host' | 'usage' | 'provenance' | 'settling' | 'ask';
+export type HeaderPiece = 'seed' | 'role' | 'host' | 'usage' | 'provenance' | 'id' | 'settling' | 'ask';
 export type RankStep = readonly [HeaderPiece, PieceLevel];
 export type PieceWidths = { full: number } & Partial<Record<MeasuredLevel, number>>;
 export type HeaderLevels = Partial<Record<HeaderPiece, PieceLevel>>;
@@ -24,6 +24,7 @@ export const HEADLINE_RANK: readonly RankStep[] = [
 
 export const SUBLINE_RANK: readonly RankStep[] = [
   ['usage', 'hidden'],
+  ['id', 'hidden'],
   ['provenance', 'icon'],
   ['host', 'short'],
   ['role', 'icon'],
@@ -53,6 +54,8 @@ export function fitHeaderRow({ available, gap, fixed, widths, rank, keep = [] }:
   }
   return levels;
 }
+
+export const shortSessionId = (sessionId: string) => sessionId.slice(0, 8);
 
 export function hostMark(hostName: string): string {
   const digits = hostName.match(/\d+$/)?.[0] ?? '';
