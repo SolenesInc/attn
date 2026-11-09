@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -320,7 +322,14 @@ func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan) {
 		d.finishUpdateRun(run, protocol.UpdatePhaseDone, "Already on the latest commit, "+commit[:9]+".")
 		return
 	}
-	if err := plan.Build(ctx, env, log); err != nil {
+	limit := selfupdate.BuildTimeoutFromEnv()
+	buildCtx, cancelBuild := context.WithTimeout(ctx, limit)
+	defer cancelBuild()
+	if err := plan.Build(buildCtx, env, log); err != nil {
+		if errors.Is(buildCtx.Err(), context.DeadlineExceeded) {
+			d.failUpdateRun(run, fmt.Sprintf("the build did not finish within its %s limit (%s)", limit, selfupdate.BuildTimeoutEnv))
+			return
+		}
 		d.failUpdateRun(run, "the build failed: "+err.Error())
 		return
 	}

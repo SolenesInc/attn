@@ -7,12 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/selfupdate"
 	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -72,12 +74,16 @@ func installFixtureTree(t *testing.T, tree, binary string) {
 
 func newSourceInstall(t *testing.T, vars ...string) *sourceInstall {
 	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skip("the app tree sits under the real home outside Linux, where XDG_DATA_HOME does not move it")
+	}
 	stack := testworld.NewStack(t, testworld.WithAgents(fakeagent.Harness(protocol.SessionAgentShell)))
+	dataHome := filepath.Join(stack.Dir, "share")
 	install := &sourceInstall{
 		stack:    stack,
 		origin:   filepath.Join(stack.Dir, "origin.git"),
 		checkout: filepath.Join(stack.Dir, "checkout"),
-		tree:     filepath.Join(stack.Dir, "tree"),
+		tree:     filepath.Join(dataHome, "attn"),
 		built:    filepath.Join(stack.Dir, "built-commits"),
 	}
 	runGit(t, stack.Dir, "init", "--bare", "-b", "main", install.origin)
@@ -104,6 +110,7 @@ func newSourceInstall(t *testing.T, vars ...string) *sourceInstall {
 	target := testworld.AttnSourceBinaryFrom(t, "2.0.0", install.checkout)
 	stack.RunFrom(filepath.Join(install.tree, "bin", "attn"))
 	stack.Vars = append(stack.Vars, append([]string{
+		"XDG_DATA_HOME=" + dataHome,
 		"TARGET_DIR=" + filepath.Dir(target),
 		"BUILT=" + install.built,
 		"TREE=" + install.tree,
@@ -405,6 +412,52 @@ func TestUpdateRefusesARepositoryItCannotUseAndChangesNothing(t *testing.T) {
 				t.Fatal("a refused update changed the install")
 			}
 		})
+	}
+}
+
+func TestADaemonOutsideItsAppTreeIsRefusedAndNothingAroundItChanges(t *testing.T) {
+	install := newSourceInstall(t)
+	outside := filepath.Join(install.stack.Dir, "dot-local")
+	installFixtureTree(t, outside, testworld.AttnSourceBinaryFrom(t, "1.0.0", install.checkout))
+	neighbor := filepath.Join(outside, "bin", "someone-elses-tool")
+	writeFixtureFile(t, neighbor, "keep me", 0o755)
+	install.stack.RunFrom(filepath.Join(outside, "bin", "attn"))
+	app := install.start(t)
+
+	refused := sendStartUpdate(app)
+	t.Logf("refusal: %+v", refused)
+	for _, named := range []string{filepath.Join(outside, "bin"), install.tree, "make install"} {
+		if refused.Success || !strings.Contains(protocol.Deref(refused.Error), named) {
+			t.Fatalf("start_update = %+v, want a refusal naming %q", refused, named)
+		}
+	}
+	if mustRead(t, neighbor) != "keep me" {
+		t.Fatal("a refused update touched the directory around the daemon")
+	}
+	if status := updateStatus(t, install.stack); status.Run != nil {
+		t.Fatalf("a refused update opened a run: %+v", status.Run)
+	}
+}
+
+func TestABuildPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
+	hold := filepath.Join(t.TempDir(), "hold")
+	if err := exec.Command("mkfifo", hold).Run(); err != nil {
+		t.Fatal(err)
+	}
+	install := newSourceInstall(t, "HOLD="+hold, selfupdate.BuildTimeoutEnv+"=200ms")
+	app := install.start(t)
+	before := mustRead(t, filepath.Join(install.tree, "bin", "attnd"))
+
+	run := startUpdate(t, app)
+	failed := awaitRunPhase(app, protocol.UpdatePhaseFailed)
+	t.Logf("failed run: %+v", failed)
+	for _, named := range []string{"200ms", selfupdate.BuildTimeoutEnv, run.LogPath} {
+		if !strings.Contains(protocol.Deref(failed.Outcome), named) {
+			t.Fatalf("outcome = %q, want %q", protocol.Deref(failed.Outcome), named)
+		}
+	}
+	if mustRead(t, filepath.Join(install.tree, "bin", "attnd")) != before {
+		t.Fatal("a build past its limit changed the install")
 	}
 }
 

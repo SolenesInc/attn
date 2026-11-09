@@ -11,7 +11,24 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
+	"time"
+
+	"github.com/victorarias/attn/internal/config"
 )
+
+const (
+	BuildTimeoutEnv      = "ATTN_UPDATE_BUILD_TIMEOUT"
+	defaultBuildTimeout  = time.Hour
+	killedBuildExitLimit = 10 * time.Second
+)
+
+func BuildTimeoutFromEnv() time.Duration {
+	if limit, err := time.ParseDuration(os.Getenv(BuildTimeoutEnv)); err == nil && limit > 0 {
+		return limit
+	}
+	return defaultBuildTimeout
+}
 
 // Plan is how one install gets and applies a build. Dir is where make runs.
 type Plan struct {
@@ -22,17 +39,34 @@ type Plan struct {
 	Root       string
 }
 
-// InstallRoot is the app tree that holds the running executable. A daemon run
-// from a build directory has none, and updating it would replace nothing.
-func InstallRoot(executable string) (string, error) {
-	dir := filepath.Dir(executable)
-	if filepath.Base(dir) == "MacOS" && filepath.Base(filepath.Dir(dir)) == "Contents" {
-		return filepath.Dir(filepath.Dir(dir)), nil
+// InstallRoot is the app tree this instance installs to, the one
+// install-staged replaces. It is the only directory an update may copy or
+// remove, so an executable anywhere else is refused.
+func InstallRoot(executable, instance string) (string, error) {
+	root := config.AppPathForInstance(instance)
+	if !isInside(resolved(executable), resolved(root)) {
+		return "", fmt.Errorf("attn cannot update itself here: %s is not inside this install's app, %s. Run %s", executable, root, installCommand(instance))
 	}
-	if filepath.Base(dir) == "bin" {
-		return filepath.Dir(dir), nil
+	return root, nil
+}
+
+func resolved(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
 	}
-	return "", fmt.Errorf("attn cannot update itself here: %s is not inside an installed app. Run make install", executable)
+	return filepath.Clean(path)
+}
+
+func isInside(path, dir string) bool {
+	relative, err := filepath.Rel(dir, path)
+	return err == nil && relative != "." && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+func installCommand(instance string) string {
+	if instance == "" {
+		return "make install"
+	}
+	return "make install INSTANCE=" + instance
 }
 
 func NewPlan(install Install, dataDir, originWorktree string) (Plan, error) {
@@ -44,7 +78,7 @@ func NewPlan(install Install, dataDir, originWorktree string) (Plan, error) {
 	case ReleaseApp, ReleaseBinary:
 		return Plan{}, fmt.Errorf("attn cannot yet update a %s install from here. Download the new version from the releases page", install.Kind.Label())
 	}
-	root, err := InstallRoot(install.Facts.Executable)
+	root, err := InstallRoot(install.Facts.Executable, install.Facts.Instance)
 	if err != nil {
 		return Plan{}, err
 	}
@@ -154,6 +188,9 @@ func runIn(ctx context.Context, dir string, env []string, log io.Writer, name st
 	var tail tailBuffer
 	cmd.Stdout = io.MultiWriter(log, &tail)
 	cmd.Stderr = io.MultiWriter(log, &tail)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = killedBuildExitLimit
 	if err := cmd.Run(); err != nil {
 		return errors.New(lastLine(tail.data, err))
 	}
