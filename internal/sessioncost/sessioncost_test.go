@@ -243,6 +243,31 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 	}
 }
 
+func TestClaudeFastModeRates(t *testing.T) {
+	everyTier := Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000}
+	for _, c := range []struct {
+		model          string
+		standard, fast float64
+	}{
+		{"claude-fable-5-2", 74.2, 16 + 80 + 0.4 + 20 + 32},
+		{"claude-opus-5-5", 37.2, 8 + 40 + 0.4 + 10 + 16},
+		{"claude-opus-5", 46.75, 10 + 50 + 1 + 12.5 + 20},
+		{"claude-opus-4-8", 46.75, 10 + 50 + 1 + 12.5 + 20},
+		{"claude-opus-4-6", 46.75, 30 + 150 + 3 + 37.5 + 60},
+	} {
+		t.Run(c.model, func(t *testing.T) {
+			fast := AgentKey(c.model)
+			fast.FastMode = true
+			for key, want := range map[LedgerKey]float64{AgentKey(c.model): c.standard, fast: c.fast} {
+				usd, known, hasUsage := Price(Ledger{key: everyTier}, nil)
+				if !known || !hasUsage || math.Abs(usd-want) > 1e-9 {
+					t.Errorf("fast=%v: Price() = %v, %v, %v; want %v", key.FastMode, usd, known, hasUsage, want)
+				}
+			}
+		})
+	}
+}
+
 func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 	priced := []string{
 		"claude-fable-5",
@@ -591,7 +616,7 @@ func TestFastModeRatesAndContextTiers(t *testing.T) {
 			}
 		})
 	}
-	for _, model := range []string{"gpt-reserve", "claude-opus-5", "gpt-5.5"} {
+	for _, model := range []string{"gpt-reserve", "claude-sonnet-5-5", "gpt-5.5"} {
 		usage := Usage{InputTokens: 300_000}
 		key := RequestLedgerKey(model, PurposeAgent, usage)
 		key.FastMode = true

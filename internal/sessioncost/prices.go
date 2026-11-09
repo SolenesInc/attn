@@ -30,8 +30,16 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-6.1-sol": openAIRates(2, 10, 0.1, 2.5),
 }
 
-// https://developers.openai.com/api/docs/pricing (2026-09-29), Fast table.
-var openAIFastRateMultipliers = map[string]float64{
+var fastRateMultipliers = map[string]float64{
+	// https://platform.claude.com/docs/en/about-claude/pricing (2026-11-09), Fast mode pricing.
+	"claude-fable-5-2": 2,
+	"claude-opus-5-5":  2,
+	"claude-opus-5":    2,
+	"claude-opus-4-8":  2,
+	// Claude Code 2.1.321 prices Opus 4.6 fast mode at $30 / $150.
+	"claude-opus-4-6": 6,
+
+	// https://developers.openai.com/api/docs/pricing (2026-09-29), Fast table.
 	"gpt-6.1-sol":   2,
 	"gpt-6-astra":   2,
 	"gpt-6-sol":     2,

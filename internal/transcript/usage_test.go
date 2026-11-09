@@ -116,6 +116,24 @@ func TestUsageExtractorEmitsRevisedClaudeSnapshotWithTheSameKey(t *testing.T) {
 	}
 }
 
+func TestUsageExtractorReadsClaudeSpeed(t *testing.T) {
+	for _, c := range []struct {
+		usage string
+		fast  bool
+	}{
+		{`{"input_tokens":2,"output_tokens":5,"speed":"fast"}`, true},
+		{`{"input_tokens":2,"output_tokens":5,"speed":"standard"}`, false},
+		{`{"input_tokens":2,"output_tokens":5}`, false},
+		{`{"iterations":[{"input_tokens":2,"output_tokens":5}],"speed":"fast"}`, true},
+	} {
+		line := []byte(`{"type":"assistant","message":{"id":"msg","model":"claude-fable-5-2","usage":` + c.usage + `}}`)
+		usage, ok := NewUsageExtractor("claude").Observe(line, "ignored")
+		if !ok || usage.FastMode != c.fast || usage.OutputTokens != 5 {
+			t.Errorf("%s: usage = %+v, ok=%v; want FastMode=%v", c.usage, usage, ok, c.fast)
+		}
+	}
+}
+
 func TestUsageExtractorRejectsImpossibleCodexCacheSubset(t *testing.T) {
 	extractor := NewUsageExtractor("codex")
 	_, _ = extractor.Observe([]byte(`{"type":"turn_context","payload":{"model":"gpt-test"}}`), "context")

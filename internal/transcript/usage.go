@@ -142,6 +142,7 @@ type claudeUsageFields struct {
 		Ephemeral1hInputTokens int64 `json:"ephemeral_1h_input_tokens"`
 	} `json:"cache_creation"`
 	Iterations []claudeUsageFields `json:"iterations"`
+	Speed      string              `json:"speed"`
 }
 
 func extractClaudeUsage(line []byte) (TokenUsage, bool) {
@@ -161,7 +162,11 @@ func extractClaudeUsage(line []byte) (TokenUsage, bool) {
 		return TokenUsage{}, false
 	}
 
-	usage := TokenUsage{Key: "claude:" + id, Model: strings.TrimSpace(entry.Message.Model)}
+	usage := TokenUsage{
+		Key:      "claude:" + id,
+		Model:    strings.TrimSpace(entry.Message.Model),
+		FastMode: entry.Message.Usage.Speed == "fast",
+	}
 	if len(entry.Message.Usage.Iterations) == 0 {
 		if !addClaudeUsage(&usage, *entry.Message.Usage) {
 			return TokenUsage{}, false

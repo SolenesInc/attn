@@ -310,7 +310,7 @@ func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) 
 	if target := billedAs(key.Model, settings); target != "" {
 		priced = target
 	}
-	fastMultiplier, fastKnown := openAIFastRateMultipliers[priced]
+	fastMultiplier, fastKnown := fastRateMultipliers[priced]
 	fastCard := fastRates(card, fastMultiplier)
 	for _, tier := range []struct {
 		usage Usage
