@@ -381,6 +381,7 @@ fn any_tile_window_visible(app: &AppHandle) -> bool {
 
 pub fn main_close_requested(app: &AppHandle, api: &tauri::CloseRequestApi) {
     if !any_tile_window_visible(app) {
+        app.exit(0);
         return;
     }
     api.prevent_close();
