@@ -117,11 +117,11 @@ func holdsPTYEvidence(e *Evidence, obs pty.Observation) bool {
 	if obs.Source == pty.SourceProgramStatus {
 		return holdsProgramStatus(e, obs, sessionstate.SourceProgramStatus)
 	}
-	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs) || busyFrameReadBeforeVerdict(e, obs)
+	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs)
 }
 
-func busyFrameReadBeforeVerdict(e *Evidence, obs pty.Observation) bool {
-	return obs.Claim == "busy" && e.LastClassifier != nil && !obs.At.After(e.LastClassifier.ObservedAt)
+func readBeforeVerdict(e *Evidence, at time.Time) bool {
+	return e.LastClassifier != nil && !at.After(e.LastClassifier.ObservedAt)
 }
 
 func reportedByServer(e *Evidence) bool {
@@ -161,6 +161,9 @@ func programStatusEvidence(obs pty.Observation, at time.Time, source sessionstat
 	return func(e *Evidence) {
 		if claim == sessionstate.ClaimBusy {
 			e.LastBusyAt = at
+			if readBeforeVerdict(e, at) {
+				return
+			}
 		}
 		e.Heartbeat = nil
 		if !reported {
@@ -222,14 +225,17 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool
 		claim = sessionstate.ClaimBusy
 	}
 	return func(e *Evidence) {
+		if claim == sessionstate.ClaimBusy {
+			e.LastBusyAt = at
+			if readBeforeVerdict(e, at) {
+				return
+			}
+		}
 		e.Heartbeat = &sessionstate.Observation{
 			Source:     sessionstate.SourceHeartbeat,
 			Claim:      claim,
 			Detail:     obs.Detail,
 			ObservedAt: at,
-		}
-		if claim == sessionstate.ClaimBusy {
-			e.LastBusyAt = at
 		}
 	}, true
 }
