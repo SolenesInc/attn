@@ -12146,6 +12146,7 @@ export enum SetSessionPriorityMessageCmd {
 export interface SetSessionResumeIDMessage {
     cmd:               SetSessionResumeIDMessageCmd;
     id:                string;
+    lifecycle_id?:     string;
     resume_session_id: string;
     transcript_path?:  string;
     [property: string]: any;
@@ -12801,6 +12802,7 @@ export enum TerminalLaunchMessageCmd {
 
 export interface TerminalLaunchResult {
     cols?:         number;
+    lifecycle_id?: string;
     params?:       string;
     read_error?:   string;
     rows?:         number;
@@ -28050,6 +28052,7 @@ const typeMap: any = {
     "SetSessionResumeIDMessage": o([
         { json: "cmd", js: "cmd", typ: r("SetSessionResumeIDMessageCmd") },
         { json: "id", js: "id", typ: "" },
+        { json: "lifecycle_id", js: "lifecycle_id", typ: u(undefined, "") },
         { json: "resume_session_id", js: "resume_session_id", typ: "" },
         { json: "transcript_path", js: "transcript_path", typ: u(undefined, "") },
     ], "any"),
@@ -28457,6 +28460,7 @@ const typeMap: any = {
     ], "any"),
     "TerminalLaunchResult": o([
         { json: "cols", js: "cols", typ: u(undefined, 0) },
+        { json: "lifecycle_id", js: "lifecycle_id", typ: u(undefined, "") },
         { json: "params", js: "params", typ: u(undefined, "") },
         { json: "read_error", js: "read_error", typ: u(undefined, "") },
         { json: "rows", js: "rows", typ: u(undefined, 0) },

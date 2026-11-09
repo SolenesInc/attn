@@ -18,6 +18,7 @@ type agentConversationObservation struct {
 	SessionID      protocol.SessionID `json:"-"`
 	NativeID       string             `json:"-"`
 	TranscriptPath string             `json:"transcript_path,omitempty"`
+	Run            string             `json:"-"`
 }
 
 func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Conn, msg *protocol.SetSessionResumeIDMessage) {
@@ -25,6 +26,7 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 	observation := agentConversationObservation{
 		NativeID:       strings.TrimSpace(msg.ResumeSessionID),
 		TranscriptPath: strings.TrimSpace(protocol.Deref(msg.TranscriptPath)),
+		Run:            strings.TrimSpace(protocol.Deref(msg.LifecycleID)),
 	}
 	if terminal == "" {
 		d.sendError(conn, "missing id")
@@ -107,6 +109,10 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
 		return false
 	}
+	if d.monitors().runReplaced(session.ID, proposed.Run) {
+		d.logf("agent conversation: dropped %s from terminal %s, reported by run %s that a reload replaced", observation.NativeID, t, proposed.Run)
+		return false
+	}
 	observation.SessionID = session.ID
 	if held = d.store.GetSessionConversation(session.ID).NativeID; held == observation.NativeID {
 		return d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
@@ -170,7 +176,11 @@ func (o agentConversationObservation) monitored() sessionmonitor.ConversationObs
 }
 
 func (d *Daemon) proposeMonitorConversation(observation agentConversationObservation, proposal sessionmonitor.ConversationProposal, terminal harness.TerminalID) (*sessionmonitor.ConversationReceipt, bool) {
-	return d.monitorInTerminal(terminal, observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal)
+	run := observation.Run
+	if run == "" && terminal != "" {
+		run, _ = d.runtimeLifecycle(terminal)
+	}
+	return d.monitorInTerminal(terminal, observation.SessionID).ProposeConversation(observation.monitored(), proposal, terminal, run)
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {

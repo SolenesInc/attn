@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,28 @@ type monitorBinding struct {
 	applied    sessionmonitor.View
 	catchUp    *time.Timer
 	retryDelay time.Duration
+	replaced   []string
+}
+
+func (r *monitorIndex) replacingRun(id protocol.SessionID, run string) (stillRunning func()) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	binding := r.sessions[id]
+	if binding == nil || run == "" {
+		return func() {}
+	}
+	binding.replaced = append(binding.replaced, run)
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		binding.replaced = slices.DeleteFunc(binding.replaced, func(held string) bool { return held == run })
+	}
+}
+
+func (r *monitorIndex) runReplaced(id protocol.SessionID, run string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.sessions[id] != nil && slices.Contains(r.sessions[id].replaced, run)
 }
 
 func (r *monitorIndex) copied(id protocol.SessionID) bool {

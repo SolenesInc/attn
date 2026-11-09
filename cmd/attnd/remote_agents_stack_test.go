@@ -1220,10 +1220,6 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			secondReply := "Replacement ready. <!-- attn:state=waiting_input -->"
 			if reload {
 				deciding.Release()
-				stale := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
-					return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
-				}).Session
-				t.Logf("stale decision committed %s while terminal %s runs %s", stale.ID, terminal, conversation)
 			}
 			agent.Reply(secondReply)
 			mark := len(app.Log())
@@ -1237,6 +1233,12 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			})
 			if app.Terminal(first) != terminal {
 				t.Fatal("next prompt moved the original conversation to another terminal")
+			}
+			for _, raw := range app.Log() {
+				var event protocol.WebSocketEvent
+				if json.Unmarshal(raw, &event) == nil && event.Event == protocol.EventSessionRegistered && event.Session != nil && protocol.Deref(event.Session.Succeeds) == protocol.SessionID(first) {
+					t.Fatalf("a decision from the replaced run opened successor %s", event.Session.ID)
+				}
 			}
 			mark = app.EventCount()
 			outpost.Stop()

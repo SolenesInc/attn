@@ -2,6 +2,10 @@ package daemon
 
 import "github.com/victorarias/attn/internal/config"
 
+func (d *Daemon) runEnv(lifecycleID string) []string {
+	return append(d.spawnRoutingEnv(), "ATTN_RUNTIME_LIFECYCLE="+lifecycleID)
+}
+
 func (d *Daemon) spawnRoutingEnv() []string {
 	return append(config.SessionMarkerEnv(d.dataRoot),
 		"ATTN_INSTANCE="+config.Instance(),

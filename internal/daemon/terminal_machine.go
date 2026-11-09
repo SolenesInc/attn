@@ -168,8 +168,9 @@ func (d *Daemon) spawnSessionRuntime(sessionID protocol.SessionID, opts ptybacke
 }
 
 func (d *Daemon) startTerminalRuntime(opts ptybackend.SpawnOptions) error {
-	opts.DaemonEnv = d.spawnRoutingEnv()
-	return d.ptyBackend.Spawn(context.Background(), withLifecycleID(opts))
+	opts = withLifecycleID(opts)
+	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
+	return d.ptyBackend.Spawn(context.Background(), opts)
 }
 
 func (d *Daemon) restartTerminal(ctx context.Context, msg protocol.TerminalRestartMessage) (struct{}, error) {
@@ -210,7 +211,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if removeErr := d.ptyBackend.Remove(ctx, terminal); removeErr != nil {
 		d.logf("reload: remove returned error for %s (continuing): %v", sessionID, removeErr)
 	}
-	opts.DaemonEnv = d.spawnRoutingEnv()
+	opts.DaemonEnv = d.runEnv(opts.LifecycleID)
 	d.sessionMonitor(sessionID).HarnessStarting(opts.Agent)
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
@@ -242,6 +243,9 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 
 func (d *Daemon) readTerminalLaunch(ctx context.Context, msg protocol.TerminalLaunchMessage) (protocol.TerminalLaunchResult, error) {
 	var result protocol.TerminalLaunchResult
+	if run, running := d.runtimeLifecycle(msg.TerminalID); running {
+		result.LifecycleID = protocol.Ptr(run)
+	}
 	if infoProvider, ok := d.ptyBackend.(ptybackend.SessionInfoProvider); ok {
 		if info, err := infoProvider.SessionInfo(ctx, msg.TerminalID); err == nil {
 			if info.Cols > 0 {

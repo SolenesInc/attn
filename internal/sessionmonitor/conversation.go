@@ -40,7 +40,7 @@ func (r *ConversationReceipt) Wait(ctx context.Context) error {
 	}
 }
 
-func (m *Monitor) ProposeConversation(observation ConversationObservation, proposal ConversationProposal, terminal harness.TerminalID) (*ConversationReceipt, bool) {
+func (m *Monitor) ProposeConversation(observation ConversationObservation, proposal ConversationProposal, terminal harness.TerminalID, run string) (*ConversationReceipt, bool) {
 	if m == nil {
 		return nil, false
 	}
@@ -68,12 +68,12 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	current := r.currentInTerminalLocked(inputTerminal, m)
 	r.mu.Unlock()
 	if current != m {
-		return current.ProposeConversation(observation, proposal, terminal)
+		return current.ProposeConversation(observation, proposal, terminal, run)
 	}
 	if !inPlace && boundAtStart && !linked {
 		m.FinishAndSettleUsage()()
 	}
-	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal}
+	proposed := Conversation{ConversationObservation: observation, Proposal: proposal, Terminal: terminal, Run: run}
 	candidate := m
 	if !inPlace {
 		candidate = m.candidate(proposed)
@@ -87,7 +87,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	current = r.currentInTerminalLocked(inputTerminal, m)
 	if current != m {
 		r.mu.Unlock()
-		return current.ProposeConversation(observation, proposal, terminal)
+		return current.ProposeConversation(observation, proposal, terminal, run)
 	}
 	if linked {
 		if existing := r.conversationLocked(profile, observation.NativeID); existing != nil {
@@ -451,7 +451,7 @@ func (m *Monitor) TakeQueuedConversation() (ConversationObservation, bool) {
 }
 
 func (m *Monitor) ObserveResumeID(nativeID string) (*ConversationReceipt, bool) {
-	return m.ProposeConversation(ConversationObservation{NativeID: nativeID}, ConversationReported, "")
+	return m.ProposeConversation(ConversationObservation{NativeID: nativeID}, ConversationReported, "", "")
 }
 
 func (r *Registry) Monitors() []*Monitor { return r.each() }

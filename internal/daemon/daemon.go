@@ -3338,7 +3338,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 			if !agentdriver.EffectiveCapabilities(driver).HasHooks {
 				proposal = sessionmonitor.ConversationReported
 			}
-			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, proposal, "")
+			monitor.ProposeConversation(sessionmonitor.ConversationObservation{NativeID: native, TranscriptPath: msg.TranscriptPath}, proposal, "", "")
 		}
 	}
 	monitor.Touch(time.Now())

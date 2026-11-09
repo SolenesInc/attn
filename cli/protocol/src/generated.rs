@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "8260647cc94e";
+pub const PROTOCOL_VERSION: &str = "19ea6be09c77";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -11681,6 +11681,8 @@ impl SetSessionPriorityMessage {
 pub struct SetSessionResumeIDMessage {
     pub cmd: String,
     pub id: TerminalID,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_id: Option<String>,
     pub resume_session_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transcript_path: Option<String>,
@@ -12539,6 +12541,8 @@ impl TerminalLaunchMessage {
 pub struct TerminalLaunchResult {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cols: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

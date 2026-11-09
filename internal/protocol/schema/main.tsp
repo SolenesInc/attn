@@ -696,6 +696,7 @@ model SetSessionResumeIDMessage {
   id: TerminalID;
   resume_session_id: string;
   transcript_path?: string;
+  lifecycle_id?: string; // The run whose hook reports this, from ATTN_RUNTIME_LIFECYCLE
 }
 
 @extension("x-on", #{ home: true })
@@ -3516,6 +3517,7 @@ model TerminalLaunchResult {
   read_error?: string;    // Why params is absent: the record could not be read
   cols?: int32;
   rows?: int32;
+  lifecycle_id?: string;  // The run the terminal holds now
 }
 
 @extension("x-on", #{ terminal: "terminal_id" })

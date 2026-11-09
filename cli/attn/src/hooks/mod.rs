@@ -184,6 +184,10 @@ impl Hook<'_> {
         message.id = id.to_string();
         message.resume_session_id = session.to_string();
         message.transcript_path = Some(transcript.to_string());
+        let lifecycle = (self.getenv)("ATTN_RUNTIME_LIFECYCLE");
+        if !lifecycle.is_empty() {
+            message.lifecycle_id = Some(lifecycle);
+        }
         if let Err(error) = self.client(id).send(&message) {
             say(&format!(
                 "warning: could not observe agent conversation: {error}"

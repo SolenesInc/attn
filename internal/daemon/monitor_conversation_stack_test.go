@@ -472,3 +472,33 @@ func TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession(t *test
 	binding.Release()
 	awaitUsageTokens(app, string(next.ID), claudeTokens(fixed))
 }
+
+func TestAReloadAfterACommittedMoveLeavesTheMoveInPlace(t *testing.T) {
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	saved := s.PauseAt(pausepoint.ConversationMoveSaved)
+	s.Start()
+	app := s.App()
+	first := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
+	agent := s.Launched(first)
+	app.TypeLine(first, "before move")
+	agent.Prompted()
+	agent.Reply("Ready. <!-- attn:state=waiting_input -->")
+	testworld.AwaitSession(app, first, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
+	app.TypeLine(first, "/clear")
+	agent.Prompted()
+	saved.Await()
+	successor := awaitSuccessor(app, first)
+	reloaded := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(first), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == first })
+	saved.Release()
+	if reloaded.Success {
+		t.Fatal("reload of the session the terminal moved on from reported success")
+	}
+	if got := protocol.Deref(reloaded.Error); got != "session not found" {
+		t.Fatalf("reload error = %q", got)
+	}
+	app.TypeLine(string(successor.ID), "after move")
+	if got := agent.Prompted(); got != "after move" {
+		t.Fatalf("the moved conversation's agent took %q", got)
+	}
+}

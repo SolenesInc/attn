@@ -77,6 +77,7 @@ type Conversation struct {
 	ConversationObservation
 	Proposal ConversationProposal
 	Terminal harness.TerminalID
+	Run      string `json:",omitempty"`
 }
 
 type Exit struct {

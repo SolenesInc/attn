@@ -12673,6 +12673,9 @@ type SetSessionResumeIDMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID TerminalID `json:"id"`
 
+	// LifecycleID corresponds to the JSON schema field "lifecycle_id".
+	LifecycleID *string `json:"lifecycle_id,omitempty,omitzero"`
+
 	// ResumeSessionID corresponds to the JSON schema field "resume_session_id".
 	ResumeSessionID string `json:"resume_session_id"`
 
@@ -13577,6 +13580,9 @@ type TerminalLaunchMessage struct {
 type TerminalLaunchResult struct {
 	// Cols corresponds to the JSON schema field "cols".
 	Cols *int `json:"cols,omitempty,omitzero"`
+
+	// LifecycleID corresponds to the JSON schema field "lifecycle_id".
+	LifecycleID *string `json:"lifecycle_id,omitempty,omitzero"`
 
 	// Params corresponds to the JSON schema field "params".
 	Params *string `json:"params,omitempty,omitzero"`

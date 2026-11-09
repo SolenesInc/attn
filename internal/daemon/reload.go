@@ -355,6 +355,11 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		return nil, err
 	}
 	msg := protocol.TerminalRestartMessage{Cmd: protocol.CmdTerminalRestart, HostName: name, SessionID: sessionID, TerminalID: opts.ID, Launch: launch, Agent: agentJSON}
+	running, err := Call[protocol.TerminalLaunchResult](context.Background(), d.router(), protocol.TerminalLaunchMessage{Cmd: protocol.CmdTerminalLaunch, TerminalID: opts.ID})
+	if err != nil {
+		return nil, err
+	}
+	stillRunning := d.monitors().replacingRun(sessionID, protocol.Deref(running.LifecycleID))
 	if opts.Agent != protocol.AgentShellValue {
 		d.persistReloadedConversation(sessionID, opts)
 	}
@@ -364,6 +369,7 @@ func (d *Daemon) executePreparedSessionReload(sessionID protocol.SessionID, opts
 		_, err = Call[struct{}](context.Background(), d.router(), msg)
 	}
 	if err != nil {
+		stillRunning()
 		return nil, err
 	}
 	d.recordReload(sessionID, opts)
