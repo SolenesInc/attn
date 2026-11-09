@@ -90,6 +90,8 @@ type fakeMod struct {
 	events   chan ModEvent
 	reports  chan ModCompactReport
 
+	returning sync.Mutex
+
 	mu       sync.Mutex
 	instance string
 	cancel   context.CancelFunc
@@ -247,8 +249,10 @@ func (m *fakeMod) readdressHeldRings(address string) error {
 }
 
 func (m *fakeMod) sendGivenBack(instance string) {
+	m.returning.Lock()
+	defer m.returning.Unlock()
 	m.mu.Lock()
-	back := m.back
+	back := slices.Clone(m.back)
 	m.mu.Unlock()
 	if len(back) == 0 {
 		return
