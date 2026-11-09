@@ -7,17 +7,24 @@ const stack: Array<RefObject<() => void>> = [];
 
 let installedListener: ((e: KeyboardEvent) => void) | null = null;
 
+function dismissTop(e: KeyboardEvent) {
+  if (e.key !== 'Escape') return;
+  const top = stack[stack.length - 1];
+  if (!top) return;
+  e.preventDefault();
+  e.stopPropagation(); // Prevent terminal and other element handlers from also seeing it.
+  top.current();
+}
+
 function ensureInstalled() {
   if (installedListener) return;
-  installedListener = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
-    const top = stack[stack.length - 1];
-    if (!top) return;
-    e.preventDefault();
-    e.stopPropagation(); // Prevent terminal and other element handlers from also seeing it.
-    top.current();
-  };
+  installedListener = dismissTop;
   window.addEventListener('keydown', installedListener, true); // Capture phase fires before terminal input.
+}
+
+/** Escape reaches a popped-out tile window only through its own keydown listener. */
+export function listenForEscape(target: Window): void {
+  target.addEventListener('keydown', dismissTop, true);
 }
 
 export function useEscapeStack(handler: () => void, enabled: boolean): void {

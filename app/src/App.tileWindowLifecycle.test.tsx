@@ -8,6 +8,7 @@ import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { serveSettings } from './test/settings';
+import { useTileWindowStore } from './tileWindow/pool';
 import { letTileWindowsOpen } from './test/tileWindows';
 
 const FRAME = { x: 10, y: 20, width: 500, height: 400 };
@@ -119,5 +120,15 @@ describe('a browser tile in its own window', () => {
     await gesture(daemon, () => pressShortcut('desktop.select3'));
 
     expect(browserHostLifecycle()).toEqual(['browser_host_mount', 'browser_host_unmount']);
+  });
+
+  it('runs app shortcuts pressed inside it', async () => {
+    const { daemon } = await openBrowserOnA({ popped: true });
+    const [{ window: tileWindow }] = [...useTileWindowStore.getState().byLeaf.values()];
+    expect(screen.queryByTestId('settings-nav-desktop')).toBeNull();
+
+    await gesture(daemon, () => pressShortcut('ui.openSettings', tileWindow));
+
+    expect(screen.getByTestId('settings-nav-desktop')).toBeTruthy();
   });
 });

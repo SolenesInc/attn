@@ -2,6 +2,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { create } from 'zustand';
 import type { TileWindowFrame } from '../types/generated';
 import { SHORTCUTS, matchesShortcut } from '../shortcuts/registry';
+import { listenForShortcuts } from '../shortcuts/useShortcut';
+import { listenForEscape } from '../hooks/useEscapeStack';
 import { recordUiDiag } from '../utils/uiDiagnosticsLog';
 import { nameNativeWindow } from '.';
 
@@ -107,6 +109,8 @@ async function openWindow(frame: TileWindowFrame): Promise<PooledWindow> {
   if (!tileWindow) throw new Error(`tile window ${label} did not open`);
   nameNativeWindow(tileWindow, label);
   bringBackOnToggleKey(tileWindow, label);
+  listenForShortcuts(tileWindow);
+  listenForEscape(tileWindow);
   const entry: PooledWindow = {
     label,
     window: tileWindow,

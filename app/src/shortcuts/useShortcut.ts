@@ -38,13 +38,7 @@ export function setShortcutCaptureSuspended(suspended: boolean): void {
   captureSuspended = suspended;
 }
 
-let listenerInstalled = false;
-
-function installGlobalListener() {
-  if (listenerInstalled) return;
-  listenerInstalled = true;
-
-  window.addEventListener('keydown', (e: KeyboardEvent) => {
+function dispatchKeydown(e: KeyboardEvent) {
     if (captureSuspended || isRetainedTerminalEvent(e)) return;
 
     // A pending leader owns the next keystroke entirely: always consume, so it can't fall through
@@ -101,7 +95,20 @@ function installGlobalListener() {
         return;
       }
     }
-  }, true); // Capture phase to get events before terminal input.
+}
+
+/** Shortcuts reach a popped-out tile window only through its own keydown listener. */
+export function listenForShortcuts(target: Window): void {
+  target.addEventListener('keydown', dispatchKeydown, true); // Capture phase to get events before terminal input.
+}
+
+let listenerInstalled = false;
+
+function installGlobalListener() {
+  if (listenerInstalled) return;
+  listenerInstalled = true;
+
+  listenForShortcuts(window);
 
   window.addEventListener(NATIVE_SHORTCUT_EVENT, (event) => {
     const shortcutId = (event as CustomEvent<unknown>).detail;
