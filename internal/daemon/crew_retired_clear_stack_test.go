@@ -23,9 +23,19 @@ func TestARetiredMembersSleepRequestReachesItsConversationDuringBinding(t *testi
 	wake := wakeCrew(t, cli, "Keel", "")
 	agent := s.Launched(string(wake.SessionID))
 	agent.Prompted()
+	endTurn := func() {
+		mark := len(app.Log())
+		agent.Reply("Ready. <!-- attn:state=idle -->")
+		awaitStateSince(app, mark, string(wake.SessionID), protocol.SessionStateIdle)
+	}
+	endTurn()
 	if _, err := cli.CrewRetire("Keel"); err != nil {
 		t.Fatal(err)
 	}
+	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
+		t.Fatalf("retired member received %q", got)
+	}
+	endTurn()
 	probe := uuid.NewString()
 	cleared := testworld.Request(app, protocol.PtyInputMessage{
 		Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(app.Terminal(string(wake.SessionID))), Data: "/clear\r",
