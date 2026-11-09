@@ -53,14 +53,17 @@ const fixtureId = `com.attn.capture-fixture.${runner.runId.replace(/[^a-z0-9]/gi
 const fixture = createWindowDriver({ appPath: options.appPath, bundleId: fixtureId });
 const otherFixtureId = `${fixtureId}.other`;
 const otherFixture = createWindowDriver({ appPath: options.appPath, bundleId: otherFixtureId });
+const FIXTURE_SIGNAL_LIMIT_MS = 120_000;
 function fixtureSignal(name, action) {
   const file = path.join(runner.runDir, name);
   fs.rmSync(file, { force: true });
   return new Promise((resolve, reject) => {
+    const settle = (finish, value) => { clearTimeout(limit); watcher.close(); finish(value); };
     const watcher = fs.watch(runner.runDir, (_, changed) => {
-      if (changed === name && fs.existsSync(file)) { watcher.close(); resolve(); }
+      if (changed === name && fs.existsSync(file)) settle(resolve);
     });
-    Promise.resolve(action()).catch(error => { watcher.close(); reject(error); });
+    const limit = setTimeout(() => settle(reject, new Error(`${name} did not appear in ${runner.runDir} within ${FIXTURE_SIGNAL_LIMIT_MS}ms`)), FIXTURE_SIGNAL_LIMIT_MS);
+    Promise.resolve(action()).catch(error => settle(reject, error));
   });
 }
 async function screenshot(name) {

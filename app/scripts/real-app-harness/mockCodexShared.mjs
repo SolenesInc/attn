@@ -124,7 +124,7 @@ export async function runSharedMockServer() {
 
   const newThread = ({ id, cwd, file, source, config, conn }) => ({
     id, cwd, path: file, config, sessionSource: source, sessionStarted: false, written: false, active: false,
-    turnId: '', sequence: 0, approval: null, captures: new Map(), subscribers: new Set([conn]),
+    turnId: '', sequence: 0, approval: null, captures: new Map(), steered: [], subscribers: new Set([conn]),
   });
 
   const speak = (thread, role, text) => {
@@ -160,16 +160,24 @@ export async function runSharedMockServer() {
       tell(thread, { method: 'item/completed', params: { threadId: thread.id, turnId: thread.turnId, item: { type: 'agentMessage', text: spoken } } });
     };
     const runAction = createMockActionRunner({ cwd: thread.cwd, env: { ...process.env, ...toolEnv, CODEX_THREAD_ID: thread.id }, reply, captures: thread.captures });
-    try {
-      for (const action of turn.actions) await runAction(action, text);
-    } catch (error) {
-      failure = error;
-      await reply(`mock agent error: ${error.message}`, {});
+    let played = turn;
+    let next = { text, turn };
+    while (next) {
+      played = next.turn;
+      try {
+        for (const action of next.turn.actions) await runAction(action, next.text);
+      } catch (error) {
+        failure = error;
+        await reply(`mock agent error: ${error.message}`, {});
+      }
+      next = thread.steered.shift();
+      if (next) continue;
+      await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - started)));
+      const marker = stateMarker(failure ? 'idle' : markerStateForActions(played.actions));
+      speak(thread, 'assistant', marker);
+      await runHooks(thread, 'Stop', { stop_hook_active: false, last_assistant_message: `${replies.join('\n')} ${marker}`.trim() });
+      next = thread.steered.shift();
     }
-    await delay(Math.max(0, (config.minimumWorkingMs ?? 1_500) - (Date.now() - started)));
-    const marker = stateMarker(failure ? 'idle' : markerStateForActions(turn.actions));
-    speak(thread, 'assistant', marker);
-    await runHooks(thread, 'Stop', { stop_hook_active: false, last_assistant_message: `${replies.join('\n')} ${marker}`.trim() });
     thread.active = false;
     tell(thread, { method: 'turn/completed', params: { threadId: thread.id, turn: { id: thread.turnId, status: 'completed' } } });
     announceStatus(thread);
@@ -292,7 +300,9 @@ export async function runSharedMockServer() {
       const thread = loadedThread(params.threadId);
       if (!thread.active) throw new Error('no active turn to steer');
       if (params.expectedTurnId !== thread.turnId) throw new Error(`expected turn ${params.expectedTurnId}, but turn ${thread.turnId} is active`);
-      speakUser(thread, promptOf(params));
+      const text = promptOf(params);
+      speakUser(thread, text);
+      thread.steered.push({ text, turn: selectMockAgentTurn(readMockAgentConfig(thread.cwd), text) });
       return { result: { turnId: thread.turnId } };
     },
   };
