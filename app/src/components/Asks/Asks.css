@@ -236,6 +236,11 @@
   gap: 14px;
 }
 
+.asks-ask > *,
+.ask-question > * {
+  flex-shrink: 0;
+}
+
 .asks-ask-from {
   display: flex;
   align-items: center;
@@ -340,7 +345,7 @@
 
 .ask-question-context {
   color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
 }
 
 .ask-choices {
@@ -417,13 +422,13 @@
 
 .ask-choice-label {
   color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   line-height: 1.4;
 }
 
 .ask-choice-description {
   color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm);
   line-height: 1.4;
 }
 
@@ -448,7 +453,7 @@
   border-radius: 8px;
   color: var(--color-text-primary);
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   line-height: 1.4;
   padding: 8px 10px;
   resize: vertical;

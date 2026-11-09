@@ -181,4 +181,38 @@ test.describe('Asks', () => {
       fs.rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  test('a long ask leaves the note box at full height', async ({ page, daemon }) => {
+    const { wsUrl, socketPath } = await daemon.start();
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-asks-'));
+    const sessionId = 'asks-long-agent';
+    let spawned = false;
+    try {
+      await page.setViewportSize({ width: 700, height: 800 });
+      await page.goto('/');
+      await page.waitForSelector('.dashboard');
+      await spawnClaude(wsUrl, { id: sessionId, cwd, label: 'long-agent' });
+      spawned = true;
+
+      const paragraph = 'The migration touches the sessions table, the bus consumers and the replay path. '.repeat(6);
+      const questions = Array.from({ length: 6 }, (_, i) =>
+        `${paragraph}\n\n:::question\nWhich approach for part ${i + 1}?\n- [ ] Rewrite in place\n- [ ] Rewrite on read\n:::\n`).join('\n');
+      attnCli(socketPath, ['ask', '--session', sessionId, '--subject', 'Long plan'], questions);
+
+      await page.keyboard.press('Meta+Shift+r');
+      const note = page.getByRole('region', { name: 'Asks' }).getByRole('textbox', { name: 'Note' });
+      await note.scrollIntoViewIfNeeded();
+      const box = await note.boundingBox();
+      expect(box?.height).toBeGreaterThanOrEqual(60);
+    } finally {
+      if (spawned) {
+        try {
+          attnCli(socketPath, ['agent', 'close', sessionId, '-m', 'shown', '--source-session', sessionId]);
+        } catch (error) {
+          console.warn(`[asks] could not close ${sessionId}; its stub agent outlives the daemon: ${error}`);
+        }
+      }
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });
