@@ -30,7 +30,7 @@ the session compacts at a token budget they choose.
 ### Agents
 
 - `attn session show <id>` prints a `usage` line, and `attn session list --json` carries the same (`cmd/attnd/session_ledger.go`). See [ledger.md](ledger.md) for the verbs.
-- `attn settings set session_cost.price.<model> '<json>'` sets a price, and `""` clears it (`cmd/attnd/settings.go`). The JSON needs `input_usd_per_mtok`, `output_usd_per_mtok`, `cache_read_usd_per_mtok`, `cache_write_5m_usd_per_mtok` and `cache_write_1h_usd_per_mtok`. `headless_context_window_cap` sets the background caps. No verb sets a session's context cap.
+- `attn settings set session_cost.price.<model> '<json>'` sets a price, and `""` clears it (`cli/attn/src/commands/settings.rs`). The JSON needs `input_usd_per_mtok`, `output_usd_per_mtok`, `cache_read_usd_per_mtok`, `cache_write_5m_usd_per_mtok` and `cache_write_1h_usd_per_mtok`. `headless_context_window_cap` sets the background caps. No verb sets a session's context cap.
 
 ### Triggers
 

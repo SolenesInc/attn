@@ -1480,11 +1480,3 @@ func runProbeTUI() {
 		exit(1)
 	}
 }
-
-func runTicket() {
-	verb := ""
-	if len(os.Args) > 2 {
-		verb = os.Args[2]
-	}
-	signpostTicketVerb(verb)
-}

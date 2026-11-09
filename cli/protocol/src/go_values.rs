@@ -65,6 +65,7 @@ pub const MAX_CHECK_TEXT_CHARS: i64 = 2000;
 pub const MAX_CHECK_SUMMARY_CHARS: i64 = 400;
 
 pub const LINKABLE_KINDS: &[&str] = &["blocks", "part-of", "discovered-from"];
+pub const ROUTING_OVERRIDE_ENV: &[&str] = &["ATTN_DATA_DIR", "ATTN_HARNESS_DATA_DIR", "ATTN_HARNESS_NOTEBOOK_ROOT", "ATTN_SOCKET_PATH", "ATTN_DB_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "ATTN_WS_PORT"];
 pub const ENTRY_KINDS: &[&str] = &["note", "handoff", "attach", "detach", "check", "edit", "move", "link", "answer", "authorization"];
 pub const CHECK_VERBS: &[&str] = &["add", "edit", "remove", "restore", "report", "confirm", "reject", "uncheck", "reopen"];
 

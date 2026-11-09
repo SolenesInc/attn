@@ -16,6 +16,17 @@ const DERIVED_PORT_SPAN: u32 = 9_849;
 const DEFAULT_PORT: &str = "9849";
 const DEV_PORT: &str = "29849";
 
+pub fn validate_instance_name(name: &str) -> Result<(), String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || matches_instance_pattern(&trimmed.to_lowercase()) {
+        return Ok(());
+    }
+    Err(format!(
+        "invalid instance name {}: must match {INSTANCE_PATTERN_TEXT}",
+        quote(name.as_bytes())
+    ))
+}
+
 pub type Getenv<'a> = &'a dyn Fn(&str) -> String;
 
 #[derive(Default)]

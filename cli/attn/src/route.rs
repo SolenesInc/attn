@@ -1,4 +1,4 @@
-use crate::commands::{Run, Stop, seed, top_level};
+use crate::commands::{Run, Stop, callout, instance_env, seed, settings, ticket, top_level};
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
 use crate::invocation::{self, Invocation};
@@ -22,28 +22,83 @@ pub fn run(argv: Vec<OsString>) -> ExitCode {
     }
 }
 
+#[derive(Clone, Copy, PartialEq)]
+enum Checks {
+    InstanceAndRouting,
+    InstanceOnly,
+    Nothing,
+}
+
+type NativeRun = for<'a, 'b> fn(&'a mut Run<'b>, &'a [String]) -> Result<(), Stop>;
+
+#[derive(Clone, Copy)]
+struct Native {
+    run: NativeRun,
+    banner: bool,
+    checks: Checks,
+    arguments_from: usize,
+}
+
+const fn native(run: NativeRun, banner: bool) -> Native {
+    Native {
+        run,
+        banner,
+        checks: Checks::InstanceAndRouting,
+        arguments_from: 2,
+    }
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn run_help(_run: &mut Run<'_>, _args: &[String]) -> Result<(), Stop> {
+    top_level::help();
+    Ok(())
+}
+
+fn native_command(name: &str, verb: Option<&str>) -> Option<Native> {
+    Some(match (name, verb) {
+        ("help" | "-h" | "--help", _) => native(run_help, false),
+        ("seed", _) => native(seed::run, true),
+        ("ticket", _) => native(ticket::run, true),
+        ("settings", _) => native(settings::run, false),
+        ("callout", _) => native(callout::run, false),
+        ("instance-env", _) => Native {
+            checks: Checks::Nothing,
+            ..native(instance_env::run, false)
+        },
+        ("instance", Some("env")) => Native {
+            checks: Checks::InstanceOnly,
+            arguments_from: 3,
+            ..native(instance_env::run, false)
+        },
+        _ => return None,
+    })
+}
+
 fn route_command(argv: Vec<OsString>) -> ExitCode {
     let Some(name) = argv.get(1).map(|name| name.to_string_lossy().into_owned()) else {
         return hand_off_to_attnd(argv);
     };
-    if name != "seed"
-        && name != "help"
-        && name != "-h"
-        && name != "--help"
-        && top_level::attnd_owns(&name)
-    {
+    let verb = argv.get(2).map(|verb| verb.to_string_lossy().into_owned());
+    let command = native_command(&name, verb.as_deref());
+    if command.is_none() && top_level::attnd_owns(&name) {
         return hand_off_to_attnd(argv);
     }
+    let from = command.map_or(2, |command| command.arguments_from);
     let arguments: Vec<String> = argv
         .iter()
-        .skip(2)
+        .skip(from)
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
     let paths = Paths::new(&getenv);
     let terminal = terminal_from_env(&getenv).trim().to_string();
-    let checked = paths
-        .validate_instance()
-        .and_then(|()| paths.validate_routing());
+    let checks = command.map_or(Checks::InstanceAndRouting, |command| command.checks);
+    let checked = match checks {
+        Checks::InstanceAndRouting => paths
+            .validate_instance()
+            .and_then(|()| paths.validate_routing()),
+        Checks::InstanceOnly => paths.validate_instance(),
+        Checks::Nothing => Ok(()),
+    };
     if let Err(message) = checked {
         let _ = writeln!(io::stderr(), "{message}");
         return finish(&paths, "attn", String::new(), None, 1, &terminal);
@@ -51,29 +106,28 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
     let mut run = Run {
         paths: &paths,
         terminal: terminal.clone(),
-        path: name.clone(),
+        path: if from == 3 {
+            format!("{name} {}", verb.clone().unwrap_or_default())
+        } else {
+            name.clone()
+        },
         usage_error: None,
         refusal: None,
         closed_session: None,
     };
-    let code = match name.as_str() {
-        "help" | "-h" | "--help" => {
-            top_level::help();
-            0
+    let code = if let Some(command) = command {
+        if command.banner
+            && let Some(banner) = paths.banner()
+        {
+            let _ = writeln!(io::stderr(), "{banner}");
         }
-        "seed" => {
-            if let Some(banner) = paths.banner() {
-                let _ = writeln!(io::stderr(), "{banner}");
-            }
-            match seed::run(&mut run, &arguments) {
-                Ok(()) => 0,
-                Err(Stop(code)) => code,
-            }
+        match (command.run)(&mut run, &arguments) {
+            Ok(()) => 0,
+            Err(Stop(code)) => code,
         }
-        _ => {
-            let Stop(code) = top_level::unknown(&mut run, &name);
-            code
-        }
+    } else {
+        let Stop(code) = top_level::unknown(&mut run, &name);
+        code
     };
     invocation::record(
         &paths,

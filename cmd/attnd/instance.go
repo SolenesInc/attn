@@ -60,9 +60,6 @@ func runInstance() {
 	case "list":
 		setCommandPath("instance list")
 		runInstanceList(os.Args[3:])
-	case "env":
-		setCommandPath("instance env")
-		runInstanceEnvArgs(os.Args[3:])
 	case "help", "-h", "--help":
 		printInstanceHelp(os.Stdout)
 	default:

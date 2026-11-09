@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/ask"
+	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
@@ -96,6 +97,7 @@ func writeConstants(out *strings.Builder) {
 	}
 	for _, c := range []named[[]string]{
 		{"LINKABLE_KINDS", garden.LinkableKinds},
+		{"ROUTING_OVERRIDE_ENV", config.RoutingOverrideEnv()},
 		{"ENTRY_KINDS", garden.EntryKinds},
 		{"CHECK_VERBS", checkVerbs},
 	} {

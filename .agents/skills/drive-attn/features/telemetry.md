@@ -28,7 +28,7 @@ the machine. Vents live in the same section. See
 - **Settings → Experimental**, the "Usage analytics" switch (`[data-testid="settings-feature-analytics.enabled"]`, `app/src/components/SettingsModalSections.tsx`). **Settings → Analytics** (`[data-testid="settings-nav-analytics"]`) has the same switch in its page head. Opening the settings dialog is in [settings.md](settings.md).
 - **Settings → Analytics** (`app/src/components/Analytics/AnalyticsSettings.tsx`): the "Usage analytics" switch in the page head, with the page dimmed and `inert` while it is off, then the strip (Sharing, Vents, Kept here, and Outposts when there are any, with `[data-testid="analytics-outposts"]` naming the unreachable ones), the lists Vents, All records, `bus`, `app`, `cli`, `sample` and `run`, and the inspector, which shows a record's JSON under "Exactly as stored". Keys: `[` and `]` switch lists, `j` and `k` or the arrows move, Enter expands a burst of records from the same second, `c` copies a record's JSON, `r` refreshes, `m` opens Machine settings.
 - Machine settings (`app/src/components/Analytics/AnalyticsMachine.tsx`): "Share with attn's maintainers" (Enable or Disable, then "Delete from server" after sharing ran), "Send vents", "Tool vents", "Forget this install…" and "Clear the local record…".
-- Their own shell: `attn settings set analytics.enabled|analytics.sharing_enabled|analytics.share_vents|analytics.tool_vents true|false` and `attn settings get` (`cmd/attnd/settings.go`).
+- Their own shell: `attn settings set analytics.enabled|analytics.sharing_enabled|analytics.share_vents|analytics.tool_vents true|false` and `attn settings get` (`cli/attn/src/commands/settings.rs`).
 
 ### Agents
 

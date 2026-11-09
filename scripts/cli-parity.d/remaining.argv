@@ -1,0 +1,47 @@
+read ticket
+read ticket list
+read ticket status
+read ticket nope
+read ticket --help
+read instance-env dev
+read instance-env --fish dev
+read instance-env --unset
+read instance-env --fish --unset
+read instance-env none
+read instance-env default
+read instance-env Bad_Name
+read instance-env
+read instance-env --help
+read instance env dev
+read instance env --fish dev
+read instance env --help
+read instance env
+usage settings list
+read settings
+read settings -h
+read settings nope
+read settings list extra
+read settings list --features
+read settings list --features --json
+read settings list --all
+read settings list --json
+read settings list --all --json
+read settings get
+read settings get asks_enabled
+read settings get asks_enabled --json
+read settings get no_such_key
+read settings set
+write settings set asks_enabled true
+write settings set asks_enabled true --json
+write settings set asks_enabled ""
+write settings set no_such_key 1
+usage callout show
+read callout
+read callout -h
+read callout nope
+read callout show
+read callout show lonely
+read callout anchors extra
+read callout anchors --session nope
+read callout anchors --session nope --json
+read callout show garden hi --session nope

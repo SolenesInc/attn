@@ -1,4 +1,9 @@
+pub mod callout;
+pub mod instance_env;
 pub mod seed;
+pub mod settings;
+pub mod support;
+pub mod ticket;
 pub mod top_level;
 
 use crate::client::{Reply, SendError};

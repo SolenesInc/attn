@@ -33,7 +33,7 @@ with the mock agent and the mock GitHub, the doctor and the cleanup are in
 
 ### Agents
 
-- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme|env` (`cmd/attnd/instance.go`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cmd/attnd/instance_env.go`). `attn daemon ensure|stop` and `attn version [--json]` (`cmd/attnd/main.go`).
+- `attn instance status|resolve|list|clean|stop-app|set-origin|tauri-config|register-scheme` (`cmd/attnd/instance.go`), `attn instance env` (`cli/attn/src/commands/instance_env.rs`). `attn instance-env <name>|--unset`, with `--fish` for fish (`cli/attn/src/commands/instance_env.rs`). `attn daemon ensure|stop` and `attn version [--json]` (`cmd/attnd/main.go`).
 - No prompt attn sends names these verbs. The agents an instance runs reach that instance with their own `attn` commands, because every terminal the instance starts carries the instance's routing: `ATTN_INSTANCE`, `ATTN_SOCKET_PATH`, `ATTN_DATA_DIR` and the rest (`internal/daemon/spawn_routing.go`).
 
 ### Triggers

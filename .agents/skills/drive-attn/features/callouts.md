@@ -23,7 +23,7 @@ ends the callout with Esc. Callouts are always on.
 
 ### Agents
 
-- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cmd/attnd/callout.go`).
+- `attn callout anchors [--json]` and `attn callout show <anchor> <text> [<anchor> <text>]... [--session <id>]` (`cli/attn/src/commands/callout.rs`).
 - Prompts: `attn skill --reference callouts` covers when to point, the anchors and the limits (`internal/prompts/content/skills/attn/references/callouts.md`). The skill's capability index names the reference (`internal/prompts/content/skills/attn/SKILL.md`).
 
 ## Driving it

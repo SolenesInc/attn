@@ -26,7 +26,7 @@ plant a seed from it. The user can also send attn vents to attn's maintainers.
 - Keys on the list (`app/src/components/Analytics/useVentTriage.tsx`): `j`, `k` or the arrows move, `o` opens the vent's live session, `t` opens its transcript, `g` opens its stake seed, `p` plants a seed, `d` dismisses or restores, `s` files it under attn or tools, `u` undoes the last action, `x` sends or keeps it while sharing is on. A row click selects a vent, and the inspector's buttons (Open session, Transcript, Stake seed, Plant seed, Dismiss or Restore, File under attn or tools, Send or Keep here) do what the keys do.
 - Machine settings (`m`, `app/src/components/Analytics/AnalyticsMachine.tsx`): "Send vents" sets `analytics.share_vents` and "Tool vents" sets `analytics.tool_vents` in `attn settings`. The panel lists "Send vents" while sharing (`analytics.sharing_enabled`) or `analytics.share_vents` is on.
 - Where people see what agents do: the count of new vents on the Vents tab, each row's session label, `tools` mark and age, and the inspector's context.
-- Their own shell: `attn settings set analytics.enabled|analytics.tool_vents|analytics.share_vents true|false` (`cmd/attnd/settings.go`).
+- Their own shell: `attn settings set analytics.enabled|analytics.tool_vents|analytics.share_vents true|false` (`cli/attn/src/commands/settings.rs`).
 
 ### Agents
 
