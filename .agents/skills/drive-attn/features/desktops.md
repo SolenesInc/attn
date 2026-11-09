@@ -55,7 +55,7 @@ sessions on a launch desktop.
 ### Agents
 
 - `attn terminal move [<terminal>] <desktop>` (`cmd/attnd/terminal.go`): moves the caller's terminal, or a shell, or an agent below the caller in the caller's delegation chain. `<desktop>` is a digit, a name or an id. The command creates a missing numbered desktop. `attn terminal open --desktop <ref>` is in [terminals.md](terminals.md).
-- `attn crew set <member> --launch-desktop` (`cmd/attnd/crew.go`) and `attn automation set <id> --launch-desktop`, `attn automation apply --file <yaml> --launch-desktop` (`cmd/attnd/automation.go`).
+- `attn crew set <member> --launch-desktop` (`cli/attn/src/commands/crew.rs`) and `attn automation set <id> --launch-desktop`, `attn automation apply --file <yaml> --launch-desktop` (`cli/attn/src/commands/automation.rs`).
 - `attn delegate --desktop` places a delegate ([delegation.md](delegation.md)), and `attn callout show desktop:<which>` points at a desktop ([callouts.md](callouts.md)).
 - Prompts: placement, reach and moves in `attn skill --reference terminal` (`internal/prompts/content/skills/attn/references/terminal.md`).
 

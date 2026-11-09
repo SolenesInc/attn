@@ -1,4 +1,6 @@
+pub mod automation;
 pub mod callout;
+pub mod crew;
 pub mod instance_env;
 pub mod seed;
 pub mod settings;

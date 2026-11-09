@@ -1,4 +1,7 @@
-use crate::commands::{Run, Stop, callout, instance_env, seed, settings, ticket, top_level};
+use crate::commands::{
+    Run, Stop, automation, callout, crew, instance_env, print_stdout, seed, settings, ticket,
+    top_level,
+};
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
 use crate::invocation::{self, Invocation};
@@ -37,6 +40,7 @@ struct Native {
     banner: bool,
     checks: Checks,
     arguments_from: usize,
+    help: Option<&'static str>,
 }
 
 const fn native(run: NativeRun, banner: bool) -> Native {
@@ -45,6 +49,7 @@ const fn native(run: NativeRun, banner: bool) -> Native {
         banner,
         checks: Checks::InstanceAndRouting,
         arguments_from: 2,
+        help: None,
     }
 }
 
@@ -60,6 +65,11 @@ fn native_command(name: &str, verb: Option<&str>) -> Option<Native> {
         ("seed", _) => native(seed::run, true),
         ("ticket", _) => native(ticket::run, true),
         ("settings", _) => native(settings::run, false),
+        ("crew", _) => native(crew::run, true),
+        ("automation", _) => Native {
+            help: Some(automation::USAGE),
+            ..native(automation::run, true)
+        },
         ("callout", _) => native(callout::run, false),
         ("instance-env", _) => Native {
             checks: Checks::Nothing,
@@ -116,15 +126,7 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
         closed_session: None,
     };
     let code = if let Some(command) = command {
-        if command.banner
-            && let Some(banner) = paths.banner()
-        {
-            let _ = writeln!(io::stderr(), "{banner}");
-        }
-        match (command.run)(&mut run, &arguments) {
-            Ok(()) => 0,
-            Err(Stop(code)) => code,
-        }
+        run_native(command, &mut run, &arguments, &paths)
     } else {
         let Stop(code) = top_level::unknown(&mut run, &name);
         code
@@ -142,6 +144,25 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
         &terminal,
     );
     ExitCode::from(code)
+}
+
+fn run_native(command: Native, run: &mut Run<'_>, arguments: &[String], paths: &Paths<'_>) -> u8 {
+    if let Some(help) = command.help
+        && let [only] = arguments
+        && (only == "-h" || only == "--help")
+    {
+        print_stdout(help);
+        return 0;
+    }
+    if command.banner
+        && let Some(banner) = paths.banner()
+    {
+        let _ = writeln!(io::stderr(), "{banner}");
+    }
+    match (command.run)(run, arguments) {
+        Ok(()) => 0,
+        Err(Stop(code)) => code,
+    }
 }
 
 fn getenv(name: &str) -> String {

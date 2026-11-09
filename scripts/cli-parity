@@ -39,7 +39,11 @@ OPERATION_ID_PATTERN = re.compile(r'("operation_id": ")[0-9a-f]+')
 RUST_CWD_PATTERN = re.compile(r"(?<=/cli-parity-)(\w+)/rust-\w+|(?<=/cli-parity-)\w+")
 MAX_REPORTED_DIFF_LINES = 40
 PREVIOUS_STDOUT = "<previous stdout>"
-FIXTURE_WORDS = {"$plot_json": str(ARGV_DIR / "seed-plot.json")}
+FIXTURE_WORDS = {
+    "$plot_json": str(ARGV_DIR / "seed-plot.json"),
+    "$automation_yaml": str(ARGV_DIR / "crewauto-automation.yaml"),
+    "$bad_automation_yaml": str(ARGV_DIR / "crewauto-bad.yaml"),
+}
 
 
 @dataclass

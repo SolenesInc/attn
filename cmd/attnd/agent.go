@@ -190,6 +190,14 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 	fmt.Fprintf(w, "\nAn ID or awake MEMBER here works with `attn agent peek <target>`; --json carries full ids.\n")
 }
 
+func crewProfileFlag(fs *flag.FlagSet) *string {
+	return fs.String("profile", "", "the profile whose crew to address, by name or id; inside attn, your session's profile")
+}
+
+func crewClient(profile string) *client.Client {
+	return client.New("").WithGardenProfile(strings.TrimSpace(profile), currentSessionOrExit())
+}
+
 func agentShortID(id string) string {
 	if len(id) <= agentShortIDLength {
 		return id

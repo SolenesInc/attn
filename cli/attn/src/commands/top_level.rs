@@ -167,8 +167,6 @@ const UNLISTED_ATTND_COMMANDS: &[&str] = &[
     "open",
     "browser",
     "journal",
-    "crew",
-    "automation",
     "profile",
     "profile-env",
     "pty-worker",

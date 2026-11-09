@@ -1,0 +1,184 @@
+read crew
+read crew --help
+read crew -h
+read crew help
+read crew nope
+read crew --no-such-flag
+usage crew list
+read crew list
+read crew ls
+read crew list --profile Default
+read crew list --profile Default --json
+read crew list --profile Default --all
+read crew ls --all --json --profile=Default
+read crew list --profile Test --all
+read crew list --profile nope
+read crew list extra --profile Default
+read crew list --json=maybe
+read crew list --profile
+usage crew wake
+read crew wake
+read crew wake a b
+read crew wake a --profile Default b
+read crew wake nosuch --profile Default
+read crew wake nosuch --agent "  " --profile Default --json
+read crew wake --agent
+usage crew sleep
+read crew sleep
+read crew sleep a b
+read crew sleep nosuch --profile Default
+read crew sleep Alder --profile Default
+read crew sleep Alder --profile Default --json
+read crew sleep member:keel --profile Default
+read crew sleep chief --profile Test
+usage crew apply
+read crew apply
+read crew apply nosuch --profile Default
+read crew apply Alder --profile Default
+read crew apply Alder --profile Default --json
+usage crew set
+read crew set
+read crew set Alder
+read crew set Alder --profile Default
+read crew set Alder extra --cwd /tmp
+read crew set --desktop-name x Alder --profile Default
+read crew set nosuch --cwd /tmp --profile Default
+read crew set nosuch --home relative/dir --profile Default
+read crew set nosuch --home ~/x --profile Default
+read crew set nosuch --home "  " --profile Default
+read crew set nosuch --awareness-dir "" --profile Default
+read crew set Alder --home /nonexistent/place/ --profile Default
+write crew set Keel --cwd /tmp --model sonnet --effort high --profile Default
+write crew set Keel --cwd /tmp --agent "" --model "" --effort "" --profile Default --json
+write crew set Keel --awareness-dir /tmp --awareness-dir /usr --profile Default
+write crew set Keel --awareness-dir "" --profile Default --json
+write crew set Keel --awareness-dir "  " --awareness-dir /tmp --profile Default
+write crew set Keel --launch-desktop own --desktop-name Parity --profile Default
+write crew set Keel --launch-desktop own --profile Default --json
+usage crew rename
+read crew rename
+read crew rename a
+read crew rename a b c
+read crew rename nosuch other --profile Default
+write crew rename Trellis Lattice --profile Default
+write crew rename Lattice --json Trellis --profile Default
+write crew rename Trellis Chief --profile Default
+usage crew create
+read crew create
+read crew create a b
+write crew create Parity --profile Default
+write crew create Parity2 --profile Default --json
+write crew create Parity --profile Default
+usage crew retire
+read crew retire
+read crew retire nosuch --profile Default
+read crew retire chief --profile Default
+write crew retire Parity --profile Default
+write crew retire Parity --profile Default
+write crew retire Parity2 --profile Default --json
+usage crew restore
+read crew restore
+read crew restore nosuch --profile Default
+write crew restore Parity --profile Default
+write crew restore Parity --profile Default
+write crew restore Parity2 --profile Default --json
+usage crew move-home
+read crew move-home
+read crew move-home nosuch --profile Default
+write crew move-home Parity --profile Default
+write crew move-home Parity2 --profile Default --json
+read crew prime
+read crew prime extra
+read crew prime --help
+read automation
+read automation --help
+read automation -h
+read automation -h extra
+read automation help
+read automation nope
+read automation --profile
+read automation --profile Default
+read automation list --profile
+read automation list --profile=Default
+read automation list --profile Default
+read automation list extra --profile Default
+read automation list --profile nope
+read automation --no-such-flag
+read automation show
+read automation show abc
+read automation show 0
+read automation show -1
+read automation show 1 extra
+read automation show 999 --profile Default
+read automation show 1 --profile Default
+read automation show 2 --profile Default
+read automation show 3 --profile=Default
+read automation show 4 --profile Default
+read automation show +1 --profile Default
+read automation show 007 --profile Default
+read automation show 99999999999999999999
+read automation runs
+read automation runs x
+read automation runs 1 extra
+read automation runs 999 --profile Default
+read automation runs 1 --profile Default
+read automation runs 4 --profile Default
+read automation set
+read automation set x
+read automation set 1
+read automation set 1 --no-such-flag
+read automation set 1 --help
+read automation set 1 -h
+read automation set 1 --launch-desktop
+read automation set 1 --launch-desktop own extra
+read automation set 999 --launch-desktop own --profile Default
+read automation apply
+read automation apply --no-such-flag
+read automation apply --help
+read automation apply --file
+read automation apply --file /nonexistent/x.yaml
+read automation apply --file /tmp
+read automation apply --file $automation_yaml --desktop-name x
+read automation apply --file $bad_automation_yaml --profile Default
+read automation validate
+read automation validate --no-such-flag
+read automation validate --help
+read automation validate --file /nonexistent/x.yaml
+read automation validate --file $automation_yaml --profile Default
+read automation validate --file $bad_automation_yaml --profile Default
+read automation run
+read automation run x
+read automation run 1 extra
+read automation run 1 --no-such-flag
+read automation run 1 --help
+read automation run 1 --input-file /nonexistent/x.json
+read automation run 1 --input-file /a --pr-url /b
+read automation run 999 --profile Default
+read automation run 999 --pr-url https://github.test/a/b/pull/1 --request-id parity --profile Default
+read automation enable
+read automation enable 1 extra
+read automation enable x
+read automation enable 999 --profile Default
+read automation disable
+read automation disable 1 extra
+read automation disable 999 --profile Default
+read automation delete
+read automation delete 1 extra
+read automation delete 999 --profile Default
+read automation cleanup
+read automation cleanup 1 extra
+read automation cleanup 999 --profile Default
+read automation cleanup 2 --profile Default
+write automation apply --file $automation_yaml --profile Default
+write automation apply --file $automation_yaml --profile Default --launch-desktop own --desktop-name Parity
+write automation show 5 --profile Default
+write automation disable 5 --profile Default
+write automation enable 5 --profile Default
+write automation set 5 --launch-desktop own --profile Default
+write automation set 5 --launch-desktop own --desktop-name Second --profile Default
+write automation show 5 --profile Default
+write automation runs 5 --profile Default
+write automation cleanup 5 --profile Default
+write automation delete 5 --profile Default
+write automation delete 6 --profile=Default
+write automation show 5 --profile Default

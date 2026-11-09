@@ -7,6 +7,7 @@ import (
 
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
@@ -64,6 +65,9 @@ func writeConstants(out *strings.Builder) {
 		{"CODEX_THREAD_PREFIX", harness.CodexThreadPrefix},
 		{"NISSE_CONVERSATION_PREFIX", harness.NisseConversationPrefix},
 		{"ID_ALPHABET", shortid.Alphabet},
+		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
+		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},
+		{"LAUNCH_DESKTOP_KIND_AUTOMATION", string(protocol.LaunchDesktopKindAutomation)},
 	} {
 		fmt.Fprintf(out, "pub const %s: &str = %s;\n", c.rust, rustString(c.value))
 	}

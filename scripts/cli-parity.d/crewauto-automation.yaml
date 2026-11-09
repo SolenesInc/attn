@@ -1,0 +1,6 @@
+api_version: attn.dev/automations/v1alpha1
+name: Parity manual
+trigger: {type: manual}
+prompt: Parity check.
+launch: {driver: codex}
+location: {type: directory, path: "/tmp"}

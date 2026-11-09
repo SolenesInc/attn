@@ -44,6 +44,9 @@ pub const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
 pub const CODEX_THREAD_PREFIX: &str = "codex:";
 pub const NISSE_CONVERSATION_PREFIX: &str = "nisse:";
 pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
+pub const CREW_KEY_REF_PREFIX: &str = "member:";
+pub const AGENT_MSG_STATUS_QUEUED: &str = "queued";
+pub const LAUNCH_DESKTOP_KIND_AUTOMATION: &str = "automation";
 
 pub const MAX_SOCKET_FRAME_BYTES: i64 = 8388608;
 pub const AGENT_MESSAGE_MAX_CHARS: i64 = 32768;

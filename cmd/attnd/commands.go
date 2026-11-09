@@ -40,9 +40,6 @@ func topLevelCommands() []topLevelCommand {
 			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn open <file.md|seed-id> [--session <id>]") }},
 		{names: []string{"browser"}, run: runBrowser, banner: true, help: printBrowserUsage},
 		{names: []string{"journal"}, run: runJournal, banner: true},
-		{names: []string{"crew"}, run: runCrew, banner: true},
-		{names: []string{"automation"}, run: runAutomationCommand, banner: true,
-			help: func(w io.Writer) { fmt.Fprint(w, automationUsageText) }},
 
 		{names: []string{"presence"}, run: runPresence,
 			help: func(w io.Writer) { fmt.Fprintln(w, "usage: attn presence [--session-id | --seed-ids]") }},

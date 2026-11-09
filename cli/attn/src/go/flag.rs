@@ -122,6 +122,13 @@ impl<'a> FlagSet<'a> {
         }
     }
 
+    pub fn repeated(&self, name: &str) -> &[String] {
+        match self.value(name) {
+            Value::Repeated(values) => values,
+            other => panic!("flag -{name} is not repeated: {other:?}"),
+        }
+    }
+
     pub fn int(&self, name: &str) -> i64 {
         match self.value(name) {
             Value::Int(value) => *value,
