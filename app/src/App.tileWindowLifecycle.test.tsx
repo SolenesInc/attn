@@ -8,7 +8,7 @@ import { fakeRects } from './test/layout';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { serveSettings } from './test/settings';
-import { useTileWindowStore } from './tileWindow/pool';
+import { tileWindowByLabel } from './tileWindow/pool';
 import { letTileWindowsOpen } from './test/tileWindows';
 
 const FRAME = { x: 10, y: 20, width: 500, height: 400 };
@@ -124,11 +124,21 @@ describe('a browser tile in its own window', () => {
 
   it('runs app shortcuts pressed inside it', async () => {
     const { daemon } = await openBrowserOnA({ popped: true });
-    const [{ window: tileWindow }] = [...useTileWindowStore.getState().byLeaf.values()];
+    const tileWindow = tileWindowByLabel(shownTileWindowLabel()!)!;
     expect(screen.queryByTestId('settings-nav-desktop')).toBeNull();
 
     await gesture(daemon, () => pressShortcut('ui.openSettings', tileWindow));
 
     expect(screen.getByTestId('settings-nav-desktop')).toBeTruthy();
+  });
+
+  it('brings its tile back once when the pop-out key is pressed inside it', async () => {
+    const { daemon } = await openBrowserOnA({ popped: true });
+    const tileWindow = tileWindowByLabel(shownTileWindowLabel()!)!;
+
+    await gesture(daemon, () => pressShortcut('tile.popOut', tileWindow));
+
+    expect(daemon.sentOf('desktop_bring_back_leaf')).toHaveLength(1);
+    expect(daemon.sentOf('desktop_pop_out_leaf')).toHaveLength(0);
   });
 });

@@ -78,7 +78,7 @@ function bringBackOnToggleKey(tileWindow: Window, label: string): void {
   tileWindow.addEventListener('keydown', (event) => {
     if (!matchesShortcut(event, SHORTCUTS['tile.popOut'])) return;
     event.preventDefault();
-    event.stopPropagation();
+    event.stopImmediatePropagation();
     window.dispatchEvent(new CustomEvent('attn:tile-window-close', { detail: { label } }));
   }, true);
 }
