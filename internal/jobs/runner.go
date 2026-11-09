@@ -83,6 +83,7 @@ type Runner struct {
 	onChange func(jobID string)
 
 	onTerminalFailure func(*Job)
+	onSuccess         func(*Job)
 
 	mu          sync.Mutex
 	handlers    map[string]handler
@@ -754,6 +755,9 @@ func (r *Runner) finish(id string, result json.RawMessage, runErr error) {
 	if wentDead {
 		r.notifyTerminalFailure(cur)
 	}
+	if runErr == nil {
+		r.notifySuccess(cur)
+	}
 	if requeue {
 		r.nudge()
 	}
@@ -792,6 +796,21 @@ func (r *Runner) recordPermanentFailureLocked(j *Job, cause error) {
 	r.log("jobs: %s (%s) dead, cannot be retried: %v", j.ID, j.Kind, cause)
 	if err := r.store.Save(j); err != nil {
 		r.log("jobs: persist permanent failure for %s: %v", j.ID, err)
+	}
+}
+
+func (r *Runner) OnSuccess(fn func(*Job)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.onSuccess = fn
+}
+
+func (r *Runner) notifySuccess(j *Job) {
+	r.mu.Lock()
+	fn := r.onSuccess
+	r.mu.Unlock()
+	if fn != nil {
+		fn(j.clone())
 	}
 }
 

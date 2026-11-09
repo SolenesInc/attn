@@ -173,12 +173,39 @@ func (d *Daemon) notifyTaskTerminalFailure(t *jobs.Job) {
 	if renderer == nil {
 		renderer = renderUnknownTaskFailure
 	}
-	record, err := d.store.AddNotification(renderer(t), time.Now())
+	record := renderer(t)
+	record.ID = taskFailureNotificationID(t)
+	record, created, err := d.store.RaiseNotification(record, time.Now())
 	if err != nil {
 		d.logf("notifications: add task-failure notification for %s: %v", t.ID, err)
 		return
 	}
-	d.publishFact(FactNotificationCreated, record.ID, nil)
+	if created {
+		d.publishFact(FactNotificationCreated, record.ID, nil)
+	}
+}
+
+func taskFailureNotificationID(t *jobs.Job) string {
+	subject := jobSubject(t)
+	if subject == "" {
+		subject = t.ID
+	}
+	return notificationKindTaskFailed + ":" + t.Kind + ":" + subject
+}
+
+func (d *Daemon) resolveTaskFailure(t *jobs.Job) {
+	if t == nil || d.store == nil {
+		return
+	}
+	id := taskFailureNotificationID(t)
+	resolved, err := d.store.ResolveNotification(id, time.Now())
+	if err != nil {
+		d.logf("notifications: resolve task-failure notification for %s: %v", t.ID, err)
+		return
+	}
+	if resolved {
+		d.publishFact(FactNotificationRead, id, nil)
+	}
 }
 
 func taskFailureNotification(t *jobs.Job, title, trigger, impact string, actions []store.NotificationAction) store.NotificationRecord {

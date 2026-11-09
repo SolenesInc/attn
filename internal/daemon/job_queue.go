@@ -177,6 +177,7 @@ func (d *Daemon) startJobQueue(home bool) error {
 			d.failGardenReviewJob(j)
 		}
 	})
+	runner.OnSuccess(d.resolveTaskFailure)
 	if !home && sqlQueue != nil {
 		sqlQueue.OnlyKinds(runner.RegisteredKinds())
 	}

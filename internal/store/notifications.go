@@ -95,6 +95,19 @@ func (s *Store) insertNotification(insert string, rec NotificationRecord, now ti
 	return rec, inserted == 1, nil
 }
 
+func (s *Store) RaiseNotification(rec NotificationRecord, now time.Time) (NotificationRecord, bool, error) {
+	if rec.ID == "" {
+		return NotificationRecord{}, false, fmt.Errorf("store: raise notification needs an id")
+	}
+	if s.db == nil {
+		return NotificationRecord{}, false, fmt.Errorf("store: no database")
+	}
+	if _, err := s.db.Exec(`DELETE FROM notifications WHERE id = ? AND read_at != ''`, rec.ID); err != nil {
+		return NotificationRecord{}, false, fmt.Errorf("store: raise notification %s: %w", rec.ID, err)
+	}
+	return s.insertNotification("INSERT OR IGNORE", rec, now)
+}
+
 const notificationsSeenBy = `profile_id IN ('', ?)`
 
 func (s *Store) ListNotifications(profileID string) ([]NotificationRecord, error) {

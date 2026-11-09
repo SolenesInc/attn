@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -266,6 +267,43 @@ func TestAFailedTitleKeepsTheNameUntilTheUserRetries(t *testing.T) {
 	}
 	task.Answer("Fix login flow")
 	awaitLabel(app, session, "Fix login flow")
+}
+
+func TestAFailureNotificationClearsWhenTheRetrySucceeds(t *testing.T) {
+	inBubbleAnsweringHeadlessTasks(t, []fakeagent.Harness{fakeagent.Claude}, func(t *testing.T, w *world) {
+		var recovered atomic.Bool
+		w.AnswerHeadlessTasks(func(task *fakeagent.HeadlessTask) {
+			switch {
+			case strings.HasPrefix(task.Prompt, "Classify how this assistant message ends"):
+				task.Answer(`{"verdict":"DONE"}`)
+			case recovered.Load():
+				task.Answer("Fix login flow")
+			default:
+				task.Fail("API Error: 529 overloaded")
+			}
+		})
+		app := w.App()
+		session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+			m.InitialPrompt = protocol.Ptr("the login form rejects valid passwords")
+		})
+		w.advance(0)
+		w.advance(time.Minute)
+		w.advance(2 * time.Minute)
+		if feed := listNotifications(app); len(feed.Notifications) != 1 || feed.UnreadCount != 1 {
+			t.Fatalf("after the failure the feed = %+v, want one unread warning", feed)
+		}
+
+		recovered.Store(true)
+		failed := awaitTitleTask(app, session, func(task protocol.Task) bool { return task.State == "dead" || task.State == "failed" })
+		requestID := uuid.NewString()
+		testworld.Request(app, protocol.TaskRetryMessage{Cmd: protocol.CmdTaskRetry, TaskID: failed.ID, RequestID: protocol.Ptr(requestID)},
+			protocol.EventTaskRetryResult, func(r protocol.TaskRetryResultMessage) bool { return r.RequestID == requestID })
+		w.advance(0)
+		awaitLabel(app, session, "Fix login flow")
+		if feed := listNotifications(app); len(feed.Notifications) != 1 || feed.UnreadCount != 0 || len(feed.Notifications[0].Actions) != 0 {
+			t.Errorf("after the retry succeeded the feed = %+v, want the warning read with no actions", feed)
+		}
+	})
 }
 
 func TestACrewMembersDayKeepsTheMembersName(t *testing.T) {
