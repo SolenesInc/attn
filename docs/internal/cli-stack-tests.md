@@ -27,7 +27,12 @@ returns `testworld.Main(m)`.
   PID to read the assigned port. The test does not release a reservation or
   retry startup.
 - The release upgrade tests start from the binaries of the latest release, which
-  `scripts/test-pty-upgrade.sh` downloads. `s.InstallBuild(attn, host)` renames a
+  `scripts/test-pty-upgrade.sh` downloads, so a test must not assume what that
+  release launches or that its snapshot format differs from this build's: it sets
+  the setting it needs, or installs a build with
+  `testworld.AttnBinaryWithSnapshotFormat`. A state only an older release can
+  create starts from that release, pinned in the script.
+  `s.InstallBuild(attn, host)` renames a
   build over the stack's install folder, as an update does: running processes keep
   the old image, and every later exec, such as an agent's hook, runs the new build.
   `s.StartRelease()` starts the installed release. `s.ReleaseApp()` connects to it

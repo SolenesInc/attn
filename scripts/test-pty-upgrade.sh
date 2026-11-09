@@ -35,30 +35,39 @@ if [ -z "${ATTN_UPGRADE_OLD_BIN:-}" ]; then
     -o "$test_root/attn-legacy" ./cmd/attn)
   export ATTN_UPGRADE_OLD_BIN="$test_root/attn-legacy"
 fi
-if [ -z "${ATTN_UPGRADE_RELEASE_BIN:-}" ]; then
-  mkdir -p "$test_root/release"
-  latest=https://github.com/victorarias/attn/releases/latest/download
+download_release() {
+  local url="$1" dir="$2" arch
+  mkdir -p "$dir"
   case "$(go env GOOS)" in
     linux)
       arch="$(go env GOARCH)"
-      curl -fsSL --retry 3 -o "$test_root/release/attn" "$latest/attn-linux-$arch"
-      curl -fsSL --retry 3 -o "$test_root/release/attn-pty-host" "$latest/attn-pty-host-linux-$arch"
-      chmod +x "$test_root/release/attn" "$test_root/release/attn-pty-host"
-      if curl -fsSL --retry 3 -o "$test_root/release/attnd" "$latest/attnd-linux-$arch"; then
-        chmod +x "$test_root/release/attnd"
+      curl -fsSL --retry 3 -o "$dir/attn" "$url/attn-linux-$arch"
+      curl -fsSL --retry 3 -o "$dir/attn-pty-host" "$url/attn-pty-host-linux-$arch"
+      chmod +x "$dir/attn" "$dir/attn-pty-host"
+      if curl -fsSL --retry 3 -o "$dir/attnd" "$url/attnd-linux-$arch"; then
+        chmod +x "$dir/attnd"
       fi
       ;;
     darwin)
-      curl -fsSL --retry 3 "$latest/attn_aarch64.app.tar.gz" |
-        tar -xz --strip-components=3 -C "$test_root/release" attn.app/Contents/MacOS
+      curl -fsSL --retry 3 "$url/attn_aarch64.app.tar.gz" |
+        tar -xz --strip-components=3 -C "$dir" attn.app/Contents/MacOS
       ;;
     *)
       echo "No released attn for $(go env GOOS)." >&2
       exit 1
       ;;
   esac
+}
+if [ -z "${ATTN_UPGRADE_RELEASE_BIN:-}" ]; then
+  download_release https://github.com/victorarias/attn/releases/latest/download "$test_root/release"
   export ATTN_UPGRADE_RELEASE_BIN="$test_root/release/attn"
   export ATTN_UPGRADE_RELEASE_HOST="$test_root/release/attn-pty-host"
+fi
+if [ -z "${ATTN_UPGRADE_ADDRESS_RELEASE_BIN:-}" ]; then
+  last_release_accepting_outpost_addresses=v0.13.0
+  download_release "https://github.com/victorarias/attn/releases/download/$last_release_accepting_outpost_addresses" "$test_root/address-release"
+  export ATTN_UPGRADE_ADDRESS_RELEASE_BIN="$test_root/address-release/attn"
+  export ATTN_UPGRADE_ADDRESS_RELEASE_HOST="$test_root/address-release/attn-pty-host"
 fi
 echo "Previous release under test: $("$ATTN_UPGRADE_RELEASE_BIN" --version)"
 if [ -z "${ATTN_E2E_BIN:-}" ]; then

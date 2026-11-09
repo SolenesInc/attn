@@ -328,8 +328,9 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			app := u.ReleaseApp()
 			claude, codex := u.spawnAgent(app, fakeagent.Claude), u.spawnAgent(app, fakeagent.Codex)
 			shell := u.spawnShell(app)
+			parents := map[string]string{}
 			for _, agent := range []releaseAgent{claude, codex} {
-				u.assertParent(agent.run, " -s ")
+				parents[agent.session] = u.parentPID(agent.run)
 				u.turn(app, agent, "before-update")
 			}
 
@@ -355,7 +356,7 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 			for _, agent := range []releaseAgent{claude, codex} {
 				u.assertNoReloadNotice(app, agent.session)
 				app.AwaitScreen(agent.session, "before-update reply")
-				u.assertParent(agent.run, " -s ")
+				u.assertSameParent(agent, parents[agent.session])
 				u.turn(app, agent, "after-update")
 			}
 			u.assertNoReloadNotice(app, shell.session)
@@ -368,7 +369,7 @@ func TestAnUpdateFromTheReleaseKeepsLiveAgentsAndPutsNewOnesOnTheHostWithDirectL
 				u.turn(app, agent, "new-after-update")
 			}
 			for _, agent := range []releaseAgent{claude, codex} {
-				u.assertParent(agent.run, " -s ")
+				u.assertSameParent(agent, parents[agent.session])
 				u.turn(app, agent, "after-new-defaults")
 			}
 			shell.assertSameProcess(app)
@@ -384,9 +385,10 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
+	setSetting(t, app, upgradeSharedHostEnabled, "false")
 	onWorker := u.spawnAgent(app, fakeagent.Claude)
 	u.assertNoSharedHost(app.Terminal(onWorker.session))
-	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	turnOnTheSharedHost(t, app)
 	onHost := u.spawnAgent(app, fakeagent.Claude)
 	sharedHostOf(t, u.Dir, app.Terminal(onHost.session))
 	shellOnHost := u.spawnShell(app)
@@ -397,7 +399,7 @@ func TestAnUpdateFromTheReleaseKeepsWorkerAndHostTerminalsAndReloadsThemOntoTheH
 		u.turn(app, agent, "before-update")
 	}
 
-	u.InstallBuild(u.currentAttn, u.currentHost)
+	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), ptyhosttest.BuildWithSnapshotFormat(t, upgradeMovedSnapshotFormat))
 	app = u.ensureCurrent()
 	format := attachedFormatAfterMove(app, hostTerminal, formatBefore)
 	if format == formatBefore || format == "" {
@@ -428,7 +430,7 @@ func TestAnUpdateFromTheReleaseKeepsAHostTerminalAfterTheSettingWasTurnedOff(t *
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	turnOnTheSharedHost(t, app)
 	agent := u.spawnAgent(app, fakeagent.Claude)
 	u.turn(app, agent, "before-update")
 	shell := u.spawnShell(app)
@@ -492,7 +494,7 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWor
 	t.Parallel()
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
-	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	turnOnTheSharedHost(t, app)
 	shell := u.spawnShell(app)
 	sharedHostOf(t, u.Dir, app.Terminal(shell.session))
 
@@ -500,7 +502,7 @@ func TestAnUpdateFromTheReleaseWhoseNewHostFailsItsCheckShowsTheNoticeAndUsesWor
 	if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	u.InstallBuild(u.currentAttn, broken)
+	u.InstallBuild(testworld.AttnBinaryWithSnapshotFormat(t, upgradeMovedSnapshotFormat), broken)
 	app = u.ensureCurrent()
 	if len(u.notifications(app)) == 0 {
 		testworld.Await(app, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
@@ -1024,7 +1026,7 @@ func TestAnOutpostOnTheReleaseKeepsItsTerminalsWhenTheHomeAddsAndUpdatesIt(t *te
 
 func TestAnOutpostAddedByAddressOnTheReleaseExplainsItselfAfterTheUpdate(t *testing.T) {
 	t.Parallel()
-	u := startTheRelease(t)
+	u := startRelease(t, os.Getenv("ATTN_UPGRADE_ADDRESS_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_ADDRESS_RELEASE_HOST"))
 	app := u.ReleaseApp()
 	requireStdout(t, u.Attn("settings", "set", "outposts_enabled", "true"), "true")
 	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
@@ -1103,7 +1105,12 @@ type releaseShell struct {
 
 func startTheRelease(t *testing.T) *releaseUpdate {
 	t.Helper()
-	releaseAttn, releaseHost, currentHost := os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_RELEASE_HOST"), os.Getenv("ATTN_TEST_PTY_HOST")
+	return startRelease(t, os.Getenv("ATTN_UPGRADE_RELEASE_BIN"), os.Getenv("ATTN_UPGRADE_RELEASE_HOST"))
+}
+
+func startRelease(t *testing.T, releaseAttn, releaseHost string) *releaseUpdate {
+	t.Helper()
+	currentHost := os.Getenv("ATTN_TEST_PTY_HOST")
 	if releaseAttn == "" || releaseHost == "" || currentHost == "" || os.Getenv("ATTN_E2E_BIN") == "" {
 		t.Skip("run scripts/test-pty-upgrade.sh to start from the real previous release")
 	}
@@ -1193,6 +1200,15 @@ func awaitTheSharedHost(t *testing.T, app *testworld.Peer) {
 	})
 }
 
+func turnOnTheSharedHost(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	mark := len(app.Log())
+	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	testworld.AwaitSince(app, mark, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings[upgradeSharedHostActive] == "true"
+	})
+}
+
 func (u *releaseUpdate) spawnAgent(app *testworld.Peer, h fakeagent.Harness) releaseAgent {
 	u.T.Helper()
 	session := u.Spawn(app, h, u.Path(string(h)))
@@ -1250,18 +1266,30 @@ func (u *releaseUpdate) startTurn(app *testworld.Peer, agent releaseAgent, phase
 	return testworld.AwaitSessionSince(app, mark, agent.session, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
 }
 
-func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {
+func (u *releaseUpdate) parentPID(run *fakeagent.Run) string {
 	u.T.Helper()
 	ppid, err := exec.Command("ps", "-p", strconv.Itoa(run.PID), "-o", "ppid=").Output()
 	if err != nil {
 		u.T.Fatalf("read %s's parent: %v", run.Harness, err)
 	}
-	parent, err := exec.Command("ps", "-p", strings.TrimSpace(string(ppid)), "-o", "args=").Output()
+	return strings.TrimSpace(string(ppid))
+}
+
+func (u *releaseUpdate) assertParent(run *fakeagent.Run, want string) {
+	u.T.Helper()
+	parent, err := exec.Command("ps", "-p", u.parentPID(run), "-o", "args=").Output()
 	if err != nil {
 		u.T.Fatalf("read %s's parent: %v", run.Harness, err)
 	}
 	if !strings.Contains(string(parent), want) {
 		u.T.Errorf("%s's parent is %s, want %q", run.Harness, parent, want)
+	}
+}
+
+func (u *releaseUpdate) assertSameParent(agent releaseAgent, want string) {
+	u.T.Helper()
+	if got := u.parentPID(agent.run); got != want {
+		u.T.Errorf("%s's parent was pid %s and is now pid %s, want the same process", agent.run.Harness, want, got)
 	}
 }
 
@@ -1290,6 +1318,7 @@ const (
 	upgradeSharedHostEnabled   = "pty_shared_host_enabled"
 	upgradeSharedHostActive    = "pty_shared_host_active"
 	upgradeDirectLaunchEnabled = "direct_agent_launch_enabled"
+	upgradeMovedSnapshotFormat = "update-moves-the-format"
 )
 
 type upgradeDaemon struct {
