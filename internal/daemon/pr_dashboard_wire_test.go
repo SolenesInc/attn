@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/github/mockserver"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -200,6 +201,48 @@ func TestAPollPublishesAPullRequestUpdateOnlyWhenGitHubReportsAChange(t *testing
 	if updated := producedBy(busStatus(t, app), "pr.updated"); updated != 1 {
 		t.Errorf("a renamed pull request polled twice published %d pr.updated, want 1", updated)
 	}
+}
+
+func TestDetailsArrivingDuringAPollAreNotReportedAsAPullRequestUpdate(t *testing.T) {
+	gh := mockserver.New()
+	t.Cleanup(gh.Close)
+	t.Setenv("ATTN_MOCK_GH_URL", gh.URL)
+	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
+
+	w := &world{World: prepareWorld(t)}
+	saving := w.PauseEvery(pausepoint.PRPollSaving)
+	w.start()
+	saving.Await()
+	saving.Release()
+
+	app := w.App()
+	checkout := mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Add checkout", Role: "reviewer"}
+	gh.AddPR(checkout)
+	refreshAwaitingSave(t, app, saving)
+	saving.Release()
+	testworld.Await(app, protocol.EventRefreshPRsResult, func(protocol.RefreshPRsResultMessage) bool { return true })
+	id := prNumbered(t, queryPRs(t, w.Client(), ""), checkout.Number).ID
+
+	refreshAwaitingSave(t, app, saving)
+	fetchPRDetails(t, app, id)
+	saving.Release()
+	if refreshed := testworld.Await(app, protocol.EventRefreshPRsResult, func(protocol.RefreshPRsResultMessage) bool { return true }); !refreshed.Success {
+		t.Fatalf("refresh pull requests: %s", protocol.Deref(refreshed.Error))
+	}
+
+	status := busStatus(t, app)
+	if updated := producedBy(status, "pr.updated"); updated != 0 {
+		t.Errorf("details arriving during a poll published %d pr.updated, want 0: GitHub's list did not change", updated)
+	}
+	if changed := producedBy(status, "pr.details.changed"); changed != 1 {
+		t.Errorf("details arriving during a poll published %d pr.details.changed, want 1", changed)
+	}
+}
+
+func refreshAwaitingSave(t *testing.T, app *testworld.Peer, saving *testworld.Pause) {
+	t.Helper()
+	app.Send(protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs})
+	saving.Await()
 }
 
 func TestPullRequestDetailsPublishAChangeOnlyWhenGitHubReportsOne(t *testing.T) {

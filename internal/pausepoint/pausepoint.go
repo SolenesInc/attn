@@ -44,6 +44,7 @@ const (
 	SeedReminderRead          = "seed-reminder-read"
 
 	DaemonEnrollmentLoaded         = "daemon-enrollment-loaded"
+	PRPollSaving                   = "pr-poll-saving"
 	DaemonStartupRecovery          = "daemon-startup-recovery"
 	DaemonGitHubHostDiscovery      = "daemon-github-host-discovery"
 	DaemonGitHubHostRegistered     = "daemon-github-host-registered"

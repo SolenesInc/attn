@@ -3777,6 +3777,7 @@ func (d *Daemon) saveObservedPRs(observedByHost map[string]successfulPRObservati
 	for host, observation := range observedByHost {
 		prsByHost[host] = observation.prs
 	}
+	pausepoint.At(pausepoint.PRPollSaving)
 	changes, err := d.store.ReplacePRsOfHosts(prsByHost)
 	if err != nil {
 		return nil, err
