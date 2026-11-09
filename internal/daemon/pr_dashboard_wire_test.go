@@ -115,9 +115,9 @@ func TestTheDashboardKeepsWhatTheUserDidAcrossRefreshesAndRestarts(t *testing.T)
 		t.Error("muting a repository twice left it muted")
 	}
 
+	app = w.App()
 	gh.Reset()
 	gh.AddPR(mockserver.MockPR{Repo: "acme/shop", Number: 1, Title: "Checkout is ready", Role: "reviewer"})
-	app = w.App()
 	refreshPRs(t, app)
 	testworld.Await(app, protocol.EventPRsUpdated, func(e protocol.WebSocketEvent) bool {
 		return len(e.Prs) == 1 && e.Prs[0].ID == checkout.ID && e.Prs[0].Title == "Checkout is ready"
