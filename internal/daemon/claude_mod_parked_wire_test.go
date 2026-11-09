@@ -13,7 +13,6 @@ import (
 
 func moddedClaudeWithVerdicts(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run) {
 	t.Helper()
-	setSetting(t, app, claudeModSetting, "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.Label = protocol.Ptr("deploy work")
 	})

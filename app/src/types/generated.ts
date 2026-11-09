@@ -2635,9 +2635,10 @@ export enum ClaudeModReachMessageCmd {
 }
 
 export interface ClaudeModReachReportMessage {
-    change:     ClaudeModReachChange;
-    cmd:        ClaudeModReachReportMessageCmd;
-    session_id: string;
+    change:          ClaudeModReachChange;
+    claude_version?: string;
+    cmd:             ClaudeModReachReportMessageCmd;
+    session_id:      string;
     [property: string]: any;
 }
 
@@ -22054,6 +22055,7 @@ const typeMap: any = {
     ], "any"),
     "ClaudeModReachReportMessage": o([
         { json: "change", js: "change", typ: r("ClaudeModReachChange") },
+        { json: "claude_version", js: "claude_version", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("ClaudeModReachReportMessageCmd") },
         { json: "session_id", js: "session_id", typ: "" },
     ], "any"),

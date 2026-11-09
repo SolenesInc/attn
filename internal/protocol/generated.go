@@ -1988,6 +1988,9 @@ type ClaudeModReachReportMessage struct {
 	// Change corresponds to the JSON schema field "change".
 	Change ClaudeModReachChange `json:"change"`
 
+	// ClaudeVersion corresponds to the JSON schema field "claude_version".
+	ClaudeVersion *string `json:"claude_version,omitempty,omitzero"`
+
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 

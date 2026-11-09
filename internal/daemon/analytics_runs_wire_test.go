@@ -299,7 +299,12 @@ func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
 			agent.ProgramStatus("state=working:app=claude-code")
 			working := testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			steer(app, session)
-			agent.Prompted()
+			if name == "annotation" {
+				modEvent(t, agent, fakeagent.ModEventHeld, "also run the linter")
+				agent.ModToolBoundary()
+			} else {
+				agent.Prompted()
+			}
 			reply := "The build and the linter pass. <!-- attn:state=idle -->"
 			runEnds(w, app, agent, working, reply)
 
@@ -434,7 +439,6 @@ func TestACrewHeartbeatThroughTheModRecordsAHeartbeatRun(t *testing.T) {
 	w.restart()
 	app, cli := w.App(), w.Client()
 	setAnalyticsEnabled(app, "true")
-	setSetting(t, app, claudeModSetting, "true")
 	session := string(wakeCrew(t, cli, "trellis", "").SessionID)
 	agent := w.Launched(session)
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)

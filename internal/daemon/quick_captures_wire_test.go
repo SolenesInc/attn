@@ -304,9 +304,8 @@ func TestAQuickCaptureWaitsForTheChiefToWakeAndReadsAsTheUsers(t *testing.T) {
 	woken := wakeCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))
 	run.Prompted()
-	if typed := run.Prompted(); !strings.Contains(typed, msg.Content) {
-		t.Fatalf("the woken Chief was typed %q, want the capture that waited for it", typed)
-	}
+	modEvent(t, run, fakeagent.ModEventHeld, msg.Content)
+	run.ModToolBoundary()
 	receipt := testworld.Await(app, protocol.EventQuickCaptureRead, func(e protocol.QuickCaptureReadMessage) bool { return e.CaptureID == msg.CaptureID })
 	_, item, err := cli.AgentInboxEntry(msg.CaptureID, woken.SessionID)
 	if err != nil || item == nil || item.Kind != "quick_capture" || item.Content != msg.Content || item.Sender != nil || item.Address != "member:chief" || item.ReadAt != receipt.ReadAt {

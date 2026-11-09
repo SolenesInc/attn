@@ -215,10 +215,6 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 	claude := false
 	if entry := d.store.SessionLedgerEntry(sessionID); entry != nil && entry.Agent == string(protocol.SessionAgentClaude) {
 		claude = true
-		if !d.claudeModEnabled() {
-			receipt.Detail = d.blockTenderWake(a, seed, fmt.Sprintf("its tender is a Claude session, and %s is off, so attn cannot deliver to it once resumed; turn %s on", setting.ClaudeModEnabled, setting.ClaudeModEnabled))
-			return receipt, nil
-		}
 	}
 	if reopensAt, tripped := d.tenderWakes.reopensAt(seed.ID, d.clock.Now()); tripped {
 		receipt.Detail = d.blockTenderWake(a, seed, tenderWakeTripwire{reopensAt: reopensAt}.Error())
@@ -387,7 +383,7 @@ func (d *Daemon) tenderWakeText(wake *tenderWakeDelivery) string {
 	})
 }
 
-func (d *Daemon) tenderWakeModMissed(session protocol.SessionID) {
+func (d *Daemon) tenderWakeModMissed(session protocol.SessionID, claudeVersion string) {
 	addresses, err := d.inboxAddressesOf(session)
 	if err != nil {
 		d.logf("tender wake: addresses of %s: %v", session, err)
@@ -395,12 +391,12 @@ func (d *Daemon) tenderWakeModMissed(session protocol.SessionID) {
 	}
 	for _, a := range addresses {
 		if _, seedMail := a.TenderOf(); seedMail {
-			d.blockClaudeWakeWithoutMod(a, session)
+			d.blockClaudeWakeWithoutMod(a, session, claudeVersion)
 		}
 	}
 }
 
-func (d *Daemon) blockClaudeWakeWithoutMod(a who.Address, session protocol.SessionID) {
+func (d *Daemon) blockClaudeWakeWithoutMod(a who.Address, session protocol.SessionID, claudeVersion string) {
 	state := d.lockInboxState(a)
 	defer state.unlock()
 	wake := state.tenderWake
@@ -412,5 +408,5 @@ func (d *Daemon) blockClaudeWakeWithoutMod(a who.Address, session protocol.Sessi
 		d.logf("tender wake: %s: %v", wake.seedID, err)
 		return
 	}
-	d.blockTenderWake(a, seed, fmt.Sprintf("attn resumed Claude session %s, but its Claude Code mod never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later", shortSessionID(session), claudeModFirstPollTripwire))
+	d.blockTenderWake(a, seed, fmt.Sprintf("attn resumed Claude session %s, but the mod in %s never polled within %s, so attn did not type the mail into it; the mail is delivered if the mod polls later. If this Claude Code version broke the mod, attn needs a fix for that version", shortSessionID(session), claudeVersion, claudeModFirstPollTripwire))
 }

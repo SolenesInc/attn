@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
@@ -61,8 +60,7 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 			return nil
 		}
 		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
-			"this Claude session does not run with attn's Claude mod, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Claude sessions launched after that can close with --compact. Close without --compact instead",
-			setting.ClaudeModEnabled, setting.ClaudeModEnabled)}
+			"this Claude session does not run with attn's Claude mod, so attn has no way to compact it; reload the session so it loads the mod (attn agent reload %s), or close without --compact", shortSessionID(target.ID))}
 	}
 	return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
 		"attn has no way to compact a %s session; close without --compact", target.Agent)}

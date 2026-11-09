@@ -60,6 +60,10 @@ var claudePrintFlags = flagSpec{
 const ClaudeVersion = "2.1.310"
 
 func runClaude(cfg config) int {
+	if slices.Equal(os.Args[1:], []string{"--version"}) {
+		fmt.Println(ClaudeVersion + " (Claude Code)")
+		return 0
+	}
 	if slices.Contains(os.Args[1:], "--print") && slices.Contains(os.Args[1:], "--input-format") {
 		return claudeModelDiscovery()
 	}

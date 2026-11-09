@@ -9056,6 +9056,7 @@ model ClaudeModReachReportMessage {
   cmd: "claude_mod_reach_report";
   session_id: SessionID;
   change: ClaudeModReachChange;
+  claude_version?: string;
 }
 
 // The machine running a session keeps its compacting close beside the session's input lane.

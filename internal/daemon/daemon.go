@@ -206,6 +206,7 @@ type Daemon struct {
 	routerOnce               sync.Once
 	routes                   *Router
 	terminalState            *terminalRegistry
+	noAgentSockets           bool
 	claudeModOnce            sync.Once
 	tenderWakes              tenderWakeLedger
 	compactions              compactionLedger
@@ -810,7 +811,7 @@ func (d *Daemon) Start() error {
 	if err := <-queueStarted; err != nil {
 		return err
 	}
-	if d.claudeModEnabled() {
+	if !d.noAgentSockets {
 		if err := d.claudeMod().serve(); err != nil {
 			d.logf("claude mod: live sessions are typed into: %v", err)
 		}

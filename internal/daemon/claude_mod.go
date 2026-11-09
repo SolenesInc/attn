@@ -20,7 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/stepclock"
 )
 
@@ -48,6 +47,7 @@ const (
 	claudeModCompactBusy                      = "busy"
 	claudeModCompactReady                     = "ready"
 	claudeModCompactFailed                    = "failed"
+	claudeVersionUnknown                      = "Claude Code of unknown version"
 )
 
 type claudeMod struct {
@@ -124,19 +124,15 @@ func (d *Daemon) claudeMod() *claudeMod {
 	return d.claudeModState
 }
 
-func (d *Daemon) claudeModEnabled() bool {
-	return d.on(setting.ClaudeModEnabled)
-}
-
 func (d *Daemon) claudeModForLaunch(terminal harness.TerminalID, agent string) agentdriver.ClaudeMod {
-	if agent != string(protocol.SessionAgentClaude) || !d.claudeModEnabled() {
+	if agent != string(protocol.SessionAgentClaude) || d.noAgentSockets {
 		return agentdriver.ClaudeMod{}
 	}
+	d.claudeMod().awaitFirstPoll(terminal)
 	if err := d.claudeMod().serve(); err != nil {
 		d.logf("claude mod: this session is typed into: %v", err)
 		return agentdriver.ClaudeMod{}
 	}
-	d.claudeMod().awaitFirstPoll(terminal)
 	return agentdriver.ClaudeMod{Dir: claudemod.Dir(d.dataRoot), Socket: claudemod.SocketPath(d.dataRoot)}
 }
 
@@ -174,12 +170,28 @@ func (m *claudeMod) firstPollMissed(terminal harness.TerminalID, timer *stepcloc
 	if !missed {
 		return
 	}
+	claude := m.claudeVersionLabel()
 	if session, ok := m.d.shownIn(terminal); ok {
-		m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeFirstPollMissed})
+		m.report(protocol.ClaudeModReachReportMessage{Cmd: protocol.CmdClaudeModReachReport, SessionID: session, Change: protocol.ClaudeModReachChangeFirstPollMissed, ClaudeVersion: protocol.Ptr(claude)})
 	}
 	if m.d.terminalLive(terminal) {
-		m.d.logf("claude mod: first_poll_tripwire=%s; Claude in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, terminal)
+		m.d.logf("claude mod: first_poll_tripwire=%s; %s in terminal %s launched with the mod but never polled, attn types into this session", claudeModFirstPollTripwire, claude, terminal)
 	}
+}
+
+func (m *claudeMod) claudeVersionLabel() string {
+	binary, err := m.d.machineAgentExecutable(agentdriver.MustGet(string(protocol.SessionAgentClaude)), "")
+	if err != nil {
+		return claudeVersionUnknown
+	}
+	ctx, cancel := context.WithTimeout(m.d.life.Context(), agentVersionLimit)
+	defer cancel()
+	out, err := m.d.runAgentBinary(ctx, binary, "--version")
+	version, ok := strings.CutSuffix(strings.TrimSpace(string(out)), " (Claude Code)")
+	if err != nil || !ok {
+		return claudeVersionUnknown
+	}
+	return "Claude Code " + version
 }
 
 func (m *claudeMod) listen() error {
@@ -229,9 +241,6 @@ func (m *claudeMod) close() {
 }
 
 func (m *claudeMod) reachable(terminal harness.TerminalID) bool {
-	if !m.d.claudeModEnabled() {
-		return false
-	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.terminals[terminal] != nil
@@ -334,7 +343,7 @@ func (m *claudeMod) connectLocked(terminal harness.TerminalID, instance string) 
 }
 
 func (m *claudeMod) expectModsToReconnect() {
-	if !m.d.claudeModEnabled() {
+	if m.d.noAgentSockets {
 		return
 	}
 	live := m.d.localLiveTerminals(context.Background())
@@ -421,6 +430,9 @@ func (m *claudeMod) dropUnreachable(t *claudeModTerminal, timer *stepclock.Timer
 		return false
 	}
 	delete(m.terminals, t.id)
+	if t.instance == "" {
+		m.d.logf("claude mod: reach_window=%s; terminal %s did not reconnect after the daemon started, attn types into it", claudeModReachWindow, t.id)
+	}
 	for _, delivery := range t.queued {
 		delivery.answer <- harness.Custody{Reason: "claude mod: reach_window=" + claudeModReachWindow.String() + "; the mod stopped polling before taking input " + delivery.input.ID + ", send it again"}
 	}
@@ -697,7 +709,7 @@ func (d *Daemon) readClaudeModReach(_ context.Context, msg protocol.ClaudeModRea
 
 func (d *Daemon) receiveClaudeModReachReport(_ context.Context, msg protocol.ClaudeModReachReportMessage) (struct{}, error) {
 	if msg.Change == protocol.ClaudeModReachChangeFirstPollMissed {
-		d.tenderWakeModMissed(msg.SessionID)
+		d.tenderWakeModMissed(msg.SessionID, protocol.Deref(msg.ClaudeVersion))
 	} else {
 		d.kickSessionInboxAddresses(msg.SessionID)
 	}

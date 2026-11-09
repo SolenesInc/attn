@@ -49,14 +49,13 @@ exec "$@"
 `
 
 type codexShared struct {
-	d                         *Daemon
-	mu                        sync.Mutex
-	servers                   map[string]*codexServer
-	views                     map[harness.TerminalID]*codexView
-	seq                       uint64
-	installed                 string
-	terminalsCannotHostServer bool
-	latest                    string
+	d         *Daemon
+	mu        sync.Mutex
+	servers   map[string]*codexServer
+	views     map[harness.TerminalID]*codexView
+	seq       uint64
+	installed string
+	latest    string
 
 	archivingAfterClose map[string]int
 }
@@ -178,7 +177,7 @@ func (r *codexShared) canRun(req *spawnRequest) bool {
 	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell
 }
 
-func (r *codexShared) enabledForNewLaunches() bool { return !r.terminalsCannotHostServer }
+func (r *codexShared) enabledForNewLaunches() bool { return !r.d.noAgentSockets }
 
 func (r *codexShared) admit(profile, conversation string) error {
 	if other := r.loadedElsewhere(profile, conversation); conversation != "" && other != "" {

@@ -27,6 +27,7 @@ func TestSubmittedAnnotationsReachTheAgentAfterWhatTheUserTyped(t *testing.T) {
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
+	typedClaude(w, agent)
 	awaitClaudeAtItsPrompt(app, session)
 	plan := fileAnnotatedDocument("/notes/plan.md")
 	hello := []protocol.MarkdownAnnotation{{ID: "c1", Type: "comment", Text: protocol.Ptr("hi"), CreatedAt: 1,
@@ -106,6 +107,7 @@ func TestASendLeavesWhatWasSavedWhileItWasBeingPlaced(t *testing.T) {
 			app := w.App()
 			session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 			agent := w.Launched(session)
+			typedClaude(w, agent)
 			awaitClaudeAtItsPrompt(app, session)
 			doc := fileAnnotatedDocument("/notes/plan.md")
 			saver := app
@@ -296,6 +298,7 @@ func TestAnnotationsTheAgentsTerminalWillNotTakeKeepTheDraft(t *testing.T) {
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
+	typedClaude(w, agent)
 	awaitClaudeAtItsPrompt(app, session)
 	plan := fileAnnotatedDocument("/notes/plan.md")
 	marks := []protocol.MarkdownAnnotation{{ID: "g1", Type: "global", Text: protocol.Ptr(strings.Repeat("tighten the intro ", 16<<10)), CreatedAt: 1}}

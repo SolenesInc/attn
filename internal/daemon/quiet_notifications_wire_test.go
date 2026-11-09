@@ -51,6 +51,13 @@ func notificationRunStarts(t *testing.T, app *testworld.Peer, cli *client.Client
 	return working, readInbox(t, cli, session, 0)
 }
 
+func notificationRunSettled(app *testworld.Peer, working protocol.Session) protocol.Session {
+	app.T.Helper()
+	return testworld.AwaitSession(app, string(working.ID), func(s protocol.Session) bool {
+		return s.StateSince == working.StateSince && !protocol.Deref(s.TurnOwed)
+	})
+}
+
 func settleFromApp(app *testworld.Peer, owed protocol.Session) protocol.Session {
 	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: owed.ID})
 	return testworld.AwaitSession(app, string(owed.ID), func(s protocol.Session) bool {
@@ -111,9 +118,9 @@ func TestANotificationThatSetsAWaitingAgentWorkingSettlesItsTurn(t *testing.T) {
 	}
 
 	working, _ = notificationRunStarts(t, app, cli, agent, session, waiting, "CI passed")
-	if protocol.Deref(working.TurnOwed) || !protocol.Deref(working.TurnByAgent) {
-		t.Fatalf("once the notification set the agent working its turn shows owed=%v by_agent=%v, want settled by the agent",
-			protocol.Deref(working.TurnOwed), protocol.Deref(working.TurnByAgent))
+	working = notificationRunSettled(app, working)
+	if !protocol.Deref(working.TurnByAgent) {
+		t.Fatalf("once the notification set the agent working its turn shows by_agent=%v, want settled by the agent", protocol.Deref(working.TurnByAgent))
 	}
 	agent.Reply("CI is green. <!-- attn:state=idle -->")
 	if stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle }); protocol.Deref(stopped.TurnOwed) {
@@ -188,9 +195,7 @@ func TestANotificationRunThatDiesOnAnErrorOpensATurn(t *testing.T) {
 	waking := owed
 	for i := range 2 {
 		working, _ := notificationRunStarts(t, app, cli, agent, session, waking, fmt.Sprintf("review round %d is in", i+1))
-		if protocol.Deref(working.TurnOwed) {
-			t.Fatal("the ring's run did not settle the agent's open turn")
-		}
+		working = notificationRunSettled(app, working)
 		agent.ProgramStatus("state=error:app=claude-code")
 		died := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 		if !protocol.Deref(died.TurnOwed) {
@@ -271,9 +276,8 @@ func TestAQuickCaptureThatSteersANotificationRunOpensItsTurnAtTheStop(t *testing
 
 	working, _ := notificationRunStarts(t, app, cli, agent, session, settled, "the review is in")
 	sendQuickCapture(t, app, sessionMailbox(session), "what did the reviewer say?")
-	if got := agent.Prompted(); !strings.Contains(got, "what did the reviewer say?") {
-		t.Fatalf("the agent was prompted with %q, want the user's question", got)
-	}
+	modEvent(t, agent, fakeagent.ModEventHeld, "what did the reviewer say?")
+	agent.ModToolBoundary()
 	agent.Reply("They approved. <!-- attn:state=idle -->")
 	stopped := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if !protocol.Deref(stopped.TurnOwed) || protocol.Deref(stopped.TurnByAgent) {

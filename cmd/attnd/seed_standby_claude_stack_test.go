@@ -37,7 +37,6 @@ func TestSeedMailWakesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 		"DISABLE_AUTOUPDATER=1",
 	)
 	s.Start()
-	s.Attn("settings", "set", "claude_mod_enabled", "true")
 	const reviewer = "rev-1111-2222"
 	register(t, s, reviewer, "reviewer")
 

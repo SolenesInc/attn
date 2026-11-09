@@ -20,15 +20,6 @@ var (
 		Since:   "2026-10-29",
 		Search:  "harness server",
 	})
-	ClaudeModEnabled = feature("claude_mod_enabled", "Deliver input to Claude sessions through attn's Claude Code mod instead of typing: true or false. A session loads the mod at its next launch; turning this off goes back to typing at once.", Info{
-		Name:    "Claude mod",
-		Summary: "Deliver messages to Claude through a Claude Code mod instead of typing.",
-		Group:   Agents,
-		Applies: NewAgentsOnOnly,
-		Stage:   Experimental,
-		Since:   "2026-11-04",
-		Search:  "delivery typing standby compact",
-	})
 	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
 		Name:    "Launcher 2.0",
 		Summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.",

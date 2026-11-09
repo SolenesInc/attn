@@ -40,7 +40,6 @@ func TestAgentMessageReachesRealClaudeThroughTheMod(t *testing.T) {
 		"DISABLE_AUTOUPDATER=1",
 	)
 	s.Start()
-	s.Attn("settings", "set", "claude_mod_enabled", "true")
 	const reviewer = "rev-1111-2222"
 	register(t, s, reviewer, "reviewer")
 
@@ -106,7 +105,6 @@ func TestRefusingAPermissionQuestionLeavesRealClaudeFreeToTakeMessages(t *testin
 				"DISABLE_AUTOUPDATER=1",
 			)
 			s.Start()
-			s.Attn("settings", "set", "claude_mod_enabled", "true")
 			const reviewer = "rev-1111-2222"
 			register(t, s, reviewer, "reviewer")
 
@@ -238,7 +236,7 @@ func writeClaudeConfig(t *testing.T, claude, configDir, work string) {
 	}
 }
 
-func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheModAndIsTypedOnceTheSettingIsOff(t *testing.T) {
+func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheMod(t *testing.T) {
 	t.Parallel()
 	claude, err := exec.LookPath("claude")
 	if err != nil {
@@ -260,11 +258,8 @@ func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheModAndIsTypedOnceTheS
 	pair := testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
-	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
-	copied := outpost.App()
 	pair.Connect()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "true" })
 	const reviewer = "rev-1111-2222"
 	register(t, home, reviewer, "reviewer")
 
@@ -308,17 +303,11 @@ func TestMailFromHomeReachesRealClaudeOnAnOutpostThroughTheModAndIsTypedOnceTheS
 	if kind, name := originOfRing(1, "the discount is applied after tax"); kind != "plugin" || name != "attn" {
 		t.Fatalf("Claude recorded the ring with origin %s/%s, want the attn plugin's; it was typed, not handed to the mod", kind, name)
 	}
-	t.Log("with the setting on, Claude on the outpost recorded the ring with origin plugin/attn")
+	t.Log("Claude on the outpost recorded the ring with origin plugin/attn")
 
 	if read := home.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: recipient}); read.Code != 0 || !strings.Contains(read.Stdout, "the discount is applied after tax") {
 		t.Fatalf("attn agent inbox exited %d with %q%s", read.Code, read.Stdout, read.Stderr)
 	}
-	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "false"), "claude_mod_enabled = false")
-	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "false" })
-	if kind, name := originOfRing(2, "the total is rounded last"); kind == "plugin" {
-		t.Fatalf("Claude recorded the ring with origin %s/%s with the setting off, want it typed", kind, name)
-	}
-	t.Log("with the setting off, the same session was typed into")
 }
 
 func realClaudeRunningATool(t *testing.T) (*testworld.Stack, *testworld.Peer, *fakeclaudeapi.Model, string, *os.File) {
@@ -344,7 +333,6 @@ func realClaudeRunningATool(t *testing.T) (*testworld.Stack, *testworld.Peer, *f
 		"DISABLE_AUTOUPDATER=1",
 	)
 	s.Start()
-	requireStdout(t, s.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
 	app := s.TrustedApp()
 	recipient := s.Spawn(app, fakeagent.Claude, work)
 	t.Cleanup(func() {

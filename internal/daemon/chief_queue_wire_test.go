@@ -34,9 +34,7 @@ func TestTheChiefMemberOwesATurnTheWayAnyCrewMemberDoes(t *testing.T) {
 	if !protocol.Deref(batch.QuietNotifications) {
 		t.Errorf("reading its inbox in a notification run, the Chief was not told it stays out of the queue: %+v", batch)
 	}
-	if protocol.Deref(working.TurnOwed) {
-		t.Fatal("a ring left the Chief's owed turn open")
-	}
+	working = notificationRunSettled(app, working)
 	run.Reply("Noted in the journal. <!-- attn:state=idle -->")
 	quiet := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	if protocol.Deref(quiet.TurnOwed) {

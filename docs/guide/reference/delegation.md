@@ -314,11 +314,10 @@ belongs to your profile, and `attn settings set garden.tender_wake` changes it
 with `any`, `watches` or `off`. Mail that doesn't wake an agent waits in its
 inbox. A crew member that tends the seed wakes under every choice.
 
-A Claude Code session wakes only while the [Claude mod](using-claude-mod.md) is
-on. Attn delivers a woken Claude session's mail through the mod and never types
-it into the terminal. `attn seed standby` refuses in a Claude session without
-the mod, and the refusal names `claude_mod_enabled`. Codex sessions and crew
-members need no setting to go on standby or to wake.
+Attn delivers a woken Claude Code session's mail through the
+[Claude mod](using-claude-mod.md) and never types it into the terminal. The
+resumed session loads the mod, even if the session that went on standby ran
+without it.
 
 To shrink its conversation before the session closes, an agent can add
 `--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
@@ -340,12 +339,10 @@ unreachable when the compact ends on an outpost, the session closes when the lin
 returns.
 
 Only a Claude Code session with the
-[Claude mod](using-claude-mod.md) and a Codex session on
-[shared Codex](using-shared-codex.md) compact. **Claude mod** in **Settings →
-Experimental**, or `attn settings set claude_mod_enabled true`, turns the mod on
-for the sessions you launch or resume afterwards. They compact on your home
-machine and on an outpost. Attn refuses `--compact` for any other session, and
-the refusal says why. Compacting does not help a crew member: its wake
+[Claude mod](using-claude-mod.md) connected and a Codex session on
+[shared Codex](using-shared-codex.md) compact, on your home machine and on an
+outpost. Attn refuses `--compact` for any other session, and the refusal says
+why. Compacting does not help a crew member: its wake
 starts a new session from its latest letter, and Attn refuses to close a crew
 member's session.
 

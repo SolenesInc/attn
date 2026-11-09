@@ -86,7 +86,8 @@ On a `fakeagent.Run`:
   A bare `-r` makes Claude open its resume picker. The picker starts a new
   conversation and sets `ResumePicker` on the `Run`.
 - Claude launched with `--plugin-dir` also runs a fake mod that polls the
-  daemon's mod socket, as a session with `claude_mod_enabled` on does. After
+  daemon's mod socket. Worlds with in-memory terminals launch Claude without the
+  mod, because no agent process can reach a socket there. After
   `Prompted`, `ThroughMod` says whether the prompt came through the mod.
   `ModNext` returns what the mod did next with a message it could not submit:
   held it, refused it as stopped, or lost its poll to a newer one.

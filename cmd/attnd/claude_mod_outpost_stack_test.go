@@ -69,12 +69,9 @@ func newOutpostModPair(t *testing.T, prepare func(home, outpost *testworld.Stack
 	pair = testworld.PrepareOutpostPair(t, home, outpost)
 	home.Start()
 	outpost.Start()
-	requireStdout(t, home.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
 	requireStdout(t, home.Attn("settings", "set", "asks_enabled", "true"), "asks_enabled = true")
-	copied := outpost.App()
 	pair.Connect()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	testworld.Await(copied, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["claude_mod_enabled"] == "true" })
 	register(t, home, outpostModSender, "reviewer")
 	return home, outpost, pair
 }
@@ -275,7 +272,6 @@ func newHomeMod(t *testing.T, prepare func(s *testworld.Stack)) (*outpostMod, *t
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	prepare(s)
 	s.Start()
-	requireStdout(t, s.Attn("settings", "set", "claude_mod_enabled", "true"), "claude_mod_enabled = true")
 	register(t, s, outpostModSender, "reviewer")
 	app := s.App()
 	session := s.Spawn(app, fakeagent.Claude, s.Path("shop"))
@@ -562,21 +558,4 @@ func TestAHeldAnswerKeepsAnOutpostTendersSeedOnStandbyUntilClaudeTakesIt(t *test
 		}
 		return false
 	})
-}
-
-func TestWithTheSettingOffAnOutpostClaudeIsTypedInto(t *testing.T) {
-	home, outpost := testworld.NewStack(t), testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
-	pair := testworld.PrepareOutpostPair(t, home, outpost)
-	pair.Start()
-	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	register(t, home, outpostModSender, "reviewer")
-	session := home.Spawn(pair.App, fakeagent.Claude, outpost.Path("shop"), func(msg *protocol.SpawnSessionMessage) { msg.Host = &pair.Host })
-	run := outpost.LaunchedCarrying(pair.App.Terminal(session))
-	sent := home.Run(testworld.Invocation{Args: []string{"agent", "msg", session, "the discount is applied after tax"}, Session: outpostModSender})
-	if sent.Code != 0 {
-		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
-	}
-	if got := run.Prompted(); run.ThroughMod || !strings.Contains(got, "attn agent inbox") {
-		t.Fatalf("the agent took %q (through the mod: %t), want the ring typed", got, run.ThroughMod)
-	}
 }

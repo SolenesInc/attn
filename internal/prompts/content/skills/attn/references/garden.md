@@ -242,11 +242,8 @@ again. Seed mail that arrives during the compact waits until the session has
 closed, then wakes it as above. When attn refuses `--compact`, it leaves standby
 unset, so run the command again without it.
 
-A Claude Code session needs the Claude mod, because attn delivers a woken Claude
-session's mail through the mod and never types it. `attn seed standby` refuses
-in a Claude session that runs without the mod and names `claude_mod_enabled`. A
-wake also fails while the setting is off. Codex sessions and crew members need
-no setting.
+attn delivers a woken Claude session's mail through the Claude mod and never
+types it.
 
 The profile setting `garden.tender_wake` decides which mail wakes a closed
 session. `any` (the default) wakes for all seed mail. `watches` wakes for PR

@@ -57,7 +57,7 @@ func TestAgentsAndShellPanesGetAttnFirstOnPathAndGhosttysTerminalIdentity(t *tes
 		env  []string
 		want map[string]string
 	}{
-		"agent": {w.Launched(agent).Env, map[string]string{"ATTN_TERMINAL_ID": app.Terminal(agent), "ATTN_SESSION_ID": "", "ATTN_AGENT": "claude", "ATTN_INSIDE_APP": "1", "ATTN_SOCKET_PATH": w.Socket, "ATTN_WRAPPER_PATH": filepath.Join(active, "attn"), "CLAUDE_CODE_SESSION_ID": "", "ATTN_CLAUDE_MOD_SOCKET": ""}},
+		"agent": {w.Launched(agent).Env, map[string]string{"ATTN_TERMINAL_ID": app.Terminal(agent), "ATTN_SESSION_ID": "", "ATTN_AGENT": "claude", "ATTN_INSIDE_APP": "1", "ATTN_SOCKET_PATH": w.Socket, "ATTN_WRAPPER_PATH": filepath.Join(active, "attn"), "CLAUDE_CODE_SESSION_ID": ""}},
 		"shell": {strings.Split(strings.TrimSpace(string(dumped)), "\n"), map[string]string{"ATTN_TERMINAL_ID": "", "ATTN_SESSION_ID": "", "ATTN_AGENT": "", "ATTN_CLAUDE_MOD_SOCKET": ""}},
 	} {
 		env := map[string]string{}

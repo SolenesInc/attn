@@ -26,7 +26,7 @@ import (
 const (
 	codexUpdateCheckKind     = "codex_update_check"
 	codexUpdateCheckInterval = 24 * time.Hour
-	codexVersionLimit        = 5 * time.Second
+	agentVersionLimit        = 5 * time.Second
 )
 
 func (r *codexShared) binary(configured string) (string, error) {
@@ -34,8 +34,8 @@ func (r *codexShared) binary(configured string) (string, error) {
 	return r.d.machineAgentExecutable(codex, configured)
 }
 
-func (r *codexShared) run(ctx context.Context, binary string, args ...string) ([]byte, error) {
-	loginEnv := r.d.loginEnv.Latest(ctx)
+func (d *Daemon) runAgentBinary(ctx context.Context, binary string, args ...string) ([]byte, error) {
+	loginEnv := d.loginEnv.Latest(ctx)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -67,9 +67,9 @@ func (r *codexShared) installedVersion(ctx context.Context) (string, error) {
 }
 
 func (r *codexShared) versionOf(ctx context.Context, binary string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, codexVersionLimit)
+	ctx, cancel := context.WithTimeout(ctx, agentVersionLimit)
 	defer cancel()
-	out, err := r.run(ctx, binary, "--version")
+	out, err := r.d.runAgentBinary(ctx, binary, "--version")
 	if err != nil {
 		return "", err
 	}
@@ -210,7 +210,7 @@ func (d *Daemon) codexUpdateCheckHandler(ctx context.Context, _ *jobs.Job) (any,
 		r.d.logf("shared Codex: no update check: %v", err)
 		return nil, nil
 	}
-	out, err := r.run(ctx, binary, "doctor", "--json")
+	out, err := r.d.runAgentBinary(ctx, binary, "doctor", "--json")
 	var report struct {
 		Checks map[string]struct {
 			Details map[string]any `json:"details"`

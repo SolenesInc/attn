@@ -210,13 +210,15 @@ func TestAModReloadDuringTheCompactClosesTheClaudeSessionSayingTheCompactDidNotR
 	run.AwaitGone()
 }
 
-func TestACompactingCloseOfAClaudeSessionWithoutTheModIsRefusedNamingTheModSetting(t *testing.T) {
+func TestACompactingCloseOfAClaudeSessionWithoutTheModIsRefusedAskingForAReload(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
-	w.Launched(session)
+	session, run := moddedClaude(t, w, app)
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.advance(claudeModReachWindow)
 
 	_, err := cli.AgentCloseCompacting(protocol.SessionID(session), compactReason)
-	agentCloseRefused(t, err, "compact_unavailable", claudeModSetting)
+	agentCloseRefused(t, err, "compact_unavailable", "attn agent reload")
 	stillOpen(t, cli, session, "after the refused compacting close")
 }

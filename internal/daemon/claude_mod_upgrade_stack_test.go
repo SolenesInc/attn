@@ -13,7 +13,6 @@ import (
 func TestADaemonStartingOnANewVersionUpdatesTheModForLiveSessions(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
-	setSetting(t, s.App(), claudeModSetting, "true")
 	s.Stop()
 
 	folder := claudemod.Dir(s.Dir)

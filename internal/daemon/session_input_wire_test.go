@@ -17,6 +17,7 @@ func TestAHalfTypedDraftSurvivesTheTurnEndingAndAttnsMail(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
+	typedClaude(w, agent)
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 	app.TypeLine(recipient, "keep going")
 	agent.Prompted()

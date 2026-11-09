@@ -399,6 +399,14 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 			return nil, err
 		}
 		a.term.programStatus(p.Text)
+		if modded, ok := a.conv.(*claude); ok {
+			switch {
+			case strings.HasPrefix(p.Text, "state=working"):
+				modded.mod.turnStarted()
+			case strings.HasPrefix(p.Text, "state=error"):
+				modded.mod.turnCompleted()
+			}
+		}
 		return struct{}{}, nil
 	case methodSuggestion:
 		var p textParams

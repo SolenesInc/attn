@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/who"
 )
@@ -64,9 +63,6 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 	if caller == nil || seed.Tender.IsZero() || seed.Tender != d.partyOfSession(caller.ID) {
 		return nil, nil, protocol.Refuse(protocol.RefusalNotTender, "only %s's tender can put it on standby, from its own session; tend it first: attn seed tend %s", seedID, seedID)
 	}
-	if err := d.standbyDeliveryRefusal(caller, seed); err != nil {
-		return nil, nil, err
-	}
 	if closeSelf {
 		if err := d.unreadStandbyMailRefusal(caller, seed.ID); err != nil {
 			return nil, nil, err
@@ -88,18 +84,6 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 		Reason:          garden.TrimReason(fmt.Sprintf("On standby for %s: %s", seed.ID, note)),
 		Compact:         protocol.Ptr(compact),
 	}, nil
-}
-
-func (d *Daemon) standbyDeliveryRefusal(caller *protocol.Session, seed garden.Seed) error {
-	if _, session := seed.Tender.Session(); !session || caller.Agent != string(protocol.SessionAgentClaude) {
-		return nil
-	}
-	if d.claudeModReaches(caller.ID) {
-		return nil
-	}
-	return protocol.Refuse(protocol.RefusalWrongState,
-		"this Claude session runs without attn's Claude Code mod, so attn could not deliver %s's mail when it resumes the session; the user turns on %s (attn settings set %s true), and sessions launched after that can go on standby",
-		seed.ID, setting.ClaudeModEnabled, setting.ClaudeModEnabled)
 }
 
 func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter who.Actor) (*protocol.SeedStandbyResult, error) {

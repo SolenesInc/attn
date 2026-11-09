@@ -132,6 +132,7 @@ func TestInputDuringADeliveryIsAnsweredWhileTheDeliveryWaitsForItsTerminal(t *te
 	app, phone := w.App(), w.App()
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(session)
+	typedClaude(w, agent)
 	awaitClaudeAtItsPrompt(app, session)
 	other := w.Spawn(app, shellHarness, w.Path("other"))
 

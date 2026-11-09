@@ -209,7 +209,6 @@ func TestOnlySeedMailForASeedOnStandbyReopensAClosedTender(t *testing.T) {
 func TestSeedMailReachesAWokenClaudeTenderThroughItsModAfterTheFirstPoll(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, claudeModSetting, "true")
 	registerSessions(t, w, cli, "sender")
 
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
@@ -245,7 +244,6 @@ func TestSeedMailReachesAWokenClaudeTenderThroughItsModAfterTheFirstPoll(t *test
 func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, claudeModSetting, "true")
 	registerSessions(t, w, cli, "sender")
 
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
@@ -263,7 +261,7 @@ func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.
 	beforeMiss := len(app.Log())
 	w.clock.Fire(daemon.ClaudeModFirstPollTimer)
 	testworld.AwaitSince(app, beforeMiss, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
-	reason := "never polled"
+	reason := "the mod in Claude Code " + fakeagent.ClaudeVersion + " never polled"
 	wakeBlockedNotice(t, app, cli, seed, reason)
 	if later := sendAgentMessage(t, cli, "sender", seed, "and the checks passed"); later.Status != protocol.AgentMsgStatusQueued || !strings.Contains(later.Detail, "first poll") {
 		t.Fatalf("mail after the mod missed its first poll = %+v, want it queued for the mod", later)
@@ -284,7 +282,6 @@ func TestAWokenClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testing.
 func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, claudeModSetting, "true")
 	setSetting(t, app, "asks_enabled", "true")
 
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
@@ -326,7 +323,6 @@ func TestAnAnswerTheModHoldsKeepsTheSeedOnStandbyUntilClaudeTakesIt(t *testing.T
 func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, claudeModSetting, "true")
 	setSetting(t, app, "asks_enabled", "true")
 
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
@@ -364,22 +360,26 @@ func TestAnAnswerReturnedBeforeItsPlacementAnswersStaysUnreadOnStandby(t *testin
 	awaitStandbyEnded(t, app, mark, seed)
 }
 
-func TestAClaudeTenderWithoutTheModCannotGoOnStandby(t *testing.T) {
+func TestAClaudeTenderWhoseModIsGoneGoesOnStandbyAndItsResumeLoadsTheMod(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
-	cli := w.Client()
+	app, cli := w.App(), w.Client()
+	registerSessions(t, w, cli, "sender")
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
-	w.Launched(string(delegated.SessionID)).Prompted()
+	run := w.Launched(string(delegated.SessionID))
+	run.Prompted()
+	typedClaude(w, run)
 
-	_, err := standbyAs(t, cli, delegated, true)
-	if err == nil || !strings.Contains(err.Error(), claudeModSetting) {
-		t.Fatalf("seed standby from a Claude session without the mod = %v, want a refusal naming %s", err, claudeModSetting)
+	if _, err := standbyAs(t, cli, delegated, true); err != nil {
+		t.Fatalf("seed standby --close from a Claude session whose mod is gone: %v", err)
 	}
-	if shown := lifeShow(t, cli, delegated.SeedID); shown.Seed.Standby != nil {
-		t.Errorf("the refused standby left %+v on the seed", shown.Seed.Standby)
+	mark := len(app.Log())
+	sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
+	relaunched := w.Launched(string(delegated.SessionID))
+	if got := relaunched.Prompted(); !relaunched.ThroughMod || !strings.Contains(got, standbyNote) {
+		t.Fatalf("the resumed Claude took %q (through the mod: %t), want the standby note through the mod", got, relaunched.ThroughMod)
 	}
-	if open := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(open.ClosedAt) != "" {
-		t.Errorf("the refused standby closed %s", delegated.SessionID)
-	}
+	seedMail(t, cli, string(delegated.SessionID), delegated.SeedID)
+	awaitStandbyEnded(t, app, mark, delegated.SeedID)
 }
 
 func TestStandbyCloseWaitsUntilTheTenderHasReadItsSeedMail(t *testing.T) {

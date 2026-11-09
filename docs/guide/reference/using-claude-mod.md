@@ -1,24 +1,13 @@
 # Using the Claude mod
 
-The Claude mod is experimental. With it on, Attn delivers messages to your Claude
-Code sessions through a Claude Code mod instead of typing into the terminal. A
-mod is a plugin that runs inside Claude. Rings, annotations and your messages
+Attn delivers messages to your Claude Code sessions through a Claude Code mod
+instead of typing into the terminal. A mod is a plugin that runs inside Claude. Rings, annotations and your messages
 from elsewhere no longer race what you are typing, and Attn no longer waits for
 a quiet moment in the terminal.
 
 Claude reads the same text either way: the bare message when it is idle, and
 Claude's own "The user sent a new message while you were working" wording when
 it is in the middle of a turn. Attn was checked against Claude Code 2.1.318.
-
-## Turn it on or off
-
-**Claude mod** in **Settings → Experimental** is off by default. From a terminal,
-run `attn settings set claude_mod_enabled true`, or `false` to turn it off.
-
-The setting decides how new Claude sessions launch, including the ones
-automations and delegations start. A session that started with the setting off
-stays typed until you reload it. A session that started with the setting on goes
-back to typing as soon as you turn the setting off.
 
 ## What you see
 
@@ -53,8 +42,13 @@ Typing stays the fallback. Attn types into the terminal whenever the mod is not
 connected, for example while Claude is starting, while Claude waits for you to
 answer its trust question in a folder it has not trusted yet, or if the mod
 failed to load. A session whose mod has not connected 30 seconds after it
-launched gets a warning in the daemon log, including when you take longer than
-that to answer the trust question.
+launched gets a warning in the daemon log that names its Claude Code version,
+including when you take longer than that to answer the trust question. There is
+no setting that turns the mod off: if a Claude Code update breaks it, Attn says
+which version in that warning and needs a fix for it.
+
+A session that was running when you upgraded to a version of Attn with the mod
+always on keeps being typed into until you reload it.
 
 Attn never types the mail for a session it resumes because its seed is on
 standby. Attn waits for the mod's first connection and delivers through it, as
@@ -70,8 +64,7 @@ can't. Typing into the session while it compacts does not stop the close.
 ## Sessions on an outpost
 
 A Claude session on an outpost takes messages and compacts through its mod, the
-same as a session on your home machine. The outpost reads **Claude mod** from the home, so
-you turn it on in one place. If the mod gives a message back while the home is
+same as a session on your home machine. If the mod gives a message back while the home is
 asleep or unreachable, the outpost keeps it and hands it to the home when the
 link returns.
 

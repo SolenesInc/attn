@@ -69,7 +69,6 @@ type Applies string
 const (
 	Now             Applies = "Now"
 	NewAgents       Applies = "New agents"
-	NewAgentsOnOnly Applies = "On: new agents. Off: now"
 	NewTerminals    Applies = "New terminals"
 	NextDaemonStart Applies = "Next daemon start"
 )
@@ -78,8 +77,6 @@ func (a Applies) Timing() string {
 	switch a {
 	case NewAgents:
 		return "Starts with the next agent you open."
-	case NewAgentsOnOnly:
-		return "Starts with the next agent you open. Turning it off applies at once."
 	case NewTerminals:
 		return "Starts with the next terminal you open."
 	case NextDaemonStart:

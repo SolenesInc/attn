@@ -25,18 +25,24 @@ import (
 )
 
 const (
-	claudeModSetting     = "claude_mod_enabled"
 	claudeModPromptLine  = "› Prompt from the attn plugin"
 	claudeModReachWindow = 5 * time.Second
 )
 
 func moddedClaude(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run) {
 	t.Helper()
-	setSetting(t, app, claudeModSetting, "true")
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	run := w.Launched(session)
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
 	return session, run
+}
+
+func typedClaude(w *world, run *fakeagent.Run) {
+	w.T.Helper()
+	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
+	run.ModStopPolling()
+	w.awaitTimer(daemon.ClaudeModReachTimer)
+	w.advance(claudeModReachWindow)
 }
 
 func workingOn(t *testing.T, app *testworld.Peer, run *fakeagent.Run, session, prompt string) {
@@ -525,7 +531,7 @@ func TestAReplacedModCannotTakeItsTerminalBackWithALatePoll(t *testing.T) {
 	}
 }
 
-func TestTheClaudeModSettingDecidesTheLaunchAndTheDelivery(t *testing.T) {
+func TestAClaudeLaunchLoadsTheModFromTheDaemonsFolder(t *testing.T) {
 	t.Setenv("ATTN_CLAUDE_MOD_SOCKET", "/inherited/claude-mod.sock")
 	for _, launch := range []struct{ name, direct string }{{"through attn -s", "false"}, {"direct", "true"}} {
 		t.Run(launch.name, func(t *testing.T) {
@@ -533,17 +539,10 @@ func TestTheClaudeModSettingDecidesTheLaunchAndTheDelivery(t *testing.T) {
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", launch.direct)
 
-			off := w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("off")))
-			if slices.Contains(off.Argv, "--plugin-dir") || runEnv(off, "ATTN_CLAUDE_MOD_SOCKET") != "" {
-				t.Errorf("with the setting off the agent launched with %v, socket %q", off.Argv, runEnv(off, "ATTN_CLAUDE_MOD_SOCKET"))
-			}
-			delivered(t, app, off.SessionID, "typed, not modded")
-			typedOnce(t, app, off, off.SessionID, "typed, not modded")
-
 			_, on := moddedClaude(t, w, app)
 			at := slices.Index(on.Argv, "--plugin-dir")
 			if at < 0 || runEnv(on, "ATTN_CLAUDE_MOD_SOCKET") == "" {
-				t.Fatalf("with the setting on the agent launched with %v, socket %q", on.Argv, runEnv(on, "ATTN_CLAUDE_MOD_SOCKET"))
+				t.Fatalf("the agent launched with %v, socket %q", on.Argv, runEnv(on, "ATTN_CLAUDE_MOD_SOCKET"))
 			}
 			folder := on.Argv[at+1]
 			module := filepath.Join(folder, "hooks", "register.tsx")

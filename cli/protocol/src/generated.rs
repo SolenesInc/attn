@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "2f87e8864bf0";
+pub const PROTOCOL_VERSION: &str = "8260647cc94e";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -1798,6 +1798,8 @@ impl ClaudeModReachMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ClaudeModReachReportMessage {
     pub change: ClaudeModReachChange,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claude_version: Option<String>,
     pub cmd: String,
     pub session_id: SessionID,
 }

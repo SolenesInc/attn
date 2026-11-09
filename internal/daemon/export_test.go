@@ -38,7 +38,6 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	switch onHost := os.Getenv("ATTN_TEST_WIRE_ON_PTY_HOST") != ""; {
 	case terminals != nil:
 		d.ptyBackend = terminals
-		d.codexShared().terminalsCannotHostServer = true
 	case os.Getenv("ATTN_PTY_BACKEND") != "":
 	case onHost && nativeWatch:
 		shared, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
@@ -55,6 +54,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 		d.ptyBackend = testworld.NewInProcessPTY(pty.NewManagerWithClock(d.logf, clock))
 	}
 	if terminals != nil || !nativeWatch {
+		d.noAgentSockets = true
 		d.rootWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
 	}
 	d.listener = unix

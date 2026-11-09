@@ -23,9 +23,6 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	s.Start()
 	app := s.TrustedApp()
-	if set := s.Attn("settings", "set", "claude_mod_enabled", "true"); set.Code != 0 {
-		t.Fatalf("enable the mod: %+v", set)
-	}
 	if set := s.Attn("crew", "set", "chief", "--agent", "claude"); set.Code != 0 {
 		t.Fatalf("crew set chief: %+v", set)
 	}

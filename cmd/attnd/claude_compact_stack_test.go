@@ -44,7 +44,6 @@ func realModdedClaude(t *testing.T, vars ...string) (*testworld.Stack, *testworl
 	)
 	s.Vars = append(s.Vars, vars...)
 	s.Start()
-	s.Attn("settings", "set", "claude_mod_enabled", "true")
 	register(t, s, closingReviewer, "reviewer")
 
 	app := s.App()

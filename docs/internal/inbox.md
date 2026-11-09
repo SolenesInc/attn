@@ -242,8 +242,7 @@ that input. A ring lost to an open menu in the harness stays lost.
 
 ### With the Claude mod
 
-With the experimental `claude_mod_enabled` setting on, a Claude session's mod
-takes each ring instead of the terminal while the mod is connected, on the home
+A Claude session's mod takes each ring instead of the terminal while the mod is connected, on the home
 and on an outpost. attn types as usual while the mod is not connected, such as
 after Claude first reports and before the mod's first poll. The exception is a
 Claude session that attn resumed for a standby seed's mail: attn waits for its
@@ -395,9 +394,8 @@ The woken session gets its mail only through a path that knows when the agent
 reads input. For Codex, attn rings once the resumed Codex first reports. For Claude, attn
 waits for the reopened session's first Claude mod poll and delivers through the
 mod. attn types nothing into a Claude terminal. A Claude session cannot be woken
-while `claude_mod_enabled` is off, or when its mod does not poll within 30
-seconds of the resume. `attn seed standby` refuses to run in a Claude session
-that runs without the mod and names `claude_mod_enabled`.
+when its mod does not poll within 30 seconds of the resume; the wake's reason
+names the Claude Code version.
 
 The first prompt carries the mail and the standby note. It says the user may
 not be watching, and names the ways to end the turn: put the seed on standby

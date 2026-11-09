@@ -100,7 +100,6 @@ pub struct Feature {
 pub const SETTINGS: &[Setting] = &[
     Setting { key: "asks_enabled", machine: false },
     Setting { key: "nisse_enabled", machine: false },
-    Setting { key: "claude_mod_enabled", machine: false },
     Setting { key: "new_session_launcher_enabled", machine: false },
     Setting { key: "outposts_enabled", machine: false },
     Setting { key: "phone_access_enabled", machine: false },
@@ -189,7 +188,6 @@ pub const SETTINGS: &[Setting] = &[
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", stage: "on by default", applies: "New agents" },
     Feature { key: "nisse_enabled", name: "Nisse", stage: "experimental", applies: "New agents" },
-    Feature { key: "claude_mod_enabled", name: "Claude mod", stage: "experimental", applies: "On: new agents. Off: now" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", stage: "experimental", applies: "Now" },
     Feature { key: "outposts_enabled", name: "Outposts", stage: "experimental", applies: "Now" },
     Feature { key: "phone_access_enabled", name: "Phone access", stage: "experimental", applies: "Now" },
