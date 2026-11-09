@@ -18,6 +18,7 @@ func TestAgentPeekShowsStateWorkspaceLatestReplyAndScreen(t *testing.T) {
 	codex.Prompted()
 	codex.Reply("first answer <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	app.AwaitScreen(session, "first answer")
 	app.TypeLine(session, "build it")
 	codex.Prompted()
 	codex.Reply("latest answer <!-- attn:state=waiting_input -->")
