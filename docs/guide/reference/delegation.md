@@ -47,20 +47,24 @@ The flags you'll reach for most:
   desktop's shortcut digit, name, or id.
 - `--name` names the session. The default is the title of the brief or seed.
 - `--priority` puts the delegate's turns first in your queue.
-- `--authorization TEXT` carries your words for the task: what the delegate
-  may do without asking and where it stops, such as "You may land on main. Ask
-  me before releasing." See [Authorization](#authorization).
+- `--authorization TEXT` says how far you let the task go: the steps the
+  delegate takes beyond what the project's guidance allows, and the steps it
+  stops before, such as "Land on main once the checks pass. Ask me before
+  releasing." See [Authorization](#authorization).
 
 `attn delegate --help` lists every flag, and `attn delegate roles` prints the
 roles agents choose from.
 
 ### Authorization
 
-When you tell an agent what its delegate may do, the agent passes your words
-with `--authorization`. Attn saves them on the seed, with the agent that set
-them, and puts them in the delegate's opening message as yours. A handover
-keeps them: the next agent's opening carries the seed's current words without
-anyone passing them again. `attn seed show` prints them under the header, with
+A project's guidance, such as `AGENTS.md`, sets what an agent does without
+asking. When you tell an agent that its delegate may go further, or must stop
+earlier, the agent writes that as instructions to the delegate and passes them
+with `--authorization`. Attn saves the words on the seed, with the agent that
+set them, and puts them in the delegate's opening message as yours. The opening
+also tells the delegate to take each step you allowed without asking again. A
+handover keeps the words: the next agent's opening carries the seed's current
+words without anyone passing them again. `attn seed show` prints them under the header, with
 who set them and when.
 
 Only the seed's tender, the sessions above the tender in the delegation chain,

@@ -61,6 +61,7 @@ func TestADispatchersAuthorizationChangeIsTypedIntoTheTenderOnceItCanTakeInput(t
 		want := `The user changed the authorization for seed ` + seed + ` "Search endpoint", set by dispatcher:
 "Ask me before landing."
 It replaces: "You may land on main."
+Take the task as far as the authorization reaches. A step it allows is one the user wants taken without being asked again, even where the project's guidance stops earlier. Ask the user before a step that neither the authorization nor the project's guidance allows.
 If this applies to work you delegated, update those seeds with attn seed authorization.`
 		if typed := typedAuthorizations(tender); len(typed) != 1 || typed[0] != want {
 			t.Fatalf("after the restart and the approval the tender was typed %q; want only the newer words:\n%s", typed, want)
@@ -117,6 +118,7 @@ If this applies to work you delegated, update those seeds with attn seed authori
 			t.Fatalf("clearing returned %+v; want the words gone and the cleared form typed", cleared)
 		}
 		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint", set by dispatcher. These words no longer apply: "The user said I may push this branch."
+The project's guidance is now the whole boundary of what you may do without asking.
 If this applies to work you delegated, update those seeds with attn seed authorization.`
 		w.advance(time.Hour)
 		if typed := typedAuthorizations(tender); len(typed) != 2 || typed[1] != wantCleared {
@@ -145,6 +147,7 @@ func TestASharedCodexDelegateReceivesItsDispatchersAuthorizationChange(t *testin
 	}
 	want := `The user changed the authorization for seed ` + seed + ` "Search endpoint", set by caller:
 "Ask me before pushing."
+Take the task as far as the authorization reaches. A step it allows is one the user wants taken without being asked again, even where the project's guidance stops earlier. Ask the user before a step that neither the authorization nor the project's guidance allows.
 If this applies to work you delegated, update those seeds with attn seed authorization.`
 	if got := w.CodexServer().Prompted(codex.ConversationID); got != want {
 		t.Fatalf("the shared Codex delegate was typed %q; want\n%s", got, want)
@@ -188,6 +191,7 @@ func TestTheUserChangesATendedSeedsAuthorizationFromTheApp(t *testing.T) {
 		w.advance(0)
 		want := `The user changed the authorization for seed ` + seed + ` "Search endpoint":
 "You may land on main."
+Take the task as far as the authorization reaches. A step it allows is one the user wants taken without being asked again, even where the project's guidance stops earlier. Ask the user before a step that neither the authorization nor the project's guidance allows.
 If this applies to work you delegated, update those seeds with attn seed authorization.`
 		if typed := typedAuthorizations(tender); len(typed) != 1 || typed[0] != want {
 			t.Fatalf("the tender was typed %q; want\n%s", typed, want)
@@ -204,6 +208,7 @@ If this applies to work you delegated, update those seeds with attn seed authori
 		}
 		w.advance(0)
 		wantCleared := `The user removed the authorization for seed ` + seed + ` "Search endpoint". These words no longer apply: "You may land on main."
+The project's guidance is now the whole boundary of what you may do without asking.
 If this applies to work you delegated, update those seeds with attn seed authorization.`
 		if typed := typedAuthorizations(tender); len(typed) != 2 || typed[1] != wantCleared {
 			t.Fatalf("the tender was typed %q; want the set, then the cleared form:\n%s", typed, wantCleared)

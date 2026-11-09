@@ -1,0 +1,1 @@
+Take the task as far as the authorization reaches. A step it allows is one the user wants taken without being asked again, even where the project's guidance stops earlier. Ask the user before a step that neither the authorization nor the project's guidance allows.

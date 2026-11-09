@@ -64,8 +64,8 @@ func TestADelegationsAuthorizationIsSavedOnTheSeedAndDeliveredInEveryOpening(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opening := w.Launched(string(second.SessionID)).Prompted(); !strings.HasSuffix(strings.TrimSpace(opening), line) {
-		t.Errorf("the successor's opening is %q; want it to end with the seed's authorization %q", opening, line)
+	if opening := w.Launched(string(second.SessionID)).Prompted(); !strings.Contains(opening, line) {
+		t.Errorf("the successor's opening is %q; want it to carry the seed's authorization %q", opening, line)
 	}
 	assertOneAuthorizationEntry(t, cli, seed, words)
 
@@ -88,8 +88,8 @@ func TestADelegationsAuthorizationIsSavedOnTheSeedAndDeliveredInEveryOpening(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if opening := w.Launched(string(readme.SessionID)).Prompted(); !strings.HasSuffix(strings.TrimSpace(opening), "set by caller: Ask me before pushing.") {
-		t.Errorf("a delegation that plants its seed opened with %q; want the authorization line last", opening)
+	if opening := w.Launched(string(readme.SessionID)).Prompted(); !strings.Contains(opening, "set by caller: Ask me before pushing.") {
+		t.Errorf("a delegation that plants its seed opened with %q; want the authorization line", opening)
 	}
 	unauthorized := delegateFrom("caller", cwd, "Rename the module", fakeagent.Codex)
 	unauthorized.Label = protocol.Ptr("rename")

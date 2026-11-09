@@ -11,9 +11,11 @@ conversation. Write it that way even when you plan to do the work yourself.
   Point to shared context and say what the reader needs from it.
 - Define scope. Say what the work covers, what the tender may change, and what
   the tender must leave alone. Say which decisions need the user. Leave the seed's
-  authorization out of the body. The authorization lists what the tender may do
-  without asking and which actions wait for the user, and
-  `attn delegate --authorization` sets the authorization from the user's words.
+  authorization out of the body. The authorization says how far the user lets
+  the task go: the steps the tender takes beyond what the project's guidance
+  allows, and the steps the tender stops before. Set it with
+  `attn delegate --authorization`, as `attn skill --reference delegation`
+  describes.
   Follow
   `attn skill --reference delivery` for repository delivery.
 - Specify completion. Define the checks that verify the result on the seed, as

@@ -15,15 +15,17 @@ var (
 			Use("delegation.seed-no-checks", "content/delegation/seed-no-checks.md"))))
 	authorization       = TextField("authorization", "The user's words for the task, stored on the seed.")
 	authorizationSetter = TextField("set_by", "Name of the session or crew member that set the authorization; blank when the user set it in the app.")
-	authorizationLine   = Choose(Present(authorizationSetter),
+	authorizationRule   = Use("delegation.authorization-rule", "content/delegation/authorization-rule.md")
+	authorizationLine   = Join("\n", Choose(Present(authorizationSetter),
 		Use("delegation.authorization", "content/delegation/authorization.md", Bind("set_by", Input(authorizationSetter)), Bind("authorization", Input(authorization))),
-		Use("delegation.authorization-from-user", "content/delegation/authorization-from-user.md", Bind("authorization", Input(authorization))))
+		Use("delegation.authorization-from-user", "content/delegation/authorization-from-user.md", Bind("authorization", Input(authorization)))),
+		authorizationRule)
 	previousAuthorization  = TextField("previous", "The words the change replaces or removes.")
 	authorizationChangedBy = When(Present(authorizationSetter),
 		Use("delegation.authorization-set-by", "content/delegation/authorization-set-by.md", Bind("set_by", Input(authorizationSetter))))
 	authorizationUpdate = Use("delegation.authorization-update", "content/delegation/authorization-update.md",
 		Bind("seed_id", Input(seedID)), Bind("seed_title", Quoted(seedTitle)), Bind("set_by", authorizationChangedBy),
-		Bind("authorization", Quoted(authorization)),
+		Bind("authorization", Quoted(authorization)), Bind("rule", authorizationRule),
 		Bind("replaces", When(Present(previousAuthorization),
 			Exact(Use("delegation.authorization-replaces", "content/delegation/authorization-replaces.md", Bind("previous", Quoted(previousAuthorization)))))))
 	authorizationCleared = Use("delegation.authorization-cleared", "content/delegation/authorization-cleared.md",

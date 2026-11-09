@@ -553,11 +553,13 @@ assignment:
   --priority                         put the delegate's owed turns first
   --handover                         transfer that seed to a new agent
   -m TEXT                            optional handover note: the next step
-  --authorization TEXT               the user's words for this task: what the
-                                     agent may do without asking and where it
-                                     stops. Saved on the seed; the opening
-                                     delivers it. Without it, a delegation or
-                                     handover keeps the seed's current words
+  --authorization TEXT               how far the user lets this task go: the
+                                     steps to take beyond the project's
+                                     guidance and the steps to stop before,
+                                     written as instructions to the agent.
+                                     Saved on the seed; the opening delivers
+                                     it. Without it, a delegation or handover
+                                     keeps the seed's current words
 
 folder and Git:
   --host NAME                        target outpost name/id; home selects the home
@@ -632,7 +634,7 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	priority := fs.Bool("priority", false, "mark the delegate as priority")
 	handover := fs.Bool("handover", false, "transfer an existing seed to the new agent")
 	handoffNote := fs.String("m", "", "optional handover note")
-	authorization := fs.String("authorization", "", "the user's words for this task, saved on the seed")
+	authorization := fs.String("authorization", "", "how far the user lets this task go, saved on the seed")
 	ticketID := fs.String("ticket", "", "retired: delegations bind a seed, not a ticket")
 	confirm := fs.Bool("confirm", false, "retired: went with --ticket")
 	agentName := fs.String("agent", "", "target agent (defaults to the source session agent)")

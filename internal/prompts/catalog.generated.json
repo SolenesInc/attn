@@ -2217,62 +2217,73 @@
           "delivery": "message_fragment",
           "description": "The seed's authorization, after the role block of a delegation or handover opening.",
           "body": {
-            "kind": "choose",
-            "condition": {
-              "field": {
-                "name": "set_by",
-                "kind": "text",
-                "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
-              },
-              "test": "present"
-            },
+            "kind": "join",
+            "separator": "\n",
             "children": [
               {
-                "kind": "text",
-                "id": "delegation.authorization",
-                "source": "content/delegation/authorization.md",
-                "bindings": [
-                  {
+                "kind": "choose",
+                "condition": {
+                  "field": {
                     "name": "set_by",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                  },
+                  "test": "present"
+                },
+                "children": [
+                  {
+                    "kind": "text",
+                    "id": "delegation.authorization",
+                    "source": "content/delegation/authorization.md",
+                    "bindings": [
+                      {
                         "name": "set_by",
-                        "kind": "text",
-                        "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "set_by",
+                            "kind": "text",
+                            "description": "Name of the session or crew member that set the authorization; blank when the user set it in the app."
+                          }
+                        }
+                      },
+                      {
+                        "name": "authorization",
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "authorization",
+                            "kind": "text",
+                            "description": "The user's words for the task, stored on the seed."
+                          }
+                        }
                       }
-                    }
+                    ]
                   },
                   {
-                    "name": "authorization",
-                    "node": {
-                      "kind": "input",
-                      "field": {
+                    "kind": "text",
+                    "id": "delegation.authorization-from-user",
+                    "source": "content/delegation/authorization-from-user.md",
+                    "bindings": [
+                      {
                         "name": "authorization",
-                        "kind": "text",
-                        "description": "The user's words for the task, stored on the seed."
+                        "node": {
+                          "kind": "input",
+                          "field": {
+                            "name": "authorization",
+                            "kind": "text",
+                            "description": "The user's words for the task, stored on the seed."
+                          }
+                        }
                       }
-                    }
+                    ]
                   }
                 ]
               },
               {
                 "kind": "text",
-                "id": "delegation.authorization-from-user",
-                "source": "content/delegation/authorization-from-user.md",
-                "bindings": [
-                  {
-                    "name": "authorization",
-                    "node": {
-                      "kind": "input",
-                      "field": {
-                        "name": "authorization",
-                        "kind": "text",
-                        "description": "The user's words for the task, stored on the seed."
-                      }
-                    }
-                  }
-                ]
+                "id": "delegation.authorization-rule",
+                "source": "content/delegation/authorization-rule.md"
               }
             ]
           }
@@ -2389,6 +2400,14 @@
                     "description": "The user's words for the task, stored on the seed."
                   },
                   "quote": true
+                }
+              },
+              {
+                "name": "rule",
+                "node": {
+                  "kind": "text",
+                  "id": "delegation.authorization-rule",
+                  "source": "content/delegation/authorization-rule.md"
                 }
               },
               {
@@ -5718,5 +5737,5 @@
       ]
     }
   ],
-  "definitions_hash": "b55fee9b370761f3ef80418f865645c37d05235ff99694d755926f529ab239a5"
+  "definitions_hash": "37c530c26023130e5fb45a6cecd51c802d893375d159f344b820269fcc393131"
 }

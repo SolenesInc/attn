@@ -217,10 +217,11 @@ Edit entries in notes show the versions and size changes.",
     Verb {
         name: r"authorization",
         synopsis: r#"authorization <id> ["<words>" | --clear] [--json]"#,
-        about: r"set, clear or print the user's words for this task: what agents may do
-without asking and where they stop. Set only words the user gave you.
-Delegation openings deliver them. When someone other than the seed's
-tender changes them, attn types the change into the tender's conversation
+        about: r"set, clear or print the task's authorization: the steps agents take beyond
+the project's guidance and the steps they stop before, written as
+instructions. Set only what the user allowed.
+Delegation openings deliver the words. When someone other than the seed's
+tender changes the words, attn types the change into the tender's conversation
 as the user's message, waiting while the tender needs approval. With
 neither words nor --clear, prints them and the state of the last typed update.
 Who may change them follows seed moves: the tender, sessions above it in
