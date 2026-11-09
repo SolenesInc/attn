@@ -117,7 +117,11 @@ func holdsPTYEvidence(e *Evidence, obs pty.Observation) bool {
 	if obs.Source == pty.SourceProgramStatus {
 		return holdsProgramStatus(e, obs, sessionstate.SourceProgramStatus)
 	}
-	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs)
+	return e.ProgramStatus != nil || holdsSettledHeartbeat(e, obs) || busyFrameReadBeforeVerdict(e, obs)
+}
+
+func busyFrameReadBeforeVerdict(e *Evidence, obs pty.Observation) bool {
+	return obs.Claim == "busy" && e.LastClassifier != nil && !obs.At.After(e.LastClassifier.ObservedAt)
 }
 
 func reportedByServer(e *Evidence) bool {

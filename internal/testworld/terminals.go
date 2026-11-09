@@ -454,6 +454,10 @@ func (t *Terminal) Heartbeat(claim, detail string) {
 	t.observe(pty.SourceHeartbeat, claim, detail)
 }
 
+func (t *Terminal) HeartbeatReadAt(claim, detail string, readAt time.Time) {
+	t.report(pty.Observation{Source: pty.SourceHeartbeat, Claim: claim, Detail: detail, At: readAt})
+}
+
 func (t *Terminal) ProgramStatus(claim string) {
 	t.observe(pty.SourceProgramStatus, claim, "")
 }
@@ -463,8 +467,11 @@ func (t *Terminal) WorkerReportsItsProcessRunning() {
 }
 
 func (t *Terminal) observe(source pty.Source, claim, detail string) {
+	t.report(pty.Observation{Source: source, Claim: claim, Detail: detail, At: time.Now()})
+}
+
+func (t *Terminal) report(signal pty.Observation) {
 	t.owner.mu.Lock()
-	signal := pty.Observation{Source: source, Claim: claim, Detail: detail, At: time.Now()}
 	t.lastSignal = &signal
 	report := t.owner.onState
 	t.owner.mu.Unlock()
