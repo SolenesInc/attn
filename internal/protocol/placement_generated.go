@@ -85,6 +85,7 @@ var Placements = map[string][]Placement{
 	"crew_set":                         {Placement{LocatorHome, ""}},
 	"crew_sleep":                       {Placement{LocatorHome, ""}},
 	"crew_wake":                        {Placement{LocatorHome, ""}},
+	"decline_update":                   {Placement{LocatorHere, ""}},
 	"delegate":                         {Placement{LocatorHome, ""}},
 	"delegate_status":                  {Placement{LocatorHome, ""}},
 	"delegation_preferences_commit":    {Placement{LocatorHome, ""}},
@@ -205,6 +206,7 @@ var Placements = map[string][]Placement{
 	"set_session_resume_id":            {Placement{LocatorHere, ""}},
 	"set_setting":                      {Placement{LocatorSetting, "key"}},
 	"snooze_turn":                      {Placement{LocatorHome, ""}},
+	"start_update":                     {Placement{LocatorHere, ""}},
 	"state":                            {Placement{LocatorHere, ""}},
 	"state_explain":                    {Placement{LocatorHome, ""}},
 	"stop":                             {Placement{LocatorHere, ""}},
@@ -230,6 +232,7 @@ var Placements = map[string][]Placement{
 	"transcript_activity":              {Placement{LocatorSession, "session_id"}},
 	"unregister":                       {Placement{LocatorHome, ""}},
 	"update_outpost":                   {Placement{LocatorHome, ""}},
+	"update_request":                   {Placement{LocatorHome, ""}},
 	"update_status":                    {Placement{LocatorHome, ""}},
 	"wake_turn":                        {Placement{LocatorHome, ""}},
 	"withdraw_vent":                    {Placement{LocatorHome, ""}},
@@ -973,6 +976,18 @@ func (m CrewWakeMessage) Placement() Placement {
 }
 
 func (m CrewWakeMessage) Locate() string {
+	return ""
+}
+
+func (DeclineUpdateMessage) CommandName() string {
+	return "decline_update"
+}
+
+func (m DeclineUpdateMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m DeclineUpdateMessage) Locate() string {
 	return ""
 }
 
@@ -2446,6 +2461,18 @@ func (m SnoozeTurnMessage) Locate() string {
 	return ""
 }
 
+func (StartUpdateMessage) CommandName() string {
+	return "start_update"
+}
+
+func (m StartUpdateMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m StartUpdateMessage) Locate() string {
+	return ""
+}
+
 func (StateMessage) CommandName() string {
 	return "state"
 }
@@ -2743,6 +2770,18 @@ func (m UpdateOutpostMessage) Placement() Placement {
 }
 
 func (m UpdateOutpostMessage) Locate() string {
+	return ""
+}
+
+func (UpdateRequestMessage) CommandName() string {
+	return "update_request"
+}
+
+func (m UpdateRequestMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m UpdateRequestMessage) Locate() string {
 	return ""
 }
 

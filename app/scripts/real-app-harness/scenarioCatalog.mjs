@@ -468,6 +468,14 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'self-update',
+    runnerId: 'SELF-UPDATE',
+    label: 'Self-update: Settings, the palette and a confirmed agent request each update and relaunch a named instance',
+    command: ['node', 'scripts/real-app-harness/scenario-self-update.mjs'],
+    freshWorldAfter: true,
+    skipOn: { darwin: 'Patches the daemon binary in place, which breaks its code signature on macOS' },
+  },
+  {
     id: 'codex-update',
     runnerId: 'CODEX-UPDATE',
     label: 'Shared Codex update: the banner offers a newer Codex, Install runs it in a tile, shared Codex restarts on it, Reload tiles moves the old tile',

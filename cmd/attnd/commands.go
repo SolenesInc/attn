@@ -129,6 +129,7 @@ func topLevelCommands() []topLevelCommand {
 		{names: []string{"--build-info-json"}, run: runBuildInfoJSON, checks: checkNothing, unrecorded: true},
 		{names: []string{"pty-worker"}, run: runPTYWorker, unrecorded: true},
 		{names: []string{"_outpost-install"}, run: runOutpostInstall},
+		{names: []string{"_update-apply"}, run: runUpdateApply, checks: checkNothing, unrecorded: true},
 		{names: []string{"_bridge"}, run: runBridge, unrecorded: true},
 		{names: []string{"_probe-tui"}, run: runProbeTUI},
 	}

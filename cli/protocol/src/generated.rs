@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b49729ddc214";
+pub const PROTOCOL_VERSION: &str = "26cd22d55d40";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2945,6 +2945,42 @@ pub struct DaemonWarning {
     pub message: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeclineUpdateMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub update_request_id: String,
+}
+
+impl DeclineUpdateMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "decline_update".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeclineUpdateResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+}
+
+impl DeclineUpdateResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "decline_update_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DelegateAssignment {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub brief: Option<String>,
@@ -5529,6 +5565,8 @@ pub struct InitialStateMessage {
     pub source_fingerprint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_bindings: Option<Vec<TerminalBinding>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_run: Option<UpdateRun>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vents: Option<Vec<Vent>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -8859,6 +8897,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub terminal_wait_result: Option<TerminalWaitResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_request_result: Option<UpdateRequestResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_status: Option<UpdateStatus>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub workflow_skill_paths: Option<Vec<String>>,
@@ -11984,6 +12024,45 @@ impl SpawnSessionMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StartUpdateMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update_request_id: Option<String>,
+}
+
+impl StartUpdateMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "start_update".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StartUpdateResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<UpdateRun>,
+    pub success: bool,
+}
+
+impl StartUpdateResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "start_update_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct StateExplainEntry {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cause: Option<String>,
@@ -12906,6 +12985,21 @@ impl UnregisterMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateChangedMessage {
+    pub event: String,
+    pub run: UpdateRun,
+}
+
+impl UpdateChangedMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "update_changed".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateOutpostMessage {
     pub cmd: String,
     pub id: String,
@@ -12919,6 +13013,43 @@ impl UpdateOutpostMessage {
             ..Self::default()
         }
     }
+}
+pub type UpdatePhase = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateRequestMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub caller_session_id: Option<String>,
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+impl UpdateRequestMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "update_request".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateRequestResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub joined_run: Option<UpdateRun>,
+    pub request_id: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateRun {
+    pub id: String,
+    pub install_kind: String,
+    pub log_path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    pub phase: UpdatePhase,
+    #[serde(deserialize_with = "null_as_default")]
+    pub requesters: Vec<String>,
+    pub target_build: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateStatus {
@@ -12941,6 +13072,8 @@ pub struct UpdateStatus {
     pub outpost: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refusal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run: Option<UpdateRun>,
     pub version: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -13800,6 +13933,9 @@ impl ResponseField for TerminalReadResult {
 }
 impl ResponseField for TerminalWaitResult {
     const FIELD: &'static str = "terminal_wait_result";
+}
+impl ResponseField for UpdateRequestResult {
+    const FIELD: &'static str = "update_request_result";
 }
 impl ResponseField for WorktreeKeepResult {
     const FIELD: &'static str = "worktree_keep_result";

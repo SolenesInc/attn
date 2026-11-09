@@ -524,6 +524,24 @@ func (c *Client) UpdateStatus() (*protocol.UpdateStatus, error) {
 	return resp.UpdateStatus, nil
 }
 
+func (c *Client) RequestUpdate(caller protocol.SessionID, reason string) (*protocol.UpdateRequestResult, error) {
+	msg := protocol.UpdateRequestMessage{Cmd: protocol.CmdUpdateRequest}
+	if reason != "" {
+		msg.Reason = protocol.Ptr(reason)
+	}
+	if caller != "" {
+		msg.CallerSessionID = protocol.Ptr(string(caller))
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	if resp.UpdateRequestResult == nil {
+		return nil, errors.New("daemon returned no update request result")
+	}
+	return resp.UpdateRequestResult, nil
+}
+
 func (c *Client) RenameSession(sessionID protocol.SessionID, name string) error {
 	_, err := c.send(protocol.RenameSessionMessage{
 		Cmd:       protocol.CmdRenameSession,

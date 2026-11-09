@@ -33,7 +33,7 @@ Appearance.
   - Agents: Agents and models (`agents`) and Models (`models`), [harnesses.md](harnesses.md). Background agents (`backgroundAgents`), the garden advisor in [garden.md](garden.md) and the chief in [crew.md](crew.md). Delegation (`delegation`), [delegation.md](delegation.md).
   - Connectivity: GitHub hosts (`connectivity`), the hosts [pull-requests.md](pull-requests.md) uses. Outposts (`outposts`), shown while Outposts is on, [outposts.md](outposts.md).
   - Extensions: Plugins (`plugins`), [harnesses.md](harnesses.md).
-  - System: Updates (`updates`), shown while Self-update is on: the install kind, the build and what is available, from `attn update status`'s facts. Experimental (`experimental`), each switch with its feature. Task runner (`backgroundTasks`) and Event bus (`eventBus`), [diagnostics.md](diagnostics.md). Analytics (`analytics`), [telemetry.md](telemetry.md).
+  - System: Updates (`updates`), shown while Self-update is on: the install kind, the build and what is available, from `attn update status`'s facts. On a source install or named instance, the **Update attn** button (`.settings-update-action .banner-button`) sends `start_update`, as does the palette's `update-attn` command and the **Update** action on an `update_requested` notification (asked for with `attn update request`, **Decline** closes it); progress shows in `[data-testid="update-run-banner"]`. Experimental (`experimental`), each switch with its feature. Task runner (`backgroundTasks`) and Event bus (`eventBus`), [diagnostics.md](diagnostics.md). Analytics (`analytics`), [telemetry.md](telemetry.md).
 - Where people see what agents do: a setting an agent changes with `attn settings set` shows in the open dialog as the toggle's new value. `theme` and `uiScale` are the exceptions, because the open app reads them from the daemon only once (see Gotchas).
 - Their own shell: `attn settings`, below.
 
@@ -89,8 +89,8 @@ Preconditions:
 ## Tests
 
 - Wire: `internal/daemon/settings_ack_wire_test.go`, `internal/daemon/settings_validation_wire_test.go`.
-- Stack: `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
-- Scenario: `focusless-native` (parked macOS native input), `agent-settings`.
+- Stack: `cmd/attnd/update_run_stack_test.go`, `cmd/attnd/settings_stack_test.go`, `cmd/attnd/settings_outpost_stack_test.go`, `app/e2e/settings.spec.ts`, `app/e2e/settings-visual.spec.ts`.
+- Scenario: `focusless-native` (parked macOS native input), `agent-settings`, `self-update`.
 - App: `app/src/App.settingsAutosave.test.tsx`, `app/src/components/SettingsModal*.test.tsx`.
 
 ## Gotchas

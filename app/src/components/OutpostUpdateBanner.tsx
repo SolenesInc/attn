@@ -48,7 +48,7 @@ function outpostBannerHeadline(different: OutpostInfo[], updated: OutpostInfo[])
   return `Updated ${names(updated)}.`;
 }
 
-function DoneCountdown({ paused, onDone }: { paused: boolean; onDone: () => void }) {
+export function DoneCountdown({ paused, onDone }: { paused: boolean; onDone: () => void }) {
   const [left, setLeft] = useState(OUTPOST_DONE_CLOSE_SECONDS);
   useEffect(() => {
     if (paused) return;

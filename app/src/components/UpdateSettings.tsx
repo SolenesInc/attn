@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
+import { updateRunIsOpen } from './UpdateRunBanner';
+
 const INSTALL_LABELS: Record<string, string> = {
   release_app: 'Release app',
   release_binary: 'Release binary',
@@ -14,8 +18,34 @@ function availability(settings: Record<string, string>): string {
   return settings.update_install_kind === 'source' ? 'Source installs do not check for releases' : 'Not checked';
 }
 
+const UPDATABLE_KINDS = ['source', 'named_instance'];
+
+function UpdateAction() {
+  const api = useOptionalDaemonApi();
+  const [error, setError] = useState('');
+  if (!api || !UPDATABLE_KINDS.includes(api.settings.update_install_kind)) return null;
+  const running = !!api.updateRun && updateRunIsOpen(api.updateRun);
+  return (
+    <div className="settings-update-action">
+      <button
+        type="button"
+        className="banner-button"
+        disabled={running}
+        onClick={() => {
+          setError('');
+          api.sendStartUpdate().catch((err: Error) => setError(err.message));
+        }}
+      >
+        {running ? 'Updating…' : 'Update attn'}
+      </button>
+      {error && <div className="settings-warning" role="alert">{error}</div>}
+    </div>
+  );
+}
+
 export function UpdateSettings({ settings }: { settings: Record<string, string> }) {
   return (
+    <>
     <dl className="settings-update-facts" data-testid="settings-updates">
       <dt>Installed as</dt>
       <dd>{INSTALL_LABELS[settings.update_install_kind] ?? settings.update_install_kind}</dd>
@@ -24,5 +54,7 @@ export function UpdateSettings({ settings }: { settings: Record<string, string> 
       <dt>Available</dt>
       <dd>{availability(settings)}</dd>
     </dl>
+    <UpdateAction />
+    </>
   );
 }

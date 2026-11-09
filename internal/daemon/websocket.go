@@ -588,6 +588,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Vents:                  d.ventsSnapshot(client.selectedProfile()).Vents,
 		SharedCodex:            d.codexShared().wireState(client.selectedProfile()),
 		Outposts:               d.outpostsUpdatedMessage().Outposts,
+		UpdateRun:              d.latestUpdateRunForApp(),
 	}
 	d.fillInitialMigrationPhase(event)
 	pausepoint.At(pausepoint.DaemonInitialStateBuilt)
@@ -1304,6 +1305,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleRestartSharedCodex", func() { d.handleRestartSharedCodex(client, msg.(*protocol.RestartSharedCodexMessage)) })
 	case protocol.CmdInstallCodexUpdate:
 		d.life.Go("handleInstallCodexUpdate", func() { d.handleInstallCodexUpdate(client, msg.(*protocol.InstallCodexUpdateMessage)) })
+	case protocol.CmdStartUpdate:
+		d.handleStartUpdate(client, msg.(*protocol.StartUpdateMessage))
+	case protocol.CmdDeclineUpdate:
+		d.handleDeclineUpdate(client, msg.(*protocol.DeclineUpdateMessage))
 	case protocol.CmdSetTerminalTheme:
 		d.handleSetTerminalTheme(client, msg.(*protocol.SetTerminalThemeMessage))
 	case protocol.CmdSetClientPresence:

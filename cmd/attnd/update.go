@@ -13,11 +13,19 @@ import (
 )
 
 const updateUsage = `usage: attn update status [--json]
+       attn update request [--reason <text>]
 
-Show how attn was installed, the current build, what is available, and the
-current update run. On an outpost, the home answers.`
+status shows how attn was installed, the current build, what is available, and
+the current update run. On an outpost, the home answers.
+
+request asks the user to update attn. The user decides in the app; the asking
+session gets an inbox notice when the update finishes.`
 
 func runUpdate() {
+	if len(os.Args) >= 3 && os.Args[2] == "request" {
+		runUpdateRequest()
+		return
+	}
 	if len(os.Args) < 3 || os.Args[2] != "status" {
 		fmt.Fprintln(os.Stderr, updateUsage)
 		os.Exit(2)
@@ -37,10 +45,7 @@ func runUpdate() {
 	if *asJSON {
 		encoder := json.NewEncoder(os.Stdout)
 		encoder.SetIndent("", "  ")
-		_ = encoder.Encode(struct {
-			*protocol.UpdateStatus
-			Run *struct{} `json:"run"`
-		}{UpdateStatus: status})
+		_ = encoder.Encode(status)
 		return
 	}
 	fprintUpdateStatus(os.Stdout, *status)
@@ -54,10 +59,46 @@ func fprintUpdateStatus(w io.Writer, status protocol.UpdateStatus) {
 	}
 	fmt.Fprintf(w, "Build:      %s, commit %s\n", status.Version, status.Commit)
 	fmt.Fprintf(w, "Available:  %s\n", updateAvailability(status))
-	fmt.Fprintln(w, "Update run: none")
+	fmt.Fprintf(w, "Update run: %s\n", updateRunSummary(status.Run))
 	if refusal := protocol.Deref(status.Refusal); refusal != "" {
 		fmt.Fprintln(w, refusal)
 	}
+}
+
+func updateRunSummary(run *protocol.UpdateRun) string {
+	if run == nil {
+		return "none"
+	}
+	if outcome := protocol.Deref(run.Outcome); outcome != "" {
+		return string(run.Phase) + ": " + outcome
+	}
+	return string(run.Phase) + ", log at " + run.LogPath
+}
+
+func runUpdateRequest() {
+	flags := flag.NewFlagSet("update request", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	reason := flags.String("reason", "", "")
+	if err := flags.Parse(os.Args[3:]); err != nil || flags.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, updateUsage)
+		os.Exit(2)
+	}
+	c := client.New("")
+	caller, err := currentSession(c)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "attn update request: %v\n", err)
+		os.Exit(1)
+	}
+	result, err := c.RequestUpdate(caller, *reason)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "attn update request: %v\n", err)
+		os.Exit(1)
+	}
+	if result.JoinedRun != nil {
+		fmt.Printf("An update is already running (phase %s). You will get an inbox notice when it finishes.\n", result.JoinedRun.Phase)
+		return
+	}
+	fmt.Println("Asked the user to update attn. You will get an inbox notice when it finishes, or if the user declines.")
 }
 
 func updateAvailability(status protocol.UpdateStatus) string {

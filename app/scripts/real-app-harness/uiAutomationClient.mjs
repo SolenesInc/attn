@@ -235,6 +235,11 @@ export class UiAutomationClient {
     await this.launchApp();
   }
 
+  // The app was replaced by something other than this client, such as an update that relaunches it.
+  forgetLaunchedApp() {
+    this.launch = null;
+  }
+
   async waitForManifest(timeoutMs = 15_000) {
     const startedAt = Date.now();
     let lastError = null;

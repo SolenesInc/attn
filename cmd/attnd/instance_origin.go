@@ -16,15 +16,13 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-const originFileName = "origin.json"
-
 type instanceOrigin struct {
 	Worktree   string `json:"worktree"`
 	Branch     string `json:"branch,omitempty"`
 	RecordedAt string `json:"recordedAt"`
 }
 
-func originPath(dataDir string) string { return filepath.Join(dataDir, originFileName) }
+func originPath(dataDir string) string { return config.InstanceOriginPath(dataDir) }
 
 func writeInstanceOrigin(dataDir string, origin instanceOrigin) error {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {

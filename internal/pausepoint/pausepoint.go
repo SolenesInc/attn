@@ -112,6 +112,7 @@ const (
 	OutpostMachineRead             = "outpost-machine-read"
 	ClassifierVerdictReached       = "classifier-verdict-reached"
 	EnsureFoundNoListener          = "ensure-found-no-listener"
+	UpdateApplyFinished            = "update-apply-finished"
 	OutpostRecoveryReported        = "outpost-recovery-reported"
 	OutpostRecoveryStarted         = "outpost-recovery-started"
 	OutpostRecoveryApplied         = "outpost-recovery-applied"

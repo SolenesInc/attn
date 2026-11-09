@@ -763,6 +763,80 @@ model UpdateStatus {
   available_url?: string;
   checked_at?: string;
   check_error?: string;
+  run?: UpdateRun;
+}
+
+enum UpdatePhase {
+  preparing,
+  staging,
+  applying,
+  home_restarted,
+  outposts,
+  done,
+  failed,
+}
+
+// target_build is empty until the build has been made. log_path names the
+// build log, and a failed run's outcome names it too. requesters are the
+// sessions that receive the final inbox notice.
+model UpdateRun {
+  id: string;
+  target_build: string;
+  install_kind: string;
+  phase: UpdatePhase;
+  outcome?: string;
+  log_path: string;
+  requesters: string[];
+}
+
+// Asks the user to update attn. The request appears as a notification with
+// Update and Decline; while a run is open the request joins it instead.
+@extension("x-on", #{ home: true })
+model UpdateRequestMessage {
+  cmd: "update_request";
+  caller_session_id?: string;
+  reason?: string;
+}
+
+model UpdateRequestResult {
+  request_id: string;
+  joined_run?: UpdateRun;
+}
+
+// The app only: the socket refuses it, so an agent cannot start a run.
+// update_request_id is empty when the user started the update directly.
+@extension("x-on", #{ here: true })
+model StartUpdateMessage {
+  cmd: "start_update";
+  request_id?: string;
+  update_request_id?: string;
+}
+
+model StartUpdateResultMessage {
+  event: "start_update_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  run?: UpdateRun;
+}
+
+@extension("x-on", #{ here: true })
+model DeclineUpdateMessage {
+  cmd: "decline_update";
+  request_id?: string;
+  update_request_id: string;
+}
+
+model DeclineUpdateResultMessage {
+  event: "decline_update_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+}
+
+model UpdateChangedMessage {
+  event: "update_changed";
+  run: UpdateRun;
 }
 
 // Reads one ledger row, live or closed, by exact session id.
@@ -3906,6 +3980,7 @@ model InitialStateMessage {
   // Every outpost, as outposts_updated carries them, so a tile knows its
   // host's reach from the first push.
   outposts?: OutpostInfo[];
+  update_run?: UpdateRun;
 }
 
 model SessionRegisteredMessage {
@@ -6980,6 +7055,7 @@ model Response {
   session_list_result?: SessionListResult;
   session_show_result?: SessionShowResult;
   update_status?: UpdateStatus;
+  update_request_result?: UpdateRequestResult;
   session_reopen_result?: SessionReopenResult;
   terminal_entries?: TerminalEntry[];
   terminal_open_result?: TerminalOpenResult;
@@ -8829,6 +8905,9 @@ alias DaemonEvent =
   | SharedCodexChangedMessage
   | RestartSharedCodexResultMessage
   | InstallCodexUpdateResultMessage
+  | StartUpdateResultMessage
+  | DeclineUpdateResultMessage
+  | UpdateChangedMessage
   | OpenMarkdownResultMessage
   | MarkdownAnnotationsGetResultMessage
   | MarkdownAnnotationsSaveResultMessage

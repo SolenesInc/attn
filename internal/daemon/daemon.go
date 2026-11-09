@@ -110,6 +110,7 @@ type Daemon struct {
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
 	releases            releaseAvailability
+	updateRuns          updateRuns
 	outpost             outpostRuntime
 	homeGateway         homeGatewayConns
 	phones              phonesRuntime
@@ -2967,6 +2968,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdUpdateStatus:
 		d.handleUpdateStatus(ctx, conn)
+	case protocol.CmdUpdateRequest:
+		d.handleUpdateRequest(conn, msg.(*protocol.UpdateRequestMessage))
+	case protocol.CmdStartUpdate, protocol.CmdDeclineUpdate:
+		d.sendError(conn, "only the attn app can start or decline an update; run `attn update request` to ask the user")
 	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
 	case protocol.CmdTerminalList:

@@ -39,6 +39,8 @@ CREATE INDEX idx_sessions_member_key ON sessions(member_key) WHERE member_key !=
 CREATE INDEX idx_sessions_profile_id ON sessions(profile_id);
 CREATE INDEX idx_sessions_succeeds ON sessions(succeeds) WHERE succeeds != '';
 CREATE INDEX idx_terminal_bindings_session ON terminal_bindings(session_id);
+CREATE INDEX idx_update_requests_run ON update_requests(run_id);
+CREATE INDEX idx_update_requests_state ON update_requests(state);
 CREATE UNIQUE INDEX idx_vents_one_per_turn ON vents(session_id, turn) WHERE withdrawn_at IS NULL;
 CREATE INDEX idx_vents_profile ON vents(profile_id, created_at);
 CREATE INDEX idx_worktree_sweep_log_at ON worktree_sweep_log(at DESC, id DESC);
@@ -119,6 +121,8 @@ CREATE TABLE supervised_parks ( child TEXT PRIMARY KEY, parked_at TEXT NOT NULL,
 CREATE TABLE tasks ( id TEXT PRIMARY KEY, kind TEXT NOT NULL, subject TEXT NOT NULL, state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, next_attempt_at TEXT NOT NULL, last_error TEXT NOT NULL DEFAULT '', meta_json TEXT NOT NULL DEFAULT '', requeued INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL );
 CREATE TABLE terminal_bindings ( terminal_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE );
 CREATE TABLE terminal_views ( terminal_id TEXT PRIMARY KEY, link TEXT NOT NULL, profile_id TEXT NOT NULL, created_at TEXT NOT NULL );
+CREATE TABLE update_requests ( id TEXT PRIMARY KEY, requester TEXT NOT NULL DEFAULT '', reason TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, run_id TEXT NOT NULL DEFAULT '', notification_id TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL );
+CREATE TABLE update_runs ( id TEXT PRIMARY KEY, target_build TEXT NOT NULL DEFAULT '', install_kind TEXT NOT NULL, phase TEXT NOT NULL, outcome TEXT NOT NULL DEFAULT '', log_path TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL, finished_at TEXT NOT NULL DEFAULT '' );
 CREATE TABLE vents ( id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, session_id TEXT NOT NULL, turn TEXT NOT NULL, text TEXT NOT NULL, context TEXT NOT NULL, created_at TEXT NOT NULL, withdrawn_at TEXT, dismissed_at TEXT , planted_seed_id TEXT, outbox_seq INTEGER, sent_at TEXT, kind TEXT NOT NULL DEFAULT 'attn');
 CREATE TABLE worktree_sweep_log ( id TEXT PRIMARY KEY, path TEXT NOT NULL, main_repo TEXT NOT NULL, branch TEXT NOT NULL DEFAULT '', action TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', at TEXT NOT NULL );
 CREATE TABLE worktrees ( path TEXT PRIMARY KEY, branch TEXT NOT NULL, main_repo TEXT NOT NULL, created_at TEXT NOT NULL , origin TEXT NOT NULL DEFAULT '', pinned_at TEXT NOT NULL DEFAULT '', observed_at TEXT NOT NULL DEFAULT '', head_sha TEXT NOT NULL DEFAULT '', detached INTEGER NOT NULL DEFAULT 0, dirty INTEGER NOT NULL DEFAULT 0, dirty_files INTEGER NOT NULL DEFAULT 0, stashes INTEGER NOT NULL DEFAULT 0, unpushed INTEGER NOT NULL DEFAULT 0, merged_signal TEXT NOT NULL DEFAULT '', prunable INTEGER NOT NULL DEFAULT 0, last_activity_at TEXT NOT NULL DEFAULT '', sweep_status TEXT NOT NULL DEFAULT '', sweep_reason TEXT NOT NULL DEFAULT '', sweep_at TEXT NOT NULL DEFAULT '', refresh_error TEXT NOT NULL DEFAULT '');

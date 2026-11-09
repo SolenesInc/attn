@@ -77,6 +77,7 @@ const (
 	FactPluginDriverRegistered = "plugin.driver.registered"
 
 	FactOutpostChanged = "outpost.changed"
+	FactUpdateChanged  = "update.changed"
 	FactSettingChanged = "setting.changed"
 	FactBackupWritten  = "backup.written"
 
@@ -137,6 +138,7 @@ func wireProjections() []projection {
 func buildWireProjections() []projection {
 	return []projection{
 		{filter: bus.Filter{FactOutpostChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectOutpostReach() }},
+		{filter: bus.Filter{FactUpdateChanged}, apply: func(d *Daemon, _ bus.Event) { d.projectUpdateRun() }},
 		{filter: homeGatewayFacts, apply: func(d *Daemon, _ bus.Event) { d.homeGateway.nudge() }},
 		{filter: bus.Filter{FactQuickCaptureRead}, apply: func(d *Daemon, ev bus.Event) {
 			var scope struct {

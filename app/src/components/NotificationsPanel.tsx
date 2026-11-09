@@ -12,6 +12,8 @@ interface NotificationsPanelProps {
   onOpenSeed: (seedId: string) => void;
   installingCodexUpdate: boolean;
   onInstallCodexUpdate: () => void;
+  onStartUpdate: (updateRequestId: string) => void;
+  onDeclineUpdate: (updateRequestId: string) => void;
   changeSignal: number;
 }
 
@@ -41,6 +43,8 @@ export function NotificationsPanel({
   onOpenSeed,
   installingCodexUpdate,
   onInstallCodexUpdate,
+  onStartUpdate,
+  onDeclineUpdate,
   changeSignal,
 }: NotificationsPanelProps) {
   const [notifications, setNotifications] = useState<DaemonNotification[]>([]);
@@ -213,6 +217,19 @@ export function NotificationsPanel({
                                     disabled={retryingIds.has(n.id)}
                                   >
                                     {retryingIds.has(n.id) ? 'Retrying…' : action.label}
+                                  </button>
+                                );
+                              }
+                              if (action.kind === 'start_update' || action.kind === 'decline_update') {
+                                const act = action.kind === 'start_update' ? onStartUpdate : onDeclineUpdate;
+                                return (
+                                  <button
+                                    key={action.kind}
+                                    type="button"
+                                    className="notification-row-action"
+                                    onClick={() => act(action.target_id)}
+                                  >
+                                    {action.label}
                                   </button>
                                 );
                               }

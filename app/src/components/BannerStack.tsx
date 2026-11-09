@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import { renderWarningSegments } from '../utils/warningLinks';
 import { AvailableUpdateBanner } from './AvailableUpdateBanner';
 import { OutpostUpdateBanner } from './OutpostUpdateBanner';
+import { UpdateRunBanner } from './UpdateRunBanner';
 import { SharedCodexBanner } from './SharedCodexBanner';
 
 export interface BannerStackWarning {
@@ -46,6 +47,7 @@ export function BannerStack({
       )}
       <AvailableUpdateBanner />
       <OutpostUpdateBanner />
+      <UpdateRunBanner />
       <SharedCodexBanner />
     </div>
   );

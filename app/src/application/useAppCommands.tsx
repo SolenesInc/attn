@@ -50,7 +50,7 @@ import {
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useOpenInEditor } from './useOpenInEditor';
 import { useSharedCodexCommands } from './useSharedCodex';
-import { FEATURES, isOn } from '../utils/settings';
+import { BoolSetting, FEATURES, isOn } from '../utils/settings';
 
 export function useAppCommands(onRename: (sessionId: string, name: string, opener: HTMLElement | null) => void): PaletteCommand[] {
   const seeds = useDaemonStore((state) => state.seeds);
@@ -68,6 +68,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
+  const { sendStartUpdate } = useDaemonApi();
   const asksAvailable = useAsksAvailable(settings);
   const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { handleOpenCrew } = useCrewPanelContext();
@@ -381,6 +382,14 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
           if (currentDesktopId) useDesktopShelfStore.getState().rowActionsByDesktop[currentDesktopId]?.clearDraggedWidths();
         },
       },
+      ...(isOn(settings, BoolSetting.selfUpdateEnabled) && ['source', 'named_instance'].includes(settings.update_install_kind)
+        ? [{
+            id: 'update-attn',
+            title: 'Update attn',
+            keywords: ['update', 'upgrade', 'install', 'build'],
+            run: () => void sendStartUpdate().catch((err: Error) => console.error('[App] Start update failed:', err)),
+          }]
+        : []),
       {
         id: 'settings',
         title: 'Settings',
@@ -600,6 +609,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
       toggleGardenFrame,
       gardenMode,
       settings,
+      sendStartUpdate,
       handleToggleQueueMode,
       handleToggleCrewQueue,
       handleOpenCrew,

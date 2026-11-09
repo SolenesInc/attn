@@ -121,6 +121,7 @@ func (d *Daemon) handleUpdateStatus(ctx context.Context, conn net.Conn) {
 		return
 	}
 	status := d.updateStatus()
+	status.Run = d.latestUpdateRunForApp()
 	if origin, remote := OriginOf(ctx); remote {
 		status.HomeKind = protocol.Ptr(status.Kind)
 		status.Kind = string(selfupdate.Outpost)

@@ -14,6 +14,7 @@ import { CodexInstallUntracked, handleSharedCodexDaemonEvent, INSTALL_CODEX_UPDA
 import { handlePhoneDaemonEvent } from './daemonPhoneEvents';
 import { handleSenderDaemonEvent } from './daemonSenderEvents';
 import { handleAnalyticsDaemonEvent, type AnalyticsCleared, type AnalyticsRecordPage, type AnalyticsStatus } from './daemonAnalyticsEvents';
+import { DECLINE_UPDATE, handleUpdateRunDaemonEvent, START_UPDATE } from './daemonUpdateRunEvents';
 import { handleOutpostDaemonEvent, type OutpostCommandMessage } from './daemonOutpostEvents';
 import { handleLaunchDesktopEvent } from './daemonLaunchDesktopEvents';
 import { handleDelegationDaemonEvent, type DelegationSettingsState, type HarnessModelCatalog } from './daemonDelegationEvents';
@@ -28,7 +29,7 @@ import {
   type CrewMutationOutcome,
 } from './daemonCrewEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
-import type { AgentCatalogResult, DelegationPreferences, OutpostInfo, TileWindowFrame } from '../types/generated';
+import type { AgentCatalogResult, DelegationPreferences, OutpostInfo, TileWindowFrame, UpdateRun } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
@@ -757,6 +758,7 @@ export function useDaemonSocket({
   }, []);
   const [outpostCommandError, setOutpostCommandError] = useState('');
   const [homeBuild, setHomeBuild] = useState('');
+  const [updateRun, setUpdateRun] = useState<UpdateRun | null>(null);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const [keptConversationsChangeSignal, setKeptConversationsChangeSignal] = useState(0);
@@ -1174,6 +1176,7 @@ export function useDaemonSocket({
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
             syncNavigationFromProfiles({ kind: 'scope' });
             setOutposts(data.outposts ?? []);
+            setUpdateRun(data.update_run ?? null);
             callbacksRef.current.onSessionsUpdate(nextSessions);
             callbacksRef.current.onSeedsUpdate?.(
               data.seeds || [],
@@ -2350,6 +2353,7 @@ export function useDaemonSocket({
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
             if (handleSharedCodexDaemonEvent(data, pending)) break;
+            if (handleUpdateRunDaemonEvent(data, pending, setUpdateRun)) break;
             if (handlePhoneDaemonEvent(data, pending)) break;
             if (handleSenderDaemonEvent(data, pending)) break;
             if (handleAnalyticsDaemonEvent(data, pending)) break;
@@ -3611,6 +3615,12 @@ export function useDaemonSocket({
   const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
     sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
 
+  const sendStartUpdate = useCallback((updateRequestId?: string): Promise<true> =>
+    sendRequest(START_UPDATE, updateRequestId ? { update_request_id: updateRequestId } : {}, 'Starting the update timed out'), [sendRequest]);
+
+  const sendDeclineUpdate = useCallback((updateRequestId: string): Promise<true> =>
+    sendRequest(DECLINE_UPDATE, { update_request_id: updateRequestId }, 'Declining the update timed out'), [sendRequest]);
+
   const sendRecentFiles = useCallback((limit?: number, root?: string): Promise<RecentFile[]> => {
     const requestId = nextRequestID('recent_files');
     const key = `recent_files:${requestId}`;
@@ -4392,6 +4402,9 @@ export function useDaemonSocket({
     sendSenderPairDecide,
     sendSenderUnpair,
     sendInstallCodexUpdate,
+    updateRun,
+    sendStartUpdate,
+    sendDeclineUpdate,
     sendRecentFiles,
     sendGetRecentLocations,
     sendBrowseDirectory,

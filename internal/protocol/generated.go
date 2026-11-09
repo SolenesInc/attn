@@ -3172,6 +3172,31 @@ type DaemonWarning struct {
 	Message string `json:"message"`
 }
 
+type DeclineUpdateMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// UpdateRequestID corresponds to the JSON schema field "update_request_id".
+	UpdateRequestID string `json:"update_request_id"`
+}
+
+type DeclineUpdateResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type DelegateAssignment struct {
 	// Brief corresponds to the JSON schema field "brief".
 	Brief *string `json:"brief,omitempty,omitzero"`
@@ -5828,6 +5853,9 @@ type InitialStateMessage struct {
 
 	// TerminalBindings corresponds to the JSON schema field "terminal_bindings".
 	TerminalBindings []TerminalBinding `json:"terminal_bindings,omitempty,omitzero"`
+
+	// UpdateRun corresponds to the JSON schema field "update_run".
+	UpdateRun *UpdateRun `json:"update_run,omitempty,omitzero"`
 
 	// Vents corresponds to the JSON schema field "vents".
 	Vents []Vent `json:"vents,omitempty,omitzero"`
@@ -9375,6 +9403,10 @@ type Response struct {
 
 	// TerminalWaitResult corresponds to the JSON schema field "terminal_wait_result".
 	TerminalWaitResult *TerminalWaitResult `json:"terminal_wait_result,omitempty,omitzero"`
+
+	// UpdateRequestResult corresponds to the JSON schema field
+	// "update_request_result".
+	UpdateRequestResult *UpdateRequestResult `json:"update_request_result,omitempty,omitzero"`
 
 	// UpdateStatus corresponds to the JSON schema field "update_status".
 	UpdateStatus *UpdateStatus `json:"update_status,omitempty,omitzero"`
@@ -12991,6 +13023,34 @@ type SpawnSessionMessage struct {
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
 }
 
+type StartUpdateMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// UpdateRequestID corresponds to the JSON schema field "update_request_id".
+	UpdateRequestID *string `json:"update_request_id,omitempty,omitzero"`
+}
+
+type StartUpdateResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run *UpdateRun `json:"run,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type StateExplainEntry struct {
 	// Cause corresponds to the JSON schema field "cause".
 	Cause *string `json:"cause,omitempty,omitzero"`
@@ -13965,12 +14025,72 @@ type UnregisterMessage struct {
 	ID SessionID `json:"id"`
 }
 
+type UpdateChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run UpdateRun `json:"run"`
+}
+
 type UpdateOutpostMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+}
+
+type UpdatePhase string
+
+const UpdatePhaseApplying UpdatePhase = "applying"
+const UpdatePhaseDone UpdatePhase = "done"
+const UpdatePhaseFailed UpdatePhase = "failed"
+const UpdatePhaseHomeRestarted UpdatePhase = "home_restarted"
+const UpdatePhaseOutposts UpdatePhase = "outposts"
+const UpdatePhasePreparing UpdatePhase = "preparing"
+const UpdatePhaseStaging UpdatePhase = "staging"
+
+type UpdateRequestMessage struct {
+	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
+	CallerSessionID *string `json:"caller_session_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason *string `json:"reason,omitempty,omitzero"`
+}
+
+type UpdateRequestResult struct {
+	// JoinedRun corresponds to the JSON schema field "joined_run".
+	JoinedRun *UpdateRun `json:"joined_run,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type UpdateRun struct {
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// InstallKind corresponds to the JSON schema field "install_kind".
+	InstallKind string `json:"install_kind"`
+
+	// LogPath corresponds to the JSON schema field "log_path".
+	LogPath string `json:"log_path"`
+
+	// Outcome corresponds to the JSON schema field "outcome".
+	Outcome *string `json:"outcome,omitempty,omitzero"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase UpdatePhase `json:"phase"`
+
+	// Requesters corresponds to the JSON schema field "requesters".
+	Requesters []string `json:"requesters"`
+
+	// TargetBuild corresponds to the JSON schema field "target_build".
+	TargetBuild string `json:"target_build"`
 }
 
 type UpdateStatus struct {
@@ -14009,6 +14129,9 @@ type UpdateStatus struct {
 
 	// Refusal corresponds to the JSON schema field "refusal".
 	Refusal *string `json:"refusal,omitempty,omitzero"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run *UpdateRun `json:"run,omitempty,omitzero"`
 
 	// Version corresponds to the JSON schema field "version".
 	Version string `json:"version"`
