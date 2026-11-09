@@ -56,7 +56,8 @@ func TestAClosedSessionWhoseConversationIsGoneRefusesResume(t *testing.T) {
 	conversation := vanishedRun.ConversationID
 	closeSession(t, cli, vanished, "done")
 	awaitClosed(app, vanished)
-	removeReopenRollout(t, w, conversation)
+	w.CodexServer().AwaitArchived(conversation)
+	removeCodexRollout(t, w, "archived_sessions", conversation)
 
 	for session, reason := range map[string]string{
 		unbound:  "nothing to resume",
@@ -417,9 +418,9 @@ func reopenVerdict(t *testing.T, cli *client.Client, session string) protocol.Se
 	return *shown.Reopen
 }
 
-func removeReopenRollout(t *testing.T, w *world, conversation string) {
+func removeCodexRollout(t *testing.T, w *world, directory, conversation string) {
 	t.Helper()
-	rollouts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "*-"+conversation+".jsonl"))
+	rollouts, err := filepath.Glob(filepath.Join(w.Dir, "toolhome", ".codex", directory, "*-"+conversation+".jsonl"))
 	if err != nil || len(rollouts) != 1 {
 		t.Fatalf("rollout of %s = %v (%v), want exactly one", conversation, rollouts, err)
 	}

@@ -42,7 +42,7 @@ func TestASeedRemembersWhereAndHowItsClosedOrReapedTenderRan(t *testing.T) {
 	reaped := tenders["reaped"]
 	runGit(t, reaped.repo, "checkout", "-b", "feature/reaped")
 	w.stop()
-	removeReopenRollout(t, w, reaped.run.ConversationID)
+	removeCodexRollout(t, w, "sessions/*/*/*", reaped.run.ConversationID)
 	w.restart()
 	w.App()
 	cli = w.Client()
