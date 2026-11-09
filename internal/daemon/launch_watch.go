@@ -20,10 +20,11 @@ const seedNoteScreenMaxBytes = garden.MaxNoteBytes / 2
 var errDelegationInterrupted = errors.New("the daemon stopped before the delegate's first turn")
 
 type launchOutcome struct {
-	startedAt   time.Time
-	exit        *store.SessionExitScreen
-	unconfirmed string
-	interrupted bool
+	startedAt       time.Time
+	exit            *store.SessionExitScreen
+	relaunchFailure string
+	unconfirmed     string
+	interrupted     bool
 }
 
 type launchWatch struct {
@@ -75,6 +76,13 @@ func (d *Daemon) noteLaunchStarted(sessionID protocol.SessionID) {
 
 func (d *Daemon) noteLaunchExited(sessionID protocol.SessionID, exit sessionmonitor.Exit) {
 	d.resolveLaunchWatch(sessionID, launchOutcome{exit: d.exitScreenOrBare(sessionID, exit)})
+}
+
+func (d *Daemon) noteRelaunchFailed(sessionID protocol.SessionID, cause error) {
+	d.resolveLaunchWatch(sessionID, launchOutcome{
+		exit:            &store.SessionExitScreen{SessionID: sessionID, ExitCode: 1},
+		relaunchFailure: fmt.Sprintf("could not relaunch the agent's terminal: %v", cause),
+	})
 }
 
 func (d *Daemon) exitScreenOrBare(sessionID protocol.SessionID, exit sessionmonitor.Exit) *store.SessionExitScreen {

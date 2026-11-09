@@ -309,6 +309,9 @@ func (d *Daemon) confirmAutomationLaunch(run *store.AutomationRun, agent string,
 }
 
 func (d *Daemon) settleAutomationLaunch(run *store.AutomationRun, agent string, result automation.DeliveryResult, outcome launchOutcome) error {
+	if outcome.relaunchFailure != "" {
+		return errors.New(outcome.relaunchFailure)
+	}
 	if outcome.exit != nil {
 		exit := *outcome.exit
 		exit.Text = seedNoteScreenTail(exit.Text)

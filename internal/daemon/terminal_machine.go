@@ -215,6 +215,7 @@ func (d *Daemon) restartPreparedTerminal(ctx context.Context, msg protocol.Termi
 	if spawnErr := d.ptyBackend.Spawn(ctx, opts); spawnErr != nil {
 		unlockEnds()
 		d.logf("reload: respawn failed for %s: %v; finalizing as exited", sessionID, spawnErr)
+		d.noteRelaunchFailed(sessionID, spawnErr)
 		d.life.Go("handleFailedTerminalRestart", func() {
 			d.handlePTYExit(ptybackend.ExitInfo{ID: terminal, ExitCode: 1, LifecycleID: opts.LifecycleID})
 		})
