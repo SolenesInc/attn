@@ -1,0 +1,204 @@
+# doc: help and dispatch
+read doc
+read doc -h
+read doc --help
+read doc nope
+read doc nope --help
+
+# doc: argument errors
+read doc define
+read doc define onlyone
+read doc define test/x things nocolon
+read doc undefine onlyone
+read doc collections --bogus
+read doc put
+read doc put ns col
+read doc put ns col id
+read doc put ns col id {} --expect
+read doc put ns col id {} --expect absent
+read doc put ns col id {} --expect 0
+read doc put ns col id {} --expect 1x
+read doc put ns col id {} --expect -3
+read doc get
+read doc get ns col
+read doc delete ns col
+read doc delete ns col id --expect
+read doc delete ns col id --expect absent
+read doc delete ns col id --expect zero
+read doc query
+read doc query ns
+read doc query ns col --bogus
+read doc query ns col positional
+read doc query ns col --where
+read doc query ns col --where novalue
+read doc query ns col --where =5
+read doc query ns col --where >=5
+read doc query ns col --sort
+read doc query ns col --after
+read doc query ns col --limit
+read doc query ns col --limit nan
+read doc query ns col --desc
+read doc query ns col --resume
+read doc count ns
+read doc count ns col --bogus
+read doc count ns col --resume
+read doc count ns col --desc
+read doc watch
+read doc watch ns
+
+# doc: daemon refusals
+read doc get nosuch/ns col id
+read doc get nosuch/ns col id --json
+read doc query nosuch/ns col
+read doc query nosuch/ns col --json
+read doc count nosuch/ns col
+read doc count nosuch/ns col --json
+write doc define Bad! col
+write doc define test/parity things bad:kind
+write doc undefine nosuch/ns col
+write doc put nosuch/ns col id {}
+write doc delete nosuch/ns col id
+
+# doc: real collections and documents in the copied garden
+read doc collections
+read doc collections --json
+read doc collections extra --json
+read doc query core/garden seeds --limit 3
+read doc query core/garden seeds --limit 3 --json
+read doc query core/garden seeds --limit 2 --sort updated_at --desc --json
+read doc count core/garden seeds
+read doc count core/garden seeds --json
+read doc count core/garden seeds --where status=growing --sort updated_at --limit 1
+
+# doc: a whole lifecycle
+write doc define test/parity things status:string attempts:number done:bool
+write doc collections
+write doc collections --json
+write doc put test/parity things a '{"status":"pending","attempts":3,"note":"<a&b>","text":"line\u2028sep"}'
+write doc put test/parity things b '{  "status" : "done" ,  "attempts" : 7 ,  "nested" : { "x" : [ 1 , 2 ] , "empty" : { } , "none" : [ ] } }'
+write doc put test/parity things c '{"status":"pending","attempts":"5"}' --expect absent
+write doc put test/parity things c '{"status":"pending"}' --expect absent
+write doc put test/parity things a '{"status":"pending"}' --expect 9
+write doc put test/parity things notjson not-json
+write doc put test/parity things arr [1,2]
+read doc get test/parity things a
+read doc get test/parity things a --json
+read doc get test/parity things b --json
+read doc get test/parity things missing
+read doc get test/parity things missing --json
+read doc get test/parity things --json
+read doc query test/parity things
+read doc query test/parity things --json
+read doc query test/parity things --where status=pending
+read doc query test/parity things --where attempts>=5 --json
+read doc query test/parity things --where attempts<5 --json
+read doc query test/parity things --where attempts<=7 --where status=done
+read doc query test/parity things --where status=1e999 --json
+read doc query test/parity things --where note=a>b
+read doc query test/parity things --where nosuchfield=1
+read doc query test/parity things --sort nosuchfield
+read doc query test/parity things --sort attempts --desc --json
+read doc query test/parity things --sort attempts --limit 1
+read doc query test/parity things --sort attempts --limit 1 --after a
+read doc query test/parity things --limit 0
+read doc query test/parity things --limit 1000000
+read doc count test/parity things
+read doc count test/parity things --where status=pending --json
+write doc get test/parity things a --json
+write doc put test/parity things piped - <= $out
+read doc get test/parity things piped
+write doc delete test/parity things a --expect 7
+write doc delete test/parity things a --expect 1
+write doc delete test/parity things a
+write doc delete test/parity things b
+read doc query test/parity empty
+write doc define test/parity empty
+read doc query test/parity empty
+read doc query test/parity empty --json
+read doc count test/parity empty
+write doc undefine test/parity empty
+write doc undefine test/parity things extra args
+
+# pr: help and dispatch
+read pr
+read pr -h
+read pr --help
+read pr nope
+read pr nope --help
+read pr nope -h
+read pr nope a b
+read pr ls --help
+read pr ls -h
+read pr watch --help
+read pr wait-ready --help
+read pr wait-ready -h
+read pr status --help
+read pr status a --help
+
+# pr: session required and flag errors
+read pr ls
+read pr status
+read pr record https://github.com/x/y/pull/1
+read pr forget https://github.com/x/y/pull/1
+read pr watch https://github.com/x/y/pull/1
+read pr unwatch https://github.com/x/y/pull/1
+read pr ls --bogus
+read pr ls --session
+read pr ls --json=maybe
+read pr ls a --bogus
+read pr ls --mode nope
+read pr watch --mode NOPE u --session s
+read pr watch --mode "" u --session nope
+read pr record --session s
+read pr record a b --session s
+read pr forget --session s
+read pr watch --session s
+read pr watch a b --session s
+read pr unwatch --session s
+read pr status a b --session s
+read pr record u --session s --seed x
+read pr forget u --session s --seed x
+read pr watch u --session s --reviewer bob
+read pr watch u --session s --mode green --reviewer bob
+read pr watch u --session s --mode FORMAL-review --reviewer "  "
+
+# pr: bad ids and daemon refusals
+read pr ls --session nosuch
+read pr ls --session nosuch --json
+read pr status --session nosuch
+read pr status u --session nosuch --json
+read pr ls --session nosuch --seed s-000000
+read pr ls --session nosuch --seed s-000000 --json
+read pr status --session nosuch --seed s-000000
+write pr record notaurl --session nosuch
+write pr record https://github.com/x/y/pull/1 --session nosuch
+write pr forget notaurl --session nosuch
+write pr forget https://github.com/x/y/pull/1 --session nosuch
+write pr watch notaurl --session nosuch
+write pr watch https://github.com/x/y/pull/1 --session nosuch
+write pr watch https://github.com/x/y/pull/1 --session nosuch --seed s-000000
+write pr watch https://github.com/x/y/pull/1 --session nosuch --mode formal-review --reviewer bob
+write pr unwatch notaurl --session nosuch
+write pr unwatch https://github.com/x/y/pull/1 --session nosuch
+write pr unwatch https://github.com/x/y/pull/1 --session nosuch --seed s-000000
+
+# pr: real sessions from the copied garden
+read pr ls --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4
+read pr ls --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4 --json
+read pr ls --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+read pr ls --session 7027c183-35f8-4f2e-9413-d98be6b77a39 --json
+read pr status --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+read pr status --session 7027c183-35f8-4f2e-9413-d98be6b77a39 --json
+read pr status https://github.com/SolenesInc/vesalius/pull/5 --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+read pr status https://github.com/SolenesInc/vesalius/pull/5 --session 7027c183-35f8-4f2e-9413-d98be6b77a39 --json
+read pr status https://github.com/SolenesInc/attn/pull/1 --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+read pr status --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4
+read pr status --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4 --json
+write pr unwatch https://github.com/SolenesInc/vesalius/pull/5 --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+read pr status --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+write pr watch https://github.com/SolenesInc/vesalius/pull/5 --session 7027c183-35f8-4f2e-9413-d98be6b77a39 --mode codex
+read pr status --session 7027c183-35f8-4f2e-9413-d98be6b77a39
+write pr forget https://github.com/SolenesInc/attn/pull/497 --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4
+read pr ls --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4
+write pr record https://github.com/SolenesInc/attn/pull/497 --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4
+read pr ls --session b08a57f4-97fa-4f2f-bc9d-91593a529eb4

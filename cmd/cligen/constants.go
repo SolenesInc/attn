@@ -8,6 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/ask"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crew"
+	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/inbox"
@@ -72,6 +73,11 @@ func writeConstants(out *strings.Builder) {
 		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
 		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},
 		{"LAUNCH_DESKTOP_KIND_AUTOMATION", string(protocol.LaunchDesktopKindAutomation)},
+		{"DOC_OP_EQ", string(docstore.OpEq)},
+		{"DOC_OP_LT", string(docstore.OpLt)},
+		{"DOC_OP_LTE", string(docstore.OpLte)},
+		{"DOC_OP_GT", string(docstore.OpGt)},
+		{"DOC_OP_GTE", string(docstore.OpGte)},
 	} {
 		fmt.Fprintf(out, "pub const %s: &str = %s;\n", c.rust, rustString(c.value))
 	}
@@ -95,6 +101,10 @@ func writeConstants(out *strings.Builder) {
 		{"MAX_CHECKS_PER_SEED", garden.MaxChecksPerSeed},
 		{"MAX_CHECK_TEXT_CHARS", garden.MaxCheckTextChars},
 		{"MAX_CHECK_SUMMARY_CHARS", garden.MaxCheckSummaryChars},
+		{"DOC_DEFAULT_LIMIT", docstore.DefaultLimit},
+		{"DOC_MAX_LIMIT", docstore.MaxLimit},
+		{"DOC_FIRST_REV", docstore.FirstRev},
+		{"DOC_EXPECT_ABSENT", docstore.ExpectAbsent},
 	} {
 		fmt.Fprintf(out, "pub const %s: i64 = %d;\n", c.rust, c.value)
 	}

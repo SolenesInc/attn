@@ -1,6 +1,6 @@
 use crate::commands::{
-    Run, Stop, automation, callout, codex, conversation, crew, enrollment, instance_env,
-    instance_resolve, print_stdout, seed, send, settings, ticket, top_level, worktree,
+    Run, Stop, automation, callout, codex, conversation, crew, doc, enrollment, instance_env,
+    instance_resolve, pr, print_stdout, seed, send, settings, ticket, top_level, worktree,
 };
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
@@ -59,11 +59,15 @@ fn run_help(_run: &mut Run<'_>, _args: &[String]) -> Result<(), Stop> {
     Ok(())
 }
 
-fn native_command(name: &str, verb: Option<&str>) -> Option<Native> {
+fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<Native> {
     Some(match (name, verb) {
         ("help" | "-h" | "--help", _) => native(run_help, false),
         ("seed", _) => native(seed::run, true),
         ("ticket", _) => native(ticket::run, true),
+        ("doc", Some("watch")) => return None,
+        ("doc", _) => native(doc::run, true),
+        ("pr", Some("wait-ready")) if !pr::asks_for_help(&argv[2..]) => return None,
+        ("pr", _) => native(pr::run, false),
         ("settings", _) => native(settings::run, false),
         ("crew", _) => native(crew::run, true),
         ("automation", _) => Native {
@@ -99,7 +103,7 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
         return hand_off_to_attnd(argv);
     };
     let verb = argv.get(2).map(|verb| verb.to_string_lossy().into_owned());
-    let command = native_command(&name, verb.as_deref());
+    let command = native_command(&name, verb.as_deref(), &argv);
     if command.is_none() && top_level::attnd_owns(&name) {
         return hand_off_to_attnd(argv);
     }

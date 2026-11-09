@@ -51,6 +51,11 @@ pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
 pub const CREW_KEY_REF_PREFIX: &str = "member:";
 pub const AGENT_MSG_STATUS_QUEUED: &str = "queued";
 pub const LAUNCH_DESKTOP_KIND_AUTOMATION: &str = "automation";
+pub const DOC_OP_EQ: &str = "eq";
+pub const DOC_OP_LT: &str = "lt";
+pub const DOC_OP_LTE: &str = "lte";
+pub const DOC_OP_GT: &str = "gt";
+pub const DOC_OP_GTE: &str = "gte";
 
 pub const MAX_SOCKET_FRAME_BYTES: i64 = 8388608;
 pub const AGENT_MESSAGE_MAX_CHARS: i64 = 32768;
@@ -70,6 +75,10 @@ pub const MAX_NOTE_BYTES: i64 = 32768;
 pub const MAX_CHECKS_PER_SEED: i64 = 200;
 pub const MAX_CHECK_TEXT_CHARS: i64 = 2000;
 pub const MAX_CHECK_SUMMARY_CHARS: i64 = 400;
+pub const DOC_DEFAULT_LIMIT: i64 = 100;
+pub const DOC_MAX_LIMIT: i64 = 1000;
+pub const DOC_FIRST_REV: i64 = 1;
+pub const DOC_EXPECT_ABSENT: i64 = 0;
 
 pub const LINKABLE_KINDS: &[&str] = &["blocks", "part-of", "discovered-from"];
 pub const ROUTING_OVERRIDE_ENV: &[&str] = &["ATTN_DATA_DIR", "ATTN_HARNESS_DATA_DIR", "ATTN_HARNESS_NOTEBOOK_ROOT", "ATTN_SOCKET_PATH", "ATTN_DB_PATH", "ATTN_CONFIG_PATH", "ATTN_PLUGIN_DIR", "ATTN_WS_PORT"];

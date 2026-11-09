@@ -181,19 +181,8 @@ func runPRCommand() {
 }
 
 func executePRCommand(args []string, stdout, stderr io.Writer) int {
-	if (len(args) == 1 && isHelpArg(args[0])) || (len(args) == 2 && isHelpArg(args[1])) {
-		writePRHelp(stdout)
-		return 0
-	}
-	if len(args) > 0 {
-		switch args[0] {
-		case "record", "forget", "ls", "watch", "unwatch", "status":
-			setCommandPath("pr " + args[0])
-			return executeSessionPRCommand(args[0], args[1:], stdout, stderr)
-		}
-	}
 	if len(args) == 0 || args[0] != "wait-ready" {
-		writePRHelp(stderr)
+		fmt.Fprintln(stderr, "attnd pr: only wait-ready runs here; use attn pr for every other command")
 		return prWaitExitUsage
 	}
 	setCommandPath("pr wait-ready")
@@ -515,43 +504,3 @@ func parseRepoFlag(repo string) (host, owner, name string, err error) {
 }
 
 func isHelpArg(arg string) bool { return arg == "-h" || arg == "--help" }
-
-func writePRHelp(w io.Writer) {
-	fmt.Fprint(w, `usage: attn pr <command>
-
-commands:
-  record <url> [--session <id>]                               record a pull request opened by a session
-  ls [--session <id>] [--seed <id>] [--json]                  list a session's pull requests or a seed's watches, with status
-  forget <url> [--session <id>]                               stop recording a pull request
-  watch <url> [--session <id>] [--seed <id>] [--mode <mode>]  durably watch readiness and feedback
-  unwatch <url> [--session <id>] [--seed <id>]                stop a durable watch
-  status [<url>] [--session <id>] [--seed <id>] [--json]      show recorded watch/readiness state
-  wait-ready <number-or-url> [options]                        wait for the next actionable update
-
---seed <id> addresses a watch to a seed instead of the session. Updates go to
-whoever tends the seed when they arrive, so a handover moves the watch with no
-new watch. ls, status and unwatch with --seed act on the seed's watches. watch
-refuses an unknown or closed seed. Harvesting or withering the seed stops its
-watches and clears their unread updates.
-
-watch reports state changes (ready, changes requested, failed checks, merged,
-closed), feedback (comments, review comments, review bodies, reopened review
-threads) and monitoring outages. Because agents post as the user, it skips the
-feedback the user's GitHub account wrote. Feedback by others, including the
-author of a pull request under review, and state changes still reach the agent.
-To have watch deliver the user's feedback too, the user runs:
-  attn settings set pull_requests.own_comments ring
-wait-ready does not skip the user's feedback; --ignore-author skips a login.
-
-wait-ready options:
-  --repo [host/]owner/repository  required when the target is a number
-  --mode green|codex|formal-review
-  --reviewer login                optional only with formal-review
-  --timeout duration              default 30m
-  --interval duration             default 20s; Codex deadlines wake independently
-  --since RFC3339                 report feedback after this time instead of resuming
-  --reset                         baseline feedback from the current state
-  --ignore-author login           repeatable
-  --json                          emit one machine-readable result
-`)
-}

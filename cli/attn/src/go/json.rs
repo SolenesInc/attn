@@ -74,6 +74,43 @@ fn push_newline(out: &mut Vec<u8>, depth: usize) {
     }
 }
 
+pub fn compact_escaped(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    for character in raw.chars() {
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_string = false;
+            }
+        } else if matches!(character, ' ' | '\t' | '\r' | '\n') {
+            continue;
+        } else if character == '"' {
+            in_string = true;
+        }
+        match html_escape(character) {
+            Some(replacement) => out.push_str(replacement),
+            None => out.push(character),
+        }
+    }
+    out
+}
+
+const fn html_escape(character: char) -> Option<&'static str> {
+    match character {
+        '<' => Some("\\u003c"),
+        '>' => Some("\\u003e"),
+        '&' => Some("\\u0026"),
+        '\u{2028}' => Some("\\u2028"),
+        '\u{2029}' => Some("\\u2029"),
+        _ => None,
+    }
+}
+
 pub fn encode<T: Serialize + ?Sized>(value: &T) -> serde_json::Result<Vec<u8>> {
     let mut out = Vec::new();
     let mut serializer = serde_json::Serializer::with_formatter(&mut out, GoEscapes);
@@ -91,13 +128,8 @@ impl Formatter for GoEscapes {
     ) -> io::Result<()> {
         let mut clean_start = 0;
         for (index, character) in fragment.char_indices() {
-            let replacement = match character {
-                '<' => "\\u003c",
-                '>' => "\\u003e",
-                '&' => "\\u0026",
-                '\u{2028}' => "\\u2028",
-                '\u{2029}' => "\\u2029",
-                _ => continue,
+            let Some(replacement) = html_escape(character) else {
+                continue;
             };
             writer.write_all(&fragment.as_bytes()[clean_start..index])?;
             writer.write_all(replacement.as_bytes())?;
