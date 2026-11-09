@@ -293,6 +293,7 @@ func TestAUserSteeringARunTheAgentStartedKeepsItsStartCause(t *testing.T) {
 			app := w.App()
 			setAnalyticsEnabled(app, "true")
 			session, agent, idle := claudeAtIdle(w, app)
+			w.awaitTimer(daemon.ClaudeModPollHoldTimer)
 			app.TypeLine(session, "")
 			screenSnapshot(app, session)
 

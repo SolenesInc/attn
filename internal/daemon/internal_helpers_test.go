@@ -20,6 +20,7 @@ func NewForTesting(socketPath string) *Daemon {
 	pidPath := filepath.Join(dataRoot, "attn.pid")
 	d := &Daemon{
 		recentFileStat:      os.Stat,
+		noAgentSockets:      true,
 		notebookSyncWatch:   true,
 		rootWatch:           openRootWatch,
 		clock:               stepclock.Process(),

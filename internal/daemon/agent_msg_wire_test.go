@@ -13,12 +13,14 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
+	recorded := w.PauseAt(pausepoint.InboxRingRecorded)
 	app, cli := w.App(), w.Client()
 	recipient, agent, _ := mailAgentAtWork(w, app, "shop", "rebase onto main")
 	panes := spawnPanes(w, app, w.Path("sender"), w.Path("bystander"))
@@ -44,6 +46,8 @@ func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T)
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) || strings.Contains(got, "rebase again") {
 		t.Fatalf("once its turn ended the agent was prompted with %q, want only the inbox doorbell", got)
 	}
+	recorded.Await()
+	recorded.Release()
 	read, err := cli.AgentInbox(sent.MessageID, protocol.SessionID(recipient))
 	if err != nil || read.Content != "when you surface, rebase again" {
 		t.Fatalf("the rung recipient reads its message = %+v, %v", read, err)

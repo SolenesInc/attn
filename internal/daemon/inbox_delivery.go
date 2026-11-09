@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
@@ -346,6 +347,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	placement := d.placeDelivery(context.Background(), holder.ID, pending.input)
 	if placement.Stage == sessionmonitor.Placed {
 		readAt, err := d.store.RingInbox(a, finishingWake, paste.typed, holder.ID, paste.notified, pending.at)
+		pausepoint.Done(pausepoint.InboxRingRecorded, err)
 		if err != nil {
 			return receipt, err
 		}

@@ -57,6 +57,7 @@ const (
 	ClaudeModReturnWaits           = "claude-mod-return-waits"
 	ClaudeModEnqueuing             = "claude-mod-enqueuing"
 	RingPlacementAnswering         = "ring-placement-answering"
+	InboxRingRecorded              = "inbox-ring-recorded"
 	TenderDirectoryInspecting      = "tender-directory-inspecting"
 	SessionInputLaneContended      = "session-input-lane-contended"
 	CodexReplyDelivering           = "codex-reply-delivering"
