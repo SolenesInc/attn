@@ -142,6 +142,7 @@ func TestClosedCrewDaysKeepTheirTranscripts(t *testing.T) {
 			s.Attn("crew", "wake", "trellis", "--json").JSON(t, &day)
 			run := s.Launched(string(day.SessionID))
 			run.Prompted()
+			run.Reply("Ready for the day. <!-- attn:state=idle -->")
 			converse(app, run, string(day.SessionID), "Remember the day's decision.", "Keep the reasons beside the decision.")
 			var handoff protocol.CrewHandoffResult
 			closed := s.Run(testworld.Invocation{Session: string(day.SessionID), Args: []string{"handoff", "-m", "Dear successor, keep the reasons.", "--json"}})

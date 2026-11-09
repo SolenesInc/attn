@@ -99,7 +99,8 @@ func TestALaunchOntoAMissingDesktopDropsTheAnchorAndRecreatesOnlyNumberedTargets
 		t.Run(fmt.Sprintf("numbered=%t", numbered), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app := w.App()
-			_, current, sourcePane := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+			source, current, sourcePane := w.RequestSpawn(app, fakeagent.Codex, w.Path("source"))
+			w.Launched(string(source.ID))
 			target, want := "desktop-missing", current
 			if numbered {
 				target = profiles.NumberedDesktopID(app.SelectedProfile(), 7)
@@ -111,6 +112,7 @@ func TestALaunchOntoAMissingDesktopDropsTheAnchorAndRecreatesOnlyNumberedTargets
 			if !spawned.Success || desktopID != want {
 				t.Fatalf("spawn = %+v on %s; want success on %s", spawned, desktopID, want)
 			}
+			w.Launched(string(spawned.ID))
 			arrangement := viewProfile(t, w, app.SelectedProfile())
 			if arrangement.profile.CurrentDesktopID != current {
 				t.Errorf("current desktop = %s; want %s", arrangement.profile.CurrentDesktopID, current)

@@ -64,7 +64,7 @@ async function paletteTitles(daemon: ScriptedDaemon, query: string): Promise<str
 const lowerStages = { latest_version: '0.164.0', stale_sessions: ['fix-auth', 'docs-sweep'] };
 
 describe('the Codex banner', () => {
-  it('shows nothing while Shared Codex is off or everything runs the installed Codex', async () => {
+  it('shows nothing without shared Codex state or while everything runs the installed Codex', async () => {
     const { daemon } = await renderCodex();
     expect(banner()).toBeNull();
     await change(daemon, codex());

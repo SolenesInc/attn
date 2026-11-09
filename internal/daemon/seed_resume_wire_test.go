@@ -30,6 +30,7 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 		t.Fatalf("resuming while %s runs = %+v, want it focused as already running", session, running)
 	}
 	first.Prompted()
+	first.Reply("on it")
 	app.TypeLine(string(session), "still you?")
 	if got := first.Prompted(); got != "still you?" {
 		t.Fatalf("after the resume the running codex received %q, want the next input", got)
@@ -43,7 +44,7 @@ func TestResumingASeedPreservesItsConversationAndProjectAssignment(t *testing.T)
 
 	resumed := seedResumeRequest(app, seed)
 	if !resumed.Success || protocol.Deref(resumed.SessionID) != session || protocol.Deref(resumed.AlreadyRunning) {
-		t.Fatalf("resuming the closed tender = %+v, want %s relaunched", resumed, session)
+		t.Fatalf("resuming the closed tender failed with %q (%+v), want %s relaunched", protocol.Deref(resumed.Error), resumed, session)
 	}
 	seedResumeContinues(t, w, first, string(session))
 	if profile := protocol.Deref(resumed.ProfileID); profile != protocol.Deref(delegated.ProfileID) {
@@ -166,6 +167,7 @@ func seedResumeDelegate(t *testing.T, w *world, agent fakeagent.Harness, dir str
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	request := brief(cwd, "Investigate the tracked task.")
 	request.Agent = protocol.Ptr(string(agent))
 	delegated, err := w.Client().Delegate(request)

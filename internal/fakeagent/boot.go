@@ -36,10 +36,13 @@ func (k *Kit) boot(params json.RawMessage) (any, error) {
 	if err := json.Unmarshal(params, &booting); err != nil {
 		return nil, err
 	}
-	k.awaitBoot()
+	k.awaitBoot(booting.Role)
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	result := bootingResult{}
+	if booting.Role == roleCodexServer {
+		return result, nil
+	}
 	if k.nextBootResult != nil {
 		result, k.nextBootResult = *k.nextBootResult, nil
 	}

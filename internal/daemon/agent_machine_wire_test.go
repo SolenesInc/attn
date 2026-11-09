@@ -73,14 +73,17 @@ func TestAgentHooksReachTheLaunchingDaemonAndDefaultExecutableComesFromPath(t *t
 				w.start()
 				app := w.App()
 				setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
-				setSetting(t, app, "codex_shared_enabled", "false")
 				session := w.Spawn(app, agent, w.Path("shop"))
 				run := w.Launched(session)
-				if run.Argv[0] != string(agent) {
+				if filepath.Base(run.Argv[0]) != string(agent) {
 					t.Errorf("executable = %q, want the harness on this daemon's PATH", run.Argv[0])
 				}
-				if !strings.Contains(strings.Join(run.Argv, "\n"), w.Socket) {
-					t.Errorf("hooks %q do not name the launching daemon's socket %s", run.Argv, w.Socket)
+				hooks := run.Argv
+				if agent == fakeagent.Codex {
+					hooks = w.CodexServer().Argv()
+				}
+				if !strings.Contains(strings.Join(hooks, "\n"), w.Socket) {
+					t.Errorf("hooks %q do not name the launching daemon's socket %s", hooks, w.Socket)
 				}
 				app.TypeLine(session, "price the cart")
 				run.Prompted()

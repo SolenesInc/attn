@@ -82,7 +82,7 @@ the ones you changed:
   With a worktree, **Run now** asks for the pull request's URL.
 - **Local clones**, for a worktree. Repositories to fetch from one of your
   clones.
-- **Executable override**. A specific binary of the harness.
+- **Executable override**. A specific binary of the harness, for harnesses other than Codex. Every Codex session uses the profile's shared app-server, so set `codex_executable` instead.
 - **Show definition**, on a saved automation. The read-only YAML, with **Copy**.
 
 ## Runs
@@ -188,7 +188,7 @@ Only when you already do. A Codex run starts when either of these is true:
 
 A review run in Attn's own copy of a repository passes once you have worked in your own checkout of it.
 
-With [shared Codex](using-shared-codex.md#folder-trust), Attn answers Codex's trust question for the run. With a plain Codex, Attn adds the repository as trusted to Codex's `config.toml` before the run starts, as choosing "Trust and continue" would, and notes it in the daemon log. Remove that entry from `config.toml` to take the trust back.
+Attn answers Codex's trust question for the run, as [shared Codex](using-shared-codex.md#folder-trust) describes, and leaves Codex's `config.toml` alone.
 
 In any other folder, or in a folder you marked untrusted in Codex, the run fails, says why, and Codex does not start. For a folder Codex has never been asked about, choose **Trust folder in Codex** on the failed automation in the drawer, or open Codex there yourself, and trust the folder, or work there with any agent. The next run then starts. A folder marked untrusted stays that way until you change its entry in `config.toml`.
 </details>

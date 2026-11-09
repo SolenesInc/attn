@@ -18,7 +18,6 @@ import (
 func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -45,7 +44,6 @@ func TestNewInASharedCodexTerminalLeavesTheSessionItLeftOpenAndHidden(t *testing
 func TestASharedCodexTerminalShowsTheSessionOfEachConversationItMovesToBeforeAnyPrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	tax := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -104,7 +102,6 @@ func TestASharedCodexTerminalShowsTheSessionOfEachConversationItMovesToBeforeAny
 func TestASharedCodexTerminalThatAgentsTakesBackToAnUnpromptedNewConversationShowsItsSessionAtThePrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	mark := len(app.Log())
@@ -139,7 +136,6 @@ func TestASharedCodexTerminalThatAgentsTakesBackToAnUnpromptedNewConversationSho
 func TestASharedCodexSubagentsToolsResolveTheSessionThatStartedIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	parent, codex, _ := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
 	subagent := server.SpawnSubagent(codex.ConversationID)
@@ -152,7 +148,6 @@ func TestASharedCodexSubagentsToolsResolveTheSessionThatStartedIt(t *testing.T) 
 func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationThatStartedIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	subagent := w.CodexServer().SpawnSubagent(codex.ConversationID)
 
@@ -189,7 +184,6 @@ func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationTha
 func TestANewSharedCodexTileThatResumesBeforeItsFirstPromptLeavesNoEmptySessionAndCanGoBack(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 	fresh := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	freshCodex := w.Launched(fresh)
@@ -224,7 +218,6 @@ func TestANewSharedCodexTileThatResumesBeforeItsFirstPromptLeavesNoEmptySessionA
 func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	hidden := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -247,7 +240,6 @@ func TestASharedCodexToolSpeaksAsItsConversationsSessionAfterItsTerminalMovesOn(
 func TestClosingATileWhoseCodexMovedOnKeepsTheSessionItShowedHiddenAndWaiting(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	typeInto(app, terminal, "/new\r")
@@ -279,7 +271,6 @@ func TestClosingATileWhoseCodexMovedOnKeepsTheSessionItShowedHiddenAndWaiting(t 
 func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
 	conversation := first.ConversationID
 	other := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -355,7 +346,6 @@ func TestTwoTerminalsShowOneSharedCodexSessionUntilTheLastTileClosesAndArchivesI
 func TestOneSharedTerminalsExitLeavesItsSessionUsableInTheOther(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
 	other := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	second := w.Launched(other)
@@ -394,7 +384,6 @@ func TestClosingADesktopEndsOnlyItsTileOfASharedCodexSessionAnotherDesktopShows(
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	profile := app.SelectedProfile()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
 	conversation := first.ConversationID
 	elsewhere := createDesktop(app, profile)
@@ -425,7 +414,6 @@ func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t 
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	profile := app.SelectedProfile()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	cli := w.Client()
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 	chief := string(wakeCrew(t, cli, "chief", "").SessionID)
@@ -460,7 +448,6 @@ func TestClosingADesktopRefusesToEndTheChiefOnlyWhereItHoldsTheChiefsLastTile(t 
 func TestInputReachesAHiddenSharedCodexSessionWithoutTouchingAnotherTerminalsDraft(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -505,7 +492,6 @@ func TestShowingAHiddenSharedCodexSessionReplaysTheApprovalItWaitsOn(t *testing.
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	setSetting(t, app, "auto_approve_enabled", "false")
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -538,7 +524,6 @@ func TestShowingAHiddenSharedCodexSessionReplaysTheApprovalItWaitsOn(t *testing.
 func TestASharedCodexSessionAndItsConversationShareOneName(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 
@@ -554,35 +539,9 @@ func TestASharedCodexSessionAndItsConversationShareOneName(t *testing.T) {
 	w.CodexServer().AwaitName(conversation, "Tax lock")
 }
 
-func TestAPlainCodexThatResumesAHiddenSharedConversationShowsThatSessionAsPlain(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
-	conversation := codex.ConversationID
-	moveOn(t, app, codex, terminal, "/new", "add a discount field")
-	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
-	setSetting(t, app, "codex_shared_enabled", "false")
-
-	billing := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	plain := w.Launched(billing)
-	plainTerminal := app.Terminal(billing)
-	moveOn(t, app, plain, plainTerminal, "/resume "+conversation, "carry on")
-	if shown := sessionShownIn(t, w, app, plainTerminal); shown != checkout {
-		t.Fatalf("/resume %s in a plain Codex shows %s, want %s", conversation, shown, checkout)
-	}
-	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return !protocol.Deref(s.Hidden) })
-
-	moveOn(t, app, plain, plainTerminal, "/new", "write the notes")
-	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == checkout
-	})
-}
-
 func TestAConversationResumedInAnotherProfileIsThatProfilesOwnSharedCodexSession(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 
@@ -619,7 +578,6 @@ func TestAResumedSharedCodexSessionNamesItsConversationAgainAfterAnotherProfileR
 func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	conversation := sideCodex.ConversationID
 	renamed := testworld.Request(sideApp, protocol.RenameSessionMessage{Cmd: protocol.CmdRenameSession, SessionID: protocol.SessionID(elsewhere), Label: "Release plan"},
@@ -673,7 +631,6 @@ func resumeRenamedSharedCodexSession(t *testing.T, way string) {
 func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	side, sideApp, elsewhere, sideCodex := sideCodexIdle(t, w, app)
 	before := queriedSession(t, w.Client(), elsewhere).Usage.TotalTokens
 	conversation := sideCodex.ConversationID
@@ -693,60 +650,27 @@ func TestAConversationAnotherProfileResumesCountsItsTurnsOnlyThere(t *testing.T)
 	}
 }
 
-func TestAClosedPlainCodexSessionResumedInASharedTerminalComesBackThereAsShared(t *testing.T) {
+func TestAClosedCodexSessionResumedInASharedTerminalComesBackThereAsShared(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	plain, plainCodex, _ := sharedCodexWaiting(t, w, app)
-	conversation := plainCodex.ConversationID
-	if closed := closeFromApp(app, plain); !closed.Accepted {
-		t.Fatalf("close %s: %s", plain, protocol.Deref(closed.Error))
+	earlier, earlierCodex, _ := sharedCodexWaiting(t, w, app)
+	conversation := earlierCodex.ConversationID
+	if closed := closeFromApp(app, earlier); !closed.Accepted {
+		t.Fatalf("close %s: %s", earlier, protocol.Deref(closed.Error))
 	}
-	setSetting(t, app, "codex_shared_enabled", "true")
 
 	_, codex, terminal := sharedCodexWaiting(t, w, app)
 	moveOn(t, app, codex, terminal, "/resume "+conversation, "carry on")
-	if resumed := sessionShownIn(t, w, app, terminal); resumed != plain {
-		t.Fatalf("/resume %s in a shared terminal shows %s, want %s back", conversation, resumed, plain)
+	if resumed := sessionShownIn(t, w, app, terminal); resumed != earlier {
+		t.Fatalf("/resume %s in a shared terminal shows %s, want %s back", conversation, resumed, earlier)
 	}
 	moveOn(t, app, codex, terminal, "/new", "write the notes")
-	testworld.AwaitSession(app, plain, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
-}
-
-func TestAClosedSharedCodexSessionResumesFromTheLedgerAsPlainCodexWhileSharedCodexIsOff(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	checkout, codex, _ := sharedCodexWaiting(t, w, app)
-	conversation := codex.ConversationID
-	if closed := closeFromApp(app, checkout); !closed.Accepted {
-		t.Fatalf("close %s: %s", checkout, protocol.Deref(closed.Error))
-	}
-	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == checkout
-	})
-	setSetting(t, app, "codex_shared_enabled", "false")
-
-	if reopened := reopenOverTheWebSocket(app, checkout); !reopened.Success {
-		t.Fatalf("resume %s from the ledger: %s", checkout, protocol.Deref(reopened.Error))
-	}
-	resumed := w.Launched(checkout)
-	if !resumed.Resumed || resumed.ConversationID != conversation {
-		t.Fatalf("the resumed Codex shows %s (resumed=%v), want conversation %s", resumed.ConversationID, resumed.Resumed, conversation)
-	}
-	if archivedInCodex(t, w, conversation) {
-		t.Errorf("conversation %s is still archived after its session resumed", conversation)
-	}
-	w.CodexServer().AwaitStopped()
-	moveOn(t, app, resumed, app.Terminal(checkout), "/new", "write the notes")
-	testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool {
-		return e.Session != nil && string(e.Session.ID) == checkout
-	})
+	testworld.AwaitSession(app, earlier, func(s protocol.Session) bool { return protocol.Deref(s.Hidden) })
 }
 
 func TestClosingASharedCodexSessionFromTheCLIArchivesItsConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
 	if err := w.Client().Unregister(protocol.SessionID(checkout)); err != nil {
@@ -764,7 +688,6 @@ func TestClosingASharedCodexSessionFromTheCLIArchivesItsConversation(t *testing.
 func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	side, _, _, sideCodex := sideCodexIdle(t, w, app)
 
 	refused, _, _ := w.RequestSpawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
@@ -778,7 +701,6 @@ func TestASharedLaunchRefusesAConversationAnotherProfilesServerHolds(t *testing.
 func TestAHiddenSharedCodexQuestionWaitsForTheUserUntilItsAppServerExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(checkout)
 	terminal := app.Terminal(checkout)
@@ -812,7 +734,6 @@ func TestAHiddenSharedCodexQuestionWaitsForTheUserUntilItsAppServerExits(t *test
 func TestAHiddenSharedCodexSessionWaitingForTheUserKeepsWaitingThroughItsAppServersExit(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -845,7 +766,6 @@ func TestAHiddenSharedCodexSessionWaitingForTheUserKeepsWaitingThroughItsAppServ
 func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	cli := w.Client()
 	setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("codex")})
 	chief := string(wakeCrew(t, cli, "chief", "").SessionID)
@@ -867,7 +787,6 @@ func TestNewInASharedCodexChiefTerminalStartsAPlainConversation(t *testing.T) {
 func TestAHiddenSharedCodexConversationReloadsWithItsSessionsContextCap(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	setSetting(t, app, "default_context_window_cap_codex", "200000")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
@@ -887,7 +806,6 @@ func TestAHiddenSharedCodexConversationReloadsWithItsSessionsContextCap(t *testi
 func TestASharedCodexServerThatOutlivesAttnsConnectionKeepsReportingToIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 
 	w.CodexServer().DropControl()
@@ -899,7 +817,6 @@ func TestASharedCodexServerThatOutlivesAttnsConnectionKeepsReportingToIt(t *test
 func TestAHiddenSharedCodexTurnEndsWhenItsAppServerExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	conversation := codex.ConversationID
 	moveOn(t, app, codex, terminal, "/new", "add a discount field")
@@ -1015,7 +932,6 @@ func archivedInCodex(t *testing.T, w *world, conversation string) bool {
 func TestNewInASharedCodexTerminalKeepsTheSessionsContextCap(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, _, terminal := sharedCodexWaiting(t, w, app)
 	pinned := testworld.Request(app, protocol.SetSessionContextWindowCapMessage{Cmd: protocol.CmdSetSessionContextWindowCap, SessionID: protocol.SessionID(checkout), Cap: 300000},
 		protocol.EventSessionContextWindowCapResult, func(r protocol.SessionContextWindowCapResultMessage) bool { return string(r.SessionID) == checkout })
@@ -1033,7 +949,6 @@ func TestNewInASharedCodexTerminalKeepsTheSessionsContextCap(t *testing.T) {
 func TestAClosedSharedCodexSubagentStopsResolvingItsParentEvenAfterALateHook(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	parent, codex, shownTerminal := sharedCodexWaiting(t, w, app)
 	server := w.CodexServer()
 	child := server.SpawnSubagent(codex.ConversationID)

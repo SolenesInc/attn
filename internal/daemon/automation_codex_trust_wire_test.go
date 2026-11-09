@@ -15,18 +15,15 @@ import (
 
 func TestACodexAutomationRefusesAFolderTheUserIsNotKnownToTrust(t *testing.T) {
 	for _, c := range []struct {
-		name                 string
-		shared, otherProfile bool
+		name         string
+		otherProfile bool
 	}{
-		{name: "plain Codex in a repository an agent worked in from another profile", otherProfile: true},
-		{name: "shared Codex in a repository nobody worked in", shared: true},
+		{name: "a repository an agent worked in from another profile", otherProfile: true},
+		{name: "a repository nobody worked in"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 			app := w.App()
-			if c.shared {
-				setSetting(t, app, "codex_shared_enabled", "true")
-			}
 			repo := newRepo(t, "shop")
 			folder := filepath.Join(repo, "pkg2")
 			if err := os.MkdirAll(folder, 0o755); err != nil {
@@ -74,7 +71,7 @@ func requireTrustFix(t *testing.T, app *testworld.Peer, agent, directory string)
 	}
 }
 
-func TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts(t *testing.T) {
+func TestACodexAutomationStartsInsideARepositoryTheUserTrustsAndLeavesCodexsConfigAlone(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	repo, worktree := newWorktree(t, "shop", "nightly")
@@ -86,18 +83,17 @@ func TestAPlainCodexAutomationStartsInsideARepositoryTheUserTrusts(t *testing.T)
 	if !answered.Success || answered.Run == nil || protocol.Deref(answered.Run.SessionID) == "" {
 		t.Fatalf("the run answered %s, want it started", describeRunAnswer(answered))
 	}
-	if got := w.CodexFolderTrust(repo); got != "trusted" {
-		t.Errorf("Codex saves the repository %s as %q, want trusted before Codex starts", repo, got)
-	}
-	if got := w.CodexFolderTrust(worktree); got != "" {
-		t.Errorf("Codex saves %s as %q, want the trust on its repository alone", worktree, got)
+	for _, dir := range []string{repo, worktree} {
+		if got := w.CodexFolderTrust(dir); got != "" {
+			t.Errorf("Codex saves %s as %q, want its config left alone", dir, got)
+		}
 	}
 	if got := w.Launched(string(protocol.Deref(answered.Run.SessionID))).Prompted(); !strings.Contains(got, "Report the flaky tests.") {
 		t.Errorf("codex received %q, want the automation's prompt", got)
 	}
 }
 
-func TestAPlainCodexAutomationStartsInARepositoryAPluginAgentStartedAConversationIn(t *testing.T) {
+func TestACodexAutomationStartsInARepositoryAPluginAgentStartedAConversationIn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	driver := connectDriver(t, w, "snipe-plugin", "snipe", map[string]bool{"state_reporting": true})
@@ -117,9 +113,7 @@ func TestAPlainCodexAutomationStartsInARepositoryAPluginAgentStartedAConversatio
 	if !answered.Success || answered.Run == nil || protocol.Deref(answered.Run.SessionID) == "" {
 		t.Fatalf("the run answered %s, want it started", describeRunAnswer(answered))
 	}
-	if got := w.CodexFolderTrust(repo); got != "trusted" {
-		t.Errorf("Codex saves the repository %s as %q, want trusted before Codex starts", repo, got)
-	}
+	w.Launched(string(protocol.Deref(answered.Run.SessionID)))
 }
 
 func manualCodexAutomationIn(folder string) string {

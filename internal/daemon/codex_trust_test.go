@@ -47,18 +47,17 @@ func TestAnUnattendedCodexRunTrustsOnlyAFolderTheUserIsKnownToTrust(t *testing.T
 		folder  string
 		worked  []string
 		saved   map[string]string
-		add     string
 		refused bool
 	}{
-		{name: "the repository an agent worked in", folder: "shop", worked: []string{"shop"}, add: "shop"},
-		{name: "a worktree of a repository an agent worked in", folder: "shop--nightly", worked: []string{"shop"}, add: "shop"},
-		{name: "the repository of a worktree an agent worked in", folder: "shop", worked: []string{"shop--nightly"}, add: "shop"},
-		{name: "a subfolder of a repository an agent worked in", folder: "shop/pkg2", worked: []string{"shop"}, add: "shop"},
-		{name: "a subfolder beside the one an agent worked in", folder: "shop/pkg2", worked: []string{"shop/pkg1"}, add: "shop"},
-		{name: "another clone of a repository an agent worked in", folder: "shop-review", worked: []string{"shop"}, add: "shop-review"},
+		{name: "the repository an agent worked in", folder: "shop", worked: []string{"shop"}},
+		{name: "a worktree of a repository an agent worked in", folder: "shop--nightly", worked: []string{"shop"}},
+		{name: "the repository of a worktree an agent worked in", folder: "shop", worked: []string{"shop--nightly"}},
+		{name: "a subfolder of a repository an agent worked in", folder: "shop/pkg2", worked: []string{"shop"}},
+		{name: "a subfolder beside the one an agent worked in", folder: "shop/pkg2", worked: []string{"shop/pkg1"}},
+		{name: "another clone of a repository an agent worked in", folder: "shop-review", worked: []string{"shop"}},
 		{name: "a clone of another repository whose origin ends the same way", folder: "other-shop", worked: []string{"team-shop"}, refused: true},
 		{name: "a repository nobody worked in", folder: "shop", worked: []string{"warehouse", "notes"}, refused: true},
-		{name: "a folder outside any repository an agent worked in", folder: "notes", worked: []string{"notes"}, add: "notes"},
+		{name: "a folder outside any repository an agent worked in", folder: "notes", worked: []string{"notes"}},
 		{name: "a folder outside any repository nobody worked in", folder: "notes", worked: []string{"shop"}, refused: true},
 		{name: "a folder Codex trusts", folder: "notes", saved: map[string]string{"notes": "trusted"}},
 		{name: "a subfolder of a repository Codex trusts", folder: "shop/pkg2", saved: map[string]string{"shop": "trusted"}},
@@ -81,22 +80,15 @@ func TestAnUnattendedCodexRunTrustsOnlyAFolderTheUserIsKnownToTrust(t *testing.T
 			}
 			folder := filepath.Join(root, c.folder)
 
-			add, err := unattendedCodexTrustToAdd(folder, config, worked, originOf)
+			err = checkUnattendedCodexFolder(folder, config, worked, originOf)
 			if c.refused {
 				if err == nil || !strings.Contains(err.Error(), folder) {
-					t.Fatalf("the run was allowed (adding trust to %q, error %v), want it refused with a reason naming %s", add, err, folder)
+					t.Fatalf("the run was allowed (error %v), want it refused with a reason naming %s", err, folder)
 				}
 				return
 			}
 			if err != nil {
 				t.Fatalf("the run was refused: %v", err)
-			}
-			want := ""
-			if c.add != "" {
-				want = filepath.Join(root, c.add)
-			}
-			if add != want {
-				t.Errorf("the run adds trust to %q, want %q", add, want)
 			}
 		})
 	}

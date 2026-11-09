@@ -64,12 +64,16 @@ func TestTheMessageWindowKeepsTheNewestAnswersWithinItsBudgetAndSaysItDroppedSom
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
-	app.TypeLine(session, "write the release notes")
-	codex.Prompted()
+	answer := func(text string) {
+		t.Helper()
+		app.TypeLine(session, "write the release notes")
+		codex.Prompted()
+		codex.Reply(text)
+	}
 
-	codex.Reply("A normal answer.")
-	codex.Reply(strings.Repeat("x", 64*1024+1))
-	codex.Reply("An answer after the oversize one.")
+	answer("A normal answer.")
+	answer(strings.Repeat("x", 64*1024+1))
+	answer("An answer after the oversize one.")
 	oversize := messageWindowShowing(app, session, "An answer after the oversize one.")
 	if got := messageMarkdowns(oversize); !slices.Equal(got, []string{"A normal answer.", "An answer after the oversize one."}) || !oversize.Truncated {
 		t.Fatalf("after an oversize answer the window holds %d answers (truncated %v), want only the one in budget and a truncation", len(got), oversize.Truncated)
@@ -77,9 +81,9 @@ func TestTheMessageWindowKeepsTheNewestAnswersWithinItsBudgetAndSaysItDroppedSom
 
 	var answers []string
 	for i := range 35 {
-		answer := fmt.Sprintf("answer %d", i)
-		codex.Reply(answer)
-		answers = append(answers, answer)
+		numbered := fmt.Sprintf("answer %d", i)
+		answer(numbered)
+		answers = append(answers, numbered)
 	}
 	capped := messageWindowShowing(app, session, answers[len(answers)-1])
 	if got := messageMarkdowns(capped); !slices.Equal(got, answers[len(answers)-32:]) || !capped.Truncated {

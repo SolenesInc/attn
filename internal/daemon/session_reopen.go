@@ -137,9 +137,6 @@ func (d *Daemon) decideReopenPlace(
 	gitView reopenGit,
 ) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution, verdict.Resume, verdict.DirectoryState == directoryMissing)
-	if l := d.linkNamed(verdict.Link); !conversation && l != nil && l.setAsideAtClose(verdict.Resume) {
-		conversation, conversationReason = true, ""
-	}
 	if !hasLaunchIntent {
 		conversation = false
 		conversationReason = fmt.Sprintf("session %s has no saved launch contract, so its exact agent configuration cannot be restored", verdict.SessionID)

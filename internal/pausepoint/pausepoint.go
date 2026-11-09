@@ -28,7 +28,6 @@ const (
 	PtyOutputHeld             = "pty-output-held"
 	PtyStreamRead             = "pty-stream-read"
 	PtySubscriberDrop         = "pty-subscriber-drop"
-	PtyWatchReplay            = "pty-watch-replay"
 	PtyHostWatchAll           = "pty-host-watch-all"
 	PtyWorkerUpgrade          = "pty-worker-upgrade"
 	PtyWaitBlock              = "pty-wait-block"

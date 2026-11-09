@@ -27,6 +27,7 @@ func TestADelegatedWorktreeStartsFromTheExactBaseWhereItWasAsked(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	repo := newRepo(t, "shop")
+	w.SetCodexFolderTrust(repo, "trusted")
 	root := filepath.Dir(repo)
 	base := commitFile(t, repo, "web.txt", "shop\n")
 	runGit(t, repo, "branch", "base")
@@ -163,6 +164,7 @@ func TestADelegationNeverSharesACheckoutWithoutConsent(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	cli := w.Client()
 	repo := newRepo(t, "shop")
+	w.SetCodexFolderTrust(repo, "trusted")
 	shared := filepath.Join(filepath.Dir(repo), "shop--feature-shared")
 	nested := filepath.Join(shared, "nested", "package")
 
@@ -225,6 +227,7 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	repo := newRepo(t, "shop")
+	w.SetCodexFolderTrust(repo, "trusted")
 	reuseMain := &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: "main"}
 	first := delegateCheckoutAt(repo, reuseMain)
 	first.RequestID, first.Label = "first", protocol.Ptr("first")

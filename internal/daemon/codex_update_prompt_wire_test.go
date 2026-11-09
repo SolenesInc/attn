@@ -12,7 +12,6 @@ func TestASharedCodexTerminalOpensPastCodexsOwnUpdatePromptWhenANewerCodexIsOut(
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	app.TypeLine(session, "add a discount field")

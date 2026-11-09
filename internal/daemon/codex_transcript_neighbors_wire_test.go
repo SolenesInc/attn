@@ -44,42 +44,44 @@ func TestCodexSessionsSharingADirectoryEachFollowTheirOwnConversation(t *testing
 }
 
 func TestAMissingBoundTranscriptNeverUsesANeighborsReply(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		cwd := w.Path("shop")
-		makeConversation := func(native string) (string, string) {
-			id := w.Spawn(app, fakeagent.Codex, cwd)
-			path := w.Path(native + ".jsonl")
-			data := fmt.Sprintf(`{"timestamp":"2026-10-18T12:00:00Z","type":"session_meta","payload":{"id":%q,"cwd":%q,"source":"cli"}}
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	cwd := w.Path("shop")
+	makeConversation := func(native string) (string, string) {
+		id := w.Spawn(app, fakeagent.Codex, cwd)
+		w.Launched(id)
+		path := w.Path(native + ".jsonl")
+		data := fmt.Sprintf(`{"timestamp":"2026-10-18T12:00:00Z","type":"session_meta","payload":{"id":%q,"cwd":%q,"source":"cli"}}
 {"timestamp":"2026-10-18T12:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Should I delete everything? <!-- attn:state=waiting_input -->"}]}}
 `, native, cwd)
-			if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-				t.Fatal(err)
-			}
-			if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal(id)), native, path); err != nil {
-				t.Fatal(err)
-			}
-			return id, path
-		}
-		older, oldPath := makeConversation("own-conversation")
-		neighbor, neighborPath := makeConversation("neighbor-conversation")
-		if read, err := cli.SessionTranscript(neighbor, ""); err != nil || len(read.Events) == 0 {
-			t.Fatalf("neighbor fixture is unreadable: %+v %v", read, err)
-		}
-		if err := cli.UpdateState(protocol.TerminalID(w.Terminal(older)), protocol.StateWorking); err != nil {
+		if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Remove(oldPath); err != nil {
+		if err := cli.ObserveAgentConversation(protocol.TerminalID(w.Terminal(id)), native, path); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := cli.SessionTranscript(older, ""); err == nil || !strings.Contains(err.Error(), "transcript_unavailable") {
-			t.Fatalf("missing own transcript resolved to a neighbor: %v", err)
-		}
-		if err := cli.SendStop(protocol.TerminalID(w.Terminal(older)), neighborPath, client.StopFacts{}); err != nil {
-			t.Fatal(err)
-		}
-		w.advance(0)
-		explained := stateExplainOf(t, cli, older)
-		stateExplainShows(t, explained.Observations, stateExplainRow{source: "classifier", claim: protocol.StateUnknown, outcome: "observed", detail: "transcript_parse_error"})
-	})
+		return id, path
+	}
+	older, oldPath := makeConversation("own-conversation")
+	neighbor, neighborPath := makeConversation("neighbor-conversation")
+	if read, err := cli.SessionTranscript(neighbor, ""); err != nil || len(read.Events) == 0 {
+		t.Fatalf("neighbor fixture is unreadable: %+v %v", read, err)
+	}
+	if err := cli.UpdateState(protocol.TerminalID(w.Terminal(older)), protocol.StateWorking); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSession(app, older, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	mark := len(app.Log())
+	if err := os.Remove(oldPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cli.SessionTranscript(older, ""); err == nil || !strings.Contains(err.Error(), "transcript_unavailable") {
+		t.Fatalf("missing own transcript resolved to a neighbor: %v", err)
+	}
+	if err := cli.SendStop(protocol.TerminalID(w.Terminal(older)), neighborPath, client.StopFacts{}); err != nil {
+		t.Fatal(err)
+	}
+	testworld.AwaitSessionSince(app, mark, older, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	explained := stateExplainOf(t, cli, older)
+	stateExplainShows(t, explained.Observations, stateExplainRow{source: "classifier", claim: protocol.StateUnknown, outcome: "observed", detail: "transcript_parse_error"})
 }

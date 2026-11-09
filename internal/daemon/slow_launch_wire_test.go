@@ -15,7 +15,6 @@ import (
 func TestTheAppsOtherCommandsAnswerWhileASpawnStartsItsSharedCodexAppServer(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	cwd := w.Path("shop")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
@@ -70,7 +69,7 @@ func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *
 			w, app, session, _ := stoppedSharedCodexSessionWithNoAppServer(t)
 			desktop, pane := placedPane(t, w, session)
 
-			boot := w.HoldNextBoot()
+			boot := w.HoldNextCodexServerBoot()
 			app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
 			boot.Await()
 			if way == "unregister" {
@@ -105,7 +104,7 @@ func TestClosingASessionAnswersWhileItsResumeWaitsForItsSharedCodexAppServer(t *
 
 func TestReopeningASessionClosedWhileItsResumeWaitedKeepsItsConversationLive(t *testing.T) {
 	w, app, session, conversation := stoppedSharedCodexSessionWithNoAppServer(t)
-	boot := w.HoldNextBoot()
+	boot := w.HoldNextCodexServerBoot()
 	app.Send(protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30})
 	boot.Await()
 	if closed := closeFromApp(app, session); !closed.Accepted {
@@ -138,7 +137,6 @@ func stoppedSharedCodexSessionWithNoAppServer(t *testing.T) (w *world, app *test
 	t.Helper()
 	w = newWorld(t, fakeagent.Codex)
 	app = w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	takeTurn(app, codex, session)
@@ -216,7 +214,6 @@ func revivableSharedCodexAndClaudeSessions(t *testing.T) (w *world, app *testwor
 	t.Helper()
 	w = newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app = w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	codex = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	takeTurn(app, w.Launched(codex), codex)
 	claude = w.Spawn(app, fakeagent.Claude, w.Path("blog"))

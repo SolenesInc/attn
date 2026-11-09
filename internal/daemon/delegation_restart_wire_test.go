@@ -12,6 +12,7 @@ import (
 func TestADelegationInterruptedByARestartFinishesOnItsSessionInTheWorktreeItCreated(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	repo := newRepo(t, "shop")
+	w.SetCodexFolderTrust(repo, "trusted")
 	worktree := filepath.Join(filepath.Dir(repo), "shop--feature-interrupted")
 	request := delegateCheckoutAt(repo, delegateNewWorktree("feature/interrupted", "main"))
 	request.RequestID, request.Label = "interrupted", protocol.Ptr("interrupted")

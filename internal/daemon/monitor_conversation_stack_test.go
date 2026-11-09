@@ -203,9 +203,6 @@ func TestACandidatesTitleAndTurnSurviveItsOutcome(t *testing.T) {
 			owed := s.PauseAt(pausepoint.ConversationCandidateTurn)
 			s.Start()
 			app := s.App()
-			if agentKind == fakeagent.Codex {
-				setSetting(t, app, "codex_shared_enabled", "true")
-			}
 			first := s.Spawn(app, agentKind, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.Label = protocol.Ptr("Original name") })
 			agent := s.Launched(first)
 			app.TypeLine(first, "first prompt")
@@ -301,7 +298,6 @@ func TestAResumedSharedConversationsRunSurvivesItsOutcome(t *testing.T) {
 	outcome := s.PauseEvery(pausepoint.ConversationMoveSaved)
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	first := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	agent := s.Launched(first)
 	app.TypeLine(first, "first conversation")
@@ -356,7 +352,6 @@ func TestReloadingOneSharedTerminalKeepsTheOthersPendingConversation(t *testing.
 	deciding := s.PauseEvery(pausepoint.ConversationDecision)
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	first := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	firstAgent := s.Launched(first)
 	app.TypeLine(first, "first conversation")

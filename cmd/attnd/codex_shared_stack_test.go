@@ -19,7 +19,6 @@ func TestASharedCodexKeepsItsAppServerTerminalAndConversationAcrossADaemonRestar
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	terminal := app.Terminal(session)
 	codex := s.Launched(session)
@@ -74,7 +73,6 @@ func TestASharedCodexKeepsServingWhenLinuxCleansItsSocketLink(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	first := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	firstCodex := s.Launched(first)
 	servers := s.CodexServers()
@@ -110,7 +108,6 @@ func TestASharedCodexSubagentCanReadAndWriteSeedsBeforeAndAfterADaemonRestart(t 
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	parent := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	codex := s.Launched(parent)
 	app.TypeLine(parent, "review the checkout")
@@ -152,7 +149,6 @@ func TestAnApprovalPendingInASharedCodexIsAnsweredAfterADaemonRestart(t *testing
 	s.Start()
 	app := s.App()
 	setSetting(t, app, "auto_approve_enabled", "false")
-	shareCodex(t, app)
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	codex := s.Launched(session)
 	app.TypeLine(session, "run the migration")
@@ -181,7 +177,6 @@ func TestASharedCodexSessionShownInAnotherSessionsTerminalKeepsItsApprovalMode(t
 			s.Start()
 			app := s.App()
 			setSetting(t, app, "auto_approve_enabled", "true")
-			shareCodex(t, app)
 			unguarded := s.Spawn(app, fakeagent.Codex, s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
 			yolo := s.Launched(unguarded)
 			app.TypeLine(unguarded, "find the flaky checkout test")
@@ -244,7 +239,6 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 			app := s.App()
 			codex := s.InstallStandaloneCodex("standalone", "0.162.1")
 			setSetting(t, app, "codex_executable", codex)
-			shareCodex(t, app)
 			spawn := func(project string) (string, *fakeagent.Run) {
 				session := s.Spawn(app, fakeagent.Codex, s.Path(project), func(m *protocol.SpawnSessionMessage) {
 					m.Executable, m.CodexExecutable = protocol.Ptr(codex), protocol.Ptr(codex)
@@ -272,22 +266,11 @@ func TestASharedCodexTerminalOpenedAfterADaemonRestartRunsTheAppServersCodexWhil
 	}
 }
 
-func shareCodex(t *testing.T, app *testworld.Peer) {
-	t.Helper()
-	requestID := uuid.NewString()
-	set := testworld.Request(app, protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: "codex_shared_enabled", Value: "true", RequestID: protocol.Ptr(requestID)},
-		protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
-	if !protocol.Deref(set.Success) {
-		t.Fatalf("share Codex: %s", protocol.Deref(set.Error))
-	}
-}
-
 func TestAHiddenSharedCodexSessionSurvivesADaemonRestartAndTakesInput(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 
 	s.Stop()
@@ -322,7 +305,6 @@ func TestAHiddenSharedCodexSessionCutOffByAMachineRestartComesBackIdle(t *testin
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 	submitFeedback(t, app, session, "Lock the tax table before the lookup.")
 	s.CodexServer().Prompted(conversation)
@@ -356,7 +338,6 @@ func TestAHiddenSharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestar
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	session, conversation := hiddenWaitingSharedCodex(t, s, app)
 	listed, err := s.Client().Query("")
 	if err != nil {
@@ -394,7 +375,6 @@ func TestASharedCodexTurnThatEndsWhileTheDaemonIsDownSettlesAfterTheRestart(t *t
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	codex := s.Launched(session)
 	app.TypeLine(session, "find the flaky checkout test")
@@ -440,7 +420,6 @@ func TestRestartNowLetsARunningTurnFinishWhenCodexIsInstalledWithNpm(t *testing.
 			s.Start()
 			app := s.App()
 			setSetting(t, app, "codex_executable", s.InstallNpmCodex("npm", "0.162.1"))
-			shareCodex(t, app)
 			session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 			codex := s.Launched(session)
 			app.TypeLine(session, "write the release notes")
@@ -473,7 +452,6 @@ func TestACodexUpdateInstalledFromTheAppRunsInATileAndSharedCodexMovesToIt(t *te
 	s.SetCodexLatest("0.163.0")
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	s.Launched(s.Spawn(app, fakeagent.Codex, s.Path("shop")))
 	sharedCodexOn := func(running, installed string) {
 		t.Helper()
@@ -557,7 +535,6 @@ func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T
 		return found
 	}
 	app := s.App()
-	shareCodex(t, app)
 	if before := offers(app); len(before) != 1 || len(before[0].Actions) == 0 {
 		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the offers are %+v, want one with Install", before)
 	}

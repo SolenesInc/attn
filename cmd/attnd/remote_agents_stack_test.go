@@ -266,11 +266,6 @@ func shareOutpostCodex(t *testing.T, pair *testworld.OutpostPair) {
 	if configured := pair.Home.Attn("settings", "set", "codex_executable", noCodex); configured.Code != 0 {
 		t.Fatal(configured)
 	}
-	shareCodex(t, pair.App)
-	outpostApp := pair.Outpost.App()
-	if outpostApp.Initial.Settings["codex_shared_enabled"] != "true" {
-		testworld.Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["codex_shared_enabled"] == "true" })
-	}
 	pair.Outpost.SetCodexFolderTrust(pair.Outpost.Path("agent"), "trusted")
 }
 
@@ -1076,6 +1071,7 @@ func TestAnOutpostConversationComesBackOnItsOwnAfterItsMachineReboots(t *testing
 			pair.Start()
 			awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
 			app := pair.App
+			outpost.SetCodexFolderTrust(outpost.Path("missing-worker"), "trusted")
 			id := home.Spawn(app, harness, outpost.Path("missing-worker"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
 			terminal := app.Terminal(id)
 			agent := outpost.LaunchedCarrying(terminal)

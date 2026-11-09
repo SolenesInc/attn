@@ -145,7 +145,8 @@ try {
     runner.assert(!(await text('.settings-nav')).includes('Workflows'), 'workflow engine settings are retired');
     await section('experimental');
     const experiments = await text('[data-testid="settings-section-experimental"]');
-    runner.assert(experiments.includes('Shared Codex'), 'Shared Codex is still an experiment');
+    runner.assert(experiments.includes('Launcher 2.0'), 'Launcher 2.0 is still an experiment');
+    runner.assert(!experiments.includes('Shared Codex'), 'Shared Codex left Experimental');
     runner.assert(!experiments.includes('Shared terminal host'), 'the shared terminal host left Experimental');
     runner.assert(!experiments.includes('Runtime mode'), 'runtime diagnostics do not have a separate card');
     runner.assert(!(await text('.settings-nav')).includes('Terminal'), 'Experimental replaces the Terminal section');

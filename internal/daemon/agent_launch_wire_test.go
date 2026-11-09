@@ -44,7 +44,7 @@ func TestAutoApproveDefaultsOnAndRespectsAnExplicitChoice(t *testing.T) {
 				mode, _ := flagValue(run.Argv, "--permission-mode")
 				auto := mode == "auto"
 				if agent == fakeagent.Codex {
-					auto = slices.Contains(run.Argv, `approvals_reviewer="auto_review"`)
+					auto = w.CodexServer().Permissions(run.ConversationID).ApprovalsReviewer == "auto_review"
 				}
 				if auto != want {
 					t.Errorf("direct=%s stored=%q: %s ran with auto-approve %t, want %t: %q", launch.direct, launch.stored, agent, auto, want, run.Argv)

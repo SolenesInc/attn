@@ -31,14 +31,22 @@ func (a *agent) handleCodexSettings(params json.RawMessage) (any, error) {
 	if err := json.Unmarshal(params, &p); err != nil {
 		return nil, err
 	}
-	c, ok := a.conv.(*codex)
+	c, ok := a.conv.(codexSettingsTaker)
 	if !ok {
 		return nil, fmt.Errorf("%T is not Codex", a.conv)
 	}
 	a.turn.Lock()
 	defer a.turn.Unlock()
-	c.model, c.serviceTier = p.Model, p.ServiceTier
-	return struct{}{}, nil
+	return struct{}{}, c.settings(p.Model, p.ServiceTier)
+}
+
+type codexSettingsTaker interface {
+	settings(model, serviceTier string) error
+}
+
+func (c *codex) settings(model, serviceTier string) error {
+	c.model, c.serviceTier = model, serviceTier
+	return nil
 }
 
 type guardianReviewer interface {

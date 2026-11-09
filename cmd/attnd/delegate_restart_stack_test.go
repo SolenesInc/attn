@@ -62,6 +62,7 @@ func TestAHandoverInterruptedByARestartFinishesOnTheSuccessorThatOutlivedIt(t *t
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	s.SetCodexFolderTrust(cwd, "trusted")
 	predecessor, err := cli.Delegate(protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: "first", Cwd: cwd, Agent: protocol.Ptr("codex"),
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Investigate the tracked task.")},

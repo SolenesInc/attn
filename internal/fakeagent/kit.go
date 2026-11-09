@@ -38,6 +38,7 @@ type Kit struct {
 	mu             sync.Mutex
 	launches       map[string]chan *Run
 	nextBoot       func()
+	nextServerBoot func()
 	fakes          []*fake
 	servers        []*fake
 	failures       []string
@@ -236,10 +237,20 @@ func (k *Kit) HoldNextBoot(hold func()) {
 	k.nextBoot = hold
 }
 
-func (k *Kit) awaitBoot() {
+func (k *Kit) HoldNextCodexServerBoot(hold func()) {
 	k.mu.Lock()
-	hold := k.nextBoot
-	k.nextBoot = nil
+	defer k.mu.Unlock()
+	k.nextServerBoot = hold
+}
+
+func (k *Kit) awaitBoot(role string) {
+	k.mu.Lock()
+	next := &k.nextBoot
+	if role == roleCodexServer {
+		next = &k.nextServerBoot
+	}
+	hold := *next
+	*next = nil
 	k.mu.Unlock()
 	if hold != nil {
 		hold()
@@ -307,6 +318,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				Yolo:           f.Yolo,
 				t:              k.t,
 				fake:           f,
+				kit:            k,
 			}
 			k.launchesFor(f.AttnSessionID) <- run
 			k.mu.Lock()

@@ -26,6 +26,7 @@ type codexRemote struct {
 	connected    chan struct{}
 	conversation string
 	resumed      bool
+	picker       bool
 	unavailable  bool
 	approvals    map[string]json.RawMessage
 	answering    map[string]bool
@@ -102,6 +103,7 @@ func (c *codexRemote) begin(term *terminal) error {
 		}
 	}
 	var shown codexRemoteThread
+	c.picker = len(args.positionals) == 1 && args.positionals[0] == "resume"
 	if len(args.positionals) > 1 && args.positionals[0] == "resume" {
 		c.resumed = true
 		err = call(client, "thread/resume", map[string]any{"threadId": args.positionals[1], "excludeTurns": true}, &shown)
@@ -412,7 +414,7 @@ func (c *codexRemote) approvalAnnouncement() string {
 func (c *codexRemote) approvalAnswered() { c.term.title(codexBusyGlyph + c.restingTitle()) }
 
 func (c *codexRemote) launch() launch {
-	return launch{Harness: Codex, ConversationID: c.current(), Resumed: c.resumed}
+	return launch{Harness: Codex, ConversationID: c.current(), Resumed: c.resumed, ResumePicker: c.picker}
 }
 
 func (c *codexRemote) initialPrompt() string { return c.prompt }
@@ -492,6 +494,27 @@ func (c *codexRemote) reply(text string, afterStop bool) error {
 		return errors.New("the codex --remote fake does not script a reply written after its Stop hook")
 	}
 	return c.request(methodFakeReply, map[string]any{"threadId": c.current(), "text": text}, nil)
+}
+
+func (c *codexRemote) stream(text string) error {
+	c.term.print(text)
+	return nil
+}
+
+func (c *codexRemote) subagent(text string) error {
+	return c.request(methodFakeSubagent, map[string]any{"threadId": c.current(), "text": text}, nil)
+}
+
+func (c *codexRemote) deleteSubagentTranscripts() error {
+	return errors.New("the codex --remote fake does not script deleting subagent rollouts")
+}
+
+func (c *codexRemote) guardianReview(text string) error {
+	return c.request(methodFakeGuardian, map[string]any{"threadId": c.current(), "text": text}, nil)
+}
+
+func (c *codexRemote) settings(model, serviceTier string) error {
+	return c.request(methodFakeSettings, map[string]any{"threadId": c.current(), "model": model, "serviceTier": serviceTier}, nil)
 }
 
 func (c *codexRemote) halt() error {

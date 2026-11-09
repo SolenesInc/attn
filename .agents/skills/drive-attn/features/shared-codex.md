@@ -13,7 +13,6 @@ the tiles still on the old Codex.
 
 ## Sub-features
 
-- `codex-shared-switch`: the Settings switch, off by default. It decides how new Codex terminals and resumes from the ledger launch.
 - `codex-status`: the Codex the app-server runs, the installed and latest ones, a pending restart and what it waits on, and the tiles on an older Codex.
 - `codex-hidden`: a conversation no tile shows stays live and hidden, in the ledger and, optionally, the queue.
 - `codex-approval`: an approval waits in the conversation until the user answers it, either in the conversation's tile or after opening the conversation in a tile.
@@ -22,13 +21,12 @@ the tiles still on the old Codex.
 - `codex-reload-tiles`: restart the tiles still on an older Codex, in the same conversations.
 - `codex-names`: a session's name and its Codex conversation's name follow each other.
 - `codex-stuck-working`: a visible tile's terminal can stick on `working` while its conversation is idle (`docs/internal/harnesses/codex-app-server.md` has the cause). After 5 s, and again 5 s after the last MCP server finishes starting, attn checks the server. With no background terminal and no MCP server still starting on that terminal's connection, the tile follows the server's status until the terminal reports again. `attn state explain` shows `program_status working` then `app_server idle`. Only stock Codex reproduces it: the mock does not model the TUI's MCP startup.
-- `codex-compact`: `attn agent close --self --compact` and `attn seed standby --close --compact` compact a shared Codex conversation through `thread/compact/start` before the session closes. A Codex session that does not run on the shared app-server is refused, naming `codex_shared_enabled`. [agent-launch.md](agent-launch.md) `close-compact` holds the rules, the recipe and the tests.
+- `codex-compact`: `attn agent close --self --compact` and `attn seed standby --close --compact` compact a shared Codex conversation through `thread/compact/start` before the session closes. A Codex session started before this version, not on the shared app-server, is refused. [agent-launch.md](agent-launch.md) `close-compact` holds the rules, the recipe and the tests.
 
 ## How to get to it
 
 ### People
 
-- **Settings → Experimental** (`app/src/components/SettingsModalSections.tsx`): "Shared Codex", `[data-testid="settings-feature-codex_shared_enabled"]` (setting `codex_shared_enabled`).
 - **Settings → Attention queue** (`app/src/components/SettingsModalSections.tsx`): "Show hidden sessions in the queue" (`[data-testid="settings-queue-hidden-sessions-toggle"]`, setting `queue_show_hidden_sessions`, on by default).
 - The banner at the top of the window, `[aria-label="Codex updates"]`, with Install, Restart now, Retry or Reload tiles as each applies, and a confirm prompt before a restart or a reload (`app/src/components/SharedCodexBanner.tsx`, `app/src/components/SharedCodexPrompts.tsx`). After the user closes the banner, the same offer stays under the bell in the sidebar.
 - Palette, while each applies (`app/src/application/useSharedCodex.tsx`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
@@ -38,7 +36,7 @@ the tiles still on the old Codex.
 
 ### Agents
 
-- `attn codex status [--profile <name|id>] [--json]`, `attn codex update [--profile]` and `attn codex restart [--now] [--profile]` (`cmd/attnd/codex.go`). Inside a session, these commands act on the session's profile.
+- `attn codex status [--profile <name|id>] [--json]`, `attn codex update [--profile]` and `attn codex restart [--now] [--profile]` (`cli/attn/src/commands/codex.rs`). Inside a session, these commands act on the session's profile.
 - Prompts: `attn opened this conversation.`, typed into a conversation attn opens in the app-server (`internal/prompts/content/session/codex-opened.md`).
 
 ### Triggers
@@ -67,15 +65,13 @@ Preconditions:
 
 `<profile>` is the profile's name. `<terminal>` is the agent's terminal id from `wsctl list`. `<P>` is the proof folder's path written out.
 
-- **Off by default.** Run `./attn codex status`. It prints `profile  <profile>`, `codex` with the mock's path, and `shared   off; turn it on in Settings → Experimental`.
-- **Turn it on in Settings.** Open Settings with `bridge native_key '{"key":",","modifiers":["command"]}'` and click `[data-testid="settings-nav-experimental"]` natively. Click `[data-testid="settings-feature-codex_shared_enabled"]` natively. `./attn settings get codex_shared_enabled` prints `true`, and `./attn codex status` prints `server  not running; the next shared Codex terminal starts it`.
 - **Hidden sessions in the queue.** With Settings still open, click `[data-testid="settings-nav-hygiene"]` natively, then click `[data-testid="settings-queue-hidden-sessions-toggle"]` natively: `./attn settings get queue_show_hidden_sessions` prints `false`, since the switch starts on. Click it again and it prints `true`. Press Escape.
 - **A shared terminal starts the app-server.** First run `./attn settings set auto_approve_enabled false`, before the terminal starts, so the user reviews the approval below. Run `wsctl add-session --cwd $C --agent codex --label shared-one --id shared-one --place`. `./attn codex status` prints `server  1.0.0`, `installed  1.0.0` and `restart  none`. Run `wsctl input --id <terminal> --text "hello" --enter`: `./attn agent list` shows `shared-one` as `waiting_input`.
 - **An approval.** With Auto-approve disabled before launch, run `wsctl input --id <terminal> --text "approve" --enter`. `./attn agent list` shows `pending_approval`, and `./attn agent peek shared-one` shows `Allow the command to run?`. Run `wsctl input --id <terminal> --enter`: the turn runs, peek shows `• ran it`, and the state is `waiting_input`. Put the setting back with `./attn settings set auto_approve_enabled true` after the run.
 - **A switch leaves a hidden session.** Run `wsctl input --id <terminal> --text "/new" --enter`. The tile shows a new session at once, and `./attn session show shared-one` prints `state      waiting_input (hidden)`. `./attn session list` says the same. In the ledger (⌘⇧L), the `shared-one` row is marked `hidden`.
 - **Switch back by id.** The tile's screen names its conversation, `Conversation mock-<id>`. Note `shared-one`'s conversation id before `/new`. Run `wsctl input --id <terminal> --text "/resume mock-<id>" --enter`: `wsctl list` shows the terminal on `shared-one` again, `./attn session show shared-one` drops `(hidden)`, and the conversation `/new` made is listed `idle (hidden)`. Run `/new` once more, then `wsctl input --id <terminal> --text "/agents mock-<id>" --enter`: the terminal is back on `shared-one`.
 - **Restart once idle, then now.** Run `./attn codex restart`. It prints `Shared Codex of profile <profile> restarts once no turn runs.`, and `./attn codex status` shows the restart until the line is back to `restart  none`. Run `./attn codex restart --now`: it prints `Restarting shared Codex of profile <profile> now.`, and once the terminal reconnects, peek shows its conversation again. The baseline mock cannot reconnect, so that post-restart assertion fails there. See Gotchas.
-- **Status as JSON.** Run `./attn codex status --json`: it prints `executable`, `profile_id` and `profile_name`, and once shared Codex is on, `shared_codex` with `installed_version`, `latest_version`, `restart` and `running_version`.
+- **Status as JSON.** Run `./attn codex status --json`: it prints `executable`, `profile_id` and `profile_name`, and `shared_codex` with `installed_version`, `latest_version`, `restart` and `running_version`.
 - **Update without a known install.** Run `./attn codex update`. With the baseline's mock it prints `Could not detect how Codex was installed`, then the status, and exits 1.
 - **Update, install and reload tiles.** Make a mock Codex install that reports 1.0.0 with 1.1.0 out, and restart the instance on it:
 

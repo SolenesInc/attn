@@ -91,6 +91,7 @@ type launch struct {
 
 type bootingParams struct {
 	AttnSessionID string `json:"attn_session_id"`
+	Role          string `json:"role,omitempty"`
 }
 
 type unexpectedLaunch struct {
@@ -142,9 +143,17 @@ func Main() {
 		harness = Plug
 	}
 	if name != wrapperName && name != miseName && !slices.Contains(cfg.Harnesses, harness) {
+		if isCodexVersionProbe(name, os.Args[1:]) {
+			fmt.Fprintf(os.Stderr, "%s: command not found\n", name)
+			os.Exit(127)
+		}
 		os.Exit(tripwire(cfg, name, fmt.Sprintf("%s spawned in a world that did not install it", name)))
 	}
 	os.Exit(program(cfg))
+}
+
+func isCodexVersionProbe(name string, args []string) bool {
+	return name == string(Codex) && (slices.Equal(args, []string{"--version"}) || slices.Equal(args, []string{"doctor", "--json"}))
 }
 
 func programDir() string {

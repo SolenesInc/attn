@@ -260,7 +260,7 @@ try {
     agentExecutables: { codex: wrapper, claude: wrapper },
   });
   await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-  runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'codex']);
+  runAttn(['crew', 'set', awake, '--cwd', awakeHome, '--agent', 'claude']);
   membersRegistered = true;
   runAttn(['crew', 'set', asleep, '--cwd', asleepHome]);
   runAttn(['crew', 'set', history, '--cwd', historyHome]);
@@ -518,7 +518,7 @@ try {
     await click('[data-testid="crew-member-details-action"]');
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Current day active' });
     const running = await client.request('dom_text', { selector: '[aria-label="Running now"]' });
-    runner.assert(running.text.includes('Codex') && running.text.includes('Model not reported') && running.text.includes('Effort not reported'), 'running truth stays separate from next-wake pins', running);
+    runner.assert(running.text.includes('Claude') && running.text.includes('Model not reported') && running.text.includes('Effort not reported'), 'running truth stays separate from next-wake pins', running);
     await pressEscapeAndWaitFor(`session-actions-${firstSession}`);
     await click(`[data-testid="session-actions-${firstSession}"]`);
     await click('[data-testid="crew-member-details-action"]');

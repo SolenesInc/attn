@@ -12,7 +12,6 @@ func TestASharedCodexTileThatRejoinsItsLoadedConversationAfterARestartSettlesTho
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))
 	codex := s.Launched(session)
 	app.TypeLine(session, "find the flaky checkout test")

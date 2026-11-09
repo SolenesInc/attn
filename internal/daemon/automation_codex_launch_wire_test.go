@@ -1,21 +1,17 @@
 package daemon_test
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"testing/synctest"
-	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func codexAutomationWorld(t *testing.T, shared bool) (*world, *testworld.Peer) {
+func codexAutomationWorld(t *testing.T) (*world, *testworld.Peer) {
 	t.Helper()
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
@@ -23,13 +19,19 @@ func codexAutomationWorld(t *testing.T, shared bool) (*world, *testworld.Peer) {
 		t.Fatal(err)
 	}
 	w.SetCodexFolderTrust(w.Path("check"), "trusted")
-	if shared {
-		setSetting(t, app, "codex_shared_enabled", "true")
-		w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
-	}
+	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
 	applyAutomation(t, w.Client(), manualAutomation(w, "Check the code."))
 	awaitAutomationChanged(app, 1)
 	return w, app
+}
+
+func TestACodexAutomationThatNamesItsOwnExecutableIsRefusedNamingTheSetting(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	spec := strings.Replace(manualCodexAutomationIn(w.Path("check")), "driver: codex", "driver: codex, executable: /opt/codex", 1)
+	_, err := w.Client().AutomationApply(spec)
+	if err == nil || !strings.Contains(err.Error(), "launch.executable") || !strings.Contains(err.Error(), "codex_executable") {
+		t.Fatalf("apply answered %v, want a refusal naming launch.executable and codex_executable", err)
+	}
 }
 
 func runAutomationFromApp(app *testworld.Peer, requestID string) protocol.AutomationRunResultMessage {
@@ -63,7 +65,7 @@ func awaitRunState(t *testing.T, w *world, app *testworld.Peer, runID string, do
 }
 
 func TestACodexAutomationWhoseOpeningNoteCouldNotBeWrittenFailsWithItsStartupScreen(t *testing.T) {
-	w, app := codexAutomationWorld(t, true)
+	w, app := codexAutomationWorld(t)
 	arrived, release := w.CodexServer().HoldNextInjectReply()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "refused"})
 	arrived()
@@ -86,7 +88,7 @@ func TestACodexAutomationWhoseOpeningNoteCouldNotBeWrittenFailsWithItsStartupScr
 }
 
 func TestACodexAutomationIsDeliveredOnceItsSlowOpeningNoteIsWritten(t *testing.T) {
-	w, app := codexAutomationWorld(t, true)
+	w, app := codexAutomationWorld(t)
 	arrived, release := w.CodexServer().HoldNextInjectReply()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "slow-note"})
 	arrived()
@@ -103,8 +105,8 @@ func TestACodexAutomationIsDeliveredOnceItsSlowOpeningNoteIsWritten(t *testing.T
 	}
 }
 
-func TestAPlainCodexAutomationThatExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {
-	w, app := codexAutomationWorld(t, false)
+func TestACodexAutomationThatExitsBeforeItsFirstTurnFailsWithItsScreen(t *testing.T) {
+	w, app := codexAutomationWorld(t)
 	w.ExitAtNextBoot(1, "Error: the model provider refused the login")
 	runAutomationFromApp(app, "exits")
 	failed := awaitOnlyRunSettled(t, w, app)
@@ -123,36 +125,31 @@ func awaitOnlyRunSettled(t *testing.T, w *world, app *testworld.Peer) protocol.A
 }
 
 func TestACodexAutomationIsDeliveredOnceItsOpeningPromptStartsATurn(t *testing.T) {
-	for _, shared := range []bool{true, false} {
-		name := map[bool]string{true: "shared", false: "plain"}[shared]
-		t.Run(name, func(t *testing.T) {
-			w, app := codexAutomationWorld(t, shared)
-			boot := w.HoldNextBoot()
-			app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "ok"})
-			runs := automationRuns(t, w.Client(), 1)
-			for len(runs) == 0 {
-				awaitAutomationChanged(app, 1)
-				runs = automationRuns(t, w.Client(), 1)
-			}
-			if runs[0].State != "pending" {
-				t.Fatalf("before Codex boots the run is %+v, want pending", runs[0])
-			}
-			boot.Await()
-			boot.Release()
-			answered := awaitAutomationRunResult(app, "ok")
-			if !answered.Success {
-				t.Fatalf("run answered %s, want success", describeRunAnswer(answered))
-			}
-			session := string(protocol.Deref(answered.Run.SessionID))
-			agent := w.Launched(session)
-			if prompt := agent.Prompted(); !strings.Contains(prompt, "Check the code.") {
-				t.Fatalf("the agent was prompted with %q, want the configured task", prompt)
-			}
-			delivered := awaitRunState(t, w, app, answered.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
-			if delivered.State != "delivered" {
-				t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
-			}
-		})
+	w, app := codexAutomationWorld(t)
+	boot := w.HoldNextBoot()
+	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "ok"})
+	runs := automationRuns(t, w.Client(), 1)
+	for len(runs) == 0 {
+		awaitAutomationChanged(app, 1)
+		runs = automationRuns(t, w.Client(), 1)
+	}
+	if runs[0].State != "pending" {
+		t.Fatalf("before Codex boots the run is %+v, want pending", runs[0])
+	}
+	boot.Await()
+	boot.Release()
+	answered := awaitAutomationRunResult(app, "ok")
+	if !answered.Success {
+		t.Fatalf("run answered %s, want success", describeRunAnswer(answered))
+	}
+	session := string(protocol.Deref(answered.Run.SessionID))
+	agent := w.Launched(session)
+	if prompt := agent.Prompted(); !strings.Contains(prompt, "Check the code.") {
+		t.Fatalf("the agent was prompted with %q, want the configured task", prompt)
+	}
+	delivered := awaitRunState(t, w, app, answered.Run.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if delivered.State != "delivered" {
+		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
 	}
 }
 
@@ -163,7 +160,6 @@ func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAf
 		t.Fatal(err)
 	}
 	w.SetCodexFolderTrust(w.Path(""), "trusted")
-	setSetting(t, app, "codex_shared_enabled", "true")
 	spec := strings.NewReplacer("*/2 * * * *", "@every 1s", "launch: {driver: claude}", "launch: {driver: codex}").Replace(automationSingletonSpec(w, "Sweep", "latest", ""))
 	id := applyAutomation(t, cli, spec).ID
 	awaitDelivered := func(earlier ...string) protocol.AutomationRunSummary {
@@ -208,7 +204,7 @@ func TestASharedCodexSingletonContinuesItsLiveSessionAndResumesItsConversationAf
 }
 
 func TestACodexAutomationWhoseAgentExitsRightAfterItsFirstTurnStartsIsDelivered(t *testing.T) {
-	w, app := codexAutomationWorld(t, false)
+	w, app := codexAutomationWorld(t)
 	boot := w.HoldNextBoot()
 	app.Send(protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "brief"})
 	boot.Await()
@@ -227,175 +223,31 @@ func TestACodexAutomationWhoseAgentExitsRightAfterItsFirstTurnStartsIsDelivered(
 }
 
 func TestACodexSingletonWhoseFirstLaunchExitsBeforeItsFirstTurnStartsFreshAtTheNextOccurrence(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		w.SetCodexFolderTrust(w.Path(""), "trusted")
-		w.terms.OnNextSpawn(func(term *testworld.Terminal) {
-			term.PaintScreen("Error: the model provider refused the login")
-			term.Exit(1)
-		})
-		id := applyAutomation(t, cli, strings.Replace(automationSingletonSpec(w, "Sweep", "latest", ""), "launch: {driver: claude}", "launch: {driver: codex}", 1)).ID
-		w.advance(2*time.Minute + 30*time.Second)
-		runs := automationRuns(t, cli, id)
-		if len(runs) != 1 || runs[0].State != "failed" {
-			t.Fatalf("after Codex exited before its first turn the runs are %+v, want one failed run", runs)
-		}
-		failed := runs[0]
-
-		launched := make(chan *testworld.Terminal, 1)
-		w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
-		w.advance(2 * time.Minute)
-		var replacement *testworld.Terminal
-		select {
-		case replacement = <-launched:
-		default:
-			latest := automationRuns(t, cli, id)[0]
-			t.Fatalf("after the first launch exited, the next occurrence launched nothing and is %s with %q", latest.State, protocol.Deref(latest.LastError))
-		}
-		if err := cli.UpdateStateFromHook(replacement.Options.ID, "working", ""); err != nil {
-			t.Fatal(err)
-		}
-		synctest.Wait()
-
-		runs = automationRuns(t, cli, id)
-		fresh := runs[0]
-		if len(runs) != 2 || fresh.State != "delivered" || protocol.Deref(fresh.SessionID) == protocol.Deref(failed.SessionID) || protocol.Deref(fresh.SeedID) == protocol.Deref(failed.SeedID) {
-			t.Fatalf("after the first launch exited, the next occurrence is %s on %s/%s with %q, want delivered on a session and seed of its own, not %s/%s", fresh.State, protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID), protocol.Deref(fresh.LastError), protocol.Deref(failed.SessionID), protocol.Deref(failed.SeedID))
-		}
-		if argv := strings.Join(replacement.Options.AgentArgv, " "); !strings.Contains(argv, "Sweep.") {
-			t.Fatalf("the replacement launched with %q, want its opening prompt", argv)
-		}
-		if first := runs[1]; first.ID != failed.ID || first.State != "failed" || !strings.Contains(protocol.Deref(first.LastError), "the model provider refused the login") {
-			t.Fatalf("the first run now reads %+v, want it still failed with the screen Codex left", first)
-		}
-	})
-}
-
-func TestTurningOffAReviewAutomationAfterItsCodexLaunchedKeepsTheRunPendingAcrossARestartWhileGitHubIsSignedOutUntilItDelivers(t *testing.T) {
-	github := newAutomationGitHub(t)
-	w := &world{World: prepareWorld(t), terms: testworld.NewTerminals(t)}
-	w.start()
-	clone := newRepo(t, "shop")
-	runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
-	head := commitFile(t, clone, "change.go", "package change\n")
-	w.SetCodexFolderTrust(clone, "trusted")
-	spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
-	applyAutomation(t, w.Client(), spec)
-	r := &automationReviewWorld{t: t, w: w, app: w.App(), cli: w.Client(), github: github}
-	r.refresh()
-
-	launched := make(chan *testworld.Terminal, 1)
-	w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
-	github.request(42, head, false)
-	r.refresh()
-	agent := <-launched
-	started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
-		return len(runs) == 1 && runs[0].State == "pending"
-	})[0]
-
-	setAutomationEnabled(t, r.cli, 1, false)
-	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
-	}
-	t.Setenv("ATTN_MOCK_GH_TOKEN", "")
-	w.restart()
-	r.app, r.cli = w.App(), w.Client()
-	if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
-		t.Fatalf("after a restart signed out of GitHub the runs are %+v, want the launched run still pending", runs)
-	}
-
-	if err := r.cli.UpdateStateFromHook(agent.Options.ID, "working", ""); err != nil {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	if err := os.MkdirAll(w.Path(""), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	delivered := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
-		return len(runs) == 1 && runs[0].State != "pending"
-	})[0]
-	if delivered.State != "delivered" || delivered.ID != started.ID {
-		t.Fatalf("after its first turn started the run is %+v, want run %s delivered", delivered, started.ID)
+	w.SetCodexFolderTrust(w.Path(""), "trusted")
+	w.ExitAtNextBoot(1, "Error: the model provider refused the login")
+	spec := strings.NewReplacer("*/2 * * * *", "@every 1s", "launch: {driver: claude}", "launch: {driver: codex}").Replace(automationSingletonSpec(w, "Sweep", "latest", ""))
+	id := applyAutomation(t, cli, spec).ID
+
+	failed := awaitNextSettledRun(t, w, app, id)
+	if failed.State != "failed" || !strings.Contains(protocol.Deref(failed.LastError), "the model provider refused the login") {
+		t.Fatalf("after Codex exited before its first turn the run is %s with %q, want failed with the screen Codex left", failed.State, protocol.Deref(failed.LastError))
 	}
-}
 
-func rewindToBeforeTheLaunchedMarker(t *testing.T, w *world) {
-	t.Helper()
-	db, err := sql.Open("sqlite3", filepath.Join(w.Dir, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
+	fresh := awaitNextDeliveredRun(t, w, app, id, failed.ID)
+	setAutomationEnabled(t, cli, id, false)
+	if fresh.State != "delivered" || protocol.Deref(fresh.SessionID) == protocol.Deref(failed.SessionID) || protocol.Deref(fresh.SeedID) == protocol.Deref(failed.SeedID) {
+		t.Fatalf("after the first launch exited, the next occurrence is %s on %s/%s with %q, want delivered on a session and seed of its own, not %s/%s", fresh.State, protocol.Deref(fresh.SessionID), protocol.Deref(fresh.SeedID), protocol.Deref(fresh.LastError), protocol.Deref(failed.SessionID), protocol.Deref(failed.SeedID))
 	}
-	defer db.Close()
-	if _, err := db.Exec(`
-ALTER TABLE automation_runs DROP COLUMN launched_at;
-DELETE FROM schema_migrations WHERE version IN (1793985310641958, 1793993403875462);
-`); err != nil {
-		t.Fatal(err)
+	if opening := w.Launched(string(protocol.Deref(fresh.SessionID))).Prompted(); !strings.Contains(opening, "Sweep.") {
+		t.Fatalf("the replacement was prompted %q, want its opening prompt", opening)
 	}
-}
-
-func TestUpgradingWhileACodexReviewAwaitsItsFirstTurnKeepsTheRunWhileGitHubIsSignedOut(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		disable bool
-	}{
-		{"automation stays on", false},
-		{"automation turned off", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			github := newAutomationGitHub(t)
-			w := &world{World: prepareWorld(t), terms: testworld.NewTerminals(t)}
-			w.start()
-			clone := newRepo(t, "shop")
-			runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
-			head := commitFile(t, clone, "change.go", "package change\n")
-			w.SetCodexFolderTrust(clone, "trusted")
-			spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
-			applyAutomation(t, w.Client(), spec)
-			r := &automationReviewWorld{t: t, w: w, app: w.App(), cli: w.Client(), github: github}
-			r.refresh()
-
-			launched := make(chan *testworld.Terminal, 2)
-			w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
-			github.request(42, head, false)
-			r.refresh()
-			agent := <-launched
-			started := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
-				return len(runs) == 1 && runs[0].State == "pending"
-			})[0]
-
-			t.Setenv("ATTN_MOCK_GH_TOKEN", "")
-			w.stop()
-			rewindToBeforeTheLaunchedMarker(t, w)
-			w.terms.OnNextSpawn(func(term *testworld.Terminal) { launched <- term })
-			w.start()
-			r.app, r.cli = w.App(), w.Client()
-
-			if tc.disable {
-				setAutomationEnabled(t, r.cli, 1, false)
-				if runs := automationRuns(t, r.cli, 1); len(runs) != 1 || runs[0].State != "pending" {
-					t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
-				}
-				seed, err := r.cli.SeedShow("", protocol.Deref(started.SeedID))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if seed.Seed.Status == "withered" {
-					t.Fatalf("turning the automation off withered the seed of a run whose agent is running: %+v", seed)
-				}
-			}
-
-			if err := r.cli.UpdateStateFromHook(agent.Options.ID, "working", ""); err != nil {
-				t.Fatal(err)
-			}
-			delivered := r.awaitRuns(1, func(runs []protocol.AutomationRunSummary) bool {
-				return len(runs) == 1 && runs[0].State != "pending"
-			})[0]
-			if delivered.State != "delivered" || delivered.ID != started.ID {
-				t.Fatalf("after its first turn started the run is %+v, want run %s delivered", delivered, started.ID)
-			}
-			if len(launched) != 0 {
-				t.Fatal("the upgrade started a second agent for a run whose agent was running")
-			}
-		})
+	runs := automationRuns(t, cli, id)
+	if first := runs[len(runs)-1]; first.ID != failed.ID || first.State != "failed" {
+		t.Fatalf("the first run now reads %+v, want it still failed", first)
 	}
 }

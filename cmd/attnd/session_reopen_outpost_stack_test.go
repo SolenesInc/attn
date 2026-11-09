@@ -155,7 +155,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.Rename(cwd+".saved", cwd); err != nil {
 		t.Fatal(err)
 	}
-	rollouts, err := filepath.Glob(filepath.Join(outpost.Dir, "toolhome", ".codex", "sessions", "*", "*", "*", "*-"+run.ConversationID+".jsonl"))
+	rollouts, err := filepath.Glob(filepath.Join(outpost.Dir, "toolhome", ".codex", "archived_sessions", "*-"+run.ConversationID+".jsonl"))
 	if err != nil || len(rollouts) != 1 {
 		t.Fatalf("rollouts=%v, %v", rollouts, err)
 	}
@@ -351,11 +351,6 @@ func TestClosingAnOutpostsSharedCodexLeavesTheHomesRunning(t *testing.T) {
 	serverGone := outpost.PauseAt(pausepoint.CodexServerExitHandled)
 	pair.Start()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	shareCodex(t, pair.App)
-	outpostApp := outpost.App()
-	if outpostApp.Initial.Settings["codex_shared_enabled"] != "true" {
-		testworld.Await(outpostApp, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings["codex_shared_enabled"] == "true" })
-	}
 	homeDir := home.Path("agent")
 	home.SetCodexFolderTrust(homeDir, "trusted")
 	outpostDir := outpost.Path("agent")

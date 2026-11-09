@@ -211,7 +211,7 @@ function buildLaunch(values: AutomationFormValues): Record<string, unknown> {
   const executable = values.executable.trim();
   if (model !== '') launch.model = model;
   if (values.effort !== '') launch.effort = values.effort;
-  if (executable !== '') launch.executable = executable;
+  if (executable !== '' && values.agent !== 'codex') launch.executable = executable;
   return launch;
 }
 

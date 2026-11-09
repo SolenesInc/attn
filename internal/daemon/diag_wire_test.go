@@ -35,7 +35,7 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 	}
 
 	t.Setenv("ATTN_PPROF", "")
-	w := newWorld(t, fakeagent.Codex)
+	w := newWorld(t, fakeagent.Claude)
 	for _, addr := range unsetProbes {
 		if dial(addr) == nil {
 			t.Fatalf("with ATTN_PPROF unset something answered on %s", addr)
@@ -45,7 +45,7 @@ func TestTheDiagnosticsServerIsOptInAndLoopbackOnly(t *testing.T) {
 	t.Setenv("ATTN_PPROF", net.JoinHostPort("0.0.0.0", port))
 	w.restart()
 	app := w.App()
-	w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
+	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("shop")))
 	resp, err := http.Get(vars)
 	if err != nil {
 		t.Fatalf("with ATTN_PPROF asking for every interface, loopback %s did not answer: %v", vars, err)

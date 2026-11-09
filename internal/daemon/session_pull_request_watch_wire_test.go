@@ -170,7 +170,7 @@ func TestAPullRequestWatchedOnASeedReportsToTheSeedsNextTender(t *testing.T) {
 	gh := serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN", mergeStateStatus: "BLOCKED"})
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		first := w.Spawn(app, fakeagent.Codex, w.Path("first"))
+		first := w.Spawn(app, fakeagent.Claude, w.Path("first"))
 		next := w.Spawn(app, fakeagent.Claude, w.Path("next"))
 		seed := plantSeedAs(t, cli, first, "Ship the readiness check")
 		moveDelegationSeed(t, cli, first, seed, "tend", "")

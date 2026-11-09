@@ -814,8 +814,7 @@ commands:
         closes, and the reason says the compact did not run. Only a Claude
         session with the Claude mod and a Codex session on the shared Codex app
         server compact, on the home machine or an outpost. attn refuses any other
-        session. The refusal names the setting the user turns on,
-        claude_mod_enabled or codex_shared_enabled. Compact only a
+        session, and the refusal says why. Compact only a
         session that will resume as itself, as a seed's tender does when its
         standby wakes it. A crew member's next wake starts a fresh session.
   reload <session-or-member>... [--source-session <id>] [--json]

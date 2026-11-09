@@ -4,19 +4,6 @@ import { describe, expect, it } from 'vitest';
 import { openSection, savedSettings } from '../test/settings';
 import { gesture } from '../test/renderApp';
 
-const sharedCodex = () => screen.getByRole('switch', { name: 'Shared Codex' });
-
-describe('Experimental settings for shared Codex', () => {
-  it('starts with Shared Codex off and saves its setting both ways', async () => {
-    const daemon = await openSection('experimental');
-    expect(sharedCodex()).toHaveAttribute('aria-checked', 'false');
-    await gesture(daemon, () => fireEvent.click(sharedCodex()));
-    expect(sharedCodex()).toHaveAttribute('aria-checked', 'true');
-    await gesture(daemon, () => fireEvent.click(sharedCodex()));
-    expect(savedSettings(daemon)).toEqual([['codex_shared_enabled', 'true'], ['codex_shared_enabled', 'false']]);
-  });
-});
-
 describe('Experimental settings for the Claude mod', () => {
   it('starts off and saves the setting in both directions', async () => {
     const daemon = await openSection('experimental');

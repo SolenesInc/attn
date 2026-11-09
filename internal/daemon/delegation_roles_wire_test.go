@@ -131,6 +131,7 @@ func TestADelegateLaunchedInARoleGetsOnlyThatRolesGuidance(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	request := brief(cwd, "# Discount field\n\nImplement the discount field")
 	request.Role = protocol.Ptr("build")
 	result, err := cli.Delegate(request)

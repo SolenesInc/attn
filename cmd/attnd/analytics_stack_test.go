@@ -104,7 +104,6 @@ func TestASharedCodexHookIsRecordedAsItsAgentNotAPerson(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
 	s.Start()
 	app := s.App()
-	shareCodex(t, app)
 	if set := s.Attn("settings", "set", "analytics.enabled", "true"); set.Code != 0 {
 		t.Fatalf("enable analytics: exit %d, stderr %q", set.Code, set.Stderr)
 	}

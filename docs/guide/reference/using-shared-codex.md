@@ -1,7 +1,7 @@
 # Using shared Codex
 
-Shared Codex is experimental. With it on, your Codex terminals talk to one Codex
-app-server per profile instead of each running a Codex of their own. Sharing the
+Your Codex terminals talk to one Codex app-server per profile instead of each
+running a Codex of their own. Sharing the
 app-server lets a conversation outlive the terminal that showed it. When you
 switch a terminal to another conversation, the conversation you left keeps
 running as a hidden session instead of closing.
@@ -14,20 +14,21 @@ executable in Settings. After you install another Codex, Attn moves the
 app-server to the new Codex. [Codex updates](#codex-updates) describes how. Attn
 was checked against Codex 0.160.0.
 
-## Turn it on or off
+## Which sessions run on it
 
-**Shared Codex** in **Settings → Experimental** is off by default. From a
-terminal, run `attn settings set codex_shared_enabled true`, or `false` to turn
-it off. The setting decides how new Codex terminals, and sessions you resume
-from the Sessions ledger, launch. The setting also applies to the Codex
-sessions that automations and delegations start. A running session, hidden ones
-included, stays shared or plain until it closes or you move its conversation
-yourself, for example with `/resume` in a Codex of the other kind.
+Every Codex terminal you start, and every Codex session you resume from the
+Sessions ledger, runs on shared Codex. So do the Codex sessions that automations
+and delegations start. A Codex session that was already running when you
+upgraded to this version stays plain until it closes.
 
 An automation that starts shared Codex runs with its own model, effort and
-auto-approval, as with plain Codex. An automation that names its own Codex
-executable runs a plain Codex, since the app-server runs one Codex for the
-whole profile.
+auto-approval. An automation cannot name its own Codex executable, because the
+app-server runs one Codex for the whole profile. Attn refuses to save one that
+does, and the upgrade to this version cleared the executable from any saved
+Codex automation. Set **Codex executable** in Settings, or `codex_executable`, instead.
+
+If the app-server cannot start, the launch fails with an error naming the Codex
+version it tried.
 
 ## Folder trust
 
@@ -193,8 +194,8 @@ Codex, settles the session's usage and closes the session into the ledger. A hid
 closes the same way.
 
 To pick the session up again, resume the session from the Sessions ledger. Attn
-unarchives the conversation and resumes it in a new tile, shared or plain as
-the setting says.
+unarchives the conversation and resumes it in a new shared tile. A typed
+`/resume <id>` and a seed's tender waking do the same.
 
 An agent can compact a shared session's conversation just before it closes
 itself, as [Seeds on standby](delegation.md#seeds-on-standby) describes. A plain

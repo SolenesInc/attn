@@ -254,7 +254,7 @@ func TestDeletingAProfileWithAClosedSeedAndALiveDelegate(t *testing.T) {
 				side := createProfile(app, "Side")
 				selectProfile(app, side.ID)
 				cwd := registerDelegationCaller(t, w, cli, "caller")
-				worker, err := cli.Delegate(delegateFrom("caller", cwd, "Close before deleting this profile", fakeagent.Codex))
+				worker, err := cli.Delegate(delegateFrom("caller", cwd, "Close before deleting this profile", fakeagent.Claude))
 				if err != nil {
 					t.Fatal(err)
 				}

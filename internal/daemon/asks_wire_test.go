@@ -34,7 +34,7 @@ func TestAnAnsweredAskIsTypedIntoTheAgentsConversationAndHandsItsTurnBack(t *tes
 	setSetting(t, app, "asks_enabled", "true")
 	asker := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("pick a cache store") })
 	agent := w.Launched(asker)
-	if guidance := launchGuidance(t, agent); !strings.Contains(guidance, askGuidanceLead) {
+	if guidance := launchGuidance(t, w, agent); !strings.Contains(guidance, askGuidanceLead) {
 		t.Fatalf("an agent launched with asks on was not taught them:\n%s", guidance)
 	}
 	agent.Prompted()
@@ -344,7 +344,7 @@ func TestARepliedAskStaysForADayUnlessItsSessionClosesFirst(t *testing.T) {
 func TestAnAgentKeepsTheAsksSettingItLaunchedWith(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	taught := func(run *fakeagent.Run) bool { return strings.Contains(launchGuidance(t, run), askGuidanceLead) }
+	taught := func(run *fakeagent.Run) bool { return strings.Contains(launchGuidance(t, w, run), askGuidanceLead) }
 	respawn := func(session string) *fakeagent.Run {
 		t.Helper()
 		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
@@ -486,7 +486,7 @@ func TestEachHarnessLaunchedWithAsksIsTaughtThem(t *testing.T) {
 	app := w.App()
 	setSetting(t, app, "asks_enabled", "true")
 	for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
-		if guidance := launchGuidance(t, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
+		if guidance := launchGuidance(t, w, w.Launched(w.Spawn(app, h, w.Path(string(h))))); !strings.Contains(guidance, askGuidanceLead) {
 			t.Errorf("%s launched with asks on was not taught them:\n%s", h, guidance)
 		}
 	}
@@ -541,7 +541,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	if _, err := cli.SeedNote("caller", seed, "the schema froze yesterday", "", true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) {
+	if got := successor.DeliveredPrompt(); !strings.HasSuffix(got, inboxDoorbell) {
 		t.Fatalf("the seed's tender was prompted with %q, want the doorbell for the caller's note", got)
 	}
 	successor.Reply("Noted. <!-- attn:state=waiting_input -->")
@@ -557,7 +557,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	}
 	testworld.Await(app, protocol.EventAsksUpdated, func(m protocol.AsksUpdatedMessage) bool { return len(m.Asks) == 1 && m.Asks[0].Reply != nil })
 	testworld.AwaitStateAfter(app, waiting, func(s protocol.Session) bool { return s.TurnOwed == nil && protocol.Deref(s.TurnByAgent) })
-	if got := successor.Prompted(); !strings.Contains(got, "Answer: Postgres (the recommended choice)") || strings.Contains(got, inboxDoorbell) {
+	if got := successor.DeliveredPrompt(); !strings.Contains(got, "Answer: Postgres (the recommended choice)") || strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the seed's tender was typed %q, want the answer alone", got)
 	}
 	items := readInbox(t, cli, string(second.SessionID), 0).Items
@@ -569,7 +569,7 @@ func TestADelegatesAskIsAboutItsSeedAndItsAnswerIsTypedToTheNextTender(t *testin
 	if _, err := cli.SeedNote("caller", seed, "the index rebuild is scheduled", "", true, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := successor.Prompted(); !strings.HasSuffix(got, inboxDoorbell) || strings.Contains(got, "Answer: Postgres") {
+	if got := successor.DeliveredPrompt(); !strings.HasSuffix(got, inboxDoorbell) || strings.Contains(got, "Answer: Postgres") {
 		t.Fatalf("the next ring typed %q, want the doorbell alone and not the answer again", got)
 	}
 	notes, err := cli.SeedNotes("", seed, client.SeedNotesQuery{Limit: 2})

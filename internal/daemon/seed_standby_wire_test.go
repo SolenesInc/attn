@@ -71,7 +71,7 @@ func TestSeedMailReopensACodexTenderOnStandbyAsItselfWithItsNote(t *testing.T) {
 	if !relaunched.Resumed || relaunched.ConversationID != first.ConversationID {
 		t.Fatalf("the wake ran %s %q, want it resuming conversation %s", relaunched.Harness, relaunched.Argv, first.ConversationID)
 	}
-	got := relaunched.Prompted()
+	got := relaunched.DeliveredPrompt()
 	if !strings.Contains(got, standbyNote) || !strings.Contains(got, seed) {
 		t.Fatalf("the woken tender received %q, want the standby note of %s", got, seed)
 	}
@@ -97,7 +97,7 @@ func TestATenderClosedBeforeReadingItsSeedMailIsWokenAgainForIt(t *testing.T) {
 
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
 	woken := w.Launched(string(session))
-	if got := woken.Prompted(); !strings.Contains(got, standbyNote) {
+	if got := woken.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the woken tender received %q, want the standby note", got)
 	}
 	if shown := lifeShow(t, cli, seed); shown.Seed.Standby == nil {
@@ -110,7 +110,7 @@ func TestATenderClosedBeforeReadingItsSeedMailIsWokenAgainForIt(t *testing.T) {
 	if !again.Resumed || again.ConversationID != first.ConversationID {
 		t.Fatalf("after the close the tender ran %s %q, want it resuming conversation %s", again.Harness, again.Argv, first.ConversationID)
 	}
-	if got := again.Prompted(); !strings.Contains(got, standbyNote) {
+	if got := again.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the tender woken again received %q, want the standby note", got)
 	}
 
@@ -145,11 +145,12 @@ func TestAWokenCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
 	}
 	boot.Release()
 	relaunched := w.Launched(string(session))
-	if got := relaunched.Prompted(); !strings.Contains(got, standbyNote) {
+	if got := relaunched.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the woken Codex took %q, want the standby note once it booted", got)
 	}
 	seedMail(t, cli, string(session), seed)
 	awaitStandbyEnded(t, app, mark, seed)
+	relaunched.Reply("Reading it. <!-- attn:state=idle -->")
 	nothingElsePrompted(t, app, relaunched, string(session))
 }
 
@@ -172,6 +173,7 @@ func TestOnlySeedMailForASeedOnStandbyReopensAClosedTender(t *testing.T) {
 	if _, err := standbyAs(t, cli, direct, false); err != nil {
 		t.Fatalf("seed standby: %v", err)
 	}
+	working.Reply("On standby. <!-- attn:state=idle -->")
 	app.TypeLine(string(direct.SessionID), "keep working")
 	working.Prompted()
 	if sent := sendAgentMessage(t, cli, "sender", string(direct.SessionID), "to the session, not the seed"); sent.Status != protocol.AgentMsgStatusQueued {
@@ -195,7 +197,7 @@ func TestOnlySeedMailForASeedOnStandbyReopensAClosedTender(t *testing.T) {
 	if !relaunched.Resumed || relaunched.ConversationID != first.ConversationID {
 		t.Fatalf("the wake ran %s %q, want it resuming conversation %s", relaunched.Harness, relaunched.Argv, first.ConversationID)
 	}
-	if got := relaunched.Prompted(); !strings.Contains(got, standbyNote) {
+	if got := relaunched.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 		t.Fatalf("the tender the user closed received %q, want the standby note", got)
 	}
 	seedMail(t, cli, string(session), seed)
@@ -486,7 +488,7 @@ func TestTheTenderWakeSettingDecidesWhichSeedMailWakesATenderOnStandby(t *testin
 		if first := runs[delegated.SeedID]; !run.Resumed || run.ConversationID != first.ConversationID {
 			t.Fatalf("%s ran %s %q, want it resuming conversation %s", by, run.Harness, run.Argv, first.ConversationID)
 		}
-		if got := run.Prompted(); !strings.Contains(got, standbyNote) {
+		if got := run.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 			t.Fatalf("the tender woken by %s received %q, want its standby note", by, got)
 		}
 		return seedMail(t, cli, string(delegated.SessionID), delegated.SeedID)
@@ -815,6 +817,7 @@ func TestTheSessionAboveAClosedTenderOnStandbyMovesItsSeedWithoutForce(t *testin
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	request := brief(cwd, "Investigate the tracked task.")
 	request.Agent = protocol.Ptr(string(fakeagent.Codex))
 	request.SourceSessionID = protocol.Ptr(protocol.SessionID("parent"))

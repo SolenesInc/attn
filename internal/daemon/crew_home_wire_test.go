@@ -531,7 +531,6 @@ func TestWakingAMemberTrustsItsHomeInTheHarnessConfig(t *testing.T) {
 func TestACodexMemberInAFolderTheUserChoseStillGetsCodexsQuestion(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	cli, app := w.Client(), w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	chosen := w.Path("chosen")
 	if err := os.MkdirAll(chosen, 0o755); err != nil {
 		t.Fatal(err)

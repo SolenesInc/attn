@@ -13,7 +13,6 @@ import (
 func TestTerminalCommandsAddressEachTileOfASharedConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	caller, first, firstTerminal := sharedCodexWaiting(t, w, app)
 	home, _ := tileOf(t, w, app, firstTerminal)
 	elsewhere := createDesktop(app, app.SelectedProfile())

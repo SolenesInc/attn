@@ -9,6 +9,7 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
+  submitPrompt,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
@@ -16,6 +17,7 @@ import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './ha
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appCliInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
+import { waitForFirstDesktopPane } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -131,7 +133,7 @@ async function main() {
       // Reopen resumes the saved conversation, so the rollout must sit where the driver looks.
       resumable: true,
       name: 'session reopen mock',
-      turns: [],
+      turns: [{ includes: 'start the conversation', actions: [{ type: 'reply', text: 'conversation started', state: 'idle' }] }],
     });
 
     await runner.step('launch_app', async () => {
@@ -163,6 +165,12 @@ async function main() {
         repo,
       });
       runner.writeJson('worktree-session.json', registered);
+    });
+
+    await runner.step('start_the_conversation', async () => {
+      const pane = await waitForFirstDesktopPane(client, sessionId, 'the worktree session pane', 20_000);
+      await submitPrompt(client, sessionId, pane.paneId, 'start the conversation');
+      await observer.waitFor(() => observer.getSession(sessionId)?.state === 'idle', 'the first turn to finish', 30_000);
     });
 
     await runner.step('close_the_session', async () => {

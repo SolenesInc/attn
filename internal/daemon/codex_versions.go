@@ -131,9 +131,6 @@ func (r *codexShared) terminalBinary(profile, installed string) string {
 }
 
 func (r *codexShared) refreshInstalled() {
-	if !r.enabledForNewLaunches() {
-		return
-	}
 	version, err := r.installedVersion(r.d.life.Context())
 	if err != nil {
 		r.d.logf("shared Codex: reading the installed version: %v", err)
@@ -208,12 +205,10 @@ func (d *Daemon) queueCodexUpdateCheck() {
 
 func (d *Daemon) codexUpdateCheckHandler(ctx context.Context, _ *jobs.Job) (any, error) {
 	r := d.codexShared()
-	if !r.enabledForNewLaunches() {
-		return nil, nil
-	}
 	binary, err := r.binary("")
 	if err != nil {
-		return nil, err
+		r.d.logf("shared Codex: no update check: %v", err)
+		return nil, nil
 	}
 	out, err := r.run(ctx, binary, "doctor", "--json")
 	var report struct {
@@ -255,19 +250,22 @@ func (r *codexShared) versionsChanged(profiles ...string) {
 }
 
 func (r *codexShared) settingChanged(key string) {
-	switch key {
-	case setting.CodexSharedEnabled.Key:
-		if r.enabledForNewLaunches() {
-			r.d.queueCodexUpdateCheck()
-		}
-		r.versionsChanged()
-	case setting.CodexExecutable.Key:
+	if key == setting.CodexExecutable.Key {
 		r.refreshInstalledSoon()
+		r.d.queueCodexUpdateCheck()
 	}
 }
 
+func (r *codexShared) versionLabel(ctx context.Context) string {
+	version, err := r.installedVersion(ctx)
+	if err != nil || version == "" {
+		return "Codex version unknown"
+	}
+	return "Codex " + version
+}
+
 func (r *codexShared) wireState(profile string) *protocol.SharedCodexState {
-	if profile == "" || !r.enabledForNewLaunches() {
+	if profile == "" {
 		return nil
 	}
 	r.mu.Lock()

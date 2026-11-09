@@ -15,7 +15,7 @@ import (
 func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *testing.T) {
 	for _, failedCapture := range []bool{false, true} {
 		t.Run(strconv.FormatBool(failedCapture), func(t *testing.T) {
-			w := &world{World: prepareWorld(t, fakeagent.Claude, fakeagent.Codex)}
+			w := &world{World: prepareWorld(t, fakeagent.Claude)}
 			profile := filepath.Join(w.Dir, "profile")
 			shell := filepath.Join(w.Dir, "login-shell")
 			script := "#!/bin/sh\n. \"$ATTN_TEST_PROFILE\"\n"
@@ -36,7 +36,7 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 			setSetting(t, app, "direct_agent_launch_enabled", "true")
 			for _, phase := range []string{"first", "edited", "removed"} {
 				var content strings.Builder
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				for _, h := range []fakeagent.Harness{fakeagent.Claude} {
 					key := "ATTN_" + strings.ToUpper(string(h)) + "_EXECUTABLE"
 					if phase == "removed" {
 						fmt.Fprintf(&content, "unset %s\n", key)
@@ -53,7 +53,7 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 				if err := os.WriteFile(profile, []byte(content.String()), 0o600); err != nil {
 					t.Fatal(err)
 				}
-				for _, h := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				for _, h := range []fakeagent.Harness{fakeagent.Claude} {
 					run := w.Launched(w.Spawn(app, h, w.Path(string(h), phase), func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr(literalInitialPrompt) }))
 					if got := run.Prompted(); got != literalInitialPrompt {
 						t.Fatalf("%s prompt %q", h, got)
@@ -67,13 +67,6 @@ func TestDirectLaunchReadsTheCurrentProfileEvenWhenEnvironmentCaptureFails(t *te
 						t.Fatalf("%s ran executable %q after profile %s; want %q", h, marker, phase, want)
 					}
 				}
-			}
-			if err := os.WriteFile(profile, []byte("export ATTN_CODEX_EXECUTABLE=/no/such/profile-codex\n"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			run := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("explicit"), func(m *protocol.SpawnSessionMessage) { m.Executable = protocol.Ptr("codex") }))
-			if value, _ := envEntry(run.Env, "ATTN_CODEX_EXECUTABLE"); value != "codex" {
-				t.Fatalf("explicit default executable left hook override %q", value)
 			}
 		})
 	}

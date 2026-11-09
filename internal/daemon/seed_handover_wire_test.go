@@ -21,6 +21,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	if err := os.MkdirAll(w.Path("api"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(w.Path("api"), "trusted")
 	predecessor, err := cli.Delegate(delegateFrom(source, w.Path("api"), "# Investigate the tracked task\n\nTrace the failing test.", fakeagent.Codex))
 	if err != nil {
 		t.Fatal(err)
@@ -32,6 +33,11 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 	unfinished := seedArtifactsWrite(t, predecessor.Directory, "unfinished.txt", []byte("still here"))
 	body := lifeShow(t, cli, seed).Seed.Body
 	observer := w.Spawn(app, fakeagent.Codex, w.Path("observer"))
+	observerRun := w.Launched(observer)
+	app.TypeLine(observer, "watch the task")
+	observerRun.Prompted()
+	observerRun.Reply("Watching. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, observer, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	for _, watcher := range []string{source, observer} {
 		if _, err := cli.SeedWatch(protocol.SessionID(watcher), seed, false); err != nil {
 			t.Fatal(err)
@@ -72,7 +78,7 @@ func TestAHandoverStartsTheSuccessorWhereThePredecessorLeftOff(t *testing.T) {
 		t.Errorf("the successor's session carries seed %q, want %s", got, seed)
 	}
 
-	if prompt := w.Launched(observer).Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+	if prompt := observerRun.DeliveredPrompt(); !strings.Contains(prompt, inboxDoorbell) {
 		t.Fatalf("the seed's watcher was prompted %q, want the inbox doorbell", prompt)
 	}
 	if bells := readInbox(t, cli, observer, 0).Items; len(bells) != 1 || protocol.Deref(bells[0].Hint) != "tended" || !strings.Contains(bells[0].Content, seed) {
@@ -118,7 +124,7 @@ func TestAHandedOverSeedResumesTheSuccessorsConversation(t *testing.T) {
 	closePane(app, sessionPane{session: string(successor.SessionID)})
 
 	if resumed := seedResumeRequest(app, predecessor.SeedID); !resumed.Success || protocol.Deref(resumed.SessionID) != successor.SessionID {
-		t.Fatalf("resuming the handed-over seed = %+v, want %s relaunched", resumed, successor.SessionID)
+		t.Fatalf("resuming the handed-over seed failed with %q, want %s relaunched", protocol.Deref(resumed.Error), successor.SessionID)
 	}
 	seedResumeContinues(t, w, first, string(successor.SessionID))
 	seedHandoverHeldBy(t, cli, predecessor.SeedID, string(successor.SessionID), 1)
@@ -132,6 +138,7 @@ func TestAHandoverWithoutAPreviousExecutionStartsWhereItWasAsked(t *testing.T) {
 	if err := os.MkdirAll(placed, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(placed, "trusted")
 
 	successor, err := cli.Delegate(seedHandoverRequest("", placed, seed, ""))
 	if err != nil {
@@ -151,6 +158,7 @@ func TestAHandoverRecreatesTheSavedBranchAfterItsWorktreeWasDeleted(t *testing.T
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
 	repo := w.Path("repo")
+	w.SetCodexFolderTrust(repo, "trusted")
 	gitRepo(t, repo)
 	predecessor, err := cli.Delegate(delegateCheckoutAt(filepath.Join(repo, "web"), delegateNewWorktree("feature/handover", "main")))
 	if err != nil {

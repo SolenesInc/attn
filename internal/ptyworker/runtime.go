@@ -1292,9 +1292,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		lastEvidence := c.runtime.lastEvidence
 		title := c.runtime.title
 		c.runtime.stateMu.RUnlock()
-		if lastEvidence != nil {
-			pausepoint.At(pausepoint.PtyWatchReplay)
-		}
 		if !c.watching {
 			c.watching = true
 			c.runtime.addWatcher(c)

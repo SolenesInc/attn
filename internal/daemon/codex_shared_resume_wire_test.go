@@ -12,7 +12,6 @@ import (
 func TestSpawningAConversationALiveSharedSessionHoldsOpensThatSessionInANewTerminal(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, first, firstTerminal := sharedCodexWaiting(t, w, app)
 	conversation := first.ConversationID
 

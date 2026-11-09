@@ -208,7 +208,7 @@ func TestEditingASingletonsContractHandsItsSeedToANewSessionAndLeavesTheOldOneWo
 	if protocol.Deref(again.SessionID) != codexSession {
 		t.Fatalf("the second codex run went to %s, want %s", protocol.Deref(again.SessionID), codexSession)
 	}
-	codex.Prompted()
+	codex.DeliveredPrompt()
 	readInbox(t, cli, string(codexSession), 0)
 
 	applyAutomation(t, cli, automationEditSpec(id, claudeSpec))
@@ -441,6 +441,15 @@ func TestASingletonRunCancelledBeforeItsHandoverLeavesTheHandoverToTheNextRun(t 
 
 func awaitNextDeliveredRun(t *testing.T, w *world, app *testworld.Peer, id int, earlier ...string) protocol.AutomationRunSummary {
 	t.Helper()
+	next := awaitNextSettledRun(t, w, app, id, earlier...)
+	if next.State != "delivered" {
+		t.Fatalf("run %s is %s with %q, want it delivered", next.ID, next.State, protocol.Deref(next.LastError))
+	}
+	return next
+}
+
+func awaitNextSettledRun(t *testing.T, w *world, app *testworld.Peer, id int, earlier ...string) protocol.AutomationRunSummary {
+	t.Helper()
 	var next protocol.AutomationRunSummary
 	w.tickSchedulesUntil("a new run", func() bool {
 		runs := automationRuns(t, w.Client(), id)
@@ -457,9 +466,6 @@ func awaitNextDeliveredRun(t *testing.T, w *world, app *testworld.Peer, id int, 
 				next = run
 			}
 		}
-	}
-	if next.State != "delivered" {
-		t.Fatalf("run %s is %s with %q, want it delivered", next.ID, next.State, protocol.Deref(next.LastError))
 	}
 	return next
 }

@@ -30,7 +30,6 @@ func sharedCodexOn(t *testing.T, version string) (w *world, app *testworld.Peer,
 	w = newWorld(t, fakeagent.Codex)
 	w.SetCodexVersion(version)
 	app = w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session = w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	return w, app, session, w.Launched(session)
 }
@@ -229,7 +228,7 @@ func TestARestartBacksOffWhenATurnStartsWhileItPrepares(t *testing.T) {
 	w, app, session, codex := sharedCodexOn(t, "0.162.1")
 
 	w.SetCodexVersion("0.163.0")
-	preflight := w.HoldNextBoot()
+	preflight := w.HoldNextCodexServerBoot()
 	if result := restartSharedCodex(t, app, false); !result.Success {
 		t.Fatalf("restart: %s", protocol.Deref(result.Error))
 	}
@@ -370,7 +369,6 @@ func TestAQueuedRestartWaitsUntilASlashNewConversationIsWritten(t *testing.T) {
 func TestReloadingDuringASlashNewWriteKeepsTheTerminalOnTheConversationItShows(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session, first, terminal := sharedCodexWaiting(t, w, app)
 	original := first.ConversationID
 	arrived, release := w.CodexServer().HoldNextInjectReply()

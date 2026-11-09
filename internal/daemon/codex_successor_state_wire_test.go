@@ -21,7 +21,6 @@ func TestASharedCodexSuccessorStartsWorkingOnItsOwnFirstPrompt(t *testing.T) {
 		t.Run(old.name, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app := w.App()
-			setSetting(t, app, "codex_shared_enabled", "true")
 			original, first, terminal := sharedCodexWaiting(t, w, app)
 			before := listedState(t, w, original)
 			first.ProgramStatus("state=working:app=codex")

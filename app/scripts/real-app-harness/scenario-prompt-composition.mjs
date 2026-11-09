@@ -34,8 +34,7 @@ function instructions(text, agent) {
   const meta = text.split('\n').filter(Boolean).map(line => JSON.parse(line)).find(row => row.type === 'session_meta');
   const args = meta?.payload?.launch?.argv || [];
   if (agent === 'claude') return args[args.indexOf('--append-system-prompt') + 1] || '';
-  const override = args.find(arg => arg.startsWith('developer_instructions='));
-  return override ? JSON.parse(override.slice('developer_instructions='.length)) : '';
+  return '';
 }
 
 async function main() {
@@ -94,7 +93,7 @@ async function main() {
     cli(['daemon', 'stop']);
     fs.mkdirSync(crewHome, { recursive: true });
     fs.writeFileSync(path.join(crewHome, 'CHARTER.md'), '# Promptprobe\nSynthetic prompt verification crew member.\n');
-    writeMockAgentFixture(crewHome, { version: 1, agent: 'codex', turns: [
+    writeMockAgentFixture(crewHome, { version: 1, agent: 'claude', turns: [
       { includes: 'You have been woken', actions: [{ type: 'reply', text: 'CREW_READY' }] },
       { includes: '📬 You have unread items', actions: [
         { type: 'attn', args: ['agent', 'inbox'] },
@@ -104,7 +103,7 @@ async function main() {
     ] });
     await launchFreshAppAndConnect(client, observer);
     const launches = [];
-    for (const [name, agent, chief] of [['ordinary-claude', 'claude', false], ['ordinary-codex', 'codex', false], ['chief-codex', 'codex', true]]) {
+    for (const [name, agent, chief] of [['ordinary-claude', 'claude', false], ['peer-claude', 'claude', false], ['chief-claude', 'claude', true]]) {
       await runner.step(`launch_${name}`, async () => {
         const cwd = path.join(runner.sessionDir, name);
         fs.mkdirSync(cwd, { recursive: true });
@@ -200,14 +199,14 @@ async function main() {
         'agent image has inspectable pixels', { width: decoded.width, height: decoded.height, bytes: received.length });
     });
     await runner.step('crew_wake_sleep_and_successor', async () => {
-      cli(['crew', 'set', crewName, '--agent', 'codex', '--model', 'claude-haiku-4-5']);
+      cli(['crew', 'set', crewName, '--agent', 'claude', '--model', 'claude-haiku-4-5']);
       const first = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(first.session_id);
       await observer.waitForSession({ id: first.session_id });
       await client.request('select_session', { sessionId: first.session_id });
       await waitForFirstDesktopPane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
-      runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');
+      runner.assert(instructions(captured.text, 'claude').includes(`You are **${crewLabel}**`), 'crew identity reaches the appended instructions');
       const duplicate = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       runner.assert(duplicate.already_awake === true && duplicate.session_id === first.session_id, 'wake does not create a second day');
       observer.send({ cmd: 'set_client_presence', visible: true, dashboard_visible: false, idle_seconds: 0 });
@@ -224,7 +223,7 @@ async function main() {
       const second = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(second.session_id);
       const successor = await waitFor(() => transcripts(crewHome).find(file => file.name !== captured.name && file.text.includes('CREW_READY')), 'successor wake');
-      runner.assert(instructions(successor.text, 'codex').includes('PROMPT_TEST_LETTER'), 'successor receives the filed letter');
+      runner.assert(instructions(successor.text, 'claude').includes('PROMPT_TEST_LETTER'), 'successor receives the filed letter');
       for (const file of [captured, successor]) {
         const turns = transcriptTurns(file.text).filter(turn => turn.role === 'user' && turn.text.includes('You have been woken'));
         runner.assert(turns.length === 1, 'opening wake is delivered once', { file: file.name, count: turns.length });

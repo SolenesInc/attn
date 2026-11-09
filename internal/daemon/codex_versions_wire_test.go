@@ -25,10 +25,6 @@ func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t 
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
 	app := w.App()
-	if app.Initial.SharedCodex != nil {
-		t.Fatalf("with Shared Codex off the app was sent %+v", *app.Initial.SharedCodex)
-	}
-	setSetting(t, app, "codex_shared_enabled", "true")
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})
@@ -63,9 +59,6 @@ func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t 
 	testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool {
 		return m.ProfileID == home && sharedCodexVersions(m.SharedCodex, "0.162.1", "0.163.0", "0.163.0", protocol.SharedCodexRestartPending)
 	})
-
-	setSetting(t, app, "codex_shared_enabled", "false")
-	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool { return s == nil })
 }
 
 func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
@@ -73,7 +66,6 @@ func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.162.1")
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	terminal := w.Terminal(session)
@@ -107,7 +99,6 @@ func TestSharedCodexRunsTheConfiguredCodexForItsAppServerAndItsTerminals(t *test
 	w.SetCodexVersion("0.162.1")
 	app := w.App()
 	configured := w.InstallCodexAt("configured-codex", "0.170.0")
-	setSetting(t, app, "codex_shared_enabled", "true")
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return s != nil && protocol.Deref(s.InstalledVersion) == "0.162.1"
 	})
@@ -133,7 +124,6 @@ func TestNewSharedCodexTerminalsRunTheAppServersCodexWhileItIsStillInstalled(t *
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	codex := w.InstallStandaloneCodex("standalone", "0.162.1")
-	setSetting(t, app, "codex_shared_enabled", "true")
 	setSetting(t, app, "codex_executable", codex)
 	spawn := func(project string) string {
 		return w.Spawn(app, fakeagent.Codex, w.Path(project), func(m *protocol.SpawnSessionMessage) {
@@ -175,7 +165,6 @@ func TestNewSharedCodexTerminalsRunTheInstalledCodexWhenTheAppServerRanThroughAS
 	app := w.App()
 	shim := w.InstallMiseCodex("mise", "0.162.1")
 	standalone := w.InstallStandaloneCodex("standalone", "0.163.0")
-	setSetting(t, app, "codex_shared_enabled", "true")
 	spawn := func(project, codex string) string {
 		setSetting(t, app, "codex_executable", codex)
 		session := w.Spawn(app, fakeagent.Codex, w.Path(project), func(m *protocol.SpawnSessionMessage) {

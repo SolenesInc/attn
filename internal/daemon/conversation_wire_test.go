@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -283,7 +284,6 @@ func TestACrewMembersClearKeepsItsDay(t *testing.T) {
 func TestASharedCodexCrewMembersNewKeepsItsDayInItsTerminal(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	workDir := w.Path("keel-work")
 	if err := os.MkdirAll(workDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -371,80 +371,6 @@ func TestAClearedTerminalComesBackShowingItsNewSessionInItsNewConversation(t *te
 	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 }
 
-func TestCodexNewOpensANewSessionOnTheNewChatsFirstPrompt(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	cwd := w.Path("shop")
-	first := w.Spawn(app, fakeagent.Codex, cwd)
-	codex := w.Launched(first)
-	app.TypeLine(first, "find the flaky test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	launched := codex.ConversationID
-
-	app.TypeLine(first, "/new")
-	if got := codex.Prompted(); got != "/new" {
-		t.Fatalf("codex received %q, want /new", got)
-	}
-	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{first}) {
-		t.Fatalf("before the new chat's first prompt the sessions are %v, want only %s", ids, first)
-	}
-	app.TypeLine(first, "now fix it")
-	codex.Prompted()
-	next := awaitSuccessor(app, first)
-	started := codex.ConversationID
-	if started == launched {
-		t.Fatalf("/new kept codex in conversation %s", launched)
-	}
-	awaitClosed(app, first)
-	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	codex.Reply("Fixed with a lock. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	resumed := respawn(w, app, fakeagent.Codex, string(next.ID), cwd)
-	if !resumed.Resumed || resumed.ConversationID != started {
-		t.Fatalf("respawn ran codex %q; want it to resume %s, the conversation /new started", resumed.Argv, started)
-	}
-}
-
-func TestCodexResumeReopensTheClosedSessionOnTheNextPrompt(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	first := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	terminal := app.Terminal(first)
-	codex := w.Launched(first)
-	app.TypeLine(first, "find the flaky test")
-	codex.Prompted()
-	codex.Reply("It races the tax lookup. <!-- attn:state=idle -->")
-	flaky := codex.ConversationID
-	app.TypeLine(first, "/new")
-	codex.Prompted()
-	app.TypeLine(first, "write the changelog")
-	codex.Prompted()
-	next := awaitSuccessor(app, first)
-	awaitClosed(app, first)
-	codex.Reply("Written. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, string(next.ID), func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-
-	app.TypeLine(string(next.ID), "/resume "+flaky)
-	codex.Prompted()
-	app.TypeLine(string(next.ID), "now fix it")
-	if got := codex.Prompted(); got != "now fix it" || codex.ConversationID != flaky {
-		t.Fatalf("codex took %q in conversation %s, want it in %s", got, codex.ConversationID, flaky)
-	}
-	if back := awaitSuccessor(app, string(next.ID)); string(back.ID) != first {
-		t.Fatalf("/resume %s showed session %s, want %s, the closed session that holds it", flaky, back.ID, first)
-	}
-	if got := app.Terminal(first); got != terminal {
-		t.Errorf("%s came back in terminal %s, want %s", first, got, terminal)
-	}
-	awaitClosed(app, string(next.ID))
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
-	codex.Reply("Fixed with a lock. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, first, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-}
-
 func TestCodexResumeFromATerminalWithNoConversationYetReopensTheClosedSession(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
@@ -482,14 +408,15 @@ func TestASessionLaunchedToResumeAConversationKeepsResumingIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	cwd := w.Path("api")
-	earlier := w.Spawn(app, fakeagent.Codex, cwd)
-	codex := w.Launched(earlier)
-	app.TypeLine(earlier, "list the endpoints")
-	codex.Prompted()
-	codex.Reply("Three endpoints. <!-- attn:state=idle -->")
-	conversation := codex.ConversationID
-	app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(earlier)})
-	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return string(e.SessionID) == earlier })
+	conversation := "019a0000-0000-7000-8000-00000000beef"
+	rollout := filepath.Join(os.Getenv("CODEX_HOME"), "sessions", "2026", "07", "17", "rollout-2026-07-17T10-00-00-"+conversation+".jsonl")
+	if err := os.MkdirAll(filepath.Dir(rollout), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	meta := `{"timestamp":"2026-07-17T10:00:00Z","type":"session_meta","payload":{"id":"` + conversation + `","cwd":"` + cwd + `","source":"cli"}}` + "\n"
+	if err := os.WriteFile(rollout, []byte(meta), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	session := w.Spawn(app, fakeagent.Codex, cwd, func(m *protocol.SpawnSessionMessage) {
 		m.ResumeSessionID = protocol.Ptr(conversation)

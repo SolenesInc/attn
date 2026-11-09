@@ -131,7 +131,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
 	}
 	l := d.linkNamed(launch.Link)
-	if err := d.trustUnattendedCodexFolder(opts, launch.Profile, l != nil && l.kind() == codexLinkKind); err != nil {
+	if err := d.refuseUnknownCodexFolder(opts, launch.Profile); err != nil {
 		return nil, err
 	}
 	if err := d.settleClaudeFolderTrust(opts, launch.RepositoryTrust); err != nil {

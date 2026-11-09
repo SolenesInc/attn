@@ -1,8 +1,10 @@
 package daemon_test
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -171,5 +173,123 @@ func TestACodexAutomationConfirmedJustBeforeAMachineRebootIsDeliveredWithoutAFre
 	app.TypeLine(session, "anything else?")
 	if next := revived.Prompted(); next != "anything else?" {
 		t.Fatalf("the next prompt was %q, want only what was typed and no fresh opening prompt", next)
+	}
+}
+
+func codexReviewOnAModal(t *testing.T) (*testworld.Stack, protocol.AutomationRunSummary, string) {
+	t.Helper()
+	github := newAutomationGitHub(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Codex))
+	s.Vars = append(s.Vars, "ATTN_MOCK_GH_URL="+github.url, "ATTN_MOCK_GH_TOKEN=test-token", "ATTN_MOCK_GH_HOST=github.test")
+	s.Start()
+	clone := newRepo(t, "shop")
+	runGit(t, clone, "remote", "add", "origin", "https://github.test/acme/shop.git")
+	head := commitFile(t, clone, "change.go", "package change\n")
+	s.SetCodexFolderTrust(clone, "trusted")
+	spec := strings.Replace(automationReviewSpec("review", "github_review_requested", automationReviewOverride(clone)), "launch: {driver: claude, model: sonnet}", "launch: {driver: codex}", 1)
+	applyAutomation(t, s.Client(), spec)
+	app := s.App()
+	refreshStackPRs(t, app)
+	s.RequireEnterAtNextBoot(codexStuckOnAModal)
+	github.request(42, head, false)
+	refreshStackPRs(t, app)
+	runs := automationRuns(t, s.Client(), 1)
+	for len(runs) != 1 || runs[0].State != "pending" {
+		awaitAutomationChanged(app, 1)
+		runs = automationRuns(t, s.Client(), 1)
+	}
+	session := string(protocol.Deref(runs[0].SessionID))
+	app.AwaitScreen(session, "A new version of Codex")
+	checkout := testworld.AwaitSession(app, session, func(protocol.Session) bool { return true })
+	s.SetCodexFolderTrust(checkout.Directory, "trusted")
+	return s, runs[0], session
+}
+
+func refreshStackPRs(t *testing.T, app *testworld.Peer) {
+	t.Helper()
+	result := testworld.Request(app, protocol.RefreshPRsMessage{Cmd: protocol.CmdRefreshPRs}, protocol.EventRefreshPRsResult,
+		func(protocol.RefreshPRsResultMessage) bool { return true })
+	if !result.Success {
+		t.Fatalf("refresh_prs: %s", protocol.Deref(result.Error))
+	}
+}
+
+func signStackOutOfGitHub(s *testworld.Stack) {
+	s.Vars = append(s.Vars, "ATTN_MOCK_GH_TOKEN=")
+}
+
+func awaitCodexReviewDelivered(t *testing.T, s *testworld.Stack, app *testworld.Peer, started protocol.AutomationRunSummary, session string) {
+	t.Helper()
+	app.TypeLine(session, "")
+	if opening := s.Launched(session).Prompted(); opening == "" {
+		t.Fatal("the agent started no turn past the modal")
+	}
+	delivered := awaitStackRun(t, s, app, started.ID, func(r protocol.AutomationRunSummary) bool { return r.State != "pending" })
+	if delivered.State != "delivered" {
+		t.Fatalf("after its first turn started the run is %+v, want delivered", delivered)
+	}
+}
+
+func TestTurningOffAReviewAutomationAfterItsCodexLaunchedKeepsTheRunPendingAcrossARestartWhileGitHubIsSignedOutUntilItDelivers(t *testing.T) {
+	s, started, session := codexReviewOnAModal(t)
+	setAutomationEnabled(t, s.Client(), 1, false)
+	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
+	}
+	s.Stop()
+	signStackOutOfGitHub(s)
+	s.Start()
+	app := s.App()
+	if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
+		t.Fatalf("after a restart signed out of GitHub the runs are %+v, want the launched run still pending", runs)
+	}
+	awaitCodexReviewDelivered(t, s, app, started, session)
+}
+
+func rewindToBeforeTheLaunchedMarker(t *testing.T, dir string) {
+	t.Helper()
+	db, err := sql.Open("sqlite3", filepath.Join(dir, "attn.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`
+ALTER TABLE automation_runs DROP COLUMN launched_at;
+DELETE FROM schema_migrations WHERE version IN (1793985310641958, 1793993403875462);
+`); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestUpgradingWhileACodexReviewAwaitsItsFirstTurnKeepsTheRunWhileGitHubIsSignedOut(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		disable bool
+	}{
+		{"automation stays on", false},
+		{"automation turned off", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, started, session := codexReviewOnAModal(t)
+			s.Stop()
+			signStackOutOfGitHub(s)
+			rewindToBeforeTheLaunchedMarker(t, s.Dir)
+			s.Start()
+			app := s.App()
+			if tc.disable {
+				setAutomationEnabled(t, s.Client(), 1, false)
+				if runs := automationRuns(t, s.Client(), 1); len(runs) != 1 || runs[0].State != "pending" {
+					t.Fatalf("after turning the automation off the runs are %+v, want the launched run still pending", runs)
+				}
+				seed, err := s.Client().SeedShow("", protocol.Deref(started.SeedID))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if seed.Seed.Status == "withered" {
+					t.Fatalf("turning the automation off withered the seed of a run whose agent is running: %+v", seed)
+				}
+			}
+			awaitCodexReviewDelivered(t, s, app, started, session)
+		})
 	}
 }

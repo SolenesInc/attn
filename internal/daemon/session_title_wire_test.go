@@ -124,7 +124,6 @@ func TestTheFirstPromptTheUserTypesTitlesTheSession(t *testing.T) {
 func TestASharedCodexTitleStaysWithItsConversationWhenTheTileMovesOn(t *testing.T) {
 	w := newTitlingWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	first := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(first)
 	app.TypeLine(first, "find the flaky test")
@@ -163,9 +162,9 @@ func TestTheFirstPromptTypedIntoACodexNewChatTitlesItsNewSession(t *testing.T) {
 	if got := codex.Prompted(); got != "/new" {
 		t.Fatalf("codex received %q, want /new", got)
 	}
-	app.TypeLine(first, "the cart total ignores discounts")
-	codex.Prompted()
 	next := awaitSuccessor(app, first)
+	app.TypeLine(string(next.ID), "the cart total ignores discounts")
+	codex.Prompted()
 	task := w.HeadlessTask()
 	if !strings.Contains(task.Prompt, "the cart total ignores discounts") {
 		t.Fatalf("the title task asked %q, want the new chat's first prompt", task.Prompt)

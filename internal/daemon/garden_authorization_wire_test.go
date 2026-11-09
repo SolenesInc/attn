@@ -128,7 +128,6 @@ If this applies to work you delegated, update those seeds with attn seed authori
 func TestASharedCodexDelegateReceivesItsDispatchersAuthorizationChange(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	cwd := registerDelegationCaller(t, w, cli, "caller")
 	w.SetCodexFolderTrust(cwd, "trusted")
 	seed := plantDelegationSeed(t, cli, "caller", "Search endpoint")

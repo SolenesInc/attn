@@ -19,6 +19,7 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 	app, cli := w.App(), w.Client()
 	repo := w.Path("repo")
 	gitRepo(t, repo)
+	w.SetCodexFolderTrust(repo, "trusted")
 	predecessor, err := cli.Delegate(delegateCheckoutAt(filepath.Join(repo, "web"), delegateNewWorktree("feature/checkout", "main")))
 	if err != nil {
 		t.Fatal(err)

@@ -183,6 +183,7 @@ func TestADelegationFromTheChiefIsMarkedAndLandsBesideTheChief(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 
 	request := delegateFrom(chief, cwd, "Audit the backlog", fakeagent.Codex)
 	request.Label = protocol.Ptr("Backlog audit")
@@ -229,6 +230,7 @@ func TestADelegationNamesItsSeedAndSessionFromItsBrief(t *testing.T) {
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
+			w.SetCodexFolderTrust(cwd, "trusted")
 			request := brief(cwd, row.brief)
 			request.Agent = protocol.Ptr("codex")
 			if row.label != "" {
@@ -274,6 +276,7 @@ func TestDerivedDelegationNamesUseTheFirstFreeDesktopSuffix(t *testing.T) {
 			if err := os.MkdirAll(cwd, 0o755); err != nil {
 				t.Fatal(err)
 			}
+			w.SetCodexFolderTrust(cwd, "trusted")
 			for _, title := range []string{"Fix the queue jump", strings.Repeat("é", 70)} {
 				for n := 1; n <= 3; n++ {
 					request := brief(cwd, "# "+title+"\n\nDo the task.")
@@ -319,6 +322,7 @@ func TestAnExistingSeedNamesItsDelegateAndHandover(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	first, err := cli.Delegate(delegateAtSeed(source, cwd, seed))
 	if err != nil {
 		t.Fatal(err)

@@ -240,6 +240,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	planted, err := cli.SeedPlot(protocol.SessionID(planner), protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{

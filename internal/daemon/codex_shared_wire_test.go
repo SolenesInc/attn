@@ -24,7 +24,6 @@ func TestASharedCodexLaunchIsOneSessionThatWorksWaitsAndCountsItsUsage(t *testin
 		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app := w.App()
-			setSetting(t, app, "codex_shared_enabled", "true")
 			if direct {
 				setSetting(t, app, "direct_agent_launch_enabled", "true")
 			}
@@ -65,7 +64,6 @@ func TestASharedCodexLaunchIsOneSessionThatWorksWaitsAndCountsItsUsage(t *testin
 func TestSharedCodexRunsInADataDirAtTheSocketPathLimit(t *testing.T) {
 	w := newWorldInLongestDataDir(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	if !slices.Contains(codex.Argv, "--remote") {
@@ -98,7 +96,6 @@ func TestASharedCodexAppServerRunsCommandsWithTheDaemonsOpenFileLimitWhenLaunche
 	}
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	codex := w.Launched(w.Spawn(app, fakeagent.Codex, w.Path("shop")))
 
 	got := strings.TrimSpace(w.CodexServer().RunTool(codex.ConversationID, "ulimit -Sn"))
@@ -107,27 +104,9 @@ func TestASharedCodexAppServerRunsCommandsWithTheDaemonsOpenFileLimitWhenLaunche
 	}
 }
 
-func TestWithSharedCodexOffCodexRunsAloneInItsTerminal(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app := w.App()
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	codex := w.Launched(session)
-	app.TypeLine(session, "find the flaky checkout test")
-	codex.Prompted()
-	codex.Reply("Found it. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	if slices.Contains(codex.Argv, "--remote") {
-		t.Errorf("Codex ran %q, want it on its own", codex.Argv)
-	}
-	if servers := w.CodexServers(); len(servers) != 0 {
-		t.Errorf("app-servers launched = %v, want none", servers)
-	}
-}
-
 func TestASharedCodexAppServerThatExitsStartsAgainAndTheTerminalCarriesOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	conversation := codex.ConversationID
@@ -150,7 +129,6 @@ func TestASharedCodexAppServerThatExitsStartsAgainAndTheTerminalCarriesOn(t *tes
 func TestAStoppedSharedCodexSessionResumesUnderTheApprovalsItLaunchedWith(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	setSetting(t, app, "auto_approve_enabled", "true")
 	unguarded := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
 	reviewed := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
@@ -192,7 +170,6 @@ func TestAStoppedSharedCodexSessionResumesUnderTheApprovalsItLaunchedWith(t *tes
 func TestAYoloSharedCodexConversationKeepsFullAccessWhenItsTerminalOrAttnResumesIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	unguarded := fakeagent.CodexPermissions{ApprovalPolicy: "never", ApprovalsReviewer: "user", Sandbox: "danger-full-access"}
 	checkout := w.Spawn(app, fakeagent.Codex, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.YoloMode = protocol.Ptr(true) })
 	codex := w.Launched(checkout)
@@ -228,7 +205,6 @@ func TestAYoloSharedCodexConversationKeepsFullAccessWhenItsTerminalOrAttnResumes
 func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	notes, desktop, anchor := w.RequestSpawn(app, fakeagent.Claude, w.Path("notes"))
 	if !notes.Success {
 		t.Fatalf("spawn the session beside which Codex launches: %s", protocol.Deref(notes.Error))
@@ -245,7 +221,7 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 		Placement: &protocol.SessionPlacement{DesktopID: protocol.Ptr(desktop), AnchorPaneID: protocol.Ptr(anchor)},
 	}
 
-	boot := w.HoldNextBoot()
+	boot := w.HoldNextCodexServerBoot()
 	app.Send(shop)
 	boot.Await()
 	if closed := closeTileFromApp(w.ConnectApp(), desktop, anchor); !closed.Success {
@@ -261,7 +237,6 @@ func TestASharedCodexLaunchThatCannotBePlacedLetsItsAppServerStop(t *testing.T) 
 func TestASharedCodexLaunchWhoseTerminalCannotStartLetsItsAppServerStop(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	id := protocol.SessionID(uuid.NewString())
 	refused := testworld.Request(app, protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: id, Agent: string(fakeagent.Codex), Cwd: w.Path("missing"),
@@ -275,9 +250,7 @@ func TestASharedCodexLaunchWhoseTerminalCannotStartLetsItsAppServerStop(t *testi
 
 func TestASharedCodexCrewMemberWakesWithItsAwarenessDirsAsWorkspaceRoots(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Codex)
-	app := w.App()
 	cli := w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	workDir, notes := w.Path("keel-work"), w.Path("keel-notes")
 	for _, dir := range []string{workDir, notes} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -310,7 +283,6 @@ func newWorktree(t *testing.T, name, branch string) (repo, worktree string) {
 func TestSharedCodexSkipsTheTrustQuestionOnlyInARepositoryWhereAnAgentSessionStarted(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	worked, workedWorktree := newWorktree(t, "shop", "discount")
 	browsed, browsedWorktree := newWorktree(t, "warehouse", "audit")
 	w.LeaveCodexFolderTrustUnanswered(workedWorktree)
@@ -329,7 +301,6 @@ func TestSharedCodexSkipsTheTrustQuestionOnlyInARepositoryWhereAnAgentSessionSta
 func TestSharedCodexSkipsTheTrustQuestionInAWorktreeOfARepositoryCodexTrusts(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	repo, worktree := newWorktree(t, "shop", "discount")
 	w.LeaveCodexFolderTrustUnanswered(worktree)
 	w.SetCodexFolderTrust(repo, "trusted")
@@ -346,7 +317,6 @@ func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnswere
 	w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 	t.Cleanup(func() { ptyworker.ReapDataDir(w.Dir) })
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	repo, worktree := newWorktree(t, "shop", "discount")
 	w.LeaveCodexFolderTrustUnanswered(worktree)
 	w.Launched(w.Spawn(app, fakeagent.Claude, repo))
@@ -363,12 +333,11 @@ func TestASharedCodexReloadedAfterADaemonRestartSkipsTheTrustQuestionAttnAnswere
 	w.Launched(session)
 }
 
-func TestWithSharedCodexOnAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
+func TestAnAutomationRunsSharedCodexUnderItsLaunchContract(t *testing.T) {
 	for _, saved := range []string{"", "trusted"} {
 		t.Run("saved trust "+strconv.Quote(saved), func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex, fakeagent.Claude)
 			app, cli := w.App(), w.Client()
-			setSetting(t, app, "codex_shared_enabled", "true")
 			folder := w.Path("check")
 			if saved == "" {
 				w.Launched(w.Spawn(app, fakeagent.Claude, folder))
@@ -411,37 +380,5 @@ location: {type: directory, path: %q}
 				t.Errorf("Codex saves %s as %q, want the user's %q", folder, got, saved)
 			}
 		})
-	}
-}
-
-func TestWithSharedCodexOnAnAutomationThatNamesItsCodexRunsItPlain(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
-	folder := w.Path("check")
-	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	w.SetCodexFolderTrust(folder, "trusted")
-	executable := filepath.Join(w.Dir, "bin", string(fakeagent.Codex))
-	applyAutomation(t, cli, fmt.Sprintf(`api_version: attn.dev/automations/v1alpha1
-name: Nightly check
-trigger: {type: manual}
-prompt: Report the flaky tests.
-launch: {driver: codex, executable: %q}
-location: {type: directory, path: %q}
-`, executable, folder))
-	awaitAutomationChanged(app, 1)
-	run := testworld.Request(app, protocol.AutomationRunMessage{Cmd: protocol.CmdAutomationRun, DefinitionID: 1, RequestID: "now"},
-		protocol.EventAutomationRunResult, automationAnswer[protocol.AutomationRunResultMessage]("now"))
-	if !run.Success || protocol.Deref(run.Run.SessionID) == "" {
-		t.Fatalf("automation_run = %+v, want a delivered run with a session", run)
-	}
-	codex := w.Launched(string(protocol.Deref(run.Run.SessionID)))
-	if codex.Argv[0] != executable || slices.Contains(codex.Argv, "--remote") {
-		t.Errorf("the automation ran %q, want its own %s on its own", codex.Argv, executable)
-	}
-	if servers := w.CodexServers(); len(servers) != 0 {
-		t.Errorf("app-servers launched = %v, want none", servers)
 	}
 }

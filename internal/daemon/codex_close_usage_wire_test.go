@@ -17,7 +17,6 @@ func TestClosingSharedCodexKeepsFinalDescendantUsageWithUnrelatedHistory(t *test
 		t.Run(visibility, func(t *testing.T) {
 			w := newWorld(t, fakeagent.Codex)
 			app := w.App()
-			setSetting(t, app, "codex_shared_enabled", "true")
 			session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 			codex := w.Launched(session)
 			app.TypeLine(session, "price the cart")

@@ -20,7 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/setting"
 )
 
 const (
@@ -199,9 +198,6 @@ var blockerReasonsByUrgency = []protocol.SharedCodexBlockerReason{
 }
 
 func (r *codexShared) restartWhenQuiet(s *codexServer) {
-	if !r.enabledForNewLaunches() {
-		return
-	}
 	if _, quiet := r.waitingOn(s); !quiet {
 		return
 	}
@@ -593,9 +589,6 @@ func (d *Daemon) handleRestartSharedCodex(client *wsClient, msg *protocol.Restar
 }
 
 func (r *codexShared) requestRestart(profile string, now bool) error {
-	if !r.enabledForNewLaunches() {
-		return setting.CodexSharedEnabled.Refusal()
-	}
 	r.mu.Lock()
 	s := r.servers[profile]
 	r.mu.Unlock()

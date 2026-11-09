@@ -173,6 +173,9 @@ func ValidateDefinition(s *DefinitionSpec) error {
 	if s.Launch.Driver == "" {
 		return errors.New("launch.driver is required")
 	}
+	if err := refuseCodexExecutable(s.Launch); err != nil {
+		return err
+	}
 	switch s.Location.Type {
 	case "directory":
 		if err := canonicalizeDirectory(&s.Location.Path, "location.path"); err != nil {
@@ -457,6 +460,13 @@ func ParsePullRequestURL(raw string) (host, owner, repository string, number int
 	}
 	identityParts := strings.Split(identity, "/")
 	return identityParts[0], identityParts[1], identityParts[2], number, nil
+}
+
+func refuseCodexExecutable(launch LaunchSpec) error {
+	if strings.EqualFold(launch.Driver, "codex") && launch.Executable != "" {
+		return errors.New("launch.executable cannot be set for codex: every Codex session runs on its profile's shared app server; set codex_executable with attn settings set instead")
+	}
+	return nil
 }
 
 func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {

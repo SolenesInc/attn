@@ -4489,7 +4489,7 @@ model InstallCodexUpdateResultMessage {
   success: boolean;
   error?: string;
   // The connection's profile and its shared Codex once attn read the installed
-  // Codex again; shared_codex is absent while Shared Codex is off.
+  // Codex again.
   profile_id: string;
   shared_codex?: SharedCodexState;
 }
@@ -4511,12 +4511,10 @@ model CodexStatusResult {
   profile_name: string;
   // The Codex executable shared terminals launch.
   executable: string;
-  // Absent while Shared Codex is off.
   shared_codex?: SharedCodexState;
 }
 
-// The profile's shared Codex versions. shared_codex is absent while Shared
-// Codex is off.
+// The profile's shared Codex versions.
 model SharedCodexChangedMessage {
   event: "shared_codex_changed";
   profile_id: string;

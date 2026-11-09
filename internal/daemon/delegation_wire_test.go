@@ -34,6 +34,7 @@ func TestADelegationRetryReturnsTheAcceptedOperationAfterTheRolesChange(t *testi
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	request := brief(".", "rename the checkout module")
 	request.CwdBase = &cwd
 	request.RequestID = "rename-request"
@@ -150,6 +151,7 @@ func TestACompletedSeedDelegationReportsItsSeedAndTheWorktreeRoot(t *testing.T) 
 	app := w.App()
 	repo := w.Path("shop")
 	gitRepo(t, repo)
+	w.SetCodexFolderTrust(repo, "trusted")
 	seed := plantSeed(t, w, "Add a discount field")
 
 	result := delegateSeed(t, app, "discount", seed.ID, filepath.Join(repo, "web"),

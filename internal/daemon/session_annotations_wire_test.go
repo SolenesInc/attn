@@ -16,6 +16,8 @@ func TestSessionAnnotationDraftsKeepTheNewestGenerationAndStayClearedAfterAClear
 	app := w.App()
 	reviewed := w.Spawn(app, fakeagent.Codex, w.Path("api"))
 	neighbour := w.Spawn(app, fakeagent.Codex, w.Path("web"))
+	w.Launched(reviewed)
+	w.Launched(neighbour)
 	marks := []protocol.SessionAnnotation{{ID: "a1", MessageKey: "turn-1", Start: 4, End: 10, Quote: "parser", Emoji: protocol.Ptr("❓"), Comment: "why this?"}}
 
 	if got := getSessionAnnotations(app, reviewed); !got.Success || len(got.Annotations) != 0 || got.Generation != 0 || protocol.Deref(got.Note) != "" {

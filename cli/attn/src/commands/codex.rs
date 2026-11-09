@@ -271,7 +271,6 @@ fn render_status(result: &CodexStatusResult, names: &HashMap<String, String>) ->
         result.profile_name, result.executable
     );
     let Some(state) = &result.shared_codex else {
-        table.push_str("shared\toff; turn it on in Settings → Experimental\n");
         return tabwriter::format(&table);
     };
     let running = version_or(

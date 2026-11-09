@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"slices"
 	"testing"
 
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -21,7 +20,7 @@ func TestASuccessorKeepsItsDaysApprovalModeAndReturnsToTheMembersSavedPins(t *te
 	if model := crewLaunchFlag(oneDay.Argv, "--model"); oneDay.Harness != fakeagent.Codex || model != "gpt-5.6-sol" {
 		t.Fatalf("a one-day codex wake launched %s on model %q, want codex on its own default gpt-5.6-sol", oneDay.Harness, model)
 	}
-	if !slices.Contains(oneDay.Argv, `approvals_reviewer="auto_review"`) {
+	if w.CodexServer().Permissions(oneDay.ConversationID).ApprovalsReviewer != "auto_review" {
 		t.Fatal("the day launched without the reviewer approval mode the user had on")
 	}
 

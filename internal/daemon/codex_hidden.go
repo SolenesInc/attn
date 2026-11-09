@@ -332,10 +332,6 @@ func (r *codexShared) sessionClosed(sessionID protocol.SessionID, profile, conve
 	}
 }
 
-func (r *codexShared) setAsideAtClose(conversation string) bool {
-	return conversation != "" && transcript.FindArchivedCodexTranscript(conversation) != ""
-}
-
 func (r *codexShared) restore(profile, conversation string) error {
 	if transcript.FindArchivedCodexTranscript(conversation) == "" {
 		return nil
@@ -352,6 +348,18 @@ func (r *codexShared) restore(profile, conversation string) error {
 		return fmt.Errorf("unarchive Codex conversation %s: %w", conversation, err)
 	}
 	return nil
+}
+
+func (r *codexShared) unarchiveForResume(profile string, m *codexshared.Message) {
+	var p struct {
+		ThreadID string `json:"threadId"`
+	}
+	if json.Unmarshal(m.Params, &p) != nil {
+		return
+	}
+	if err := r.restore(profile, p.ThreadID); err != nil {
+		r.d.logf("shared Codex: conversation %s stays archived: %v", p.ThreadID, err)
+	}
 }
 
 func (r *codexShared) transcriptPath(path string) string {

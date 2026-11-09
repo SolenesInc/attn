@@ -121,7 +121,6 @@ func TestStateExplainFollowsASessionThroughItsTurnARestartAndItsClose(t *testing
 func TestStateExplainShowsWhatTheSharedCodexAppServerReportsForAVisibleTileThatFollowsItsTerminal(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, terminal := sharedCodexWaiting(t, w, app)
 	caughtUpWithServer := func(name string) protocol.Session {
 		typeInto(app, terminal, "/rename "+name+"\r")
@@ -198,7 +197,6 @@ func stateExplainOf(t *testing.T, cli *client.Client, session string) *protocol.
 func TestSharedCodexTileSettlesWhenItsTerminalSticksOnWorkingWhileItsConversationIsIdle(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 
 	mark := len(app.Log())
@@ -221,7 +219,6 @@ func TestSharedCodexTileSettlesWhenItsTerminalSticksOnWorkingWhileItsConversatio
 func TestSharedCodexTileKeepsWorkingWhileABackgroundTerminalRunsInItsIdleConversation(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 
 	w.CodexServer().StartBackgroundTerminal(codex.ConversationID)
@@ -243,7 +240,6 @@ func TestSharedCodexTileKeepsWorkingWhileABackgroundTerminalRunsInItsIdleConvers
 func TestSharedCodexTileKeepsWorkingWhileAnMCPServerStartsThenOpensATurnWhenItIsReady(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 	testworld.AwaitSession(app, checkout, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 	mark := len(app.Log())
@@ -274,7 +270,6 @@ func TestSharedCodexTileKeepsWorkingWhileAnMCPServerStartsThenOpensATurnWhenItIs
 func TestSharedCodexTileSettlesAfterAnMCPServerFinishesStartingWhenItsTerminalStaysOnWorking(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	checkout, codex, _ := sharedCodexWaiting(t, w, app)
 
 	mark := len(app.Log())

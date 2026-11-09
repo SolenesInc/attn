@@ -34,6 +34,9 @@ const (
 	methodFakeApproval   = "attn-fake/ask-approval"
 	methodFakeCrash      = "attn-fake/crash"
 	methodFakeTerminal   = "attn-fake/terminal"
+	methodFakeSubagent   = "attn-fake/subagent"
+	methodFakeGuardian   = "attn-fake/guardian-review"
+	methodFakeSettings   = "attn-fake/codex-settings"
 	methodThreadName     = "thread_name"
 	methodAwaitArchived  = "await_archived"
 	methodAskQuestion    = "ask_question"
@@ -178,7 +181,7 @@ func runCodexAppServer(cfg config) int {
 	s.control = control
 	control.start()
 	var boot bootingResult
-	if err := control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: string(harness.TerminalFromEnv())}, &boot); err != nil {
+	if err := control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: string(harness.TerminalFromEnv()), Role: roleCodexServer}, &boot); err != nil {
 		return 1
 	}
 	if boot.Exit {
@@ -368,6 +371,7 @@ type codexServerParams struct {
 	ExpectedTurnID string            `json:"expectedTurnId"`
 	CWD            string            `json:"cwd"`
 	Model          string            `json:"model"`
+	ServiceTier    string            `json:"serviceTier"`
 	Ephemeral      bool              `json:"ephemeral"`
 	Text           string            `json:"text"`
 	Items          []json.RawMessage `json:"items"`
@@ -524,6 +528,8 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		return s.endTurn(m.Method, p)
 	case methodFakeApproval:
 		return s.askApproval(p)
+	case methodFakeSubagent, methodFakeGuardian, methodFakeSettings:
+		return s.scriptThread(m.Method, p)
 	case methodFakeCrash:
 		return map[string]any{}, func() { os.Exit(1) }, nil
 	default:
@@ -816,6 +822,25 @@ func (s *codexAppServer) endTurn(method string, p codexServerParams) (any, func(
 		s.tell(t, notification("turn/completed", map[string]any{"threadId": t.c.conversation, "turn": turn}))
 		s.status(t)
 	}, nil
+}
+
+func (s *codexAppServer) scriptThread(method string, p codexServerParams) (any, func(), error) {
+	t, err := s.loaded(p.ThreadID)
+	if err != nil {
+		return nil, nil, err
+	}
+	switch method {
+	case methodFakeSubagent:
+		err = t.c.subagent(p.Text)
+	case methodFakeGuardian:
+		err = t.c.guardianReview(p.Text)
+	default:
+		t.c.model, t.c.serviceTier = p.Model, p.ServiceTier
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	return map[string]any{}, nil, nil
 }
 
 func (s *codexAppServer) askApproval(p codexServerParams) (any, func(), error) {

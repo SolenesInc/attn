@@ -17,7 +17,6 @@ func TestADroppedConversationMoveKeepsItsInFlightDeliveryUsable(t *testing.T) {
 	bound := s.PauseAt(pausepoint.ConversationCandidateBound)
 	s.Start()
 	app := s.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	spawnWaiting := func(prompt string) (string, *fakeagent.Run) {
 		t.Helper()
 		session := s.Spawn(app, fakeagent.Codex, s.Path("shop"))

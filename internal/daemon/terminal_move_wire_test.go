@@ -174,6 +174,8 @@ func TestTerminalMoveCreatesTheMissingNumberedDesktop(t *testing.T) {
 		m.Label = protocol.Ptr("second")
 		m.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(home)}
 	})
+	w.Launched(string(s.ID))
+	w.Launched(string(other.ID))
 
 	for _, c := range []struct {
 		name    string

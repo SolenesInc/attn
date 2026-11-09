@@ -25,7 +25,6 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})
@@ -38,8 +37,8 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	}
 
 	w.SetCodexLatest("0.164.0")
-	setSetting(t, app, "codex_shared_enabled", "false")
-	setSetting(t, app, "codex_shared_enabled", "true")
+	w.restart()
+	app = w.App()
 	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.164.0", protocol.SharedCodexRestartNone)
 	})

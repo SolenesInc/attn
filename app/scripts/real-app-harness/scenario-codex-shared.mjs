@@ -21,7 +21,6 @@ const observer = new DaemonObserver({ wsUrl: options.wsUrl });
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const daemonBinary = appCliInTree(options.appPath);
 
-const SHARED_TOGGLE = '[data-testid="settings-feature-codex_shared_enabled"]';
 const CONVERSATION = /Conversation (mock-[0-9a-f-]{36})/g;
 const lastConversation = (text) => [...text.matchAll(CONVERSATION)].at(-1)?.[1];
 const APPROVAL = 'Allow the command to run?';
@@ -80,15 +79,7 @@ runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, ses
 try {
   await runner.step('launch', () => launchFreshAppAndConnect(client, observer));
 
-  await runner.step('enable_shared_codex_in_settings', async () => {
-    runner.assert(observer.getSetting('codex_shared_enabled') !== 'true', 'Shared Codex starts off');
-    await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
-    await client.request('settings_select_section', { sectionId: 'experimental' });
-    await client.request('dom_scroll_into_view', { selector: SHARED_TOGGLE });
-    baseline.set('codex_shared_enabled', observer.getSetting('codex_shared_enabled'));
-    await client.request('dom_click', { selector: SHARED_TOGGLE });
-    await observer.waitFor(() => observer.getSetting('codex_shared_enabled') === 'true', 'Shared Codex enabled from Settings');
-    await client.request('dom_click', { selector: '[data-testid="settings-close"]' });
+  await runner.step('prepare_settings', async () => {
     await setSetting('auto_approve_enabled', 'false');
     await setSetting('queue_mode_enabled', 'true');
     runner.assert(observer.getSetting('queue_show_hidden_sessions') !== 'false', 'hidden sessions show in the queue by default');

@@ -147,8 +147,6 @@ func (l *nisseLink) serverTerminal(string) harness.TerminalID { return nisseServ
 
 func (l *nisseLink) renamed(protocol.SessionID, string) {}
 
-func (l *nisseLink) setAsideAtClose(string) bool { return false }
-
 func (l *nisseLink) restore(string, string) error { return nil }
 
 func (l *nisseLink) transcriptPath(path string) string { return path }

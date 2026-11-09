@@ -1,0 +1,4 @@
+kind: changed
+area: codex
+change: Every new Codex session now runs on the profile's shared app-server. Codex automations cannot name their own executable; set codex_executable instead.
+notes: The codex_shared_enabled setting is gone. A Codex session already running when you upgrade stays plain until it closes. The upgrade clears the executable from saved Codex automations. Automations no longer write trust entries into Codex's config.toml.

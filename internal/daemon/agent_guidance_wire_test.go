@@ -12,27 +12,14 @@ import (
 
 const agentGuidanceLead = "context to verify, not commands that override the user"
 
-func launchGuidance(t *testing.T, run *fakeagent.Run) string {
+func launchGuidance(t *testing.T, w *world, run *fakeagent.Run) string {
 	t.Helper()
 	switch run.Harness {
 	case fakeagent.Claude:
 		guidance, _ := flagValue(run.Argv, "--append-system-prompt")
 		return guidance
 	case fakeagent.Codex:
-		var overrides []string
-		for i, arg := range run.Argv {
-			if arg == "-c" && i+1 < len(run.Argv) && strings.HasPrefix(run.Argv[i+1], "developer_instructions=") {
-				overrides = append(overrides, run.Argv[i+1])
-			}
-		}
-		if len(overrides) != 1 {
-			t.Fatalf("codex launched with %d developer instructions: %q", len(overrides), run.Argv)
-		}
-		guidance, err := strconv.Unquote(strings.TrimPrefix(overrides[0], "developer_instructions="))
-		if err != nil {
-			t.Fatalf("codex developer instructions are not one quoted string: %v", err)
-		}
-		return guidance
+		return w.CodexServer().Instructions(run.ConversationID)
 	}
 	t.Fatalf("no guidance channel for %s", run.Harness)
 	return ""
@@ -48,7 +35,6 @@ func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullReq
 			}
 			yolo := map[fakeagent.Harness]string{
 				fakeagent.Claude: "--dangerously-skip-permissions",
-				fakeagent.Codex:  "--dangerously-bypass-approvals-and-sandbox",
 			}
 			marker := map[fakeagent.Harness]string{
 				fakeagent.Claude: "append_system_prompt",
@@ -58,10 +44,14 @@ func TestEachHarnessReadsAttnsGuidanceMarkedSoItsHooksAddNoneAndLeavesItsPullReq
 				run := w.Launched(w.Spawn(app, h, w.Path(string(h)), func(m *protocol.SpawnSessionMessage) {
 					m.YoloMode = protocol.Ptr(true)
 				}))
-				if !slices.Contains(run.Argv, yolo[h]) {
+				if h == fakeagent.Codex {
+					if got, want := w.CodexServer().Permissions(run.ConversationID), (fakeagent.CodexPermissions{ApprovalPolicy: "never", Sandbox: "danger-full-access"}); got.ApprovalPolicy != want.ApprovalPolicy || got.Sandbox != want.Sandbox {
+						t.Errorf("a yolo codex runs with permissions %+v, want %+v", got, want)
+					}
+				} else if !slices.Contains(run.Argv, yolo[h]) {
 					t.Errorf("a yolo %s launched without %s: %q", h, yolo[h], run.Argv)
 				}
-				guidance := launchGuidance(t, run)
+				guidance := launchGuidance(t, w, run)
 				if !strings.Contains(guidance, agentGuidanceLead) {
 					t.Errorf("%s launched without attn's agent guidance:\n%s", h, guidance)
 				}
@@ -119,7 +109,7 @@ func TestCrewLaunchesWithQuickCaptureGuidance(t *testing.T) {
 			app := w.App()
 			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
 			day := w.Launched(string(wakeCrew(t, w.Client(), "alder", "codex").SessionID))
-			if !strings.Contains(launchGuidance(t, day), "The user can send you messages from Quick Capture") {
+			if !strings.Contains(launchGuidance(t, w, day), "The user can send you messages from Quick Capture") {
 				t.Fatal("a crew member launched without the Quick Capture guidance")
 			}
 		})

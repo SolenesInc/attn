@@ -231,7 +231,7 @@ function advancedChips(values: AutomationFormValues): string[] {
   if (usesWorktree(values) && values.repositoryOverrides.length > 0) {
     chips.push(values.repositoryOverrides.length === 1 ? '1 local clone' : `${values.repositoryOverrides.length} local clones`);
   }
-  if (values.executable.trim()) chips.push('Custom executable');
+  if (values.agent !== 'codex' && values.executable.trim()) chips.push('Custom executable');
   return chips;
 }
 
@@ -372,16 +372,18 @@ function AutomationAdvanced({ fields, overrides, definitionYaml }: {
             </button>
           </div>
         )}
-        <div className="automation-form__field">
-          <label className="automation-form__label" htmlFor="automation-form-executable">Executable override</label>
-          <input
-            id="automation-form-executable"
-            className="automation-form__input"
-            placeholder="Default from PATH"
-            data-testid="automation-form-executable"
-            {...regField('executable')}
-          />
-        </div>
+        {values.agent !== 'codex' && (
+          <div className="automation-form__field">
+            <label className="automation-form__label" htmlFor="automation-form-executable">Executable override</label>
+            <input
+              id="automation-form-executable"
+              className="automation-form__input"
+              placeholder="Default from PATH"
+              data-testid="automation-form-executable"
+              {...regField('executable')}
+            />
+          </div>
+        )}
         {definitionYaml && <AutomationDefinitionView yaml={definitionYaml} />}
       </div>
     </details>
@@ -612,7 +614,8 @@ function AutomationLaunchFields({
   const { settings } = useDaemonApi();
   const offeredHarnesses = useMemo(() => [...new Set([...AUTOMATION_HARNESSES, values.agent])], [values.agent]);
   const { harnesses, error, retry } = useHarnessChoices(offeredHarnesses, settings);
-  const routeHarnesses = values.executable.trim() ? harnesses.map(harness => ({ ...harness, discovery: false })) : harnesses;
+  const overridden = values.agent !== 'codex' && values.executable.trim() !== '';
+  const routeHarnesses = overridden ? harnesses.map(harness => ({ ...harness, discovery: false })) : harnesses;
   return (
     <section className="automation-form__section">
       <span className="automation-form__section-label">Runs as</span>
@@ -623,7 +626,7 @@ function AutomationLaunchFields({
         setValue('model', route.model, { shouldDirty: true, shouldValidate: true });
         setValue('effort', route.effort, { shouldDirty: true, shouldValidate: true });
       }} />
-      {values.executable.trim() && <p className="automation-form__invariant">Use model and effort IDs accepted by the executable override.</p>}
+      {overridden && <p className="automation-form__invariant">Use model and effort IDs accepted by the executable override.</p>}
       {fieldError('agent') && <p className="automation-form__field-error" data-testid="automation-form-error-agent">{fieldError('agent')}</p>}
       {fieldError('model') && <p className="automation-form__field-error" data-testid="automation-form-error-model">{fieldError('model')}</p>}
       {fieldError('effort') && <p className="automation-form__field-error" data-testid="automation-form-error-effort">{fieldError('effort')}</p>}

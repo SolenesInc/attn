@@ -17,7 +17,6 @@ const compactReason = "the checkout fix landed"
 
 func sharedCodexInATurn(t *testing.T, w *world, app *testworld.Peer) (string, *fakeagent.Run) {
 	t.Helper()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)
 	app.TypeLine(session, "fix the flaky checkout test")
@@ -71,7 +70,6 @@ func TestASharedCodexSessionThatClosesCompactingCompactsOnceItsTurnEndsAndThenCl
 func TestSeedStandbyCloseCompactCompactsTheSharedCodexTenderBeforeItCloses(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	if err := os.MkdirAll(w.Path("api"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -103,17 +101,6 @@ func TestSeedStandbyCloseCompactCompactsTheSharedCodexTenderBeforeItCloses(t *te
 	if got := w.CodexServer().Compactions(conversation); got != 1 {
 		t.Errorf("the conversation compacted %d times before the close, want once", got)
 	}
-}
-
-func TestACompactingCloseOfAPlainCodexSessionIsRefusedNamingTheSharedSetting(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
-	w.Launched(session)
-
-	_, err := cli.AgentCloseCompacting(protocol.SessionID(session), compactReason)
-	agentCloseRefused(t, err, "compact_unavailable", "codex_shared_enabled")
-	stillOpen(t, cli, session, "after the refused compacting close")
 }
 
 func TestACompactThatFailsStillClosesTheSharedCodexSessionSayingSo(t *testing.T) {

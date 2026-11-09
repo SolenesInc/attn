@@ -398,6 +398,16 @@ func (w *World) HoldNextBoot() *Pause {
 	return pause
 }
 
+func (w *World) HoldNextCodexServerBoot() *Pause {
+	w.T.Helper()
+	if w.outside == nil {
+		w.outside = newOutsideHolds(w.T)
+	}
+	name, pause := w.outside.arm("Codex app-server boot")
+	w.kit.HoldNextCodexServerBoot(func() { w.outside.hold(name) })
+	return pause
+}
+
 func (w *World) LogDaemonTail() {
 	log, err := os.ReadFile(filepath.Join(w.Dir, "daemon.log"))
 	if err != nil {

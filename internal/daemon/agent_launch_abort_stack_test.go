@@ -17,7 +17,6 @@ func TestASharedCodexThatExitsBeforeItsPlacementFailsLetsItsAppServerStop(t *tes
 	released := w.PauseAt(pausepoint.CodexViewReleaseChecked)
 	w.Start()
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	notes, desktop, anchor := w.RequestSpawn(app, fakeagent.Harness("shell"), w.Path("notes"))
 	if !notes.Success {
 		t.Fatalf("spawn the shell beside which Codex launches: %s", protocol.Deref(notes.Error))

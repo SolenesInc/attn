@@ -30,7 +30,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -50,13 +49,14 @@ exec "$@"
 `
 
 type codexShared struct {
-	d         *Daemon
-	mu        sync.Mutex
-	servers   map[string]*codexServer
-	views     map[harness.TerminalID]*codexView
-	seq       uint64
-	installed string
-	latest    string
+	d                         *Daemon
+	mu                        sync.Mutex
+	servers                   map[string]*codexServer
+	views                     map[harness.TerminalID]*codexView
+	seq                       uint64
+	installed                 string
+	terminalsCannotHostServer bool
+	latest                    string
 
 	archivingAfterClose map[string]int
 }
@@ -175,12 +175,10 @@ func (s *codexServer) client() *codexshared.Client {
 func (r *codexShared) kind() string { return codexLinkKind }
 
 func (r *codexShared) canRun(req *spawnRequest) bool {
-	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
+	return req.agent == string(protocol.SessionAgentCodex) && !req.hasPluginDriver && !req.isShell
 }
 
-func (r *codexShared) enabledForNewLaunches() bool {
-	return r.d.on(setting.CodexSharedEnabled)
-}
+func (r *codexShared) enabledForNewLaunches() bool { return !r.terminalsCannotHostServer }
 
 func (r *codexShared) admit(profile, conversation string) error {
 	if other := r.loadedElsewhere(profile, conversation); conversation != "" && other != "" {
@@ -189,7 +187,12 @@ func (r *codexShared) admit(profile, conversation string) error {
 	return nil
 }
 
+func dropRetiredAutomationExecutable(opts *ptybackend.SpawnOptions) {
+	opts.UnattendedLaunch.Executable = ""
+}
+
 func (r *codexShared) prepareLaunch(opts *ptybackend.SpawnOptions, profile string) error {
+	dropRetiredAutomationExecutable(opts)
 	remote, err := r.openView(opts.ID, profile)
 	if err != nil {
 		return err
@@ -371,10 +374,10 @@ func (r *codexShared) connect(ctx context.Context, s *codexServer) error {
 			return ctx.Err()
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("the shared Codex app-server of profile %s did not answer within %s: %w", s.profile, codexServerStartLimit, err)
+			return fmt.Errorf("the shared Codex app-server of profile %s did not answer within %s (%s): %w", s.profile, codexServerStartLimit, r.versionLabel(ctx), err)
 		}
 		if !r.serverRunning(ctx, s.terminal) {
-			return fmt.Errorf("the shared Codex app-server of profile %s exited before answering: %w", s.profile, err)
+			return fmt.Errorf("the shared Codex app-server of profile %s exited before answering (%s): %w", s.profile, r.versionLabel(ctx), err)
 		}
 		select {
 		case <-ctx.Done():
@@ -628,6 +631,7 @@ func (r *codexShared) serveView(v *codexView, w http.ResponseWriter, req *http.R
 	codexshared.Proxy(ctx, down, up, func(connection context.Context, m *codexshared.Message) (func(*codexshared.Message) func(), error) {
 		if m.Method == "thread/resume" {
 			proxy.mcpStartup.resuming(s, m)
+			r.unarchiveForResume(v.profile, m)
 		}
 		return r.prepare(connection, v, m)
 	}, func(m codexshared.Message) bool {
@@ -1047,6 +1051,7 @@ func (r *codexShared) terminalShowing(profile, conversation string) (harness.Ter
 func (r *codexShared) launchStarted(protocol.SessionID) {}
 
 func (r *codexShared) relaunch(opts *ptybackend.SpawnOptions) error {
+	dropRetiredAutomationExecutable(opts)
 	installed, err := r.binary(configuredLaunchExecutable(agentdriver.MustGet(string(protocol.SessionAgentCodex)), opts))
 	if err != nil {
 		return err

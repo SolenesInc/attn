@@ -569,13 +569,13 @@ describe('App automation form', () => {
       expect(applied(daemon)[0].spec.launch).toEqual(spec.launch);
     });
     it('ignores a warmed global catalog when an executable override is selected', async () => {
-      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'gpt-6-luna', effort: 'medium' } };
+      const spec = { ...manualSpec(), launch: { driver: 'claude', model: 'gpt-6-luna', effort: 'medium' } };
       const daemon = await openEdit({ definitions: [definition(1)], spec }, daemon => {
-        daemon.on('harness_models', () => ({ event: 'harness_models_result', success: true, models: [reportedModel('codex', 'gpt-6-luna', 'Global Luna', 'light')], tier_defaults: { light: 'gpt-6-luna' }, detail: 'Global executable' }));
+        daemon.on('harness_models', () => ({ event: 'harness_models_result', success: true, models: [reportedModel('claude', 'gpt-6-luna', 'Global Luna', 'light')], tier_defaults: { light: 'gpt-6-luna' }, detail: 'Global executable' }));
       });
       expect(field('route')).toHaveTextContent('Global Luna');
       const reads = daemon.sentOf('harness_models').length;
-      await gesture(daemon, () => type('executable', '/opt/alternate-codex'));
+      await gesture(daemon, () => type('executable', '/opt/alternate-claude'));
       expect(field('route')).not.toHaveTextContent('Global Luna');
       await openRoute(daemon, 'Automation model');
       expect(routeDialog().queryByRole('option', { name: /^Global Luna/ })).toBeNull();
@@ -583,7 +583,7 @@ describe('App automation form', () => {
       await gesture(daemon, () => fireEvent.mouseDown(field('name')));
       await gesture(daemon, () => type('executable', ''));
       expect(field('route')).toHaveTextContent('Global Luna');
-      await gesture(daemon, () => type('executable', '/opt/alternate-codex'));
+      await gesture(daemon, () => type('executable', '/opt/alternate-claude'));
       await openRoute(daemon, 'Automation model');
       await enterModel(daemon, 'override-model');
       const effort = routeDialog().getByRole('textbox', { name: 'Effort' });
@@ -592,10 +592,10 @@ describe('App automation form', () => {
       await gesture(daemon, () => fireEvent.mouseDown(field('name')));
       expect(daemon.sentOf('harness_models')).toHaveLength(reads);
       await press(daemon, 'save');
-      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'codex', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-codex' });
+      expect(applied(daemon)[0].spec.launch).toEqual({ driver: 'claude', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-claude' });
     });
     it('does not request global models for an existing executable override', async () => {
-      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-codex' } };
+      const spec = { ...manualSpec(), launch: { driver: 'claude', model: 'override-model', effort: 'override-effort', executable: '/opt/alternate-claude' } };
       const daemon = await openEdit({ definitions: [definition(1)], spec });
       await openRoute(daemon, 'Automation model');
       expect(routeDialog().getByRole('textbox', { name: 'Effort' })).toHaveValue('override-effort');
@@ -604,6 +604,12 @@ describe('App automation form', () => {
       await press(daemon, 'save');
       expect(applied(daemon)[0].spec.launch).toEqual(spec.launch);
     });
+    it('offers no executable override for Codex', async () => {
+      const spec = { ...manualSpec(), launch: { driver: 'codex', model: 'gpt-6-luna', effort: 'medium' } };
+      await openEdit({ definitions: [definition(1)], spec });
+      expect(screen.queryByTestId('automation-form-executable')).toBeNull();
+    });
+
     it('offers manual model editing after a harness-list error', async () => {
       const daemon = await openEdit({ definitions: [definition(1)], spec: sparseSpec }, daemon => {
         daemon.on('delegation_preferences_get', () => ({ event: 'delegation_preferences_result', success: false, error: 'Harness list unavailable', preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } }, harnesses: [], templates: [] }));

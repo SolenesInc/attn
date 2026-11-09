@@ -113,8 +113,8 @@ func TestApplyingAHarnessChangeTurnsTheLetterIntoASessionOnTheNewHarness(t *test
 	if next.Harness != fakeagent.Codex || next.Resumed || crewLaunchFlag(next.Argv, "--model") != "" {
 		t.Fatalf("the successor launched %s resumed=%v argv %q, want a fresh codex on its default model", next.Harness, next.Resumed, next.Argv)
 	}
-	if !strings.Contains(strings.Join(next.Argv, "\n"), "crew member of this attn home") {
-		t.Errorf("the codex successor launched without its crew priming: argv %q", next.Argv)
+	if instructions := w.CodexServer().Instructions(next.ConversationID); !strings.Contains(instructions, "crew member of this attn home") {
+		t.Errorf("the codex successor launched without its crew priming: %q", instructions)
 	}
 	if got, want := next.Prompted(), prompts.RenderText("crew", "successor", prompts.Values{}); got != want {
 		t.Errorf("the successor was asked %q, want the successor prompt", got)

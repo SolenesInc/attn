@@ -17,7 +17,7 @@ const ventGuidanceLead = "by running `attn vent --about attn"
 func TestAnAgentIsTaughtToVentOnlyWhenItLaunchedWithAnalyticsOn(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	taught := func(run *fakeagent.Run) bool { return strings.Contains(launchGuidance(t, run), ventGuidanceLead) }
+	taught := func(run *fakeagent.Run) bool { return strings.Contains(launchGuidance(t, w, run), ventGuidanceLead) }
 	respawn := func(session string) *fakeagent.Run {
 		t.Helper()
 		app.Send(protocol.KillSessionMessage{Cmd: protocol.CmdKillSession, ID: protocol.SessionID(session)})
@@ -218,7 +218,7 @@ func TestToolVentsNeedTheUsersSettingAndNeverLeaveTheMachine(t *testing.T) {
 	launch := func(dir string) (string, string) {
 		t.Helper()
 		session := w.Spawn(app, fakeagent.Claude, w.Path(dir))
-		return session, launchGuidance(t, w.Launched(session))
+		return session, launchGuidance(t, w, w.Launched(session))
 	}
 	attnOnly, taught := launch("attn-only")
 	if strings.Contains(taught, "--about tools") || !strings.Contains(taught, "are not vents") {

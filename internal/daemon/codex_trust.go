@@ -110,7 +110,7 @@ func (t codexFolderTrust) known() bool {
 	return t.saved == codexTrusted || t.saved == "" && t.worked
 }
 
-func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, profile string, shared bool) error {
+func (d *Daemon) refuseUnknownCodexFolder(opts *ptybackend.SpawnOptions, profile string) error {
 	if opts.Agent != string(protocol.SessionAgentCodex) || opts.UnattendedLaunch.IsZero() {
 		return nil
 	}
@@ -120,31 +120,23 @@ func (d *Daemon) trustUnattendedCodexFolder(opts *ptybackend.SpawnOptions, profi
 	if err != nil {
 		return err
 	}
-	repository, err := unattendedCodexTrustToAdd(opts.CWD, config, d.store.StartedConversationDirectories(profile), d.automationRepositoryOrigin)
-	if err != nil || repository == "" || shared {
-		return err
-	}
-	if err := config.addTrusted(repository); err != nil {
-		return err
-	}
-	d.logf("automation launch: saved %s as trusted in Codex's config %s, since an agent session worked in it", repository, config.path)
-	return nil
+	return checkUnattendedCodexFolder(opts.CWD, config, d.store.StartedConversationDirectories(profile), d.automationRepositoryOrigin)
 }
 
-func unattendedCodexTrustToAdd(path string, config *codexTrustConfig, workedDirectories []string, originOf func(repository string) string) (string, error) {
+func checkUnattendedCodexFolder(path string, config *codexTrustConfig, workedDirectories []string, originOf func(repository string) string) error {
 	trust := assessCodexFolderTrust(path, config, workedDirectories)
 	switch {
 	case trust.saved == codexTrusted:
-		return "", nil
+		return nil
 	case trust.saved != "":
-		return "", fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
+		return fmt.Errorf("the Codex config saves %s as %s, so an automation does not run Codex there; trust the folder in Codex to let it run", trust.path, trust.saved)
 	case !trust.worked && !workedInRepository(trust.repository, workedDirectories, originOf):
-		return "", &fixableAutomationDeliveryError{
+		return &fixableAutomationDeliveryError{
 			message: fmt.Sprintf("no agent has worked in %s, its repository or another checkout of that repository in attn, and Codex does not trust it, so an automation will not trust it for you; open Codex there once and choose to trust it, or work there with any agent first", trust.path),
 			fix:     store.AutomationRunFix{Agent: string(protocol.SessionAgentCodex), Directory: trust.repository},
 		}
 	}
-	return trust.repository, nil
+	return nil
 }
 
 func codexConfigPath() string {

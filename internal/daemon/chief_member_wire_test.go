@@ -118,7 +118,7 @@ func TestAChiefWithoutAHarnessKeepsItsMailUntilItIsConfigured(t *testing.T) {
 		t.Fatalf("the Chief's first wake landed on %+v, want its own desktop", desktop)
 	}
 	run := w.Launched(string(woken.SessionID))
-	if guidance := launchGuidance(t, run); !strings.Contains(guidance, "You are the Chief") || !strings.Contains(guidance, "CHARTER.md") || strings.Contains(guidance, "You are the chief of staff") {
+	if guidance := launchGuidance(t, w, run); !strings.Contains(guidance, "You are the Chief") || !strings.Contains(guidance, "CHARTER.md") || strings.Contains(guidance, "You are the chief of staff") {
 		t.Fatalf("the Chief's launch guidance: %s", guidance)
 	}
 	if prompt := run.Prompted(); !strings.Contains(prompt, "You have been woken") {
@@ -155,7 +155,7 @@ func TestChiefMailReachesItAfterSleepAndRename(t *testing.T) {
 		t.Fatalf("mail to `chief` after a rename = %+v, Chief %+v; want Alfred woken for it", sent, chief)
 	}
 	next := w.Launched(string(*chief.BindingSession))
-	if guidance := launchGuidance(t, next); !strings.Contains(guidance, "You are **Alfred**") || !strings.Contains(guidance, "You are the Chief") {
+	if guidance := launchGuidance(t, w, next); !strings.Contains(guidance, "You are **Alfred**") || !strings.Contains(guidance, "You are the Chief") {
 		t.Fatalf("the renamed Chief's guidance: %s", guidance)
 	}
 	next.Prompted()
@@ -210,7 +210,7 @@ func TestAnOnboardingChiefTakesTheNameItAgreesOnAndItsHomeFollowsAtItsNextWake(t
 	if session := queriedSession(t, cli, string(woken.SessionID)); session.Directory != home {
 		t.Fatalf("Alfred's next day launched in %s, want %s", session.Directory, home)
 	}
-	guidance := launchGuidance(t, next)
+	guidance := launchGuidance(t, w, next)
 	for _, want := range []string{"You are **Alfred**", "You are the Chief", "Onboarding: named Alfred; delegation roles are next.", "Onboarding isn't finished"} {
 		if !strings.Contains(guidance, want) {
 			t.Fatalf("Alfred's next guidance lacks %q: %s", want, guidance)
@@ -303,7 +303,7 @@ func TestAnUpgradeHandsTodaysChiefRoleToAPrefilledChiefMember(t *testing.T) {
 
 	woken := wakeCrew(t, cli, "chief", "")
 	run := w.Launched(string(woken.SessionID))
-	guidance := launchGuidance(t, run)
+	guidance := launchGuidance(t, w, run)
 	for _, want := range []string{"You are the Chief", "attn agent msg " + old, "attn session transcript " + old} {
 		if !strings.Contains(guidance, want) {
 			t.Fatalf("the first-day guidance misses %q: %s", want, guidance)
@@ -317,7 +317,7 @@ func TestAnUpgradeHandsTodaysChiefRoleToAPrefilledChiefMember(t *testing.T) {
 
 	crewHandoff(t, cli, string(woken.SessionID), "Met the old session.", false)
 	next := w.Launched(string(wakeCrew(t, cli, "chief", "").SessionID))
-	if guidance := launchGuidance(t, next); strings.Contains(guidance, old) {
+	if guidance := launchGuidance(t, w, next); strings.Contains(guidance, old) {
 		t.Fatalf("the Chief's second day still points at the old session: %s", guidance)
 	}
 }

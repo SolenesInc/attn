@@ -44,7 +44,7 @@ func userRunStops(app *testworld.Peer, agent *fakeagent.Run, before protocol.Ses
 func notificationRunStarts(t *testing.T, app *testworld.Peer, cli *client.Client, agent *fakeagent.Run, session string, before protocol.Session, body string) (protocol.Session, *protocol.AgentInboxBatchResult) {
 	t.Helper()
 	sendAgentMessage(t, cli, "reviewer", session, body)
-	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
+	if got := agent.DeliveredPrompt(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the agent was prompted with %q, want the inbox doorbell", got)
 	}
 	working := testworld.AwaitStateAfter(app, before, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })

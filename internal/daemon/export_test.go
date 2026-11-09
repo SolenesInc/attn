@@ -38,6 +38,7 @@ func StartWireDaemonWithTerminals(socketPath string, unix, ws net.Listener, term
 	switch onHost := os.Getenv("ATTN_TEST_WIRE_ON_PTY_HOST") != ""; {
 	case terminals != nil:
 		d.ptyBackend = terminals
+		d.codexShared().terminalsCannotHostServer = true
 	case os.Getenv("ATTN_PTY_BACKEND") != "":
 	case onHost && nativeWatch:
 		shared, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{

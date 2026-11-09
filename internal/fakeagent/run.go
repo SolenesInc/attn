@@ -19,6 +19,7 @@ type Run struct {
 	ThroughMod     bool
 	t              testing.TB
 	fake           *fake
+	kit            *Kit
 }
 
 func (r *Run) Prompted() string {
@@ -28,6 +29,14 @@ func (r *Run) Prompted() string {
 	r.ConversationID = prompted.ConversationID
 	r.ThroughMod = prompted.ThroughMod
 	return prompted.Text
+}
+
+func (r *Run) DeliveredPrompt() string {
+	r.t.Helper()
+	if r.Harness == Codex {
+		return r.kit.CodexServer().Prompted(r.ConversationID)
+	}
+	return r.Prompted()
 }
 
 func (r *Run) Input(text string) {

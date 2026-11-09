@@ -29,15 +29,6 @@ var (
 		Since:   "2026-11-04",
 		Search:  "delivery typing standby compact",
 	})
-	CodexSharedEnabled = feature("codex_shared_enabled", "Use the shared Codex app server: true or false.", Info{
-		Name:    "Shared Codex",
-		Summary: "Codex terminals share one Codex server per profile, using less memory.",
-		Group:   Agents,
-		Applies: NewAgents,
-		Stage:   Experimental,
-		Since:   "2026-10-16",
-		Search:  "app server memory",
-	})
 	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
 		Name:    "Launcher 2.0",
 		Summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.",

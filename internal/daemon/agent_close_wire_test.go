@@ -59,6 +59,7 @@ func TestAgentCloseBySeedClosesItsTender(t *testing.T) {
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	seed := plantDelegationSeed(t, cli, orchestrator, "Reach it by seed")
 	delegated, err := cli.Delegate(delegateAtSeed(orchestrator, cwd, seed))
 	if err != nil {

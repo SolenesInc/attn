@@ -269,8 +269,7 @@ leave unread does not cancel the close: the session closes and the mail wakes it
 again. Mail that arrives during the compact waits until the session has closed.
 Only a Claude session with the Claude mod and a Codex session on the shared Codex
 app server compact, on the home machine or an outpost: attn refuses --compact for
-any other session and leaves standby unset. The refusal names the setting to turn
-on, claude_mod_enabled or codex_shared_enabled.
+any other session and leaves standby unset. The refusal says why.
 Only the seed's tender sets standby. A Claude session needs claude_mod_enabled
 when it launched. --clear ends standby.
 Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close"#,

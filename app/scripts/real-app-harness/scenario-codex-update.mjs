@@ -61,7 +61,6 @@ try {
 
   await runner.step('shared_codex_offers_the_newer_release', async () => {
     await setSetting('auto_approve_enabled', 'false');
-    await setSetting('codex_shared_enabled', 'true');
     const cwd = path.join(runner.sessionDir, 'shop');
     fs.mkdirSync(cwd, { recursive: true });
     const shop = await createSessionAndWaitForInitialPane({

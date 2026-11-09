@@ -21,7 +21,10 @@ func FindCodexTranscriptForResume(resumeID string) string {
 	if sessionsDir == "" {
 		return ""
 	}
-	return findCodexTranscriptForResumeIn(sessionsDir, resumeID, readFirstJSONLLine)
+	if path := findCodexTranscriptForResumeIn(sessionsDir, resumeID, readFirstJSONLLine); path != "" {
+		return path
+	}
+	return FindArchivedCodexTranscript(resumeID)
 }
 
 func FindArchivedCodexTranscript(resumeID string) string {

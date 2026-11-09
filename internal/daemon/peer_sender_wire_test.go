@@ -45,7 +45,7 @@ func TestRepliesToACrewPartyFollowItsNextSession(t *testing.T) {
 	if reply.TargetSessionID != protocol.SessionID(id) {
 		t.Fatalf("reply: %+v", reply)
 	}
-	if got := nextRun.Prompted(); !strings.Contains(got, inboxDoorbell) {
+	if got := nextRun.DeliveredPrompt(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatal(got)
 	}
 	received := readInbox(t, cli, id, 0)

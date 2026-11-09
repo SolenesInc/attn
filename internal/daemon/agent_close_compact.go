@@ -54,9 +54,8 @@ func (d *Daemon) compactPathRefusal(target *protocol.Session) *agentCloseRefusal
 	}
 	switch target.Agent {
 	case string(protocol.SessionAgentCodex):
-		return &agentCloseRefusal{"compact_unavailable", fmt.Sprintf(
-			"this Codex session does not run on the shared Codex app server, so attn has no way to compact it; the user turns on %s (attn settings set %s true), and Codex sessions launched after that can close with --compact. Close without --compact instead",
-			setting.CodexSharedEnabled, setting.CodexSharedEnabled)}
+		return &agentCloseRefusal{"compact_unavailable",
+			"this Codex session started before Codex sessions ran on the shared app server, so attn has no way to compact it. Close without --compact instead"}
 	case string(protocol.SessionAgentClaude):
 		if d.claudeModReaches(target.ID) {
 			return nil

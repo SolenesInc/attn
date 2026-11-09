@@ -72,7 +72,6 @@ func TestADriverRunIgnoresTerminalHeartbeatsAndSurvivesRecoveryWithoutItsPlugin(
 func TestSharedCodexThreadsKeepTheirOwnStateEvidence(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	hidden, run, terminal := sharedCodexWaiting(t, w, app)
 	thread := run.ConversationID
 	moveOn(t, app, run, terminal, "/new", "inspect a second task")
@@ -99,7 +98,6 @@ func TestSharedCodexLaunchesWaitingForThreadIDsKeepTheirStateSeparate(t *testing
 	w := newTitlingWorld(t, fakeagent.Codex)
 	t.Setenv("ATTN_SESSION_AUTO_TITLE", "off")
 	app := w.App()
-	setSetting(t, app, "codex_shared_enabled", "true")
 	warm := w.Spawn(app, fakeagent.Codex, w.Path("warm"))
 	w.Launched(warm)
 	firstBoot := w.HoldNextBoot()

@@ -19,6 +19,7 @@ func registerDelegationCaller(t *testing.T, w *world, cli *client.Client, id str
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	return cwd
 }
 
@@ -230,6 +231,11 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 	app, cli := w.App(), w.Client()
 	cwd := registerDelegationCaller(t, w, cli, "caller")
 	observer := w.Spawn(app, fakeagent.Codex, w.Path("observer"))
+	observerRun := w.Launched(observer)
+	app.TypeLine(observer, "watch the migration")
+	observerRun.Prompted()
+	observerRun.Reply("Watching. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, observer, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	first, err := cli.Delegate(delegateFrom("caller", cwd, "Plan the migration", fakeagent.Codex))
 	if err != nil {
 		t.Fatal(err)
@@ -267,7 +273,7 @@ func TestNestedDelegatesCarryTheirSeedAndDispatcher(t *testing.T) {
 		t.Errorf("the caller reads as %+v; want no seed and no dispatcher", caller)
 	}
 
-	if prompt := w.Launched(observer).Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+	if prompt := observerRun.DeliveredPrompt(); !strings.Contains(prompt, inboxDoorbell) {
 		t.Fatalf("the plot's watcher was prompted %q; want the inbox doorbell", prompt)
 	}
 	bells := readInbox(t, cli, observer, 0).Items

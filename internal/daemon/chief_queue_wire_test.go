@@ -66,7 +66,7 @@ func TestTheChiefMemberOwesATurnTheWayAnyCrewMemberDoes(t *testing.T) {
 
 func TestAnsweringTheChiefsAskClosesItsTurnAndTheAnswersRunOpensNone(t *testing.T) {
 	app, cli, run, session, greeted := chiefMemberInQueue(t, "asks_enabled")
-	if guidance := launchGuidance(t, run); !strings.Contains(guidance, askGuidanceLead) {
+	if guidance, _ := flagValue(run.Argv, "--append-system-prompt"); !strings.Contains(guidance, askGuidanceLead) {
 		t.Fatalf("a Chief launched with asks on was not taught them:\n%s", guidance)
 	}
 	asked, err := cli.AskOpen(protocol.SessionID(session), "", cacheAsk, "", "")

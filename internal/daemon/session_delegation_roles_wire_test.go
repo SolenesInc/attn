@@ -36,6 +36,7 @@ func TestADelegatedSessionKeepsShowingItsRoleAfterTheRoleIsRemovedAndTheDaemonRe
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	w.SetCodexFolderTrust(cwd, "trusted")
 	var runs []*fakeagent.Run
 	delegate := func(label string, configure func(*protocol.DelegateMessage)) string {
 		t.Helper()
