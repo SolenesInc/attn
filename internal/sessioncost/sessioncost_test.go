@@ -197,6 +197,12 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 			want:  92.75,
 		},
 		{
+			name:  "Fable 5.2 discounted cache read",
+			model: "claude-fable-5-2",
+			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000},
+			want:  74.2,
+		},
+		{
 			name:  "Opus 5.5 discounted cache read",
 			model: "claude-opus-5-5",
 			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000},
@@ -235,6 +241,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 	priced := []string{
 		"claude-fable-5",
 		"claude-fable-5-1",
+		"claude-fable-5-2",
 		"claude-haiku-4-5-20251001",
 		"claude-opus-4-6",
 		"claude-opus-4-8",

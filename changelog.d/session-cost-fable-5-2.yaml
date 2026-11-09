@@ -1,0 +1,7 @@
+kind: added
+area: sessions
+change: >
+  Session cost knows Claude Fable 5.2 (claude-fable-5-2). It bills $8 input
+  and $40 output per million tokens, with cache reads at $0.20.
+symptom: >
+  A Fable 5.2 session showed no price at all.

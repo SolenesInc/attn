@@ -1,6 +1,7 @@
 package sessioncost
 
 var builtInRateCards = map[string]RateCard{
+	"claude-fable-5-2":          withCacheRead(anthropicRates(8, 40), 0.2),
 	"claude-fable-5-1":          withCacheRead(anthropicRates(10, 50), 0.25),
 	"claude-fable-5":            anthropicRates(10, 50),
 	"claude-opus-5-5":           withCacheRead(anthropicRates(4, 20), 0.2),
