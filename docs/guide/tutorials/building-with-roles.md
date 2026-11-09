@@ -78,7 +78,9 @@ time. The chain button on an agent's sidebar row shows everyone in the chain.
 
 ## Ship it
 
-Agents take only the delivery steps you authorized. They push, open pull
-requests and merge as far as you said and no further. Set up your
+Agents deliver the way your project's AGENTS.md or CLAUDE.md says. When you
+tell an agent to go further, such as merging once CI is green, or to stop
+earlier, such as asking you before a release, the agent does that for the
+task. Set up your
 project's AGENTS.md or CLAUDE.md, and your local skills, to allow as much
 autonomy and verification as possible to ensure quality.

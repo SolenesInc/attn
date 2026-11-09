@@ -2254,7 +2254,7 @@
                           "field": {
                             "name": "authorization",
                             "kind": "text",
-                            "description": "The user's words for the task, stored on the seed."
+                            "description": "The task's authorization as stored on the seed: how far the user lets the task go."
                           }
                         }
                       }
@@ -2272,7 +2272,7 @@
                           "field": {
                             "name": "authorization",
                             "kind": "text",
-                            "description": "The user's words for the task, stored on the seed."
+                            "description": "The task's authorization as stored on the seed: how far the user lets the task go."
                           }
                         }
                       }
@@ -2397,7 +2397,7 @@
                   "field": {
                     "name": "authorization",
                     "kind": "text",
-                    "description": "The user's words for the task, stored on the seed."
+                    "description": "The task's authorization as stored on the seed: how far the user lets the task go."
                   },
                   "quote": true
                 }
@@ -5737,5 +5737,5 @@
       ]
     }
   ],
-  "definitions_hash": "37c530c26023130e5fb45a6cecd51c802d893375d159f344b820269fcc393131"
+  "definitions_hash": "2ca15264a986d108238e3c1115cf839428316d813baaeadd376c659b0d6a0ebd"
 }

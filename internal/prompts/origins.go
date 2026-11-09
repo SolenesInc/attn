@@ -13,7 +13,7 @@ var (
 		Bind("completion", Choose(Present(checkIDs),
 			Use("delegation.seed-checks", "content/delegation/seed-checks.md", Bind("check_ids", Input(checkIDs))),
 			Use("delegation.seed-no-checks", "content/delegation/seed-no-checks.md"))))
-	authorization       = TextField("authorization", "The user's words for the task, stored on the seed.")
+	authorization       = TextField("authorization", "The task's authorization as stored on the seed: how far the user lets the task go.")
 	authorizationSetter = TextField("set_by", "Name of the session or crew member that set the authorization; blank when the user set it in the app.")
 	authorizationRule   = Use("delegation.authorization-rule", "content/delegation/authorization-rule.md")
 	authorizationLine   = Join("\n", Choose(Present(authorizationSetter),
