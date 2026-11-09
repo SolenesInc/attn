@@ -57,7 +57,7 @@ func (d *Daemon) resumeAsMember(sessionID protocol.SessionID, resume func() erro
 		return err
 	}
 	if awakeIn != "" && awakeIn != sessionID {
-		return fmt.Errorf("%s is awake in session %s; session %s comes back only while %s is asleep",
+		return fmt.Errorf("%s is in session %s; session %s comes back only while %s is between sessions",
 			member.Name, shortSessionID(awakeIn), shortSessionID(sessionID), member.Name)
 	}
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {

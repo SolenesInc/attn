@@ -28,7 +28,7 @@ func wakePrompt(t *testing.T, w *world, sessionID string) string {
 
 func asleepPlotMember(t *testing.T, w *world) (crown, child, leaf string) {
 	t.Helper()
-	_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+	_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
 	cli := w.Client()
 	registerSessions(t, w, cli, "planter")
 	crown, child, leaf = gardenNudgePlot(t, cli, "planter")
@@ -70,10 +70,10 @@ func TestAWakeNamesOnlyTheUpdatesStillRinging(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		_, child, leaf := asleepPlotMember(t, w)
 		app := w.App()
-		setSetting(t, app, "crew.wake_limit", "0")
+		setSetting(t, app, "crew.mail_start_limit", "0")
 		gardenNudgeNote(t, w.Client(), "planter", leaf, "an update nobody woke for", true)
 		w.advance(15 * time.Minute)
-		setSetting(t, app, "crew.wake_limit", "10")
+		setSetting(t, app, "crew.mail_start_limit", "10")
 		gardenNudgeNote(t, w.Client(), "planter", child, "the update that wakes", true)
 		prompt := wakePrompt(t, w, wokenDay(t, w))
 		if !strings.Contains(prompt, child+" moved: note.added") || strings.Contains(prompt, leaf) {
@@ -106,12 +106,12 @@ func TestWakesTheUserOrAnAgentAskForKeepTheGreeting(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		_, _, leaf := asleepPlotMember(t, w)
 		app := w.App()
-		setSetting(t, app, "crew.wake_limit", "0")
+		setSetting(t, app, "crew.mail_start_limit", "0")
 		gardenNudgeNote(t, w.Client(), "planter", leaf, "waits unread", true)
 		w.advance(0)
 		asked := wakeCrew(t, w.Client(), "trellis", "")
 		if prompt := wakePrompt(t, w, string(asked.SessionID)); prompt != crewWakeGreeting {
-			t.Errorf("`attn crew wake` opened with %q, want today's greeting", prompt)
+			t.Errorf("`attn crew start` opened with %q, want today's greeting", prompt)
 		}
 		crewHandoff(t, w.Client(), string(asked.SessionID), "Asleep again.", false)
 		woken := testworld.Request(app, protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, RequestID: protocol.Ptr("user-wake"), Member: "trellis"}, protocol.EventCrewWakeResult, func(m protocol.CrewWakeResultMessage) bool { return m.RequestID == "user-wake" })
@@ -128,7 +128,7 @@ func TestAWakeForTheUsersQuickCaptureKeepsTheGreeting(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		_, _, leaf := asleepPlotMember(t, w)
 		app := w.App()
-		setSetting(t, app, "crew.wake_limit", "0")
+		setSetting(t, app, "crew.mail_start_limit", "0")
 		gardenNudgeNote(t, w.Client(), "planter", leaf, "waits beside the capture", true)
 		w.advance(0)
 		sendQuickCapture(t, w.TrustedApp(), protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}, "look at the plot")

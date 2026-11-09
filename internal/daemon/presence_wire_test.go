@@ -110,7 +110,7 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				}
 				w.restart()
 				app, cli := w.App(), w.Client()
-				for key, value := range map[string]string{"crew.away_seconds": "60", "crew.wake_limit": "0", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+				for key, value := range map[string]string{"crew.away_seconds": "60", "crew.mail_start_limit": "0", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"} {
 					setSetting(t, app, key, value)
 				}
 				days := make(map[string]string)
@@ -135,7 +135,7 @@ func TestAwayTimeStartsAtTheLastPresentReportRegardlessOfPresenceReads(t *testin
 				}
 				w.advance(time.Second)
 				ended := crewHandoff(t, cli, days["alder"], "The user has been away for a minute.", false)
-				if ended.SessionID != nil || !strings.Contains(protocol.Deref(ended.SuccessorError), "crew.wake_limit=0") {
+				if ended.SessionID != nil || !strings.Contains(protocol.Deref(ended.SuccessorError), "crew.mail_start_limit=0") {
 					t.Fatalf("60 seconds after the last report the handoff = %+v, want the autonomous wake limit to refuse its successor", ended)
 				}
 			})

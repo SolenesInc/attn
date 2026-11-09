@@ -27,7 +27,7 @@ func TestARingHeldThroughTheUpgradeReachesTheChiefOnceAfterItsNotebookComesBack(
 		t.Fatalf("crew set chief: %+v", set)
 	}
 	var woken protocol.CrewWakeResult
-	s.Attn("crew", "wake", "chief", "--json").JSON(t, &woken)
+	s.Attn("crew", "start", "chief", "--json").JSON(t, &woken)
 	legacy := string(woken.SessionID)
 	run := s.Launched(legacy)
 	s.AwaitTimer(daemon.ClaudeModPollHoldTimer)

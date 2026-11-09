@@ -202,9 +202,9 @@ func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage, request crewWakeRe
 }
 
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWakeAsked(msg, crewWakeRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew wake")})
+	result, err := d.crewWakeAsked(msg, crewWakeRequest{RequestedBy: d.launchRequester(protocol.Deref(msg.SourceSessionID), "attn crew start")})
 	if err != nil {
-		d.sendCrewError(conn, "wake", err)
+		d.sendCrewError(conn, "start", err)
 		return
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewWakeResult: result})
@@ -291,7 +291,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	member = d.moveHomeToItsName(member)
 	profile, err := d.liveLaunchProfile(member.ProfileID)
 	if err != nil {
-		return nil, fmt.Errorf("wake %s: %w", member.Name, err)
+		return nil, fmt.Errorf("start %s: %w", member.Name, err)
 	}
 	if !d.crewAgentAvailable(agent) {
 		return nil, fmt.Errorf("agent %q is not available", agent)
@@ -328,7 +328,7 @@ func (d *Daemon) crewWakeDayWithChargeLocked(name, agent string, autonomous bool
 	}, internalSpawnPolicy{launchPlacement: &launchPlacement{kind: "crew", itemID: member.ID}})
 	if rejection != nil {
 		d.releaseCrewBindingIfSession(sessionID)
-		return nil, fmt.Errorf("wake %s: %w", member.Name, rejection.reason())
+		return nil, fmt.Errorf("start %s: %w", member.Name, rejection.reason())
 	}
 	d.recordMemberSession(member.ID, sessionID)
 	if !request.UserStarted {

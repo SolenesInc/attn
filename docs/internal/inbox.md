@@ -347,8 +347,8 @@ session, attn resumes that session and rings it instead of starting a new one.
   prompt is the plain greeting that every other start gets.
 - A member has at most one mail-started session starting at a time.
 - A mail-started session counts against the member's mail-start limit: 8 per 12 hours,
-  set by `crew.wake_limit` and `crew.wake_limit_window_seconds`. A start from
-  the sidebar, a start from `attn crew wake` and a start for an unread user
+  set by `crew.mail_start_limit` and `crew.mail_start_window_seconds`. A start from
+  the sidebar, a start from `attn crew start` and a start for an unread user
   message do not count, because the user causes each of them. A start for seed
   mail counts against the seed's limit instead (see
   [A seed on standby](#a-seed-on-standby)).
@@ -381,14 +381,14 @@ resumes the session only when all of these hold:
 - The seed is on standby. A closed session whose seed is not on standby stays
   closed, and the mail waits for the next tender.
 - The session is the one the seed names as its tender.
-- `garden.tender_wake` allows the item. `any`, the default, allows all seed
+- `garden.tender_resume` allows the item. `any`, the default, allows all seed
   mail. `watches` allows PR watch updates and reminders only. `off` allows
   nothing, and the mail waits.
 - The seed has had fewer than 48 tender resumes in the last 24 hours.
 
 Who closed the session does not matter. The resume needs no connected app, and
 the session opens on its last desktop. A crew member that tends the seed
-gets a session as a member under every value of `garden.tender_wake`.
+gets a session as a member under every value of `garden.tender_resume`.
 
 The resumed session gets its mail only through a path that knows when the agent
 reads input. For Codex, attn rings once the resumed Codex first reports. For Claude, attn
@@ -461,7 +461,7 @@ this means:
 Every tender resume for seed mail, of a session or of a crew member, counts
 against one limit for the seed: 48 per 24 hours, held in memory. The count
 restarts empty when the daemon restarts. These resumes do not count against
-`crew.wake_limit`, so a member that tends several seeds is not capped across
+`crew.mail_start_limit`, so a member that tends several seeds is not capped across
 them. The daemon log records each tender resume with the seed and its cause.
 
 A resume that fails for a reason that does not fix itself writes a note on the
@@ -523,7 +523,7 @@ notified, or read.
 |---|---|---|---|
 | Time between attempts (user input and seed mail that nobody holds do not wait) | 5 minutes | `inbox.AttemptDelay` | Healthy agents read within 60 s of a ring at p99.5. |
 | Attempts per item | 3 | `inbox.MaxAttempts` | One ring was enough for over 99% of items. The repeats were harness outages. |
-| Mail-started sessions per member | 8 per 12 hours | `crew.wake_limit`, `crew.wake_limit_window_seconds` | |
+| Mail-started sessions per member | 8 per 12 hours | `crew.mail_start_limit`, `crew.mail_start_window_seconds` | |
 | Tender resumes per seed, for seed mail | 48 per 24 hours | `tenderWakeLimit`, `tenderWakeWindow` | None yet. The daemon logs each tender resume with the seed and its cause. |
 | Peer message size | 32 KiB | `protocol.AgentMessageMaxChars` | |
 | Same text to one address | once per 10 s | `agentMessageDedupeWindow` | |
@@ -579,12 +579,12 @@ new tender.
 `attn seed remind s-x --in 20m -m "Check the rollout"`, then
 `attn seed standby s-x -m "Read the rollout dashboard and report" --close`. The
 session closes. When the reminder comes due, the seed is on standby and
-`garden.tender_wake` is `any`, so attn resumes the closed session. For a Claude
+`garden.tender_resume` is `any`, so attn resumes the closed session. For a Claude
 session, attn waits for the mod's first poll. The session gets the note and
 reads the reminder with `attn agent inbox`, and standby ends. The agent
 reports, or goes on standby again.
 
 **The mail-start limit is used up.** A message for a member between sessions arrives after the
-member's 8th mail-started session in 12 hours. The reply to the sender names `crew.wake_limit`.
+member's 8th mail-started session in 12 hours. The reply to the sender names `crew.mail_start_limit`.
 attn tries at 0, 5 and 10 minutes, then stops. The message waits for the
 member's next session.

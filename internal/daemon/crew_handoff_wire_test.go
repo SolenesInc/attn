@@ -264,9 +264,9 @@ func TestDeliveryWakesChargeTheLimitAndReportAnAlreadyUsedLimit(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		setSetting(t, app, "crew.wake_limit", "2")
+		setSetting(t, app, "crew.mail_start_limit", "2")
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "read across days")
 		for attempt := 1; attempt <= 2; attempt++ {
@@ -285,7 +285,7 @@ func TestDeliveryWakesChargeTheLimitAndReportAnAlreadyUsedLimit(t *testing.T) {
 		}
 		before := crewSessionCount(t, cli)
 		fresh := sendAgentMessage(t, cli, "sender", "trellis", "a new item while the limit is used")
-		if fresh.Status != protocol.AgentMsgStatusQueued || !strings.Contains(fresh.Detail, "crew.wake_limit=2") {
+		if fresh.Status != protocol.AgentMsgStatusQueued || !strings.Contains(fresh.Detail, "crew.mail_start_limit=2") {
 			t.Fatalf("used limit receipt=%+v", fresh)
 		}
 		w.advance(5 * time.Minute)

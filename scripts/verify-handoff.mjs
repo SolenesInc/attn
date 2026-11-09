@@ -88,7 +88,7 @@ try {
   await once(ws, 'open');
   ws.send(JSON.stringify({ cmd: 'client_hello', client_kind: 'tauri-app', version: `protocol-${version}`, client_token: fs.readFileSync(path.join(data, 'client-token'), 'utf8').trim(), capabilities: [] }));
   await waitEvent(e => e.event === 'initial_state');
-  cli(['settings', 'set', 'crew.autosleep_enabled', 'false']);
+  cli(['settings', 'set', 'crew.away_close_enabled', 'false']);
   cli(['crew', 'set', member, '--cwd', home, '--agent', 'claude']);
   await present();
   const first = cli(['crew', 'wake', member], { json: true }).session_id;

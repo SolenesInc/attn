@@ -23,7 +23,7 @@ From a shell:
 
 ```sh
 attn crew set chief --agent <harness> --model <model>
-attn crew wake chief
+attn crew start chief
 ```
 
 ## Where the Chief works

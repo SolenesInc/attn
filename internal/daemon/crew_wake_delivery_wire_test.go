@@ -69,7 +69,7 @@ func TestTheUsersWordsThatWakeAMemberAreTypedOnlyOnceItsHarnessHasStarted(t *tes
 	} {
 		t.Run(item.name, func(t *testing.T) {
 			inBubbleWithAgents(t, func(t *testing.T, w *world) {
-				app, day := crewDayInBubble(t, w, map[string]string{"asks_enabled": "true", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+				app, day := crewDayInBubble(t, w, map[string]string{"asks_enabled": "true", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
 				cli := w.Client()
 				deliver := item.prepare(t, w, protocol.SessionID(day.id))
 				crewHandoff(t, cli, day.id, "Asleep until the user writes.", false)

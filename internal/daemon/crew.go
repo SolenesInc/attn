@@ -328,7 +328,7 @@ func (d *Daemon) claimCrewBinding(key string, sessionID protocol.SessionID) (str
 			return member.ID, nil
 		}
 		if d.crewBindingLive(member) {
-			return "", fmt.Errorf("%s is already awake in session %s; two agents with the same identity never run at once — wait for that day to end, or wake another member",
+			return "", fmt.Errorf("%s is already in session %s; two agents with the same identity never run at once — wait for that session to end, or start another member",
 				member.Name, shortSessionID(member.BindingSession))
 		}
 		d.releaseCrewBindingsExcept(*schema, members, docs, member.ID, sessionID)

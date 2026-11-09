@@ -77,7 +77,7 @@ type crewHomeCommit func(store.CrewHomeMove) ([]store.DocumentWriteResult, error
 
 func (d *Daemon) relocateCrewHome(member crew.Member, revision int64, parent, name string, commit crewHomeCommit) (crew.Member, int64, error) {
 	if d.crewBindingLive(member) {
-		return member, revision, fmt.Errorf("%s is awake and works from its home; put it to sleep first: attn crew sleep %s", member.Name, member.Name)
+		return member, revision, fmt.Errorf("%s is in session and works from its home; close its session first: attn crew close %s", member.Name, member.Name)
 	}
 	if err := d.requireCrewFiles(member); err != nil {
 		return member, revision, err
@@ -125,7 +125,7 @@ func (d *Daemon) repointCrewHome(member crew.Member, revision int64, dir string)
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	if d.crewBindingLive(member) {
-		return member, revision, fmt.Errorf("%s is awake and works from its home; put it to sleep first: attn crew sleep %s", member.Name, member.Name)
+		return member, revision, fmt.Errorf("%s is in session and works from its home; close its session first: attn crew close %s", member.Name, member.Name)
 	}
 	home, err := d.crewHomeAt(member, dir)
 	if err != nil || home == member.HomeDir(d.dataRoot) {

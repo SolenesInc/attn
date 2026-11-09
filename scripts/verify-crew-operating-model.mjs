@@ -101,7 +101,7 @@ try {
   ws.send(JSON.stringify({ cmd: 'client_hello', client_kind: 'crew-model-proof', version: `protocol-${version}`, client_token: fs.readFileSync(path.join(data, 'client-token'), 'utf8').trim(), capabilities: [] }));
   await waitEvent((event) => event.event === 'initial_state');
   cli(['settings', 'set', 'crew.heartbeat_enabled', 'false']);
-  cli(['settings', 'set', 'crew.autosleep_enabled', 'false']);
+  cli(['settings', 'set', 'crew.away_close_enabled', 'false']);
   cli(['settings', 'set', 'auto_approve_enabled', 'true']);
   cli(['crew', 'set', member, '--cwd', work, '--awareness-dir', root, '--agent', 'claude', '--model', 'sonnet']);
   const parent = cli(['seed', 'plant', 'Current crew priming', '-m', `Discuss the current priming implementation in ${work}/priming.go. This is a read-only discussion of a verification copy.`], { json: true }).id;

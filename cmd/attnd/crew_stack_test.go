@@ -59,12 +59,14 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireRefusals(t, s, []argvRefusal{
 		{args: []string{"crew", "list", "extra"}, want: "takes no arguments"},
 		{args: []string{"crew", "list", "--nope"}, want: "not defined: -nope"},
-		{args: []string{"crew", "wake"}, want: "takes one member name"},
-		{args: []string{"crew", "wake", "one", "two"}, want: `takes one member name, not "two"`},
-		{args: []string{"crew", "wake", "--nope", "keel"}, want: "not defined: -nope"},
-		{args: []string{"crew", "sleep"}, want: "takes one member name"},
-		{args: []string{"crew", "sleep", "one", "two"}, want: `takes one member name, not "two"`},
-		{args: []string{"crew", "sleep", "keel", "--request-id", "retry-1"}, want: "not defined: -request-id"},
+		{args: []string{"crew", "start"}, want: "takes one member name"},
+		{args: []string{"crew", "start", "one", "two"}, want: `takes one member name, not "two"`},
+		{args: []string{"crew", "start", "--nope", "keel"}, want: "not defined: -nope"},
+		{args: []string{"crew", "close"}, want: "takes one member name"},
+		{args: []string{"crew", "close", "one", "two"}, want: `takes one member name, not "two"`},
+		{args: []string{"crew", "close", "keel", "--request-id", "retry-1"}, want: "not defined: -request-id"},
+		{args: []string{"crew", "wake", "keel", "--agent", "codex"}, want: "`wake` is now `start`: attn crew start keel --agent codex"},
+		{args: []string{"crew", "sleep", "keel"}, want: "`sleep` is now `close`: attn crew close keel"},
 		{args: []string{"crew", "set", "keel"}, want: "nothing to set"},
 	})
 
@@ -96,8 +98,8 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	}
 	table := s.Attn("crew", "list").Stdout
 	requireLines(t, "crew list", table, "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "HOME")
-	requireLines(t, "keel's row", crewRow(t, table, "Keel"), " asleep ", " codex ", " high ", filepath.Join(s.Dir, "crew", "keel"))
-	requireLines(t, "trellis's row", crewRow(t, table, "Trellis"), " asleep ", " claude ", " "+protocol.Deref(roster["trellis"].ResolvedModel)+" ", filepath.Join(s.Dir, "crew", "trellis"))
+	requireLines(t, "keel's row", crewRow(t, table, "Keel"), " between sessions ", " codex ", " high ", filepath.Join(s.Dir, "crew", "keel"))
+	requireLines(t, "trellis's row", crewRow(t, table, "Trellis"), " between sessions ", " claude ", " "+protocol.Deref(roster["trellis"].ResolvedModel)+" ", filepath.Join(s.Dir, "crew", "trellis"))
 
 	requireStdout(t, s.Attn("crew", "set", "keel", "--agent", "", "--effort", "", "--awareness-dir", ""), "Keel launches in - on claude", "awareness dirs: -\n")
 	if keel := crewRoster(t, s)["keel"]; keel.Agent != nil || keel.Model != nil || keel.Effort != nil || keel.ResolvedAgent != "claude" || len(keel.AwarenessDirs) != 0 {
@@ -112,33 +114,33 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 		t.Fatalf("keel after crew set --model \"\" still pins %q", protocol.Deref(keel.Model))
 	}
 
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is awake in session ")
+	requireStdout(t, s.Attn("crew", "start", "trellis"), "Trellis is in session ")
 	day := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	trellis := s.Launched(string(day))
 	trellis.Prompted()
-	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " awake ", string(" "+day[:8]+" "))
+	requireLines(t, "trellis's row", crewRow(t, s.Attn("crew", "list").Stdout, "Trellis"), " in session ", string(" "+day[:8]+" "))
 	agents := s.Attn("agent", "list").Stdout
-	requireLines(t, "agent list", agents, "MEMBER", "An ID or awake MEMBER here works with `attn agent peek <target>`")
+	requireLines(t, "agent list", agents, "MEMBER", "An ID, or the MEMBER of a member in session, here works with `attn agent peek <target>`")
 	requireLines(t, "trellis's agent row", crewRow(t, agents, string(day[:8])), " Trellis ")
 	requireStdout(t, s.Attn("agent", "peek", "trellis"), string("session "+day), "crew member: this session is Trellis today")
-	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "keel is asleep", "never wakes", "`attn crew wake keel`")
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Trellis is already awake in session "+day[:8]+" — nothing was launched."))
+	requireFailure(t, s.Attn("agent", "peek", "keel"), "agent peek: ", "keel is between sessions", "never starts a session", "`attn crew start keel`")
+	requireStdout(t, s.Attn("crew", "start", "trellis"), string("Trellis is already in session "+day[:8]+" — nothing was launched."))
 
 	trellis.Exit(143)
 	testworld.AwaitSession(app, string(day), func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
-	requireStdout(t, s.Attn("crew", "wake", "trellis"), string("Previous session "+day[:8]+" had exited; its binding was released.\n"), "Trellis is awake in session ")
+	requireStdout(t, s.Attn("crew", "start", "trellis"), string("Previous session "+day[:8]+" had exited; its binding was released.\n"), "Trellis is in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	if next == day || next == "" {
 		t.Fatalf("trellis woke into %q after %q exited", next, day)
 	}
 	s.Launched(string(next)).Prompted()
-	requireStdout(t, s.Attn("crew", "sleep", "trellis"), string("Sleep request for Trellis is queued in session "+next[:8]+" — "))
-	requireStdout(t, s.Attn("crew", "sleep", "keel"), "Keel is already asleep", "no sleep request was sent")
+	requireStdout(t, s.Attn("crew", "close", "trellis"), string("Close request for Trellis is queued in session "+next[:8]+" — "))
+	requireStdout(t, s.Attn("crew", "close", "keel"), "Keel is between sessions", "no close request was sent")
 
 	var woken protocol.CrewWakeResult
-	s.Attn("crew", "wake", "keel", "--agent", "codex", "--json").JSON(t, &woken)
+	s.Attn("crew", "start", "keel", "--agent", "codex", "--json").JSON(t, &woken)
 	if woken.Member != "keel" || woken.AlreadyAwake || woken.SessionID == "" {
-		t.Fatalf("crew wake keel --agent codex --json = %+v", woken)
+		t.Fatalf("crew start keel --agent codex --json = %+v", woken)
 	}
 	if codex := s.Launched(string(woken.SessionID)); codex.Harness != fakeagent.Codex {
 		t.Fatalf("keel woke on %s, want codex", codex.Harness)
@@ -155,7 +157,7 @@ func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
 	s.Start()
 	app := s.App()
 	home := app.SelectedProfile()
-	requireStdout(t, s.Attn("crew", "wake", "Keel"), "Keel is awake in session")
+	requireStdout(t, s.Attn("crew", "start", "Keel"), "Keel is in session")
 	created := testworld.Request(app, protocol.ProfileCreateMessage{Cmd: protocol.CmdProfileCreate, RequestID: "side", Name: "Side"}, protocol.EventProfileActionResult, func(r protocol.ProfileActionResultMessage) bool { return r.RequestID == "side" })
 	if !created.Success {
 		t.Fatalf("create Side: %+v", created)
@@ -175,7 +177,7 @@ func TestCrewNamesResolveInTheCallersProfile(t *testing.T) {
 	if peek := asCaller(sideCaller, sideApp, "agent", "peek", "Keel"); peek.Code == 0 || !strings.Contains(peek.Stderr, "no session or crew member matches") {
 		t.Fatalf("peek of another profile's member: %+v", peek)
 	}
-	if wake := asCaller(sideCaller, sideApp, "crew", "wake", "Keel"); wake.Code == 0 || !strings.Contains(wake.Stderr, `no crew member named "Keel" in profile "Side"`) {
+	if wake := asCaller(sideCaller, sideApp, "crew", "start", "Keel"); wake.Code == 0 || !strings.Contains(wake.Stderr, `no crew member named "Keel" in profile "Side"`) {
 		t.Fatalf("wake of another profile's member: %+v", wake)
 	}
 	list := asCaller(sideCaller, sideApp, "crew", "list")
@@ -197,7 +199,7 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 		{args: []string{"crew", "restore", "Keel", "extra"}, want: "takes one member name"},
 	})
 	s.Start()
-	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew wake Keel")
+	requireStdout(t, s.Attn("crew", "create", "Keel"), "Keel joined profile", "with key member:keel.", "home: "+filepath.Join(s.Dir, "notebook", "crew", "keel"), "attn crew start Keel")
 	var created protocol.CrewMember
 	s.Attn("crew", "create", "Trellis", "--json").JSON(t, &created)
 	if created.ID != "trellis" || created.Name != "Trellis" {
@@ -213,7 +215,7 @@ func TestCrewCreateRetireAndRestoreCommands(t *testing.T) {
 	if row := crewRow(t, s.Attn("crew", "list", "--all").Stdout, "Keel"); !strings.Contains(row, "retired") {
 		t.Fatalf("retired row = %q", row)
 	}
-	requireFailure(t, s.Attn("crew", "wake", "Keel"), "crew wake: ", "Keel is retired")
+	requireFailure(t, s.Attn("crew", "start", "Keel"), "crew start: ", "Keel is retired")
 	requireFailure(t, s.Attn("crew", "create", "Keel"), "crew create: ", "Keel is retired", "attn crew restore Keel")
 	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel is back.")
 	requireStdout(t, s.Attn("crew", "restore", "Keel"), "Keel was not retired; nothing changed.")
@@ -250,9 +252,9 @@ func TestCrewMoveHomeAndRenameReportWhereTheHomeIs(t *testing.T) {
 	}
 	requireStdout(t, s.Attn("crew", "rename", "Keel", "Anchor"), "Keel is now Anchor, and its home moved to "+filepath.Join(s.Dir, "notebook", "crew", "anchor")+"; its key member:keel, letters and mail stay.")
 	var wake protocol.CrewWakeResult
-	s.Attn("crew", "wake", "Anchor", "--json").JSON(t, &wake)
+	s.Attn("crew", "start", "Anchor", "--json").JSON(t, &wake)
 	s.Launched(string(wake.SessionID)).Prompted()
-	requireStdout(t, s.Attn("crew", "rename", "Anchor", "Keeper"), "Anchor is now Keeper; its home keeps its folder while it is awake and moves to one named after Keeper at its next wake. Its key member:keel, letters and mail stay.")
+	requireStdout(t, s.Attn("crew", "rename", "Anchor", "Keeper"), "Anchor is now Keeper; its home keeps its folder while it is in session and moves to one named after Keeper when its next session starts. Its key member:keel, letters and mail stay.")
 }
 
 func TestCrewSetHomeRepointsFromTheCallersFolder(t *testing.T) {
@@ -287,7 +289,7 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	s.Start()
 	s.App()
 	var wake protocol.CrewWakeResult
-	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &wake)
+	s.Attn("crew", "start", "Keel", "--json").JSON(t, &wake)
 	day := s.Launched(string(wake.SessionID))
 	day.Prompted()
 	day.Reply("Ready. <!-- attn:state=idle -->")
@@ -319,7 +321,7 @@ func TestAClearedMemberKeepsItsDayAcrossADaemonCrash(t *testing.T) {
 	requireStdout(t, s.Run(testworld.Invocation{Args: []string{"crew", "prime"}, Terminal: terminal}), "You are **Keel**")
 	requireFailure(t, s.Attn("crew", "prime"), "crew prime: ", "this session is not a crew member's")
 	var again protocol.CrewWakeResult
-	s.Attn("crew", "wake", "Keel", "--json").JSON(t, &again)
+	s.Attn("crew", "start", "Keel", "--json").JSON(t, &again)
 	if !again.AlreadyAwake || again.SessionID != next.ID {
 		t.Fatalf("wake after the clear = %+v, want the successor %s", again, next.ID)
 	}

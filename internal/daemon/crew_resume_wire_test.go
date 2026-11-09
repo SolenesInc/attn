@@ -23,7 +23,7 @@ func TestOpeningAMembersOldDayWhileItIsAwakeElsewhereIsRefused(t *testing.T) {
 		t.Fatalf("opening alder's old day %s answered %+v, want a refusal naming the live day %s", old, revived, current.SessionID)
 	}
 	_, err := cli.SessionReopen(client.SessionReopenOptions{SessionID: old})
-	crewErrorContains(t, err, "Alder is awake in session "+string(current.SessionID)[:8])
+	crewErrorContains(t, err, "Alder is in session "+string(current.SessionID)[:8])
 
 	if got := protocol.Deref(crewRosterMember(t, cli, "alder").BindingSession); got != current.SessionID {
 		t.Fatalf("after the refusals alder is bound to %q, want %s", got, current.SessionID)

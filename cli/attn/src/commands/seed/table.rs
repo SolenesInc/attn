@@ -252,13 +252,13 @@ reminder. There is no --force."#,
         synopsis: r#"standby <id> -m "<what to do next>" [--close [--compact]] | standby <id> --clear [--json]"#,
         about: r#"put a seed you tend on standby with a note saying what to do next. While
 it is on standby, mail to the seed (attn agent msg <id>, a reminder, an ask
-answer) wakes you: when your session is closed, attn resumes it as itself and
-delivers the mail with the note. The setting garden.tender_wake chooses which
-mail wakes a session: any (the default), watches or off. Standby ends once
+answer) reaches you: when your session is closed, attn resumes it as itself and
+delivers the mail with the note. The setting garden.tender_resume chooses which
+mail resumes a session: any (the default), watches or off. Standby ends once
 you have read all of the seed's mail with attn agent inbox, and when the seed
 is parked, harvested, withered or gets a new tender. An ask answer attn types
 into your session counts as read. If your session closes before you read the
-mail, the mail wakes it again at once. --close then closes this session as
+mail, the mail resumes it again at once. --close then closes this session as
 attn agent close --self does; it refuses while the seed's mailbox holds mail
 you have not read.
 --close --compact first waits for your turn to end and compacts your

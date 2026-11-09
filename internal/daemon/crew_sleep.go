@@ -15,7 +15,7 @@ import (
 func (d *Daemon) handleCrewSleep(conn net.Conn, msg *protocol.CrewSleepMessage) {
 	result, err := d.crewSleep(askerOf(msg.SourceSessionID, msg.ProfileID), msg.Member)
 	if err != nil {
-		d.sendCrewError(conn, "sleep", err)
+		d.sendCrewError(conn, "close", err)
 		return
 	}
 	d.sendGardenResponse(conn, protocol.Response{Ok: true, CrewSleepResult: result})
@@ -57,7 +57,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 			Member:        member.ID,
 			Name:          member.Name,
 			AlreadyAsleep: true,
-			Detail:        asleep + "; no sleep request was sent",
+			Detail:        asleep + "; no close request was sent",
 		}, nil
 	}
 
@@ -65,7 +65,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 	prompt := prompts.RenderText("crew", "close-requested", prompts.Values{})
 	receipt, err := d.sendToInbox(inbox.Item{ID: uuid.NewString(), To: who.ToSession(sessionID), Kind: inbox.Notice, Text: prompt})
 	if err != nil {
-		return nil, fmt.Errorf("record %s's sleep request: %w", member.Name, err)
+		return nil, fmt.Errorf("record %s's close request: %w", member.Name, err)
 	}
 	status := protocol.AgentMsgStatusNotified
 	detail := fmt.Sprintf("asked %s in session %s to write its handoff and file it with `attn handoff`", member.Name, shortSessionID(sessionID))
@@ -85,7 +85,7 @@ func (d *Daemon) crewSleep(asker crewAsker, name string) (*protocol.CrewSleepRes
 func (d *Daemon) crewAwakeSession(member crew.Member) (sessionID protocol.SessionID, asleep string, err error) {
 	sessionID = protocol.TrimID(member.BindingSession)
 	if sessionID == "" {
-		return "", fmt.Sprintf("%s is already asleep", member.Name), nil
+		return "", fmt.Sprintf("%s is between sessions", member.Name), nil
 	}
 	live, err := d.crewSessionActuallyLive(sessionID)
 	if err != nil {
@@ -98,5 +98,5 @@ func (d *Daemon) crewAwakeSession(member crew.Member) (sessionID protocol.Sessio
 		return "", "", fmt.Errorf("release %s's exited session %s: %w", member.Name, shortSessionID(sessionID), err)
 	}
 	d.noteCrewExitedSession(member.ID, sessionID)
-	return "", fmt.Sprintf("%s is already asleep; previous session %s had exited and its binding was released", member.Name, shortSessionID(sessionID)), nil
+	return "", fmt.Sprintf("%s is between sessions; previous session %s had exited and its binding was released", member.Name, shortSessionID(sessionID)), nil
 }

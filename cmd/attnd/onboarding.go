@@ -52,7 +52,7 @@ path in its current conversation.`)
 	case action == protocol.OnboardingActionDone:
 		fmt.Printf("%s's onboarding is done. `attn onboarding again` runs the full path again.\n", response.Chief)
 	case action == protocol.OnboardingActionAgain:
-		fmt.Printf("%s's onboarding is pending again, on the full path. The Chief's next session opens with it; an awake Chief can start it now.\n", response.Chief)
+		fmt.Printf("%s's onboarding is pending again, on the full path. The Chief's next session opens with it; a Chief in session can start it now.\n", response.Chief)
 	case pending == "":
 		fmt.Printf("%s has no onboarding pending. `attn onboarding again` runs the full path again.\n", response.Chief)
 	case pending == protocol.OnboardingPathTour:

@@ -153,7 +153,7 @@ func TestInboxDeliveryWakesAgainOnlyAfterDelayAndFollowsTheMember(t *testing.T) 
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "keep this across days")
 		if sent.Status != protocol.AgentMsgStatusQueued || sent.TargetSessionID == "" {
@@ -197,16 +197,16 @@ func TestInboxWakeLimitRefusesWakeButKeepsTheItem(t *testing.T) {
 		w.restart()
 		app, cli := w.App(), w.Client()
 		registerSessions(t, w, cli, "sender")
-		setSetting(t, app, "crew.wake_limit", "0")
+		setSetting(t, app, "crew.mail_start_limit", "0")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "read this on your next day")
-		if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "crew.wake_limit=0") {
+		if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "crew.mail_start_limit=0") {
 			t.Fatalf("limit receipt=%+v", sent)
 		}
 		w.advance(15 * time.Minute)
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
 			t.Fatalf("limit woke %s", *binding)
 		}
-		setSetting(t, app, "crew.wake_limit", "10")
+		setSetting(t, app, "crew.mail_start_limit", "10")
 		w.advance(5 * time.Minute)
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {
 			t.Fatalf("exhausted item woke %s", *binding)
@@ -424,7 +424,7 @@ func TestAnInboxWakeThatPrimesForTenMinutesStillWaitsFiveMinutesBetweenRings(t *
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "wait through priming")
 		day := w.bootBubbleClaude(t, string(sent.TargetSessionID))
@@ -455,7 +455,7 @@ func TestTheThirdInboxWakeCompletesItsRingAndNeverWakesAFourthDay(t *testing.T) 
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		sendAgentMessage(t, cli, "sender", "trellis", "ignore across three days")
 		for attempt := 1; attempt <= 3; attempt++ {
@@ -511,7 +511,7 @@ func TestMailArrivingDuringPrimingSharesTheRingAndItsThreeAttemptBudget(t *testi
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		first := sendAgentMessage(t, cli, "sender", "trellis", "before waking")
 		day := w.bootBubbleClaude(t, string(first.TargetSessionID))

@@ -152,7 +152,7 @@ func TestSettingsCLIReportsDefaultOnSettingsAsOnUntilStoredOff(t *testing.T) {
 	s := testworld.NewStack(t)
 	s.Start()
 	keys := []string{
-		"auto_approve_enabled", "crew.autosleep_enabled", "crew.heartbeat_enabled", "headless_tasks.enabled",
+		"auto_approve_enabled", "crew.away_close_enabled", "crew.heartbeat_enabled", "headless_tasks.enabled",
 		"open_sent_files_enabled", "queue_quiet_notifications", "queue_show_hidden_sessions",
 		"sidebar_harness_logos_enabled", "worktree_sweep_enabled",
 	}

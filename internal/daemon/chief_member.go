@@ -169,7 +169,7 @@ func chiefRefusesRetire(member crew.Member) error {
 	if !member.Chief {
 		return nil
 	}
-	return fmt.Errorf("%s is this profile's Chief and can't be retired; it can sleep: attn crew sleep chief", member.Name)
+	return fmt.Errorf("%s is this profile's Chief and can't be retired; its session can close: attn crew close chief", member.Name)
 }
 
 func (d *Daemon) chiefWakeRefusal(member crew.Member) error {
@@ -182,7 +182,7 @@ func (d *Daemon) chiefWakeRefusal(member crew.Member) error {
 func (d *Daemon) profileDeleteRefusal(profileID string) error {
 	chief, ok := d.chiefMember(profileID)
 	if ok && d.crewBindingLive(chief) {
-		return fmt.Errorf("%s is awake; put the chief to sleep first: attn crew sleep chief", chief.Name)
+		return fmt.Errorf("%s is in session; close the chief's session first: attn crew close chief", chief.Name)
 	}
 	return nil
 }

@@ -51,7 +51,7 @@ func TestLegacyHomesMoveOnlyOnRequestAndNotebookRenamesMoveTheWholeHome(t *testi
 	run.Prompted()
 	run.Reply("Ready. <!-- attn:state=idle -->")
 	_, err := cli.CrewMoveHome("Keel")
-	crewErrorContains(t, err, "Keel is awake", "attn crew sleep Keel")
+	crewErrorContains(t, err, "Keel is in session", "attn crew close Keel")
 	crewHandoff(t, cli, string(awake.SessionID), "A letter that moves with me.", false)
 
 	moved := moveCrewHome(t, w, "Keel")
@@ -421,7 +421,7 @@ func TestAHomeMovedAwayIsRepointedAndWakesThere(t *testing.T) {
 		t.Fatalf("letters after the repoint: %+v %v", prime, err)
 	}
 	_, err = repointCrewHome(cli, "Keel", home)
-	crewErrorContains(t, err, "Keel is awake", "attn crew sleep Keel")
+	crewErrorContains(t, err, "Keel is in session", "attn crew close Keel")
 }
 
 func TestARepointBringsAHomeBackIntoTheDataFolder(t *testing.T) {

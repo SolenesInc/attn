@@ -38,7 +38,7 @@ The sidebar's Crew section lists your members.
 The same moves work from any terminal, for you and for your agents:
 
 ```sh
-attn crew wake fern
-attn crew sleep fern
+attn crew start fern
+attn crew close fern
 attn agent msg fern "The release moved to Friday"
 ```

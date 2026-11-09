@@ -139,13 +139,13 @@ func TestWakeLedger(t *testing.T) {
 			limit:   2,
 			stamps:  []time.Time{now.Add(-2 * time.Hour), now.Add(-time.Hour)},
 			kept:    2,
-			refusal: []string{"Trellis", "crew.wake_limit=2", "crew.wake_limit_window_seconds=43200", "nothing was woken"},
+			refusal: []string{"Trellis", "crew.mail_start_limit=2", "crew.mail_start_window_seconds=43200", "attn did not start another"},
 		},
 		{
 			name:    "a zero limit turns autonomous wakes off",
 			limit:   0,
 			kept:    0,
-			refusal: []string{"turned off", "crew.wake_limit=0"},
+			refusal: []string{"turned off", "crew.mail_start_limit=0"},
 		},
 	}
 	for _, tc := range cases {

@@ -172,7 +172,7 @@ Read in the installed 2.1.310 source and checked with unpaid CLI probes:
 - A line typed before Claude reads its terminal does not become a turn. Launched
   with no prompt, the line lands in the composer and is not submitted (4 of 4
   launches, typed at 0.05 to 0.15 s). `--resume` with no prompt does the same.
-  Launched with a prompt, as every crew wake
+  Launched with a prompt, as every crew session start
   is, the line reached neither the screen nor the transcript in 9 of 10 launches
   typed at 0.05 to 0.35 s. The tenth, typed at 0.35 s, became a turn, as both
   lines typed at 0.45 s did, in a boot that showed its prompt at about 0.5 s.

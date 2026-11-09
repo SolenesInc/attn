@@ -24,7 +24,7 @@ import (
 func (d *Daemon) transferCrewBinding(memberID string, from protocol.SessionID, to protocol.SessionID) error {
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != from {
-			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", member.Name, shortSessionID(from))
+			return false, fmt.Errorf("%s's session is no longer %s; nothing was moved", member.Name, shortSessionID(from))
 		}
 		member.BindingSession = to
 		return true, nil
@@ -73,11 +73,11 @@ func (d *Daemon) crewHandoff(sessionID protocol.SessionID, note string, retry bo
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	if sessionID == "" {
-		return nil, fmt.Errorf("a handoff is filed by the session living the day; none was named (run from its terminal or pass --session)")
+		return nil, fmt.Errorf("a handoff is filed by the member's own session; none was named (run from its terminal or pass --session)")
 	}
 	member, bound := d.crewMemberForSession(sessionID)
 	if !bound {
-		return nil, fmt.Errorf("this session is not living a crew member's day, so it has no letter to file. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
+		return nil, fmt.Errorf("this session is not a crew member's session, so it has no letter to file. A crew handoff is a member's own letter to its successor; the note you write for whoever tends a piece of work next is `attn seed note <id> -m \"…\" --handoff`")
 	}
 	path, err := d.crewLetterForHandoff(member, sessionID, note, retry)
 	if err != nil {
@@ -90,7 +90,7 @@ func (d *Daemon) crewTurnover(member crew.Member, sessionID protocol.SessionID, 
 	result := &protocol.CrewHandoffResult{Member: member.ID, Name: member.Name, Path: path}
 	teardown, err := d.prepareSessionTeardown(sessionID)
 	if err != nil {
-		return nil, fmt.Errorf("prepare %s's day to close: %w", member.Name, err)
+		return nil, fmt.Errorf("prepare %s's session to close: %w", member.Name, err)
 	}
 	if !d.crewSwitchDue(member, sessionID) {
 		if err := d.closeCrewDay(sessionID, teardown); err != nil {
@@ -126,13 +126,13 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID protocol.Ses
 	filed := filepath.Join(member.HomeDir(d.dataRoot), crew.HandoffsDirName, filedName)
 	if retry {
 		if !hasFiled {
-			return "", fmt.Errorf("%s's day has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", member.Name)
+			return "", fmt.Errorf("%s's session has filed no letter yet, so there is no turnover to retry — write one with `attn handoff -m \"<your letter>\"`", member.Name)
 		}
 		if err := d.validateCrewLetterPath(member, filed); err != nil {
 			return "", err
 		}
 		if _, err := os.Stat(filed); err != nil {
-			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this day's letter again with `attn handoff -m \"<your letter>\"`", member.Name, filed, err)
+			return "", fmt.Errorf("%s's filed letter is recorded at %s but is not readable there (%v); file this session's letter again with `attn handoff -m \"<your letter>\"`", member.Name, filed, err)
 		}
 		d.logf("crew: %s is retrying its turnover with the letter already filed at %s", member.Name, filed)
 		return filed, nil
@@ -198,7 +198,7 @@ func (d *Daemon) crewSwitchHarness(member crew.Member, oldSessionID protocol.Ses
 	spawnMsg, policy := d.crewSuccessorSpawn(member, session)
 	launchDir, err := d.resolveCrewWorkDir(spawnMsg.Cwd)
 	if err != nil {
-		return "", fmt.Errorf("wake %s's successor in %s: %w", member.Name, spawnMsg.Cwd, err)
+		return "", fmt.Errorf("start %s's next session in %s: %w", member.Name, spawnMsg.Cwd, err)
 	}
 	spawnMsg.Cwd = launchDir
 	newSessionID = spawnMsg.ID
@@ -214,7 +214,7 @@ func (d *Daemon) crewSwitchHarness(member crew.Member, oldSessionID protocol.Ses
 
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
 		undoBinding()
-		return "", fmt.Errorf("wake %s's successor: %w", member.Name, rejection.reason())
+		return "", fmt.Errorf("start %s's next session: %w", member.Name, rejection.reason())
 	}
 	d.recordMemberSession(member.ID, newSessionID)
 
@@ -299,7 +299,7 @@ func (d *Daemon) crewSessionGeometry(sessionID protocol.SessionID) (int, int) {
 }
 
 func (d *Daemon) closeCrewDay(sessionID protocol.SessionID, teardown *sessionTeardown) error {
-	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member put to sleep"}); err != nil {
+	if err := d.commitSessionUnregister(sessionID, store.SessionClose{By: who.User(), Reason: "crew member closed its session"}); err != nil {
 		return err
 	}
 	if teardown.session != nil {

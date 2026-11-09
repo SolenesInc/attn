@@ -485,7 +485,7 @@
   opacity: 0.45;
 }
 
-.settings-wake-explain {
+.settings-standby-explain {
   max-width: 640px;
   display: grid;
   gap: 8px;
@@ -495,7 +495,7 @@
   padding: 12px 14px;
 }
 
-.settings-wake-explain-title {
+.settings-standby-explain-title {
   margin: 0;
   color: var(--color-text-tertiary);
   font-size: var(--font-size-xs);
@@ -503,7 +503,7 @@
   text-transform: uppercase;
 }
 
-.settings-wake-cases {
+.settings-standby-cases {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -511,7 +511,7 @@
   gap: 6px;
 }
 
-.settings-wake-cases li {
+.settings-standby-cases li {
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr);
   gap: 10px;
@@ -519,7 +519,7 @@
   font-size: var(--font-size-md);
 }
 
-.settings-wake-verdict {
+.settings-standby-verdict {
   padding: 2px 0;
   border-radius: 4px;
   font-size: 11px;
@@ -527,12 +527,12 @@
   text-align: center;
 }
 
-.settings-wake-verdict.wakes {
+.settings-standby-verdict.resumes {
   color: #f59b4a;
   background: rgba(245, 155, 74, 0.14);
 }
 
-.settings-wake-verdict.waits {
+.settings-standby-verdict.waits {
   color: var(--color-text-secondary);
   background: var(--color-bg-button);
 }

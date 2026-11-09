@@ -164,7 +164,7 @@ func TestChiefMailReachesItAfterSleepAndRename(t *testing.T) {
 		t.Fatalf("mail did not ring: %s", prompt)
 	}
 	_, err = cli.CrewRetire("chief")
-	crewErrorContains(t, err, "can't be retired", "attn crew sleep chief")
+	crewErrorContains(t, err, "can't be retired", "attn crew close chief")
 	app := w.App()
 	app.Send(protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: *chief.BindingSession})
 	if refused := testworld.Refused(app); !strings.Contains(protocol.Deref(refused.Error), "Alfred is protected from closing; put Alfred to sleep first") {
@@ -359,7 +359,7 @@ func TestDeletingAProfileRetiresItsChiefOnlyOnceItSleeps(t *testing.T) {
 		requestID := uuid.NewString()
 		return testworld.Request(app, protocol.ProfileDeleteMessage{Cmd: protocol.CmdProfileDelete, RequestID: requestID, ProfileID: work.ID, ExpectedRevision: work.Revision}, protocol.EventProfileActionResult, func(m protocol.ProfileActionResultMessage) bool { return m.RequestID == requestID })
 	}
-	if refused := remove(); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "put the chief to sleep first: attn crew sleep chief") {
+	if refused := remove(); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "close the chief's session first: attn crew close chief") {
 		t.Fatalf("deleting a profile with its Chief awake = %+v", refused)
 	}
 	crewHandoff(t, w.Client(), string(*woken.SessionID), "The profile is going away.", false)

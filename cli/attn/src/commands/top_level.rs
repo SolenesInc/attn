@@ -34,7 +34,7 @@ const LISTED: &[Listed] = &[
     Listed {
         name: "handoff",
         args: "-m \"<letter>\"",
-        summary: "file this crew member's letter; the day turns over",
+        summary: "file this crew member's letter; its session ends",
     },
     Listed {
         name: "onboarding",

@@ -25,7 +25,7 @@ export const BoolSetting = {
   headlessTasksEnabled: "headless_tasks.enabled",
   worktreeSweepEnabled: "worktree_sweep_enabled",
   crewHeartbeatEnabled: "crew.heartbeat_enabled",
-  crewAutosleepEnabled: "crew.autosleep_enabled",
+  crewAwayCloseEnabled: "crew.away_close_enabled",
 } as const;
 
 export type BoolSettingKey = (typeof BoolSetting)[keyof typeof BoolSetting];
@@ -42,7 +42,7 @@ export const DEFAULT_ON_SETTINGS: ReadonlySet<string> = new Set([
   "headless_tasks.enabled",
   "worktree_sweep_enabled",
   "crew.heartbeat_enabled",
-  "crew.autosleep_enabled",
+  "crew.away_close_enabled",
 ]);
 
 export interface Feature {

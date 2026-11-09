@@ -152,13 +152,13 @@ func (d *Daemon) crewAwayLimit() time.Duration {
 func (d *Daemon) crewWakeLedger() crew.WakeLedger {
 	limit := crewWakeLimitDefault
 	if d.store != nil {
-		if raw := strings.TrimSpace(d.setting(setting.CrewWakeLimit)); raw != "" {
+		if raw := strings.TrimSpace(d.setting(setting.CrewMailStartLimit)); raw != "" {
 			limit = resolveBoundedIntSetting(raw, crewWakeLimitDefault, 0, crewWakeLimitMax)
 		}
 	}
 	return crew.WakeLedger{
 		Limit:  limit,
-		Window: d.crewSeconds(setting.CrewWakeLimitWindowSeconds, crewWakeLimitWindowDefault, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs),
+		Window: d.crewSeconds(setting.CrewMailStartWindowSeconds, crewWakeLimitWindowDefault, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs),
 	}
 }
 
@@ -215,7 +215,7 @@ func (d *Daemon) crewLifecycleTick(now time.Time) {
 	awayLimit := d.crewAwayLimit()
 	lead := d.crewHeartbeatLead()
 	heartbeat := d.crewBoolSetting(setting.CrewHeartbeatEnabled)
-	autoSleep := d.crewBoolSetting(setting.CrewAutoSleepEnabled)
+	autoSleep := d.crewBoolSetting(setting.CrewAwayCloseEnabled)
 	for _, member := range members {
 		if member.Chief || !d.crewBindingLive(member) {
 			continue

@@ -497,25 +497,25 @@ func TestTheTenderWakeSettingDecidesWhichSeedMailWakesATenderOnStandby(t *testin
 		return strings.Contains(m.Content, "Pull request monitor: ready")
 	}
 
-	setSetting(t, app, "garden.tender_wake", "watches")
-	if sent := sendAgentMessage(t, cli, "sender", peerUnderWatches.SeedID, "a peer message"); !strings.Contains(sent.Detail, "garden.tender_wake=watches") {
+	setSetting(t, app, "garden.tender_resume", "watches")
+	if sent := sendAgentMessage(t, cli, "sender", peerUnderWatches.SeedID, "a peer message"); !strings.Contains(sent.Detail, "garden.tender_resume=watches") {
 		t.Fatalf("a peer message under watches = %+v, want it queued naming the setting", sent)
 	}
-	stillClosed(t, cli, peerUnderWatches, "a peer message under garden.tender_wake=watches")
+	stillClosed(t, cli, peerUnderWatches, "a peer message under garden.tender_resume=watches")
 
-	setSetting(t, app, "garden.tender_wake", "off")
+	setSetting(t, app, "garden.tender_resume", "off")
 	readyUnderOff := pullRequestReadyFor(pullRequestUnderOff)
 	w.tickSchedulesUntil("the first reminder fires and the pull request update arrives", func() bool {
 		return lifeShow(t, cli, underOff.SeedID).Seed.Reminder == nil && readyUnderOff()
 	})
 	for _, delegated := range []*protocol.DelegateResult{underOff, pullRequestUnderOff} {
-		if sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "a peer message"); !strings.Contains(sent.Detail, "garden.tender_wake=off") {
+		if sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "a peer message"); !strings.Contains(sent.Detail, "garden.tender_resume=off") {
 			t.Fatalf("a peer message to %s after its notice under off = %+v, want it queued naming the setting", delegated.SeedID, sent)
 		}
-		stillClosed(t, cli, delegated, "a notice and a peer message under garden.tender_wake=off")
+		stillClosed(t, cli, delegated, "a notice and a peer message under garden.tender_resume=off")
 	}
 
-	setSetting(t, app, "garden.tender_wake", "watches")
+	setSetting(t, app, "garden.tender_resume", "watches")
 	w.tickSchedulesUntil("the second reminder fires", func() bool { return lifeShow(t, cli, reminderUnderWatches.SeedID).Seed.Reminder == nil })
 	if mail := woken(reminderUnderWatches, "the reminder under watches"); len(mail) != 1 || protocol.Deref(mail[0].SourceID) != "seed-reminder" {
 		t.Fatalf("the tender woken under watches holds %+v, want its reminder", mail)
@@ -525,7 +525,7 @@ func TestTheTenderWakeSettingDecidesWhichSeedMailWakesATenderOnStandby(t *testin
 		t.Fatalf("the tender woken under watches holds %+v, want the pull request update", mail)
 	}
 
-	setSetting(t, app, "garden.tender_wake", "any")
+	setSetting(t, app, "garden.tender_resume", "any")
 	w.tickSchedulesUntil("the pull request update arrives under any", pullRequestReadyFor(pullRequestUnderAny))
 	if mail := woken(pullRequestUnderAny, "the pull request update under any"); len(mail) != 1 || !pullRequestNotice(mail[0]) {
 		t.Fatalf("the tender woken under any holds %+v, want the pull request update", mail)
@@ -561,7 +561,7 @@ func TestTheFortyNinthTenderWakeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
@@ -589,10 +589,10 @@ func TestTheFortyNinthTenderWakeInADayIsRefusedLoudlyAndTheMailWaitsForTheWindow
 		}
 
 		refused := sendAgentMessage(t, cli, "sender", seed, "update 49")
-		if refused.TargetSessionID != "" || !strings.Contains(refused.Detail, "tender_wake_tripwire") {
+		if refused.TargetSessionID != "" || !strings.Contains(refused.Detail, "tender_resume_tripwire") {
 			t.Fatalf("the 49th wake within a day = %+v, want it refused by the tripwire", refused)
 		}
-		wakeBlockedNotice(t, app, cli, seed, "tender_wake_tripwire")
+		wakeBlockedNotice(t, app, cli, seed, "tender_resume_tripwire")
 		if bound := crewRosterMember(t, cli, "trellis").BindingSession; bound != nil {
 			t.Fatalf("the tripwire still woke %s", *bound)
 		}
@@ -619,7 +619,7 @@ func TestSeedMailWakesACrewMemberTenderOnStandbyWithItsNote(t *testing.T) {
 		w.restart()
 		app, cli := w.App(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the build")
 		if _, err := cli.SeedTransition("", seed, "tend", "", false, client.SeedTransitionOptions{Assignee: "trellis"}); err != nil {
@@ -847,7 +847,7 @@ func TestSeedsOnStandbyListWithTheirPullRequestWatchesAndTheGardenFollowsTheWatc
 	gh := serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN", mergeStateStatus: "BLOCKED"})
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		setSetting(t, app, "garden.tender_wake", "off")
+		setSetting(t, app, "garden.tender_resume", "off")
 		watcher := w.Spawn(app, fakeagent.Codex, w.Path("watcher"))
 		tender := w.Spawn(app, fakeagent.Codex, w.Path("tender"))
 		onStandby := plantSeedAs(t, cli, tender, "Merge the readiness check once approved")

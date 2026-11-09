@@ -2,12 +2,12 @@ const HELP: &str = r#"usage: attn crew <command>
 
 Manage the Crew. Each member has a home folder with its charter and letters,
 which persist across sessions: in attn's data folder, or in its profile's
-Notebook at crew/<name>/. Every member belongs to a profile and wakes only
-there.
+Notebook at crew/<name>/. Every member belongs to a profile and has sessions
+only there.
 
 A <member> is a name in your profile, or member:<key> for the permanent key
 that never changes. Every profile has a Chief member, and chief reaches it
-whatever its name; it sleeps but is never retired.
+whatever its name; its sessions close but it is never retired.
 Inside attn, your session's profile applies; outside, pass --profile <name|id>
 when several profiles exist.
 
@@ -21,18 +21,19 @@ commands:
         Notebook (crew/<name>-2/ when that folder is taken) and starts with an
         empty CHARTER.md, which the member writes with you in its first session.
 
-  wake <member> [--agent <name>] [--json]
+  start <member> [--agent <name>] [--json]
         Start a session using the member's saved launch settings, on its chosen
         desktop in the member's profile without moving your focus. Asked from an agent of another profile, it
         refuses.
         Include its charter location, latest handoff, home instructions,
         held seeds with handoff notes, and ready counts for their plots.
         --agent overrides the harness for this session.
-        If already awake, return the existing session.
+        If the member is in session, return that session.
 
-  sleep <member> [--json]
+  close <member> [--json]
         Ask the member to write a handoff and close with attn handoff.
-        The member closes its own session. Do nothing if already asleep.
+        The member closes its own session. Do nothing if it is between
+        sessions.
 
   prime
         Print the orientation your crew session started with, read fresh:
@@ -46,7 +47,8 @@ commands:
         its letter with attn handoff, which ends the session and starts the
         next one on the saved harness. The member itself, an agent above it in
         the delegation chain, and the profile's chief may apply. Does nothing
-        if the member is asleep; its next wake uses the saved settings.
+        if the member is between sessions; its next session uses the saved
+        settings.
 
   set <member> [--cwd <dir>] [--agent <name>] [--model <name>] [--effort <level>]
                [--launch-desktop <own|desktop>] [--awareness-dir <dir>]... [--home <dir>]
@@ -63,7 +65,7 @@ commands:
         Use --awareness-dir "" to clear it.
         --home records where the member's home is after you moved or renamed
         its folder: a folder holding its CHARTER.md. Pass it without other
-        settings; the member must be asleep. Outside attn's data folder the
+        settings; the member must be between sessions. Outside attn's data folder the
         folder is renamed after the member. A working or awareness directory
         inside the old home follows, and so do saved sessions. To undo
         move-home, move the folder to crew/<key>/ in attn's data folder and
@@ -72,27 +74,27 @@ commands:
   rename <member> <name> [--json]
         Give the member a new name, unique in its profile. Its key, letters,
         mail and seeds stay. A home in the Notebook moves to a folder named
-        after the new name: at once when the member is asleep, at its next
-        wake when it is awake.
+        after the new name: at once when the member is between sessions,
+        otherwise when its next session starts.
 
   move-home <member> [--json]
         Move the member's home into its profile's current Notebook, at
         crew/<name>/ (crew/<name>-2/ when that folder is taken), from wherever
         it is: attn's data folder, an earlier Notebook or any other folder.
         Its charter, letters and other files move; a working or awareness
-        directory inside the home follows. The member must be asleep.
+        directory inside the home follows. The member must be between sessions.
         Changing the Notebook folder moves no home by itself; run this for
         each member.
 
   retire <member> [--json]
         Stop the member's work: its claimed seeds are replanted with a note,
         its seed and pull request watches and open asks are removed, and new
-        mail is refused. Unread mail, its home and its name stay. An awake
-        member is asked to sleep.
+        mail is refused. Unread mail, its home and its name stay. A member in
+        session is asked to close.
 
   restore <member> [--json]
         Bring a retired member back. Mail kept while retired is delivered,
-        which can wake it.
+        which can start a session for it.
 "#;
 
 use super::support::{
@@ -139,8 +141,8 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         verb,
         "list"
             | "ls"
-            | "wake"
-            | "sleep"
+            | "start"
+            | "close"
             | "apply"
             | "set"
             | "rename"
@@ -154,8 +156,10 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     match verb {
         "list" | "ls" => list(run, rest),
-        "wake" => wake(run, rest),
-        "sleep" => sleep(run, rest),
+        "start" => start(run, rest),
+        "close" => close(run, rest),
+        "wake" => Err(renamed("wake", "start", rest)),
+        "sleep" => Err(renamed("sleep", "close", rest)),
         "apply" => apply(run, rest),
         "set" => set(run, rest),
         "rename" => rename(run, rest),
@@ -294,8 +298,30 @@ fn list(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     })
 }
 
-fn wake(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
-    let label = "crew wake";
+fn renamed(old: &str, new: &str, args: &[String]) -> Stop {
+    let mut command = format!("attn crew {new}");
+    for arg in args {
+        command.push(' ');
+        command.push_str(&shell_word(arg));
+    }
+    eprintln!("crew {old}: `{old}` is now `{new}`: {command}");
+    Stop(2)
+}
+
+fn shell_word(arg: &str) -> String {
+    let plain = !arg.is_empty()
+        && arg
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "-_.:/=@".contains(c));
+    if plain {
+        arg.to_string()
+    } else {
+        format!("'{}'", arg.replace('\'', "'\\''"))
+    }
+}
+
+fn start(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    let label = "crew start";
     let mut flags = FlagSet::new(label, &[JSON, PROFILE, string_flag("agent")]);
     let member = parse_member(run, &mut flags, args, label)?;
     let request = Request::from_flags(label, &flags);
@@ -308,18 +334,18 @@ fn wake(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let answer = Answer {
         field: "crew_wake_result",
         json_path: &["crew_wake_result"],
-        missing: "the daemon answered without a wake result",
+        missing: "the daemon answered without a start result",
     };
     request.respond(run, &message, &answer, |result: CrewWakeResult| {
-        wake_lines(&result)
+        start_lines(&result)
     })
 }
 
-fn wake_lines(result: &CrewWakeResult) -> String {
+fn start_lines(result: &CrewWakeResult) -> String {
     let session = short_id(&result.session_id);
     if result.already_awake {
         return format!(
-            "{} is already awake in session {session} — nothing was launched.\n",
+            "{} is already in session {session} — nothing was launched.\n",
             result.name
         );
     }
@@ -334,34 +360,34 @@ fn wake_lines(result: &CrewWakeResult) -> String {
     }
     let _ = writeln!(
         out,
-        "{name} is awake in session {session}. `attn agent peek {name}` watches the day; the priming size is in the daemon log (grep `crew: priming`).",
+        "{name} is in session {session}. `attn agent peek {name}` watches the session; the priming size is in the daemon log (grep `crew: priming`).",
         name = result.name
     );
     out
 }
 
-fn sleep(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
-    let (member, request) = member_request(run, "crew sleep", args)?;
+fn close(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    let (member, request) = member_request(run, "crew close", args)?;
     let mut message = CrewSleepMessage::new();
     message.member = member;
     let answer = Answer {
         field: "crew_sleep_result",
         json_path: &["crew_sleep_result"],
-        missing: "the daemon answered without a sleep result",
+        missing: "the daemon answered without a close result",
     };
     request.respond(run, &message, &answer, |result: CrewSleepResult| {
-        format!("{}\n", sleep_outcome(&result))
+        format!("{}\n", close_outcome(&result))
     })
 }
 
-fn sleep_outcome(result: &CrewSleepResult) -> String {
+fn close_outcome(result: &CrewSleepResult) -> String {
     let name = &result.name;
     let detail = result.detail.trim();
     if result.already_asleep {
         if !detail.is_empty() {
             return format!("{detail}.");
         }
-        return format!("{name} is already asleep — no sleep request was sent.");
+        return format!("{name} is between sessions — no close request was sent.");
     }
     let session = short_id(result.session_id.as_deref().unwrap_or(""));
     if result.delivery_status.as_deref() == Some(AGENT_MSG_STATUS_QUEUED) {
@@ -370,7 +396,7 @@ fn sleep_outcome(result: &CrewSleepResult) -> String {
         } else {
             detail
         };
-        return format!("Sleep request for {name} is queued in session {session} — {detail}");
+        return format!("Close request for {name} is queued in session {session} — {detail}");
     }
     format!(
         "Asked {name} in session {session} to write its handoff and file it with `attn handoff`."
@@ -509,15 +535,15 @@ fn roster(members: &[CrewMember]) -> String {
         return "No crew members in this profile. `attn crew create <name>` adds one; `attn crew list --all` includes retired members.\n".to_string();
     }
     let mut out = format!(
-        "{:<12}  {:<8}  {:<8}  {:<20}  {:<8}  {:<10}  {:<22}  {}\n",
+        "{:<12}  {:<16}  {:<8}  {:<20}  {:<8}  {:<10}  {:<22}  {}\n",
         "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "LAUNCH DESKTOP", "HOME"
     );
     for member in members {
         let binding = member.binding_session.as_deref().map_or("", str::trim);
         let (mut state, session) = if binding.is_empty() {
-            ("asleep", "-".to_string())
+            ("between sessions", "-".to_string())
         } else {
-            ("awake", short_id(binding))
+            ("in session", short_id(binding))
         };
         if member.retired {
             state = "retired";
@@ -529,7 +555,7 @@ fn roster(members: &[CrewMember]) -> String {
         );
         let _ = writeln!(
             out,
-            "{:<12}  {state:<8}  {:<8}  {:<20}  {:<8}  {session:<10}  {desktop:<22}  {}",
+            "{:<12}  {state:<16}  {:<8}  {:<20}  {:<8}  {session:<10}  {desktop:<22}  {}",
             member.name,
             or_dash(&member.resolved_agent),
             or_dash(member.resolved_model.as_deref().unwrap_or("")),
@@ -537,7 +563,9 @@ fn roster(members: &[CrewMember]) -> String {
             member.home_dir
         );
     }
-    out.push_str("\nAn awake MEMBER or SESSION works with `attn agent peek <target>`.\n");
+    out.push_str(
+        "\nThe MEMBER or SESSION of a member in session works with `attn agent peek <target>`.\n",
+    );
     out
 }
 
@@ -579,7 +607,7 @@ fn rename_line(result: &CrewRenameResult) -> String {
     }
     if result.home_moves_at_wake == Some(true) {
         return format!(
-            "{old} is now {new}; its home keeps its folder while it is awake and moves to one named after {new} at its next wake. Its key {key}, letters and mail stay.\n"
+            "{old} is now {new}; its home keeps its folder while it is in session and moves to one named after {new} when its next session starts. Its key {key}, letters and mail stay.\n"
         );
     }
     format!("{old} is now {new}; its key {key}, home, letters and mail stay.\n")
@@ -614,7 +642,7 @@ fn create(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     request.respond(run, &message, &answer, |result: CrewCreateResult| {
         let member = result.member;
         format!(
-            "{name} joined profile {} with key {CREW_KEY_REF_PREFIX}{}.\nhome: {}\nTheir first wake writes CHARTER.md with you: `attn crew wake {name}`.\n",
+            "{name} joined profile {} with key {CREW_KEY_REF_PREFIX}{}.\nhome: {}\nTheir first session writes CHARTER.md with you: `attn crew start {name}`.\n",
             or_dash(member.profile_name.as_deref().unwrap_or("")),
             member.id,
             member.home_dir,
@@ -657,7 +685,7 @@ fn retirement(result: &CrewRetireResult) -> String {
     );
     let _ = writeln!(out, "unread mail kept: {}", result.unread);
     if let Some(sleep) = &result.sleep {
-        let _ = writeln!(out, "{}", sleep_outcome(sleep));
+        let _ = writeln!(out, "{}", close_outcome(sleep));
     }
     let _ = writeln!(out, "`attn crew restore {name}` brings them back.");
     out
@@ -677,7 +705,7 @@ fn restore(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
             format!("{} was not retired; nothing changed.\n", result.member.name)
         } else {
             format!(
-                "{} is back. Mail kept while retired is delivered now and can wake them.\n",
+                "{} is back. Mail kept while retired is delivered now and can start a session for them.\n",
                 result.member.name
             )
         }

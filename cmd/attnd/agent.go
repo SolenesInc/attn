@@ -187,7 +187,7 @@ func printAgentList(w io.Writer, rows []agentListRow) {
 			turn,
 		)
 	}
-	fmt.Fprintf(w, "\nAn ID or awake MEMBER here works with `attn agent peek <target>`; --json carries full ids.\n")
+	fmt.Fprintf(w, "\nAn ID, or the MEMBER of a member in session, here works with `attn agent peek <target>`; --json carries full ids.\n")
 }
 
 func crewProfileFlag(fs *flag.FlagSet) *string {
@@ -269,7 +269,7 @@ func agentPeekErrorMessage(target string, err error) string {
 		return fmt.Sprintf("%q matches more than one session; give more of the id (`attn agent list --json` carries full ids)", target)
 	case "crew_member_asleep":
 		member := strings.TrimSpace(target)
-		return fmt.Sprintf("%s is asleep; `attn agent peek` never wakes crew members. `attn crew wake %s` starts a day", member, member)
+		return fmt.Sprintf("%s is between sessions; `attn agent peek` never starts a session for a crew member. `attn crew start %s` starts one", member, member)
 	}
 	return message
 }
@@ -788,12 +788,12 @@ commands:
         assistant message, and the rendered screen. On a Claude session, says
         when the composer holds Claude's suggestion and not typed text. Passive — the
         observed agent never notices. The target is a crew name, full session id, or
-        unique session id prefix. A sleeping crew member stays asleep.
+        unique session id prefix. A crew member between sessions stays between sessions.
   msg <session-or-member-or-seed> "text" [--source-session <id>] [--json]
         send a session, crew member or seed a message. The body stays in the inbox;
         the recipient gets a generic inbox notification. A target that cannot take
         input safely keeps it queued. The result says queued, notified, or refused.
-        A sleeping member wakes before the notification is placed. The sender defaults to this session
+        attn starts a session for a member between sessions before the notification is placed. The sender defaults to this session
         (resolved from this terminal); pass --source-session when running outside one.
         A seed id reaches its current or next tender, waiting when none is reachable.
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
@@ -816,13 +816,13 @@ commands:
         server compact, on the home machine or an outpost. attn refuses any other
         session, and the refusal says why. Compact only a
         session that will resume as itself, as a seed's tender does when its
-        standby wakes it. A crew member's next wake starts a fresh session.
+        standby resumes it. A crew member's next session starts fresh.
   reload <session-or-member>... [--source-session <id>] [--json]
   reload --all [--source-session <id>] [--json]
         interrupt and reload agents in place, as "Reload this agent" does.
         Running work is interrupted and non-persistent state may be lost.
-        Full ids, unique prefixes and awake crew names work; a sleeping
-        member stays asleep. A member whose saved harness matches its session
+        Full ids, unique prefixes and names of crew members in session work;
+        a member between sessions stays between sessions. A member whose saved harness matches its session
         reloads with its saved model and effort.
         A session may reload itself and descendants; the profile's chief may
         reload any agent in that profile.

@@ -102,7 +102,7 @@ In the index, "both" means people and agents.
   `wsctl list`'s `desktops[].panes[]` whose `session_id` is the session.
   `wsctl input --id <terminal>` takes the terminal id, though wsctl's help
   calls it a session id. Read the terminal id again after a reload, a resume
-  or a crew wake, which can start a new terminal.
+  or a crew start, which can start a new terminal.
 - A shell's id, which `bridge` actions take as `sessionId`, is the `id` of
   its entry with `"agent": "shell"` in `wsctl list`. Files call the id
   `<shell-id>`.

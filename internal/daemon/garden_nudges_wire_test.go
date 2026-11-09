@@ -315,7 +315,7 @@ func TestASeedBellWakesItsAsleepMemberTenderAndStaysWithTheMember(t *testing.T) 
 
 func TestAMembersClaimAndWatchShareOneMemberInboxItem(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		app, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
@@ -341,7 +341,7 @@ func TestAMembersClaimAndWatchShareOneMemberInboxItem(t *testing.T) {
 
 func TestReadingAnEmptyInboxAcknowledgesAWithdrawnSeedRing(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "sender")
 		seed := plantSeedAs(t, cli, "sender", "review the deployment")
@@ -398,7 +398,7 @@ func TestAPlotTenderHearsDescendantsOnlyWhileHoldingTheClaim(t *testing.T) {
 
 func TestAMemberTendingAPlotHearsItsGrandchildren(t *testing.T) {
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"})
+		_, day := crewDayInBubble(t, w, map[string]string{"crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"})
 		cli := w.Client()
 		registerSessions(t, w, cli, "planter")
 		plot, _, leaf := gardenNudgePlot(t, cli, "planter")

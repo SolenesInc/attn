@@ -103,9 +103,9 @@ session are tiles on their desktops.
 These start a session for a member between sessions:
 
 - You: the sun in the sidebar, the start button in Manage crew, or
-  `attn crew wake <member>`. `--agent <name>` picks another harness for this
+  `attn crew start <member>`. `--agent <name>` picks another harness for this
   one session.
-- An agent running `attn crew wake <member>`.
+- An agent running `attn crew start <member>`.
 - An item for the member's mailbox: a message (`attn agent msg <member>`), an
   update on a seed it tends or on a seed under a plot it tends, or the answer
   to one of its asks.
@@ -123,7 +123,7 @@ greeting. Starting a session for a member already in session does nothing and
 names that session.
 
 Sessions Attn starts for mail are capped at 8 per member every 12 hours
-(`crew.wake_limit` and `crew.wake_limit_window_seconds`, set with
+(`crew.mail_start_limit` and `crew.mail_start_window_seconds`, set with
 `attn settings set`), and `0` turns them off. Sessions you start and sessions
 started for your messages never count. Sessions started for mail addressed to a
 seed the member tends, such as a reminder or a message to the seed's id, count
@@ -144,7 +144,7 @@ sessions.
 ## Closing a session
 
 The ☾ in the sidebar, the close button in Manage crew, and
-`attn crew sleep <member>` all ask the member to finish its current work, write its letter and
+`attn crew close <member>` all ask the member to finish its current work, write its letter and
 file it. The member ends its own session, and nothing stops the member mid-sentence.
 
 A member files its letter with `attn handoff -m "<letter>"` (or `-m -` to
@@ -219,7 +219,7 @@ Not by default. Members keep their rows in the Crew section and stay out of the 
 <details>
 <summary>What is the heartbeat I see in a member's terminal?</summary>
 
-A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and close. Attn sends neither to a member whose run failed, such as on a usage limit, until the member runs again. `crew.heartbeat_enabled`, `crew.autosleep_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the close when you are away.
+A member's harness caches its conversation for a while. Attn assumes an hour for Claude Code and 30 minutes for Codex. When you are around, the member is between turns, and the cache will lapse in 5 minutes, Attn sends a heartbeat: the member repeats its last message. The repeat keeps the cache from lapsing before your next prompt. If you have been away from Attn for 2.5 hours, Attn instead asks the member to file its letter and close. Attn sends neither to a member whose run failed, such as on a usage limit, until the member runs again. `crew.heartbeat_enabled`, `crew.away_close_enabled`, `crew.away_seconds`, `crew.heartbeat_lead_seconds` and `crew.cache_ttl_seconds` (or `crew.cache_ttl_seconds.<harness>`) control the heartbeat and the close when you are away.
 </details>
 
 <details>

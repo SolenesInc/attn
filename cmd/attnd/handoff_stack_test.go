@@ -14,7 +14,7 @@ import (
 func wakeMember(t *testing.T, s *testworld.Stack, name string) string {
 	t.Helper()
 	var woken protocol.CrewWakeResult
-	s.Attn("crew", "wake", name, "--json").JSON(t, &woken)
+	s.Attn("crew", "start", name, "--json").JSON(t, &woken)
 	s.Launched(string(woken.SessionID)).Prompted()
 	return string(woken.SessionID)
 }
@@ -58,7 +58,7 @@ func TestAHandoffFilesTheLetterAndTurnsTheDayOver(t *testing.T) {
 	keel := wakeMember(t, s, "keel")
 	letter := "Dear next keel,\nthe join test is the gate.\n"
 	slept := s.Run(testworld.Invocation{Args: []string{"handoff", "-m", "-"}, Session: keel, Stdin: letter})
-	requireStdout(t, slept, "Keel's letter is filed at ", "Keel is asleep.")
+	requireStdout(t, slept, "Keel's letter is filed at ", "Keel is between sessions.")
 	if filed, err := os.ReadFile(filedLetter(t, slept.Stdout, "Keel")); err != nil || string(filed) != letter {
 		t.Fatalf("the filed letter reads %q (%v), want %q", filed, err, letter)
 	}
@@ -110,9 +110,9 @@ func TestCrewApplyReloadsAModelChangeInPlace(t *testing.T) {
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
 	writeCharter(t, s, "keel")
 	s.Start()
-	requireStdout(t, s.Attn("crew", "apply", "keel"), "Keel is already asleep; its next wake uses the saved settings.")
+	requireStdout(t, s.Attn("crew", "apply", "keel"), "Keel is between sessions; its next session uses the saved settings.")
 	var woken protocol.CrewWakeResult
-	s.Attn("crew", "wake", "keel", "--json").JSON(t, &woken)
+	s.Attn("crew", "start", "keel", "--json").JSON(t, &woken)
 	keel := string(woken.SessionID)
 	first := s.Launched(keel)
 	first.Prompted()

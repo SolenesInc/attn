@@ -4,11 +4,11 @@ import { gesture } from '../test/renderApp';
 import { openSection, savedSettings } from '../test/settings';
 
 const ownPullRequestComments = () => screen.getByRole('switch', { name: 'Ring on my own PR comments' });
-const wakeChoice = (name: string) => within(screen.getByRole('group', { name: 'Wake for' })).getByRole('button', { name });
+const resumeChoice = (name: string) => within(screen.getByRole('group', { name: 'Resume for' })).getByRole('button', { name });
 const verdicts = () =>
   screen
     .getAllByRole('listitem')
-    .filter((item) => /^(Wakes|Waits)/.test(item.textContent ?? ''))
+    .filter((item) => /^(Resumes|Waits)/.test(item.textContent ?? ''))
     .map((item) => item.textContent);
 
 describe('Settings Agents: Seeds on standby', () => {
@@ -46,33 +46,33 @@ describe('Settings Agents: Seeds on standby', () => {
     expect(ownPullRequestComments()).toHaveAttribute('aria-checked', 'false');
   });
 
-  it('wakes a standby agent for any mail until the profile picks PRs and reminders, or never', async () => {
-    const daemon = await openSection('agents', { settings: { 'garden.tender_wake': 'any' } });
+  it('resumes a standby agent for any mail until the profile picks PRs and reminders, or never', async () => {
+    const daemon = await openSection('agents', { settings: { 'garden.tender_resume': 'any' } });
 
-    expect(wakeChoice('Any mail')).toHaveAttribute('aria-pressed', 'true');
+    expect(resumeChoice('Any mail')).toHaveAttribute('aria-pressed', 'true');
     expect(verdicts()).toEqual([
-      'WakesPR #123 got approved',
-      'WakesIts reminder came up',
-      'WakesAnother agent messaged the seed',
-      'WakesYou answered its ask',
+      'ResumesPR #123 got approved',
+      'ResumesIts reminder came up',
+      'ResumesAnother agent messaged the seed',
+      'ResumesYou answered its ask',
     ]);
 
-    await gesture(daemon, () => fireEvent.click(wakeChoice('PRs and reminders')));
+    await gesture(daemon, () => fireEvent.click(resumeChoice('PRs and reminders')));
 
-    expect(savedSettings(daemon)).toEqual([['garden.tender_wake', 'watches']]);
-    expect(wakeChoice('PRs and reminders')).toHaveAttribute('aria-pressed', 'true');
+    expect(savedSettings(daemon)).toEqual([['garden.tender_resume', 'watches']]);
+    expect(resumeChoice('PRs and reminders')).toHaveAttribute('aria-pressed', 'true');
     expect(verdicts()).toEqual([
-      'WakesPR #123 got approved',
-      'WakesIts reminder came up',
+      'ResumesPR #123 got approved',
+      'ResumesIts reminder came up',
       'WaitsAnother agent messaged the seed',
       'WaitsYou answered its ask',
     ]);
 
-    await gesture(daemon, () => fireEvent.click(wakeChoice('Never')));
+    await gesture(daemon, () => fireEvent.click(resumeChoice('Never')));
 
     expect(savedSettings(daemon)).toEqual([
-      ['garden.tender_wake', 'watches'],
-      ['garden.tender_wake', 'off'],
+      ['garden.tender_resume', 'watches'],
+      ['garden.tender_resume', 'off'],
     ]);
     expect(verdicts()).toEqual([
       'WaitsPR #123 got approved',
@@ -80,17 +80,17 @@ describe('Settings Agents: Seeds on standby', () => {
       'WaitsAnother agent messaged the seed',
       'WaitsYou answered its ask',
     ]);
-    expect(screen.getByText('A crew member who tends the seed always wakes, whatever you pick.')).toBeInTheDocument();
+    expect(screen.getByText('attn always starts a session for a crew member who tends the seed, whatever you pick.')).toBeInTheDocument();
   });
 
-  it('shows the saved wake choice, and treats a profile that has none as any mail', async () => {
-    await openSection('agents', { settings: { 'garden.tender_wake': 'off' } });
-    expect(wakeChoice('Never')).toHaveAttribute('aria-pressed', 'true');
-    expect(wakeChoice('Any mail')).toHaveAttribute('aria-pressed', 'false');
+  it('shows the saved resume choice, and treats a profile that has none as any mail', async () => {
+    await openSection('agents', { settings: { 'garden.tender_resume': 'off' } });
+    expect(resumeChoice('Never')).toHaveAttribute('aria-pressed', 'true');
+    expect(resumeChoice('Any mail')).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('starts on any mail when the profile has not chosen', async () => {
     await openSection('agents');
-    expect(wakeChoice('Any mail')).toHaveAttribute('aria-pressed', 'true');
+    expect(resumeChoice('Any mail')).toHaveAttribute('aria-pressed', 'true');
   });
 });

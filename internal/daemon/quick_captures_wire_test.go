@@ -332,14 +332,14 @@ func TestQuickCapturesWakeAMemberWithoutSpendingItsWakeLimit(t *testing.T) {
 		w.restart()
 		app, cli := w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
-		setSetting(t, app, "crew.wake_limit", "0")
+		setSetting(t, app, "crew.away_close_enabled", "false")
+		setSetting(t, app, "crew.mail_start_limit", "0")
 		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
 		first := sendQuickCapture(t, app, mailbox, "first user request")
 		synctest.Wait()
 		dayID := protocol.Deref(crewRosterMember(t, cli, "trellis").BindingSession)
 		if dayID == "" {
-			t.Fatal("a quick capture did not wake the member under crew.wake_limit=0")
+			t.Fatal("a quick capture did not wake the member under crew.mail_start_limit=0")
 		}
 		arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(e protocol.BackgroundLaunchMessage) bool { return e.SessionID == dayID })
 		if arrival.RequestedBy != "a quick capture" {
@@ -386,7 +386,7 @@ func TestAWokenMemberIsTypedItsQuickCaptureMidTurnAndRungAtItsFirstPrompt(t *tes
 		w.restart()
 		app, cli := w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		registerSessions(t, w, cli, "sender")
 		sent := sendAgentMessage(t, cli, "sender", "trellis", "the build is green")
 		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindCrewMember, MemberID: protocol.Ptr("trellis")}
@@ -409,7 +409,7 @@ func TestAQuickCaptureOutlastsFailedWakesUntilTheMemberIsUp(t *testing.T) {
 		w.restart()
 		app, cli := w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		workDir := w.Path("trellis-work")
 		if err := os.MkdirAll(workDir, 0o755); err != nil {
 			t.Fatal(err)
@@ -563,7 +563,7 @@ func TestAQuickCaptureForTheChiefReachesItAwakeAndWakesItsNextDay(t *testing.T) 
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, trusted, cli := w.App(), w.TrustedApp(), w.Client()
 		setSetting(t, app, "crew.heartbeat_enabled", "false")
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		setCrew(t, cli, "chief", protocol.CrewSetMessage{Agent: protocol.Ptr("claude")})
 		chief := w.bootBubbleClaude(t, string(wakeCrew(t, cli, "chief", "").SessionID))
 		chief.reply("Ready. <!-- attn:state=idle -->")

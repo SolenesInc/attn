@@ -109,7 +109,7 @@ func TestPromptsRenderShowsExactlyWhatAChiefACrewMemberAndAnOrdinarySessionRecei
 		t.Helper()
 		woken, err := s.Client().CrewWake(member, string(fakeagent.Claude), "")
 		if err != nil {
-			t.Fatalf("crew wake %s: %v", member, err)
+			t.Fatalf("crew start %s: %v", member, err)
 		}
 		priming, err := s.Client().CrewPrime(woken.SessionID)
 		if err != nil || priming.Guidance == nil {

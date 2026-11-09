@@ -204,7 +204,7 @@ func TestACrewDayWhoseRunFailedIsLeftAloneUntilItRunsAgain(t *testing.T) {
 		if got := day.term.Pasted(); len(got) != 0 {
 			t.Fatalf("a day whose run failed was asked to sleep, which it cannot answer: %q", got)
 		}
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		setSetting(t, app, "crew.away_seconds", "86400")
 
 		app.TypeLine(day.id, "try again")
@@ -226,7 +226,7 @@ func TestTheCrewSwitchesTurnOffHeartbeatsAndCloseAsks(t *testing.T) {
 		if got := day.term.Pasted(); len(got) != 0 {
 			t.Fatalf("with heartbeats off the day was sent %q", got)
 		}
-		setSetting(t, app, "crew.autosleep_enabled", "false")
+		setSetting(t, app, "crew.away_close_enabled", "false")
 		setSetting(t, app, "crew.away_seconds", "60")
 		w.advance(2 * time.Minute)
 		if got := day.term.Pasted(); len(got) != 0 {
@@ -254,8 +254,8 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		setSetting(t, app, "crew.wake_limit", "1")
-		setSetting(t, app, "crew.wake_limit_window_seconds", "3600")
+		setSetting(t, app, "crew.mail_start_limit", "1")
+		setSetting(t, app, "crew.mail_start_window_seconds", "3600")
 		registerSessions(t, w, cli, "sender")
 		first := sendAgentMessage(t, cli, "sender", "trellis", "the build broke")
 		if first.TargetSessionID == "" || !strings.Contains(first.Detail, "woke Trellis") {
@@ -264,7 +264,7 @@ func TestDeliveryWakesResumeAfterTheWakeLimitWindow(t *testing.T) {
 		w.terminal(string(first.TargetSessionID)).Exit(0)
 		w.advance(30 * time.Minute)
 		inside := sendAgentMessage(t, cli, "sender", "trellis", "the build broke again")
-		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.wake_limit=1") {
+		if inside.Status != protocol.AgentMsgStatusQueued || !strings.Contains(inside.Detail, "crew.mail_start_limit=1") {
 			t.Fatalf("inside limit window=%+v", inside)
 		}
 		if binding := crewRosterMember(t, cli, "trellis").BindingSession; binding != nil {

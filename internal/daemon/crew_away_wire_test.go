@@ -13,7 +13,7 @@ func TestAHandoffWhileTheUserIsAwayEndsTheDay(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		for key, value := range map[string]string{"crew.wake_limit": "0", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+		for key, value := range map[string]string{"crew.mail_start_limit": "0", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"} {
 			setSetting(t, app, key, value)
 		}
 		if err := w.InjectCrewSession("trellis-day", "trellis-day", w.Path("trellis-day"), "trellis"); err != nil {
@@ -42,7 +42,7 @@ func TestSuccessorsWithoutAnAppUseTheAutonomousWakeBudget(t *testing.T) {
 		writeCrewCharter(t, w, "trellis")
 		w.restart()
 		app, cli := w.App(), w.Client()
-		for key, value := range map[string]string{"crew.wake_limit": "1", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
+		for key, value := range map[string]string{"crew.mail_start_limit": "1", "crew.heartbeat_enabled": "false", "crew.away_close_enabled": "false"} {
 			setSetting(t, app, key, value)
 		}
 		app.Close()
@@ -59,7 +59,7 @@ func TestSuccessorsWithoutAnAppUseTheAutonomousWakeBudget(t *testing.T) {
 		switchCrewHarness(t, cli, "trellis", "codex")
 		w.advance(time.Minute)
 		limited := crewHandoff(t, cli, next.id, "Try another successor.", false)
-		if limited.SessionID != nil || !strings.Contains(protocol.Deref(limited.SuccessorError), "crew.wake_limit=1") {
+		if limited.SessionID != nil || !strings.Contains(protocol.Deref(limited.SuccessorError), "crew.mail_start_limit=1") {
 			t.Fatalf("the second unattended successor = %+v, want the used wake budget to refuse it", limited)
 		}
 	})

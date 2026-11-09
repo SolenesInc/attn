@@ -245,11 +245,11 @@ unset, so run the command again without it.
 attn delivers a resumed Claude session's mail through the Claude mod and never
 types it.
 
-The profile setting `garden.tender_wake` decides which mail resumes a closed
+The profile setting `garden.tender_resume` decides which mail resumes a closed
 session. `any` (the default) resumes for all seed mail. `watches` resumes for PR
 watch updates and reminders only. `off` resumes no session, and the mail waits in
 the inbox. A crew member that tends the seed gets a session under every value.
-`attn settings set garden.tender_wake watches` changes it, and the user can
+`attn settings set garden.tender_resume watches` changes it, and the user can
 change it in Settings.
 
 attn allows 48 tender resumes per seed in 24 hours. When it cannot resume the tender, it

@@ -42,11 +42,11 @@ func parseTenderWakeSetting(value string) (tenderWakeSetting, error) {
 	case tenderWakeAny, tenderWakeWatches, tenderWakeOff:
 		return setting, nil
 	}
-	return "", fmt.Errorf("garden.tender_wake is any, watches or off, not %q", value)
+	return "", fmt.Errorf("garden.tender_resume is any, watches or off, not %q", value)
 }
 
 func (d *Daemon) tenderWakeSetting(profileID string) tenderWakeSetting {
-	setting, err := parseTenderWakeSetting(d.store.ProfileSetting(profileID, setting.GardenTenderWake.Key))
+	setting, err := parseTenderWakeSetting(d.store.ProfileSetting(profileID, setting.GardenTenderResume.Key))
 	if err != nil {
 		return tenderWakeAny
 	}
@@ -154,7 +154,7 @@ func (d *Daemon) memberTenderWake(seedID string, session protocol.SessionID) (*t
 type tenderWakeTripwire struct{ reopensAt time.Time }
 
 func (e tenderWakeTripwire) Error() string {
-	return fmt.Sprintf("tender_wake_tripwire=%d per %s; the seed's tender was woken %d times in the last %s, which no healthy seed does, so attn stopped waking it until %s",
+	return fmt.Sprintf("tender_resume_tripwire=%d per %s; attn resumed the seed's tender %d times in the last %s, which no healthy seed does, so attn stopped resuming it until %s",
 		tenderWakeLimit, tenderWakeWindow, tenderWakeLimit, tenderWakeWindow, e.reopensAt.UTC().Format(time.RFC3339))
 }
 
@@ -201,7 +201,7 @@ func (d *Daemon) wakeStandbyTenderLocked(a who.Address, seedID string, state *in
 		return receipt, err
 	}
 	if !wakes {
-		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_wake=%s does not wake its tender for this mail", seed.ID, wake)
+		receipt.Detail = fmt.Sprintf("queued: %s is on standby, and garden.tender_resume=%s does not resume its tender for this mail", seed.ID, wake)
 		return receipt, nil
 	}
 	waitForOutpost := func() (inbox.Receipt, error) {

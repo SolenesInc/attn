@@ -19,8 +19,8 @@ File the letter closing this crew member's session. You write it; attn files it 
 handoffs/ in the member's home, with a UTC-stamped name, and never edits the
 prose. A correction is a new letter.
 
-Filing ends the session and the member sleeps until something wakes it,
-whether or not the user is at the machine. When attn crew apply asked this
+Filing ends the session. The member is between sessions until attn starts its
+next one, whether or not the user is at the machine. When attn crew apply asked this
 session for its letter because the member's harness changed, filing instead
 starts the next session on the new harness from the letter.
 
@@ -29,13 +29,13 @@ The letter also records this session so attn can keep its transcript.
 If the session cannot end or the next one cannot start, the letter stays filed
 and this session keeps running. --retry tries again with that letter.
 
-Only the session living a member's day can file one. The note for whoever tends
+Only the member's own session can file one. The note for whoever tends
 a piece of work next is the other axis: attn seed note <id> -m "…" --handoff.
 
 flags:
   -m <text>          the letter; - reads it from stdin
-  --retry            turn the day over with the letter already filed; no -m
-  --session <id>     the session closing its day (defaults to the current session)
+  --retry            end the session with the letter already filed; no -m
+  --session <id>     the member's session to close (defaults to the current session)
   --json             print the machine result as JSON
 `)
 }
@@ -51,8 +51,8 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 	fs := flag.NewFlagSet("handoff", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "the letter; - reads it from stdin")
-	retry := fs.Bool("retry", false, "turn the day over with the letter already filed")
-	session := fs.String("session", "", "the session closing its day (defaults to the current session)")
+	retry := fs.Bool("retry", false, "end the session with the letter already filed")
+	session := fs.String("session", "", "the member's session to close (defaults to the current session)")
 	jsonOut := fs.Bool("json", false, "print the machine result as JSON")
 	if err := parseFlags(fs, args); err != nil {
 		return handoffArgs{}, err
@@ -61,7 +61,7 @@ func parseHandoffArgs(args []string, envSession func() protocol.SessionID) (hand
 		return handoffArgs{}, fmt.Errorf("handoff takes its letter in -m, not %q", strings.Join(fs.Args(), " "))
 	}
 	if *retry && strings.TrimSpace(*message) != "" {
-		return handoffArgs{}, errors.New("--retry turns the day over with the letter you already filed, so it takes no -m; drop one of the two")
+		return handoffArgs{}, errors.New("--retry ends the session with the letter you already filed, so it takes no -m; drop one of the two")
 	}
 	if !*retry && strings.TrimSpace(*message) == "" {
 		return handoffArgs{}, errors.New(`the letter is the handoff — pass it with -m "<your letter>", or -m - to pipe it in`)
@@ -112,7 +112,7 @@ func printHandoffResult(result *protocol.CrewHandoffResult, retry bool) {
 		exit(1)
 	}
 	if protocol.Deref(result.Outcome) == protocol.CrewDayCloseSleep {
-		fmt.Printf("%s is asleep. Nobody was woken behind you; the sidebar has %[1]s one click from a new day.\n", result.Name)
+		fmt.Printf("%s is between sessions. attn started no session behind you; the sidebar has %[1]s one click from a new session.\n", result.Name)
 		return
 	}
 	fmt.Printf("%s's next session is %s on its new harness, starting now. This one ends here.\n",

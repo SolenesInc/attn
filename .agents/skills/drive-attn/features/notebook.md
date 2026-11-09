@@ -79,11 +79,11 @@ Preconditions:
 - **Drafts leave the screen with the tile.** With `narrowest_tile_cols` at 150, so only one tile fits, type in the editor tile and click another tile's `[data-testid^="shelf-chip-"]` natively within 700 ms: `cat` shows the edit on disk, and clicking the tile's chip brings it back. Append to the file from a shell between typing and clicking: the tile returns with the edit and `.notebook-browser-editor-conflict`, and "Overwrite anyway" saves it. Run `chmod 555` on the folder before typing: the tile returns with the edit and `.notebook-browser-editor-error`, and after `chmod 755` the status reads `Saved`.
 - **Change the editor root.** Click `[aria-label="Editor root"]` natively (its point comes from `bridge dom_native_point`). The click focuses the select without opening its menu. Then run `bridge native_text '{"text":"Notebook"}'` to select Notebook. Press Home and Enter: the value stays unchanged. `bridge dom_value '{"selector":"[aria-label=\"Editor root\"]"}'` reads an empty value, and `wsctl list` shows the editor tile updated from its agent-folder root.
 - **The Chief's status.**
-  - Run `./attn crew set chief --agent claude --cwd $A`, then `./attn crew wake chief --json`, and note its `session_id` as `<chief>`.
+  - Run `./attn crew set chief --agent claude --cwd $A`, then `./attn crew start chief --json`, and note its `session_id` as `<chief>`.
   - Open the notebook (⇧⌥⌘N): `bridge dom_text '{"selector":".notebook-browser-chief-pulse"}'` reads `chief: idle`.
   - Run `wsctl input --id <chief> --text "journal-entry" --enter`: `bridge dom_wait '{"selector":".notebook-browser-chief-pulse","textIncludes":"chief: active","timeoutMs":10000}'` matches, then `chief: idle` again, and the open journal shows one more `The mock agent wrote this.` without a reload.
   - Click `.notebook-browser-close` natively: `.notebook-browser` goes away.
-  - Run `./attn crew sleep chief`. An agent cannot close the Chief's session.
+  - Run `./attn crew close chief`. An agent cannot close the Chief's session.
 - **Notebook Folder in Settings.**
   - Press ⌘, and click `[data-testid="settings-nav-desktop"]` natively.
   - Click `[data-testid="settings-notebook-root-input"]` natively, type a folder under the home folder, such as `$HOME/attn-nbprof-<name>` written out, and press Enter: `[data-testid="settings-notebook-root-effective"]` reads `This profile uses:` that folder, and `./attn settings get notebook.root` prints it.

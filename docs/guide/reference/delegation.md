@@ -315,7 +315,7 @@ owed a turn in your queue.
 
 **Settings → Agents and models → Seeds on standby** picks which mail resumes a
 closed agent: **Any mail**, **PRs and reminders**, or **Never**. The choice
-belongs to your profile, and `attn settings set garden.tender_wake` changes it
+belongs to your profile, and `attn settings set garden.tender_resume` changes it
 with `any`, `watches` or `off`. Mail that doesn't resume an agent waits in its
 inbox. A crew member that tends the seed gets a session under every choice.
 
@@ -353,7 +353,7 @@ member's session.
 
 Attn resumes the tender of one seed at most 48 times in 24 hours, and the count
 restarts when the daemon restarts. Sessions started for a crew member's seed mail count
-against the seed's 48, and not against the member's `crew.wake_limit`. When Attn
+against the seed's 48, and not against the member's `crew.mail_start_limit`. When Attn
 can't resume the tender, it adds a note to the seed that names the reason and the
 mail, and shows you a critical notification that opens the seed. The reasons
 are a removed worktree, a conversation that is gone, a Claude session whose mod

@@ -102,11 +102,11 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.CrewAwaySeconds: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew away threshold", value, crewAwayMinSeconds, crewAwayMaxSeconds)
 	},
-	setting.CrewWakeLimit: func(d *Daemon, key, value string) error {
-		return validateBoundedIntSetting("crew wake limit", value, 0, crewWakeLimitMax)
+	setting.CrewMailStartLimit: func(d *Daemon, key, value string) error {
+		return validateBoundedIntSetting("crew mail start limit", value, 0, crewWakeLimitMax)
 	},
-	setting.CrewWakeLimitWindowSeconds: func(d *Daemon, key, value string) error {
-		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
+	setting.CrewMailStartWindowSeconds: func(d *Daemon, key, value string) error {
+		return validateBoundedIntSetting("crew mail start window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
 	},
 	setting.NotebookRoot: func(d *Daemon, key, value string) error {
 		value = strings.TrimSpace(value)
@@ -129,7 +129,7 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 		_, err := prreadiness.ParseOwnComments(value)
 		return err
 	},
-	setting.GardenTenderWake: func(d *Daemon, key, value string) error {
+	setting.GardenTenderResume: func(d *Daemon, key, value string) error {
 		_, err := parseTenderWakeSetting(value)
 		return err
 	},

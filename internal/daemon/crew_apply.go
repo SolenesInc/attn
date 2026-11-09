@@ -64,7 +64,7 @@ func (d *Daemon) crewApplyTarget(asker crewAsker, name string) (crew.Member, *pr
 			Member:  member.ID,
 			Name:    member.Name,
 			Outcome: protocol.CrewApplyOutcomeAsleep,
-			Detail:  asleep + "; its next wake uses the saved settings",
+			Detail:  asleep + "; its next session uses the saved settings",
 		}, nil
 	}
 	if err := d.mayActOnSession(asker.session, session, "apply settings to"); err != nil {

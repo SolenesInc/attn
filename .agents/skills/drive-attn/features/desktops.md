@@ -62,7 +62,7 @@ sessions on a launch desktop.
 ### Triggers
 
 - The daemon removes a desktop once it has been empty and not the current desktop for 30 seconds, if the desktop is also unnamed and not any item's launch desktop (`internal/daemon/empty_desktops.go`).
-- A crew wake or an automation run starts the session on the member's or the automation's launch desktop (`internal/daemon/launch_desktops.go`). Crew and automations own the wake and the run.
+- A crew start or an automation run starts the session on the member's or the automation's launch desktop (`internal/daemon/launch_desktops.go`). Crew and automations own the wake and the run.
 
 ## Driving it
 

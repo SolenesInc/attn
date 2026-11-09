@@ -85,11 +85,11 @@ func (l WakeLedger) Within(now time.Time) []time.Time {
 func (l WakeLedger) Allows(name string, now time.Time) ([]time.Time, error) {
 	kept := l.Within(now)
 	if l.Limit <= 0 {
-		return kept, fmt.Errorf("autonomous wakes are turned off (crew.wake_limit=%d), so %s was not woken; wake it yourself from the sidebar, or raise the limit", l.Limit, name)
+		return kept, fmt.Errorf("mail-started sessions are turned off (crew.mail_start_limit=%d), so attn did not start a session for %s; start one yourself from the sidebar, or raise the limit", l.Limit, name)
 	}
 	if len(kept) >= l.Limit {
-		return kept, fmt.Errorf("%s has been woken %d times without the user in the last %s, and the limit is %d (crew.wake_limit=%d, crew.wake_limit_window_seconds=%d); nothing was woken. Wake it yourself from the sidebar, or raise the limit",
-			name, len(kept), l.Window, l.Limit, l.Limit, int(l.Window/time.Second))
+		return kept, fmt.Errorf("attn started %d sessions for %s without the user in the last %s, and the limit is %d (crew.mail_start_limit=%d, crew.mail_start_window_seconds=%d); attn did not start another. Start one yourself from the sidebar, or raise the limit",
+			len(kept), name, l.Window, l.Limit, l.Limit, int(l.Window/time.Second))
 	}
 	return append(kept, now), nil
 }
