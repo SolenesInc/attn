@@ -40,6 +40,20 @@ const releaseDay: Ask = {
   parts: [{ question: { key: 'q1', kind: 'any', prompt: 'Which platforms?', choices: [{ label: 'macOS' }, { label: 'Linux' }] } }],
 };
 
+const rollout: Ask = {
+  id: 'a-rollout',
+  session_id: 'api',
+  subject: 'Rollout',
+  base_dir: '/tmp/api',
+  created_at: '2026-01-01T00:02:00Z',
+  parts: [
+    { question: { key: 'q1', kind: 'one', prompt: 'Which region first?', choices: [{ label: 'eu' }, { label: 'us' }], recommended: 'eu' } },
+    { question: { key: 'q2', kind: 'any', prompt: 'Which checks?', choices: [{ label: 'smoke' }, { label: 'load' }], recommended: 'smoke' } },
+    { question: { key: 'q3', kind: 'text', prompt: 'Which date?', choices: [], recommended: 'Monday' } },
+    { question: { key: 'q4', kind: 'one', prompt: 'Who approves?', choices: [{ label: 'Ana' }, { label: 'Bo' }] } },
+  ],
+};
+
 const cacheStoreReplied: Ask = {
   ...cacheStore,
   reply: {
@@ -208,6 +222,31 @@ describe('App asks', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('this ask was already answered or withdrawn');
     expect(screen.getByRole('checkbox', { name: 'Linux' })).toBeChecked();
     expect(daemon.sentOf('ask_answer').map(({ answers }) => answers)).toEqual([[{ key: 'q1', picked: ['Linux'], other: 'FreeBSD' }]]);
+  });
+
+  it('selects every recommended answer in one action and leaves unrecommended questions unanswered', async () => {
+    const daemon = await renderAsks([rollout]);
+    await openDrawer(daemon);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /Accept all recommended/ })));
+    expect(screen.getByRole('radio', { name: /eu/ })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: /smoke/ })).toBeChecked();
+    expect(screen.getByRole('textbox', { name: 'Which date?' })).toHaveValue('Monday');
+    expect(screen.getByRole('radio', { name: /Ana/ })).not.toBeChecked();
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: /^Send/ })));
+    expect(daemon.sentOf('ask_answer').map(({ answers }) => answers)).toEqual([[
+      { key: 'q1', picked: ['eu'] },
+      { key: 'q2', picked: ['smoke'] },
+      { key: 'q3', picked: [], text: 'Monday' },
+    ]]);
+  });
+
+  it('offers accepting recommendations only when several questions have one', async () => {
+    const daemon = await renderAsks([cacheStore]);
+    await openDrawer(daemon);
+
+    expect(screen.queryByRole('button', { name: /Accept all recommended/ })).toBeNull();
   });
 
   it('sends nothing until a question is answered or a note written', async () => {

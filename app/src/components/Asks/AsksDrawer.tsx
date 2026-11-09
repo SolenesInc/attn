@@ -5,7 +5,7 @@ import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { EMPTY_ASK_DRAFT, useAskList, useAsksStore, useRepliedAskList } from '../../store/asks';
 import type { UISessionState } from '../../types/sessionState';
-import { askQuestions, draftAnswers, draftSendable, type AskHolderSession, type AskListItem } from '../../utils/asks';
+import { askQuestions, draftAnswers, draftSendable, recommendedAnswers, type AskHolderSession, type AskListItem } from '../../utils/asks';
 import { formatTurnAge } from '../../utils/queueBands';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
@@ -128,6 +128,12 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const shownAnswers = reply ? answersByKey(reply.answers) : draft.answers;
   const sendable = !reply && draftSendable(ask, draft) && !sending;
   const changeAnswer = (answer: AskAnswer) => setDraft(ask.id, { ...draft, answers: { ...draft.answers, [answer.key]: answer } });
+  const recommended = reply ? [] : recommendedAnswers(ask);
+  const canAcceptRecommended = recommended.length > 1 && !sending;
+  const acceptRecommended = () => {
+    if (!canAcceptRecommended) return;
+    setDraft(ask.id, { ...draft, answers: { ...draft.answers, ...answersByKey(recommended) } });
+  };
   const send = async () => {
     if (!sendable) return;
     const openIndex = open.findIndex((item) => item.ask.id === ask.id);
@@ -153,6 +159,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     if (key === 'j') step(1);
     else if (key === 'k') step(-1);
     else if (key === 'r') toggleReplied();
+    else if (key === 'a' && canAcceptRecommended) acceptRecommended();
     else if (key === 'o' && holder) onOpenAgent(holder.id);
     else if (key === 'g' && seedId) onOpenSeed(seedId);
     else return;
@@ -203,6 +210,11 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
       </article>
       <div className="asks-footer">
         <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
+        {canAcceptRecommended && (
+          <button type="button" className="asks-accept-recommended" title="Select every recommended answer (a)" onClick={acceptRecommended}>
+            Accept all recommended <kbd>a</kbd>
+          </button>
+        )}
         <AskAction reply={reply} sendable={sendable} sending={sending} onSend={() => void send()} />
       </div>
     </div>

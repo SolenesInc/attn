@@ -5,6 +5,7 @@ import {
   askFrom,
   draftSendable,
   emptyAnswer,
+  recommendedAnswers,
   type Answer,
   type Draft,
   type PhoneAsk,
@@ -27,6 +28,7 @@ export type AskActions<Message> = MarkdownContext<Message> & {
   readonly changeOther: (key: string, value: string) => Message
   readonly changeText: (key: string, value: string) => Message
   readonly changeNote: (value: string) => Message
+  readonly acceptRecommended: Message
   readonly send: Message
 }
 
@@ -271,6 +273,17 @@ export const askScreen = <Message>(
                 ]),
                 open.error ? h.p([h.Class('error')], [open.error]) : h.empty,
                 row.live ? h.empty : h.p([h.Class('muted')], [`${row.pairing.homeName} is not connected.`]),
+                !open.sending && recommendedAnswers(ask).length > 1
+                  ? h.button(
+                      [
+                        h.Class('quiet'),
+                        h.Type('button'),
+                        h.DataAttribute('testid', 'ask-accept-recommended'),
+                        h.OnClick(actions.acceptRecommended),
+                      ],
+                      ['Accept all recommended'],
+                    )
+                  : h.empty,
                 h.button(
                   [
                     h.Class('primary'),

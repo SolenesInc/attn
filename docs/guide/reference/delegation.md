@@ -117,6 +117,11 @@ agent's conversation as your message. When the ask is about a seed, the answer
 goes to whoever tends that seed when you answer, and Attn adds the answer to the
 seed as a note.
 
+When an ask has recommended answers for two or more questions, **Accept all
+recommended** (or `a`) selects every one of them in the draft, so you can review
+and change them before you send. Questions with no recommendation stay
+unanswered. The phone app has the same button.
+
 ## Roles
 
 When making a delegation, the agent picks:

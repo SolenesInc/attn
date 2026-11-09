@@ -11,6 +11,7 @@ import {
   PhoneAsk,
   Draft,
   answersInOneTap,
+  recommendedAnswers,
   askFrom,
   askKey,
   draftAnswers,
@@ -193,6 +194,7 @@ export const Message = defineMessageUnion({
   ChangedOther: { key: Schema.String, value: Schema.String },
   ChangedText: { key: Schema.String, value: Schema.String },
   ChangedNote: { value: Schema.String },
+  ClickedAcceptRecommended: {},
   ClickedSend: {},
   SentAnswer: { pairingId: Schema.String, askId: Schema.String },
   FailedAnswer: { pairingId: Schema.String, askId: Schema.String, message: Schema.String },
@@ -983,6 +985,19 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       model: withAnswer(model, key, (answer) => ({ ...answer, text: value })),
     }),
     ChangedNote: ({ value }) => ({ model: withDraft(model, (draft) => ({ ...draft, note: value })) }),
+    ClickedAcceptRecommended: () => {
+      const ask = openAskOf(model)
+      if (!ask || answeringOpenAsk(model)?.status === 'sending') return { model }
+      return {
+        model: withDraft(model, (draft) => ({
+          ...draft,
+          answers: {
+            ...draft.answers,
+            ...Object.fromEntries(recommendedAnswers(ask).map((answer) => [answer.key, answer])),
+          },
+        })),
+      }
+    },
     ClickedSend: () => sendDraft(model),
     SentAnswer: ({ pairingId, askId }) => {
       const key = askKey(pairingId, askId)
@@ -1575,6 +1590,7 @@ const askActions = (model: Model): AskActions<Message> => ({
   changeOther: (key, value) => Message.ChangedOther({ key, value }),
   changeText: (key, value) => Message.ChangedText({ key, value }),
   changeNote: (value) => Message.ChangedNote({ value }),
+  acceptRecommended: Message.ClickedAcceptRecommended(),
   send: Message.ClickedSend(),
 })
 

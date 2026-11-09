@@ -108,6 +108,16 @@ export const emptyDraft: Draft = { answers: {}, note: '' }
 
 export const emptyAnswer = (key: string): Answer => ({ key, picked: [], other: '', text: '' })
 
+export const recommendedAnswers = (ask: PhoneAsk): ReadonlyArray<Answer> =>
+  questionsOf(ask).flatMap((question) => {
+    const recommended = question.recommended
+    if (!recommended) return []
+    if (question.kind === 'text') return [{ ...emptyAnswer(question.key), text: recommended }]
+    if (question.kind === 'one' || question.kind === 'any')
+      return [{ ...emptyAnswer(question.key), picked: [recommended] }]
+    return []
+  })
+
 export const draftAnswers = (ask: PhoneAsk, draft: Draft): ReadonlyArray<HomeGatewayAskAnswer> =>
   questionsOf(ask).flatMap((question) => {
     const answer = draft.answers[question.key]

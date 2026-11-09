@@ -84,6 +84,15 @@ export function repliedAskList<S extends AskHolderSession & { label: string }>(a
     .map((ask) => askListItem(ask, sessions, seeds));
 }
 
+export function recommendedAnswers(ask: Ask): AskAnswer[] {
+  return askQuestions(ask).flatMap((question) => {
+    if (!question.recommended) return [];
+    if (question.kind === 'text') return [{ key: question.key, picked: [], other: '', text: question.recommended }];
+    if (question.kind === 'one' || question.kind === 'any') return [{ key: question.key, picked: [question.recommended], other: '', text: '' }];
+    return [];
+  });
+}
+
 export function draftAnswers(ask: Ask, draft: AskDraft): AskAnswer[] {
   return askQuestions(ask).flatMap((question) => {
     const answer = draft.answers[question.key];

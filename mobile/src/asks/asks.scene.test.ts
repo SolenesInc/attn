@@ -227,6 +227,46 @@ describe('asks on the phone', () => {
     )
   })
 
+  it('selects every recommended answer with one tap and leaves the rest unanswered', () => {
+    const multi = ask('a-multi', 2, [
+      { markdown: null, question: choiceQuestion },
+      {
+        markdown: null,
+        question: {
+          ...choiceQuestion,
+          key: 'q2',
+          prompt: 'Which region?',
+          choices: [{ label: 'eu', description: null }],
+          recommended: 'eu',
+        },
+      },
+      {
+        markdown: null,
+        question: { ...choiceQuestion, key: 'q3', prompt: 'Who approves?', recommended: null },
+      },
+    ])
+    Scene.scene(
+      { update, view },
+      Scene.given(online(personal)),
+      arrive(personal, [multi]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.click(Scene.testId('ask-accept-recommended')),
+      Scene.click(Scene.testId('ask-send')),
+      Scene.Command.resolve(
+        SendAnswer({
+          pairingId: personal.id,
+          askId: 'a-multi',
+          answers: [
+            { key: 'q1', picked: ['Postgres'] },
+            { key: 'q2', picked: ['eu'] },
+          ],
+          note: '',
+        }),
+        Message.FailedAnswer({ pairingId: personal.id, askId: 'a-multi', message: 'Mac is not connected' }),
+      ),
+    )
+  })
+
   it('shows why an image or a diagram cannot be shown, in its place, and does not retry what the home refused', () => {
     Scene.scene(
       { update, view },
