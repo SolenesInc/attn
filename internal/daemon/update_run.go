@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/inbox"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/selfupdate"
@@ -51,6 +52,14 @@ func updateRunToProtocol(run *store.UpdateRun) *protocol.UpdateRun {
 		Phase:       protocol.UpdatePhase(run.Phase),
 		LogPath:     run.LogPath,
 		Requesters:  run.Requesters,
+		Outposts:    make([]protocol.UpdateOutpostProgress, 0, len(run.Outposts)),
+	}
+	for _, outpost := range run.Outposts {
+		progress := protocol.UpdateOutpostProgress{ID: outpost.ID, Name: outpost.Name, State: protocol.UpdateOutpostState(outpost.State)}
+		if outpost.Detail != "" {
+			progress.Detail = protocol.Ptr(outpost.Detail)
+		}
+		wire.Outposts = append(wire.Outposts, progress)
 	}
 	if wire.Requesters == nil {
 		wire.Requesters = []string{}
@@ -183,7 +192,7 @@ func updateRequestTrigger(requests []store.UpdateRequest) string {
 
 func (d *Daemon) handleStartUpdate(client *wsClient, msg *protocol.StartUpdateMessage) {
 	result := protocol.StartUpdateResultMessage{Event: protocol.EventStartUpdateResult, RequestID: msg.RequestID, Success: true}
-	run, err := d.startUpdate()
+	run, err := d.startUpdate(msg.WithoutOutposts)
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
@@ -193,7 +202,7 @@ func (d *Daemon) handleStartUpdate(client *wsClient, msg *protocol.StartUpdateMe
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) startUpdate() (*store.UpdateRun, error) {
+func (d *Daemon) startUpdate(without []string) (*store.UpdateRun, error) {
 	if !d.on(setting.SelfUpdateEnabled) {
 		return nil, setting.SelfUpdateEnabled.Refusal()
 	}
@@ -222,7 +231,7 @@ func (d *Daemon) startUpdate() (*store.UpdateRun, error) {
 		return nil, err
 	}
 	d.publishFact(FactUpdateChanged, run.ID, nil)
-	d.life.Go("runUpdate", func() { d.runUpdate(run, plan) })
+	d.life.Go("runUpdate", func() { d.runUpdate(run, plan, without) })
 	return d.latestUpdateRun(), nil
 }
 
@@ -324,6 +333,8 @@ func (d *Daemon) finishUpdateRun(run store.UpdateRun, phase protocol.UpdatePhase
 
 func (d *Daemon) failUpdateRun(run store.UpdateRun, cause string) {
 	d.logf("update run %s failed: %s", run.ID, cause)
+	_ = os.Remove(selfupdate.RestartMarkerPath(d.dataRoot))
+	d.withdrawOutpostNotices(run)
 	d.finishUpdateRun(run, protocol.UpdatePhaseFailed, fmt.Sprintf("%s. Log: %s", strings.TrimSuffix(cause, "."), run.LogPath))
 }
 
@@ -332,7 +343,7 @@ func (d *Daemon) updateEnvironment(plan selfupdate.Plan) []string {
 	return append(env, "REPOSITORY_PATH="+plan.Repository)
 }
 
-func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan) {
+func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan, without []string) {
 	log, err := os.OpenFile(run.LogPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		d.failUpdateRun(run, fmt.Sprintf("could not open the build log: %v", err))
@@ -364,6 +375,19 @@ func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan) {
 		return
 	}
 	d.setUpdatePhase(run, protocol.UpdatePhaseStaging)
+	limit := selfupdate.BuildTimeoutFromEnv()
+	staging, cancelStaging := context.WithTimeout(ctx, limit)
+	defer cancelStaging()
+	if failed := d.stageOutposts(staging, run, target, without); len(failed) > 0 {
+		cause := "could not stage " + strings.Join(failed, "; ") + ". attn did not restart"
+		if errors.Is(staging.Err(), context.DeadlineExceeded) {
+			cause = fmt.Sprintf("staging outposts did not finish within its %s limit (%s). attn did not restart", limit, selfupdate.BuildTimeoutEnv)
+		}
+		d.failUpdateRun(run, cause)
+		return
+	}
+	pausepoint.At(pausepoint.UpdateOutpostsStaged)
+	d.noticeOutposts(ctx, run, target)
 	d.setUpdatePhase(run, protocol.UpdatePhaseApplying)
 	if err := d.startUpdateHelper(run, plan, env, log); err != nil {
 		d.failUpdateRun(run, err.Error())
@@ -451,5 +475,6 @@ func (d *Daemon) reconcileUpdateRun() {
 	}
 	d.setUpdatePhase(*run, protocol.UpdatePhaseHomeRestarted)
 	d.setUpdatePhase(*run, protocol.UpdatePhaseOutposts)
-	d.finishUpdateRun(*run, protocol.UpdatePhaseDone, "attn is now running "+running+".")
+	summary := d.switchOutposts(*run)
+	d.finishUpdateRun(*run, protocol.UpdatePhaseDone, "attn is now running "+running+"."+summary)
 }

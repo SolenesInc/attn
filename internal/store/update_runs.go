@@ -23,6 +23,23 @@ type UpdateRun struct {
 	CreatedAt   time.Time
 	FinishedAt  time.Time
 	Requesters  []string
+	Outposts    []UpdateRunOutpost
+}
+
+const (
+	UpdateOutpostStaging   = "staging"
+	UpdateOutpostStaged    = "staged"
+	UpdateOutpostSkipped   = "skipped"
+	UpdateOutpostFailed    = "failed"
+	UpdateOutpostSwitching = "switching"
+	UpdateOutpostDone      = "done"
+)
+
+type UpdateRunOutpost struct {
+	ID     string
+	Name   string
+	State  string
+	Detail string
 }
 
 func (r UpdateRun) Open() bool { return r.FinishedAt.IsZero() }
@@ -81,7 +98,39 @@ func (s *Store) LatestUpdateRun() (*UpdateRun, error) {
 	if run.Requesters, err = s.updateRunRequesters(run.ID); err != nil {
 		return nil, err
 	}
+	if run.Outposts, err = s.updateRunOutposts(run.ID); err != nil {
+		return nil, err
+	}
 	return &run, nil
+}
+
+func (s *Store) SetUpdateRunOutpost(runID string, outpost UpdateRunOutpost) error {
+	_, err := s.db.Exec(
+		`INSERT INTO update_run_outposts (run_id, outpost_id, name, state, detail) VALUES (?, ?, ?, ?, ?)
+		 ON CONFLICT (run_id, outpost_id) DO UPDATE SET name = excluded.name, state = excluded.state, detail = excluded.detail`,
+		runID, outpost.ID, outpost.Name, outpost.State, outpost.Detail,
+	)
+	if err != nil {
+		return fmt.Errorf("store: set update run outpost: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) updateRunOutposts(runID string) ([]UpdateRunOutpost, error) {
+	rows, err := s.db.Query(`SELECT outpost_id, name, state, detail FROM update_run_outposts WHERE run_id = ? ORDER BY name, outpost_id`, runID)
+	if err != nil {
+		return nil, fmt.Errorf("store: update run outposts: %w", err)
+	}
+	defer rows.Close()
+	var outposts []UpdateRunOutpost
+	for rows.Next() {
+		var outpost UpdateRunOutpost
+		if err := rows.Scan(&outpost.ID, &outpost.Name, &outpost.State, &outpost.Detail); err != nil {
+			return nil, err
+		}
+		outposts = append(outposts, outpost)
+	}
+	return outposts, rows.Err()
 }
 
 func parseUpdateRunTime(value string) time.Time {

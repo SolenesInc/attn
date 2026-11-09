@@ -41,6 +41,12 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 		return
 	}
 	lost := fmt.Sprintf("lost %s during this call; it may have run", name)
+	lostText := func() string {
+		if notice := d.homeUpdateNoticeText(name); notice != "" {
+			return lost + "; " + notice
+		}
+		return lost
+	}
 	header, err := json.Marshal(forwardRequest{Caller: caller})
 	if err != nil {
 		d.sendError(socket, err.Error())
@@ -52,7 +58,7 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 		if errors.As(err, &refused) {
 			d.sendError(socket, err.Error())
 		} else {
-			d.sendError(socket, lost)
+			d.sendError(socket, lostText())
 		}
 		return
 	}
@@ -94,7 +100,7 @@ func (r *Router) Forward(socket net.Conn, frame []byte, caller protocol.SessionI
 		if err != nil {
 			_ = channel.Close()
 			if !<-completed {
-				d.sendError(socket, lost)
+				d.sendError(socket, lostText())
 			}
 			return
 		}

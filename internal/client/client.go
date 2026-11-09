@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/selfupdate"
 )
 
 func DefaultSocketPath() string {
@@ -1212,6 +1213,9 @@ func explainConnectError(sockPath string, cause error) error {
 	}
 	base := fmt.Sprintf("connect to daemon at %s (instance=%s): %v",
 		config.CollapseHome(sockPath), instance, cause)
+	if restarting := selfupdate.RestartMarkerText(config.DataDir(), time.Now()); restarting != "" {
+		return errors.New(base + "\n  " + restarting)
+	}
 	if hint := crossInstanceHint(); hint != "" {
 		return errors.New(base + "\n  " + hint)
 	}

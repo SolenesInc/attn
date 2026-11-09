@@ -109,6 +109,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSessionTranscript:             decodeInto[SessionTranscriptMessage],
 	CmdSessionList:                   decodeInto[SessionListMessage],
 	CmdUpdateStatus:                  decodeInto[UpdateStatusMessage],
+	CmdHomeUpdateNotice:              decodeInto[HomeUpdateNoticeMessage],
 	CmdUpdateRequest:                 decodeInto[UpdateRequestMessage],
 	CmdStartUpdate:                   decodeInto[StartUpdateMessage],
 	CmdDeclineUpdate:                 decodeInto[DeclineUpdateMessage],

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "4c919b846a0a";
+pub const PROTOCOL_VERSION: &str = "2f87e8864bf0";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -5433,6 +5433,23 @@ impl HarnessModelsResultMessage {
     }
 }
 pub type HeatState = String;
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HomeUpdateNoticeMessage {
+    pub cmd: String,
+    pub host: String,
+    pub run: String,
+    pub target_build: String,
+}
+
+impl HomeUpdateNoticeMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "home_update_notice".to_string(),
+            ..Self::default()
+        }
+    }
+}
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct HookCompactionMessage {
     pub active: bool,
@@ -12030,6 +12047,8 @@ pub struct StartUpdateMessage {
     pub request_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub update_request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub without_outposts: Option<Vec<String>>,
 }
 
 impl StartUpdateMessage {
@@ -13014,6 +13033,15 @@ impl UpdateOutpostMessage {
         }
     }
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct UpdateOutpostProgress {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub id: String,
+    pub name: String,
+    pub state: UpdateOutpostState,
+}
+pub type UpdateOutpostState = String;
 pub type UpdatePhase = String;
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct UpdateRequestMessage {
@@ -13048,6 +13076,8 @@ pub struct UpdateRun {
     pub log_path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub outcome: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub outposts: Vec<UpdateOutpostProgress>,
     pub phase: UpdatePhase,
     #[serde(deserialize_with = "null_as_default")]
     pub requesters: Vec<String>,

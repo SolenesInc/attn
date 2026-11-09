@@ -3,6 +3,8 @@ import { openThenShow } from '../application/openThenShow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { outpostNeedsUpdate, outpostIsUpdating, outpostUpdateText } from './OutpostUpdateBanner';
+import { useUpdateActions } from '../hooks/useUpdateActions';
+import { failedUpdateOutposts, updateOutpostText, updateRunIsOpen } from './UpdateRunBanner';
 import type { OutpostInfo, OutpostNotebook } from '../types/generated';
 
 const stateTone: Record<OutpostInfo['state'], string> = {
@@ -31,7 +33,8 @@ function NotebookSyncStatus({ notebook }: { notebook: OutpostNotebook }) {
 }
 
 export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => void }) {
-  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendConnectOutpostInTerminal, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected } = useDaemonApi();
+  const { outposts, outpostCommandError, sendAddOutpost, sendRepairOutpost, sendConnectOutpostInTerminal, sendRemoveOutpost, sendUpdateOutpost, homeBuild, isConnected, updateRun } = useDaemonApi();
+  const { startUpdate } = useUpdateActions();
   const sessions = useDaemonStore((state) => state.daemonSessions);
   const removeButton = useRef<HTMLButtonElement>(null);
   const [terminalError, setTerminalError] = useState('');
@@ -112,8 +115,11 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
                     {row.last_error && <div className="settings-warning settings-outpost-error"><p>{row.last_error}</p>{row.last_error_at && <Timestamp value={row.last_error_at} />}</div>}
                     {row.notebook && <NotebookSyncStatus notebook={row.notebook} />}
                     {row.update && <p className="settings-description" role="status">{outpostUpdateText(row)}</p>}
+                    {updateRun && updateRunIsOpen(updateRun) && updateRun.outposts?.filter(outpost => outpost.id === row.id).map(outpost => <p key={outpost.id} className="settings-description" role="status">{updateOutpostText(outpost)}</p>)}
+                    {updateRun && failedUpdateOutposts(updateRun).filter(outpost => outpost.id === row.id).map(outpost => <p key={outpost.id} className="settings-description" role="status">{updateOutpostText(outpost)}</p>)}
                     <div className="settings-outpost-actions">
                       {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => void connectInTerminal(row.id)}>Connect in a terminal</button>}
+                      {updateRun && failedUpdateOutposts(updateRun).some(outpost => outpost.id === row.id) && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => startUpdate(undefined, failedUpdateOutposts(updateRun).map(outpost => outpost.id))}>Update without it</button>}
                       {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : row.host_missing ? 'Install shared terminal host' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button

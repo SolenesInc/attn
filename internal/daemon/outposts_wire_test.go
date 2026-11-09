@@ -392,7 +392,7 @@ func (r *refusingInstallSSH) Probe(ctx context.Context) (outpostssh.Probe, error
 	}
 	return outpostssh.Probe{Platform: "linux/amd64", Build: &bridge.Build{Version: "earlier", SourceFingerprint: "git:earlier", ProtocolVersion: protocol.ProtocolVersion}}, nil
 }
-func (r *refusingInstallSSH) Install(_ context.Context, _ outpostbuild.Binaries, _ bridge.Build, phase func(string)) error {
+func (r *refusingInstallSSH) Stage(_ context.Context, _ outpostbuild.Binaries, _ bridge.Build, phase func(string)) error {
 	r.installs++
 	phase("verifying")
 	return fmt.Errorf("the outpost refused this install")

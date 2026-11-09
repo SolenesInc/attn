@@ -147,6 +147,9 @@ func (d *Daemon) homeConn(status enrollment.Status) (*bridge.Conn, string, error
 	if conn := d.homeBridge(); conn != nil {
 		return conn, name, nil
 	}
+	if notice := d.homeUpdateNoticeText(name); notice != "" {
+		return nil, name, fmt.Errorf("%s; this call did not run", notice)
+	}
 	return nil, name, fmt.Errorf("%s is unreachable; this needs it now", name)
 }
 

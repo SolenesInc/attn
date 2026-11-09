@@ -787,6 +787,35 @@ model UpdateRun {
   outcome?: string;
   log_path: string;
   requesters: string[];
+  outposts: UpdateOutpostProgress[];
+}
+
+enum UpdateOutpostState {
+  staging,
+  staged,
+  skipped,
+  failed,
+  switching,
+  done,
+}
+
+// detail is the step while staging, or why the outpost was skipped or failed.
+model UpdateOutpostProgress {
+  id: string;
+  name: string;
+  state: UpdateOutpostState;
+  detail?: string;
+}
+
+// The home tells an outpost that an update is under way, just before it
+// restarts. The outpost uses it to explain why the home is unreachable. An
+// empty target_build withdraws it: the run failed and the home stayed up.
+@extension("x-on", #{ machine: "host" })
+model HomeUpdateNoticeMessage {
+  cmd: "home_update_notice";
+  host: string;
+  run: string;
+  target_build: string;
 }
 
 // Asks the user to update attn. The request appears as a notification with
@@ -811,6 +840,7 @@ model StartUpdateMessage {
   cmd: "start_update";
   request_id?: string;
   update_request_id?: string;
+  without_outposts?: string[];
 }
 
 model StartUpdateResultMessage {

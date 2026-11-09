@@ -119,7 +119,10 @@ func (s *wireOutpostSSH) Probe(context.Context) (outpostssh.Probe, error) {
 func (s *wireOutpostSSH) Bridge(ctx context.Context) (net.Conn, error) {
 	return s.dial(ctx, "ssh", s.Destination)
 }
-func (s *wireOutpostSSH) Install(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error {
+func (s *wireOutpostSSH) Stage(context.Context, outpostbuild.Binaries, bridge.Build, func(string)) error {
+	return nil
+}
+func (s *wireOutpostSSH) Switch(context.Context, outpostbuild.Binaries, bridge.Build, bool) error {
 	return nil
 }
 func (s *wireOutpostSSH) StopDaemon(context.Context) error     { return nil }

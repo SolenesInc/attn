@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -64,7 +63,7 @@ func (a updateApply) installed() installedBuild {
 }
 
 func (a updateApply) execute() error {
-	if err := os.WriteFile(selfupdate.RestartMarkerPath(a.dataDir), []byte(time.Now().UTC().Format(time.RFC3339)), 0o600); err != nil {
+	if err := selfupdate.WriteRestartMarker(a.dataDir, "attn is restarting to apply an update"); err != nil {
 		return a.fail(fmt.Sprintf("could not write the restart marker: %v", err))
 	}
 	build := a.installed()

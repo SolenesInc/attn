@@ -111,6 +111,7 @@ var Placements = map[string][]Placement{
 	"get_repo_info":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"get_screen_snapshot":              {Placement{LocatorTerminal, "id"}},
 	"get_settings":                     {Placement{LocatorHere, ""}},
+	"home_update_notice":               {Placement{LocatorMachine, "host"}},
 	"hook_compaction":                  {Placement{LocatorHere, ""}},
 	"hook_notification":                {Placement{LocatorHere, ""}},
 	"hook_stop_failure":                {Placement{LocatorHere, ""}},
@@ -1301,6 +1302,18 @@ func (m GetSettingsMessage) Placement() Placement {
 
 func (m GetSettingsMessage) Locate() string {
 	return ""
+}
+
+func (HomeUpdateNoticeMessage) CommandName() string {
+	return "home_update_notice"
+}
+
+func (m HomeUpdateNoticeMessage) Placement() Placement {
+	return Placement{LocatorMachine, "host"}
+}
+
+func (m HomeUpdateNoticeMessage) Locate() string {
+	return string(m.Host)
 }
 
 func (HookCompactionMessage) CommandName() string {

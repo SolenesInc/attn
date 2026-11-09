@@ -8,7 +8,7 @@ export function useUpdateActions() {
   return useMemo(() => {
     const refused = (err: Error) => showError(err.message);
     return {
-      startUpdate: (requestId?: string) => void sendStartUpdate(requestId).catch(refused),
+      startUpdate: (requestId?: string, withoutOutposts?: string[]) => void sendStartUpdate(requestId, withoutOutposts).catch(refused),
       declineUpdate: (requestId: string) => void sendDeclineUpdate(requestId).catch(refused),
     };
   }, [sendStartUpdate, sendDeclineUpdate, showError]);

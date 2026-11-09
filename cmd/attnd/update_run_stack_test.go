@@ -26,6 +26,8 @@ const updateFixtureMakefile = `build-app:
 	@if [ -n "$(HOLD)" ]; then cat "$(HOLD)" >/dev/null; fi
 
 install-staged:
+	@if [ -n "$(FAIL_INSTALL)" ]; then exit 1; fi
+	@if [ -n "$(RESTART_REACHED)" ]; then "$(TREE)/bin/attnd" daemon stop; echo reached > "$(RESTART_REACHED)"; cat "$(RESTART_RELEASE)" >/dev/null; fi
 	rm -rf "$(TREE)"
 	mkdir -p "$(TREE)/bin"
 	cp attn "$(TREE)/bin/attn"
@@ -36,6 +38,7 @@ install-staged:
 type sourceInstall struct {
 	stack                         *testworld.Stack
 	origin, checkout, tree, built string
+	target                        string
 	originHead                    string
 	finished                      *testworld.Pause
 }
@@ -108,6 +111,7 @@ func newSourceInstall(t *testing.T, vars ...string) *sourceInstall {
 
 	installFixtureTree(t, install.tree, testworld.AttnSourceBinaryFrom(t, "1.0.0", install.checkout))
 	target := testworld.AttnSourceBinaryFrom(t, "2.0.0", install.checkout)
+	install.target = target
 	stack.RunFrom(filepath.Join(install.tree, "bin", "attn"))
 	stack.Vars = append(stack.Vars, append([]string{
 		"XDG_DATA_HOME=" + dataHome,
@@ -677,6 +681,7 @@ func TestTheUpdateHelperIsRefusedInsideASession(t *testing.T) {
 	pidPath := filepath.Join(install.stack.Dir, "attn.pid")
 	before := mustRead(t, pidPath)
 	target := testworld.AttnSourceBinaryFrom(t, "2.0.0", install.checkout)
+	install.target = target
 	result := install.stack.Run(testworld.Invocation{
 		Binary: filepath.Join(filepath.Dir(target), "attnd"),
 		Args:   []string{"_update-apply", "--run", "r", "--dir", install.checkout, "--root", install.tree},

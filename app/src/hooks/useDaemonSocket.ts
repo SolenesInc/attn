@@ -3615,8 +3615,11 @@ export function useDaemonSocket({
   const sendInstallCodexUpdate = useCallback((desktopId: string): Promise<true> =>
     sendRequest(INSTALL_CODEX_UPDATE, { desktop_id: desktopId }, 'Installing the Codex update never finished', null), [sendRequest]);
 
-  const sendStartUpdate = useCallback((updateRequestId?: string): Promise<true> =>
-    sendRequest(START_UPDATE, updateRequestId ? { update_request_id: updateRequestId } : {}, 'Starting the update timed out'), [sendRequest]);
+  const sendStartUpdate = useCallback((updateRequestId?: string, withoutOutposts?: string[]): Promise<true> =>
+    sendRequest(START_UPDATE, {
+      ...(updateRequestId ? { update_request_id: updateRequestId } : {}),
+      ...(withoutOutposts?.length ? { without_outposts: withoutOutposts } : {}),
+    }, 'Starting the update timed out'), [sendRequest]);
 
   const sendDeclineUpdate = useCallback((updateRequestId: string): Promise<true> =>
     sendRequest(DECLINE_UPDATE, { update_request_id: updateRequestId }, 'Declining the update timed out'), [sendRequest]);

@@ -110,6 +110,7 @@ type Daemon struct {
 	monitorState        *monitorIndex
 	outposts            outpostsRuntime
 	releases            releaseAvailability
+	homeUpdate          homeUpdateNotice
 	updateRuns          updateRuns
 	outpost             outpostRuntime
 	homeGateway         homeGatewayConns
@@ -2856,6 +2857,9 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		if place.Locator == protocol.LocatorHome || homeSetting {
 			status := d.enrollmentStatus()
 			if !status.IsHome() {
+				if _, asksStatus := msg.(*protocol.UpdateStatusMessage); asksStatus && d.answerUpdateStatusFromNotice(conn) {
+					return
+				}
 				d.router().Forward(bufferedSocket{Conn: conn, reader: reader}, data, d.callerSession(ctx, data))
 				return
 			}

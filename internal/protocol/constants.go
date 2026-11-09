@@ -119,6 +119,7 @@ const (
 	CmdSessionTranscript             = "session_transcript"
 	CmdSessionList                   = "session_list"
 	CmdUpdateStatus                  = "update_status"
+	CmdHomeUpdateNotice              = "home_update_notice"
 	CmdUpdateRequest                 = "update_request"
 	CmdStartUpdate                   = "start_update"
 	CmdDeclineUpdate                 = "decline_update"

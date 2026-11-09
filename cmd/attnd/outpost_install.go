@@ -16,18 +16,74 @@ import (
 	"github.com/victorarias/attn/internal/outpostbuild"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost"
+	"github.com/victorarias/attn/internal/selfupdate"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func runOutpostInstall() {
-	if err := installOutpostBinary(os.Args[2:]); err != nil {
+	if err := stageOutpostBinaries(os.Args[2:]); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		exit(1)
 	}
 }
 
-func installOutpostBinary(args []string) error {
-	flags := flag.NewFlagSet("_outpost-install", flag.ContinueOnError)
+func runOutpostSwitch() {
+	if err := switchOutpostBinaries(os.Args[2:]); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		exit(1)
+	}
+}
+
+type outpostInstall struct {
+	staged, cli, host, target string
+	markRestart               bool
+}
+
+func (i outpostInstall) removeStaged() {
+	os.Remove(i.staged)
+	os.Remove(i.cli)
+	os.Remove(i.host)
+}
+
+func stageOutpostBinaries(args []string) error {
+	install, err := checkedOutpostInstall("_outpost-install", args)
+	if err != nil {
+		install.removeStaged()
+		return err
+	}
+	fmt.Println("staged")
+	return nil
+}
+
+func switchOutpostBinaries(args []string) error {
+	install, err := checkedOutpostInstall("_outpost-switch", args)
+	defer install.removeStaged()
+	if err != nil {
+		return err
+	}
+	if install.markRestart {
+		if err := selfupdate.WriteRestartMarker(config.DataDir(), "attn is switching to the home's new build"); err != nil {
+			return err
+		}
+	}
+	dir := filepath.Dir(install.target)
+	if err := replaceKeepingPrevious(install.host, filepath.Join(dir, ptyhost.BinaryName)); err != nil {
+		return err
+	}
+	if err := replaceKeepingPrevious(install.staged, filepath.Join(dir, "attnd")); err != nil {
+		return err
+	}
+	if err := replaceKeepingPrevious(install.cli, install.target); err != nil {
+		return err
+	}
+	fmt.Println("installed")
+	return nil
+}
+
+// checkedOutpostInstall returns the paths it parsed even when a check fails,
+// so the caller can remove what was sent.
+func checkedOutpostInstall(name string, args []string) (outpostInstall, error) {
+	flags := flag.NewFlagSet(name, flag.ContinueOnError)
 	size := flags.Int64("size", 0, "Expected binary size")
 	digest := flags.String("sha256", "", "Expected binary sha256")
 	cli := flags.String("cli", "", "Staged attn CLI path")
@@ -38,65 +94,55 @@ func installOutpostBinary(args []string) error {
 	hostDigest := flags.String("host-sha256", "", "Expected attn-pty-host sha256")
 	build := flags.String("build", "", "Expected build JSON")
 	target := flags.String("target", "", "Install path")
+	markRestart := flags.Bool("mark-restart", false, "Leave the restart marker")
+	var install outpostInstall
 	if err := flags.Parse(args); err != nil {
-		return err
+		return install, err
 	}
 	var expected bridge.Build
 	if err := json.Unmarshal([]byte(*build), &expected); err != nil {
-		return fmt.Errorf("expected build: %w", err)
+		return install, fmt.Errorf("expected build: %w", err)
 	}
 	if *size <= 0 || *digest == "" || *cli == "" || *cliSize <= 0 || *cliDigest == "" || *host == "" || *hostSize <= 0 || *hostDigest == "" || *target == "" || flags.NArg() != 0 {
-		return fmt.Errorf("_outpost-install requires --size, --sha256, --cli, --cli-size, --cli-sha256, --host, --host-size, --host-sha256, --build and --target")
+		return install, fmt.Errorf("%s requires --size, --sha256, --cli, --cli-size, --cli-sha256, --host, --host-size, --host-sha256, --build and --target", name)
 	}
 	staged, err := os.Executable()
 	if err != nil {
-		return err
+		return install, err
 	}
 	installedDaemon := filepath.Join(filepath.Dir(*target), "attnd")
 	if filepath.Clean(staged) == filepath.Clean(installedDaemon) {
-		return fmt.Errorf("run _outpost-install from a staged binary, not the install path %s", installedDaemon)
+		return install, fmt.Errorf("run %s from a staged binary, not the install path %s", name, installedDaemon)
 	}
-	defer os.Remove(staged)
-	defer os.Remove(*cli)
-	defer os.Remove(*host)
+	install = outpostInstall{staged: staged, cli: *cli, host: *host, target: *target, markRestart: *markRestart}
 	fmt.Println("verifying")
 	if err := verifyStagedBinary(staged, *size, *digest); err != nil {
-		return err
+		return install, err
 	}
 	if err := verifyStagedBinary(*cli, *cliSize, *cliDigest); err != nil {
-		return fmt.Errorf("attn: %w", err)
+		return install, fmt.Errorf("attn: %w", err)
 	}
 	if err := verifyStagedBinary(*host, *hostSize, *hostDigest); err != nil {
-		return fmt.Errorf("%s: %w", ptyhost.BinaryName, err)
+		return install, fmt.Errorf("%s: %w", ptyhost.BinaryName, err)
 	}
 	actual := bridge.Build{Version: buildinfo.Version, SourceFingerprint: buildinfo.SourceFingerprint, ProtocolVersion: protocol.ProtocolVersion}
 	if actual != expected {
-		return fmt.Errorf("staged build %s differs from home's build %s", actual, expected)
+		return install, fmt.Errorf("staged build %s differs from home's build %s", actual, expected)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
+		return install, err
 	}
 	if os.Getenv("ATTN_HARNESS_DATA_DIR") != "" && os.Getenv("ATTN_HARNESS_OUTPOST_INSTALL_ROOT") != "" {
 		home = os.Getenv("ATTN_HARNESS_OUTPOST_INSTALL_ROOT")
 	}
 	if err := outpostbuild.CheckInstallTarget(config.InstanceLabel(), *target, home); err != nil {
-		return err
+		return install, err
 	}
 	if err := store.CheckSchema(config.DBPath()); err != nil {
-		return err
+		return install, err
 	}
-	if err := replaceKeepingPrevious(*host, filepath.Join(filepath.Dir(*target), ptyhost.BinaryName)); err != nil {
-		return err
-	}
-	if err := replaceKeepingPrevious(staged, installedDaemon); err != nil {
-		return err
-	}
-	if err := replaceKeepingPrevious(*cli, *target); err != nil {
-		return err
-	}
-	fmt.Println("installed")
-	return nil
+	return install, nil
 }
 
 func verifyStagedBinary(path string, size int64, digest string) error {

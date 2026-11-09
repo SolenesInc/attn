@@ -26,7 +26,7 @@ describe('refused update actions', () => {
     const { daemon } = await renderApp({
       initialState: {
         settings: SELF_UPDATE,
-        update_run: { id: 'run-1', install_kind: 'source', log_path: '/tmp/run-1.log', outcome: 'The build failed.', phase: 'failed', requesters: [], target_build: 'abc' },
+        update_run: { id: 'run-1', install_kind: 'source', log_path: '/tmp/run-1.log', outcome: 'The build failed.', phase: 'failed', requesters: [], outposts: [], target_build: 'abc' },
       },
       script: refuseUpdates,
     });

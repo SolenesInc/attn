@@ -113,6 +113,7 @@ const (
 	ClassifierVerdictReached       = "classifier-verdict-reached"
 	EnsureFoundNoListener          = "ensure-found-no-listener"
 	UpdateApplyFinished            = "update-apply-finished"
+	UpdateOutpostsStaged           = "update-outposts-staged"
 	OutpostRecoveryReported        = "outpost-recovery-reported"
 	OutpostRecoveryStarted         = "outpost-recovery-started"
 	OutpostRecoveryApplied         = "outpost-recovery-applied"

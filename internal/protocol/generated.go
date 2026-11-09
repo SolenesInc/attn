@@ -5699,6 +5699,20 @@ const HeatStateCold HeatState = "cold"
 const HeatStateHot HeatState = "hot"
 const HeatStateWarm HeatState = "warm"
 
+type HomeUpdateNoticeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host string `json:"host"`
+
+	// Run corresponds to the JSON schema field "run".
+	Run string `json:"run"`
+
+	// TargetBuild corresponds to the JSON schema field "target_build".
+	TargetBuild string `json:"target_build"`
+}
+
 type HookCompactionMessage struct {
 	// Active corresponds to the JSON schema field "active".
 	Active bool `json:"active"`
@@ -13032,6 +13046,9 @@ type StartUpdateMessage struct {
 
 	// UpdateRequestID corresponds to the JSON schema field "update_request_id".
 	UpdateRequestID *string `json:"update_request_id,omitempty,omitzero"`
+
+	// WithoutOutposts corresponds to the JSON schema field "without_outposts".
+	WithoutOutposts []string `json:"without_outposts,omitempty,omitzero"`
 }
 
 type StartUpdateResultMessage struct {
@@ -14041,6 +14058,29 @@ type UpdateOutpostMessage struct {
 	ID string `json:"id"`
 }
 
+type UpdateOutpostProgress struct {
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// State corresponds to the JSON schema field "state".
+	State UpdateOutpostState `json:"state"`
+}
+
+type UpdateOutpostState string
+
+const UpdateOutpostStateDone UpdateOutpostState = "done"
+const UpdateOutpostStateFailed UpdateOutpostState = "failed"
+const UpdateOutpostStateSkipped UpdateOutpostState = "skipped"
+const UpdateOutpostStateStaged UpdateOutpostState = "staged"
+const UpdateOutpostStateStaging UpdateOutpostState = "staging"
+const UpdateOutpostStateSwitching UpdateOutpostState = "switching"
+
 type UpdatePhase string
 
 const UpdatePhaseApplying UpdatePhase = "applying"
@@ -14085,6 +14125,9 @@ type UpdateRun struct {
 
 	// Outcome corresponds to the JSON schema field "outcome".
 	Outcome *string `json:"outcome,omitempty,omitzero"`
+
+	// Outposts corresponds to the JSON schema field "outposts".
+	Outposts []UpdateOutpostProgress `json:"outposts"`
 
 	// Phase corresponds to the JSON schema field "phase".
 	Phase UpdatePhase `json:"phase"`

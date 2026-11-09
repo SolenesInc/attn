@@ -167,6 +167,7 @@ const UNLISTED_ATTND_COMMANDS: &[&str] = &[
     "profile-env",
     "pty-worker",
     "_outpost-install",
+    "_outpost-switch",
     "_bridge",
     "_probe-tui",
 ];

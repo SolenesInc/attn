@@ -209,6 +209,10 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	return d.reconnectOutpostOnHomeBuild(ctx, row)
+}
+
+func (d *Daemon) reconnectOutpostOnHomeBuild(ctx context.Context, row store.Outpost) error {
 	self := d.bridgeIdentity().Build
 	d.stopOutpostDial(row.ID)
 	d.startOutpostDial(row)
@@ -235,21 +239,26 @@ func (d *Daemon) pushOutpost(ctx context.Context, row store.Outpost, push *outpo
 	}
 }
 
-func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
-	var binaries outpostbuild.Binaries
+func (d *Daemon) outpostBinaries(ctx context.Context, build bridge.Build, platform string, phase func(string)) (outpostbuild.Binaries, error) {
 	if config.Instance() != "" || os.Getenv("ATTN_HARNESS_DATA_DIR") != "" {
 		attn := os.Getenv("ATTN_HARNESS_OUTPOST_BINARY")
-		binaries = outpostbuild.Binaries{Attn: attn, Attnd: filepath.Join(filepath.Dir(attn), "attnd"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}
-	}
-	if binaries.Attn == "" {
-		var err error
-		binaries, err = outpostbuild.Acquire(ctx, outpostbuild.Request{Build: d.bridgeIdentity().Build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: filepath.Join(config.DataDir(), "outpost-builds"), Platform: probe.Platform}, phase)
-		if err != nil {
-			return err
+		if attn != "" {
+			return outpostbuild.Binaries{Attn: attn, Attnd: filepath.Join(filepath.Dir(attn), "attnd"), Host: os.Getenv("ATTN_HARNESS_OUTPOST_HOST_BINARY")}, nil
 		}
 	}
+	return outpostbuild.Acquire(ctx, outpostbuild.Request{Build: build, Channel: buildinfo.Channel, Repository: buildinfo.RepositoryPath, ReleaseSource: buildinfo.ReleaseSource, Cache: filepath.Join(config.DataDir(), "outpost-builds"), Platform: platform}, phase)
+}
+
+func (d *Daemon) installOutpost(ctx context.Context, remote outpostRemote, probe outpostssh.Probe, phase func(string)) error {
 	self := d.bridgeIdentity().Build
-	if err := remote.Install(ctx, binaries, self, phase); err != nil {
+	binaries, err := d.outpostBinaries(ctx, self, probe.Platform, phase)
+	if err != nil {
+		return err
+	}
+	if err := remote.Stage(ctx, binaries, self, phase); err != nil {
+		return err
+	}
+	if err := remote.Switch(ctx, binaries, self, false); err != nil {
 		return err
 	}
 	ensureWontRestartTheDaemon := probe.Build != nil && *probe.Build == self

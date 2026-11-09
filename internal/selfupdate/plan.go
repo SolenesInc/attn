@@ -232,6 +232,26 @@ func (b *tailBuffer) Write(p []byte) (int, error) {
 
 func RestartMarkerPath(dataDir string) string { return filepath.Join(dataDir, "update-restarting") }
 
+// WriteRestartMarker records why this daemon is about to be down. The file's
+// modification time is when the restart began.
+func WriteRestartMarker(dataDir, reason string) error {
+	return os.WriteFile(RestartMarkerPath(dataDir), []byte(reason), 0o600)
+}
+
+// RestartMarkerText says why the daemon is down, or "" with no marker.
+func RestartMarkerText(dataDir string, now time.Time) string {
+	path := RestartMarkerPath(dataDir)
+	reason, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%s (restart began %s ago); try again in a moment", strings.TrimSpace(string(reason)), now.Sub(info.ModTime()).Round(time.Second))
+}
+
 func failurePath(dataDir string) string { return filepath.Join(dataDir, "update-failure.json") }
 
 type Failure struct {

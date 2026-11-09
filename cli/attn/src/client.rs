@@ -1,5 +1,5 @@
 use crate::instance::Paths;
-use crate::paths::os_error_text;
+use crate::paths::{join, os_error_text};
 use attn_protocol::RecordAnalyticsMessage;
 use attn_protocol::go_values::{MAX_SOCKET_FRAME_BYTES, REFUSAL_UNCLASSIFIED};
 use serde::de::DeserializeOwned;
@@ -316,10 +316,24 @@ impl<'a> Client<'a> {
             );
         }
         let base = format!("connect to daemon at {socket} (instance={instance}): {cause}");
+        if let Some(restarting) = self.restart_marker_text() {
+            return format!("{base}\n  {restarting}");
+        }
         match self.cross_instance_hint() {
             Some(hint) => format!("{base}\n  {hint}"),
             None => base,
         }
+    }
+
+    fn restart_marker_text(&self) -> Option<String> {
+        let path = join(&self.paths.attn_dir(), "update-restarting");
+        let reason = std::fs::read_to_string(&path).ok()?;
+        let began = std::fs::metadata(&path).ok()?.modified().ok()?;
+        let seconds = began.elapsed().map_or(0, |age| age.as_secs());
+        Some(format!(
+            "{} (restart began {seconds}s ago); try again in a moment",
+            reason.trim()
+        ))
     }
 
     fn cross_instance_hint(&self) -> Option<String> {
