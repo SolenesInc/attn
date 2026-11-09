@@ -403,6 +403,7 @@ func TestAFolderThatLeftAndCameBackWhileTheOutpostWasOfflineKeepsTheHomesDeletio
 
 func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T) {
 	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	streamOpens := home.PauseAt(pausepoint.NotebookStreamOpen)
 	state := filepath.Join(outpost.Dir, "notebook-sync")
 	if err := os.MkdirAll(state, 0500); err != nil {
 		t.Fatal(err)
@@ -414,19 +415,33 @@ func TestAnOutpostThatRejectedTheFolderListSyncsOnceTheCauseClears(t *testing.T)
 	rejected := awaitNotebookError(t, pair, "outpost rejected the Notebook folder list", "permission denied")
 	writeNotebookFile(t, home, "before-recovery.md", "written while the outpost rejected the list")
 
+	rejectedAgain := make(chan struct{})
+	go func() {
+		defer close(rejectedAgain)
+		home.AwaitTimer(daemon.NotebookFoldersRetryTimer)
+		home.Advance(bridge.ReconnectInterval)
+		home.AwaitTimer(daemon.NotebookFoldersRetryTimer)
+	}()
+	if streamOpens.AwaitBefore(rejectedAgain) {
+		t.Fatal("the Notebook stream opened while the outpost was rejecting the folder list")
+	}
+
 	if err := os.Chmod(state, 0700); err != nil {
 		t.Fatal(err)
 	}
-	home.AwaitTimer(daemon.NotebookFoldersRetryTimer)
-	home.Advance(bridge.ReconnectInterval)
-	stopRetries := home.FireTimers(daemon.NotebookStreamRetryTimer)
+	home.Advance(2 * bridge.ReconnectInterval)
+	streamOpens.Await()
+	installed, err := os.ReadFile(filepath.Join(state, "state.json"))
+	if err != nil || !strings.Contains(string(installed), notebookPath(outpost)) {
+		t.Fatalf("the Notebook stream opened before the outpost installed the folder list: %q (%v)", installed, err)
+	}
+	streamOpens.Release()
 	pair.App = home.App()
 	awaitNotebookState(t, pair, protocol.OutpostNotebookStateInSync)
-	stopRetries()
 	copied := outpostCopyPlacement(outpost, "notebook", notebookPath(home))
 	defer home.CloseWatchWindows()()
 	awaitOutpostFile(t, pair, filepath.Join(copied, "before-recovery.md"), "written while the outpost rejected the list", false)
-	t.Logf("the row showed %q; once the folder was writable again, one retry installed the list, and before-recovery.md reached %s", rejected, copied)
+	t.Logf("the row showed %q; once the folder was writable again, a retry installed the list before the stream opened, and before-recovery.md reached %s", rejected, copied)
 }
 
 func TestARejectedFolderListClearsWhenTheListRevertsToTheAcceptedOne(t *testing.T) {

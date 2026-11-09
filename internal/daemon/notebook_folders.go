@@ -179,7 +179,7 @@ func (d *Daemon) setHomeNotebookFoldersLocked(folders []notebookFolder) {
 
 const NotebookFoldersRetryTimer stepclock.Name = "notebook-folders-retry"
 
-func (d *Daemon) pushNotebookFolders(conn *bridge.Conn) {
+func (d *Daemon) pushNotebookFolders(conn *bridge.Conn, openStream func()) {
 	var sent []protocol.NotebookSyncFolder
 	pushed, failed := false, false
 	backoff := bridge.ReconnectInterval
@@ -197,6 +197,9 @@ func (d *Daemon) pushNotebookFolders(conn *bridge.Conn) {
 			switch {
 			case err == nil:
 				d.setNotebookFoldersRejection(conn, "")
+				if !pushed {
+					openStream()
+				}
 				sent, pushed, failed, backoff = folders, true, false, bridge.ReconnectInterval
 			case conn.Context().Err() == nil:
 				d.logf("Notebook folders for %s: %v", conn.Peer().Name, err)
