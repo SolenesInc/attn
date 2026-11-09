@@ -100,6 +100,23 @@ describe('Outposts settings', () => {
     expect(screen.queryByRole('listitem', { name: 'studio' })).toBeNull();
   });
 
+  it('updates without only the selected failed outpost', async () => {
+    const laptop = { ...connected, id: 'outpost-2', name: 'laptop' };
+    const daemon = await openSection('outposts', { settings: enabled, outposts: [connected, laptop] }, scripted => {
+      scripted.on('start_update', () => ({ event: 'start_update_result', success: true }));
+    });
+    await gesture(daemon, () => daemon.emit({ event: 'update_changed', run: {
+      id: 'run-1', target_build: 'v2', install_kind: 'source', phase: 'failed', log_path: '/tmp/run.log', requesters: [],
+      outposts: [
+        { id: connected.id, name: connected.name, state: 'failed', detail: 'denied' },
+        { id: laptop.id, name: laptop.name, state: 'failed', detail: 'denied' },
+      ],
+    } }));
+    const row = within(screen.getByRole('listitem', { name: 'studio' }));
+    await gesture(daemon, () => fireEvent.click(row.getByRole('button', { name: 'Update without it' })));
+    expect(daemon.sentOf('start_update')).toMatchObject([{ without_outposts: [connected.id] }]);
+  });
+
   it('offers a keyboard button only for an ssh refusal and shows a failed open in settings', async () => {
     const error = 'Host key verification failed.\nPlease contact your system administrator.\n';
     const refused: Outpost = { ...connected, state: 'refused', reach: 'unreachable', connectable: true, last_error: error };

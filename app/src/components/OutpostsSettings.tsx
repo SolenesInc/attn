@@ -119,7 +119,7 @@ export function OutpostsSettings({ onOpenTerminal }: { onOpenTerminal: () => voi
                     {updateRun && failedUpdateOutposts(updateRun).filter(outpost => outpost.id === row.id).map(outpost => <p key={outpost.id} className="settings-description" role="status">{updateOutpostText(outpost)}</p>)}
                     <div className="settings-outpost-actions">
                       {row.state === 'refused' && row.connectable && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => void connectInTerminal(row.id)}>Connect in a terminal</button>}
-                      {updateRun && failedUpdateOutposts(updateRun).some(outpost => outpost.id === row.id) && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => startUpdate(undefined, failedUpdateOutposts(updateRun).map(outpost => outpost.id))}>Update without it</button>}
+                      {updateRun && failedUpdateOutposts(updateRun).some(outpost => outpost.id === row.id) && <button type="button" className="settings-action" disabled={!isConnected} onClick={() => startUpdate(undefined, [row.id])}>Update without it</button>}
                       {outpostNeedsUpdate(row, homeBuild) && <button type="button" className="settings-action" disabled={!isConnected || outpostIsUpdating(row)} onClick={() => sendUpdateOutpost(row.id)}>{outpostIsUpdating(row) ? 'Updating…' : row.host_missing ? 'Install shared terminal host' : 'Update to home build'}</button>}
                       <button type="button" className="settings-action" disabled={!isConnected} onClick={() => sendRepairOutpost(row.id)}>Re-pair</button>
                       <button

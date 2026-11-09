@@ -40,6 +40,19 @@ describe('update run banner with outposts', () => {
     expect(started).toEqual([['a']]);
   });
 
+  it('offers to update without all failed outposts from the banner', async () => {
+    const view = await renderApp();
+    view.daemon.on('start_update', () => ({ event: 'start_update_result', success: true }));
+    view.daemon.emit({ event: 'update_changed', run: run({ phase: 'failed', outposts: [
+      { id: 'a', name: 'sandbox', state: 'failed', detail: 'denied' },
+      { id: 'b', name: 'laptop', state: 'failed', detail: 'denied' },
+    ] }) });
+    await view.daemon.idle();
+    fireEvent.click(banner().getByRole('button', { name: 'Update without 2 outposts' }));
+    await view.daemon.idle();
+    expect(view.daemon.sentOf('start_update')).toMatchObject([{ without_outposts: ['a', 'b'] }]);
+  });
+
   it('stays open with a skipped outpost after a finished run', async () => {
     const view = await renderApp();
     view.daemon.emit({ event: 'update_changed', run: run({ phase: 'done', outcome: 'attn is now running v2. Skipped sandbox.', outposts: [{ id: 'a', name: 'sandbox', state: 'skipped' }] }) });
