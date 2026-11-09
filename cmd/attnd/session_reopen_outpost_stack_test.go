@@ -102,6 +102,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	testworld.Await(pair.App, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
 		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == id
 	})
+	archivedRollout := outpost.CodexServer().AwaitArchived(run.ConversationID)
 	checkRefusal := func(inspected bool, want ...string) {
 		t.Helper()
 		_, err := home.Client().SessionReopen(client.SessionReopenOptions{SessionID: protocol.SessionID(id)})
@@ -155,7 +156,7 @@ func TestLedgerResumeNamesAnUnavailableOutpostAndNeverReopensItsRecord(t *testin
 	if err := os.Rename(cwd+".saved", cwd); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Remove(outpost.CodexServer().AwaitArchived(run.ConversationID)); err != nil {
+	if err := os.Remove(archivedRollout); err != nil {
 		t.Fatal(err)
 	}
 	checkRefusal(true, `on outpost "outpost"`, "conversation "+run.ConversationID, "no longer in codex's storage")
