@@ -1,3 +1,4 @@
+use crate::commands::{Run, Stop, seed, top_level};
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
 use crate::invocation::{self, Invocation};
@@ -17,8 +18,76 @@ pub fn run(argv: Vec<OsString>) -> ExitCode {
         .filter(|name| COMMANDS.contains(name))
     {
         Some(hook) => run_hook(hook, &argv),
-        None => hand_off_to_attnd(argv),
+        None => route_command(argv),
     }
+}
+
+fn route_command(argv: Vec<OsString>) -> ExitCode {
+    let Some(name) = argv.get(1).map(|name| name.to_string_lossy().into_owned()) else {
+        return hand_off_to_attnd(argv);
+    };
+    if name != "seed"
+        && name != "help"
+        && name != "-h"
+        && name != "--help"
+        && top_level::attnd_owns(&name)
+    {
+        return hand_off_to_attnd(argv);
+    }
+    let arguments: Vec<String> = argv
+        .iter()
+        .skip(2)
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+    let paths = Paths::new(&getenv);
+    let terminal = terminal_from_env(&getenv).trim().to_string();
+    let checked = paths
+        .validate_instance()
+        .and_then(|()| paths.validate_routing());
+    if let Err(message) = checked {
+        let _ = writeln!(io::stderr(), "{message}");
+        return finish(&paths, "attn", String::new(), None, 1, &terminal);
+    }
+    let mut run = Run {
+        paths: &paths,
+        terminal: terminal.clone(),
+        path: name.clone(),
+        usage_error: None,
+        refusal: None,
+        closed_session: None,
+    };
+    let code = match name.as_str() {
+        "help" | "-h" | "--help" => {
+            top_level::help();
+            0
+        }
+        "seed" => {
+            if let Some(banner) = paths.banner() {
+                let _ = writeln!(io::stderr(), "{banner}");
+            }
+            match seed::run(&mut run, &arguments) {
+                Ok(()) => 0,
+                Err(Stop(code)) => code,
+            }
+        }
+        _ => {
+            let Stop(code) = top_level::unknown(&mut run, &name);
+            code
+        }
+    };
+    invocation::record(
+        &paths,
+        Invocation {
+            path: &run.path,
+            caller: String::new(),
+            refusal: run.refusal.take(),
+            usage_error: run.usage_error,
+            session: run.closed_session.take(),
+        },
+        code,
+        &terminal,
+    );
+    ExitCode::from(code)
 }
 
 fn getenv(name: &str) -> String {
@@ -69,6 +138,8 @@ fn finish(
             path,
             caller,
             refusal,
+            usage_error: None,
+            session: None,
         },
         code,
         env_terminal,

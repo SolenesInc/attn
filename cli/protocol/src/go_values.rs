@@ -43,6 +43,7 @@ pub const STATE_SCHEDULED: &str = "scheduled";
 pub const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
 pub const CODEX_THREAD_PREFIX: &str = "codex:";
 pub const NISSE_CONVERSATION_PREFIX: &str = "nisse:";
+pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
 
 pub const MAX_SOCKET_FRAME_BYTES: i64 = 8388608;
 pub const AGENT_MESSAGE_MAX_CHARS: i64 = 32768;
@@ -53,6 +54,15 @@ pub const INBOX_MAX_LIMIT: i64 = 50;
 pub const SEARCH_DEFAULT_RESULTS: i64 = 10;
 pub const SEARCH_MAX_RESULTS: i64 = 1000;
 pub const DEFAULT_STALE_WINDOW_SECONDS: i64 = 604800;
+pub const ID_BODY_LEN: i64 = 6;
+pub const MAX_SLUG_CHARS: i64 = 100;
+pub const MAX_SLUG_WORDS: i64 = 6;
+pub const MAX_TITLE_CHARS: i64 = 400;
+pub const MAX_BODY_BYTES: i64 = 1048576;
+pub const MAX_NOTE_BYTES: i64 = 32768;
+pub const MAX_CHECKS_PER_SEED: i64 = 200;
+pub const MAX_CHECK_TEXT_CHARS: i64 = 2000;
+pub const MAX_CHECK_SUMMARY_CHARS: i64 = 400;
 
 pub const LINKABLE_KINDS: &[&str] = &["blocks", "part-of", "discovered-from"];
 pub const ENTRY_KINDS: &[&str] = &["note", "handoff", "attach", "detach", "check", "edit", "move", "link", "answer", "authorization"];

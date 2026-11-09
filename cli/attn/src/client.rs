@@ -2,8 +2,10 @@ use crate::instance::Paths;
 use crate::paths::os_error_text;
 use attn_protocol::RecordAnalyticsMessage;
 use attn_protocol::go_values::{MAX_SOCKET_FRAME_BYTES, REFUSAL_UNCLASSIFIED};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::value::RawValue;
 use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
@@ -20,7 +22,7 @@ pub struct SendError {
 }
 
 impl SendError {
-    fn plain(message: String) -> Self {
+    pub fn plain(message: String) -> Self {
         Self {
             message,
             refusal: None,
@@ -117,10 +119,45 @@ fn read_reply(connection: &mut UnixStream) -> io::Result<Vec<u8>> {
     Ok(value)
 }
 
+pub struct Reply {
+    raw: Vec<u8>,
+}
+
+impl Reply {
+    pub fn raw_field(&self, path: &[&str]) -> Result<&str, SendError> {
+        let mut current = std::str::from_utf8(&self.raw)
+            .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
+        for name in path {
+            let fields: BTreeMap<String, &RawValue> = serde_json::from_str(current)
+                .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
+            current = fields.get(*name).copied().map_or("null", RawValue::get);
+        }
+        Ok(current)
+    }
+
+    pub fn present(&self, field: &str) -> bool {
+        self.raw_field(&[field]).is_ok_and(|value| value != "null")
+    }
+
+    pub fn value<T: DeserializeOwned>(&self, field: &str) -> Result<T, SendError> {
+        serde_json::from_str(self.raw_field(&[field])?)
+            .map_err(|error| SendError::plain(format!("receive response: {error}")))
+    }
+
+    pub fn optional_string(&self, field: &str) -> String {
+        self.raw_field(&[field])
+            .ok()
+            .and_then(|raw| serde_json::from_str::<Option<String>>(raw).ok())
+            .flatten()
+            .unwrap_or_default()
+    }
+}
+
 pub struct Client<'a> {
     paths: &'a Paths<'a>,
     socket_path: String,
     caller: String,
+    garden_scope: Option<(String, String)>,
 }
 
 impl<'a> Client<'a> {
@@ -134,7 +171,57 @@ impl<'a> Client<'a> {
             paths,
             socket_path,
             caller: caller.trim().to_string(),
+            garden_scope: None,
         }
+    }
+
+    pub fn with_garden_scope(mut self, profile: &str, session: &str) -> Self {
+        self.garden_scope = (!profile.is_empty() || !session.is_empty())
+            .then(|| (profile.to_string(), session.to_string()));
+        self
+    }
+
+    fn scoped_frame<M: Serialize>(&self, message: &M) -> Result<Vec<u8>, SendError> {
+        let Some((profile, session)) = &self.garden_scope else {
+            return self.frame(message);
+        };
+        let mut fields =
+            serde_json::to_value(message).map_err(|error| SendError::plain(error.to_string()))?;
+        if let Some(object) = fields.as_object_mut()
+            && object
+                .get("cmd")
+                .and_then(Value::as_str)
+                .is_some_and(|cmd| cmd.starts_with("seed_"))
+        {
+            for (key, value) in [("profile_id", profile), ("source_session_id", session)] {
+                let empty = match object.get(key) {
+                    None | Some(Value::Null) => true,
+                    Some(existing) => existing.as_str() == Some(""),
+                };
+                if empty {
+                    object.insert(key.to_string(), Value::from(value.as_str()));
+                }
+            }
+        }
+        self.frame(&fields)
+    }
+
+    pub fn call<M: Serialize>(&self, message: &M) -> Result<Reply, SendError> {
+        let frame = self.scoped_frame(message)?;
+        self.exchange(&frame).map(|raw| Reply { raw })
+    }
+
+    pub fn call_field<M: Serialize>(
+        &self,
+        message: &M,
+        field: &str,
+        missing: &str,
+    ) -> Result<Reply, SendError> {
+        let reply = self.call(message)?;
+        if !reply.present(field) {
+            return Err(SendError::plain(missing.to_string()));
+        }
+        Ok(reply)
     }
 
     fn frame<M: Serialize>(&self, message: &M) -> Result<Vec<u8>, SendError> {
@@ -209,10 +296,9 @@ impl<'a> Client<'a> {
         })
     }
 
-    pub fn send<M: Serialize>(&self, message: &M) -> Result<(), SendError> {
-        let frame = self.frame(message)?;
+    fn exchange(&self, frame: &[u8]) -> Result<Vec<u8>, SendError> {
         let mut connection = self.connect()?;
-        let write_result = connection.write_all(&frame);
+        let write_result = connection.write_all(frame);
         let reply = read_reply(&mut connection).map_err(|error| {
             SendError::plain(match write_result {
                 Err(ref write_error) => format!("send message: {}", os_error_text(write_error)),
@@ -222,7 +308,7 @@ impl<'a> Client<'a> {
         let head: ReplyHead = serde_json::from_slice(&reply)
             .map_err(|error| SendError::plain(format!("receive response: {error}")))?;
         if head.ok {
-            return Ok(());
+            return Ok(reply);
         }
         Err(SendError {
             message: format!("daemon error: {}", head.error.unwrap_or_default()),
@@ -233,15 +319,22 @@ impl<'a> Client<'a> {
         })
     }
 
+    pub fn send<M: Serialize>(&self, message: &M) -> Result<(), SendError> {
+        let frame = self.frame(message)?;
+        self.exchange(&frame).map(|_| ())
+    }
+
     pub fn record_analytics(
         &self,
         name: &str,
+        session: Option<String>,
         props: BTreeMap<String, Value>,
     ) -> Result<(), SendError> {
         let mut message = RecordAnalyticsMessage::new();
         message.stream = "cli".to_string();
         message.name = name.to_string();
         message.props = Some(props);
+        message.session_id = session;
         let frame = self.frame(&message)?;
         let mut connection = self.connect()?;
         let deadline = Some(RECORD_ANALYTICS_DEADLINE);

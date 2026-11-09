@@ -65,3 +65,319 @@ write seed link $child $probe --blocks
 write seed wither $child -m "probe finished"
 write seed harvest $probe -m "probe finished"
 write seed show $probe --json
+
+usage seed review start
+usage seed review show
+usage seed review cancel
+usage seed review retry
+usage seed review keep
+usage seed check add
+usage seed check edit
+usage seed check remove
+usage seed check restore
+usage seed check report
+usage seed check confirm
+usage seed check reject
+usage seed check uncheck
+usage seed check reopen
+
+read help
+read --help
+read -h
+read no-such-command
+read no-such-command --flag
+read seed guide
+read seed guide extra
+read seed prime
+read seed prime extra
+read seed search
+read seed search "" --limit 2
+read seed search garden review --limit 2
+read seed search garden --limit 500
+read seed search garden --limit 0 --json
+read seed search garden --limit nope
+read seed ls extra
+read seed ls --flat
+read seed ls --stale
+read seed ls --stale --window 72h
+read seed ls --stale --window 14d --json
+read seed ls --stale --window nope
+read seed ls --stale --window 0s
+read seed ls --window 72h
+read seed ls --standby
+read seed ls --standby --json
+read seed ls --standby --stale
+read seed ls --standby --plot s-000000
+read seed ls --plot s-000000 --stale
+read seed ls --plot s-000000
+read seed ready --plot s-000000
+read seed ready --all --json
+read seed show
+read seed show a b
+read seed show s-000000 --since 1 --section x
+read seed show s-000000 --since -1
+read seed show s-000000 --since nope
+read seed notes
+read seed notes a b
+read seed notes s-000000 --since -1
+read seed notes s-000000 --kind handoff --limit 1
+read seed notes s-000000 --limit 0 --json
+read seed review
+read seed review nope
+read seed review --no-such-flag
+read seed review start extra
+read seed review show a b
+read seed review show no-such-review
+read seed review cancel
+read seed review cancel no-such-review
+read seed review retry only-one
+read seed review retry no-such-review s-000000
+read seed review keep only-one
+read seed review keep no-such-review s-000000
+read seed plot extra
+read seed plot -f /no/such/plot.json
+read seed plot
+read seed edit
+read seed edit a b
+read seed edit s-000000
+read seed edit s-000000 -m -
+read seed edit s-000000 -m "no stamp"
+read seed rollback
+read seed rollback a b c
+read seed rollback s-000000 nope
+read seed rollback s-000000 0
+read seed rollback s-000000 v2
+read seed authorization
+read seed authorization a b c
+read seed authorization s-000000 "   "
+read seed authorization s-000000 words --clear
+read seed authorization s-000000
+read seed remind
+read seed remind s-000000
+read seed remind s-000000 --in 20m
+read seed remind s-000000 --in 20m --at 2030-01-01T00:00:00Z -m x
+read seed remind s-000000 --clear --in 20m
+read seed remind s-000000 --clear -m x
+read seed remind s-000000 --in nope -m x
+read seed standby
+read seed standby s-000000
+read seed standby s-000000 --clear -m x
+read seed standby s-000000 --clear --close
+read seed standby s-000000 -m x --compact
+read seed standby s-000000 -m x
+read seed send-to-chief
+read seed send-to-chief a b
+read seed send-to-chief s-000000
+read seed export
+read seed export a b
+read seed export s-000000
+read seed tend
+read seed tend a b
+read seed tend s-000000 --for x --force --json
+read seed park a b
+read seed harvest a b
+read seed harvest s-000000 --clear
+read seed harvest s-000000 --when-merged --clear -m x
+read seed harvest s-000000 --when-merged --clear
+read seed harvest s-000000 --when-merged
+read seed harvest s-000000 --when-merged http://github.com/a/b/pull/1
+read seed harvest s-000000 --when-merged https://github.com/a/b/issues/1
+read seed harvest s-000000 --when-merged https://github.com/a/b/pull/nope
+read seed harvest s-000000 --when-merged "https://github.com/a/b/pull/1?x=1"
+read seed harvest s-000000 --when-merged https://github.com/a/b/pull/1
+read seed harvest s-000000 extra --when-merged https://github.com/a/b/pull/1
+read seed wither s-000000 --when-merged
+read seed wither s-000000 --force -m x --json
+read seed replant s-000000 --force -m x
+read seed note a b
+read seed note s-000000 --handoff --ring -m x
+read seed watch
+read seed watch a b
+read seed watch s-000000
+read seed unwatch
+read seed unwatch s-000000
+read seed attach
+read seed attach a b --path x
+read seed attach s-000000
+read seed attach s-000000 --path x --notebook y
+read seed attach s-000000 --path x --url y --notebook z
+read seed attach s-000000 --path x --move --copy
+read seed attach s-000000 --path x --move -m why
+read seed attach s-000000 --path x --to y
+read seed attach s-000000 --path x --repo r --move
+read seed attach s-000000 --path /no/such/file --move
+read seed attach s-000000 --notebook n -m why
+read seed attach s-000000 --url https://example.com
+read seed attach s-000000 --path docs/x.md --repo attn
+read seed attach s-000000 --path x --reference
+read seed detach
+read seed detach s-000000 --path x
+read seed detach s-000000 --path x --to y --move
+read seed detach s-000000 --path x --reference --repo r
+read seed detach s-000000 --url y --to z
+read seed detach s-000000 --path x --reference
+read seed detach s-000000 --path x --to /no/such/dir/y
+read seed link
+read seed link a b
+read seed link s-000000 blocks s-000001
+read seed link s-000000 no-such-kind s-000001 --json
+read seed unlink s-000000 blocks s-000001
+read seed ready --plot
+read seed check
+read seed check nope
+read seed check --no-such-flag
+read seed check add
+read seed check add s-000000
+read seed check add s-000000 -m x --shared
+read seed check add s-000000 not-an-id -m x
+read seed check edit s-000000
+read seed check edit s-000000 C1
+read seed check edit s-000000 C1 -m x --ring --json
+read seed check remove s-000000
+read seed check remove s-000000 C1 C2
+read seed check remove s-000000 C1 -m why
+read seed check restore s-000000 C1
+read seed check report s-000000
+read seed check report s-000000 C1
+read seed check report s-000000 C1 -m x
+read seed check report s-000000 C1 -m x --evidence /no/such/file
+read seed check report s-000000 C1 -m x --commit HEAD
+read seed check report s-000000 C1 -m x --evidence y --commit HEAD
+read seed check confirm s-000000 C1
+read seed check confirm s-000000 C1 -m x
+read seed check reject s-000000 C1
+read seed check reject s-000000 C1 -m x
+read seed check uncheck s-000000 C1
+read seed check uncheck s-000000 C1 -m x
+read seed check reopen s-000000 C1
+read seed check reopen s-000000 C1 -m x
+
+write seed plant "parity full" -m "## Part\n\nbody\n\n### C1\ndetail" --check "C1=first statement" --check "second statement" --json
+write seed plant "parity full" -m "## Part\n\nbody" --check "C1=first statement" --check "second statement" --check "third" => $p
+write seed plant "parity child" --part-of $p --json
+write seed plant "parity found" --discovered-from $p --json
+write seed plant "parity blocked" --part-of $p => $c
+write seed plant "parity bad check" --check "C1=a" --check "C1=b"
+write seed plant "parity bad parent" --part-of s-000000
+write seed plant ""
+write seed plot -f $plot_json => $plot
+write seed plot -f $plot_json --json
+write seed show $plot
+write seed show $plot --json
+write seed show $plot --section Plan
+write seed show $plot --section C1
+write seed show $plot --section nope
+write seed ls --plot $plot
+write seed ls --plot $plot --json
+write seed ls --plot $plot --flat
+write seed ready --plot $plot
+write seed ready --plot $plot --json
+write seed show $p
+write seed show $p --since 0
+write seed show $p --since 0 --json
+write seed show $p --section Part
+write seed notes $p --since 0
+write seed notes $p --since 0 --kind note
+write seed notes $p --kind nope
+write seed notes $c
+write seed link $c blocks $p
+write seed link $c blocks $p --json
+write seed link $c blocks $p
+write seed unlink $c blocks $p
+write seed unlink $c blocks $p --json
+write seed link $c no-such-kind $p
+write seed tend $c --json
+write seed tend $c
+write seed tend $c --for no-such-agent --force
+write seed park $c -m "pausing"
+write seed park $c --force --json
+write seed replant $c -m "again"
+write seed note $p -m "one"
+write seed note $p -m "two" --ring
+write seed note $p -m "for you" --handoff
+write seed note $p -m "for you" --handoff --ring --json
+write seed note $p -m ""
+write seed show $p
+write seed notes $p --kind handoff
+write seed notes $p --limit 1
+write seed watch $p
+write seed watch $p --json
+write seed watch $c
+write seed unwatch $c
+write seed unwatch $c --json
+write seed unwatch $p
+write seed unwatch $p
+write seed remind $p --at 2030-01-01T00:00:00Z -m "look"
+write seed remind $p --at 2030-01-01T00:00:00Z -m "look" --json
+write seed remind $p --in 20m -m "soon"
+write seed show $p
+write seed ls --plot $p
+write seed remind $p --clear
+write seed remind $p --clear --json
+write seed authorization $p
+write seed authorization $p "Ask before pushing."
+write seed authorization $p "Ask before pushing."
+write seed authorization $p --json
+write seed show $p
+write seed authorization $p --clear
+write seed authorization $p --clear
+write seed authorization $p "Again." --json
+write seed attach $p --url https://example.com/a
+write seed attach $p --url https://example.com/a -m "why it matters" --json
+write seed attach $p --notebook doc-1
+write seed attach $p --path docs/x.md --repo attn
+write seed attach $p --path $plot_json --copy
+write seed attach $p --path $plot_json --copy --json
+write seed show $p
+write seed detach $p --url https://example.com/a -m "gone"
+write seed detach $p --notebook doc-1 --json
+write seed detach $p --path docs/x.md --repo attn
+write seed detach $p --path docs/x.md --reference
+write seed detach $p --path seed-plot.json --to detached.json
+write seed detach $p --path seed-plot.json --to detached.json
+write seed check add $p -m "added check"
+write seed check add $p C9 -m "named check" --ring --json
+write seed check add $p C10 -m "a shared check" --shared
+write seed check edit $p C9 -m "edited check"
+write seed check edit $p C9 -m "edited check" --json
+write seed check report $p C1 -m "works" --evidence seed-plot.json
+write seed check report $p C2 -m "works too" --ring
+write seed check report $p C3 -m "with url" --evidence https://example.com/e --json
+write seed check confirm $p C1 -m "confirmed"
+write seed check confirm $p C2 --ring -m "confirmed" --json
+write seed check reject $p C3 -m "no good"
+write seed check uncheck $p C1 -m "again"
+write seed check reopen $p C3 -m "reopen"
+write seed check remove $p C10 -m "drop"
+write seed check restore $p C10 -m "back"
+write seed check remove $p C99 -m "missing"
+write seed show $p
+write seed show $p --json
+write seed ls --plot $p
+write seed export $p --out -
+write seed edit $p -m - --note "stamped edit" <= $out
+write seed export $p --out -
+write seed edit $p -m - --json <= $out
+write seed show $p --json
+write seed rollback $p
+write seed rollback $p 1
+write seed rollback $p v1 --json
+write seed rollback $p 99
+write seed export $p --json
+write seed export $p
+write seed export $p --out nested/no/such/x.md
+write seed export $p --out exported.md --json
+write seed send-to-chief s-000000 -m x
+write seed harvest $c --when-merged https://github.com/a/b/pull/1 -m "when it merges"
+write seed show $c
+write seed ls --plot $p
+write seed harvest $c --when-merged --clear
+write seed harvest $c --when-merged https://github.com/a/b/pull/2 --json
+write seed harvest $c --when-merged --clear --json
+write seed harvest $c -m "done" --json
+write seed harvest $c -m "again"
+write seed replant $c --json
+write seed wither $c -m "gone"
+write seed wither $p -m "finished with open checks" --force
+write seed show $p
+write seed replant $p --force -m "back"

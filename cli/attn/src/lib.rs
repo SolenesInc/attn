@@ -5,4 +5,5 @@
     clippy::must_use_candidate
 )]
 
+pub mod garden;
 pub mod go;

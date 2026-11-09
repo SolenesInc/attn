@@ -31,6 +31,10 @@ impl Time {
         .parse()
     }
 
+    pub fn unix_nanos(&self) -> i128 {
+        i128::from(self.unix_seconds) * 1_000_000_000 + i128::from(self.nanos)
+    }
+
     pub fn format(&self, layout: &str) -> String {
         format_fields(
             layout,

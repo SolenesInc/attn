@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 	"testing"
 
 	"github.com/victorarias/attn/internal/prompttest"
@@ -10,33 +9,7 @@ import (
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {
-	var help bytes.Buffer
-	writeSeedHelp(&help)
-	out := map[string]string{"guide": seedGuideText(), "help": help.String()}
-	for count := 0; count < 3; count++ {
-		for scope := 0; scope < 3; scope++ {
-			for author := 0; author < 2; author++ {
-				r := protocol.SeedReadyResult{}
-				if scope > 0 {
-					r.Crown = &protocol.SeedRow{ID: "s-plot01", Title: "Plot {{literal}}"}
-				}
-				if scope == 2 {
-					r.Crown.PlotProgress = &protocol.SeedPlotProgress{}
-				}
-				for i := 0; i < count; i++ {
-					r.Seeds = append(r.Seeds, protocol.SeedRow{ID: fmt.Sprint("s-child", i), StepSlug: "first-child", Title: "Task λ"})
-				}
-				if count > 0 {
-					r.Handoffs = []protocol.SeedNote{{SeedID: r.Seeds[0].ID, Body: " Handoff {{literal}} "}}
-					if author > 0 {
-						r.Handoffs[0].Author = protocol.ActorView{Ref: "member:keeper", Name: "Keeper"}
-					}
-				}
-				out[fmt.Sprintf("ready/%d/%d/%d", count, scope, author)] = seedPrimeFromReady(&r)
-			}
-		}
-	}
-
+	out := map[string]string{}
 	for _, sender := range []struct{ name, ref, replyTo string }{{"", "session:sender-id-123", "sender-i"}, {"A colleague", "session:sender-id-123", "sender-i"}, {"Keel", "member:keel", "Keel"}} {
 		var b bytes.Buffer
 		printAgentInbox(&b, &protocol.AgentPeerMessage{Sender: protocol.PartyView{Ref: protocol.PartyRef(sender.ref), Name: sender.name}, ReplyTo: sender.replyTo, Content: "Message λ {{literal}}\nnext"})
@@ -56,5 +29,5 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 	var empty bytes.Buffer
 	printAgentInboxBatch(&empty, &protocol.AgentInboxBatchResult{})
 	out["batch-empty"] = empty.String()
-	prompttest.Equal(t, "seed-guide", out)
+	prompttest.Equal(t, "agent-inbox", out)
 }

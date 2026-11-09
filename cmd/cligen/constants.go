@@ -11,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/inbox"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/shortid"
 )
 
 type named[T any] struct {
@@ -61,6 +62,7 @@ func writeConstants(out *strings.Builder) {
 		{"CODEX_SHARED_PROFILE_ENV", harness.CodexSharedProfileEnv},
 		{"CODEX_THREAD_PREFIX", harness.CodexThreadPrefix},
 		{"NISSE_CONVERSATION_PREFIX", harness.NisseConversationPrefix},
+		{"ID_ALPHABET", shortid.Alphabet},
 	} {
 		fmt.Fprintf(out, "pub const %s: &str = %s;\n", c.rust, rustString(c.value))
 	}
@@ -75,6 +77,15 @@ func writeConstants(out *strings.Builder) {
 		{"SEARCH_DEFAULT_RESULTS", garden.DefaultSearchResults},
 		{"SEARCH_MAX_RESULTS", garden.MaxSearchResults},
 		{"DEFAULT_STALE_WINDOW_SECONDS", int64(garden.DefaultStaleWindow.Seconds())},
+		{"ID_BODY_LEN", shortid.BodyLen},
+		{"MAX_SLUG_CHARS", garden.MaxSlugChars},
+		{"MAX_SLUG_WORDS", garden.MaxSlugWords},
+		{"MAX_TITLE_CHARS", garden.MaxTitleChars},
+		{"MAX_BODY_BYTES", garden.MaxBodyBytes},
+		{"MAX_NOTE_BYTES", garden.MaxNoteBytes},
+		{"MAX_CHECKS_PER_SEED", garden.MaxChecksPerSeed},
+		{"MAX_CHECK_TEXT_CHARS", garden.MaxCheckTextChars},
+		{"MAX_CHECK_SUMMARY_CHARS", garden.MaxCheckSummaryChars},
 	} {
 		fmt.Fprintf(out, "pub const %s: i64 = %d;\n", c.rust, c.value)
 	}

@@ -1,7 +1,9 @@
 package main_test
 
 import (
+	"maps"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -53,14 +55,19 @@ func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testin
 	for _, match := range regexp.MustCompile(`(?m)^  ([a-z][a-z-]*)`).FindAllStringSubmatch(help[strings.Index(help, "Other commands:"):], -1) {
 		named[match[1]] = true
 	}
-	commands := attn.ListedCommands()
+	for _, command := range attn.TopLevelCommandNames() {
+		if strings.HasPrefix(command, "-") || strings.HasPrefix(command, "_") || command == "pty-worker" || command == "instance" {
+			continue
+		}
+		if out := s.Attn(command, "--help"); strings.Contains(out.Stderr, "unknown command") {
+			t.Errorf("attnd dispatches %q, but attn refuses it as unknown:\n%s", command, out.Stderr)
+		}
+	}
+	commands := slices.Sorted(maps.Keys(named))
 	if len(commands) < 30 {
-		t.Fatalf("attn dispatches only %d listed commands: %v", len(commands), commands)
+		t.Fatalf("attn --help names only %d commands: %v", len(commands), commands)
 	}
 	for _, command := range commands {
-		if !named[command] {
-			t.Errorf("attn dispatches %q, but attn --help does not name it:\n%s", command, help)
-		}
 		if command == "instance" || command == "version" {
 			continue
 		}

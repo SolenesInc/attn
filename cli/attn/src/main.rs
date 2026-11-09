@@ -1,4 +1,5 @@
 mod client;
+mod commands;
 mod hooks;
 mod instance;
 mod invocation;

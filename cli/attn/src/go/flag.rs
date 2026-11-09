@@ -8,6 +8,7 @@ pub enum FlagDefault<'a> {
     String(&'a str),
     Int(i64),
     Duration(i64),
+    Repeated,
 }
 
 #[derive(Clone, Copy)]
@@ -23,6 +24,7 @@ pub enum Value {
     String(String),
     Int(i64),
     Duration(i64),
+    Repeated(Vec<String>),
 }
 
 impl fmt::Display for Value {
@@ -32,6 +34,7 @@ impl fmt::Display for Value {
             Value::String(value) => f.write_str(value),
             Value::Int(value) => write!(f, "{value}"),
             Value::Duration(value) => f.write_str(&duration::format(*value)),
+            Value::Repeated(values) => f.write_str(&values.join(", ")),
         }
     }
 }
@@ -43,6 +46,7 @@ impl From<FlagDefault<'_>> for Value {
             FlagDefault::String(value) => Value::String(value.to_owned()),
             FlagDefault::Int(value) => Value::Int(value),
             FlagDefault::Duration(value) => Value::Duration(value),
+            FlagDefault::Repeated => Value::Repeated(Vec::new()),
         }
     }
 }
@@ -92,6 +96,10 @@ impl<'a> FlagSet<'a> {
         self.rest = args.to_vec();
         while self.parse_one()? {}
         Ok(())
+    }
+
+    pub fn get(&self, name: &str) -> Option<&Value> {
+        self.values.get(name)
     }
 
     pub fn value(&self, name: &str) -> &Value {
@@ -229,6 +237,12 @@ impl<'a> FlagSet<'a> {
                 let error = parsed.is_err().then_some(PARSE_ERROR);
                 (Value::Duration(parsed.unwrap_or(0)), error)
             }
+            FlagDefault::Repeated => {
+                if let Some(Value::Repeated(values)) = self.values.get_mut(flag.name) {
+                    values.push(raw.to_owned());
+                }
+                return Ok(());
+            }
         };
         self.values.insert(flag.name, value);
         error.map_or(Ok(()), Err)
@@ -268,6 +282,7 @@ fn default_line(flag: &Flag<'_>) -> String {
         FlagDefault::Bool(false)
         | FlagDefault::Int(0)
         | FlagDefault::Duration(0)
+        | FlagDefault::Repeated
         | FlagDefault::String("") => {}
         FlagDefault::String(value) => {
             line.push_str(&format!(" (default {})", quote(value.as_bytes())));
@@ -295,6 +310,7 @@ fn unquote_usage(flag: &Flag<'_>) -> (String, String) {
         FlagDefault::String(_) => "string",
         FlagDefault::Int(_) => "int",
         FlagDefault::Duration(_) => "duration",
+        FlagDefault::Repeated => "value",
     };
     (name.to_owned(), usage.to_owned())
 }

@@ -43,6 +43,8 @@ func writeCorpus(directory string) error {
 		{"local_time.jsonl", localTimeCases(random)},
 		{"json_indent.jsonl", jsonIndentCases(random)},
 		{"json_encode.jsonl", jsonEncodeCases(random)},
+		{"step_slug.jsonl", stepSlugCases(random)},
+		{"check_id.jsonl", checkIDCases(random)},
 	} {
 		var out bytes.Buffer
 		encoder := json.NewEncoder(&out)

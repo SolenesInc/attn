@@ -42,7 +42,7 @@ fn push_escaped(out: &mut String, character: char) {
     }
 }
 
-fn is_printable(character: char) -> bool {
+pub fn is_printable(character: char) -> bool {
     let code = u32::from(character);
     GO_PRINTABLE_RANGES
         .binary_search_by(|&(low, high)| {

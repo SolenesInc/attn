@@ -211,10 +211,6 @@ impl<'a> Paths<'a> {
         }
     }
 
-    #[allow(
-        dead_code,
-        reason = "printed by the commands that show the banner once they port"
-    )]
     pub fn banner(&self) -> Option<String> {
         let instance = self.instance();
         if instance.is_empty() {

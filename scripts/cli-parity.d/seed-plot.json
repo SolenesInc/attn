@@ -1,0 +1,1 @@
+{"title":"cli parity plot","body":"## Plan\n\n### C1\nthe plan","checks":[{"id":"C1","text":"the plot holds","shared":true}],"children":[{"title":"first step","body":"first","checks":[{"id":"C2","text":"first holds"}]},{"title":"second step","body":"second","after":["first-step"]}]}

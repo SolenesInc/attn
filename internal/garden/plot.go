@@ -1,9 +1,7 @@
 package garden
 
 import (
-	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -142,55 +140,6 @@ type PlotSpec struct {
 	PartOf         string          `json:"part_of,omitempty"`
 	DiscoveredFrom string          `json:"discovered_from,omitempty"`
 	Children       []PlotChildSpec `json:"children"`
-}
-
-const plotPayloadShape = `{"title": …, "body": …, "part_of": "<plot>", "discovered_from": "<seed>", "children": [{"title": …, "after": ["<sibling slug>"]}]}`
-
-func ParsePlotSpec(raw []byte) (PlotSpec, error) {
-	if err := refuseBlocksInPlotPayload(raw); err != nil {
-		return PlotSpec{}, err
-	}
-	var spec PlotSpec
-	decoder := json.NewDecoder(strings.NewReader(string(raw)))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&spec); err != nil {
-		return PlotSpec{}, protocol.Refuse(protocol.RefusalInvalidInput, "this is not a plot payload: %w (the shape is %s)", err, plotPayloadShape)
-	}
-	if err := ValidatePlotSpec(spec); err != nil {
-		return PlotSpec{}, err
-	}
-	return spec, nil
-}
-
-func refuseBlocksInPlotPayload(raw []byte) error {
-	var probe struct {
-		Children []struct {
-			Title  string    `json:"title"`
-			Blocks *[]string `json:"blocks"`
-		} `json:"children"`
-	}
-	if json.Unmarshal(raw, &probe) != nil {
-		return nil
-	}
-	for i, child := range probe.Children {
-		if child.Blocks == nil {
-			continue
-		}
-		rewrite := "delete it"
-		if len(*child.Blocks) > 0 {
-			rewrite = fmt.Sprintf(`add "after": [%q] to %s`, StepSlug(child.Title), strings.Join(quoted(*child.Blocks), " and "))
-		}
-		return protocol.Refuse(protocol.RefusalInvalidInput, `child %d (%q) has "blocks", which plot payloads do not take; a child names the siblings it waits for with "after". Here: %s`, i+1, child.Title, rewrite)
-	}
-	return nil
-}
-
-func quoted(values []string) []string {
-	out := make([]string, len(values))
-	for i, value := range values {
-		out[i] = strconv.Quote(value)
-	}
-	return out
 }
 
 func ValidatePlotSpec(spec PlotSpec) error {

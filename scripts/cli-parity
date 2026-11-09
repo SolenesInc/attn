@@ -10,6 +10,8 @@ A line is one of:
                        captured ids, note ids, timestamps from this run, bookmarks and
                        instance names; the copied garden's stay as they are
   write <argv> => $x   also stores the first id on stdout as $x for later lines
+                       seed ids this run created are paired by position
+  write <argv> <= $out feeds the previous command's stdout to this one's stdin
   usage <argv>         read of <argv> --help, <argv> -h and <argv> --no-such-flag
 Lines are split like a shell. Blank lines and lines starting with # are skipped.
 """
@@ -33,7 +35,11 @@ ID_PATTERN = re.compile(r"(?<![\w-])[a-z]-[0-9a-z]{6}(?![\w-])")
 NOTE_ID_PATTERN = re.compile(r"(?<![\w-])n-[0-9a-z]{6}(?![\w-])")
 TIME_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?")
 BOOKMARK_PATTERN = re.compile(r'("bookmark": |--since )\d+')
+OPERATION_ID_PATTERN = re.compile(r'("operation_id": ")[0-9a-f]+')
+RUST_CWD_PATTERN = re.compile(r"(?<=/cli-parity-)(\w+)/rust-\w+|(?<=/cli-parity-)\w+")
 MAX_REPORTED_DIFF_LINES = 40
+PREVIOUS_STDOUT = "<previous stdout>"
+FIXTURE_WORDS = {"$plot_json": str(ARGV_DIR / "seed-plot.json")}
 
 
 @dataclass
@@ -56,13 +62,13 @@ def isolated_env(instance_name):
     return env
 
 
-def run(binary, argv, instance_name, cwd):
+def run(binary, argv, instance_name, cwd, stdin=b""):
     completed = subprocess.run(
         ["attn", *argv],
         executable=binary,
         env=isolated_env(instance_name),
         cwd=cwd,
-        stdin=subprocess.DEVNULL,
+        input=stdin,
         capture_output=True,
         check=False,
     )
@@ -103,6 +109,8 @@ def normalize(text, instance, variables, run_started):
     note_ids = {}
     text = NOTE_ID_PATTERN.sub(lambda match: note_ids.setdefault(match.group(0), f"<note{len(note_ids) + 1}>"), text)
     text = BOOKMARK_PATTERN.sub(r"\1<bookmark>", text)
+    text = OPERATION_ID_PATTERN.sub(r"\1<operation>", text)
+    text = RUST_CWD_PATTERN.sub("", text)
     return TIME_PATTERN.sub(run_generated_time, text)
 
 
@@ -123,6 +131,9 @@ def expand(path):
             if len(words) >= 2 and words[-2] == "=>":
                 capture = words[-1]
                 words = words[:-2]
+            elif len(words) >= 2 and words[-2:] == ["<=", "$out"]:
+                capture = PREVIOUS_STDOUT
+                words = words[:-2]
             yield "write", words, capture
         else:
             sys.exit(f"cli-parity: {path.name}: unknown mode {mode!r} in: {line}")
@@ -137,6 +148,21 @@ def first_id(result, argv):
     if match is None:
         sys.exit(f"cli-parity: attn {shlex.join(argv)} printed no id to capture:\n{result.stdout}")
     return match.group(0)
+
+
+def pair_generated_ids(go, rust, go_vars, rust_vars, args, rust_instance, cwd):
+    for go_stream, rust_stream in ((go.stdout, rust.stdout), (go.stderr, rust.stderr)):
+        go_ids = [i for i in ID_PATTERN.findall(go_stream) if i.startswith("s-")]
+        rust_ids = [i for i in ID_PATTERN.findall(rust_stream) if i.startswith("s-")]
+        known = set(go_vars.values())
+        for go_id, rust_id in zip(go_ids, rust_ids):
+            if go_id == rust_id or go_id in known:
+                continue
+            if run(args.go, ["seed", "show", go_id], rust_instance.name, cwd).exit_code == 0:
+                continue
+            name = f"$generated{len(go_vars)}"
+            go_vars[name], rust_vars[name] = go_id, rust_id
+            known.add(go_id)
 
 
 def report(argv, go, rust):
@@ -162,8 +188,10 @@ def normalized(result, instance, variables, run_started):
 
 
 def compare_group(path, args, go_instance, rust_instance, cwd):
+    rust_cwd = tempfile.mkdtemp(prefix="rust-", dir=cwd)
     compared = differences = 0
-    go_vars, rust_vars = {}, {}
+    go_vars, rust_vars = dict(FIXTURE_WORDS), dict(FIXTURE_WORDS)
+    go_previous = rust_previous = b""
     for mode, words, capture in expand(path):
         compared += 1
         if mode == "read":
@@ -172,11 +200,14 @@ def compare_group(path, args, go_instance, rust_instance, cwd):
             rust = run(args.rust, argv, go_instance.name, cwd)
         else:
             argv = bind(words, go_vars)
-            go = run(args.go, argv, go_instance.name, cwd)
-            rust = run(args.rust, bind(words, rust_vars), rust_instance.name, cwd)
-            if capture:
+            feeds_stdin = capture == PREVIOUS_STDOUT
+            go = run(args.go, argv, go_instance.name, cwd, go_previous if feeds_stdin else b"")
+            rust = run(args.rust, bind(words, rust_vars), rust_instance.name, rust_cwd, rust_previous if feeds_stdin else b"")
+            go_previous, rust_previous = go.stdout.encode(), rust.stdout.encode()
+            if capture and not feeds_stdin:
                 go_vars[capture] = first_id(go, argv)
                 rust_vars[capture] = first_id(rust, argv)
+            pair_generated_ids(go, rust, go_vars, rust_vars, args, rust_instance, cwd)
             go = normalized(go, go_instance, go_vars, args.run_started)
             rust = normalized(rust, rust_instance, rust_vars, args.run_started)
         if (go.exit_code, go.stdout, go.stderr) != (rust.exit_code, rust.stdout, rust.stderr):

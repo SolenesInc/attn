@@ -4,9 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
@@ -62,10 +60,6 @@ func Stamp(id, body string) string {
 	return fmt.Sprintf("<!-- attn-seed %s body-sha256 %s -->\n%s", id, BodySHA256(body), body)
 }
 
-var bodyStamp = sync.OnceValue(func() *regexp.Regexp {
-	return regexp.MustCompile(`^<!-- attn-seed (\S+) body-sha256 ([0-9a-f]{64}) -->$`)
-})
-
 func EditRecipe(id string) string {
 	return fmt.Sprintf("edit takes an exported file; run attn seed export %s, edit it, then attn seed edit %s -m - < %s.md", id, id, id)
 }
@@ -75,19 +69,4 @@ func ValidateBodyEdit(body string) error {
 		return protocol.Refuse(protocol.RefusalInvalidInput, "a body edit needs nonempty text; empty or whitespace-only bodies are refused")
 	}
 	return ValidateBody(body)
-}
-
-func ParseStamped(id, text string) (body, base string, err error) {
-	line, body, found := strings.Cut(text, "\n")
-	stamp := bodyStamp().FindStringSubmatch(strings.TrimSuffix(line, "\r"))
-	if !found || stamp == nil {
-		return "", "", protocol.Refuse(protocol.RefusalInvalidInput, "%s", EditRecipe(id))
-	}
-	if stamp[1] != id {
-		return "", "", protocol.Refuse(protocol.RefusalInvalidInput, "this export belongs to %s, not %s; %s", stamp[1], id, EditRecipe(id))
-	}
-	if err := ValidateBodyEdit(body); err != nil {
-		return "", "", err
-	}
-	return body, stamp[2], nil
 }
