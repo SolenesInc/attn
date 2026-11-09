@@ -96,6 +96,14 @@ async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: Daem
     ask_id: command.ask_id,
     success: true,
   }));
+  view.daemon.on('ask_seed_mentions', () => ({
+    event: 'ask_seed_mentions_result',
+    success: true,
+    mentions: seeds.flatMap((seed) => [
+      { text: seed.id, seed_id: seed.id },
+      ...(seed.step_slug ? [{ text: seed.step_slug, seed_id: seed.id }] : []),
+    ]),
+  }));
   return view.daemon;
 }
 
@@ -350,6 +358,24 @@ describe('App asks', () => {
 
     await gesture(daemon, () => fireEvent.click(links[1]));
     expect(seedHeading()).toBe('Cache store migration');
+  });
+
+  it('opens a mentioned seed outside the garden broadcast and leaves ambiguous slugs alone', async () => {
+    const old = daemonSeed('s-cache1', { title: 'Old work', step_slug: 'old-work' });
+    const ask: Ask = { ...cacheStore, parts: [
+      { markdown: 'Read s-cache1, old-work, and shared-work.' },
+      { question: { key: 'q1', kind: 'text', prompt: 'Ready?', choices: [] } },
+    ] };
+    const daemon = await renderAsks([ask], [apiWorking]);
+    daemon.on('ask_seed_mentions', () => ({ event: 'ask_seed_mentions_result', success: true, mentions: [
+      { text: old.id, seed_id: old.id }, { text: 'old-work', seed_id: old.id },
+    ] }));
+    daemon.on('open_seed', () => ({ event: 'open_seed_result', success: true, seed_id: old.id, desktop_id: 'desktop-api', tile_id: 'seed-tile' }));
+    await openDrawer(daemon);
+    const article = screen.getByRole('article', { name: ask.subject });
+    expect(within(article).queryByRole('button', { name: 'shared-work' })).toBeNull();
+    await gesture(daemon, () => fireEvent.click(within(article).getByRole('button', { name: 'old-work' })));
+    expect(daemon.sentOf('open_seed')).toEqual([expect.objectContaining({ seed_id: old.id })]);
   });
 
   it('counts open asks on the collapsed rail and marks the desktops that hold them', async () => {

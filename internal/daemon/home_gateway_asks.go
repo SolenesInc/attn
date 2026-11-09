@@ -163,6 +163,28 @@ func (d *Daemon) homeGatewayAnswerAsk(conn *homeGatewayConn, command homegateway
 	return homeGatewaySend(conn, result)
 }
 
+func (d *Daemon) homeGatewayAskSeedMentions(conn *homeGatewayConn, command homegateway.HomeGatewayAskSeedMentions) error {
+	result := homegateway.HomeGatewayAskSeedMentionsResult{Event: "ask_seed_mentions_result", RequestID: command.RequestID, Mentions: []homegateway.HomeGatewaySeedMention{}}
+	mentions, err := d.askSeedMentions(command.AskID, conn.phone.ProfileID)
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		for _, mention := range mentions {
+			result.Mentions = append(result.Mentions, homegateway.HomeGatewaySeedMention{Text: mention.Text, SeedID: mention.SeedID})
+		}
+	}
+	frame, err := homeGatewayMarshal(result)
+	if err != nil {
+		return err
+	}
+	if len(frame) > cloudlink.MaxMessageBytes {
+		result.Mentions = []homegateway.HomeGatewaySeedMention{}
+		result.Error = protocol.Ptr(fmt.Sprintf("Seed mentions need %d bytes; the phone message limit is %d bytes", len(frame), cloudlink.MaxMessageBytes))
+		return homeGatewaySend(conn, result)
+	}
+	return conn.sendRaw(frame)
+}
+
 func (d *Daemon) homeGatewayAskImage(conn *homeGatewayConn, command homegateway.HomeGatewayAskImage) error {
 	mimeType, data, err := d.homeGatewayAskImageBytes(conn, strings.TrimSpace(command.AskID), command.Src)
 	if err == nil && (command.Offset < 0 || command.Offset > len(data)) {

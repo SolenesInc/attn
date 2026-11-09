@@ -54,6 +54,7 @@ var oldPhoneSteps = []oldPhoneStep{
 	{4, `{"cmd":"terminal_credit","terminal_id":"$terminal","bytes":4096}`, nil},
 	{4, `{"cmd":"terminal_resize","terminal_id":"$terminal","cols":60,"rows":30}`, []string{"terminal_resized"}},
 	{4, `{"cmd":"terminal_detach","terminal_id":"$terminal"}`, nil},
+	{9, `{"cmd":"ask_seed_mentions","ask_id":"$ask","request_id":"mentions"}`, []string{"ask_seed_mentions_result"}},
 	{3, `{"cmd":"ask_answer","ask_id":"$ask","answers":[{"key":"q1","picked":["Postgres"]}],"note":"from the phone","request_id":"answer"}`, []string{"ask_answer_result"}},
 	{6, `{"cmd":"seed_get","seed_id":"$seed","request_id":"read"}`, []string{"seed_detail"}},
 	{6, `{"cmd":"seed_note","seed_id":"$seed","body":"from the phone","request_id":"note"}`, []string{"seed_result"}},

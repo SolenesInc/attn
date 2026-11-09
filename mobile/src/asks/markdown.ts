@@ -4,6 +4,7 @@ import type { Nodes, Root, RootContent } from 'mdast'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { gfm } from 'micromark-extension-gfm'
+import type { SeedMentionIndex } from '@attn/utils/seedMentions'
 
 const walk = (node: Nodes, visit: (node: Nodes) => void) => {
   visit(node)
@@ -104,7 +105,27 @@ export type MarkdownContext<Message> = {
   readonly diagram: (code: string) => DiagramView
   readonly zoomImage: (url: string, alt: string) => Message
   readonly zoomDiagram: (svg: string) => Message
+  readonly seedMentions?: SeedMentionIndex | null
+  readonly openMention?: (seedId: string) => Message
 }
+
+export const mentionText = <Message>(
+  text: string,
+  context: MarkdownContext<Message>,
+  h: HtmlBuilder<Message>,
+): Array<Html | string> =>
+  context.seedMentions && context.openMention
+    ? context.seedMentions
+        .split(text)
+        .map((piece) =>
+          typeof piece === 'string'
+            ? piece
+            : h.button(
+                [h.Type('button'), h.Class('seed-mention'), h.OnClick(context.openMention!(piece.seedId))],
+                [piece.text],
+              ),
+        )
+    : [text]
 
 const textOf = (node: Nodes): string =>
   'value' in node ? node.value : 'children' in node ? node.children.map(textOf).join('') : ''
@@ -115,8 +136,8 @@ export const renderMarkdown = <Message>(
   h: HtmlBuilder<Message>,
 ): Html => {
   const { root, definitions } = parsedMarkdown(markdown)
-  const children = (node: Nodes): Array<Html | string> =>
-    'children' in node ? node.children.map((child: RootContent) => render(child)) : []
+  const children = (node: Nodes, inLink = false): Array<Html | string> =>
+    'children' in node ? node.children.map((child: RootContent) => render(child, inLink)) : []
 
   const image = (src: string, alt: string): Html => {
     const shown = context.image(src)
@@ -167,20 +188,20 @@ export const renderMarkdown = <Message>(
     }
   }
 
-  const render = (node: RootContent): Html | string => {
+  const render = (node: RootContent, inLink = false): Html | string => {
     switch (node.type) {
       case 'text':
-        return node.value
+        return inLink ? node.value : h.span([], mentionText(node.value, context, h))
       case 'paragraph':
-        return h.p([], children(node))
+        return h.p([], children(node, inLink))
       case 'heading':
-        return [h.h1, h.h2, h.h3, h.h4, h.h5, h.h6][node.depth - 1]!([], children(node))
+        return [h.h1, h.h2, h.h3, h.h4, h.h5, h.h6][node.depth - 1]!([], children(node, inLink))
       case 'emphasis':
-        return h.em([], children(node))
+        return h.em([], children(node, inLink))
       case 'strong':
-        return h.strong([], children(node))
+        return h.strong([], children(node, inLink))
       case 'delete':
-        return h.del([], children(node))
+        return h.del([], children(node, inLink))
       case 'inlineCode':
         return h.code([], [node.value])
       case 'code':
@@ -190,14 +211,14 @@ export const renderMarkdown = <Message>(
       case 'thematicBreak':
         return h.hr([])
       case 'blockquote':
-        return h.blockquote([], children(node))
+        return h.blockquote([], children(node, inLink))
       case 'list':
-        return (node.ordered ? h.ol : h.ul)([h.Class('md-list')], children(node))
+        return (node.ordered ? h.ol : h.ul)([h.Class('md-list')], children(node, inLink))
       case 'listItem':
         return h.li(
           [],
           node.checked === null || node.checked === undefined
-            ? children(node)
+            ? children(node, inLink)
             : [
                 h.span(
                   [
@@ -206,11 +227,11 @@ export const renderMarkdown = <Message>(
                   ],
                   [],
                 ),
-                ...children(node),
+                ...children(node, inLink),
               ],
         )
       case 'link':
-        return h.a([h.Href(node.url), h.Target('_blank'), h.Rel('noopener')], children(node))
+        return h.a([h.Href(node.url), h.Target('_blank'), h.Rel('noopener')], children(node, true))
       case 'image':
         return image(node.url, node.alt ?? '')
       case 'imageReference': {
@@ -220,17 +241,17 @@ export const renderMarkdown = <Message>(
       case 'linkReference': {
         const href = definitions.get(node.identifier)
         return href
-          ? h.a([h.Href(href), h.Target('_blank'), h.Rel('noopener')], children(node))
+          ? h.a([h.Href(href), h.Target('_blank'), h.Rel('noopener')], children(node, true))
           : textOf(node)
       }
       case 'definition':
         return ''
       case 'table':
-        return h.div([h.Class('md-table')], [h.table([], [h.tbody([], children(node))])])
+        return h.div([h.Class('md-table')], [h.table([], [h.tbody([], children(node, inLink))])])
       case 'tableRow':
-        return h.tr([], children(node))
+        return h.tr([], children(node, inLink))
       case 'tableCell':
-        return h.td([], children(node))
+        return h.td([], children(node, inLink))
       case 'html': {
         const images = htmlImages(node.value)
         return images.length > 0

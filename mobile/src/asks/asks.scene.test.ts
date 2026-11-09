@@ -1,6 +1,17 @@
 import { Scene } from 'foldkit'
 import { describe, expect, it } from 'vitest'
-import { LoadImage, Message, PinchZoom, RenderDiagram, SendAnswer, update, view, type Model } from '../main'
+import {
+  GetAskSeedMentions,
+  GetSeed,
+  LoadImage,
+  Message,
+  PinchZoom,
+  RenderDiagram,
+  SendAnswer,
+  update,
+  view,
+  type Model,
+} from '../main'
 import type { Pairing } from '../pairing'
 import type { PhoneAsk, Question } from './ask'
 
@@ -123,6 +134,43 @@ const loadStoreVisuals = Scene.Command.resolveAll(
 )
 
 describe('asks on the phone', () => {
+  it('opens a mentioned seed and returns to the unfinished ask', () => {
+    const start = online(personal)
+    const current = { ...start, homes: start.homes.map((home) => ({ ...home, api: 9 })) }
+    const linked = ask('a-linked', 1, [
+      { markdown: 'Read old-work and `old-work`.', question: null },
+      { markdown: null, question: choiceQuestion },
+    ])
+    const mentions = [{ text: 'old-work', seed_id: 's-abcdef' }]
+    Scene.scene(
+      { update, view },
+      Scene.given(current),
+      arrive(personal, [linked]),
+      Scene.click(Scene.first(Scene.all.testId('ask-entry'))),
+      Scene.Command.resolve(
+        GetAskSeedMentions({ pairingId: personal.id, askId: linked.id, version: 1 }),
+        Message.LoadedMentions({ pairingId: personal.id, askId: linked.id, version: 1, mentions }),
+      ),
+      Scene.type(Scene.role('textbox', { name: 'Note' }), 'Keep my draft'),
+      Scene.click(Scene.role('button', { name: 'old-work' })),
+      Scene.Command.resolve(
+        GetSeed({ pairingId: personal.id, seedId: 's-abcdef' }),
+        Message.FailedSeed({ pairingId: personal.id, seedId: 's-abcdef', message: 'Unavailable' }),
+      ),
+      Scene.click(Scene.role('button', { name: '‹ Ask' })),
+      Scene.Command.resolve(
+        GetAskSeedMentions({ pairingId: personal.id, askId: linked.id, version: 2 }),
+        Message.LoadedMentions({ pairingId: personal.id, askId: linked.id, version: 2, mentions }),
+      ),
+      Scene.expect(Scene.role('textbox', { name: 'Note' })).toHaveValue('Keep my draft'),
+      Scene.Subscription.emit(Message.ReceivedGarden({ pairingId: personal.id, seeds: [] })),
+      Scene.Command.resolve(
+        GetAskSeedMentions({ pairingId: personal.id, askId: linked.id, version: 3 }),
+        Message.LoadedMentions({ pairingId: personal.id, askId: linked.id, version: 3, mentions: [] }),
+      ),
+      Scene.expect(Scene.role('button', { name: 'old-work' })).not.toExist(),
+    )
+  })
   it('lists the open asks of every home above the agents, oldest first', () => {
     Scene.scene(
       { update, view },

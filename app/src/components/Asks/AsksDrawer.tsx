@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import type { Ask, AskAnswer, AskReply } from '../../types/generated';
+import type { Ask, AskAnswer, AskReply, AskSeedMention } from '../../types/generated';
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
@@ -58,15 +58,27 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   const selectedAskId = useAsksStore((state) => state.selectedAskId);
   const focusRequest = useAsksStore((state) => state.focusRequest);
   const { selectAsk, setDraft, toggleReplied } = useAsksStore.getState();
-  const { sendAskAnswer, sendAskImage } = useDaemonApi();
+  const { sendAskAnswer, sendAskImage, sendAskSeedMentions } = useDaemonApi();
   const gardenSeeds = useDaemonStore((state) => state.seeds);
-  const seedMentions = useMemo(() => createSeedMentionIndex(gardenSeeds), [gardenSeeds]);
+  const [resolved, setResolved] = useState<{ askId: string; seeds: typeof gardenSeeds; mentions: AskSeedMention[] } | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const index = Math.max(0, items.findIndex((item) => item.ask.id === selectedAskId));
   const ask = items[index]?.ask;
   const askId = ask?.id;
   const askReplied = Boolean(ask?.reply);
+  const seedMentions = useMemo(() => createSeedMentionIndex(
+    resolved && resolved.askId === askId && resolved.seeds === gardenSeeds ? resolved.mentions : [],
+  ), [resolved, askId, gardenSeeds]);
+  useEffect(() => {
+    let current = true;
+    if (askId) void sendAskSeedMentions(askId).then((result) => {
+      if (current) setResolved({ askId, seeds: gardenSeeds, mentions: result });
+    }).catch((err: unknown) => {
+      if (current) setError(err instanceof Error ? err.message : String(err));
+    });
+    return () => { current = false; };
+  }, [askId, gardenSeeds, sendAskSeedMentions]);
   const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
   const listRef = useRef<HTMLOListElement>(null);

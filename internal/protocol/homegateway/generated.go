@@ -197,6 +197,31 @@ type HomeGatewayAskReply struct {
 	Note *string `json:"note,omitempty,omitzero"`
 }
 
+type HomeGatewayAskSeedMentions struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HomeGatewayAskSeedMentionsResult struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Mentions corresponds to the JSON schema field "mentions".
+	Mentions []HomeGatewaySeedMention `json:"mentions"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
 type HomeGatewayAsks struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
@@ -465,6 +490,14 @@ type HomeGatewaySeedLogEntry struct {
 
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
+}
+
+type HomeGatewaySeedMention struct {
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
 }
 
 type HomeGatewaySeedMove struct {

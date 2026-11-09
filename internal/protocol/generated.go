@@ -783,6 +783,42 @@ type AskReply struct {
 	Note *string `json:"note,omitempty,omitzero"`
 }
 
+type AskSeedMention struct {
+	// SeedID corresponds to the JSON schema field "seed_id".
+	SeedID string `json:"seed_id"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type AskSeedMentionsMessage struct {
+	// AskID corresponds to the JSON schema field "ask_id".
+	AskID string `json:"ask_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type AskSeedMentionsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Mentions corresponds to the JSON schema field "mentions".
+	Mentions []AskSeedMention `json:"mentions"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type AsksUpdatedMessage struct {
 	// Asks corresponds to the JSON schema field "asks".
 	Asks []Ask `json:"asks"`

@@ -318,6 +318,7 @@ const openSocket = (
       case 'seed_result':
       case 'submit_result':
       case 'ask_answer_result':
+      case 'ask_seed_mentions_result':
       case 'ask_image_chunk':
       case 'ask_image_error':
       case 'crew_wake_result': {

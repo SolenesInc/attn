@@ -423,6 +423,16 @@ button.row.ask {
   color: var(--accent);
 }
 
+.seed-mention {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+}
+
 .md-table {
   overflow-x: auto;
   margin: 0 0 12px;

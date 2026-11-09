@@ -11,7 +11,9 @@ import {
   type PhoneAsk,
   type Question,
 } from './ask'
-import { renderMarkdown, type MarkdownContext } from './markdown'
+import { mentionText, renderMarkdown, type MarkdownContext } from './markdown'
+import { createSeedMentionIndex } from '@attn/utils/seedMentions'
+import type { AskSeedMention } from '@attn/types/generated'
 
 export type AskRow = {
   readonly key: string
@@ -23,6 +25,7 @@ export type AskRow = {
 
 export type AskActions<Message> = MarkdownContext<Message> & {
   readonly openAsk: (pairingId: string, askId: string) => Message
+  readonly openSeed: (pairingId: string, seedId: string) => Message
   readonly back: Message
   readonly pick: (key: string, label: string) => Message
   readonly changeOther: (key: string, value: string) => Message
@@ -37,6 +40,7 @@ export type OpenAsk = {
   readonly draft: Draft
   readonly sending: boolean
   readonly error: string
+  readonly mentions: ReadonlyArray<AskSeedMention>
 }
 
 const where = (pairing: Pairing) => `${pairing.homeName} · ${pairing.profileName}`
@@ -193,7 +197,10 @@ const questionCard = <Message>(
   return h.fieldset(
     [h.Class('question'), h.DataAttribute('testid', `ask-question-${question.key}`)],
     [
-      h.legend([], [h.span([h.Class('index')], [String(index)]), question.prompt]),
+      h.legend(
+        [],
+        [h.span([h.Class('index')], [String(index)]), ...mentionText(question.prompt, actions, h)],
+      ),
       question.context ? renderMarkdown(question.context, actions, h) : h.empty,
       ask.reply
         ? repliedAnswer(question, replied, h)
@@ -227,6 +234,11 @@ export const askScreen = <Message>(
     )
   }
   const { ask } = row
+  const mentionActions = {
+    ...actions,
+    seedMentions: createSeedMentionIndex(open.mentions),
+    openMention: (id: string) => actions.openSeed(row.pairing.id, id),
+  }
   let index = 0
   const body = ask.tooLarge
     ? [
@@ -239,14 +251,14 @@ export const askScreen = <Message>(
       ]
     : ask.parts.map((part) =>
         part.question
-          ? questionCard(ask, part.question, ++index, open, actions, h)
-          : renderMarkdown(part.markdown ?? '', actions, h),
+          ? questionCard(ask, part.question, ++index, open, mentionActions, h)
+          : renderMarkdown(part.markdown ?? '', mentionActions, h),
       )
   const sendable = !ask.reply && !ask.tooLarge && draftSendable(ask, open.draft) && !open.sending && row.live
   return h.article(
     [h.Class('ask-screen'), h.DataAttribute('testid', 'ask-screen')],
     [
-      h.h2([h.Class('subject')], [ask.subject]),
+      h.h2([h.Class('subject')], mentionText(ask.subject, mentionActions, h)),
       h.p([h.Class('ask-from')], [`${row.from} · ${where(row.pairing)} · ${age(ask.createdAt, now)}`]),
       ...body,
       ask.reply

@@ -38,6 +38,7 @@ import type {
   PhonePairingCode,
   AskAnswer,
   AskImageResultMessage,
+  AskSeedMention,
   CommandUsage,
   Session as GeneratedSession,
   PR as GeneratedPR,
@@ -3590,6 +3591,9 @@ export function useDaemonSocket({
   const sendAskImage = useCallback((askId: string, path: string): Promise<AskImageResultMessage> =>
     sendRequest('ask_image', { ask_id: askId, path }, 'Loading the image timed out'), [sendRequest]);
 
+  const sendAskSeedMentions = useCallback((askId: string): Promise<AskSeedMention[]> =>
+    sendRequest('ask_seed_mentions', { ask_id: askId }, 'Resolving seed mentions timed out'), [sendRequest]);
+
   const sendRestartSharedCodex = useCallback((profileId: string, now: boolean): Promise<true> =>
     sendRequest('restart_shared_codex', { profile_id: profileId, now }, 'Restarting shared Codex timed out'), [sendRequest]);
 
@@ -4396,6 +4400,7 @@ export function useDaemonSocket({
     sendSetVentKind,
     sendAskAnswer,
     sendAskImage,
+    sendAskSeedMentions,
     sendRestartSharedCodex,
     sendPhonesGet,
     sendPhonePairBegin,

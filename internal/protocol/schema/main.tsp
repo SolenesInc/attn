@@ -4166,6 +4166,25 @@ model AskImageResultMessage {
   data_base64?: string;
 }
 
+model AskSeedMention {
+  text: string;
+  seed_id: string;
+}
+
+model AskSeedMentionsMessage {
+  cmd: "ask_seed_mentions";
+  request_id: string;
+  ask_id: string;
+}
+
+model AskSeedMentionsResultMessage {
+  event: "ask_seed_mentions_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  mentions: AskSeedMention[];
+}
+
 @extension("x-on", #{ home: true })
 model AskListMessage {
   cmd: "ask_list";
@@ -8916,6 +8935,7 @@ alias DaemonEvent =
   | ClientEvictionNoticeMessage
   | AskAnswerResultMessage
   | AskImageResultMessage
+  | AskSeedMentionsResultMessage
   | AsksUpdatedMessage
   | SetVentDismissedResultMessage
   | PlantVentSeedResultMessage

@@ -99,6 +99,49 @@ func gardenByID(seeds []homegateway.HomeGatewaySeed) map[string]homegateway.Home
 	return out
 }
 
+func TestPhoneResolvesAskMentionsBeyondItsGarden(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "phone_access_enabled", "true")
+	setSetting(t, app, "asks_enabled", "true")
+	profile := app.SelectedProfile()
+	if err := w.InjectSession("mine", "mine", w.Path("mine"), protocol.SessionAgentClaude, profile); err != nil {
+		t.Fatal(err)
+	}
+	old := plantSeedAs(t, cli, "mine", "Old phone work")
+	if _, err := cli.SeedTransition("mine", old, "harvest", "done", false, client.SeedTransitionOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	w.advance(25 * time.Hour)
+	asked, err := cli.AskOpen("mine", "", "Read "+old+" and old-phone-work.\n\n"+cacheAsk, "", w.Path("mine"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone := connectPhone(t, w, "phone", profile)
+	phone.welcomed()
+	phone.showsAsks(func(asks []homegateway.HomeGatewayAsk) bool { return len(asks) == 1 })
+	phone.showsGarden(func(seeds []homegateway.HomeGatewaySeed) bool { return len(seeds) == 0 })
+	read := func() []homegateway.HomeGatewaySeedMention {
+		t.Helper()
+		id := uuid.NewString()
+		frame := phone.request(homegateway.HomeGatewayAskSeedMentions{Cmd: "ask_seed_mentions", RequestID: id, AskID: asked.ID}, id)
+		var result homegateway.HomeGatewayAskSeedMentionsResult
+		if err := json.Unmarshal(frame, &result); err != nil || result.Event != "ask_seed_mentions_result" || result.Error != nil {
+			t.Fatalf("phone lookup = %s (%v)", frame, err)
+		}
+		return result.Mentions
+	}
+	for _, text := range []string{old, "old-phone-work"} {
+		if !slices.Contains(read(), homegateway.HomeGatewaySeedMention{Text: text, SeedID: old}) {
+			t.Errorf("phone did not resolve %s outside its garden", text)
+		}
+	}
+	plantSeedAs(t, cli, "mine", "Old phone work")
+	if slices.ContainsFunc(read(), func(mention homegateway.HomeGatewaySeedMention) bool { return mention.Text == "old-phone-work" }) {
+		t.Error("phone resolved an ambiguous slug")
+	}
+}
+
 func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

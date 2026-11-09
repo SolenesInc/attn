@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "19ea6be09c77";
+pub const PROTOCOL_VERSION: &str = "4b41e1c3467b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -670,6 +670,47 @@ pub struct AskReply {
     pub answers: Vec<AskAnswer>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskSeedMention {
+    pub seed_id: String,
+    pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskSeedMentionsMessage {
+    pub ask_id: String,
+    pub cmd: String,
+    pub request_id: String,
+}
+
+impl AskSeedMentionsMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "ask_seed_mentions".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct AskSeedMentionsResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub mentions: Vec<AskSeedMention>,
+    pub request_id: String,
+    pub success: bool,
+}
+
+impl AskSeedMentionsResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "ask_seed_mentions_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AsksUpdatedMessage {

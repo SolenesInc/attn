@@ -8,7 +8,7 @@ using TypeSpec.JsonSchema;
 @jsonSchema
 namespace HomeGateway;
 
-const HOME_GATEWAY_API_VERSION = 8;
+const HOME_GATEWAY_API_VERSION = 9;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model HomeGatewayHello {
@@ -124,6 +124,25 @@ model HomeGatewayAsks {
 model HomeGatewayAskEvent {
   event: "ask";
   ask: HomeGatewayAsk;
+}
+
+// Since api 9: resolve an ask's seed mentions within the paired profile.
+model HomeGatewayAskSeedMentions {
+  cmd: "ask_seed_mentions";
+  request_id: string;
+  ask_id: string;
+}
+
+model HomeGatewaySeedMention {
+  text: string;
+  seed_id: string;
+}
+
+model HomeGatewayAskSeedMentionsResult {
+  event: "ask_seed_mentions_result";
+  request_id: string;
+  mentions: HomeGatewaySeedMention[];
+  error?: string;
 }
 
 enum HomeGatewayAskQuestionKind {

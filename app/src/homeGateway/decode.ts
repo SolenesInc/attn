@@ -8,6 +8,7 @@ import {
   type HomeGatewayAskEvent,
   type HomeGatewayAskImageChunk,
   type HomeGatewayAskImageError,
+  type HomeGatewayAskSeedMentionsResult,
   type HomeGatewayAsks,
   type HomeGatewayCrewWakeResult,
   type HomeGatewayGarden,
@@ -37,6 +38,7 @@ export type HomeGatewayEvent =
   | HomeGatewayAskAnswerResult
   | HomeGatewayAskImageChunk
   | HomeGatewayAskImageError
+  | HomeGatewayAskSeedMentionsResult
   | TerminalScreen
   | TerminalResized
   | TerminalError
@@ -124,6 +126,8 @@ export function decodeHomeGatewayEvent(frame: string): HomeGatewayEvent | null {
       return Convert.toHomeGatewayAsks(frame);
     case 'ask_answer_result':
       return Convert.toHomeGatewayAskAnswerResult(frame);
+    case 'ask_seed_mentions_result':
+      return Convert.toHomeGatewayAskSeedMentionsResult(frame);
     case 'ask_image_chunk':
       return Convert.toHomeGatewayAskImageChunk(frame);
     case 'ask_image_error':

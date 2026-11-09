@@ -322,6 +322,52 @@
     ],
     "type": "object"
   },
+  "HomeGatewayAskSeedMentions": {
+    "properties": {
+      "ask_id": {
+        "type": "string"
+      },
+      "cmd": {
+        "const": "ask_seed_mentions",
+        "type": "string"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cmd",
+      "request_id",
+      "ask_id"
+    ],
+    "type": "object"
+  },
+  "HomeGatewayAskSeedMentionsResult": {
+    "properties": {
+      "error": {
+        "type": "string"
+      },
+      "event": {
+        "const": "ask_seed_mentions_result",
+        "type": "string"
+      },
+      "mentions": {
+        "items": {
+          "$ref": "HomeGatewaySeedMention.json"
+        },
+        "type": "array"
+      },
+      "request_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "event",
+      "request_id",
+      "mentions"
+    ],
+    "type": "object"
+  },
   "HomeGatewayAsks": {
     "properties": {
       "event": {
@@ -817,6 +863,21 @@
       "body",
       "author",
       "created_at"
+    ],
+    "type": "object"
+  },
+  "HomeGatewaySeedMention": {
+    "properties": {
+      "seed_id": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text",
+      "seed_id"
     ],
     "type": "object"
   },

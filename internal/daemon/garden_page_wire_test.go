@@ -85,6 +85,9 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 		if len(app.Initial.Seeds) != docstore.MaxLimit || protocol.Deref(app.Initial.SeedsTotal) != seeds {
 			t.Errorf("the initial garden push returned %d of %d seeds, want %d of %d", len(app.Initial.Seeds), protocol.Deref(app.Initial.SeedsTotal), docstore.MaxLimit, seeds)
 		}
+		if slices.ContainsFunc(app.Initial.Seeds, func(seed protocol.Seed) bool { return seed.ID == panel }) {
+			t.Fatal("the old seed unexpectedly appeared in the capped broadcast")
+		}
 		for _, seed := range app.Initial.Seeds {
 			if seed.ID == newBlocked && seed.Ready {
 				t.Error("the push marks the new dependent ready while its old blocker is still open")
@@ -97,6 +100,30 @@ func TestTheGardenIsReadWholePastOnePageOfSeedsAndNotes(t *testing.T) {
 			func(m protocol.SeedDocumentGetResultMessage) bool { return m.RequestID == "old-plot" })
 		if !document.Success || document.Document == nil || len(document.Document.Children) != 2 {
 			t.Errorf("the old plot's document = %+v, want its two children", document)
+		}
+
+		oldSlug := lifeShow(t, cli, panel).Seed.StepSlug
+		asked, err := cli.AskOpen("closer", "", fmt.Sprintf("Read %s and %s.\n\n%s", panel, oldSlug, cacheAsk), "", w.Path("closer"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		mentions := func() []protocol.AskSeedMention {
+			t.Helper()
+			result := testworld.Request(app, protocol.AskSeedMentionsMessage{Cmd: protocol.CmdAskSeedMentions, RequestID: "mentions", AskID: asked.ID}, protocol.EventAskSeedMentionsResult,
+				func(m protocol.AskSeedMentionsResultMessage) bool { return m.RequestID == "mentions" })
+			if !result.Success {
+				t.Fatalf("resolving mentions: %s", protocol.Deref(result.Error))
+			}
+			return result.Mentions
+		}
+		for _, text := range []string{panel, oldSlug} {
+			if !slices.Contains(mentions(), protocol.AskSeedMention{Text: text, SeedID: panel}) {
+				t.Errorf("the old seed's %s did not resolve beyond the broadcast", text)
+			}
+		}
+		plantSeedAs(t, cli, "", "Garden panel renders a seed body as markdown")
+		if slices.ContainsFunc(mentions(), func(mention protocol.AskSeedMention) bool { return mention.Text == oldSlug }) {
+			t.Error("a slug shared by two seeds resolved as unambiguous")
 		}
 
 		moved, err := cli.SeedTransition("closer", closing, "harvest", "laid", false, client.SeedTransitionOptions{})

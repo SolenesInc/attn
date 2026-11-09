@@ -125,6 +125,9 @@ export type CrewWake = typeof CrewWake.Type
 export const Model = Schema.Struct({
   screen: Schema.Literals(['queue', 'pairings', 'ask', 'session', 'garden', 'seed']),
   seedTrail: Schema.Array(OpenSeedId),
+  mentionVersion: Schema.optionalKey(Schema.Finite),
+  mentions: Schema.optionalKey(Schema.Array(Schema.Struct({ text: Schema.String, seed_id: Schema.String }))),
+  mentionError: Schema.optionalKey(Schema.String),
   seedPage: SeedPage,
   seedNotes: Schema.Record(Schema.String, NoteDraft),
   seedMove: Schema.NullOr(MoveDraft),
@@ -175,6 +178,18 @@ export const Message = defineMessageUnion({
   ChangedSeed: { pairingId: Schema.String, seedId: Schema.String },
   ClickedGardenTab: {},
   ClickedSeed: { pairingId: Schema.String, seedId: Schema.String },
+  LoadedMentions: {
+    pairingId: Schema.String,
+    askId: Schema.String,
+    version: Schema.Finite,
+    mentions: Schema.Array(Schema.Struct({ text: Schema.String, seed_id: Schema.String })),
+  },
+  FailedMentions: {
+    pairingId: Schema.String,
+    askId: Schema.String,
+    version: Schema.Finite,
+    message: Schema.String,
+  },
   LoadedSeed: { pairingId: Schema.String, seedId: Schema.String, detail: SeedDetail },
   FailedSeed: { pairingId: Schema.String, seedId: Schema.String, message: Schema.String },
   ClickedReloadSeed: {},
@@ -476,6 +491,23 @@ export const GetSeed = Command.define('GetSeed', {
     ),
 })
 
+export const GetAskSeedMentions = Command.define('GetAskSeedMentions', {
+  args: { pairingId: Schema.String, askId: Schema.String, version: Schema.Finite },
+  messages: [Message.LoadedMentions, Message.FailedMentions],
+  execute: ({ pairingId, askId, version }) =>
+    Effect.tryPromise(async () => {
+      const reply = await linkTo(pairingId).request({ cmd: 'ask_seed_mentions', ask_id: askId })
+      if (reply.event !== 'ask_seed_mentions_result') throw new Error(`the home answered ${reply.event}`)
+      if (reply.error) throw new Error(reply.error)
+      return reply.mentions
+    }).pipe(
+      Effect.map((mentions) => Message.LoadedMentions({ pairingId, askId, version, mentions })),
+      Effect.catch(({ cause }) =>
+        Effect.succeed(Message.FailedMentions({ pairingId, askId, version, message: errorText(cause) })),
+      ),
+    ),
+})
+
 const seedResult = async (
   pairingId: string,
   command: { readonly cmd: string; readonly [field: string]: unknown },
@@ -690,6 +722,17 @@ const showSeed = (model: Model, trail: Model['seedTrail']): Update.Return<Model,
   }
 }
 
+const refreshMentions = (model: Model): Update.Return<Model, Message> => {
+  const open = model.openAsk
+  const home = model.homes.find((entry) => entry.pairing.id === open?.pairingId)
+  if (!open || !home || home.api < 9 || home.status !== 'online') return { model }
+  const version = (model.mentionVersion ?? 0) + 1
+  return {
+    model: { ...model, mentionVersion: version, mentions: [], mentionError: '' },
+    commands: [GetAskSeedMentions({ ...open, version })],
+  }
+}
+
 const loadSeed = (model: Model, detail: SeedDetail): Update.Return<Model, Message> => {
   const shown = modifyFields(model, { seedPage: () => ({ status: 'loaded' as const, detail }) })
   keepParsed([...model.homes.flatMap((home) => home.asks.flatMap(askMarkdowns)), ...seedMarkdowns(shown)])
@@ -849,14 +892,22 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
       ),
     }),
     ReceivedAsks: ({ pairingId, asks }) => receiveAsks(model, pairingId, asks),
-    ReceivedGarden: ({ pairingId, seeds }) => receiveGarden(model, pairingId, seeds),
-    ChangedSeed: ({ pairingId, seedId }) => ({
-      model,
-      commands:
-        model.screen === 'seed' && openSeedKey(model) === seedKey(pairingId, seedId)
-          ? [GetSeed({ pairingId, seedId })]
-          : [],
-    }),
+    ReceivedGarden: ({ pairingId, seeds }) => {
+      const received = receiveGarden(model, pairingId, seeds)
+      return model.screen === 'ask' && model.openAsk?.pairingId === pairingId
+        ? refreshMentions(received.model)
+        : received
+    },
+    ChangedSeed: ({ pairingId, seedId }) =>
+      model.screen === 'ask' && model.openAsk?.pairingId === pairingId
+        ? refreshMentions(model)
+        : {
+            model,
+            commands:
+              model.screen === 'seed' && openSeedKey(model) === seedKey(pairingId, seedId)
+                ? [GetSeed({ pairingId, seedId })]
+                : [],
+          },
     ClickedGardenTab: () => ({
       model: modifyFields(model, {
         screen: () => 'garden' as const,
@@ -866,7 +917,24 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         zoom: () => null,
       }),
     }),
-    ClickedSeed: ({ pairingId, seedId }) => showSeed(model, [...model.seedTrail, { pairingId, seedId }]),
+    ClickedSeed: ({ pairingId, seedId }) =>
+      showSeed(model, [...(model.screen === 'ask' ? [] : model.seedTrail), { pairingId, seedId }]),
+    LoadedMentions: ({ pairingId, askId, version, mentions }) => ({
+      model:
+        model.openAsk?.pairingId === pairingId &&
+        model.openAsk.askId === askId &&
+        model.mentionVersion === version
+          ? modifyFields(model, { mentions: () => mentions, mentionError: () => '' })
+          : model,
+    }),
+    FailedMentions: ({ pairingId, askId, version, message }) => ({
+      model:
+        model.openAsk?.pairingId === pairingId &&
+        model.openAsk.askId === askId &&
+        model.mentionVersion === version
+          ? modifyFields(model, { mentions: () => [], mentionError: () => message })
+          : model,
+    }),
     LoadedSeed: ({ pairingId, seedId, detail }) =>
       openSeedKey(model) === seedKey(pairingId, seedId) ? loadSeed(model, detail) : { model },
     FailedSeed: ({ pairingId, seedId, message }) => ({
@@ -937,15 +1005,21 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
             })
           : model,
     }),
-    ClickedAsk: ({ pairingId, askId }) => ({
-      model: modifyFields(model, {
-        screen: () => 'ask' as const,
-        openAsk: () => ({ pairingId, askId }),
+    ClickedAsk: ({ pairingId, askId }) =>
+      refreshMentions({
+        ...modifyFields(model, {
+          screen: () => 'ask' as const,
+          openAsk: () => ({ pairingId, askId }),
+          seedTrail: () => [],
+        }),
+        mentions: [],
+        mentionError: '',
       }),
-    }),
     ClickedBack: () =>
       model.screen === 'seed'
-        ? showSeed(model, model.seedTrail.slice(0, -1))
+        ? model.seedTrail.length === 1 && model.openAsk
+          ? refreshMentions(modifyFields(model, { screen: () => 'ask' as const, seedTrail: () => [] }))
+          : showSeed(model, model.seedTrail.slice(0, -1))
         : {
             model: modifyFields(model, {
               screen: () => 'queue' as const,
@@ -1585,6 +1659,7 @@ const askActions = (model: Model): AskActions<Message> => ({
   zoomImage: (url, alt) => Message.ClickedZoomImage({ url, alt }),
   zoomDiagram: (svg) => Message.ClickedZoomDiagram({ svg }),
   openAsk: (pairingId, askId) => Message.ClickedAsk({ pairingId, askId }),
+  openSeed: (pairingId, seedId) => Message.ClickedSeed({ pairingId, seedId }),
   back: Message.ClickedBack(),
   pick: (key, label) => Message.PickedChoice({ key, label }),
   changeOther: (key, value) => Message.ChangedOther({ key, value }),
@@ -2013,7 +2088,8 @@ const openAskView = (model: Model, h: HtmlBuilder<Message>): Html => {
       row,
       draft: draftOf(model),
       sending: answering?.status === 'sending',
-      error: answering?.status === 'failed' ? answering.message : '',
+      error: answering?.status === 'failed' ? answering.message : (model.mentionError ?? ''),
+      mentions: model.mentions ?? [],
     },
     model.now,
     waitedFor,
@@ -2057,7 +2133,7 @@ const backLabel = (model: Model): string | null => {
   if (model.screen === 'ask') return '‹ Queue'
   if (model.screen !== 'seed') return null
   const parent = model.seedTrail.at(-2)
-  if (!parent) return '‹ Garden'
+  if (!parent) return model.openAsk ? '‹ Ask' : '‹ Garden'
   const shown = model.homes
     .find((home) => home.pairing.id === parent.pairingId)
     ?.garden?.find((seed) => seed.id === parent.seedId)

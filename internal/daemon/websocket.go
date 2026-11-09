@@ -1213,6 +1213,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAgentCatalogWS(client, msg.(*protocol.AgentCatalogMessage))
 	case protocol.CmdAskImage:
 		d.life.Go("handleAskImage", func() { d.handleAskImage(client, msg.(*protocol.AskImageMessage)) })
+	case protocol.CmdAskSeedMentions:
+		d.life.Go("handleAskSeedMentions", func() { d.handleAskSeedMentions(client, msg.(*protocol.AskSeedMentionsMessage)) })
 	case protocol.CmdAskAnswer:
 		answer := msg.(*protocol.AskAnswerMessage)
 		if stored, err := d.store.GetOpenAsk(strings.TrimSpace(answer.AskID)); err == nil {

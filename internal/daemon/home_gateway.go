@@ -314,6 +314,18 @@ func (d *Daemon) homeGatewayReceive(conn *homeGatewayConn) error {
 				return err
 			}
 			continue
+		case "ask_seed_mentions":
+			if conn.api < 9 {
+				break
+			}
+			var command homegateway.HomeGatewayAskSeedMentions
+			if err := json.Unmarshal(frame, &command); err != nil {
+				return fmt.Errorf("phone %s sent a malformed ask_seed_mentions: %w", conn.phone.PhoneID, err)
+			}
+			if err := d.homeGatewayAskSeedMentions(conn, command); err != nil {
+				return err
+			}
+			continue
 		}
 		if conn.api >= homeGatewayTerminalAPI && d.homeGatewayCommand(conn, message.Cmd, frame) {
 			continue

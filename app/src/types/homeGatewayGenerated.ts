@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAsks, HomeGatewayAsleepCrewMember, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewWake, HomeGatewayCrewWakeResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./homeGatewayGenerated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayAsleepCrewMember, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewWake, HomeGatewayCrewWakeResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./homeGatewayGenerated";
 //
 //   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
 //   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
@@ -15,6 +15,8 @@
 //   const homeGatewayAskQuestion = Convert.toHomeGatewayAskQuestion(json);
 //   const homeGatewayAskQuestionKind = Convert.toHomeGatewayAskQuestionKind(json);
 //   const homeGatewayAskReply = Convert.toHomeGatewayAskReply(json);
+//   const homeGatewayAskSeedMentions = Convert.toHomeGatewayAskSeedMentions(json);
+//   const homeGatewayAskSeedMentionsResult = Convert.toHomeGatewayAskSeedMentionsResult(json);
 //   const homeGatewayAsks = Convert.toHomeGatewayAsks(json);
 //   const homeGatewayAsleepCrewMember = Convert.toHomeGatewayAsleepCrewMember(json);
 //   const homeGatewayCheckState = Convert.toHomeGatewayCheckState(json);
@@ -36,6 +38,7 @@
 //   const homeGatewaySeedError = Convert.toHomeGatewaySeedError(json);
 //   const homeGatewaySeedGet = Convert.toHomeGatewaySeedGet(json);
 //   const homeGatewaySeedLogEntry = Convert.toHomeGatewaySeedLogEntry(json);
+//   const homeGatewaySeedMention = Convert.toHomeGatewaySeedMention(json);
 //   const homeGatewaySeedMove = Convert.toHomeGatewaySeedMove(json);
 //   const homeGatewaySeedNoteCommand = Convert.toHomeGatewaySeedNoteCommand(json);
 //   const homeGatewaySeedResult = Convert.toHomeGatewaySeedResult(json);
@@ -244,6 +247,35 @@ export interface HomeGatewayAskReply {
     answered_at: Date;
     answers:     AnswerElement[];
     note?:       string;
+    [property: string]: any;
+}
+
+export interface HomeGatewayAskSeedMentions {
+    ask_id:     string;
+    cmd:        HomeGatewayAskSeedMentionsCmd;
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum HomeGatewayAskSeedMentionsCmd {
+    AskSeedMentions = "ask_seed_mentions",
+}
+
+export interface HomeGatewayAskSeedMentionsResult {
+    error?:     string;
+    event:      HomeGatewayAskSeedMentionsResultEvent;
+    mentions:   MentionElement[];
+    request_id: string;
+    [property: string]: any;
+}
+
+export enum HomeGatewayAskSeedMentionsResultEvent {
+    AskSeedMentionsResult = "ask_seed_mentions_result",
+}
+
+export interface MentionElement {
+    seed_id: string;
+    text:    string;
     [property: string]: any;
 }
 
@@ -518,6 +550,12 @@ export interface HomeGatewaySeedLogEntry {
     created_at: Date;
     id:         string;
     kind:       string;
+    [property: string]: any;
+}
+
+export interface HomeGatewaySeedMention {
+    seed_id: string;
+    text:    string;
     [property: string]: any;
 }
 
@@ -888,6 +926,22 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayAskReply")), null, 2);
     }
 
+    public static toHomeGatewayAskSeedMentions(json: string): HomeGatewayAskSeedMentions {
+        return cast(JSON.parse(json), r("HomeGatewayAskSeedMentions"));
+    }
+
+    public static homeGatewayAskSeedMentionsToJson(value: HomeGatewayAskSeedMentions): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskSeedMentions")), null, 2);
+    }
+
+    public static toHomeGatewayAskSeedMentionsResult(json: string): HomeGatewayAskSeedMentionsResult {
+        return cast(JSON.parse(json), r("HomeGatewayAskSeedMentionsResult"));
+    }
+
+    public static homeGatewayAskSeedMentionsResultToJson(value: HomeGatewayAskSeedMentionsResult): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayAskSeedMentionsResult")), null, 2);
+    }
+
     public static toHomeGatewayAsks(json: string): HomeGatewayAsks {
         return cast(JSON.parse(json), r("HomeGatewayAsks"));
     }
@@ -1054,6 +1108,14 @@ export class Convert {
 
     public static homeGatewaySeedLogEntryToJson(value: HomeGatewaySeedLogEntry): string {
         return JSON.stringify(uncast(value, r("HomeGatewaySeedLogEntry")), null, 2);
+    }
+
+    public static toHomeGatewaySeedMention(json: string): HomeGatewaySeedMention {
+        return cast(JSON.parse(json), r("HomeGatewaySeedMention"));
+    }
+
+    public static homeGatewaySeedMentionToJson(value: HomeGatewaySeedMention): string {
+        return JSON.stringify(uncast(value, r("HomeGatewaySeedMention")), null, 2);
     }
 
     public static toHomeGatewaySeedMove(json: string): HomeGatewaySeedMove {
@@ -1493,6 +1555,21 @@ const typeMap: any = {
         { json: "answers", js: "answers", typ: a(r("AnswerElement")) },
         { json: "note", js: "note", typ: u(undefined, "") },
     ], "any"),
+    "HomeGatewayAskSeedMentions": o([
+        { json: "ask_id", js: "ask_id", typ: "" },
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayAskSeedMentionsCmd") },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "HomeGatewayAskSeedMentionsResult": o([
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("HomeGatewayAskSeedMentionsResultEvent") },
+        { json: "mentions", js: "mentions", typ: a(r("MentionElement")) },
+        { json: "request_id", js: "request_id", typ: "" },
+    ], "any"),
+    "MentionElement": o([
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
     "HomeGatewayAsks": o([
         { json: "event", js: "event", typ: r("HomeGatewayAsksEvent") },
         { json: "ids", js: "ids", typ: a("") },
@@ -1648,6 +1725,10 @@ const typeMap: any = {
         { json: "id", js: "id", typ: "" },
         { json: "kind", js: "kind", typ: "" },
     ], "any"),
+    "HomeGatewaySeedMention": o([
+        { json: "seed_id", js: "seed_id", typ: "" },
+        { json: "text", js: "text", typ: "" },
+    ], "any"),
     "HomeGatewaySeedMove": o([
         { json: "cmd", js: "cmd", typ: r("HomeGatewaySeedMoveCmd") },
         { json: "request_id", js: "request_id", typ: "" },
@@ -1802,6 +1883,12 @@ const typeMap: any = {
     ],
     "HomeGatewayAskImageErrorEvent": [
         "ask_image_error",
+    ],
+    "HomeGatewayAskSeedMentionsCmd": [
+        "ask_seed_mentions",
+    ],
+    "HomeGatewayAskSeedMentionsResultEvent": [
+        "ask_seed_mentions_result",
     ],
     "HomeGatewayAsksEvent": [
         "asks",

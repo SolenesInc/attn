@@ -87,13 +87,13 @@ export function useAppGardenActions({
     (seedId: string) => {
       const trail = gardenPathToSeed(seeds, seedId);
       if (trail.length === 0) {
-        showError(`Could not find ${seedId} in the Garden`);
+        handleOpenSeedTile(seedId);
         return;
       }
       useGardenWalk.getState().arriveAt(trail);
       openDockPanel('garden');
     },
-    [openDockPanel, seeds, showError],
+    [handleOpenSeedTile, openDockPanel, seeds],
   );
 
   const checkArtifactPath = useCallback(

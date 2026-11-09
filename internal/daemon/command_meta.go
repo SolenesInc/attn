@@ -169,6 +169,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdAskClose:                      commandMetadata(false, true),
 	protocol.CmdAskAnswer:                     commandMetadata(false, true),
 	protocol.CmdAskImage:                      commandMetadata(false, false),
+	protocol.CmdAskSeedMentions:               commandMetadata(false, false),
 	protocol.CmdRecordVent:                    commandMetadata(false, true),
 	protocol.CmdWithdrawVent:                  commandMetadata(false, true),
 	protocol.CmdSetVentDismissed:              commandMetadata(false, true),

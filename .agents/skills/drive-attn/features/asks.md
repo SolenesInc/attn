@@ -30,7 +30,7 @@ the seed. Asks are on by default, and an agent keeps the setting it launched wit
 - ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`) opens and closes the asks drawer. The shortcut exists only while asks are on or any ask exists.
 - Palette (`app/src/application/useAppCommands.tsx`): `asks` ("Open asks").
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
-- In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation; the phone app has the same button, `[data-testid="ask-accept-recommended"]`), "Send", "Replied" and "Close asks". Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
+- In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), links to mentioned seeds in the subject, prose, question prompt and context, the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation; the phone app has the same button, `[data-testid="ask-accept-recommended"]`), "Send", "Replied" and "Close asks". The phone opens a mentioned seed from the same text and returns to the unfinished ask. Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). A narrow tile cuts the subject, then shows only the `?` mark; the chip never leaves the header. The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
 - **Settings → Agents and models → Session defaults**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
 - Where people see what agents do: the title bar's asks button counts open asks, and an ask row says "Waiting on you" when its agent is also owed a turn.
@@ -69,7 +69,7 @@ Preconditions:
   {"includes": "ask about", "actions": [
     {"type": "capture", "name": "seed", "pattern": "(s-[a-z0-9]+)"},
     {"type": "attn", "args": ["seed", "tend", "{{seed}}"]},
-    {"type": "attn", "args": ["ask", "--seed", "{{seed}}", "--subject", "Release note"], "input": ":::question-text\nWhat should the release note say?\n:::\n"}]},
+    {"type": "attn", "args": ["ask", "--seed", "{{seed}}", "--subject", "Release note"], "input": "Read {{seed}}.\n\n:::question-text\nWhat should the release note say?\n:::\n"}]},
   {"includes": "open an ask", "actions": [
     {"type": "attn", "args": ["ask", "--subject", "Cache store"], "input": "Deploys empty the cache.\n\n:::question\nWhich store should keep the cache?\n- [ ] Postgres — already deployed\n- [ ] Redis — faster, one more service\nRecommended: Postgres\n:::\n"}]}
 ]}
@@ -105,6 +105,7 @@ Preconditions:
 - **An ask about a seed, from the tile chip.**
   - Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".`
   - Select ask-agent for setup with `bridge select_session '{"sessionId":"ask-agent"}'`. `[data-testid="ask-chip-ask-agent"]` carries `aria-label="Open ask: Release note"`. Click it natively: the drawer opens on that ask, and `bridge dom_text '{"selector":".asks-ask-seed"}'` names `asks-drive`. The text field has focus.
+  - Click `[data-seed-target="<seed>"]` natively. `bridge garden_get_state` shows `here` naming the seed. Press Escape to return to the ask.
   - Run `bridge native_text '{"text":"Ship it on Friday."}'` and `bridge native_key '{"key":"Enter","modifiers":["command"]}'`. `./attn seed notes <seed>` shows the answer as a note.
 - **List and withdraw from the agent.** Run `wsctl input --id <terminal> --text "open an ask" --enter`, then `wsctl input --id <terminal> --text "list asks" --enter`: peek shows `<ask>  Cache store`. Run `wsctl input --id <terminal> --text "withdraw <ask>" --enter`: peek shows `Withdrew <ask>.`, and the drawer shows `.asks-empty`. The drawer reopens in the Replied list when you last left it there, so when `.asks-list` reads `Replied in the last day`, press `r` once with focus off any text field.
 - **Ask from a file, as JSON.** Run `wsctl input --id <terminal> --text "file ask" --enter`: peek shows the ask as JSON with `"subject":"Ship day"` and its `"id"`. Run `wsctl input --id <terminal> --text "json list" --enter`: peek shows `{"asks":[...]` naming that id and `"enabled":true`. Withdraw it as above.
@@ -121,6 +122,7 @@ Preconditions:
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep the harness's own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
 - **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
+- **Large gardens**: a mention outside the Garden's pushed list opens in a seed tile. A mention inside the list opens in the Garden drawer.
 - **Flow**: in queue flow, the title bar's asks button counts open asks. Clicking it or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
 
 ## Tests

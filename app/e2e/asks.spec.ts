@@ -82,6 +82,31 @@ async function spawnClaude(wsUrl: string, spawn: { id: string; cwd: string; labe
 }
 
 test.describe('Asks', () => {
+  test('opens a seed mentioned in an ask', async ({ page, daemon }) => {
+    const { wsUrl, socketPath } = await daemon.start();
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-asks-mention-'));
+    const sessionId = 'asks-mention-agent';
+    let spawned = false;
+    try {
+      await page.goto('/');
+      await page.waitForSelector('.dashboard');
+      await spawnClaude(wsUrl, { id: sessionId, cwd, label: 'mention-agent' });
+      spawned = true;
+      const planted = JSON.parse(attnCli(socketPath, ['seed', 'plant', 'Mentioned cache work', '--session', sessionId, '--json']));
+      const asked = attnCli(socketPath, ['ask', '--session', sessionId, '--subject', 'Cache work'],
+        `Read ${planted.id}.\n\n${CACHE_STORE_ASK}`);
+      const askId = /^Asked (\S+):/.exec(asked)?.[1];
+      expect(askId, asked).toBeTruthy();
+      await page.keyboard.press('Meta+Shift+r');
+      const ask = page.getByRole('region', { name: 'Asks' }).getByTestId(`ask-${askId}`);
+      await ask.getByRole('button', { name: planted.id }).click();
+      await expect(page.getByRole('region', { name: 'The garden' })).toContainText('Mentioned cache work');
+    } finally {
+      if (spawned) attnCli(socketPath, ['agent', 'close', sessionId, '-m', 'shown', '--source-session', sessionId]);
+      fs.rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
   test('an agent asks through attn ask and the answer picked in the drawer closes the ask', async ({ page, daemon }) => {
     test.slow(paced, 'ATTN_E2E_PACE adds pauses for a recording');
     const { wsUrl, socketPath } = await daemon.start();
