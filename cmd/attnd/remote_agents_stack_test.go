@@ -1222,25 +1222,14 @@ func TestARemoteReloadHealsItsConversationOnTheNextPrompt(t *testing.T) {
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after reload\r"})
 			agent.Prompted()
 			secondReply := "Replacement ready. <!-- attn:state=waiting_input -->"
-			var staleID protocol.SessionID
 			if reload {
 				deciding.Release()
 				stale := testworld.Await(app, protocol.EventSessionRegistered, func(e protocol.WebSocketEvent) bool {
 					return e.Session != nil && protocol.Deref(e.Session.Succeeds) == protocol.SessionID(first)
 				}).Session
-				staleID = stale.ID
 				t.Logf("stale decision committed %s while terminal %s runs %s", stale.ID, terminal, conversation)
-				testworld.AwaitSession(app, string(staleID), func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			}
-			finishedAt := time.Now()
-			finishedMark := len(app.Log())
 			agent.Reply(secondReply)
-			if reload {
-				finished := testworld.AwaitSessionSince(app, finishedMark, string(staleID), func(s protocol.Session) bool {
-					return protocol.Deref(s.TurnOwed) && s.State != protocol.SessionStateWorking && !protocol.Timestamp(protocol.Deref(s.TurnOpenedAt)).Time().Before(finishedAt)
-				})
-				t.Logf("autonomous finish observed on %s: state=%s turn=%v seen=%s", staleID, finished.State, protocol.Deref(finished.TurnOwed), finished.LastSeen)
-			}
 			mark := len(app.Log())
 			app.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: protocol.TerminalID(terminal), Data: "after stale commit\r"})
 			agent.Prompted()

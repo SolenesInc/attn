@@ -20,12 +20,13 @@ type pendingConversation struct {
 }
 
 type ConversationReceipt struct {
-	done  chan struct{}
-	err   error
-	moves bool
+	done     chan struct{}
+	err      error
+	moves    bool
+	recorded bool
 }
 
-func (r *ConversationReceipt) Moves() bool { return r != nil && r.moves }
+func (r *ConversationReceipt) MustWait() bool { return r != nil && !r.moves && !r.recorded }
 
 func (r *ConversationReceipt) Wait(ctx context.Context) error {
 	if r == nil {
@@ -46,6 +47,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 	m.mu.Lock()
 	same := m.conversationInput.ConversationObservation == observation
 	inPlace := m.conversation == "" || m.conversation == observation.NativeID
+	recorded := m.conversation == observation.NativeID
 	linked, profile, boundAtStart := m.watch.linked, m.profile, m.session != ""
 	inputTerminal := terminal
 	if inputTerminal == "" {
@@ -106,7 +108,7 @@ func (m *Monitor) ProposeConversation(observation ConversationObservation, propo
 			moves = pending.receipt.moves
 		}
 	}
-	receipt := &ConversationReceipt{done: make(chan struct{}), moves: moves}
+	receipt := &ConversationReceipt{done: make(chan struct{}), moves: moves, recorded: recorded}
 	owner.pendingConversations = append(owner.pendingConversations, pendingConversation{Conversation: proposed, candidate: candidate, terminal: inputTerminal, receipt: receipt})
 	owner.pendingDirty = true
 	view := owner.viewLocked()

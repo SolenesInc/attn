@@ -55,7 +55,7 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		d.sendError(conn, "conversation observation could not be saved")
 		return
 	}
-	if receipt != nil && !receipt.Moves() {
+	if receipt.MustWait() {
 		ctx, cancel := d.connectionContext(ctx, conn)
 		defer cancel()
 		if err := receipt.Wait(ctx); err != nil {
