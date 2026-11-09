@@ -2394,18 +2394,34 @@ func (d *Daemon) listenHTTP() error {
 		listener, err = net.Listen("tcp", addr)
 	}
 	if err != nil {
-		return fmt.Errorf(
-			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
-				"attn derives that port from the instance name, so the usual owner is a daemon for the same instance running somewhere else — "+
-				"notably on a VM whose listener OrbStack forwards onto host localhost while the host port is free. "+
-				"Starting anyway would leave this daemon split-brained: the app routes by WebSocket port and would attach to the foreign listener, "+
-				"the CLI routes by the unix socket and would talk to this process, and every command sent from the app would silently miss these sessions. "+
-				"Free %s (stop whatever holds it, including a forwarding VM) or run this daemon under another instance with ATTN_INSTANCE",
-			addr, config.InstanceLabel(), err, addr,
-		)
+		return wsBindError(addr, err)
 	}
 	d.httpListener = listener
 	return nil
+}
+
+func wsBindError(addr string, err error) error {
+	instance := config.Instance()
+	label := config.InstanceLabel()
+	_, port, _ := net.SplitHostPort(addr)
+	if holders := config.InstancesHoldingWSPort(port, instance); len(holders) > 0 {
+		return fmt.Errorf(
+			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
+				"Port %s also belongs to attn instance %s. "+
+				"An instance keeps its port in ws-port in its data dir once claimed; `attn instance claim-port --instance <name>` gives an instance that has none a port no other instance holds. "+
+				"Claim for whichever of these instances has no ws-port yet and reinstall its app, or stop the other instance",
+			addr, label, err, port, strings.Join(holders, ", "),
+		)
+	}
+	return fmt.Errorf(
+		"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
+			"No other attn instance on this machine uses that port, so the usual owner is a daemon for the same instance running somewhere else — "+
+			"notably on a VM whose listener OrbStack forwards onto host localhost while the host port is free. "+
+			"Starting anyway would leave this daemon split-brained: the app routes by WebSocket port and would attach to the foreign listener, "+
+			"the CLI routes by the unix socket and would talk to this process, and every command sent from the app would silently miss these sessions. "+
+			"Free %s (stop whatever holds it, including a forwarding VM) or run this daemon under another instance with ATTN_INSTANCE",
+		addr, label, err, addr,
+	)
 }
 
 func (d *Daemon) runHTTPServer(listener net.Listener) {

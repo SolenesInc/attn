@@ -15,6 +15,7 @@ Usage:
   attn instance resolve         resolved resources as JSON
   attn instance resolve --field wsPort      print one resolved value
   attn instance resolve --instance agent7   resolve a different instance
+  attn instance claim-port      give the instance a WebSocket port no other instance holds, keep it, and print it (--instance <name> for another)
   attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler

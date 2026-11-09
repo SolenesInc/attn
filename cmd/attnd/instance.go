@@ -45,6 +45,9 @@ func runInstance() {
 	case "clean":
 		setCommandPath("instance clean")
 		runInstanceClean(os.Args[3:])
+	case "claim-port":
+		setCommandPath("instance claim-port")
+		runInstanceClaimPort(os.Args[3:])
 	case "stop-app":
 		setCommandPath("instance stop-app")
 		runInstanceStopApp(os.Args[3:])
@@ -552,6 +555,35 @@ func stopInstanceDaemon(r instanceResolved) string {
 	return ""
 }
 
+func runInstanceClaimPort(args []string) {
+	instance := config.Instance()
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--instance":
+			if i+1 >= len(args) {
+				instanceFatal("--instance requires a value")
+			}
+			i++
+			p, err := config.NormalizeInstanceName(args[i])
+			if err != nil {
+				instanceFatal(err.Error())
+			}
+			instance = p
+		case "-h", "--help":
+			printInstanceHelp(os.Stdout)
+			return
+		default:
+			recordUsageError("instance claim-port", usageErrorUnknownFlag)
+			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
+		}
+	}
+	port, err := config.ClaimWSPortForInstance(instance)
+	if err != nil {
+		instanceFatal(err.Error())
+	}
+	fmt.Println(port)
+}
+
 func runInstanceStopApp(args []string) {
 	instance := config.Instance()
 	for i := 0; i < len(args); i++ {
@@ -909,6 +941,7 @@ Usage:
   attn instance resolve         resolved resources as JSON
   attn instance resolve --field wsPort      print one resolved value
   attn instance resolve --instance agent7   resolve a different instance
+  attn instance claim-port      give the instance a WebSocket port no other instance holds, keep it, and print it (--instance <name> for another)
   attn instance tauri-config    Tauri --config overlay for the instance's build (--demo: titled attn)
   attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
   attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, shared Codex sockets, and scheme handler

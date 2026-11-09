@@ -47,7 +47,7 @@ cd "$repo_root"
 # Resolve every resource from the one authority.
 app_name="$("$attn" instance resolve --instance "$instance" --field appName)"
 bundle_id="$("$attn" instance resolve --instance "$instance" --field bundleId)"
-ws_port="$("$attn" instance resolve --instance "$instance" --field wsPort)"
+ws_port="$("$attn" instance claim-port --instance "$instance")"
 label="$("$attn" instance resolve --instance "$instance" --field label)"
 
 if [ -n "$harness_default" ] && [ -z "$instance" ]; then

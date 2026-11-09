@@ -616,30 +616,10 @@ func WSPort() string {
 	return WSPortForInstance(Instance())
 }
 
-func WSPortForInstance(instance string) string {
-	p := strings.ToLower(strings.TrimSpace(instance))
-	switch p {
-	case "", "default":
-		return "9849"
-	case "dev":
-		return "29849"
-	default:
-		if !instanceNamePattern().MatchString(p) {
-			return "9849"
-		}
-		return derivedInstancePort(p)
-	}
-}
-
 func instanceFNV(instance string) uint32 {
 	h := fnv.New32a()
 	h.Write([]byte(instance))
 	return h.Sum32()
-}
-
-func derivedInstancePort(instance string) string {
-	port := 20000 + int(instanceFNV(instance)%9849)
-	return fmt.Sprintf("%d", port)
 }
 
 func E2EDaemonPortForInstance(instance string) string {

@@ -17,6 +17,14 @@ inherits both. To scope tests with `ATTN_DATA_DIR`, clear the others too, as
 daemon whose `ATTN_DATA_DIR` is not its instance's own folder keeps its default
 Notebook in `<data folder>/notebook`, away from the user's real one.
 
+`default` uses WebSocket port 9849 and `dev` 29849. Any other instance keeps its
+port in `ws-port` in its data folder. `attn instance claim-port`, which the app
+build runs, writes that file once: the port derived from the instance name,
+unless another instance already uses it, then the next free one. An instance
+without the file uses the derived port, so two such instances can collide, and
+the daemon's bind error names the other instance. `attn instance clean` removes
+the file with the data folder.
+
 ## Starting a daemon from inside a session
 
 `ATTN_SESSION_HOME` and `ATTN_SESSION_BINARY`, set on everything a daemon spawns,

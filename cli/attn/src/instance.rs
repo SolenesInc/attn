@@ -17,6 +17,7 @@ const DERIVED_PORT_SPAN: u32 = 9_849;
 const DERIVED_OFFSET_SPAN: u32 = 1_000;
 const DEFAULT_PORT: &str = "9849";
 const DEV_PORT: &str = "29849";
+const INSTANCE_PORT_FILE: &str = "ws-port";
 
 pub fn validate_instance_name(name: &str) -> Result<(), String> {
     let trimmed = name.trim();
@@ -212,6 +213,24 @@ impl<'a> Paths<'a> {
         self.data_dir_for_named(&name)
     }
 
+    pub fn ws_port_for_instance(&self, instance: &str) -> String {
+        let name = instance.trim().to_lowercase();
+        match name.as_str() {
+            "" | "default" => DEFAULT_PORT.to_string(),
+            "dev" => DEV_PORT.to_string(),
+            other if !matches_instance_pattern(other) => DEFAULT_PORT.to_string(),
+            other => self.stored_instance_port(other).unwrap_or_else(|| {
+                (DERIVED_PORT_BASE + fnv1a(other) % DERIVED_PORT_SPAN).to_string()
+            }),
+        }
+    }
+
+    fn stored_instance_port(&self, instance: &str) -> Option<String> {
+        let path = join(&self.data_dir_for_named(instance), INSTANCE_PORT_FILE);
+        let port: u16 = fs::read_to_string(path).ok()?.trim().parse().ok()?;
+        (port != 0).then(|| port.to_string())
+    }
+
     pub fn socket_path_for_instance(&self, instance: &str) -> String {
         join(&self.data_dir_for_instance(instance), "attn.sock")
     }
@@ -275,7 +294,7 @@ impl<'a> Paths<'a> {
             socket: join(&data_dir, "attn.sock"),
             db_path: join(&data_dir, "attn.db"),
             data_dir,
-            ws_port: ws_port_for_instance(instance),
+            ws_port: self.ws_port_for_instance(instance),
             app_local_data: if macos {
                 join(&home, &format!("Library/Application Support/{bundle_id}"))
             } else {
@@ -370,7 +389,7 @@ impl<'a> Paths<'a> {
     pub fn ws_port(&self) -> String {
         let port = self.trimmed("ATTN_WS_PORT");
         if port.is_empty() {
-            ws_port_for_instance(&self.instance())
+            self.ws_port_for_instance(&self.instance())
         } else {
             port
         }
@@ -420,7 +439,7 @@ impl<'a> Paths<'a> {
             return Ok(());
         }
         let instance_dir = self.data_dir_for_instance(&instance);
-        let instance_port = ws_port_for_instance(&instance);
+        let instance_port = self.ws_port_for_instance(&instance);
 
         let path_check =
             |env: &'static str, config_key: &'static str, resolved: String, file: &str| Check {
@@ -572,7 +591,7 @@ impl<'a> Paths<'a> {
         let port = port.trim();
         if port == DEFAULT_PORT
             || port == DEV_PORT
-            || (!instance.is_empty() && port == ws_port_for_instance(&instance))
+            || (!instance.is_empty() && port == self.ws_port_for_instance(&instance))
         {
             return Err(format!("refusing instance harness websocket port {port}"));
         }
@@ -648,16 +667,6 @@ fn format_conflict(
         );
     }
     text.trim_end_matches('\n').to_string()
-}
-
-pub fn ws_port_for_instance(instance: &str) -> String {
-    let name = instance.trim().to_lowercase();
-    match name.as_str() {
-        "" | "default" => DEFAULT_PORT.to_string(),
-        "dev" => DEV_PORT.to_string(),
-        other if !matches_instance_pattern(other) => DEFAULT_PORT.to_string(),
-        other => (DERIVED_PORT_BASE + fnv1a(other) % DERIVED_PORT_SPAN).to_string(),
-    }
 }
 
 fn fnv1a(text: &str) -> u32 {
