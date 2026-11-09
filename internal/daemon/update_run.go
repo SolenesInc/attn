@@ -132,7 +132,7 @@ func (d *Daemon) requestUpdate(requester, reason string) (*protocol.UpdateReques
 		Title:    "Update attn?",
 		Body:     "An agent asked to update attn.",
 		Trigger:  updateRequestTrigger(append(pending, request)),
-		Impact:   "Update builds the new attn and restarts it. Your agents keep running.",
+		Impact:   "Update installs the new attn and restarts it. Your agents keep running.",
 		Actions: []store.NotificationAction{
 			{Kind: notificationActionUpdate, Label: "Update", TargetID: protocol.SessionID(request.ID)},
 			{Kind: notificationActionDecline, Label: "Decline", TargetID: protocol.SessionID(request.ID)},
@@ -316,24 +316,7 @@ func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan) {
 	defer log.Close()
 	ctx := d.life.Context()
 	env := d.updateEnvironment(plan)
-	commit, err := plan.Checkout(ctx, env, log)
-	if err != nil {
-		d.failUpdateRun(run, err.Error())
-		return
-	}
-	if commit != "" && !buildinfo.Dirty && buildinfo.GitCommit != "" && strings.HasPrefix(commit, buildinfo.GitCommit) {
-		d.finishUpdateRun(run, protocol.UpdatePhaseDone, "Already on the latest commit, "+commit[:9]+".")
-		return
-	}
-	limit := selfupdate.BuildTimeoutFromEnv()
-	buildCtx, cancelBuild := context.WithTimeout(ctx, limit)
-	defer cancelBuild()
-	if err := plan.Build(buildCtx, env, log); err != nil {
-		if errors.Is(buildCtx.Err(), context.DeadlineExceeded) {
-			d.failUpdateRun(run, fmt.Sprintf("the build did not finish within its %s limit (%s)", limit, selfupdate.BuildTimeoutEnv))
-			return
-		}
-		d.failUpdateRun(run, "the build failed: "+err.Error())
+	if finished := d.getUpdateBuild(ctx, run, plan, env, log); finished {
 		return
 	}
 	staged, err := selfupdate.ReadStagedBuild(ctx, plan.StagedDaemon())
@@ -362,10 +345,50 @@ func (d *Daemon) runUpdate(run store.UpdateRun, plan selfupdate.Plan) {
 	}
 }
 
+// getUpdateBuild puts the build in the plan's folder. It reports true when the
+// run has already finished, failed or with nothing to do.
+func (d *Daemon) getUpdateBuild(ctx context.Context, run store.UpdateRun, plan selfupdate.Plan, env []string, log *os.File) bool {
+	limit := selfupdate.BuildTimeoutFromEnv()
+	limited, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	fail := func(what string, err error) bool {
+		if errors.Is(limited.Err(), context.DeadlineExceeded) {
+			d.failUpdateRun(run, fmt.Sprintf("the %s did not finish within its %s limit (%s)", what, limit, selfupdate.BuildTimeoutEnv))
+			return true
+		}
+		d.failUpdateRun(run, err.Error())
+		return true
+	}
+	if plan.Kind == selfupdate.ReleaseApp || plan.Kind == selfupdate.ReleaseBinary {
+		latest, newer, err := plan.Download(limited, buildinfo.ReleaseSource, buildinfo.Version, env, log)
+		if err != nil {
+			return fail("download", err)
+		}
+		if !newer {
+			d.finishUpdateRun(run, protocol.UpdatePhaseDone, "Already on the latest release, "+latest.Version+".")
+			return true
+		}
+		return false
+	}
+	commit, err := plan.Checkout(ctx, env, log)
+	if err != nil {
+		d.failUpdateRun(run, err.Error())
+		return true
+	}
+	if commit != "" && !buildinfo.Dirty && buildinfo.GitCommit != "" && strings.HasPrefix(commit, buildinfo.GitCommit) {
+		d.finishUpdateRun(run, protocol.UpdatePhaseDone, "Already on the latest commit, "+commit[:9]+".")
+		return true
+	}
+	if err := plan.Build(limited, env, log); err != nil {
+		return fail("build", fmt.Errorf("the build failed: %w", err))
+	}
+	return false
+}
+
 func (d *Daemon) startUpdateHelper(run store.UpdateRun, plan selfupdate.Plan, env []string, log *os.File) error {
-	args := []string{"_update-apply", "--run", run.ID, "--dir", plan.Dir, "--root", plan.Root, "--instance", plan.Instance}
+	args := []string{"_update-apply", "--run", run.ID, "--kind", string(plan.Kind), "--dir", plan.Dir, "--root", plan.Root, "--instance", plan.Instance}
 	helper := exec.Command(plan.StagedDaemon(), args...)
-	helper.Dir = plan.Dir
+	helper.Dir = d.dataRoot
 	helper.Env = env
 	helper.Stdout = log
 	helper.Stderr = log

@@ -338,6 +338,13 @@ jobs:
         run: |
           gh release upload "${RELEASE_TAG}" /tmp/attn-pty-host-linux-amd64 --clobber
 
+      - name: Upload Linux amd64 checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (cd /tmp && sha256sum attnd-linux-amd64 attn-linux-amd64 attn-pty-host-linux-amd64 > SHA256SUMS-linux-amd64)
+          gh release upload "${RELEASE_TAG}" /tmp/SHA256SUMS-linux-amd64 --clobber
+
 
   linux-arm64:
     name: Linux arm64 daemon
@@ -419,6 +426,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload "${RELEASE_TAG}" /tmp/attn-pty-host-linux-arm64 --clobber
+
+      - name: Upload Linux arm64 checksums
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          (cd /tmp && sha256sum attnd-linux-arm64 attn-linux-arm64 attn-pty-host-linux-arm64 > SHA256SUMS-linux-arm64)
+          gh release upload "${RELEASE_TAG}" /tmp/SHA256SUMS-linux-arm64 --clobber
 
 
   # Nothing is public until every gate above has passed and every asset is

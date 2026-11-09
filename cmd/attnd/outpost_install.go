@@ -135,7 +135,7 @@ func replaceKeepingPrevious(staged, target string) error {
 		return err
 	}
 	if err := os.Rename(staged, target); err != nil {
-		return fmt.Errorf("replace outpost binary: %w", err)
+		return fmt.Errorf("replace binary: %w", err)
 	}
 	return nil
 }

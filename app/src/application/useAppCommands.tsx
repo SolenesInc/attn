@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useAsksAvailable } from '../store/asks';
 import { useToast } from '../components/Toast';
 import { triggerShortcut } from '../shortcuts/useShortcut';
+import { UPDATABLE_KINDS } from '../components/UpdateSettings';
 import type { PaletteCommand } from '../components/palette/paletteCommands';
 import { EditorIcon, NotebookIcon } from '../components/Sidebar';
 import { SessionRoleIcon } from '../components/DelegationChain';
@@ -383,7 +384,7 @@ export function useAppCommands(onRename: (sessionId: string, name: string, opene
           if (currentDesktopId) useDesktopShelfStore.getState().rowActionsByDesktop[currentDesktopId]?.clearDraggedWidths();
         },
       },
-      ...(isOn(settings, BoolSetting.selfUpdateEnabled) && ['source', 'named_instance'].includes(settings.update_install_kind)
+      ...(isOn(settings, BoolSetting.selfUpdateEnabled) && UPDATABLE_KINDS.includes(settings.update_install_kind)
         ? [{
             id: 'update-attn',
             title: 'Update attn',

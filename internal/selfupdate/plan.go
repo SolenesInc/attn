@@ -76,7 +76,7 @@ func NewPlan(install Install, dataDir, originWorktree string) (Plan, error) {
 	case Outpost:
 		return Plan{}, errors.New("an outpost updates from its home; update attn from the home's app")
 	case ReleaseApp, ReleaseBinary:
-		return Plan{}, fmt.Errorf("attn cannot yet update a %s install from here. Download the new version from the releases page", install.Kind.Label())
+		return newReleasePlan(install, dataDir)
 	}
 	root, err := InstallRoot(install.Facts.Executable, install.Facts.Instance)
 	if err != nil {
@@ -151,7 +151,12 @@ func (p Plan) makeArgs(target string) []string {
 	return []string{target}
 }
 
-func (p Plan) StagedDaemon() string { return filepath.Join(p.Dir, "attnd") }
+func (p Plan) StagedDaemon() string {
+	if p.Kind == ReleaseApp {
+		return filepath.Join(p.Dir, BundleName, "Contents", "MacOS", "attnd")
+	}
+	return filepath.Join(p.Dir, "attnd")
+}
 
 type StagedBuild struct {
 	Version           string `json:"version"`

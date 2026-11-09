@@ -52,7 +52,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return Binaries{}, err
 	}
-	cached := binariesIn(dir)
+	cached := BinariesIn(dir)
 	if nonEmptyFile(cached.Attn) && nonEmptyFile(cached.Attnd) && nonEmptyFile(cached.Host) {
 		return cached, req.prune(key, arch)
 	}
@@ -61,11 +61,11 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 		return Binaries{}, err
 	}
 	defer os.RemoveAll(staging)
-	staged := binariesIn(staging)
+	staged := BinariesIn(staging)
 	switch req.Channel {
 	case "release":
 		phase("downloading")
-		err = req.download(ctx, arch, staged)
+		err = DownloadRelease(ctx, req.ReleaseSource, req.Build.Version, arch, staged)
 	case "source":
 		phase("building")
 		err = req.build(ctx, arch, staging, staged)
@@ -85,7 +85,7 @@ func Acquire(ctx context.Context, req Request, phase func(string)) (Binaries, er
 	return cached, req.prune(key, arch)
 }
 
-func binariesIn(dir string) Binaries {
+func BinariesIn(dir string) Binaries {
 	return Binaries{Attn: filepath.Join(dir, "attn"), Attnd: filepath.Join(dir, "attnd"), Host: filepath.Join(dir, ptyhost.BinaryName)}
 }
 
@@ -94,18 +94,22 @@ func nonEmptyFile(path string) bool {
 	return err == nil && info.Size() > 0
 }
 
-func (req Request) download(ctx context.Context, arch string, staged Binaries) error {
-	release := strings.TrimRight(req.ReleaseSource, "/") + "/v" + strings.TrimPrefix(req.Build.Version, "v") + "/"
-	if err := downloadBinary(ctx, release+"attnd-linux-"+arch, staged.Attnd); err != nil {
-		return err
-	}
-	if err := downloadBinary(ctx, release+"attn-linux-"+arch, staged.Attn); err != nil {
-		return err
-	}
-	return downloadBinary(ctx, release+ptyhost.BinaryName+"-linux-"+arch, staged.Host)
+func ReleaseURL(releaseSource, version string) string {
+	return strings.TrimRight(releaseSource, "/") + "/v" + strings.TrimPrefix(version, "v") + "/"
 }
 
-func downloadBinary(ctx context.Context, url, output string) error {
+func DownloadRelease(ctx context.Context, releaseSource, version, arch string, staged Binaries) error {
+	release := ReleaseURL(releaseSource, version)
+	if err := Download(ctx, release+"attnd-linux-"+arch, staged.Attnd); err != nil {
+		return err
+	}
+	if err := Download(ctx, release+"attn-linux-"+arch, staged.Attn); err != nil {
+		return err
+	}
+	return Download(ctx, release+ptyhost.BinaryName+"-linux-"+arch, staged.Host)
+}
+
+func Download(ctx context.Context, url, output string) error {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err

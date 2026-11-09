@@ -18,7 +18,7 @@ function availability(settings: Record<string, string>): string {
   return settings.update_install_kind === 'source' ? 'Source installs do not check for releases' : 'Not checked';
 }
 
-const UPDATABLE_KINDS = ['source', 'named_instance'];
+export const UPDATABLE_KINDS = ['release_app', 'release_binary', 'source', 'named_instance'];
 
 function UpdateAction() {
   const api = useOptionalDaemonApi();

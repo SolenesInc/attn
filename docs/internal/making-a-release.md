@@ -60,9 +60,12 @@ Fix forward: land the fix on `main`, then release a patch version.
 ## After publishing
 
 Confirm the release has the versioned DMG, `attn_aarch64.dmg`,
-`attn-linux-amd64`, `attn-linux-arm64`, `attn-pty-host-linux-amd64`, and
-`attn-pty-host-linux-arm64`, because an outpost install needs both binaries,
-then run `brew upgrade --cask solenesinc/attn/attn` and confirm that it installs the new
+`attn_aarch64.app.tar.gz`, `attnd-linux-amd64`, `attnd-linux-arm64`,
+`attn-linux-amd64`, `attn-linux-arm64`, `attn-pty-host-linux-amd64`,
+`attn-pty-host-linux-arm64`, `SHA256SUMS-linux-amd64`, and
+`SHA256SUMS-linux-arm64`. An outpost install needs both binaries, and a
+release install updates itself from the archive or from the Linux binaries and
+their checksums. Then run `brew upgrade --cask solenesinc/attn/attn` and confirm that it installs the new
 version.
 
 Open the upgraded app from Finder and confirm that this first launch starts, and
