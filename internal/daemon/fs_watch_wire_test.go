@@ -49,12 +49,13 @@ func fsAwaitLaterChange(t *testing.T, subscriber *testworld.Peer, root string) {
 	})
 }
 
-func fsChangesHeardByNow(p *testworld.Peer) int {
+func fsChangesHeardByNow(p *testworld.Peer, root string) int {
 	p.T.Helper()
 	fsAskList(p, "", "")
 	heard := 0
-	for _, e := range p.Received() {
-		if e.Event == protocol.EventFsChanged {
+	for _, raw := range p.Log() {
+		var changed protocol.FsChangedMessage
+		if json.Unmarshal(raw, &changed) == nil && changed.Event == protocol.EventFsChanged && changed.Root == root {
 			heard++
 		}
 	}
@@ -74,7 +75,7 @@ func TestFsWatchReportsExternalEditsOnlyToItsSubscribers(t *testing.T) {
 	}
 
 	fsAwaitLaterChange(t, watching, watched)
-	if heard := fsChangesHeardByNow(other); heard != 0 {
+	if heard := fsChangesHeardByNow(other, watched); heard != 0 {
 		t.Fatalf("a client that never watched %s heard %d changes", watched, heard)
 	}
 }
@@ -246,7 +247,7 @@ func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 	fsWriteFile(t, filepath.Join(refusedRoot, "unwatched.txt"), []byte("x"))
 	fsMustWatch(t, app, refusedRoot)
 	fsAwaitLaterChange(t, app, refusedRoot)
-	if heard := fsChangesHeardByNow(remote); heard != 0 {
+	if heard := fsChangesHeardByNow(remote, refusedRoot); heard != 0 {
 		t.Fatalf("the refused root was watched after all: the unauthenticated client heard %d changes", heard)
 	}
 }
