@@ -20,14 +20,39 @@ import (
 const (
 	BuildTimeoutEnv      = "ATTN_UPDATE_BUILD_TIMEOUT"
 	defaultBuildTimeout  = time.Hour
+	StepTimeoutEnv       = "ATTN_UPDATE_STEP_TIMEOUT"
+	defaultStepTimeout   = 5 * time.Minute
 	killedBuildExitLimit = 10 * time.Second
 )
 
 func BuildTimeoutFromEnv() time.Duration {
-	if limit, err := time.ParseDuration(os.Getenv(BuildTimeoutEnv)); err == nil && limit > 0 {
+	return durationFromEnv(BuildTimeoutEnv, defaultBuildTimeout)
+}
+
+// StepTimeoutFromEnv limits the steps that take seconds on a healthy install:
+// the git fetch (0.5s measured) and make install-staged, which copies the
+// staged files.
+func StepTimeoutFromEnv() time.Duration {
+	return durationFromEnv(StepTimeoutEnv, defaultStepTimeout)
+}
+
+func durationFromEnv(name string, fallback time.Duration) time.Duration {
+	if limit, err := time.ParseDuration(os.Getenv(name)); err == nil && limit > 0 {
 		return limit
 	}
-	return defaultBuildTimeout
+	return fallback
+}
+
+// LimitedStep runs step under the step limit and names the limit when it is hit.
+func LimitedStep(ctx context.Context, what string, step func(context.Context) error) error {
+	limit := StepTimeoutFromEnv()
+	limited, cancel := context.WithTimeout(ctx, limit)
+	defer cancel()
+	err := step(limited)
+	if err != nil && errors.Is(limited.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("%s did not finish within its %s limit (%s)", what, limit, StepTimeoutEnv)
+	}
+	return err
 }
 
 // Plan is how one install gets and applies a build. Dir is where make runs.
@@ -114,7 +139,10 @@ func (p Plan) Checkout(ctx context.Context, env []string, log io.Writer) (string
 	if p.Kind != Source {
 		return "", nil
 	}
-	if err := runIn(ctx, p.Repository, env, log, "git", "fetch", "--no-tags", "origin", "main"); err != nil {
+	fetch := func(ctx context.Context) error {
+		return runIn(ctx, p.Repository, env, log, "git", "fetch", "--no-tags", "origin", "main")
+	}
+	if err := LimitedStep(ctx, "git fetch", fetch); err != nil {
 		return "", fmt.Errorf("could not fetch main from origin in %s: %w", p.Repository, err)
 	}
 	head, err := exec.CommandContext(ctx, "git", "-C", p.Repository, "rev-parse", "FETCH_HEAD").Output()

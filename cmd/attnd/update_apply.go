@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -147,11 +150,17 @@ func (t appTree) replace() error {
 	if t.apply.instance != "" {
 		args = append(args, "INSTANCE="+t.apply.instance)
 	}
-	cmd := exec.Command("make", args...)
-	cmd.Dir = t.apply.dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	err := selfupdate.LimitedStep(context.Background(), "make install-staged", func(ctx context.Context) error {
+		cmd := exec.CommandContext(ctx, "make", args...)
+		cmd.Dir = t.apply.dir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+		cmd.WaitDelay = 10 * time.Second
+		return cmd.Run()
+	})
+	if err != nil {
 		return fmt.Errorf("make install-staged: %w", err)
 	}
 	return nil

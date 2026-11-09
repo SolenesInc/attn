@@ -27,6 +27,7 @@ const updateFixtureMakefile = `build-app:
 
 install-staged:
 	@if [ -n "$(FAIL_INSTALL)" ]; then exit 1; fi
+	@if [ -n "$(HOLD_INSTALL)" ]; then cat "$(HOLD_INSTALL)" >/dev/null; fi
 	@if [ -n "$(RESTART_REACHED)" ]; then "$(TREE)/bin/attnd" daemon stop; echo reached > "$(RESTART_REACHED)"; cat "$(RESTART_RELEASE)" >/dev/null; fi
 	rm -rf "$(TREE)"
 	mkdir -p "$(TREE)/bin"
@@ -622,6 +623,51 @@ func TestABuildPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
 	}
 	if mustRead(t, filepath.Join(install.tree, "bin", "attnd")) != before {
 		t.Fatal("a build past its limit changed the install")
+	}
+}
+
+func holdingFifo(t *testing.T) string {
+	t.Helper()
+	hold := filepath.Join(t.TempDir(), "hold")
+	if err := exec.Command("mkfifo", hold).Run(); err != nil {
+		t.Fatal(err)
+	}
+	return hold
+}
+
+func TestAFetchPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
+	hold := holdingFifo(t)
+	stalledSSH := filepath.Join(t.TempDir(), "stalled-ssh")
+	writeFixtureFile(t, stalledSSH, "#!/bin/sh\ncat \""+hold+"\" >/dev/null\n", 0o755)
+	install := newSourceInstall(t, "GIT_SSH_COMMAND="+stalledSSH, selfupdate.StepTimeoutEnv+"=200ms")
+	runGit(t, install.checkout, "remote", "set-url", "origin", "ssh://stalled.invalid/origin.git")
+	app := install.start(t)
+	before := mustRead(t, filepath.Join(install.tree, "bin", "attnd"))
+
+	run := startUpdate(t, app)
+	failed := awaitRunPhase(app, protocol.UpdatePhaseFailed)
+	t.Logf("failed run: %+v", failed)
+	for _, named := range []string{"git fetch", "200ms", selfupdate.StepTimeoutEnv, run.LogPath} {
+		if !strings.Contains(protocol.Deref(failed.Outcome), named) {
+			t.Fatalf("outcome = %q, want %q", protocol.Deref(failed.Outcome), named)
+		}
+	}
+	if mustRead(t, filepath.Join(install.tree, "bin", "attnd")) != before {
+		t.Fatal("a fetch past its limit changed the install")
+	}
+}
+
+func TestAnInstallPastItsLimitFailsAndNamesTheLimit(t *testing.T) {
+	install := newSourceInstall(t, "HOLD_INSTALL="+holdingFifo(t), selfupdate.StepTimeoutEnv+"=200ms")
+	app := install.start(t)
+
+	startUpdate(t, app)
+	failed := awaitRunPhase(app, protocol.UpdatePhaseFailed)
+	t.Logf("failed run: %+v", failed)
+	for _, named := range []string{"make install-staged", "200ms", selfupdate.StepTimeoutEnv} {
+		if !strings.Contains(protocol.Deref(failed.Outcome), named) {
+			t.Fatalf("outcome = %q, want %q", protocol.Deref(failed.Outcome), named)
+		}
 	}
 }
 
