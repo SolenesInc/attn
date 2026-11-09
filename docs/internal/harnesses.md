@@ -28,8 +28,11 @@ same identity under `ATTN_SESSION_ID`. A terminal can change conversations with
 command starts. Hooks apply to the conversation shown when the report arrives.
 Under shared Codex, hooks and commands run in the app-server and name their
 conversation instead: a hook by the `session_id` on its stdin, a command by
-`CODEX_THREAD_ID`. Nisse runs commands in its server, and names the
-conversation people started by `NISSE_ROOT_CONVERSATION`. Native harness
+`CODEX_THREAD_ID`. A `/side` conversation has no session of its own: attn sets
+`ATTN_TERMINAL_ID` on its shell tools, so its commands act as the session of the
+terminal that shows it, and its hooks resolve to no session. Nisse runs commands
+in its server, and names the conversation people started by
+`NISSE_ROOT_CONVERSATION`. Native harness
 conversation ids remain separate text values.
 
 A session is attn's record of one conversation in one profile. A terminal

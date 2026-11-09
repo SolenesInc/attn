@@ -452,6 +452,16 @@ func (c *codexRemote) submit(prompt string) error {
 		c.mu.Unlock()
 		c.showPending()
 		return nil
+	case command == "/side":
+		var side codexRemoteThread
+		if err := c.request("thread/fork", map[string]any{"threadId": c.current(), "ephemeral": true}, &side); err != nil {
+			return err
+		}
+		c.mu.Lock()
+		c.conversation = side.Thread.ID
+		c.mu.Unlock()
+		c.showPending()
+		return nil
 	case strings.HasPrefix(command, "/resume "):
 		target := strings.TrimSpace(strings.TrimPrefix(command, "/resume "))
 		if c.overrides {

@@ -21,6 +21,7 @@ the tiles still on the old Codex.
 - `codex-reload-tiles`: restart the tiles still on an older Codex, in the same conversations.
 - `codex-names`: a session's name and its Codex conversation's name follow each other.
 - `codex-stuck-working`: a visible tile's terminal can stick on `working` while its conversation is idle (`docs/internal/harnesses/codex-app-server.md` has the cause). After 5 s, and again 5 s after the last MCP server finishes starting, attn checks the server. With no background terminal and no MCP server still starting on that terminal's connection, the tile follows the server's status until the terminal reports again. `attn state explain` shows `program_status working` then `app_server idle`. Only stock Codex reproduces it: the mock does not model the TUI's MCP startup.
+- `codex-side`: `/side` forks an ephemeral conversation in the terminal. `attn` commands an agent runs there act as the session on screen, and the side's hooks change nothing on that session. Only stock Codex opens a real side; the mock does not model `/side`, and the wire test uses the fake's.
 - `codex-compact`: `attn agent close --self --compact` and `attn seed standby --close --compact` compact a shared Codex conversation through `thread/compact/start` before the session closes. A Codex session started before this version, not on the shared app-server, is refused. [agent-launch.md](agent-launch.md) `close-compact` holds the rules, the recipe and the tests.
 
 ## How to get to it
@@ -31,6 +32,7 @@ the tiles still on the old Codex.
 - The banner at the top of the window, `[aria-label="Codex updates"]`, with Install, Restart now, Retry or Reload tiles as each applies, and a confirm prompt before a restart or a reload (`app/src/components/SharedCodexBanner.tsx`, `app/src/components/SharedCodexPrompts.tsx`). After the user closes the banner, the same offer stays under the bell in the sidebar.
 - Palette, while each applies (`app/src/application/useSharedCodex.tsx`): `install-codex-update` ("Install Codex update"), `restart-shared-codex-now` ("Restart shared Codex now"), `retry-shared-codex-restart` ("Retry shared Codex restart") and `reload-old-codex-tiles` ("Reload old Codex tiles").
 - In a shared Codex terminal, `/new`, `/resume <id>` and `/agents` switch the terminal's conversation.
+- In a shared Codex terminal, `/side` opens a side conversation, ctrl-/ switches between it and its parent, and ctrl-c closes it.
 - Where people see what agents do: a hidden session is marked `hidden` in the ledger ([ledger.md](ledger.md)) and queues without a desktop chip ([queue-flow.md](queue-flow.md)).
 - Their own shell: the verbs below.
 

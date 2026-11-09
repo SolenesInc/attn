@@ -749,6 +749,21 @@ func (r *codexShared) proxied(v *codexView, proxy *codexProxy) {
 	r.viewsChanged(v.profile)
 }
 
+func identifySideConversationTools(m *codexshared.Message, params map[string]any, terminal harness.TerminalID) error {
+	config, _ := params["config"].(map[string]any)
+	if config == nil {
+		config = make(map[string]any)
+	}
+	config["shell_environment_policy.set.ATTN_TERMINAL_ID"] = terminal
+	params["config"] = config
+	raw, err := json.Marshal(params)
+	if err != nil {
+		return err
+	}
+	m.Params = raw
+	return nil
+}
+
 func (r *codexShared) prepare(connection context.Context, v *codexView, m *codexshared.Message) (func(*codexshared.Message) func(), error) {
 	method := m.Method
 	switch method {
@@ -769,6 +784,9 @@ func (r *codexShared) prepare(connection context.Context, v *codexView, m *codex
 		return nil, err
 	}
 	if ephemeral, _ := params["ephemeral"].(bool); ephemeral {
+		if method == "thread/fork" {
+			return nil, identifySideConversationTools(m, params, v.terminal)
+		}
 		return nil, nil
 	}
 	sessionID, launchAs := r.launching(v, method, params)

@@ -148,6 +148,11 @@ func (s *CodexServer) RunTool(conversation, command string) string {
 	return ran.Text
 }
 
+func (s *CodexServer) EndSideTurn(side, text string) {
+	s.t.Helper()
+	s.call(methodEndSideTurn, serverThreadParams{ThreadID: side, Text: text}, nil)
+}
+
 func (s *CodexServer) Instructions(conversation string) string {
 	s.t.Helper()
 	var started promptedResult

@@ -145,6 +145,39 @@ func TestASharedCodexSubagentsToolsResolveTheSessionThatStartedIt(t *testing.T) 
 	}
 }
 
+func TestACodexSideConversationsToolsActAsTheSessionOnScreenAndItsStopLeavesTheParentsTurnAlone(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app := w.App()
+	session, codex, terminal := sharedCodexWaiting(t, w, app)
+	server := w.CodexServer()
+	parent := codex.ConversationID
+
+	app.TypeLine(session, "run the whole suite")
+	codex.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	typeInto(app, terminal, "/side\r")
+	codex.Prompted()
+	side := codex.ConversationID
+	if side == parent {
+		t.Fatalf("/side left the terminal on conversation %s", parent)
+	}
+
+	if got := strings.TrimSpace(server.RunTool(side, `"$ATTN_WRAPPER_PATH" presence --session-id`)); got != session {
+		t.Errorf("a tool of side conversation %s reports session %q, want %s", side, got, session)
+	}
+	server.RunTool(side, `"$ATTN_WRAPPER_PATH" agent inbox`)
+
+	before := queriedSession(t, w.Client(), session)
+	server.EndSideTurn(side, "an answer on the side")
+	after := queriedSession(t, w.Client(), session)
+	if after.State != protocol.SessionStateWorking || protocol.Deref(after.StateReason) != protocol.Deref(before.StateReason) || after.StateSince != before.StateSince {
+		t.Errorf("the side's Stop moved session %s from %s (%s) to %s (%s) while its parent's turn ran", session, before.State, protocol.Deref(before.StateReason), after.State, protocol.Deref(after.StateReason))
+	}
+	if protocol.Deref(after.TurnOwed) != protocol.Deref(before.TurnOwed) || protocol.Deref(after.TurnOpenedAt) != protocol.Deref(before.TurnOpenedAt) {
+		t.Errorf("the side's Stop changed the turn of session %s: owed %v at %s, then owed %v at %s", session, protocol.Deref(before.TurnOwed), protocol.Deref(before.TurnOpenedAt), protocol.Deref(after.TurnOwed), protocol.Deref(after.TurnOpenedAt))
+	}
+}
+
 func TestASharedCodexTerminalShowingASubagentKeepsTheSessionOfTheConversationThatStartedIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()

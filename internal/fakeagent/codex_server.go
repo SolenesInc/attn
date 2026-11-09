@@ -50,6 +50,7 @@ const (
 	methodMCPStartup     = "mcp_startup"
 	methodRunTool        = "run_tool"
 	methodSpawnSubagent  = "spawn_subagent"
+	methodEndSideTurn    = "end_side_turn"
 	methodCloseThread    = "close_thread"
 	methodStartTerminal  = "start_background_terminal"
 	methodAwaitListed    = "await_background_terminals_listed"
@@ -109,6 +110,7 @@ type codexServerThread struct {
 	memoryConfig        map[string]any
 	workspaceRoots      []string
 	parent              string
+	shellEnv            map[string]string
 }
 
 type CodexPermissions struct {
@@ -406,6 +408,8 @@ func (s *codexAppServer) handle(conn *codexServerConn, m codexshared.Message) (a
 		return s.start(conn, p)
 	case "thread/resume":
 		return s.resume(conn, p)
+	case "thread/fork":
+		return s.forkSide(conn, p)
 	case "thread/unsubscribe":
 		s.mu.Lock()
 		t := s.threads[p.ThreadID]
@@ -591,6 +595,37 @@ func (s *codexAppServer) start(conn *codexServerConn, p codexServerParams) (any,
 	s.mu.Unlock()
 	return map[string]any{"thread": s.metadata(t)}, func() {
 		s.broadcast("thread/started", map[string]any{"thread": s.metadata(t)})
+	}, nil
+}
+
+const codexShellEnvPrefix = "shell_environment_policy.set."
+
+func (s *codexAppServer) forkSide(conn *codexServerConn, p codexServerParams) (any, func(), error) {
+	if !p.Ephemeral {
+		return nil, nil, fmt.Errorf("the fake app-server forks only ephemeral threads")
+	}
+	parent, err := s.loaded(p.ThreadID)
+	if err != nil {
+		return nil, nil, err
+	}
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, nil, err
+	}
+	t := s.newThread(id.String(), parent.c.cwd, parent.c.model, "", "fork", time.Now().UTC(), conn)
+	t.c.turnID = uuid.NewString()
+	t.shellEnv = map[string]string{}
+	for key, value := range p.Config {
+		if name, ok := strings.CutPrefix(key, codexShellEnvPrefix); ok {
+			t.shellEnv[name] = fmt.Sprint(value)
+		}
+	}
+	s.mu.Lock()
+	s.threads[t.c.conversation] = t
+	s.mu.Unlock()
+	thread := map[string]any{"id": t.c.conversation, "cwd": t.c.cwd, "path": nil, "ephemeral": true, "source": "cli", "status": map[string]any{"type": "idle"}}
+	return map[string]any{"thread": thread}, func() {
+		s.broadcast("thread/started", map[string]any{"thread": thread})
 	}, nil
 }
 
@@ -1150,6 +1185,9 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 		cmd := exec.Command("/bin/sh", "-c", p.Text)
 		cmd.Dir = t.c.cwd
 		cmd.Env = withEnv(s.toolEnv, "CODEX_THREAD_ID", p.ThreadID)
+		for name, value := range t.shellEnv {
+			cmd.Env = withEnv(cmd.Env, name, value)
+		}
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			return nil, fmt.Errorf("%v: %s", err, out)
@@ -1233,6 +1271,12 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			return nil, err
 		}
 		return promptedResult{ConversationID: child.lastThread}, nil
+	case methodEndSideTurn:
+		t, err := s.loaded(p.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		return struct{}{}, t.c.hooks.run("Stop", "", t.c.hookInput("Stop", map[string]any{"transcript_path": nil, "stop_hook_active": false, "last_assistant_message": p.Text}))
 	case methodSpawnSubagent:
 		parent, err := s.loaded(p.ThreadID)
 		if err != nil {

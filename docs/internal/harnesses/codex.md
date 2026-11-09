@@ -60,6 +60,22 @@ Probed on 0.162.1 with a mock model and an isolated `CODEX_HOME`:
   continue this session, run: codex resume <id>", even when that process never
   held the conversation.
 
+Probed on 0.167.0 with a mock model and read in the source at `rust-v0.167.0`:
+
+- `/side` forks an ephemeral thread in the same process
+  (`tui/src/app/side.rs`). It has its own `session_id`, writes no rollout, and
+  reports `transcript_path` as `null` in every hook. `CODEX_THREAD_ID` is set in
+  its shell tools and unset in hooks.
+- Its first prompt fires SessionStart `fork`, then UserPromptSubmit. Its tool
+  calls fire PreToolUse and PostToolUse, and each turn ends with Stop.
+- ctrl-/ switches between the side and its parent and fires no hook. ctrl-c in
+  the side discards it and fires no SessionEnd or Stop.
+- A parent and its side can run turns at the same time.
+- The TUI's reported status follows the thread on screen.
+- A `shell_environment_policy.set.<NAME>` key in the `config` of an ephemeral
+  `thread/fork` reaches the side's shell tools and merges with the same table
+  set when the app-server started. It does not reach hooks.
+
 ## Local memories
 
 Read in the source at openai/codex 4aa94dce and checked against the
