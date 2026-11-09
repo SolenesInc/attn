@@ -274,7 +274,7 @@ try {
     (member) => Boolean(member.binding_session),
     'the awake member binding broadcast',
   );
-  firstSession = json(['crew', 'wake', awake, '--json']).session_id;
+  firstSession = json(['crew', 'start', awake, '--json']).session_id;
   const boundMember = await awakeBinding;
   runner.assert(boundMember.binding_session === firstSession, 'the roster binds the requested first day', { boundMember, firstSession });
   await observer.waitForSession({ id: firstSession, timeoutMs: 30_000 });

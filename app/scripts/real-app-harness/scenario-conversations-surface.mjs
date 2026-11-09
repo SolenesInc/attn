@@ -109,7 +109,7 @@ async function main() {
       cli('crew', 'set', member, '--cwd', memberHome, '--agent', 'claude');
       const replied = observer.waitForMessage((event) => event.event === 'session_state_changed'
         && event.session?.directory === memberHome && event.session?.state === 'idle', 'crew mock turn ends');
-      const day = JSON.parse(cli('crew', 'wake', member, '--json'));
+      const day = JSON.parse(cli('crew', 'start', member, '--json'));
       openSessions.add(day.session_id);
       await replied;
       const copied = awaitRows(observer, (result) => result.rows.some((row) => row.session_ids.includes(day.session_id)

@@ -91,14 +91,14 @@ try {
   cli(['settings', 'set', 'crew.away_close_enabled', 'false']);
   cli(['crew', 'set', member, '--cwd', home, '--agent', 'claude']);
   await present();
-  const first = cli(['crew', 'wake', member], { json: true }).session_id;
+  const first = cli(['crew', 'start', member], { json: true }).session_id;
   await ready(first);
   const launches = events.filter(e => e.event === 'session_registered' && e.session?.crew_member === member).length;
   cli(['handoff', '-m', 'Plain handoff verification.', '--session', first]);
   assert(!roster().binding_session, 'plain handoff must leave the member asleep');
   assert.equal(events.filter(e => e.event === 'session_registered' && e.session?.crew_member === member).length, launches);
   output.push(`PASS: plain handoff with the user present sleeps.`);
-  const next = cli(['crew', 'wake', member], { json: true }).session_id;
+  const next = cli(['crew', 'start', member], { json: true }).session_id;
   await ready(next);
   await present();
   cli(['crew', 'set', member, '--agent', 'codex']);

@@ -237,7 +237,7 @@ try {
       ] },
     ] });
     runAttn(['crew', 'set', mailbox, '--cwd', home, '--agent', 'codex']);
-    runAttn(['crew', 'sleep', mailbox]);
+    runAttn(['crew', 'close', mailbox]);
   });
   await runner.step('build_synthetic_foreground_app', async () => {
     const app = path.join(runner.runDir, 'CaptureFixture.app');

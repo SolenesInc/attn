@@ -112,7 +112,7 @@ try {
   const letter = `Dear successor,\n\nWe are discussing current crew priming on ${seedID}, under ${parent}. The work lives at ${work}/priming.go. I suspected the garden did not receive the held-seed total, but I had not checked the current file. Pick up the discussion from those pointers. No implementation is requested.\n`;
   fs.writeFileSync(path.join(letterDir, '2026-10-27T00-00Z-verification.md'), letter);
   fs.writeFileSync(path.join(receipts, 'letter.md'), letter);
-  session = cli(['crew', 'wake', member], { json: true }).session_id;
+  session = cli(['crew', 'start', member], { json: true }).session_id;
   console.log(`Woke ${member}: ${session}`);
   fs.writeFileSync(path.join(receipts, 'runtime.json'), JSON.stringify({ root, session, member, seed: seedID, plot: parent }, null, 2));
   const priming = await prime(session);

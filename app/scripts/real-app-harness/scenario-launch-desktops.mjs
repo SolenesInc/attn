@@ -154,7 +154,7 @@ try {
     await client.request('dom_hover', { selector: '.toast', leave: true });
     await wait('.toast', { absent: true });
     await openCrew();
-    const output = cli('crew', 'wake', members[1].item_id, '--json');
+    const output = cli('crew', 'start', members[1].item_id, '--json');
     const arrival = JSON.parse(output.slice(output.indexOf('{')));
     runner.assert(Boolean(arrival.session_id), 'The CLI wake succeeds', arrival);
     await wait(`[data-testid="crew-roster-${members[1].item_id}"] .is-awake`);

@@ -70,7 +70,7 @@ async function main() {
     }
   });
   const wake = async () => {
-    const id = json(['crew', 'wake', member, '--json']).session_id;
+    const id = json(['crew', 'start', member, '--json']).session_id;
     sessions.push(id);
     await observer.waitForSession({ id, timeoutMs: 30_000 });
     await client.request('select_session', { sessionId: id });
