@@ -59,6 +59,7 @@ func (d *Daemon) closeTerminal(sessionID protocol.SessionID, t harness.TerminalI
 func (d *Daemon) dropTerminal(t harness.TerminalID) {
 	owner, _ := d.shownIn(t)
 	d.forgetTerminalTitle(t)
+	d.typedCommands.Delete(t)
 	d.linkTerminalDropped(t)
 	var removed []harness.TerminalID
 	if err := d.removePTYSession(t); err != nil {

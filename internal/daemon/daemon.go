@@ -188,6 +188,7 @@ type Daemon struct {
 	codexTrustMu                sync.Mutex
 	launchWatches               map[protocol.SessionID]*launchWatch
 	recoveredLaunches           map[protocol.SessionID]*launchWatch
+	typedCommands               sync.Map
 	terminalExitIntentMu        sync.Mutex
 	terminalExitIntents         map[harness.TerminalID]terminalExitIntent
 	replacedRuntimes            map[harness.TerminalID][]string

@@ -70,6 +70,25 @@ func TestTerminalCLI(t *testing.T) {
 					}
 				}
 			}
+			var chained protocol.TerminalOpenResult
+			openedWithCommand := run("open", "--json", "--", "printf chained-%s first")
+			if openedWithCommand.Code != 0 {
+				t.Fatal(openedWithCommand)
+			}
+			openedWithCommand.JSON(t, &chained)
+			if got := run("run", string(chained.TerminalID), "printf chained-second", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-second" {
+				t.Fatalf("run --wait right after open with a command: %+v", got)
+			}
+			if got := run("run", string(chained.TerminalID), "printf chained-third"); got.Code != 0 {
+				t.Fatalf("run right after a finished command: %+v", got)
+			}
+			if got := run("run", string(chained.TerminalID), "printf chained-fourth", "--wait"); got.Code != 0 || strings.TrimSpace(got.Stdout) != "chained-fourth" {
+				t.Fatalf("run --wait right after run: %+v", got)
+			}
+			if got := run("close", string(chained.TerminalID)); got.Code != 0 {
+				t.Fatalf("close chained shell: %+v", got)
+			}
+
 			got := run("run", string(first.TerminalID), "printf 'command-output\\n'; (exit 7)", "--wait")
 			if got.Code != 7 || strings.TrimSpace(got.Stdout) != "command-output" {
 				t.Fatalf("run --wait: %+v", got)
@@ -162,10 +181,6 @@ func TestTerminalCLIDesktopAndProfileReach(t *testing.T) {
 		t.Fatal(got)
 	}
 	got.JSON(t, &opened)
-	app.AwaitScreen(string(opened.SessionID), "remote-ready")
-	if got := run("wait", string(opened.TerminalID), "--until", "prompt"); got.Code != 0 {
-		t.Fatal(got)
-	}
 	denied := run("send", string(opened.TerminalID), "--text", "x")
 	if denied.Code != 1 || !strings.Contains(denied.Stderr, "--desktop "+opened.DesktopID) {
 		t.Fatalf("desktop refusal: %+v", denied)

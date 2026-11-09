@@ -25,6 +25,12 @@ import (
 
 const terminalFirstPromptTripwire = 30 * time.Second
 const terminalFirstPromptReceipt = "first prompt measured at 9-176 ms across fish, zsh and bash"
+const typedCommandFinishTripwire = 5 * time.Second
+
+type typedCommand struct {
+	afterBlockID string
+	typedAt      time.Time
+}
 
 func (d *Daemon) terminalCaller(id protocol.SessionID) (*protocol.Session, error) {
 	caller := d.store.Get(protocol.TrimID(id))
@@ -329,7 +335,11 @@ func (d *Daemon) handleTerminalOpen(conn net.Conn, msg *protocol.TerminalOpenMes
 		defer cancel()
 		err := d.waitForTerminalFirstPrompt(ctx, terminal)
 		if err == nil && ctx.Err() == nil {
-			_, err = Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: command + "\r", Source: "agent"})
+			var state protocol.TerminalText
+			state, err = Call[protocol.TerminalText](ctx, d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: terminal, Mode: protocol.TerminalReadModeScreen})
+			if err == nil {
+				err = d.typeInput(ctx, terminal, state, command+"\r")
+			}
 		}
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			d.sendError(conn, fmt.Sprintf("first prompt wait exceeded limit=%s; %s. Terminal %s stays open; nothing was typed. Use attn terminal send %s to continue", terminalFirstPromptTripwire, terminalFirstPromptReceipt, id, id))
@@ -357,6 +367,30 @@ func (d *Daemon) waitForTerminalFirstPrompt(ctx context.Context, terminal protoc
 	return err
 }
 
+func (d *Daemon) typeInput(ctx context.Context, terminal protocol.TerminalID, state protocol.TerminalText, data string) error {
+	if _, err := Call[struct{}](ctx, d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: terminal, Data: data, Source: "agent"}); err != nil {
+		return err
+	}
+	if state.IntegrationSeen {
+		d.typedCommands.Store(terminal, typedCommand{afterBlockID: state.LastBlockID, typedAt: time.Now()})
+	}
+	return nil
+}
+
+func (d *Daemon) awaitTypedCommandFinish(ctx context.Context, terminal protocol.TerminalID) {
+	stored, ok := d.typedCommands.Load(terminal)
+	if !ok {
+		return
+	}
+	typed := stored.(typedCommand)
+	finishing, cancel := context.WithDeadline(ctx, typed.typedAt.Add(typedCommandFinishTripwire))
+	defer cancel()
+	_, _ = Call[protocol.TerminalWaitResult](finishing, d.router(), protocol.TerminalWaitBlockMessage{Cmd: protocol.CmdTerminalWaitBlock, TerminalID: terminal, Until: protocol.TerminalWaitUntilPrompt, AfterBlockID: protocol.Ptr(typed.afterBlockID)})
+	if ctx.Err() == nil {
+		d.typedCommands.CompareAndDelete(terminal, typed)
+	}
+}
+
 func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputMessage) {
 	caller, err := d.terminalCaller(msg.CallerSessionID)
 	if err != nil {
@@ -372,19 +406,24 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 		return
 	}
 	result := &protocol.TerminalInputResult{TerminalID: target.terminal}
+	var state protocol.TerminalText
 	if protocol.Deref(msg.Run) {
 		if target.Agent != protocol.AgentShellValue {
 			d.sendError(conn, "run rule: run requires a shell; use send to type into an agent")
 			return
 		}
-		state, err := Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
+		connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
+		defer cancelConnection()
+		d.awaitTypedCommandFinish(connectionCtx, target.terminal)
+		if connectionCtx.Err() != nil {
+			return
+		}
+		state, err = Call[protocol.TerminalText](context.Background(), d.router(), protocol.TerminalReadTextMessage{Cmd: protocol.CmdTerminalReadText, TerminalID: target.terminal, Mode: protocol.TerminalReadModeScreen})
 		if err != nil {
 			d.sendError(conn, err.Error())
 			return
 		}
 		if !state.IntegrationSeen && protocol.Deref(msg.Wait) {
-			connectionCtx, cancelConnection := d.connectionContext(d.life.Context(), conn)
-			defer cancelConnection()
 			ctx, cancel := context.WithTimeout(connectionCtx, terminalFirstPromptTripwire)
 			defer cancel()
 			if err := d.waitForTerminalFirstPrompt(ctx, target.terminal); err != nil {
@@ -403,7 +442,7 @@ func (d *Daemon) handleTerminalInput(conn net.Conn, msg *protocol.TerminalInputM
 		}
 		result.LastBlockID = protocol.Ptr(state.LastBlockID)
 	}
-	if _, err := Call[struct{}](context.Background(), d.router(), protocol.TerminalWriteMessage{Cmd: protocol.CmdTerminalWrite, TerminalID: target.terminal, Data: msg.Data, Source: "agent"}); err != nil {
+	if err := d.typeInput(context.Background(), target.terminal, state, msg.Data); err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
