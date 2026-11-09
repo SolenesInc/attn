@@ -8,6 +8,7 @@ export interface SeedMentionIndex {
 }
 
 const NAME_CHAR = '[A-Za-z0-9_-]';
+const NAME_CHAR_NOT = '[^A-Za-z0-9_-]';
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -28,18 +29,19 @@ export function createSeedMentionIndex(seeds: readonly Pick<Seed, 'id' | 'step_s
   }
   const slugs = [...seedIdBySlug.keys()].sort((a, b) => b.length - a.length).map(escapeRegExp);
   const alternatives = [`s-${SEED_ID_BODY}`, ...slugs].join('|');
-  const pattern = new RegExp(`(?<!${NAME_CHAR})(?:${alternatives})(?!${NAME_CHAR})`, 'g');
+  const pattern = new RegExp(`(^|${NAME_CHAR_NOT})(${alternatives})(?!${NAME_CHAR})`, 'g');
   return {
     split(text) {
       const pieces: SeedMentionPiece[] = [];
       let last = 0;
       for (const match of text.matchAll(pattern)) {
-        const seedId = ids.has(match[0]) ? match[0] : seedIdBySlug.get(match[0]);
+        const name = match[2];
+        const seedId = ids.has(name) ? name : seedIdBySlug.get(name);
         if (!seedId) continue;
-        const start = match.index ?? 0;
+        const start = (match.index ?? 0) + match[1].length;
         if (start > last) pieces.push(text.slice(last, start));
-        pieces.push({ seedId, text: match[0] });
-        last = start + match[0].length;
+        pieces.push({ seedId, text: name });
+        last = start + name.length;
       }
       if (last === 0) return [text];
       if (last < text.length) pieces.push(text.slice(last));
