@@ -28,7 +28,9 @@ const (
 	stopTimeout    = 5 * time.Second
 	readyFDEnv     = "ATTN_DAEMON_READY_FD"
 	startupTimeout = 60 * time.Second
-	healthTimeout  = time.Second
+	// A tripwire for a daemon that stays silent. A resumed daemon answered within 397 ms under a CPU
+	// quota, and a healthy daemon on a loaded CI runner took 7 s to bring up a shell (run 42555759849).
+	healthTimeout = 15 * time.Second
 )
 
 var errDaemonAlreadyRunning = errors.New("daemon already running")

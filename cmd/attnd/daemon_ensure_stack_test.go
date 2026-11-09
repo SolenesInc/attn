@@ -52,8 +52,9 @@ func TestDaemonEnsureLeavesAPausedDaemonAndItsShellRunning(t *testing.T) {
 	if after, err := os.ReadFile(pidPath); err != nil || string(after) != string(pid) {
 		t.Fatalf("daemon PID after SIGCONT = %q, %v; want %q", after, err, pid)
 	}
-	app.TypeLine(shell, "printf '__survived_%s\\n' \"$kept\"")
-	app.AwaitScreen(shell, "__survived_before")
+	reconnected := s.App()
+	reconnected.TypeLine(shell, "printf '__survived_%s\\n' \"$kept\"")
+	reconnected.AwaitScreen(shell, "__survived_before")
 	t.Logf("daemon pid %s and its shell survived both Ensure callers", strings.TrimSpace(string(pid)))
 }
 
