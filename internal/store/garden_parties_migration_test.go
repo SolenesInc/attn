@@ -191,7 +191,7 @@ INSERT INTO garden_seed_watches(watcher_session_id,seed_id,created_at) VALUES
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := newStoreAtVersion(path, 1793422341369336)
+	upgraded, err := NewWithDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}

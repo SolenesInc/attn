@@ -32,7 +32,7 @@ INSERT INTO inbox_items(id,address,kind,source_id,created_at) VALUES
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := newStoreAtVersion(path, 1793415974004927)
+	upgraded, err := NewWithDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ INSERT INTO sessions(id,user_label,directory,created_at,closed_at,closed_by) VAL
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := newStoreAtVersion(path, 1793416602286212)
+	upgraded, err := NewWithDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestUpgradeMarksPendingRunsLaunchedOnlyWhenTheirSessionStartedAfterTheRunWasCreated(t *testing.T) {
-	const before, upgrade = 1793993403875462 - 1, 1793993403875462
+	const beforeBackfill = 1793993403875462 - 1
 	cases := []struct {
 		name, state, createdAt, sessionLaunchedAt string
 		launched                                  bool
@@ -18,7 +18,7 @@ func TestUpgradeMarksPendingRunsLaunchedOnlyWhenTheirSessionStartedAfterTheRunWa
 		{"run already finished", "delivered", "2026-11-01T10:00:00Z", "2026-11-01T10:00:05.5Z", false},
 	}
 	path := filepath.Join(t.TempDir(), "runs.db")
-	old, err := newStoreAtVersion(path, before)
+	old, err := newStoreAtVersion(path, beforeBackfill)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +39,7 @@ func TestUpgradeMarksPendingRunsLaunchedOnlyWhenTheirSessionStartedAfterTheRunWa
 	if err := old.Close(); err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := newStoreAtVersion(path, upgrade)
+	upgraded, err := NewWithDB(path)
 	if err != nil {
 		t.Fatal(err)
 	}
