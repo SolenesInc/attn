@@ -1,3 +1,0 @@
-kind: changed
-area: terminals
-change: New and reloaded terminals now run in one shared terminal host, which uses less memory, and the app streams output only to the terminals it shows. Terminals already running keep their process until they reload. Settings → Agents and models → Shared terminal host turns it off on this machine, and a stored value still wins. A machine with no host keeps using dedicated workers without a warning.

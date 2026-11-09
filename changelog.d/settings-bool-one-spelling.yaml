@@ -1,3 +1,0 @@
-kind: fixed
-area: settings
-change: attn settings set stores a true or false setting in one spelling, so a value typed as TRUE no longer reads as on in the daemon and off in the app.

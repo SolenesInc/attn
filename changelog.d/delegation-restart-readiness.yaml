@@ -1,3 +1,0 @@
-kind: internal
-area: tests
-change: Outpost restart tests wait for fresh connection updates before sending prompts or resuming work.

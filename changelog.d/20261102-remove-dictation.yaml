@@ -1,4 +1,0 @@
-kind: removed
-area: dictation
-change: attn no longer records audio or dictates. The experimental Dictation setting, its shortcut and the speech helper are gone; the daemon still answers dictation_refine for apps that send it, using dictation.refinement_agent.
-notes: The downloaded speech model stays on disk until you delete it. It is in ~/Library/Caches/attn/speech-models for the default instance, and in the instance's data folder under speech-models for a named one. Removing the folder is safe.

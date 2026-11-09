@@ -1,3 +1,0 @@
-kind: added
-area: crew
-change: Crew members can keep entries and summaries across days with the experimental crew_memory_enabled setting. Memory is off by default.

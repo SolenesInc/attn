@@ -1,5 +1,0 @@
-kind: fixed
-area: app
-change: >
-  Opening the same `attn://spawn` link again launches or focuses its session
-  again. The app used to ignore a link it had handled once until it restarted.

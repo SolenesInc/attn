@@ -1,3 +1,0 @@
-kind: changed
-area: settings
-change: Settings → Experimental reads lighter. Each feature has a bold name, a one-sentence summary and a faint note for its shortcut or when a change starts, with an on-off switch, and each group shows how many are on. Outposts, Phones and Analytics show their switch beside the page title. Usage analytics now says nothing is sent unless you turn on sharing.

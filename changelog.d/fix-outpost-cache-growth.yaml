@@ -1,3 +1,0 @@
-kind: fixed
-area: outposts
-change: Updating outposts removes older cached binaries for the same architecture.

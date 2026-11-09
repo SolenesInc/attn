@@ -1,3 +1,0 @@
-kind: fixed
-area: sessions
-change: Agents report their terminal exit before they become idle.

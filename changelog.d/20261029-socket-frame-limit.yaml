@@ -1,3 +1,0 @@
-kind: fixed
-area: garden
-change: Large seed bodies, plots, and escaped vents pass through the CLI and outposts; requests over the socket frame limit name the command, size, and limit.

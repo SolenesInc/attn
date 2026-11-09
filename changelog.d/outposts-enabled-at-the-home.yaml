@@ -1,3 +1,0 @@
-kind: fixed
-area: outposts
-change: attn settings set outposts_enabled on an outpost now refuses and points to the home, instead of cutting the connection and reporting a lost call. Setting it to the value it already has no longer restarts every connection.

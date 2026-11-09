@@ -6,6 +6,1023 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-09]
+
+### Added
+- **Add an outpost by the name you use with `ssh`.** Type `ai-sandbox` in
+  Settings → Outposts and attn installs the home's build and shared terminal
+  host there, starts it, pairs and syncs the Notebook. There is no binary to
+  copy, systemd unit, key file or port to set up. Your own ssh config applies,
+  including keys held only in your SSH agent. Remove stops what Add started and
+  leaves the outpost's binary, data and Notebook folder in place.
+- **Connect in a terminal answers what ssh asks.** When ssh refuses an outpost
+  over a host key or authentication, its row shows ssh's message and offers this
+  action. Answer the prompt in the terminal tile, including a passphrase, 2FA or
+  security-key touch, and the outpost connects with no other step. Resume on an
+  exited connection tile runs ssh again in the same tile and pauses background
+  attempts while you answer.
+- **Run Claude and Codex agents on your outposts.** Their turns, conversations,
+  cost and pull request links show on the Mac, messages queue while an outpost
+  is unreachable, and the queue skips its offline agents. Delegations and new
+  terminals default to the machine that asked for them; pass `--host home` or
+  an outpost name to choose another.
+- **Open shells on outposts that survive connection loss.** Typing and screen
+  updates go through the home, and shells outlast bridge loss, daemon restarts,
+  crashes and updates. Remote tiles name their outpost, splits stay on the same
+  outpost, and removing an outpost asks before closing its terminals.
+- **Resume closed outpost work on the machine it ran on.** The Sessions ledger
+  shows each session's host and resumes it there, with its conversation and
+  cost continuing. In the Garden, on seed pages and in `attn seed show`, Resume
+  names the outpost, and it dims with the reason while the outpost is
+  unreachable. If the folder or conversation is gone, Resume says so and leaves
+  the seed as it was.
+- **Update outposts to the home's build from the app.** A banner or the
+  outpost's Settings row uses the same install as Add and keeps shells running.
+  Both show "Connecting" the moment you click, repeat requests join the running
+  update, and a refusal appears in the banner. A successful update says so in
+  one line and closes after 5 seconds unless you hover. Other messages stay
+  until they are resolved.
+- **The Notebook syncs between your home and your outposts.** Changes flow both
+  ways for every Notebook folder your profiles use, outpost rows show sync
+  health and conflicts, and seed file transfers use the machine that asked for
+  them. If one folder ends up nested inside another, only the inner one stops
+  syncing and the Outposts row says why. Files deleted at the home stay deleted,
+  even if an outpost was offline while their folder left sync and came back.
+- **Outpost shells can use Garden commands and your home settings.** Garden and
+  document commands run through the home, with named errors when it cannot be
+  reached. Outposts read home settings locally, forward changes to them, and
+  keep machine settings separate; leaving enrollment restores the earlier
+  settings.
+- **The new-session launcher starts agents on the machine you pick.** With an
+  outpost attached, recents from every machine appear with a badge showing the
+  machine's name and state. Enter, the Tab where list, ⌘Enter and ⌘⌫ act on the
+  highlighted row's machine, and the harness strip marks any harness that
+  machine lacks. `ai-sandbox:~/projects/` browses that machine's folders,
+  `ai-sandbox:attn` searches its recents, Tab completes a machine name, and ⌘T
+  with an address opens a shell there. A line under the input says when an
+  outpost is being asked, a folder is missing or a machine is unreachable.
+  Starting on an unreachable machine is refused right away, and a start on a
+  stalled machine shows how long it has waited.
+- **An iPhone app shows every waiting agent in one queue.** Install attn from
+  TestFlight and scan a home profile's QR code, and the phone connects through
+  Attn Cloud. Sessions from every pairing merge into one live list, with waiting
+  and needs-approval agents first, longest wait at the top, and each row naming
+  its computer and profile. A home that is offline says so and can be forgotten
+  right from the queue, and a home that ends the pairing shows its reason.
+- **Pair a phone with attn (experimental).** Turn on phone access in Settings →
+  Experimental, then open Settings → Phones to show a one-time QR code for a
+  profile. A paired phone sees only that profile's sessions, and only a phone
+  holding the code can reach your home while pairing is open. A code ends when
+  you cancel, leave the page, show a new one, quit the app or when it expires.
+  The page shows the link to Attn Cloud with any error, and each phone with when
+  it was last seen and a Revoke button. With the setting off, attn makes no
+  connection to Attn Cloud.
+- **Crew members stay at the top of the phone app.** A Crew section sits above
+  Asks, with the Chief first, and a member keeps its row whatever its state. A
+  tap wakes an asleep member. If the home refuses, the row shows the reason and
+  can be tapped again. An older home sends no crew details, so its sessions
+  appear as they did before.
+- **Read and answer agents' asks on the phone.** An ask reads as it does on the
+  desktop, with its images and mermaid diagrams. Single-choice asks answer in
+  one tap, and you can always write your own answer. Images and diagrams open
+  full screen with pinch zoom, and an image that can't load says why in its
+  place.
+- **Open a session's terminal on the phone and answer the agent.** Tap a live
+  session to see its terminal, reply from a composer with autocorrect, or use a
+  one-row keys bar for Esc, arrows, Enter, 1–3, Tab, ^C and Shift-Tab. Tapping
+  the terminal closes the keyboard, and swiping down reads back through earlier
+  output. While you use it, the phone sets the terminal's size and the desktop
+  shows it scaled; clicking the desktop pane takes the size back. Drafts survive
+  navigation, and terminals reconnect on their own when the home comes back.
+- **Your phone tells you when an agent needs you, without Attn Cloud reading
+  it.** A turn you owe, an approval or a new ask arrives as a notification
+  showing the agent, its state and its question. Your home encrypts it and only
+  the phone can decrypt it, and tapping it opens that session or ask. A failed
+  run shows "run failed". Stops that attn's own notifications started stay
+  quiet, in any flow. A push waits up to two minutes for a dropped Cloud Relay
+  link to return.
+- **The Garden is on the phone.** A Garden tab lists every home's plots and
+  seeds. You can read a seed's body, checks and log, add a note, and park,
+  harvest, wither or replant with a reason. An open seed updates when its notes
+  or body change, and homes the phone can't reach are named, with their
+  last-known seeds greyed.
+- **`attn send` delivers files and a message to any agent session from outside
+  attn.** It works for local and outpost sessions: a program pairs once with
+  `attn send pair`, you check a 4-digit code and click Allow in the app, and it
+  can then send to that profile's agents. `attn send sessions` lists them with
+  the one you last focused, and Settings → Paired senders shows each sender's
+  last use and lets you remove it.
+- **attn can update itself (experimental).** Turn on Settings → Experimental →
+  Self-update to see how attn was installed and what update is available, in
+  Settings or with `attn update status`. Start an update from Settings or Cmd+K
+  and follow it in a progress banner. If the new build does not start, attn
+  rolls back. Agents can ask with `attn update request`, which shows you their
+  reason with Update and Decline, but only you can start a run. Reachable
+  outposts get the new build before the home restarts and are offline for about
+  a restart, and **Update without it** skips one that is holding things up.
+- **Automation schedules have a Composer.** Build a schedule with controls and a
+  time zone field instead of writing cron, and see the next runs or any error as
+  you type. A cron the controls cannot express stays on the Cron tab and saves
+  unchanged, and descriptors such as `@daily` now save.
+- **Scheduled automations can wake only when something changed.** Give a
+  schedule a guard command with "Only run if" in the automation form or under
+  `trigger.guard`. It runs in the automation's folder before each run, and the
+  agent starts only when the command prints something new. The drawer,
+  `attn automation show` and `list` show the latest check, and a failed check
+  gets the Failed badge.
+- **Every automation can be started by hand.** Run now and `attn automation run`
+  work on scheduled and PR-review automations. A run started this way skips the
+  guard, gets its own session and leaves the schedule's state alone, so testing
+  cannot change what the trigger does next. An automation that works on a pull
+  request asks for its URL.
+- **Every profile has its Chief as a crew member.** The Chief appears from the
+  first start with a slot at the top of the Crew section. A setup popover lets
+  you pick its harness, model, effort and Notebook folder from the keyboard, and
+  it can sleep and be renamed. If you had a session marked Chief of Staff, the
+  new Chief is prefilled from it when you upgrade, and saved asks, mail and pull
+  request watches move to the new Chief and reach it once. An upgraded Claude
+  Chief with no recorded model keeps the harness default, and `attn crew set
+  --model default` gives any member the same.
+- **The Chief's first day shows you around.** New users get a full onboarding
+  and existing users a short tour, both by conversation and in plain words. It
+  covers the Chief's name and charter, delegation roles and suggested models,
+  the Notebook, Settings, the shortcuts and an optional analytics offer, where
+  vents and tool vents are separate choices. `attn onboarding` shows, finishes
+  or restarts it for each profile.
+- **Crew members get up to speed from their letters, seeds and current work.**
+  They keep their way of working in their charters and always launch with
+  harness memory off. Letters keep their session's transcript, and you can
+  forget one after confirming; agents consent with `attn conversation forget
+  --unlink-crew-letters`.
+- **Create, retire and restore crew members.** `attn crew create` adds a member
+  with no daemon restart. `attn crew retire` releases its seeds, puts it to
+  sleep and refuses new mail, while keeping its home, name and unread mail.
+  `attn crew restore` brings it back.
+- **Crew members can be renamed, and names belong to a profile.** Use `attn crew
+  rename` or Rename in Manage crew, even while the member is awake. The name and
+  session label change at once, and the home folder takes the new name at the
+  member's next wake. A member's mail and history stay with it, two profiles can
+  use the same name, and the session list shows a member as one row.
+- **Crew homes can live in the Notebook.** Members created with `attn crew
+  create` get a home at `crew/<name>/` in their profile's Notebook. `attn crew
+  move-home` brings a home from anywhere into the profile's current Notebook,
+  and `attn crew set <member> --home <folder>` points a member at a folder that
+  was moved or renamed. Closed sessions follow the home, subfolders included,
+  so they stay resumable. A session on an outpost keeps its own folder, even at
+  the same path. Changing the Notebook folder moves no homes on its own.
+- **`attn delegate roles install` adds attn's roles from the command line.** It
+  does what Add Attn roles in Settings › Delegation does: it adds the maintained
+  roles your table lacks, keeps your custom ones, turns on roles and the
+  attn-workflow skill, and installs the skill for every available harness. The
+  Chief uses it during onboarding.
+- **attn now has a user guide.** `attn guide` lists tutorials and reference pages
+  for the queue, sessions, the launcher, desktops, delegation, crew, automations,
+  Quick Capture, agent callouts and more, and `attn guide <topic>` prints one in
+  the terminal. The same pages are in the repository under `docs/guide`.
+- **Tell an agent to "wrap up" and it closes itself.** The agent briefs its
+  delegates, cleans up its own work and raises anything that needs you with one
+  question. When nothing is left, it closes with `attn agent close --self`, a
+  command now listed in the help agents search.
+- **Agents can compact their conversation and then close.** `attn agent close
+  --self --compact` and `attn seed standby --close --compact` compact as soon as
+  the asking turn ends, even with a shell or monitor still running, and close
+  the session. They work for shared Codex and for Claude sessions with the
+  Claude mod, on outposts too.
+- **A seed can go on standby and wake its tender when mail arrives.** `attn seed
+  standby <seed> -m "<note>"` leaves a note on what to do next. When seed mail
+  arrives and the tender's session is closed, attn reopens that session and
+  hands it the mail and the note. The Garden marks these seeds on cards and list
+  rows, along with the pull requests they wait on, and adds an `is:standby` lens.
+  `attn seed ls --standby` lists them. Temporary failures retry on their own,
+  and a wake that can't be fixed raises a critical notification that opens the
+  seed.
+- **Set a reminder on a seed.** `attn seed remind <seed> --in 20m -m "…"` (or
+  `--at <time>`) posts the message to the seed's mailbox at that time, so
+  whoever tends the seed then reads it in their inbox. `--clear` removes it, and
+  harvest or wither clears it. A seed holds one reminder, a new one replaces it,
+  and reminders persist across daemon restarts. `attn seed show` and `attn seed
+  ls` show an armed reminder.
+- **A seed can watch a pull request.** `attn pr watch`, `unwatch`, `ls` and
+  `status` take `--seed`. Updates reach whoever tends the seed when they arrive,
+  a handover moves the watch along, and harvesting or withering the seed stops
+  it. Each seed's watch reports its own readiness, so a formal review and a
+  green-checks watch on one pull request no longer overwrite each other.
+- **Agents can read only what changed on a seed.** `attn seed show` and `attn
+  seed notes` end with a bookmark, and `--since <bookmark>` returns just the
+  entries saved after it, across a plot's whole tree. Seed bells name that exact
+  command, so a watching agent reads what changed instead of the whole seed.
+  `notes --kind` keeps one kind of entry, a child sees its parent's outline, and
+  `show --section <heading|id>` prints one part of a body.
+- **Seeds can carry checks.** A check is a numbered statement the seed must
+  prove. Add them with `attn seed plant --check`, in a plot's JSON or with `attn
+  seed check add -m`; attn picks the next free id if you leave it out and refuses
+  a taken one with its owner. Agents define, report and judge them as part of
+  their work, and a delegated agent's opening names the seed's checks, including
+  inherited shared ones. The Garden and seed tiles let you confirm, reject,
+  uncheck or reopen each one and open its evidence. Checks never block a move.
+- **Reporting a check is one call.** `attn seed check report -m` reads like a
+  commit message: a summary line of up to 400 characters, then any detail.
+  `--evidence` also takes local files, and a report with several problems is
+  refused once with all of them listed.
+- **Seed edits save numbered versions you can roll back.** An edit made from a
+  stale export is refused, empty bodies are refused, and `--note` records what
+  changed.
+- **Planting a seed shows similar open seeds.** You can spot a duplicate right
+  away, and planting still succeeds if the lookup fails.
+- **Give a seed's agent your words on what it may do.** `attn delegate
+  --authorization` saves what the agent may do without asking and where it
+  stops, and every delegation or handover opening repeats those words. Change or
+  clear them with `attn seed authorization` or on the seed's page, which shows
+  who set them and when. A change is typed into the agent working on the seed as
+  a user message, and the page shows whether it has arrived yet.
+- **Seed cards in terminals can take you to the agent.** Hovering a seed id in a
+  terminal offers a "Go to <agent>" button. It brings up the seed's live tender,
+  or the last session that tended it if that session is still open, including
+  agents on outposts. The button is left out when neither session is open or
+  when that session owns the terminal you are in.
+- **Experimental: attn can reach Claude without typing into its terminal.** With
+  the `claude_mod_enabled` setting on, a mod that attn ships hands each message
+  straight to Claude, on the home and on outposts, so it no longer races your
+  keystrokes. An idle session starts a turn, and a working session reads the
+  message in its running turn, even while a permission question is open. After
+  you press Esc, attn's own messages wait until your next prompt and are listed
+  above the prompt, while your own words are submitted. A ring the mod gives back
+  shows as waiting and is unread at home again, even if the link drops or the
+  daemon restarts. attn falls back to typing whenever the mod is not connected.
+  The guide page "Using the Claude mod" has the details.
+- **Tiles can pop out into their own windows on macOS.** The tile header's
+  button, Cmd+Shift+O or the palette moves a tile into a separate window, and its
+  terminal, browser page or editor keeps running. Closing the window, Cmd+Shift+O
+  or the palette brings it back. Popped tiles reopen where you left them after a
+  restart.
+- **Hovering a shelf chip gives you a peek at that tile.** A panel shows the
+  terminal's latest text and a reply box, without moving anything on screen. Each
+  tile's mark on a stacked chip is its own hover target. A reply stays until the
+  terminal confirms it, and if it can't be delivered you keep the text, see why,
+  and can copy or resend it.
+- **Resize the sidebar.** Drag the handle on the open sidebar's right edge, even
+  when a browser tile sits beside it. Esc cancels and a double-click returns to
+  the default width. ⌘⌥] and ⌘⌥[ (Ctrl+Alt+] and [ on Linux) and the palette's
+  "Widen the sidebar" and "Narrow the sidebar" step it by 40px, "Reset sidebar
+  width" clears it, and Settings → Appearance has a width row. A step or value
+  past a limit names that limit and saves nothing.
+- **Usage analytics can keep a local record of how you use attn.** A switch in
+  Settings › Experimental, off by default, records daemon events, the shortcuts
+  and commands you use, and samples every 20 minutes of memory per kind of attn
+  process and counts of what is open. Each `attn` command gets one entry, named
+  as you type it, with its exit code and any refusal reason, and hooks appear
+  under their own names. Records say which setting changed, why a git operation
+  failed, why a session ended and the signal that ended its terminal, how the
+  daemon's previous run ended, the build that wrote them, and the model asked
+  for and the one the agent reported. Text is reduced to its length, subjects and
+  ids are hashed per install, and repository names and paths are never recorded.
+  Each outpost records its own usage and sends it to the home, naming the outpost
+  as a hash.
+- **Settings › System › Analytics shows that record and can share it.** You can
+  browse every stored row, see how much is kept and clear it. Sharing with attn's
+  maintainers is off by default and nothing is sent unless you turn it on. When
+  on, the home uploads every 5 minutes and shows when it last sent, what waits,
+  any refusal and outposts it can't reach. Only the production instance uploads
+  by default; other instances upload nowhere unless `ATTN_ANALYTICS_INGEST_URL`
+  names a service, and the page says where uploads go. Forget this install
+  deletes the server copy and starts a new install id. Records an outpost held
+  offline don't outlive turning analytics off, clearing or forgetting.
+- **Analytics shows what each agent run cost.** Settings › Analytics has a run
+  view with one record per stretch of agent work: what started it (you, a ring, a
+  crew heartbeat, an annotation, a launch prompt or the agent itself), how long
+  it ran, how it ended, its approvals, its tokens and price, whether the agent
+  asked for your turn and when you first typed. A run is recorded only if
+  analytics was on for all of it.
+- **Analytics can show whether quiet stops hide something you needed to read.**
+  With analytics on, attn checks when an agent woken by a notification stops on
+  something the queue isn't already showing, or when the agent asked for your
+  turn. It asks the small model that judges session states, once per stop, at
+  about $0.0012 per call, and stores only the answer. This never opens a turn.
+- **Agents can report what got in their way with `attn vent`.** With Usage
+  analytics on, agents say whether a vent is about attn or their other tools
+  using `--about attn|tools`. Only attn vents can be sent to attn's maintainers,
+  and tool vents are offered only when you turn them on. From the Analytics page
+  you can open a vent's session or transcript, plant a seed from it, dismiss it,
+  refile it under the other kind with `s`, and undo.
+- **attn offers new Codex versions and moves shared Codex onto them.** With Shared
+  Codex on, a banner and a notification offer Install, which runs Codex's update
+  in a terminal tile. Once no conversation is running a turn, attn restarts the
+  app-server on the new Codex and terminals reconnect with what you typed still
+  in place; if the new Codex refuses to start, the old one keeps running. The
+  banner names what a restart waits on and offers Restart now, Retry and reloading
+  tiles on an older Codex. Until the restart, new terminals match the running
+  app-server while that version is still installed. `attn codex status`, `update`
+  and `restart` do the same from the CLI. Banners also take their own row instead
+  of covering the top of attn.
+- **attn warns when one conversation is open in two terminals.** Resuming a Claude
+  conversation that another terminal still runs used to leave two processes
+  writing to it with nothing on screen. Both tiles now warn until only one has it
+  open, including when the other session is on another machine.
+- **Nisse is available as an experimental harness.** Turn it on in Settings ›
+  Experimental and attn runs the Nisse server, opens sessions in its TUI, follows
+  their state, delivers messages as follow-ups and lists its models in the
+  pickers. Sessions start with attn's instructions, and their `attn` commands act
+  as that session.
+- **The asks drawer shows what you replied to.** Press `r` or click Replied to see
+  the last day's answered asks, with the answers and note you sent.
+- **Agents can build a skill that drives your product.** The attn-workflow skill
+  has a feature map process: agents ask which features your product has, then
+  write a `drive-<app>` skill that starts it on an isolated instance and maps
+  every way into each feature for people and for agents.
+- **`attn presence` can print just the ids scripts need.** `--session-id` prints
+  the current session and `--seed-ids` prints every seed it works on, which suits
+  git hooks.
+- **`attn agent peek` labels a Claude suggestion.** A suggestion in Claude's
+  composer looks like typed text in peek's output, so agents could report it as a
+  lost draft. Peek now says when the text is Claude's suggestion, in both its text
+  and `--json` output.
+- **Settings → Attention queue has a "Put the crew in the queue" switch.**
+  Searching Settings for "crew" finds it. It is the same setting as the command
+  palette's "Put the crew in the queue".
+
+### Changed
+- **Every desktop is now one row of tiles with a shelf.** A desktop shows as many
+  columns as fit at a width you choose, and tiles that don't fit wait as chips on
+  a shelf. Desktops you already have open as a row with every tile and session
+  intact. ⌘⌥←/→ slide along the row, ⌘⌥⇧←/→ carry a tile, ⌘⌥⇧↑ sends it to the
+  shelf, and ⌘⌥− and ⌘⌥= change how many tiles fit. Chips and tiles can be
+  dragged, and layout changes animate on a spring. The narrowest tile width is in
+  Settings → Appearance. A browser tile on the shelf keeps its page, and agents
+  can still control it.
+- **The window's title bar is one toolbar.** New, Commands, the flow switch, the
+  sidebar toggle and Notifications sit beside the window controls, the shelf or
+  queue bar takes the middle, and every other button and the profile selector sit
+  on the right. Tiles and the sidebar list gain height. Linux shows the same band
+  under its native title bar.
+- **Only the shelf rearranges your tiles.** Cmd+J, queue steps, the sidebar and
+  the palette slide the row to the tile and leave its order alone. A shelf chip,
+  its menu, the dots and peek's Open bring the tile beside the selected one,
+  which stays where it is, unless the two cannot share the screen; then they jump
+  too.
+- **A tile dropped beside a shelf chip comes on screen next to that chip's tile.**
+  The dropped tile becomes active, so every drop has a visible result. If a saved
+  width keeps the two apart, attn clears only as much as it needs to. If two tiles
+  cannot fit side by side at all, the dropped tile shows alone and a message says
+  what would make room.
+- **An agent opening a document or tile off screen gets your attention.** The tile
+  slides into view if the active tile can stay. Otherwise its chip waits and ⌘J
+  takes you there. Focus never moves.
+- **More tiles (⌘⌥=) makes room when a dragged width is in the way.** It clears
+  the widths in the way and says so. A width dragged on a big display gives way on
+  a smaller screen and returns when the room does. The shelf's width label shows
+  only tile counts your window can reach, with the current count highlighted, and
+  the limit message says when a narrower width in Settings → Appearance would fit
+  another tile.
+- **A maximized tile no longer has a Focus bar above it.** The tile fills the
+  desktop, and its own header carries a "Return to row" control. Esc and ⌘⇧↩ still
+  return. Review document tabs stay, shown only while one of two or more review
+  documents is maximized.
+- **Agent tiles have a two-row header that fits any width.** The top row holds the
+  state dot, title, settling and ask signals. The second holds the seed, role,
+  host, usage and provenance. As a tile narrows, pieces step down in a fixed order,
+  so signals never disappear, and the header refits when you change the app's text
+  size.
+- **Inactive tiles keep their signals lit.** An inactive tile dims its body and
+  identity details, while its state dot, ask chip and settling indicator stay at
+  full strength.
+- **A terminal takes the size of the screen you last used.** When several clients
+  show one terminal, the one you last typed in, pointed at or focused decides its
+  size. The others draw it whole, scaled to fit and centered, instead of being left
+  at the wrong width.
+- **The new-session launcher has a more polished look.** The selected row, the
+  input and the active harness carry an accent color. Rows have line-icon tiles,
+  the harness strip is one track, and a small heading says "New agent" or "New
+  terminal". Layout and keys are unchanged.
+- **New terminals run in one shared terminal host by default.** New and reloaded
+  terminals share one host, which uses less memory, and the app streams output
+  only to the terminals it shows. Output arrives once per frame: three streaming
+  terminals dropped from about half a core to about a fifth, with no added typing
+  delay. Terminals already running keep their process until they reload. Settings
+  → Agents and models → Shared terminal host turns it off, and a stored value
+  still wins. Outposts follow the home's setting and a machine with no host keeps
+  dedicated workers. The released Linux host also runs on Ubuntu 22.04, Debian 12
+  and Rocky 9.
+- **Agents start directly under their terminal by default.** Nothing you see
+  changes, and each agent uses about 9.6 to 9.7 MB less memory, measured on a Mac.
+  Agents already running keep their launcher until they reload. "Direct agent
+  launches" in Settings → Agents and models turns it off.
+- **Agents come back on their own after a machine reboots.** attn resumes every
+  agent's conversation after a reboot, on the home and on outposts. Each one waits
+  at the prompt and owes you a turn, so expect a full queue after a reboot. Shells
+  stay stopped until you open them.
+- **Asks are on by default.** New agents send you their questions with `attn ask`
+  and carry on while you answer from the Asks drawer. Settings → Agents and models
+  → Asks turns them off, and a stored value still wins. Agents keep the setting
+  they launched with.
+- **Ask answers and Quick Captures are typed into the agent's conversation.** They
+  arrive as your own message, so auto-mode reviewers in Claude Code and Codex
+  accept the approvals in them. They go in at once while the agent works, idles or
+  waits, and only a pending approval holds them back. `attn agent inbox` no longer
+  returns them, and a crew member woken for one does not spend its wake limit.
+- **Answering an ask keeps that agent on screen.** The answer still settles the
+  agent's turn, but the queue no longer swaps the view to the next agent behind the
+  drawer.
+- **Quiet queue notifications are on by default.** In queue flow, an agent woken by
+  a notification stays out of the queue unless it needs an approval or runs `attn
+  turn open`, which also works in desktop flow. An agent that finished something
+  you should read puts itself in your queue. A reply to something you sent through
+  Quick Capture or a paired `attn send` still opens a turn. The switch is in
+  Settings → Attention queue, along with "Show hidden sessions in the queue", which
+  stays on by default.
+- **The crew switch also brings the Chief into the queue.** A Chief that is owed a
+  turn waits in the queue and keeps its row in the Crew section, and you settle or
+  snooze it like any agent. When a delegate reports, the Chief asks you only for
+  decisions you alone can make, and opens its turn for a result you should read.
+- **Closing the agent on screen in queue flow takes you to the next turn.** It does
+  what ⌘J does, past the agent you closed. You stay put if nobody is waiting, or if
+  you close another agent from its row, a shell, or one of two tiles showing the
+  same agent.
+- **A close you asked for always finishes.** A draft, Enter, an annotation or a
+  phone prompt no longer cancels it, on the home or an outpost. Anything sent while
+  the session closes is refused with a message saying so. Your annotations and the
+  words Claude gives back at Esc are submitted whatever the composer holds.
+- **Rings reach agents that are really at their prompt.** A parked agent with
+  background work no longer holds its unread items for up to 30 minutes, and an
+  agent in the unknown state can be rung, which is often what wakes it. Crew
+  heartbeats and input the Claude mod returns follow the same rule.
+- **Your agents' own pull request comments no longer ring their watch.** Watches
+  stay quiet about anything your own account wrote, while everyone else's comments
+  still arrive and state changes always ring. "Ring on my own PR comments" in
+  Settings → Agents and models turns the old behavior back on, and `attn pr
+  wait-ready` still delivers everything.
+- **`attn crew apply` puts a member's saved settings into effect.** The command and
+  the Apply button in Manage crew reload in place and keep the conversation on the
+  same harness; on a new harness the member writes a letter and continues there.
+- **Plain `attn handoff` leaves a crew member asleep.** The session ends and the
+  member sleeps until something wakes it, even while you are at the machine. The
+  `--nap` and `--sleep` flags are gone.
+- **`/clear` keeps a crew member's day.** After `/clear` in Claude Code or `/clear`
+  and `/new` in Codex, the member stays bound to its terminal, even if the daemon
+  crashes partway through. `attn crew prime` re-orients it.
+- **A crew member's seeds stay with the member across sessions.** Its claims and
+  watches outlive any one session. `attn seed tend <id> --for <name>` replaces
+  `--member`. Resume on a member's seed focuses or wakes the member instead of
+  reopening an old session, including work assigned from another session.
+- **Replying to a crew member reaches the member.** A reply goes to the member's
+  current session, or wakes it if the session that wrote has ended.
+- **A crew member woken by an update is told what woke it.** An inbox wake lists
+  the seed updates and who sent messages, says you did not open the session, and
+  asks the member to read its inbox first. A member with a written charter follows
+  it. A member without one, one still onboarding, and the Chief greet you after the
+  cause.
+- **`attn agent reload` accepts an awake crew member's name.** A sleeping member is
+  refused by name and stays asleep.
+- **Quick Capture lists the Chief once, on ⌘1.**
+- **Paused seeds are called parked everywhere.** The CLI, app, search and prompts
+  now agree with the board. The search filter `is:dormant` is now `is:parked`, and
+  the old word is no longer accepted. Existing seeds are renamed on upgrade and
+  keep their age and board position.
+- **A seed's first read leads with the news.** `attn seed show` puts the newest
+  entries first and the body last. A plot shows its open children as a board, with
+  closed ones folded into a count, and `attn seed ls --plot <id>` lists every
+  child.
+- **A seed's log now records every change.** Moves, links, edits and ask answers
+  each write one entry, including the reason or park comment, so a seed's history
+  reads complete in the CLI and the app.
+- **Dispatchers can close their delegates' seeds without `--force`.** A session
+  above a seed's tender in the delegation chain, or the profile's chief, can move
+  the seed. The log records who moved it, and the delegate hears about it.
+- **Closing a seed twice is no longer an error.** A repeated move exits cleanly and
+  keeps any new reason as a note. `harvest --when-merged -m` keeps your reason,
+  refusals fit on one line that names the next command, and every move says who it
+  rang.
+- **A plot closes after its children.** Harvest and wither refuse a seed with open
+  children, even with `--force`, and name each open child and the ways out. Closing
+  the last open child tells the plot's tender, and an agent tending a plot hears
+  updates from the seeds under it.
+- **Attaching a file with a name the seed already has replaces it.** This ends the
+  `-v2` and `-final` copies. `attn seed show` and the app mark evidence as changed
+  since its report when the file no longer matches.
+- **Seed slugs work wherever a seed id does.** That covers every `attn seed` verb,
+  `delegate --seed` and `ask --seed`; a slug shared by several seeds is refused with
+  each match listed. Plot payloads can set `part_of` and `discovered_from`, and
+  children use `after` in place of `blocks`.
+- **Garden word searches put the best matches first.** Results are ranked by how
+  well they match your words.
+- **Agents learn what attn offers from one map.** New agents start with how to
+  behave plus a single map of attn's capabilities, which you can also read with
+  `attn --help` and `attn skill`. Every command listed there answers `--help`. The
+  separate `attn` skill is retired: agents already running are pointed at the map,
+  and attn removes the skill folder only when every file in it is one attn
+  installed.
+- **Agents ask how to deliver when nothing says.** The bundled skills cover pull
+  requests and trunk delivery. Agents no longer assume pull requests or a main
+  branch: they follow the task and the project's guidance, and ask you when neither
+  covers delivery. A repository whose guidance declares trunk has agents finish when
+  the landing step pushes.
+- **Orchestrators close their delegates when the work is done.** Finished Builders
+  and Pathfinders used to stay open as idle sessions until you closed them. An
+  Orchestrator now closes each one after reviewing its result.
+- **Agents get broader engineering guidance.** The attn-workflow skill keeps each
+  principle in its own file under an index of when it applies. A costly design
+  choice can run as independent prototypes, one per model your Prototyper role
+  offers, and you can tell a Pathfinder to dispatch without stopping for your
+  review.
+- **Editing an automation no longer breaks its thread.** After any change to an
+  automation's prompt, agent, model, effort or location, the next run starts a new
+  session on the same seed, and the old session keeps running. If the old session
+  later takes the seed back, attn respects that once the new session has delivered a
+  run on it.
+- **Codex automations run only in folders you already trust.** Attn no longer
+  watches Codex's screen to answer its trust question. A folder counts when you have
+  worked there, in its repository or in another checkout with the same origin, or
+  when Codex already trusts it. Any other folder fails the run with the reason
+  before Codex starts, and the automations drawer offers a button that opens the
+  agent in the repository so you can answer its trust question.
+- **The automation editor covers more cases.** Rarer settings such as continuity and
+  catch-up live in one Advanced section, with chips for values you changed. Manual
+  automations can work in a pull request worktree, Folder has a Browse button, and
+  you can read and copy an automation's definition. Automations using other drivers
+  open and keep their driver.
+- **Delegations and new terminals respond sooner.** `attn delegate` returns as soon
+  as a delegation settles instead of up to a quarter second later, and a typical new
+  terminal starts about 30 ms faster.
+- **Opening a pull request shows its fresh CI status right away.** You no longer
+  wait for the next refresh, and a failed fetch says so instead of showing stale
+  details. Dashboard updates go out only when GitHub reports a change.
+- **`attn terminal move` moves agents and shells between desktops.** Their processes
+  keep running. It replaces `attn session move`, and `attn terminal open --desktop`
+  now creates a missing numbered desktop.
+- **`attn version` says how the binary was built.** It prints the channel, commit
+  and whether the tree was dirty, and `attn version --json` gives the same as JSON.
+- **`attn state explain` shows what the shared Codex server reports.** Each thread
+  status appears as an `app_server` row, so a stuck tile can be compared with the
+  server's view.
+- **Typing on an outpost echoes about a round trip sooner.** Keys stream in order
+  without waiting for the previous key's answer, which matters most on slow or
+  relayed links. Keys typed before attn knows an outpost is offline may run when it
+  comes back, and those keys don't flash their tile.
+- **Typing stays responsive during a Notebook first sync.** The connection to an
+  outpost paces large transfers and terminal floods to the network path, so
+  keystrokes no longer wait behind them or another shell's flood.
+- **A silent outpost gets a full minute before attn gives up.** Short network
+  outages pass with nothing refused. The outpost's tiles say "not responding" from 3
+  seconds, "unreachable" at 60 seconds, and show when the outpost is still
+  connecting.
+- **An unreachable outpost no longer costs CPU while it stays down.** Retries back
+  off from a few seconds to about two minutes and start over once it connects, and
+  it no longer refreshes every session on each redial. Connect in a terminal,
+  Re-pair, Update and restarting the home still retry right away.
+- **More features follow the home.** Outposts, the narrowest tile width and usage
+  analytics apply everywhere when you turn them on in the app. An outpost that had
+  its own value uses the home value until it leaves the home.
+- **Each profile has one Notebook folder setting.** `notebook.root` is set per
+  profile in Settings → Notebook Folder, a blank value uses `~/attn-notebook`, and
+  folders you already use carry over. Changing the folder repoints without moving
+  files. Settings, Chief setup and `attn settings set notebook.root` refuse a folder
+  inside or around another profile's folder or the default folder, and name both
+  folders.
+- **Settings → Experimental is clearer.** Each feature has a bold name, a
+  one-sentence summary and a faint note for its shortcut or when a change starts,
+  with an on-off switch. Each group shows how many are on, and search finds every
+  feature by name. The palette can turn each one on and off, `attn settings list
+  --features` lists them, and `attn settings set <key> ""` returns a true or false
+  setting to its default.
+- **Experimental flags no longer make settings appear and disappear.** Outposts,
+  Phones and Analytics stay in Settings with their switch beside the page title,
+  dimmed and marked off until you turn them on.
+- **A feature that's off says so the same way everywhere.** Attn names the switch and
+  its setting, and where to turn it on.
+- **Agent callouts are always on.** Any agent can point you at a part of the app, and
+  there is no longer a setting to turn this off. A stored value is removed at upgrade.
+- **Quick Capture is always available on macOS.** Ctrl+Option+Cmd+Space opens it from
+  any app, and "Customize keyboard shortcuts" rebinds or clears the shortcut. The
+  setting is gone. Closing the last visible window now quits attn, so the app no
+  longer stays running with no way back.
+- **Option shortcuts on macOS follow the physical key.** On keyboards where Option+8
+  types a bracket, such as Swedish, ⌘⌥8 and ⌘⌥9 move a tile to desktop 8 or 9 as they
+  should. The sidebar width keys are the two keys right of P on every layout, and the
+  shortcut editor records and checks keys the same way.
+- **attn opens without waiting on your login shell or GitHub.** The app connects first
+  and reads your login environment in the background, so a slow shell never holds the
+  first screen. Launches wait for the check instead of running without your
+  environment. The first screen also stopped waiting for GitHub host discovery and for
+  slow reads of attn's own history.
+- **A harness being checked shows a small ring on its button.** Nothing moves when the
+  ring comes or goes, and a hover says what it means.
+- **The `attn` command is now a small native program and starts faster.** Agent hooks
+  and most commands run in it directly, and everything else goes to the Go program, now
+  named `attnd`, which installs beside it. Commands behave as before. An `attn` found
+  without `attnd` names the path it searched, and Linux releases ship both
+  `attn-linux-*` and `attnd-linux-*`. A hook takes about 6 ms instead of 14 and about a
+  third of the CPU, and tables print in a few writes instead of thousands.
+- **Large gardens cost attn far less.** attn sends the app only the seeds that changed,
+  so an update drops from about 4 MB to about 11 KB, and adding a note answers in about
+  2 ms instead of about 100 ms. Seed text is stored apart from the rest of each seed:
+  on about 2,800 seeds the daemon's memory dropped from 145 to 120 MB and each garden
+  change takes about 40% less daemon CPU. If you go back to v0.12 or older and return,
+  seed text written in the meantime is picked up, and any text it replaces stays as a
+  version. Startup no longer reads every seed file's content, which cut startup CPU from
+  about 14 s to 9 s on a 2.8 GB Notebook.
+- **Listing the Garden is lighter.** `attn seed ls` receives about a tenth of the data
+  it did. `attn seed ls --json` and `attn seed ready --json` print only the fields a
+  listing shows; use `attn seed show` to read a whole seed. `attn seed ready --all` uses
+  about 30% less CPU on about 2,800 seeds, with identical output.
+- **Session updates no longer slow down as pull request history grows.** Each update
+  reads only the rows that session needs instead of every pull request attn has
+  recorded. Usage tracking stays cheap for sessions with hundreds of subagent threads,
+  and agents' `attn` commands find their session far faster.
+- **attn's app uses much less memory.** Painting no longer creates garbage for every
+  cell, and terminal output no longer allocates fresh memory per message: four panes
+  streaming text went from about 2 MB/s of growth to under 0.6 MB/s while memory climbs.
+  Inactive panes no longer hold a hidden copy of their contents, saving about 12 MB of
+  graphics memory per inactive agent pane in a large window. Home is no longer painted
+  under the session view, saving about 75 MB on a 2560-wide window, and its lists no
+  longer leave about 36 MB behind each time they grow or shrink past a certain height.
+  The Garden no longer rebuilds its search text on every session update.
+- **attn refuses to run a different build on a session's home.** From inside an attn
+  session, `attn daemon`, `attn daemon ensure`, `attn _bridge` and `attn db restore`
+  stop if they would replace that session's daemon from another binary. The refusal
+  explains how to select an instance instead. `make install` and terminals outside attn
+  work as before.
+- **attn has a new website.** attn.codes has a new landing page, an About page and a
+  "Coming soon" guide placeholder, with the older feature and guide pages unpublished
+  for now. Installs now use `brew tap solenesinc/attn
+  https://github.com/SolenesInc/attn`, then `brew install --cask solenesinc/attn/attn`.
+
+### Fixed
+- **What you type no longer lands in the daemon log.** Every keystroke was logged with
+  a preview of its bytes, including passwords typed at sudo or ssh prompts, and the
+  volume pushed useful lines out of the log within an hour. Input is now logged only
+  when a write fails, and without its contents.
+- **Web pages can no longer reach the daemon by rebinding a domain name.** The daemon
+  now answers only requests addressed to a localhost name or an IP address. If you set
+  `ATTN_WS_BIND` to a LAN hostname and connect by that name, the refusal names the
+  host, and connecting by IP still works.
+- **attn's plugin runtime no longer trusts a compromised certificate root.** Bun 1.4.4
+  drops the emSign ECC Root CA - G3, whose intermediate keys could be used to forge
+  certificates.
+- **A paused or slow daemon is no longer replaced.** attn used to kill a daemon that
+  missed one health reply, which could end its shells. It now replaces a daemon only
+  when it proves to be the wrong one, and otherwise reports an error naming the process
+  and what to do.
+- **Restarting the daemon right after stopping it no longer fails.** attn could report
+  a daemon that had already exited as "already running", or refuse to stop because it
+  couldn't inspect a process that was on its way out.
+- **`attn daemon stop --help` no longer stops the daemon.** `stop` and `ensure` print
+  usage for help flags and refuse any other argument by name.
+- **An interrupted or quick second backup no longer causes trouble.** A partial file
+  could sit under a backup's name and `attn db restore` would pick it and leave the
+  daemon unable to start. Backups now get that name only once complete, and cost less
+  to write. A second backup in the same second failed with "already exists"; each
+  backup now gets its own name and survives rotation in the right order.
+- **Terminals come back when the process hosting them dies.** A crash used to leave
+  every session stopped and needing a hand reopen. Sessions now revive at their pane's
+  size, and a session that cannot come back refuses input.
+- **Reloading a session no longer risks losing it.** The replaced terminal worker could
+  delete its successor's files as it exited. The reload then failed with "worker
+  announced ready but did not answer", or the session vanished at the next daemon
+  restart.
+- **Opening a terminal after an update no longer fails with "EOF".** With a new build on
+  disk and the old daemon still running, a new terminal could interrupt other terminals'
+  attach or launch. Terminals now keep running and offer a reload until the daemon
+  restarts.
+- **A paste into a program that isn't reading no longer freezes your other panes.** Each
+  terminal has its own input queue, so typing elsewhere stays instant. A queue past 16
+  MiB refuses more input and says so. Sending to an agent that won't take the text within
+  5 seconds fails with the reason and keeps your draft. Terminals already running pick
+  this up when they reload or move.
+- **Closing terminals finishes properly.** Linux shells close promptly, jobs stop across
+  process groups even when disowned or ignoring HUP, and a command run right after a
+  reload waits for the first shell prompt. An exiting agent also reports its exit before
+  it turns idle.
+- **A terminal on the shared host reports its exit even if a background job holds it.**
+  The job ends with the terminal when the terminal is removed, unless it moved its input
+  and output elsewhere, and an exited terminal shows as a defunct process until then. A
+  host out of file descriptors no longer spins a CPU core, and a failed terminal upgrade
+  no longer ends a session whose output was stuck behind a slow client.
+- **An agent on the shared terminal host keeps its state across a daemon restart.** An
+  agent waiting for you no longer comes back idle, and one asking for approval no longer
+  comes back working. A status the agent reported just before its hook no longer replaces
+  the state that hook set.
+- **A session no longer stays running forever if its agent exits as the daemon
+  restarts.** An agent that exited just as a restarted daemon began watching its terminal
+  could be missed.
+- **Enabling the shared terminal host on Linux no longer fails at random.** It could stop
+  with "text file busy" while starting up. A host that retires early and cleanly is also
+  no longer recorded as broken for that build.
+- **Waiting Claude sessions keep their place after a daemon restart.** They stay waiting
+  and hold their position in the queue.
+- **Claude's agent view no longer pulls conversations out of attn.** Pressing ← on an
+  empty prompt or using `/bg` moved the conversation into Claude's own daemon, which lost
+  the session's label and links, pointed `attn` commands at another terminal and broke
+  Reload. attn now launches Claude with that view off. Conversations already in Claude's
+  daemon run until you stop them with `claude stop <id>`.
+- **Claude compacting by itself no longer sends you to an idle session.** An automatic
+  compaction at an idle prompt returns the session to the state it had and opens no turn.
+  A compaction during real work, or one you asked for, still ends in a turn. A failed idle
+  compact also returns the agent to its previous state right away.
+- **Pressing Esc on a Claude session's first turn now settles it.** A fresh session used
+  to stay working if its first prompt came more than about two seconds after launch.
+- **A Claude Code agent whose woken run fails now reaches you.** If a notification started
+  a run that died, such as on a usage limit, the agent sat at its prompt with no turn. It
+  now joins your queue and notifies your phone. attn also stops sending heartbeats and
+  sleep requests to a crew member whose run failed, until it runs again.
+- **Delegated Claude agents no longer stop at the trust question in repositories you
+  already use.** A delegation or automation records Claude's trust when a session in that
+  profile has worked in the same repository on any machine. In a repository neither known
+  nor trusted, a delegation still asks, and an automation fails before it starts. A launch
+  stopped at the question reads as waiting for you, and the agent that delegated is told,
+  with the screen attached.
+- **A capture can no longer land in Claude's folder-trust question after a restart.** A
+  Quick Capture could be typed into the open question, answer it with No and still count
+  as read. attn restores the question on restart and holds captures until you answer.
+- **Nothing gets typed into a resumed or reloaded agent while it starts.** Text sent
+  during that window could sit unsent in Claude's composer and count as read. attn waits
+  until the agent shows up, and mail waiting for a Resume rings as soon as it does.
+- **Waking a sleeping crew member no longer loses your message.** An ask answer, Quick
+  Capture or authorization was typed into an agent that had not started yet and marked
+  read. It now arrives as a user turn once the agent is up.
+- **Mail for an interrupted crew member resumes its conversation.** After a restart,
+  queued mail could start a fresh session without the conversation's context and stop the
+  original from coming back.
+- **A crew member can no longer run as two sessions at once.** A member's earlier session
+  now comes back only while the member is asleep, otherwise attn refuses and names the
+  session that is awake. Reopening a session right after its handoff no longer lets the
+  next wake start a second one.
+- **Opening an agent while attn brings it back now attaches.** It used to fail with
+  "session not recoverable" just as the daemon revived that same agent.
+- **Reloading an agent that hasn't taken its opening prompt keeps that prompt.** The agent
+  launched with nothing to do, and a Codex automation run reloaded during startup stayed
+  pending forever.
+- **A delegation whose agent exits before its first turn reports why.** After a daemon
+  restart, attn could launch the agent again and report success, so you never heard about
+  the failure.
+- **An agent that delegates work now hears from its delegate.** It watches the delegate's
+  seed, so it hears when the delegate harvests, withers, parks or sends a ringing note,
+  even when it tends no plot above that seed.
+- **When your answer asks the agent something, it replies with a new ask.** It used to
+  write the reply into its terminal, where you would likely never read it.
+- **An agent that exits at once now shows why.** When a login shell's rc file exits
+  during launch, its error stays on the exit screen instead of "screen unavailable".
+- **A slow or failed read of your login shell no longer costs you its environment until a
+  restart.** attn gives the shell 10 seconds instead of 2, shows a notification naming the
+  shell, the limit and the error, tries again on the next launch, and clears the
+  notification once a read succeeds. An agent found only on your login PATH stays
+  selectable in the meantime.
+- **Generated titles and waiting states work for more installs.** Agents get them even
+  when their harness is only on the login-shell PATH.
+- **Background agent tasks stop when they should.** Tasks such as session titles could
+  run past their deadline and keep the daemon from stopping when Codex was installed
+  through npm. Cancelling now stops the whole task, and a failure from being offline says
+  so instead of blaming MCP.
+- **Session activity lines stay current with non-English text.** A character cut in half
+  made Codex refuse the activity prompt on every retry. Prompts are now always cut between
+  characters.
+- **Multi-line messages sent to Claude mid-turn show on one row.** Each line break used
+  to appear as a garbage character in the transcript. Claude still receives the original
+  line breaks.
+- **Usage is counted once and not lost.** A reply landing during `/new` or `/clear` could
+  go uncounted for good, closing a remote Claude agent could lose its final usage, and
+  two transcript readers could add the same Codex reply twice.
+- **Automations recover from a session that can't resume.** A singleton whose first launch
+  failed or whose session could not resume used to fail every run until someone edited its
+  definition. The next run now starts a fresh session and seed, and the failed run stays
+  in history. Closing a session that can resume still reopens the same conversation on the
+  next run.
+- **A Codex automation only counts as delivered once its first turn starts.** The run stays
+  pending until the first turn, even across a daemon restart or when the automation is
+  turned off, and fails with the saved error if Codex exits. A run relaunched by `attn
+  codex restart --now` delivers its prompt or fails with a reason.
+- **Singleton automations no longer look like they pile up sessions.** The drawer and `attn
+  automation runs` mark only the active session as current. Sessions replaced by an
+  earlier definition change stay in the history.
+- **Automation runs no longer fail silently.** A first manual run that failed while attn
+  was starting up used to report success, and now returns the failure.
+- **Saving a scheduled automation from the form works.** Every save used to be refused
+  with "schedule.time_zone is required".
+- **Started GitHub automation runs finish after a restart.** A review whose agent had
+  already started could stay pending forever if its automation was turned off or GitHub
+  was signed out. It now completes either way.
+- **Shared Codex no longer starts a conversation it cannot save.** A failed write is now
+  refused with the error instead of letting an automation be marked delivered on a
+  conversation nothing could resume. A slow but healthy write gets up to 60 seconds, a
+  quiet restart waits for it, and reloading a terminal during `/new` no longer sends later
+  prompts to the wrong conversation. attn's opening note goes in the background, so a slow
+  one cannot exit the terminal.
+- **Shared Codex survives a stopping or restarting app-server.** A resume could fail with a
+  broken pipe, a command could lose a reply from a server that then exited, and a restart
+  could close a terminal that was just starting.
+- **Shared Codex keeps working after Linux cleans up its socket link.** attn now finds the
+  running server without the link, so nothing stops and running turns continue.
+- **Shared Codex tiles settle correctly.** A tile could show working for hours while the
+  agent sat idle. attn now checks with Codex and settles it, unless a background terminal
+  is really running. A slow MCP server keeps the tile working until it is ready, and your
+  turn opens then. A Codex session on the shared terminal host also no longer sticks when
+  a title arrives early.
+- **Shared Codex tiles no longer open on Codex's own update prompt.** Choosing Update now
+  there closed the session and archived its conversation.
+- **Codex approvals show when Codex actually shows them.** Requests that auto-review
+  handles no longer read as needs approval for minutes, and one handed to you appears at
+  once. Answering in a shared session you switched to with `/resume` or `/agents` clears
+  its approval from the queue.
+- **An unused Codex session stays out of its neighbour's conversation.** Quitting one used
+  to show the verdict of the newest conversation in the same folder.
+- **Codex agents started with a prompt get a title.** The title now arrives after their
+  conversation connects.
+- **Codex subagents act as their parent's session.** Seed reads also work from their
+  profile when no session resolves, sandbox socket errors explain how to run the command,
+  and `--profile` refuses a different profile by name.
+- **Removing or sweeping worktrees on an outpost respects your seeds.** An outpost could
+  force-delete a branch or remove a worktree that an open seed at the home still needed.
+  It now asks the home first and refuses if the home can't answer. A removal it allows
+  notes the seed and closes the sessions.
+- **Automatic worktree cleanup waits until GitHub can say where work merged.** When the pull
+  request listing failed, or no GitHub client was available for a GitHub host, the sweep
+  could delete a worktree with its local branch and ignored files. attn now leaves those
+  alone until GitHub names the integration branch.
+- **The worktree sweep stops failing on a repository whose folder is gone.** attn stops
+  tracking that repository and logs it as forgotten. Creating a worktree there with attn
+  tracks it again, and worktrees that come back keep their Keep pins.
+- **Review clones stop starting over when Git rewrites your origin.** With a global
+  `url.<mirror>.insteadOf` rule, a managed review clone was cloned again on every poll,
+  which could take 30 minutes each time.
+- **A home can't take over or disturb another home's outpost.** Add and Update refuse before
+  installing anything on an outpost paired with another home, and removing a refused row
+  leaves that home's enrollment and running shells alone.
+- **A stalled outpost no longer holds up the home.** Waiting on an unresponsive outpost could
+  block every Garden change or local work; attn now gives up after 10 seconds. Seeds tended
+  from a nested folder on an outpost also reopen in the right place.
+- **An outpost restart no longer strands its daemon or overwrites live state.** A daemon
+  starting at the wrong moment could end up unreachable, and a session could stay working
+  after its agent had replied.
+- **Remote tiles show what will happen to your typing.** With Outposts off or while
+  connecting they say so instead of looking online, each refused key flashes the tile, and
+  a dropped connection says how many keys may not have been sent.
+- **Outpost files stay on the outpost.** Open in editor and clicked paths in an outpost shell
+  name the outpost instead of opening a Mac file at the same path, and deleting a Mac
+  worktree can no longer close an outpost shell with a matching folder.
+- **Remote sessions close cleanly.** A shell that exits while its outpost has stopped
+  listening closes at the home with its exit code and screen. A remote terminal that exits
+  disappears from its session, ending one that is already gone no longer fails, and closed
+  shells no longer pile up or slow reconnects. Shared Codex servers on outposts stop once
+  nothing uses them, and closing an outpost's last session no longer stops the home's
+  server.
+- **Reopening a shared Codex session right after an outpost restart works every time.** It
+  could be refused because the old server's terminal was still being removed. An outpost
+  Codex session also always takes its first prompt now.
+- **Outpost updates and reconnects tidy up after themselves.** Updates remove older cached
+  binaries, the Notebook drops a sync error from a previous connection, a missing Notebook
+  folder marker shows up after a reconnect, and resume refusals name the outpost and the
+  directory problem.
+- **Add installs the shared terminal host on an outpost that lacks it.** An outpost already
+  paired without one offers "Install shared terminal host" and keeps its terminals on
+  workers until you do.
+- **Notebook sync with an outpost recovers on its own.** When an outpost refuses the folder
+  list, the home retries and shows the reason in Settings → Outposts. When the sync stream
+  closes while the outpost stays connected, the home reopens it. Files written just as sync
+  starts on a Linux outpost reach the home right away, and folder changes stay in order with
+  sync engine v0.1.11. Notebook folder paths containing a line break are refused.
+- **A bad note or locked folder no longer breaks the Notebook.** A note whose frontmatter
+  refers to itself no longer crashes the daemon when backlinks are read. A folder the daemon
+  can't read no longer fails backlinks or stops live updates for the whole Notebook.
+- **Open Notebook files refresh after attn writes to them.** Journal appends, writes from
+  another window and the chief's scaffold used to leave the old content on screen until you
+  reopened the file.
+- **Editors stay accurate about outside changes.** An editor rooted at a folder another
+  profile used as its Notebook no longer stops seeing outside edits when that profile
+  changes its Notebook, and attn's own saves no longer show up as outside edits.
+- **Unsaved edits survive when an editor tile leaves the screen.** A tile that unmounts saves
+  its edit, and if the save fails or conflicts the draft returns with the usual message. ⌘W
+  on an unsaved tile now saves too.
+- **Marks in a document stay until they have really been sent.** Marks added or changed in a
+  markdown or seed tile while a send is under way stay, in the tile and in the saved draft,
+  and the tile says how many stayed. Two tiles showing the same seed share its marks.
+- **An ask's images show on every machine and stay as they were.** `attn ask` copies an ask's
+  images to the home when the ask opens. A missing image, or more than 5 MiB of images in one
+  ask, is refused with an error that says so.
+- **Each notification stays in the profile it belongs to.** Notebook conflict notifications
+  reach only the profiles that use the folder and name both the original and the conflict
+  copy. Session and Garden review failures reach only their own profile, and switching
+  profiles no longer leaves the previous profile's rows on screen. On upgrade, stored conflict
+  notifications are replaced by per-profile ones for copies still on disk, and failures whose
+  session is gone are deleted.
+- **A refused snooze or settle now says why.** A snooze or settle of an outpost agent that
+  arrives after a new turn opened is refused with the reason and the new turn's start time.
+- **A pull request reported during `/clear` stays with its session.** Links and sent files are
+  confirmed only once saved. A pull request reported from the terminal during `/clear` lands
+  on the session it names, including on outposts, where the report fails and names the home if
+  the home cannot be reached.
+- **Pull request details no longer roll back to an older answer.** A slow GitHub response could
+  overwrite newer CI, mergeability or head information and announce a change that never
+  happened.
+- **The false "GitHub rate limited" banner is gone.** Details are fetched once per launch,
+  pacing is silent, and the banner only appears for GitHub's real limit. A failed reviews
+  request no longer blanks a pull request's review status.
+- **Muted pull requests stay muted when a GitHub host can't be reached.** Only signing out of a
+  host now clears its list.
+- **`pr wait-ready` uses the right GitHub credentials.** It names the pull request's repository,
+  which fixes 401 errors when run from a checkout on another GitHub host.
+- **Garden review stays reliable.** Advice stays put once it is ready, instead of a restart or
+  second start replacing it. A reconnecting outpost no longer makes every action on a ready
+  item refuse as stale. If the seed really changed, the item shows Try again or settles.
+- **Open seed now shows the seed even with an old Garden search in place.** Notifications, asks
+  and a tile's Reveal in Garden used to land on search results, often empty.
+- **Garden graphs count every seed.** Relations, ready flags, plot progress and stale listings
+  used to miss seeds older than the newest 1000.
+- **Large seeds pass through the CLI and outposts.** Big bodies, plots and vents no longer fail,
+  and a request over the size limit names the command, size and limit.
+- **Seed commands are stricter and clearer.** Each shows its own help, rejects flags from other
+  verbs and refuses empty stdin instead of clearing a body.
+- **`attn state explain` always names the cause of the state it shows.** A state now appears
+  only once its cause is recorded, including after a failed save and on outposts.
+- **Browser commands keep working through page changes.** Element waits follow navigation and
+  reopened tiles until their original deadline, and page actions work on the new document.
+- **A browser tile closing during a cookie sync no longer freezes the app.** Cookie saves also
+  stay in order, so closing a tile can't bring back a cookie a site just deleted.
+- **Browser tiles behave on Linux.** Opening one no longer splits the window in half, closing a
+  focused page keeps keyboard focus, and pages shrink with their tile.
+- **⌘Z works in text fields again.** Undo and redo did nothing in Settings search, rename boxes,
+  Quick Capture and other inputs in the packaged app.
+- **Quick Capture can be dragged.** Drag the panel by its surface to move it, while the message
+  field, buttons and history rows keep their clicks.
+- **Keyboard focus stays put while model catalogs refresh.** Crew launch controls and the model
+  Refresh buttons used to drop focus to the page.
+- **Quick keys land where you meant.** Tab then Down as the launcher's Where list appeared could
+  be overwritten by the default row, a D pressed as the worktree chooser rendered could be
+  forgotten, and a second ⌘digit pressed quickly could leave you on the wrong desktop.
+- **Enter and → now do the same thing on every callout step.** Both keys move to the next step,
+  and only the last step goes to its target or ends the tour. A multi-step callout stays while
+  you try what it points at.
+- **Row keys walk off an empty desktop.** ⌘⌥← and ⌘⌥→ (Cmd+Shift+arrows on Linux) used to do
+  nothing from the launcher on an empty desktop, which trapped you there.
+- **Sidebar and status alignment is right again.** The status dot no longer sits about 3px low,
+  and in the desktop flow the crew section, Home and Desktop overview line up with the session
+  rows.
+- **Home lists stay in view.** Dragging a text selection past the edge of Sessions or Pull
+  Requests, or scrolling diagonally, could push the rows sideways out of sight.
+- **Dragging a divider moves only what you drag.** Untouched columns no longer shift, and dropping
+  a stack on a tile's top or bottom edge keeps its tiles at a usable size or places the stack
+  beside the tile with a message.
+- **The delegation chain card stays open when you move to it quickly.** The chip's "Drag to move"
+  tooltip no longer covers the card either.
+- **attn holds far less graphics memory with the shelf.** After 600 tile moves the app now sits
+  near 480 MB instead of 3.2 GB, and hidden panes let go of their last frame.
+- **The queue no longer reads "nothing owed" above a list of turns.** When an outpost is
+  unreachable, the pill and sidebar head read "2 waiting · 1 unreachable", and unreachable turns
+  sort after the ones you can act on.
+- **Offline agents keep their Home queue band.** The agents palette hides turn actions that are
+  unavailable, and refused turn commands now say so.
+- **A refused setting shows once, beside its field.** Text fields show the reason and Retry next
+  to the input, instead of resending the value and raising a notification.
+- **`attn settings` tells the truth.** Unset default-on settings show as on, a value typed or
+  stored as TRUE reads the same everywhere, and resetting the shared terminal host follows a later
+  default. On an outpost, `attn settings list` marks a home setting as set at the home, and
+  `attn settings set outposts_enabled` refuses and points to the home. Setting it to the value it
+  already has no longer restarts every connection.
+- **Opening the same `attn://spawn` link again works.** The app used to ignore a link it had
+  handled once until it restarted.
+- **Removing an instance works just after its daemon starts.** `attn instance` removal could fail
+  with "shared PTY host was not stopped".
+- **`attn terminal run --wait` returns only its own output.** Run right after `attn terminal open`
+  or another `run`, it could return the earlier command's output.
+- **`attn terminal open -- <command>` refuses at once when `/bin/sh` is bash and
+  `SHELL=/bin/sh`.** It used to wait 30 seconds and then fail.
+- **Switching conversations keeps each chat's details.** Input, title, turn and usage hold while
+  the switch waits or the daemon restarts, and reloaded plugin agents stay active when an earlier
+  stop finishes. Closing a plugin agent also completes when its terminal exits during cleanup.
+- **Two crashes to the UI error screen are gone.** One came from a terminal that never drew leaving
+  the row, the other from a palette command reporting an error as the palette closed.
+
+### Removed
+- **Outposts no longer listen on a TCP port.** The `outpost_listen` setting and the
+  `authorized_keys` setup are gone, because every connection now rides ssh. An outpost added by
+  address must be removed and added again by its ssh destination, which closes its terminals.
+- **Marking a session Chief of Staff is gone.** The New session toggle, "Make chief of staff", the
+  transfer prompt and the Chief of Staff card no longer exist. The `crew_v2_enabled`,
+  `chief_model_*`, `chief_effort_*` and `chief_context_window_cap` settings are gone too, along
+  with `chief:<profile>` addresses. Use the Chief slot or `attn crew set chief` to configure the
+  Chief.
+- **The Pi plugin, the Guardian and auto mode are gone.** This includes `attn automode`, `attn
+  plugin install-bundled`, the Auto mode section in Settings and the toggle in the session picker.
+  Stored Pi sessions stay as history; resuming one or delegating to `pi` reports that the agent is
+  not available.
+- **GitHub Copilot CLI is no longer supported.** Past Copilot sessions stay in the ledger as
+  history, and reopening one is refused with the missing harness named.
+- **The Mobile Web Client is gone.** attn no longer runs `tailscale serve`, and Settings no longer
+  offers it. It could not work, because a browser cannot get the token every connection needs; the
+  phone app replaces it. If you had it on, Tailscale still keeps the rule attn added, so remove it
+  with `tailscale serve --https=443 off`.
+- **Agents no longer fall back to running inside the daemon.** That fallback hid a failed terminal
+  backend, and a daemon restart then stopped those agents. When terminals can't start, attn says why
+  through `attn daemon ensure` and the app. `ATTN_PTY_BACKEND=embedded` is refused like any other
+  unknown value.
+- **Delegation roles no longer have a stopping point.** The "Stops when" field and
+  `--stopping-point` are gone, and any custom text you wrote now lives in that role's instructions.
+  `attn delegate roles apply` refuses older exports and files with unknown fields or extra content
+  instead of silently dropping text.
+- **Send to Chief is gone from the Notebook.** Selecting text in the Notebook stays a plain
+  selection. Send to Chief for Garden seeds is unchanged.
+
+<!-- changelog-commits: 9bab4a363be433d22a7e6376329c3a0f6f4ec342..a25889600325b677d7dcc27c9e916a13dbb76aa5 -->
+
+---
+
 ## [2026-10-24]
 
 ### Added

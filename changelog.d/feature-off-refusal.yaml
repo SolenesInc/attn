@@ -1,3 +1,0 @@
-kind: changed
-area: settings
-change: When a feature is off, Attn says so the same way everywhere and names the switch and its setting, as in "Outposts is off. Turn it on in Settings → Experimental → Outposts (outposts_enabled)".
