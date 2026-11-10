@@ -73,6 +73,7 @@ type codexAppServer struct {
 	hooks           hookSet
 	toolEnv         []string
 	mu              sync.Mutex
+	statusMu        sync.Mutex
 	threads         map[string]*codexServerThread
 	conns           map[*codexServerConn]bool
 	nextID          int
@@ -360,7 +361,7 @@ func (s *codexAppServer) unload(id string) {
 	}
 	delete(s.threads, id)
 	s.mu.Unlock()
-	s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
+	s.unloaded(id)
 	s.broadcast("thread/closed", map[string]any{"threadId": id})
 }
 
@@ -774,7 +775,15 @@ func (s *codexAppServer) metadata(t *codexServerThread) map[string]any {
 }
 
 func (s *codexAppServer) status(t *codexServerThread) {
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
 	s.broadcast("thread/status/changed", map[string]any{"threadId": t.c.conversation, "status": s.metadata(t)["status"]})
+}
+
+func (s *codexAppServer) unloaded(id string) {
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
 }
 
 func (s *codexAppServer) turn(conn *codexServerConn, p codexServerParams) (any, func(), error) {
@@ -896,10 +905,9 @@ func (s *codexAppServer) askApproval(p codexServerParams) (any, func(), error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return map[string]any{}, func() {
-		s.tell(t, json.RawMessage(request))
-		s.status(t)
-	}, nil
+	s.tell(t, json.RawMessage(request))
+	s.status(t)
+	return map[string]any{}, nil, nil
 }
 
 func (s *codexAppServer) answered(m codexshared.Message) {
@@ -997,7 +1005,7 @@ func (s *codexAppServer) archive(id string) (any, func(), error) {
 		return nil, nil, err
 	}
 	return map[string]any{}, func() {
-		s.broadcast("thread/status/changed", map[string]any{"threadId": id, "status": map[string]any{"type": "notLoaded"}})
+		s.unloaded(id)
 		s.broadcast("thread/archived", map[string]any{"threadId": id})
 	}, nil
 }
@@ -1128,10 +1136,7 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 			}
 		}
 	case methodAskApproval:
-		_, after, err := s.askApproval(codexServerParams{ThreadID: p.ThreadID})
-		if err == nil && after != nil {
-			after()
-		}
+		_, _, err := s.askApproval(codexServerParams{ThreadID: p.ThreadID})
 		return struct{}{}, err
 	case methodStartTerminal:
 		t, err := s.loaded(p.ThreadID)

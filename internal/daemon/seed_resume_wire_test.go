@@ -118,7 +118,9 @@ func TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing(t *test
 	forgotten := seedResumeDelegate(t, w, fakeagent.Codex, "forgotten")
 	conversation := w.Launched(string(forgotten.SessionID)).ConversationID
 	closePane(app, sessionPane{session: string(forgotten.SessionID)})
-	sessionRecoveryDeleteTranscript(t, conversation)
+	if err := os.Remove(w.CodexServer().AwaitArchived(conversation)); err != nil {
+		t.Fatal(err)
+	}
 
 	desktops := seedResumeDesktops(w)
 	for _, refusal := range []struct {

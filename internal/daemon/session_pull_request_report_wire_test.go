@@ -46,10 +46,11 @@ func TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten(t *testing.
 		return len(s.PullRequests) == 1 && s.PullRequests[0].Repository == "ghe.example.test/acme/widget"
 	})
 
+	beforeForget := app.EventCount()
 	if err := cli.ForgetSessionPullRequest(protocol.SessionID(s1), url); err != nil {
 		t.Fatalf("forget: %v", err)
 	}
-	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
+	testworld.AwaitSessionSince(app, beforeForget, s1, func(s protocol.Session) bool { return len(s.PullRequests) == 0 })
 	if landed := pullRequestChangesOf(app, s1); !slices.EqualFunc(landed, [][]int{{71}, {}}, slices.Equal) {
 		t.Errorf("s1's pull requests reached the app as %v, want #71 once and then none", landed)
 	}
