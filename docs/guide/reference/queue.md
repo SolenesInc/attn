@@ -65,13 +65,20 @@ Settling takes you to the next agent waiting for you, or Home when nobody is.
 Cmd+Shift+E on an agent that is working takes you to the front of the queue.
 
 A snooze settles an agent for a period of time. Use it when you don't want to
-close the agent but can't make a decision yet. Three controls open the snooze choices: Cmd+Shift+S (Ctrl+Alt+S on Linux), the snooze button on the agent's row, and "Snooze this agent…" in the command palette. The choices are 30 minutes, an hour, 2, 4 or 8 hours, or until
+close the agent but can't make a decision yet. Four controls open the snooze choices: Cmd+Shift+S (Ctrl+Alt+S on Linux), the snooze button on the agent's row, "Snooze this agent…" in the command palette, and **Snooze** (or `s`) on one of the agent's asks in the Asks drawer. The choices are 30 minutes, an hour, 2, 4 or 8 hours, or until
 tomorrow, Saturday or Monday at 9:00. Snoozed agents wait at the end of the full
 agent list ("N more agents" in the sidebar, or Cmd+Shift+A, Ctrl+Alt+A on
 Linux), each with the time its snooze ends. To unsnooze an agent, click the unsnooze
-button on the agent's row, or open the agent and run the unsnooze command from
-the command palette. A snooze ends early if the
-agent's process exits or Attn loses track of the agent's state.
+button on the agent's row, press **Wake** (or `s`) on one of its asks in the Asks
+drawer, or open the agent and run the unsnooze command from the command palette.
+A snooze ends early if the agent's process exits or Attn loses track of the
+agent's state.
+
+A snoozed agent's open asks snooze with it. They leave the asks button's count
+and Home, wait under **Snoozed** at the end of the Asks drawer with the time the
+snooze ends, and send no phone notification. The agent's own row and tile still
+mark its asks. When the snooze ends they count again. The phone app still lists
+them with the other open asks.
 
 ## Priority
 

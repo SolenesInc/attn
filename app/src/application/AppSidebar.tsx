@@ -2,7 +2,7 @@ import { useEffect, useMemo, type ReactNode } from 'react';
 import { Sidebar, SidebarProvider } from '../components/Sidebar';
 import { SidebarResizeHandle } from '../components/SidebarResizeHandle';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useAskList } from '../store/asks';
+import { useAskLists } from '../store/asks';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -75,7 +75,7 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
   const { profileSessions } = useAppSessionsContext();
-  const asks = useAskList(profileSessions);
+  const asks = useAskLists(profileSessions).live;
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();

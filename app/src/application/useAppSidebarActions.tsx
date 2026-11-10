@@ -11,10 +11,11 @@ import {
   useAppAppearanceContext,
   useAppInputs,
   useAppPanelsContext,
+  useAppSessionsContext,
   useAppShell,
   useNavigationContext,
 } from './AppContexts';
-import { useAsksAvailable, useAsksStore } from '../store/asks';
+import { useAskLists, useAsksAvailable } from '../store/asks';
 import {
   AsksIcon,
   AutomationsIcon,
@@ -26,7 +27,8 @@ import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread, settings } = useAppInputs();
   const asksAvailable = useAsksAvailable(settings);
-  const openAskCount = useAsksStore((state) => state.asks.length);
+  const { profileSessions } = useAppSessionsContext();
+  const openAskCount = useAskLists(profileSessions).live.length;
   const { hasCriticalNotification, zoomModeBySessionId } = useAppShell();
   const {
     toggleDockPanel,

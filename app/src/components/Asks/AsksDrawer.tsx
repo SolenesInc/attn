@@ -3,7 +3,7 @@ import type { Ask, AskAnswer, AskReply, AskSeedMention } from '../../types/gener
 import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { TURN_AGE_TICK_MS, useNow } from '../../hooks/useNow';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
-import { EMPTY_ASK_DRAFT, useAskList, useAsksStore, useRepliedAskList } from '../../store/asks';
+import { EMPTY_ASK_DRAFT, useAskLists, useAsksStore, useRepliedAskList } from '../../store/asks';
 import type { UISessionState } from '../../types/sessionState';
 import { askQuestions, draftAnswers, draftSendable, recommendedAnswers, type AskHolderSession, type AskListItem } from '../../utils/asks';
 import { formatTurnAge } from '../../utils/queueBands';
@@ -23,12 +23,15 @@ export interface AskDrawerSession extends AskHolderSession {
   agent?: string;
   state: UISessionState;
   state_reason?: string;
+  offline?: boolean;
 }
 
 interface AsksDrawerProps {
   sessions: readonly AskDrawerSession[];
   onTop: boolean;
   onOpenAgent: (sessionId: string) => void;
+  onSnoozeAgent: (session: AskDrawerSession, control: HTMLElement) => void;
+  onWakeAgent: (sessionId: string) => void;
   onOpenSeed: (seedId: string) => void;
   onClose: () => void;
 }
@@ -49,8 +52,9 @@ function drawerKey(event: KeyboardEvent): string | null {
   return isTyping(event.target) || event.metaKey || event.ctrlKey || event.altKey ? null : event.key;
 }
 
-export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }: AsksDrawerProps) {
-  const open = useAskList(sessions);
+export function AsksDrawer({ sessions, onTop, onOpenAgent, onSnoozeAgent, onWakeAgent, onOpenSeed, onClose }: AsksDrawerProps) {
+  const { live, snoozed } = useAskLists(sessions);
+  const open = useMemo(() => [...live, ...snoozed], [live, snoozed]);
   const replied = useRepliedAskList(sessions);
   const showReplied = useAsksStore((state) => state.showReplied);
   const items = useMemo(() => (showReplied ? [...open, ...replied] : open), [showReplied, open, replied]);
@@ -81,6 +85,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   }, [askId, gardenSeeds, sendAskSeedMentions]);
   const drawerRef = useRef<HTMLDivElement>(null);
   const askRef = useRef<HTMLElement>(null);
+  const snoozeRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLOListElement>(null);
   const sourcePath = ask ? `${ask.base_dir}/${ask.id}.md` : '';
   const source = useMemo(() => fileMarkdownSource(sourcePath), [sourcePath]);
@@ -121,7 +126,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     if (next) show(next.ask.id);
   };
 
-  const header = <AsksHeader count={open.length} replied={replied.length} showReplied={showReplied} onToggleReplied={toggleReplied} onClose={onClose} />;
+  const header = <AsksHeader count={live.length} replied={replied.length} showReplied={showReplied} onToggleReplied={toggleReplied} onClose={onClose} />;
   const onEmptyKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (drawerKey(event) !== 'r') return;
     event.preventDefault();
@@ -137,7 +142,13 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     );
   }
 
-  const { holder, from } = items[index];
+  const { holder, from, snoozedUntil } = items[index];
+  const snoozable = holder && !holder.offline ? holder : undefined;
+  const toggleSnooze = () => {
+    if (!snoozable) return;
+    if (snoozedUntil) onWakeAgent(snoozable.id);
+    else if (snoozeRef.current) onSnoozeAgent(snoozable, snoozeRef.current);
+  };
   const seedId = ask.seed_id;
   const reply = ask.reply;
   const questions = askQuestions(ask);
@@ -153,8 +164,9 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
   };
   const send = async () => {
     if (!sendable) return;
-    const openIndex = open.findIndex((item) => item.ask.id === ask.id);
-    const after = open[openIndex + 1] ?? open[openIndex - 1];
+    const section = snoozedUntil ? snoozed : live;
+    const position = section.findIndex((item) => item.ask.id === ask.id);
+    const after = section[position + 1] ?? section[position - 1];
     setSending(true);
     setError(null);
     try {
@@ -178,6 +190,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
     else if (key === 'r') toggleReplied();
     else if (key === 'a' && canAcceptRecommended) acceptRecommended();
     else if (key === 'o' && holder) onOpenAgent(holder.id);
+    else if (key === 's' && snoozable) toggleSnooze();
     else if (key === 'g' && seedId) onOpenSeed(seedId);
     else return;
     event.preventDefault();
@@ -194,6 +207,17 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
           {holder && (
             <button type="button" className="asks-ask-open" onClick={() => onOpenAgent(holder.id)} title={`Open ${from} (o)`}>
               Open agent
+            </button>
+          )}
+          {snoozable && (
+            <button
+              ref={snoozeRef}
+              type="button"
+              className="asks-ask-open"
+              onClick={toggleSnooze}
+              title={snoozedUntil ? `Wake ${from} (s)` : `Snooze ${from} and its asks (s)`}
+            >
+              {snoozedUntil ? 'Wake' : 'Snooze'}
             </button>
           )}
         </div>
@@ -228,7 +252,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onOpenSeed, onClose }
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
-        <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} hasSeed={Boolean(seedId)} />
+        <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} snooze={snoozable ? (snoozedUntil ? 'wake' : 'snooze') : undefined} hasSeed={Boolean(seedId)} />
         {canAcceptRecommended && (
           <button type="button" className="asks-accept-recommended" title="Select every recommended answer (a)" onClick={acceptRecommended}>
             Accept all recommended <kbd>a</kbd>
@@ -254,12 +278,15 @@ function AsksList({ items, selectedId, listRef, onShow }: AsksListProps) {
       {items.map((item, position) => {
         const selected = item.ask.id === selectedId;
         const firstReply = item.ask.reply && !items[position - 1]?.ask.reply;
+        const firstSnoozed = item.snoozedUntil && !items[position - 1]?.snoozedUntil;
+        const dimmed = item.ask.reply || item.snoozedUntil;
         return (
           <li key={item.ask.id}>
+            {firstSnoozed && <div className="asks-list-divider">Snoozed</div>}
             {firstReply && <div className="asks-list-divider">Replied in the last day</div>}
             <button
               type="button"
-              className={`asks-row ${selected ? 'asks-row--selected' : ''} ${item.ask.reply ? 'asks-row--replied' : ''}`.trim()}
+              className={`asks-row ${selected ? 'asks-row--selected' : ''} ${dimmed ? 'asks-row--dimmed' : ''}`.trim()}
               data-testid={`asks-row-${item.ask.id}`}
               aria-current={selected ? 'true' : undefined}
               onClick={() => onShow(item.ask.id)}
@@ -287,11 +314,19 @@ function AskSeedLine({ ask, onOpenSeed }: { ask: Ask; onOpenSeed: (seedId: strin
   );
 }
 
-function AsksHints({ several, hasHolder, hasSeed }: { several: boolean; hasHolder: boolean; hasSeed: boolean }) {
+interface AsksHintsProps {
+  several: boolean;
+  hasHolder: boolean;
+  snooze: 'snooze' | 'wake' | undefined;
+  hasSeed: boolean;
+}
+
+function AsksHints({ several, hasHolder, snooze, hasSeed }: AsksHintsProps) {
   return (
     <span className="asks-hints">
       {several && <span className="asks-hint"><kbd>j</kbd><kbd>k</kbd> next · previous</span>}
       {hasHolder && <span className="asks-hint"><kbd>o</kbd> open agent</span>}
+      {snooze && <span className="asks-hint"><kbd>s</kbd> {snooze}</span>}
       {hasSeed && <span className="asks-hint"><kbd>g</kbd> open in Garden</span>}
       <span className="asks-hint"><kbd>r</kbd> replied</span>
       <span className="asks-hint"><kbd>esc</kbd> close</span>

@@ -326,3 +326,23 @@ func TestAnAgentANotificationWokeIsToldThePhoneStaysSilentWhenItsStopStillOpensA
 		})
 	}
 }
+
+func TestAnAskFromASnoozedAgentSendsThePhoneNothing(t *testing.T) {
+	w, app, cli, phone := phonePushWorld(t, true, true)
+	setSetting(t, app, "asks_enabled", "true")
+	registerSessions(t, w, cli, "snoozed")
+	if err := cli.SnoozeSession("", "snoozed", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("snooze: %v", err)
+	}
+	testworld.AwaitSession(app, "snoozed", func(s protocol.Session) bool { return s.TurnSnoozedUntil != nil })
+
+	ask := func(session, subject string) {
+		t.Helper()
+		if _, err := cli.AskOpen(protocol.SessionID(session), "", ":::question\n"+subject+"\n- [ ] Yes\n- [ ] No\n:::\n", "", w.Path(session)); err != nil {
+			t.Fatalf("%s asks: %v", session, err)
+		}
+	}
+	ask("snoozed", "Ship while I sleep?")
+	ask("reviewer", "Ship the review?")
+	phone.expect("ask", "Ship the review?")
+}

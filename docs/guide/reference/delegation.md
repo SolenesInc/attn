@@ -126,6 +126,10 @@ recommended** (or `a`) selects every one of them in the draft, so you can review
 and change them before you send. Questions with no recommendation stay
 unanswered. The phone app has the same button.
 
+**Snooze** (or `s`) in the drawer snoozes the agent that holds the ask, with the
+queue's snooze choices, and **Wake** (or `s`) on a snoozed agent's ask wakes it.
+[The queue page](queue.md) says what a snooze does to the agent's asks.
+
 ## Roles
 
 When making a delegation, the agent picks:

@@ -88,10 +88,12 @@ func (d *Daemon) clearSnoozeState(sessionID protocol.SessionID) {
 }
 
 func (d *Daemon) decorateSessionWithSnooze(session *protocol.Session) {
-	if session == nil || session.TurnSnoozedUntil == nil {
-		return
-	}
-	if until, err := time.Parse(time.RFC3339Nano, *session.TurnSnoozedUntil); err != nil || !until.After(time.Now()) {
+	if session != nil && !turnSnoozedAt(session, time.Now()) {
 		session.TurnSnoozedUntil = nil
 	}
+}
+
+func turnSnoozedAt(session *protocol.Session, now time.Time) bool {
+	until, err := time.Parse(time.RFC3339Nano, protocol.Deref(session.TurnSnoozedUntil))
+	return err == nil && until.After(now)
 }

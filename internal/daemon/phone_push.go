@@ -255,6 +255,9 @@ func (d *Daemon) askNote(askID string) (phonePushNote, bool) {
 	}
 	title := protocol.Deref(shown.wire.SeedTitle)
 	if session := d.store.Get(stored.SessionID); session != nil {
+		if turnSnoozedAt(session, d.clock.Now()) {
+			return phonePushNote{}, false
+		}
 		title = d.phoneSessionTitle(session)
 	}
 	return phonePushNote{

@@ -392,6 +392,47 @@ describe('App asks', () => {
     expect(openAsk()).toBe('Cache store');
   });
 
+  it('leaves a snoozed agent\'s ask out of the counts, under Snoozed, until the agent wakes', async () => {
+    const apiSnoozed = { ...apiWorking, turn_snoozed_until: '2999-01-04T09:00:00Z' };
+    const daemon = await renderAsks([cacheStore, releaseDay], [apiSnoozed, webWaiting]);
+    expect(screen.getByRole('button', { name: /^1 open ask \(/ })).toHaveTextContent('1');
+
+    const list = await openDrawer(daemon);
+    expect(document.querySelector('.asks-count')).toHaveTextContent('1');
+    expect(rows(list)).toEqual(['asks-row-a-release', 'asks-row-a-cache1']);
+    expect(within(list).getAllByRole('listitem')[1]).toHaveTextContent(/^Snoozed/);
+    expect(screen.getByTestId('asks-row-a-cache1')).toHaveTextContent(/until /);
+
+    await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: apiWorking }));
+    expect(screen.getByRole('button', { name: /^2 open asks \(/ })).toHaveTextContent('2');
+    expect(document.querySelector('.asks-count')).toHaveTextContent('2');
+    expect(within(list).queryByText('Snoozed')).toBeNull();
+    expect(screen.getByTestId('asks-row-a-cache1')).not.toHaveTextContent(/until /);
+  });
+
+  it('snoozes the asking agent from the drawer and wakes it again', async () => {
+    const daemon = await renderAsks([cacheStore], [apiWorking]);
+    await openDrawer(daemon);
+    expect(openAsk()).toBe('Cache store');
+
+    await gesture(daemon, () => fireEvent.keyDown(document.activeElement ?? window, { key: 's' }));
+    expect(screen.getByRole('menu', { name: 'Snooze api' })).toBeInTheDocument();
+    const choice = screen.getByTestId('snooze-choice-30m');
+    expect(document.activeElement).toBe(choice);
+    await gesture(daemon, () => fireEvent.click(choice));
+    expect(daemon.sentOf('snooze_turn')).toEqual([expect.objectContaining({ cmd: 'snooze_turn', session_id: 'api' })]);
+    const control = screen.getByRole('button', { name: 'Snooze' });
+    expect(document.activeElement).toBe(control);
+
+    const until = daemon.sentOf('snooze_turn')[0].until;
+    await gesture(daemon, () => daemon.emit({ event: 'session_state_changed', session: { ...apiWorking, turn_snoozed_until: until } }));
+    expect(control).toHaveTextContent('Wake');
+    expect(within(screen.getByRole('list', { name: 'Open asks' })).getByText('Snoozed')).toBeInTheDocument();
+
+    await gesture(daemon, () => fireEvent.keyDown(control, { key: 's' }));
+    expect(daemon.sentOf('wake_turn')).toEqual([{ cmd: 'wake_turn', session_id: 'api' }]);
+  });
+
   it('puts the ask in its agent\'s tile header and opens that ask', async () => {
     const daemon = await renderAsks();
     await openSession(daemon, 'api');

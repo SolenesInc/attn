@@ -172,12 +172,12 @@
   font-size: var(--font-size-xs);
 }
 
-.asks-row--replied:not(.asks-row--selected) .asks-row-from,
-.asks-row--replied:not(.asks-row--selected) .asks-row-subject {
+.asks-row--dimmed:not(.asks-row--selected) .asks-row-from,
+.asks-row--dimmed:not(.asks-row--selected) .asks-row-subject {
   color: var(--color-text-tertiary);
 }
 
-.asks-row-replied {
+.asks-row-tag {
   flex-shrink: 0;
   color: var(--color-text-dimmed);
   font-size: var(--font-size-xs);
@@ -777,4 +777,8 @@
 .seed-mention:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.asks-ask-open + .asks-ask-open {
+  margin-left: 0;
 }

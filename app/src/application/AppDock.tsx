@@ -45,7 +45,7 @@ export function AppDock() {
     gardenSlotRef,
     closeGarden,
   } = useAppPanelsContext();
-  const { waitingLocalSessions } = useAttentionQueueContext();
+  const { waitingLocalSessions, openSnoozeFromControl } = useAttentionQueueContext();
   const { prs } = useAppInputs();
   const { handleSelectSession } = useNavigationContext();
   const { launchAgent } = useSessionLaunchContext();
@@ -59,6 +59,7 @@ export function AppDock() {
     getAutomationDefinition,
     applyAutomationDefinition,
     deleteAutomationDefinition,
+    sendWakeTurn,
   } = useDaemonApi();
   const openPanels = {
     attention: attentionPanelOpen,
@@ -105,6 +106,8 @@ export function AppDock() {
                   closeDockPanel('asks');
                   handleSelectSession(sessionId);
                 }}
+                onSnoozeAgent={(session, control) => openSnoozeFromControl({ id: session.id, label: session.label }, control)}
+                onWakeAgent={sendWakeTurn}
                 onOpenSeed={handleRevealSeedInGarden}
               />
             ),

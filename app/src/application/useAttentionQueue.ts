@@ -102,6 +102,7 @@ export function useAttentionQueue({
     session: { id: string; label: string };
     placement: SnoozePlacement;
     origin: HTMLElement | null;
+    returnToOrigin?: boolean;
     leaf: ActiveLeaf | null;
     view: string;
   } | null>(null);
@@ -128,6 +129,18 @@ export function useAttentionQueue({
       session: { id: session.id, label: sessionDisplayName(session) },
       placement: rect ? { kind: 'anchor', top: rect.bottom + 4, left: rect.left } : { kind: 'center', pane },
       origin,
+      leaf: currentActiveLeaf(),
+      view: useSessionStore.getState().view,
+    });
+  }, []);
+
+  const openSnoozeFromControl = useCallback((session: { id: string; label: string }, control: HTMLElement) => {
+    const rect = control.getBoundingClientRect();
+    setSnoozeMenu({
+      session,
+      placement: { kind: 'anchor', top: rect.bottom + 4, left: rect.left },
+      origin: control,
+      returnToOrigin: true,
       leaf: currentActiveLeaf(),
       view: useSessionStore.getState().view,
     });
@@ -220,7 +233,8 @@ export function useAttentionQueue({
 
   const restoreSnoozeFocus = useCallback((reason: 'cancel' | 'choose' | 'removed') => {
     const selectionUnchanged = snoozeMenu?.view === useSessionStore.getState().view && sameLeaf(snoozeMenu.leaf, currentActiveLeaf());
-    if (reason === 'cancel' && selectionUnchanged && snoozeMenu?.origin?.isConnected) {
+    const backToOrigin = snoozeMenu?.returnToOrigin || (reason === 'cancel' && selectionUnchanged);
+    if (backToOrigin && snoozeMenu?.origin?.isConnected) {
       snoozeMenu.origin.focus({ preventScroll: true });
       return;
     }
@@ -252,6 +266,7 @@ export function useAttentionQueue({
     setSnoozeMenu,
     restoreSnoozeFocus,
     openSnoozeMenu,
+    openSnoozeFromControl,
     handleSnoozeActiveSession,
     handleSettleShortcut,
     togglePriority,

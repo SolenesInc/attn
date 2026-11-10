@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Dashboard } from '../components/Dashboard';
-import { useAskList } from '../store/asks';
+import { useAskLists } from '../store/asks';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { activityStaleMs } from '../utils/activitySettings';
 import {
@@ -20,7 +20,7 @@ export function AppDashboard() {
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { setSettingsOpen, whatsNew, openAsk } = useAppPanelsContext();
   const { queueBands, queueSessions } = useAttentionQueueContext();
-  const askItems = useAskList(queueSessions);
+  const askItems = useAskLists(queueSessions).live;
   const asks = useMemo(
     () => askItems.map(({ ask, from }) => ({ id: ask.id, from, subject: ask.subject })),
     [askItems],

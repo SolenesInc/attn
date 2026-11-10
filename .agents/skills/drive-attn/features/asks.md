@@ -20,6 +20,7 @@ the seed. Asks are on by default, and an agent keeps the setting it launched wit
 - `ask-on-seed`: an ask about a seed the agent tends, answered to the seed's tender and kept as a note.
 - `ask-list`: an agent lists its open asks and those about seeds it tends.
 - `ask-close`: an agent withdraws an ask it no longer needs.
+- `ask-snooze`: snoozing or waking the agent that holds an ask from the drawer; a snoozed agent's asks wait under Snoozed, leave every open-ask count and send no phone push.
 - `ask-markers`: the open-ask chip on the agent's tile header and the marker on its sidebar row.
 - `ask-guidance`: what attn tells agents about asking.
 
@@ -30,10 +31,10 @@ the seed. Asks are on by default, and an agent keeps the setting it launched wit
 - ⌘⇧R (`dock.asks`, `app/src/shortcuts/registry.ts`) opens and closes the asks drawer. The shortcut exists only while asks are on or any ask exists.
 - Palette (`app/src/application/useAppCommands.tsx`): `asks` ("Open asks").
 - Sidebar: the asks icon, labelled "Asks" or "N open asks", each followed by the shortcut (`app/src/application/useAppSidebarActions.tsx`).
-- In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), links to mentioned seeds in the subject, prose, question prompt and context, the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation; the phone app has the same button, `[data-testid="ask-accept-recommended"]`), "Send", "Replied" and "Close asks". The phone opens a mentioned seed from the same text and returns to the unfinished ask. Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, g opens the seed in the garden, Escape closes.
+- In the drawer (`app/src/components/Asks/AsksDrawer.tsx`): the ask list, each ask's questions with radio, checkbox, "Other…" and text answers (`app/src/components/Asks/AskQuestionCard.tsx`), links to mentioned seeds in the subject, prose, question prompt and context, the note "Anything else for <agent>?", "Accept all recommended" (shown when two or more questions have a recommendation; the phone app has the same button, `[data-testid="ask-accept-recommended"]`), "Snooze" or, for a snoozed agent's ask, "Wake" (beside "Open agent"; the snooze choices are the queue's `SnoozeMenu`), "Send", "Replied" and "Close asks". The phone opens a mentioned seed from the same text and returns to the unfinished ask. Keys: ⌘↩ sends, a accepts all recommended, j and k step through asks, r shows replied asks, o opens the asking agent, s snoozes or wakes it, g opens the seed in the garden, Escape closes.
 - On the asking agent's tile header, the chip "Open ask: <subject>" opens the drawer on that ask (`app/src/components/Asks/PaneAskChip.tsx`). A narrow tile cuts the subject, then shows only the `?` mark; the chip never leaves the header. The sidebar row carries a marker (`app/src/components/Asks/AskMarker.tsx`).
 - **Settings → Agents and models → Session defaults**: the "Asks" switch (`[data-testid="settings-feature-asks_enabled"]`, `app/src/components/SettingsModalSections.tsx`).
-- Where people see what agents do: the title bar's asks button counts open asks, and an ask row says "Waiting on you" when its agent is also owed a turn.
+- Where people see what agents do: the title bar's asks button counts open asks except a snoozed agent's, and an ask row says "Waiting on you" when its agent is also owed a turn.
 - Their own shell: `attn ask list --session <id>` and `attn ask close <id> --session <id>`.
 
 ### Agents
@@ -101,6 +102,10 @@ Preconditions:
   - With an ask open, run `./attn settings set queue_mode_enabled true` and press ⌘B to collapse the sidebar. `bridge dom_text '{"selector":"[data-testid=\"title-bar-right\"] .title-bar-count-badge"}'` reads `1`.
   - Click the asks button in `[data-testid="title-bar-right"]` natively: the drawer opens on the ask.
   - Press Escape, run `./attn settings set queue_mode_enabled false`, and click `button[title="Expand sidebar"]` natively. Withdraw the `Cache store` ask the same way.
+- **Snooze and wake from the drawer.**
+  - With the `Cache store` ask from ask-agent open and the sidebar label starting `1 open ask`, open the drawer, click the subject natively and press `s`. `bridge dom_wait '{"selector":"[role=\"menu\"][aria-label=\"Snooze ask-agent\"]","timeoutMs":5000}'` matches. Press Enter: the menu closes and focus is on the drawer's `Wake` button.
+  - `bridge dom_text '{"selector":".asks-list"}'` reads `Snoozed` and `until …`, `.asks-count` is gone, and the sidebar label no longer starts with `1 open ask`. `./attn session list --tree` shows ask-agent with `snoozed until <instant>`.
+  - Press `s` again: the ask returns above the divider, `.asks-count` reads `1`, and the label starts with `1 open ask`.
 - **Open from the palette.** Open the palette as the README says, type `Open asks` and press Enter. The `[role="region"][aria-label="Asks"]` drawer opens. Press Escape.
 - **An ask about a seed, from the tile chip.**
   - Plant a seed: `./attn seed plant "Asks drive"` prints `<seed>  <slug>  Asks drive`. Run `wsctl input --id <terminal> --text "ask about <seed>" --enter`. Peek shows `Asked <ask> about asks-drive: "Release note".`
@@ -120,14 +125,15 @@ Preconditions:
 - **Linux**: `attn ask` works the same where the daemon and CLI run on Linux. `dock.asks` is Ctrl+Alt+R there, and Ctrl+Enter sends from the drawer.
 - **Performance and idle cost**: an ask's markdown is at most 64 KiB, and its images at most 5 MiB together. The drawer loads each image once per ask it shows. Nothing measures the drawer's idle cost. When a change touches the drawer's rendering, check it for repaints with `docs/internal/perf-testing.md`.
 - **Harnesses**: the guidance tells every harness to ask with `attn ask` when the decision can wait, and to keep the harness's own question tool for when it can do nothing until the user answers. The answer arrives as the user's message in every harness, so harness auto-mode reviewers count an approval in it as the user's.
-- **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
+- **Keyboard and native input**: ⌘⇧R opens the drawer and puts focus on the first answer field. The keys j, k, r, o, s, g and Escape work while focus is not in a text field, and ⌘↩ sends from anywhere in the drawer.
 - **Compatibility across versions**: an agent keeps the asks setting it launched with. When you turn asks on, only agents launched afterward can ask. An agent launched earlier refuses `attn ask` until the agent is relaunched, so relaunch the agent instead of toggling the setting again.
 - **Large gardens**: a mention outside the Garden's pushed list opens in a seed tile. A mention inside the list opens in the Garden drawer.
-- **Flow**: in queue flow, the title bar's asks button counts open asks. Clicking it or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
+- **Phone**: the daemon sends no ask push while the asker is snoozed (`askNote`, `internal/daemon/phone_push.go`). The phone's own asks list still shows a snoozed agent's asks; it has no snooze.
+- **Flow**: in queue flow, the title bar's asks button counts open asks except a snoozed agent's. Clicking it or pressing ⌘⇧R opens the drawer. An ask row whose agent is owed a turn says "Waiting on you".
 
 ## Tests
 
-- Wire: `internal/daemon/asks_wire_test.go`.
+- Wire: `internal/daemon/asks_wire_test.go`, `internal/daemon/phone_push_wire_test.go` (no push for a snoozed asker).
 - Stack: `cmd/attnd/ask_stack_test.go`, `cmd/attnd/ask_images_stack_test.go`, `app/e2e/asks.spec.ts`.
 - Kernel: `internal/ask/ask_test.go`.
 - App: `app/src/App.asks.test.tsx`.

@@ -2,6 +2,7 @@ import type { Ask, AskAnswer, AskQuestion, Seed } from '../types/generated';
 import type { AskDraft } from '../store/asks';
 import { crewDisplayName, crewRef } from './crewName';
 import { BoolSetting, isOn } from './settings';
+import { isSnoozed } from './snoozeDurations';
 
 export const ASKS_SETTING = 'asks_enabled';
 
@@ -16,6 +17,7 @@ export interface AskHolderSession {
   seedId?: string;
   turnOwed?: boolean;
   turnOpenedAt?: string;
+  turnSnoozedUntil?: string;
 }
 
 function tendsSeed(session: AskHolderSession, seedId: string, seeds: readonly Seed[]): boolean {
@@ -67,6 +69,7 @@ export interface AskListItem<S extends AskHolderSession> {
   holder: S | undefined;
   from: string;
   questionCount: number;
+  snoozedUntil?: string;
 }
 
 function askListItem<S extends AskHolderSession & { label: string }>(ask: Ask, sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S> {
@@ -74,8 +77,21 @@ function askListItem<S extends AskHolderSession & { label: string }>(ask: Ask, s
   return { ask, holder, from: askFrom(ask, holder), questionCount: askQuestions(ask).length };
 }
 
-export function askList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
-  return orderAsks(asks, sessions, seeds).map((ask) => askListItem(ask, sessions, seeds));
+export interface AskLists<S extends AskHolderSession> {
+  live: AskListItem<S>[];
+  snoozed: AskListItem<S>[];
+}
+
+export function askLists<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[], now: number): AskLists<S> {
+  const lists: AskLists<S> = { live: [], snoozed: [] };
+  for (const ask of orderAsks(asks, sessions, seeds)) {
+    const item = askListItem(ask, sessions, seeds);
+    const until = item.holder?.turnSnoozedUntil;
+    if (isSnoozed(until, now)) lists.snoozed.push({ ...item, snoozedUntil: until });
+    else lists.live.push(item);
+  }
+  lists.snoozed.sort((a, b) => (a.snoozedUntil ?? '').localeCompare(b.snoozedUntil ?? ''));
+  return lists;
 }
 
 export function repliedAskList<S extends AskHolderSession & { label: string }>(asks: readonly Ask[], sessions: readonly S[], seeds: readonly Seed[]): AskListItem<S>[] {
