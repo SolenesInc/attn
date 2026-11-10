@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "code-navigation-setup-no-definition",
+  "description": "The setup key on a review of a Java repository, a language attn has no built-in definition for.",
+  "recipient": "code-navigation",
+  "event": "setup",
+  "values": {
+    "language": "java",
+    "repository": "/Users/me/projects/ledger",
+    "document": "/Users/me/projects/ledger/reviews/rounding.md",
+    "file": "src/main/java/ledger/Rounding.java",
+    "failed": "false",
+    "reason": "no definition"
+  }
+}

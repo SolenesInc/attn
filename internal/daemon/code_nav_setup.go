@@ -68,7 +68,7 @@ func (s *codeNavSetups) withSetups(host string, review *protocol.ReviewBundle) *
 func (d *Daemon) handleCodeNavSetupWS(client *wsClient, msg *protocol.CodeNavSetupMessage) {
 	d.life.Go("handleCodeNavSetupWS", func() {
 		result := protocol.CodeNavSetupResultMessage{Event: protocol.EventCodeNavSetupResult, RequestID: msg.RequestID}
-		if session, err := d.startCodeNavSetup(d.life.Context(), msg); err != nil {
+		if session, err := d.startCodeNavSetup(d.life.Context(), msg, client.gone); err != nil {
 			result.Error = protocol.Ptr(err.Error())
 		} else {
 			result.Success, result.SessionID = true, protocol.Ptr(session)
@@ -79,8 +79,9 @@ func (d *Daemon) handleCodeNavSetupWS(client *wsClient, msg *protocol.CodeNavSet
 
 // startCodeNavSetup starts an agent on the review's machine that sets up the
 // language's server: the user's delegation fallback when they configured one,
-// else the harness they picked for new sessions.
-func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage) (protocol.SessionID, error) {
+// else the harness they picked for new sessions. It answers once the agent
+// runs, so a launch that fails reaches the reader with its reason.
+func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage, callerGone <-chan struct{}) (protocol.SessionID, error) {
 	if !d.on(setting.CodeReviewEnabled) {
 		return "", errors.New(codeNavOff())
 	}
@@ -109,7 +110,6 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 		ProfileID:  protocol.Ptr(desktop.ProfileID),
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)},
 		Cwd:        msg.Repository,
-		Label:      protocol.Ptr(fmt.Sprintf("Set up %s navigation", msg.Language)),
 	}
 	if d.delegationFallbackReady() {
 		delegate.Fallback = protocol.Ptr(true)
@@ -129,8 +129,17 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 		delegate.Cwd = "~"
 	}
 	operation, err := d.startDelegationForeground(ctx, delegate)
+	if err == nil {
+		operation, err = d.awaitDelegationSettled(operation.OperationID, callerGone)
+	}
 	if err != nil {
 		return "", err
+	}
+	if operation.State == protocol.DelegationOperationStateFailed {
+		if operation.Failure != nil {
+			return "", errors.New(operation.Failure.Message)
+		}
+		return "", errors.New(operation.Progress)
 	}
 	d.codeNavSetups.record(codeNavSetupKey{host: host, repository: msg.Repository, language: msg.Language}, operation.SessionID)
 	d.reviewsOfRepositoryChanged(host, msg.Repository)

@@ -411,6 +411,12 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 		t.Fatalf("a review with no gopls shows go as %+v, want missing because of gopls, for use.go", missing)
 	}
 
+	w.ExitAtNextBoot(1, "Error: not logged in")
+	refused := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "before its first turn") || !strings.Contains(protocol.Deref(refused.Error), "not logged in") {
+		t.Errorf("a setup whose agent exits at launch answered %+v (error %s), want the launch failure with the agent's screen", refused, protocol.Deref(refused.Error))
+	}
+
 	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
 	if !setup.Success || protocol.Deref(setup.SessionID) == "" {
 		t.Fatalf("setup answered %+v (error %s), want the session it started", setup, protocol.Deref(setup.Error))
@@ -459,5 +465,55 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 	off := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: "use.go", State: "missing"})
 	if off.Success || !strings.Contains(protocol.Deref(off.Error), "code_review_enabled") {
 		t.Errorf("with code review off setup answered %+v, want a refusal naming code_review_enabled", off)
+	}
+}
+
+func TestAReviewOfALanguageWithNoDefinitionOffersSetupUntilOneIsSet(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := reviewRepo(t)
+	commitFile(t, repo, "Calc.java", "class Calc {\n  int twice(int a) {\n    return a + a;\n  }\n}\n")
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/calc.git")
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Twice\n\n## Calc twice\n\n### Calc.java:2-4\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	shown := awaitNavigation(app, document, "java", "missing")
+	if java := navigation(shown.Review, "java"); protocol.Deref(java.Detail) != "no definition" || java.File != "Calc.java" {
+		t.Errorf("a review of Java shows %+v, want java missing with no definition, for Calc.java", java)
+	}
+	if len(shown.Review.Stops) != 1 || protocol.Deref(shown.Review.Stops[0].Language) != "java" {
+		t.Errorf("the review's stops are %+v, want one java stop", shown.Review.Stops)
+	}
+
+	fake := fakeagent.InstallLanguageServer(t, testworld.FakeAgentBinary(t), w.Path("installed"))
+	if _, err := cli.CodeNavDefine(repo, "java", fmt.Sprintf(`{"command": [%q], "extensions": [".java"]}`, fake)); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	awaitNavigation(app, document, "java", "ready")
+}
+
+func TestNavCheckPassesOnlyOnADefinitionElsewhereThanTheAskedName(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+
+	if result, err := cli.CodeNavCheck(repo, "calc.go", 3); err == nil {
+		t.Errorf("nav check on Add's own declaration passed with %+v, want a failure: the server only named the asked place", result.Location)
+	}
+	result, err := cli.CodeNavCheck(repo, "use.go", 4)
+	if err != nil {
+		t.Fatalf("nav check on a use of Add: %v", err)
+	}
+	if got := fmt.Sprintf("%s -> %s:%d", protocol.Deref(result.Name), result.Location.Path, result.Location.Line); got != "Add -> calc.go:3" {
+		t.Errorf("nav check resolved %s, want Add -> calc.go:3", got)
 	}
 }

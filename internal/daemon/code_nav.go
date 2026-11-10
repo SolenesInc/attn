@@ -131,13 +131,30 @@ func (d *Daemon) codeNavSetDefinitions(origin string) map[string]string {
 // whose languages it needs a server for.
 func codeNavFiles(bundle protocol.ReviewBundle) []string {
 	var files []string
-	for _, stop := range bundle.Stops {
-		files = append(files, filepath.Join(bundle.Repository, filepath.FromSlash(stop.Path)))
-	}
-	for _, file := range bundle.Files {
-		files = append(files, filepath.Join(bundle.Repository, filepath.FromSlash(file.Path)))
+	for _, path := range reviewFilePaths(bundle) {
+		files = append(files, filepath.Join(bundle.Repository, filepath.FromSlash(path)))
 	}
 	return files
+}
+
+// reviewFilePaths are the review's stops' files, then its changed files,
+// relative to the repository.
+func reviewFilePaths(bundle protocol.ReviewBundle) []string {
+	var paths []string
+	for _, stop := range bundle.Stops {
+		paths = append(paths, stop.Path)
+	}
+	for _, file := range bundle.Files {
+		paths = append(paths, file.Path)
+	}
+	return paths
+}
+
+func reviewFileLanguage(defs codenav.Definitions, path string) string {
+	if language := defs.LanguageOf(path); language != "" {
+		return language
+	}
+	return defs.UndefinedLanguageOf(path)
 }
 
 // needCodeNavigation starts the servers a watched review needs and fills the
@@ -158,6 +175,19 @@ func (d *Daemon) needCodeNavigation(document string, bundle *protocol.ReviewBund
 		}
 		file, _ := filepath.Rel(bundle.Repository, need.File)
 		languages[need.Key.Language] = protocol.ReviewNavigation{Language: need.Key.Language, State: state, Detail: optional(detail), File: filepath.ToSlash(file)}
+	}
+	defs := d.codeNavDefinitions(bundle.Repository)
+	for i, stop := range bundle.Stops {
+		if language := reviewFileLanguage(defs, stop.Path); language != "" {
+			bundle.Stops[i].Language = protocol.Ptr(language)
+		}
+	}
+	for _, file := range reviewFilePaths(*bundle) {
+		language := defs.UndefinedLanguageOf(file)
+		if _, seen := languages[language]; language == "" || seen {
+			continue
+		}
+		languages[language] = protocol.ReviewNavigation{Language: language, State: codenav.StateMissing, Detail: protocol.Ptr(codenav.DetailNoDefinition), File: file}
 	}
 	bundle.Navigation = make([]protocol.ReviewNavigation, 0, len(languages))
 	for _, navigation := range languages {
@@ -417,8 +447,7 @@ func (d *Daemon) checkCodeNav(ctx context.Context, msg *protocol.CodeNavCheckMes
 		if err != nil {
 			return result, fmt.Errorf("%s: %w", answer.Program, err)
 		}
-		if len(answer.Locations) > 0 {
-			location := codeNavLocations(repository, answer.Locations[:1])[0]
+		if location, ok := definitionElsewhere(codeNavLocations(repository, answer.Locations), msg.Path, int(msg.Line), name.character); ok {
 			result.Name, result.Location = protocol.Ptr(name.name), &location
 			break
 		}
@@ -428,6 +457,19 @@ func (d *Daemon) checkCodeNav(ctx context.Context, msg *protocol.CodeNavCheckMes
 		return result, fmt.Errorf("no name on %s:%d has a definition the server could find (asked about %s)", msg.Path, msg.Line, strings.Join(result.Tried, ", "))
 	}
 	return result, nil
+}
+
+// definitionElsewhere is the first answer that is not the asked name itself:
+// a server still indexing, or asked about a keyword, answers with the name's
+// own place, which proves nothing.
+func definitionElsewhere(locations []protocol.CodeNavLocation, path string, line, character int) (protocol.CodeNavLocation, bool) {
+	for _, location := range locations {
+		own := location.Path == path && location.Line == line && location.EndLine == line && character >= location.Character && character <= location.EndCharacter
+		if !own {
+			return location, true
+		}
+	}
+	return protocol.CodeNavLocation{}, false
 }
 
 func (d *Daemon) handleCodeNavStatus(ctx context.Context, conn net.Conn, msg *protocol.CodeNavStatusMessage) {
@@ -567,6 +609,7 @@ func (d *Daemon) defineCodeNav(ctx context.Context, msg *protocol.CodeNavDefineM
 	if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value}); err != nil {
 		return protocol.CodeNavDefineResult{}, err
 	}
+	d.reportTileDocuments(d.tileDocuments.bumpAll())
 	return protocol.CodeNavDefineResult{Key: key, Origin: origin, Definition: optional(value)}, nil
 }
 

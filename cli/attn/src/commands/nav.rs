@@ -55,6 +55,9 @@ commands:
 Built-in definitions: go (gopls), typescript (typescript-language-server
 --stdio), rust (rust-analyzer), python (pyright-langserver --stdio).
 
+`attn skill --reference code-navigation` says how to find, install and define
+a server.
+
 Needs the experimental setting code_review_enabled.
 "#;
 

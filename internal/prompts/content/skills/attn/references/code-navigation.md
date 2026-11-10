@@ -4,7 +4,7 @@ In a review attn shows, the user can go to a definition, list the uses of a name
 
 ## How attn launches a server
 
-For each language attn uses a definition: the server's command, the file extensions it serves, the files that mark a workspace folder, the settings it receives at start, and an optional prepare step. Built-in definitions cover go (`gopls`), typescript (`typescript-language-server --stdio`), rust (`rust-analyzer`) and python (`pyright-langserver --stdio`). A definition set for a repository's origin replaces the built-in one for that language, and outposts with a clone of the repository use it too.
+For each language attn uses a definition: the server's command, the file extensions it serves, the files that mark a workspace folder, the settings it receives at start, and an optional prepare step. Built-in definitions cover go (`gopls`), typescript (`typescript-language-server --stdio`), rust (`rust-analyzer`) and python (`pyright-langserver --stdio`). Other programming languages, such as java, c and ruby, have none: a review of one says `no definition`, and setup sets one. A definition set for a repository's origin replaces the built-in one for that language, and outposts with a clone of the repository use it too.
 
 attn looks for the command's program in this machine's code navigation folder, then on `PATH`. `attn nav status`, run inside the repository, prints the folder, the definition of each language, where each program was found or why it was not, and the servers running with their state.
 

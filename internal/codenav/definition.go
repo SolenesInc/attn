@@ -47,6 +47,40 @@ var builtins = map[string]Definition{
 // Builtins are the languages attn can navigate with no setting, by name.
 func Builtins() map[string]Definition { return builtins }
 
+// undefinedLanguages are programming languages attn recognizes by extension
+// but has no built-in definition for, so a review can offer to set one up.
+var undefinedLanguages = map[string][]string{
+	"java":   {".java"},
+	"kotlin": {".kt", ".kts"},
+	"scala":  {".scala", ".sc"},
+	"c":      {".c", ".h"},
+	"cpp":    {".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"},
+	"csharp": {".cs"},
+	"ruby":   {".rb"},
+	"php":    {".php"},
+	"swift":  {".swift"},
+	"zig":    {".zig"},
+	"elixir": {".ex", ".exs"},
+}
+
+// DetailNoDefinition is the detail of a recognized language no definition serves.
+const DetailNoDefinition = "no definition"
+
+// UndefinedLanguageOf is the recognized programming language of a file no
+// definition serves, or "".
+func (defs Definitions) UndefinedLanguageOf(path string) string {
+	if defs.LanguageOf(path) != "" {
+		return ""
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	for language, extensions := range undefinedLanguages {
+		if _, defined := defs[language]; !defined && slices.Contains(extensions, ext) {
+			return language
+		}
+	}
+	return ""
+}
+
 // ParseDefinition reads a definition as stored in its setting, and names each
 // problem with the fix.
 func ParseDefinition(value string) (Definition, error) {

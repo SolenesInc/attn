@@ -136,6 +136,17 @@ func (w *tileDocumentWatch) bump(paths []string) []protocol.TileDocumentVersion 
 	return changed
 }
 
+// bumpAll marks every watched document changed.
+func (w *tileDocumentWatch) bumpAll() []protocol.TileDocumentVersion {
+	w.mu.Lock()
+	paths := make([]string, 0, len(w.watched))
+	for path := range w.watched {
+		paths = append(paths, path)
+	}
+	w.mu.Unlock()
+	return w.bump(paths)
+}
+
 func (d *Daemon) reportTileDocuments(changed []protocol.TileDocumentVersion) {
 	for _, document := range changed {
 		report := protocol.TileDocumentChangedMessage{Cmd: protocol.CmdTileDocumentChanged, Path: document.Path, Version: document.Version}
