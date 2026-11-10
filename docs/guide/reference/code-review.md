@@ -126,7 +126,10 @@ when the review opens and stops it after five minutes with no review shown
 server: loading, ready, failed, or no server. Built-in definitions cover
 Go (`gopls`), TypeScript (`typescript-language-server`), Rust
 (`rust-analyzer`) and Python (`pyright-langserver`). attn looks for the program
-in its own code navigation folder, then on `PATH`.
+in its own code navigation folder, then on `PATH`. Answers follow the files on
+disk: before each question, attn tells the server which files changed since it
+last asked, from edits, new or removed files, commits and checkouts. The first
+answer after a change can take longer while the server rereads them.
 
 A language with no server still reads. Only the jumps are missing. Languages
 attn knows but has no built-in definition for, such as Java, C or Ruby, also

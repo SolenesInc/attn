@@ -33,6 +33,9 @@ type Config struct {
 	Definitions func(repository string) Definitions
 	// Inputs lists the files under folder that a prepare's globs match.
 	Inputs func(ctx context.Context, folder string, globs []string) ([]string, error)
+	// Worktree reads a workspace folder's commit and the files under it that
+	// differ from it, and the files that changed since an earlier commit.
+	Worktree func(ctx context.Context, folder, since string) (Worktree, error)
 	// IdleStop arms the timer that stops a server no document needs.
 	IdleStop func(fn func()) stepclock.Timer
 	// Changed reports that a server's state changed, for the documents that need it.
@@ -194,7 +197,7 @@ func (m *Manager) prepareThenLaunch(e *entry, program string) {
 
 func (m *Manager) launchLocked(e *entry, program string) {
 	var s *server
-	s, err := startServer(e.key, e.def, program, m.cfg.ReapDir, func() {
+	s, err := startServer(e.key, e.def, program, m.cfg.ReapDir, m.cfg.Worktree, func() {
 		m.mu.Lock()
 		current := m.entries[e.key] == e && e.server == s
 		needers := e.neededBy()
@@ -335,6 +338,9 @@ func (m *Manager) Ask(ctx context.Context, document, repository, path string, li
 		return answer, err
 	}
 	if err := s.awaitReady(ctx); err != nil {
+		return answer, err
+	}
+	if err := s.catchUp(ctx); err != nil {
 		return answer, err
 	}
 	if err := s.open(path); err != nil {

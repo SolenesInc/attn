@@ -44,13 +44,15 @@ func InstallLanguageServer(t testing.TB, binary, dir string) string {
 // runLanguageServer speaks LSP over stdio for Go-like files: a definition is
 // the `func Name` or `type Name` line under the workspace or a folder its
 // settings name in "search", uses are the other lines naming it, and the type
-// is the definition's line. Settings with a "reject" message answer initialize
+// is the definition's line. Like gopls, it reads a file once and keeps that
+// text until the file is opened, changed, closed, or named in
+// workspace/didChangeWatchedFiles. Settings with a "reject" message answer initialize
 // with that error, as a server given options it does not take. Like a server
 // stuck in its own work, it keeps running when its stdin closes, until it is
 // asked to exit or is signalled.
 func runLanguageServer() int {
 	reader := bufio.NewReader(os.Stdin)
-	ls := &fakeLanguageServer{w: os.Stdout}
+	ls := &fakeLanguageServer{w: os.Stdout, read: map[string]string{}, open: map[string]string{}}
 	for {
 		msg, err := readLSP(reader)
 		if err != nil {
@@ -75,6 +77,25 @@ type lspMessage struct {
 type fakeLanguageServer struct {
 	w     io.Writer
 	roots []string
+	read  map[string]string
+	open  map[string]string
+}
+
+// text is what the server holds for path: the open document, or the disk as
+// it was when the server first read it.
+func (ls *fakeLanguageServer) text(path string) (string, bool) {
+	if text, ok := ls.open[path]; ok {
+		return text, true
+	}
+	if text, ok := ls.read[path]; ok {
+		return text, true
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	ls.read[path] = string(content)
+	return string(content), true
 }
 
 type lspPos struct {
@@ -115,6 +136,38 @@ func (ls *fakeLanguageServer) handle(msg lspMessage) error {
 			return err
 		}
 		return ls.notify("$/progress", map[string]any{"token": token, "value": map[string]any{"kind": "end"}})
+	case "textDocument/didOpen", "textDocument/didChange", "textDocument/didClose":
+		var params struct {
+			TextDocument struct {
+				URI  string `json:"uri"`
+				Text string `json:"text"`
+			} `json:"textDocument"`
+			ContentChanges []struct {
+				Text string `json:"text"`
+			} `json:"contentChanges"`
+		}
+		_ = json.Unmarshal(msg.Params, &params)
+		path := pathOfURI(params.TextDocument.URI)
+		switch {
+		case msg.Method == "textDocument/didClose":
+			delete(ls.open, path)
+		case len(params.ContentChanges) > 0:
+			ls.open[path] = params.ContentChanges[len(params.ContentChanges)-1].Text
+		default:
+			ls.open[path] = params.TextDocument.Text
+		}
+		return nil
+	case "workspace/didChangeWatchedFiles":
+		var params struct {
+			Changes []struct {
+				URI string `json:"uri"`
+			} `json:"changes"`
+		}
+		_ = json.Unmarshal(msg.Params, &params)
+		for _, change := range params.Changes {
+			delete(ls.read, pathOfURI(change.URI))
+		}
+		return nil
 	case "textDocument/definition", "textDocument/references", "textDocument/hover":
 		var params struct {
 			TextDocument struct {
@@ -123,7 +176,7 @@ func (ls *fakeLanguageServer) handle(msg lspMessage) error {
 			Position lspPos `json:"position"`
 		}
 		_ = json.Unmarshal(msg.Params, &params)
-		name := nameAt(pathOfURI(params.TextDocument.URI), params.Position)
+		name := ls.nameAt(pathOfURI(params.TextDocument.URI), params.Position)
 		definition, uses := ls.find(name)
 		switch msg.Method {
 		case "textDocument/definition":
@@ -137,7 +190,7 @@ func (ls *fakeLanguageServer) handle(msg lspMessage) error {
 			if definition == nil {
 				return ls.reply(msg.ID, nil)
 			}
-			return ls.reply(msg.ID, map[string]any{"contents": map[string]string{"kind": "plaintext", "value": strings.TrimSpace(lineOf(pathOfURI(definition.URI), definition.Range.Start.Line))}})
+			return ls.reply(msg.ID, map[string]any{"contents": map[string]string{"kind": "plaintext", "value": strings.TrimSpace(ls.lineOf(pathOfURI(definition.URI), definition.Range.Start.Line))}})
 		}
 	case "shutdown":
 		return ls.reply(msg.ID, nil)
@@ -166,11 +219,11 @@ func (ls *fakeLanguageServer) find(name string) (*lspPlace, []lspPlace) {
 			if entry.IsDir() || filepath.Ext(path) != ".go" {
 				return nil
 			}
-			content, err := os.ReadFile(path)
-			if err != nil {
+			content, ok := ls.text(path)
+			if !ok {
 				return nil
 			}
-			for i, line := range strings.Split(string(content), "\n") {
+			for i, line := range strings.Split(content, "\n") {
 				at := word.FindStringIndex(line)
 				if at == nil {
 					continue
@@ -190,8 +243,8 @@ func (ls *fakeLanguageServer) find(name string) (*lspPlace, []lspPlace) {
 	return definition, uses
 }
 
-func nameAt(path string, at lspPos) string {
-	runes := []rune(lineOf(path, at.Line))
+func (ls *fakeLanguageServer) nameAt(path string, at lspPos) string {
+	runes := []rune(ls.lineOf(path, at.Line))
 	if at.Character >= len(runes) {
 		return ""
 	}
@@ -206,12 +259,12 @@ func nameAt(path string, at lspPos) string {
 	return string(runes[start:end])
 }
 
-func lineOf(path string, line int) string {
-	content, err := os.ReadFile(path)
-	if err != nil {
+func (ls *fakeLanguageServer) lineOf(path string, line int) string {
+	content, ok := ls.text(path)
+	if !ok {
 		return ""
 	}
-	lines := strings.Split(string(content), "\n")
+	lines := strings.Split(content, "\n")
 	if line < 0 || line >= len(lines) {
 		return ""
 	}

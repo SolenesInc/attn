@@ -146,6 +146,54 @@ func TestAShownReviewAnswersDefinitionUsesAndTypeAndItsServerStopsOnceNoReviewIs
 	}
 }
 
+func TestAnswersFollowFilesChangedOnDiskAfterTheServerReadThem(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Name the sum\n\n## Add keeps its result\n\n### calc.go:3-6\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	awaitNavigation(app, document, "go", "ready")
+
+	usesOfAdd := func(want ...string) {
+		t.Helper()
+		uses := requestCodeNav(app, document, "calc.go", 3, 5, "references")
+		if got := places(uses.Locations); !uses.Success || strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Fatalf("the uses of Add answered %v (error %s), want %v", got, protocol.Deref(uses.Error), want)
+		}
+	}
+	if definition := requestCodeNav(app, document, "use.go", 4, strings.Index("\treturn Add(a, a)", "Add"), "definition"); !definition.Success {
+		t.Fatalf("the definition of Add failed: %s", protocol.Deref(definition.Error))
+	}
+	usesOfAdd("use.go:4:8 return Add(a, a)")
+
+	write := func(name, body string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("use.go", "package calc\n\nfunc Twice(a int) int {\n\tb := a\n\treturn Add(a, b)\n}\n")
+	write("more.go", "package calc\n\nfunc Thrice(a int) int {\n\treturn Add(Twice(a), a)\n}\n")
+	usesOfAdd("more.go:4:8 return Add(Twice(a), a)", "use.go:5:8 return Add(a, b)")
+	if definition := requestCodeNav(app, document, "more.go", 4, strings.Index("\treturn Add(Twice(a), a)", "Add"), "definition"); !definition.Success {
+		t.Fatalf("the definition of Add from the new file failed: %s", protocol.Deref(definition.Error))
+	}
+
+	runGit(t, repo, "add", "use.go", "more.go")
+	runGit(t, repo, "commit", "-m", "use Add twice")
+	runGit(t, repo, "reset", "--hard", "HEAD~1")
+	usesOfAdd("use.go:4:8 return Add(a, a)")
+}
+
 func TestAServerOnThePathThatNoTestInstalledIsMissingToAReview(t *testing.T) {
 	w := newWorld(t)
 	onPath := t.TempDir()

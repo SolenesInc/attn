@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -47,15 +48,16 @@ type Location struct {
 }
 
 type server struct {
-	key     Key
-	def     Definition
-	program string
-	cmd     *exec.Cmd
-	conn    *conn
-	reaper  string
-	exited  chan struct{}
-	ready   chan struct{}
-	stderr  *tail
+	key      Key
+	def      Definition
+	program  string
+	worktree func(ctx context.Context, folder, since string) (Worktree, error)
+	cmd      *exec.Cmd
+	conn     *conn
+	reaper   string
+	exited   chan struct{}
+	ready    chan struct{}
+	stderr   *tail
 
 	mu       sync.Mutex
 	state    string
@@ -63,11 +65,37 @@ type server struct {
 	progress map[string]string
 	opened   map[string]openFile
 	changed  func()
+
+	diskMu sync.Mutex
+	head   string
+	dirty  map[string]stamp
 }
 
 type openFile struct {
 	version int
 	sum     [sha256.Size]byte
+}
+
+// Worktree is what a workspace folder holds against its commit: the files that
+// differ from it, and the files that differ between an earlier commit and it.
+type Worktree struct {
+	Head  string
+	Dirty []string
+	Moved []string
+}
+
+type stamp struct {
+	exists  bool
+	size    int64
+	modTime int64
+}
+
+func stampOf(path string) stamp {
+	info, err := os.Stat(path)
+	if err != nil {
+		return stamp{}
+	}
+	return stamp{exists: true, size: info.Size(), modTime: info.ModTime().UnixNano()}
 }
 
 type tail struct {
@@ -105,7 +133,7 @@ func uriPath(uri string) string {
 
 // startServer launches the program and begins the LSP handshake; the answer
 // comes later, through the state.
-func startServer(key Key, def Definition, program, reapDir string, changed func()) (*server, error) {
+func startServer(key Key, def Definition, program, reapDir string, worktree func(context.Context, string, string) (Worktree, error), changed func()) (*server, error) {
 	cmd := exec.Command(program, def.Command[1:]...)
 	cmd.Dir = key.Folder
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -118,7 +146,7 @@ func startServer(key Key, def Definition, program, reapDir string, changed func(
 		return nil, err
 	}
 	s := &server{
-		key: key, def: def, program: program, cmd: cmd,
+		key: key, def: def, program: program, cmd: cmd, worktree: worktree,
 		exited: make(chan struct{}), ready: make(chan struct{}),
 		stderr: &tail{}, state: StateStarting, progress: map[string]string{}, opened: map[string]openFile{}, changed: changed,
 	}
@@ -155,6 +183,13 @@ func firstError(errs ...error) error {
 
 func (s *server) initialize() {
 	folder := s.key.Folder
+	s.diskMu.Lock()
+	_, err := s.diskChanges(context.Background())
+	s.diskMu.Unlock()
+	if err != nil {
+		s.abandon(fmt.Sprintf("read what changed in %s: %v", folder, err))
+		return
+	}
 	params := map[string]any{
 		"processId": os.Getpid(),
 		"rootUri":   fileURI(folder),
@@ -343,6 +378,74 @@ func (s *server) open(path string) error {
 		"textDocument":   map[string]any{"uri": uri, "version": version},
 		"contentChanges": []map[string]string{{"text": string(text)}},
 	})
+}
+
+// catchUp tells the server about each file that changed on disk since it
+// last looked, because a server rereads only what it is told changed: an open
+// document gets its new text, any other file a change event.
+func (s *server) catchUp(ctx context.Context) error {
+	s.diskMu.Lock()
+	defer s.diskMu.Unlock()
+	changed, err := s.diskChanges(ctx)
+	if err != nil {
+		return fmt.Errorf("read what changed in %s: %w", s.key.Folder, err)
+	}
+	events := []map[string]any{}
+	for _, path := range changed {
+		s.mu.Lock()
+		_, open := s.opened[path]
+		s.mu.Unlock()
+		if open {
+			err := s.open(path)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			s.mu.Lock()
+			delete(s.opened, path)
+			s.mu.Unlock()
+			if err := s.conn.notify("textDocument/didClose", map[string]any{"textDocument": map[string]string{"uri": fileURI(path)}}); err != nil {
+				return err
+			}
+		}
+		kind := 2
+		if !stampOf(path).exists {
+			kind = 3
+		}
+		events = append(events, map[string]any{"uri": fileURI(path), "type": kind})
+	}
+	if len(events) == 0 {
+		return nil
+	}
+	return s.conn.notify("workspace/didChangeWatchedFiles", map[string]any{"changes": events})
+}
+
+// diskChanges reads the folder's commit and dirty files and names the files
+// that changed since the last read: those the commit moved, and dirty files
+// that are new, edited again, or no longer dirty.
+func (s *server) diskChanges(ctx context.Context) ([]string, error) {
+	now, err := s.worktree(ctx, s.key.Folder, s.head)
+	if err != nil {
+		return nil, err
+	}
+	dirty := make(map[string]stamp, len(now.Dirty))
+	changed := slices.Clone(now.Moved)
+	for _, path := range now.Dirty {
+		dirty[path] = stampOf(path)
+		if before, ok := s.dirty[path]; !ok || before != dirty[path] {
+			changed = append(changed, path)
+		}
+	}
+	for path := range s.dirty {
+		if _, ok := dirty[path]; !ok {
+			changed = append(changed, path)
+		}
+	}
+	s.head, s.dirty = now.Head, dirty
+	slices.Sort(changed)
+	return slices.Compact(changed), nil
 }
 
 type lspPosition struct {

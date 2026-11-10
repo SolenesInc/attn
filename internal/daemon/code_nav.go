@@ -55,6 +55,12 @@ func (d *Daemon) newCodeNavigation() *codenav.Manager {
 				return client.ListFilesMatching(ctx, folder, globs)
 			})
 		},
+		Worktree: func(ctx context.Context, folder, since string) (codenav.Worktree, error) {
+			changes, err := gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (attngit.WorktreeChanges, error) {
+				return client.WorktreeChangesSince(ctx, folder, since)
+			})
+			return codenav.Worktree{Head: changes.Head, Dirty: changes.Dirty, Moved: changes.Moved}, err
+		},
 		IdleStop: func(fn func()) stepclock.Timer {
 			return d.clock.AfterFunc(CodeNavIdleStopTimer, d.codeNavIdleStop(), func() {
 				release, ok := d.life.Hold("codeNavIdleStop")
