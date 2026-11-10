@@ -7,11 +7,14 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"strings"
+	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/review"
 	"github.com/victorarias/attn/internal/setting"
+	"github.com/victorarias/attn/internal/store"
 )
 
 var reviewTask = gitTask{Kind: gitTaskReview, Lane: gitInteractive}
@@ -115,4 +118,46 @@ func (d *Daemon) handleReviewSearchWS(client *wsClient, msg *protocol.ReviewSear
 		result.RequestID = msg.RequestID
 		d.sendToClient(client, &result)
 	})
+}
+
+func (d *Daemon) markReviewSent(ctx context.Context, msg protocol.ReviewSentMessage) (struct{}, error) {
+	content, err := d.reviewDocumentHere(msg.Document)
+	if err != nil {
+		return struct{}{}, err
+	}
+	document := filepath.Clean(msg.Document)
+	return gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (struct{}, error) {
+		return struct{}{}, review.MarkSent(ctx, client, document, content, msg.Head)
+	})
+}
+
+func (d *Daemon) handleReviewAnswer(ctx context.Context, conn net.Conn, msg *protocol.ReviewAnswerMessage) {
+	if !d.on(setting.CodeReviewEnabled) {
+		d.sendError(conn, reviewOff())
+		return
+	}
+	text := strings.TrimSpace(msg.Text)
+	if text == "" {
+		d.sendError(conn, "review answer: the answer is empty. Pass it with -m \"<answer>\"")
+		return
+	}
+	if !filepath.IsAbs(msg.Document) {
+		d.sendError(conn, fmt.Sprintf("review answer: the document path must be absolute: %s", msg.Document))
+		return
+	}
+	key := store.HostPath{Path: filepath.Clean(msg.Document)}
+	if origin, remote := OriginOf(ctx); remote {
+		key.Host = origin.Host
+	}
+	generation, err := d.store.AnswerMarkdownQuestion(key, msg.AnnotationID, text, time.Now())
+	if errors.Is(err, store.ErrNoQuestion) {
+		d.sendError(conn, fmt.Sprintf("review answer: %s has no open question %s. The user may have removed it or sent the review", key.Path, msg.AnnotationID))
+		return
+	}
+	if err != nil {
+		d.sendError(conn, fmt.Sprintf("review answer: %v", err))
+		return
+	}
+	d.annotationsChanged(key, generation)
+	d.sendOK(conn)
 }

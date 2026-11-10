@@ -71,6 +71,12 @@ func (c *Client) ResolveCommit(ctx context.Context, root, rev string) (string, e
 	return strings.TrimSpace(string(out)), nil
 }
 
+// UpdateRef points ref at commit.
+func (c *Client) UpdateRef(ctx context.Context, root, ref, commit string) error {
+	_, err := c.outputWithEnv(ctx, OpMetadata, root, nil, nil, "update-ref", ref, commit)
+	return err
+}
+
 // SnapshotWorktree writes the working tree, tracked and untracked files, as a
 // commit whose parent is HEAD, through a private copy of the index so the
 // user's index never changes, and points ref at it. Untracked directories and
@@ -98,7 +104,7 @@ func (c *Client) SnapshotWorktree(ctx context.Context, root, ref, message string
 		return "", nil, err
 	}
 	sha := strings.TrimSpace(string(commit))
-	if _, err := c.outputWithEnv(ctx, OpMetadata, root, nil, nil, "update-ref", ref, sha); err != nil {
+	if err := c.UpdateRef(ctx, root, ref, sha); err != nil {
 		return "", nil, err
 	}
 	return sha, leftOut, nil

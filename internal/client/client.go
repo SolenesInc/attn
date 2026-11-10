@@ -1075,6 +1075,11 @@ func (c *Client) ReviewCheck(document string) ([]protocol.ReviewProblem, error) 
 	return resp.ReviewCheckResult.Problems, nil
 }
 
+func (c *Client) ReviewAnswer(document, annotationID, text string) error {
+	_, err := c.send(protocol.ReviewAnswerMessage{Cmd: protocol.CmdReviewAnswer, Document: document, AnnotationID: annotationID, Text: text})
+	return err
+}
+
 func (c *Client) OpenSeed(seedID string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seedID}
 	if sessionID != "" {

@@ -41,23 +41,55 @@ func markdownAnnotationRecipient() Recipient {
 	line := When(flag("has_anchor"), Join(" ", position, Compose()))
 	quickLabel := Join("", fragment("quick-label", text("label"), text("quote")),
 		When(flag("has_tip"), fragment("comment-line", text("tip"))))
+	answer := Choose(flag("has_answer"), fragment("answer", text("answer")), fragment("unanswered"))
+	code := func(name string, fields ...Field) Node {
+		return fragment(name, append([]Field{text("place"), text("fence"), text("quote"), text("comment")}, fields...)...)
+	}
+	question := Choose(flag("has_file"),
+		Use("annotation-markdown.code-question", "content/annotations/markdown-code-question.md",
+			Bind("place", Input(text("place"))), Bind("fence", Input(text("fence"))), Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))), Bind("answer", answer)),
+		Use("annotation-markdown.question", "content/annotations/markdown-question.md",
+			Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))), Bind("answer", answer)))
+	comment := Choose(flag("quick_label"), quickLabel,
+		Choose(flag("has_file"), code("code-comment"), fragment("comment", text("quote"), text("comment"))))
 	body := Choose(flag("deletion"), fragment("deletion", text("quote")),
 		Choose(flag("global"), fragment("global", text("comment")),
-			Choose(flag("quick_label"), quickLabel, fragment("comment", text("quote"), text("comment")))))
+			Choose(flag("question"), question, comment)))
 	entry := Exact(Use("annotation-markdown.entry", "content/annotations/markdown-entry.md",
 		Bind("index", Input(text("index"))), Bind("line", line), Bind("body", body)))
 	seed := Use("annotation-markdown.seed", "content/annotations/markdown-seed.md",
 		Bind("seed_id", Input(seedID)), Bind("title", When(flag("has_title"), fragment("title", text("title")))))
+	file := Choose(Present(text("machine")), fragment("file-on", text("path"), text("machine")), fragment("file", text("path")))
+	pieces := Choose(flag("singular"), fragment("piece"), fragment("pieces"))
+	entries := Input(ProducedBy(text("entries"), "annotation-markdown/entry"))
 	submit := Use("annotation-markdown.submit", "content/annotations/markdown-submit.md",
-		Bind("subject", Choose(flag("seed"), seed,
-			Choose(Present(text("machine")), fragment("file-on", text("path"), text("machine")), fragment("file", text("path"))))),
+		Bind("subject", Choose(flag("seed"), seed, file)),
 		Bind("count", Input(text("count"))),
-		Bind("pieces", Choose(flag("singular"), fragment("piece"), fragment("pieces"))),
-		Bind("entries", Input(ProducedBy(text("entries"), "annotation-markdown/entry"))),
+		Bind("pieces", pieces),
+		Bind("entries", entries),
 		Bind("summary", When(Present(text("summary_rows")), fragment("summary", text("summary_rows")))))
+	verdictText := func(name string, fields ...Field) Node {
+		return template("annotation-markdown."+name, "content/annotations/markdown-"+name+".md", fields...)
+	}
+	verdict := Choose(flag("approve"), verdictText("verdict-approve"),
+		Choose(flag("request_changes"), verdictText("verdict-request-changes", text("document")), verdictText("verdict-comment")))
+	review := Use("annotation-markdown.review", "content/annotations/markdown-review.md",
+		Bind("subject", file),
+		Bind("marks", When(flag("has_marks"), Use("annotation-markdown.review-marks", "content/annotations/markdown-review-marks.md",
+			Bind("count", Input(text("count"))), Bind("pieces", pieces), Bind("entries", entries)))),
+		Bind("verdict", verdict))
+	ask := Use("annotation-markdown.ask", "content/annotations/markdown-ask.md",
+		Bind("subject", file),
+		Bind("question", Choose(flag("has_file"),
+			template("annotation-markdown.ask-code", "content/annotations/markdown-ask-code.md", text("place"), text("fence"), text("quote"), text("comment")),
+			template("annotation-markdown.ask-prose", "content/annotations/markdown-ask-prose.md", text("quote"), text("comment")))),
+		Bind("document", Input(text("document"))),
+		Bind("id", Input(text("id"))))
 	return Recipient{ID: "annotation-markdown", Description: "Feedback sent from a Markdown document or seed to a session or seed log.", Events: []Event{
 		On("submit", "user_message", "Sorted feedback entries and label counts are prepared by the adapter.", submit),
-		On("entry", "message_fragment", "One annotation, including line position, type and optional quick-label guidance.", entry),
+		On("review", "user_message", "A review the user sent from a review document: its marks in reading order, then the verdict, which may come alone.", review),
+		On("question", "user_message", "A question the user asked on a review document, delivered at once. The agent answers it with attn review answer.", ask),
+		On("entry", "message_fragment", "One annotation, including its place in the document or the code it marks, its kind, an answer to a question, and optional quick-label guidance.", entry),
 	}}
 }
 

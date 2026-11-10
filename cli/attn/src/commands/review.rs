@@ -4,7 +4,8 @@ use crate::paths::os_error_text;
 use attn::go::flag::FlagSet;
 use attn::go::quote::quote;
 use attn_protocol::{
-    ReviewCheckMessage, ReviewCheckResult, ReviewProblem, ReviewStartMessage, ReviewStartResult,
+    ReviewAnswerMessage, ReviewCheckMessage, ReviewCheckResult, ReviewProblem, ReviewStartMessage,
+    ReviewStartResult,
 };
 use std::fmt::Write as _;
 
@@ -33,6 +34,11 @@ commands:
         list the document's problems, each with its line and the fix. Exits 1
         when there are problems. `attn open` prints the same problems as
         warnings.
+
+  answer --doc <document> <question-id> -m <answer>
+        answer a question the user asked on the review. The question arrives
+        as the user's message with this command and the question's id; the
+        answer shows under the line in the user's review.
 
 The document, below the frontmatter:
 
@@ -190,6 +196,43 @@ fn check(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     Err(Stop(1))
 }
 
+fn answer(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
+    let definitions = [string_flag("doc"), string_flag("m")];
+    let mut flags = FlagSet::new("review answer", &definitions);
+    let positionals = parse_interspersed(run, &mut flags, args)
+        .map_err(|error| usage_failure("answer", &error.to_string()))?;
+    let [id] = positionals.as_slice() else {
+        return Err(usage_failure(
+            "answer",
+            "expected one <question-id> argument",
+        ));
+    };
+    let document = flags.string("doc").trim().to_string();
+    if document.is_empty() {
+        return Err(usage_failure("answer", "--doc <document> is required"));
+    }
+    let text = flags.string("m").trim().to_string();
+    if text.is_empty() {
+        return Err(usage_failure("answer", "-m <answer> is required"));
+    }
+    let document = absolute(&document).map_err(|error| {
+        eprintln!("review answer: resolve path: {}", os_error_text(&error));
+        Stop(1)
+    })?;
+    let mut message = ReviewAnswerMessage::new();
+    message.document.clone_from(&document);
+    message.annotation_id = id.trim().to_string();
+    message.text = text;
+    client(run)
+        .call(&message)
+        .map_err(|error| run.fail_send("review answer", &error))?;
+    print_stdout(&format!(
+        "answered {} on {document}\n",
+        message.annotation_id
+    ));
+    Ok(())
+}
+
 pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let Some(verb) = args.first() else {
         print_stdout(HELP);
@@ -201,12 +244,12 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     super::warn_if_stale(run.paths);
     match verb.as_str() {
-        "start" | "check" => {
+        "start" | "check" | "answer" => {
             run.path = format!("review {verb}");
-            if verb == "start" {
-                start(run, &args[1..])
-            } else {
-                check(run, &args[1..])
+            match verb.as_str() {
+                "start" => start(run, &args[1..]),
+                "check" => check(run, &args[1..]),
+                _ => answer(run, &args[1..]),
             }
         }
         _ => {

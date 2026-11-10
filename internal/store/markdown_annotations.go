@@ -55,6 +55,35 @@ func (s *Store) SpendMarkdownAnnotations(key HostPath, sent []protocol.MarkdownA
 	})
 }
 
+// ErrNoQuestion is returned when an answer names a mark the draft does not
+// hold as a question.
+var ErrNoQuestion = errors.New("no such question")
+
+// AnswerMarkdownQuestion stores an answer on a question in the draft and
+// returns the draft's generation after it.
+func (s *Store) AnswerMarkdownQuestion(key HostPath, id, answer string, now time.Time) (int, error) {
+	asked := false
+	_, generation, err := s.rewriteMarkdownDraft(key, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+		at := slices.IndexFunc(marks, func(mark protocol.MarkdownAnnotation) bool {
+			return mark.ID == id && mark.Type == protocol.MarkdownAnnotationQuestion
+		})
+		if at < 0 {
+			return marks
+		}
+		asked = true
+		answered := slices.Clone(marks)
+		answered[at].Answer = protocol.Ptr(answer)
+		return answered
+	})
+	if err != nil {
+		return 0, err
+	}
+	if !asked {
+		return 0, ErrNoQuestion
+	}
+	return generation, nil
+}
+
 func (s *Store) rewriteMarkdownDraft(key HostPath, now time.Time, rewrite func([]protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation) ([]protocol.MarkdownAnnotation, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -142,5 +171,6 @@ func withoutDelivered(marks, sent []protocol.MarkdownAnnotation) []protocol.Mark
 func sameFeedback(a, b protocol.MarkdownAnnotation) bool {
 	return a.Type == b.Type &&
 		protocol.Deref(a.Text) == protocol.Deref(b.Text) &&
-		protocol.Deref(a.QuickLabelID) == protocol.Deref(b.QuickLabelID)
+		protocol.Deref(a.QuickLabelID) == protocol.Deref(b.QuickLabelID) &&
+		protocol.Deref(a.Answer) == protocol.Deref(b.Answer)
 }

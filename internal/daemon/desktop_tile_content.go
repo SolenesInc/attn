@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type desktopTileKey struct {
@@ -32,6 +33,8 @@ type heldTileDocument struct {
 	content string
 	review  *protocol.ReviewBundle
 	err     error
+	// The draft generation an annotation change outside the app reached.
+	annotations int
 }
 
 type deliveredTileFile struct {
@@ -145,7 +148,23 @@ func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *
 	if held.err != nil {
 		message.Error = protocol.Ptr(held.err.Error())
 	}
+	if held.annotations > 0 {
+		message.AnnotationsGeneration = protocol.Ptr(held.annotations)
+	}
 	return message
+}
+
+// annotationsChanged tells the app showing a document that its annotation
+// draft changed without it, so the app reads the draft again.
+func (d *Daemon) annotationsChanged(key store.HostPath, generation int) {
+	delivery := &d.desktopTiles
+	delivery.mu.Lock()
+	if held := delivery.documents[tileDocument{host: key.Host, path: key.Path}]; held != nil && held.serial > 0 {
+		held.annotations = generation
+		held.serial++
+	}
+	delivery.mu.Unlock()
+	d.nudgeDesktopTileContent()
 }
 
 func (d *Daemon) deliverDesktopTileContent() {
@@ -243,7 +262,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, err: held.err}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, err: held.err, annotations: held.annotations}
 		}
 	}
 	delivery.mu.Unlock()

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "review-sent",
+  "description": "A review the user sent with two notes and an answered question, asking for changes.",
+  "recipient": "annotation-markdown",
+  "event": "review",
+  "values": {
+    "path": "/Users/me/seeds/s-7k3f9m/review.md",
+    "machine": "",
+    "document": "/Users/me/seeds/s-7k3f9m/review.md",
+    "has_marks": "true",
+    "count": "3",
+    "singular": "false",
+    "entries": "## 1. (line 9) Feedback on: \"a detail refresh between them looked like a change\"\n> Name the refresh.\n\n## 2. Question on internal/store/store.go:1301\n```\n\tif !reflect.DeepEqual(before, after) {\n```\n> Why DeepEqual here and not wireEqual?\n\nYou answered: wireEqual compared JSON, which drops unexported fields.\n\n## 3. Note on internal/daemon/daemon.go:3781–3783\n```\n\tif err := d.store.ReplacePRsOfHosts(prsByHost); err != nil {\n\t\treturn err\n\t}\n```\n> Log which host failed.\n\n",
+    "approve": "false",
+    "request_changes": "true"
+  }
+}

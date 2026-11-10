@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "id": "review-question",
+  "description": "A question the user asked on a line of code in a review, delivered at once.",
+  "recipient": "annotation-markdown",
+  "event": "question",
+  "values": {
+    "path": "/Users/me/seeds/s-7k3f9m/review.md",
+    "machine": "",
+    "document": "/Users/me/seeds/s-7k3f9m/review.md",
+    "id": "6f0c2e1a-93d4-4c51-8a3e-2b1d7f0e9c44",
+    "has_file": "true",
+    "place": "internal/store/store.go:1301",
+    "fence": "```",
+    "quote": "\tif !reflect.DeepEqual(before, after) {",
+    "comment": "Why DeepEqual here and not wireEqual?"
+  }
+}

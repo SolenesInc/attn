@@ -3198,6 +3198,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleReviewStart(ctx, conn, msg.(*protocol.ReviewStartMessage))
 	case protocol.CmdReviewCheck:
 		d.handleReviewCheck(ctx, conn, msg.(*protocol.ReviewCheckMessage))
+	case protocol.CmdReviewAnswer:
+		d.handleReviewAnswer(ctx, conn, msg.(*protocol.ReviewAnswerMessage))
 	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:

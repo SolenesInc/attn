@@ -2781,6 +2781,12 @@ model MarkdownAnnotationAnchor {
   start: int32;
   end: int32;
   content_hash: string;
+  // A mark on a review's code: the file, relative to the review's repository,
+  // and its lines now. block_id is then empty, exact holds the quoted code, and
+  // start_line is the document line the mark reads at.
+  file?: string;
+  file_start_line?: int32;
+  file_end_line?: int32;
 }
 
 // One markdown annotation draft entry. `anchor` is absent only for
@@ -2788,7 +2794,7 @@ model MarkdownAnnotationAnchor {
 // "comment" carrying quick_label_id (+ tip snapshotted at creation).
 model MarkdownAnnotation {
   id: string;
-  // "comment" | "deletion" | "global". Plain string so codegen yields string
+  // "comment" | "deletion" | "global" | "question". Plain string so codegen yields string
   // on both sides (a literal union becomes anyOf -> Go interface{}).
   `type`: string;
   text?: string;
@@ -2799,6 +2805,8 @@ model MarkdownAnnotation {
   // "👍 Looks good" (emoji + label text). Optional: older drafts lack it;
   // the payload formatter falls back to quick_label_id.
   quick_label_text?: string;
+  // The agent's answer to a question, set by review_answer.
+  answer?: string;
   created_at: safeint; // epoch ms (int64 would codegen as string)
 }
 
@@ -3059,6 +3067,15 @@ model MarkdownAnnotationsSubmitMessage {
   // resolves). Orphanhood is a client-derived, non-persisted property; the
   // formatter labels these "(~line N, moved)".
   orphaned_ids?: string[];
+  // Delivers only these marks, at once, and keeps them in the draft: a
+  // question is asked before the review is sent.
+  only_ids?: string[];
+  // approve | request_changes | comment. A review send: the marks, then the
+  // verdict, which may come with no marks.
+  verdict?: string;
+  // The review snapshot the user read. A delivered review send records it as
+  // sent, so the next review start shows what changed since.
+  head?: string;
   request_id: string;
 }
 
@@ -3763,6 +3780,9 @@ model DesktopTileContentMessage {
   content: string;
   error?: string;
   review?: ReviewBundle;
+  // Rises when the document's annotation draft changed outside the app, as
+  // when an agent answers a question; the app then reads the draft again.
+  annotations_generation?: safeint;
 }
 
 // The home sends each machine the full set of markdown documents its shown
@@ -3985,6 +4005,26 @@ model ReviewSearchResultMessage {
   files?: string[];
   hits?: ReviewSearchHit[];
   problem?: string;              // a limit the results hit
+}
+
+// Records a review the user sent: the sent ref of the document names head,
+// on the machine that holds the repository.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ReviewSentMessage {
+  cmd: "review_sent";
+  host?: string;
+  document: string;
+  head: string;
+}
+
+// An agent's answer to the user's question on a review, stored on the
+// question in the document's draft. Sent by `attn review answer`.
+@extension("x-on", #{ home: true })
+model ReviewAnswerMessage {
+  cmd: "review_answer";
+  document: string;
+  annotation_id: string;
+  text: string;
 }
 
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])

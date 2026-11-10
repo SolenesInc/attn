@@ -4181,6 +4181,10 @@ type DesktopShowSessionMessage struct {
 }
 
 type DesktopTileContentMessage struct {
+	// AnnotationsGeneration corresponds to the JSON schema field
+	// "annotations_generation".
+	AnnotationsGeneration *int `json:"annotations_generation,omitempty,omitzero"`
+
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`
 
@@ -6567,6 +6571,9 @@ type MarkdownAnnotation struct {
 	// Anchor corresponds to the JSON schema field "anchor".
 	Anchor *MarkdownAnnotationAnchor `json:"anchor,omitempty,omitzero"`
 
+	// Answer corresponds to the JSON schema field "answer".
+	Answer *string `json:"answer,omitempty,omitzero"`
+
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt int `json:"created_at"`
 
@@ -6604,6 +6611,15 @@ type MarkdownAnnotationAnchor struct {
 
 	// Exact corresponds to the JSON schema field "exact".
 	Exact string `json:"exact"`
+
+	// File corresponds to the JSON schema field "file".
+	File *string `json:"file,omitempty,omitzero"`
+
+	// FileEndLine corresponds to the JSON schema field "file_end_line".
+	FileEndLine *int `json:"file_end_line,omitempty,omitzero"`
+
+	// FileStartLine corresponds to the JSON schema field "file_start_line".
+	FileStartLine *int `json:"file_start_line,omitempty,omitzero"`
 
 	// Prefix corresponds to the JSON schema field "prefix".
 	Prefix string `json:"prefix"`
@@ -6747,8 +6763,14 @@ type MarkdownAnnotationsSubmitMessage struct {
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
+	// Head corresponds to the JSON schema field "head".
+	Head *string `json:"head,omitempty,omitzero"`
+
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
+
+	// OnlyIds corresponds to the JSON schema field "only_ids".
+	OnlyIds []string `json:"only_ids,omitempty,omitzero"`
 
 	// OrphanedIds corresponds to the JSON schema field "orphaned_ids".
 	OrphanedIds []string `json:"orphaned_ids,omitempty,omitzero"`
@@ -6770,6 +6792,9 @@ type MarkdownAnnotationsSubmitMessage struct {
 
 	// TargetSessionID corresponds to the JSON schema field "target_session_id".
 	TargetSessionID *string `json:"target_session_id,omitempty,omitzero"`
+
+	// Verdict corresponds to the JSON schema field "verdict".
+	Verdict *string `json:"verdict,omitempty,omitzero"`
 }
 
 type MarkdownAnnotationsSubmitResultMessage struct {
@@ -9553,6 +9578,20 @@ type RestartSharedCodexResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type ReviewAnswerMessage struct {
+	// AnnotationID corresponds to the JSON schema field "annotation_id".
+	AnnotationID string `json:"annotation_id"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
 type ReviewBundle struct {
 	// Base corresponds to the JSON schema field "base".
 	Base *string `json:"base,omitempty,omitzero"`
@@ -9833,6 +9872,20 @@ type ReviewSearchResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type ReviewSentMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Head corresponds to the JSON schema field "head".
+	Head string `json:"head"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 }
 
 type ReviewStartMessage struct {

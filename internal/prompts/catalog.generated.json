@@ -5258,9 +5258,412 @@
           }
         },
         {
+          "id": "review",
+          "delivery": "user_message",
+          "description": "A review the user sent from a review document: its marks in reading order, then the verdict, which may come alone.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-markdown.review",
+            "source": "content/annotations/markdown-review.md",
+            "bindings": [
+              {
+                "name": "subject",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "machine",
+                      "kind": "text",
+                      "description": "machine"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.file-on",
+                      "source": "content/annotations/markdown-file-on.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "path",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "path",
+                              "kind": "text",
+                              "description": "path"
+                            }
+                          }
+                        },
+                        {
+                          "name": "machine",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "machine",
+                              "kind": "text",
+                              "description": "machine"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.file",
+                      "source": "content/annotations/markdown-file.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "path",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "path",
+                              "kind": "text",
+                              "description": "path"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "marks",
+                "node": {
+                  "kind": "when",
+                  "condition": {
+                    "field": {
+                      "name": "has_marks",
+                      "kind": "flag",
+                      "description": "has_marks"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.review-marks",
+                      "source": "content/annotations/markdown-review-marks.md",
+                      "bindings": [
+                        {
+                          "name": "count",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "count",
+                              "kind": "text",
+                              "description": "count"
+                            }
+                          }
+                        },
+                        {
+                          "name": "pieces",
+                          "node": {
+                            "kind": "choose",
+                            "condition": {
+                              "field": {
+                                "name": "singular",
+                                "kind": "flag",
+                                "description": "singular"
+                              },
+                              "test": "enabled"
+                            },
+                            "children": [
+                              {
+                                "kind": "text",
+                                "id": "annotation-markdown.piece",
+                                "source": "content/annotations/markdown-piece.md",
+                                "keep_final_newline": true
+                              },
+                              {
+                                "kind": "text",
+                                "id": "annotation-markdown.pieces",
+                                "source": "content/annotations/markdown-pieces.md",
+                                "keep_final_newline": true
+                              }
+                            ]
+                          }
+                        },
+                        {
+                          "name": "entries",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "entries",
+                              "kind": "text",
+                              "description": "entries",
+                              "from": "annotation-markdown/entry"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "verdict",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "approve",
+                      "kind": "flag",
+                      "description": "approve"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.verdict-approve",
+                      "source": "content/annotations/markdown-verdict-approve.md"
+                    },
+                    {
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "request_changes",
+                          "kind": "flag",
+                          "description": "request_changes"
+                        },
+                        "test": "enabled"
+                      },
+                      "children": [
+                        {
+                          "kind": "text",
+                          "id": "annotation-markdown.verdict-request-changes",
+                          "source": "content/annotations/markdown-verdict-request-changes.md",
+                          "bindings": [
+                            {
+                              "name": "document",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "document",
+                                  "kind": "text",
+                                  "description": "document"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "annotation-markdown.verdict-comment",
+                          "source": "content/annotations/markdown-verdict-comment.md"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "question",
+          "delivery": "user_message",
+          "description": "A question the user asked on a review document, delivered at once. The agent answers it with attn review answer.",
+          "body": {
+            "kind": "text",
+            "id": "annotation-markdown.ask",
+            "source": "content/annotations/markdown-ask.md",
+            "bindings": [
+              {
+                "name": "subject",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "machine",
+                      "kind": "text",
+                      "description": "machine"
+                    },
+                    "test": "present"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.file-on",
+                      "source": "content/annotations/markdown-file-on.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "path",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "path",
+                              "kind": "text",
+                              "description": "path"
+                            }
+                          }
+                        },
+                        {
+                          "name": "machine",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "machine",
+                              "kind": "text",
+                              "description": "machine"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.file",
+                      "source": "content/annotations/markdown-file.md",
+                      "keep_final_newline": true,
+                      "bindings": [
+                        {
+                          "name": "path",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "path",
+                              "kind": "text",
+                              "description": "path"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "question",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "has_file",
+                      "kind": "flag",
+                      "description": "has_file"
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.ask-code",
+                      "source": "content/annotations/markdown-ask-code.md",
+                      "bindings": [
+                        {
+                          "name": "place",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "place",
+                              "kind": "text",
+                              "description": "place"
+                            }
+                          }
+                        },
+                        {
+                          "name": "fence",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "fence",
+                              "kind": "text",
+                              "description": "fence"
+                            }
+                          }
+                        },
+                        {
+                          "name": "quote",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "quote",
+                              "kind": "text",
+                              "description": "quote"
+                            }
+                          }
+                        },
+                        {
+                          "name": "comment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "comment",
+                              "kind": "text",
+                              "description": "comment"
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "annotation-markdown.ask-prose",
+                      "source": "content/annotations/markdown-ask-prose.md",
+                      "bindings": [
+                        {
+                          "name": "quote",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "quote",
+                              "kind": "text",
+                              "description": "quote"
+                            }
+                          }
+                        },
+                        {
+                          "name": "comment",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "comment",
+                              "kind": "text",
+                              "description": "comment"
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              },
+              {
+                "name": "document",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "document",
+                    "kind": "text",
+                    "description": "document"
+                  }
+                }
+              },
+              {
+                "name": "id",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "id",
+                    "kind": "text",
+                    "description": "id"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "entry",
           "delivery": "message_fragment",
-          "description": "One annotation, including line position, type and optional quick-label guidance.",
+          "description": "One annotation, including its place in the document or the code it marks, its kind, an answer to a question, and optional quick-label guidance.",
           "body": {
             "kind": "text",
             "id": "annotation-markdown.entry",
@@ -5463,30 +5866,48 @@
                           "kind": "choose",
                           "condition": {
                             "field": {
-                              "name": "quick_label",
+                              "name": "question",
                               "kind": "flag",
-                              "description": "quick_label"
+                              "description": "question"
                             },
                             "test": "enabled"
                           },
                           "children": [
                             {
-                              "kind": "join",
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "has_file",
+                                  "kind": "flag",
+                                  "description": "has_file"
+                                },
+                                "test": "enabled"
+                              },
                               "children": [
                                 {
                                   "kind": "text",
-                                  "id": "annotation-markdown.quick-label",
-                                  "source": "content/annotations/markdown-quick-label.md",
-                                  "keep_final_newline": true,
+                                  "id": "annotation-markdown.code-question",
+                                  "source": "content/annotations/markdown-code-question.md",
                                   "bindings": [
                                     {
-                                      "name": "label",
+                                      "name": "place",
                                       "node": {
                                         "kind": "input",
                                         "field": {
-                                          "name": "label",
+                                          "name": "place",
                                           "kind": "text",
-                                          "description": "label"
+                                          "description": "place"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "fence",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "fence",
+                                          "kind": "text",
+                                          "description": "fence"
                                         }
                                       }
                                     },
@@ -5500,70 +5921,305 @@
                                           "description": "quote"
                                         }
                                       }
+                                    },
+                                    {
+                                      "name": "comment",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "comment",
+                                          "kind": "text",
+                                          "description": "comment"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "answer",
+                                      "node": {
+                                        "kind": "choose",
+                                        "condition": {
+                                          "field": {
+                                            "name": "has_answer",
+                                            "kind": "flag",
+                                            "description": "has_answer"
+                                          },
+                                          "test": "enabled"
+                                        },
+                                        "children": [
+                                          {
+                                            "kind": "text",
+                                            "id": "annotation-markdown.answer",
+                                            "source": "content/annotations/markdown-answer.md",
+                                            "keep_final_newline": true,
+                                            "bindings": [
+                                              {
+                                                "name": "answer",
+                                                "node": {
+                                                  "kind": "input",
+                                                  "field": {
+                                                    "name": "answer",
+                                                    "kind": "text",
+                                                    "description": "answer"
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "text",
+                                            "id": "annotation-markdown.unanswered",
+                                            "source": "content/annotations/markdown-unanswered.md",
+                                            "keep_final_newline": true
+                                          }
+                                        ]
+                                      }
                                     }
                                   ]
                                 },
                                 {
-                                  "kind": "when",
-                                  "condition": {
-                                    "field": {
-                                      "name": "has_tip",
-                                      "kind": "flag",
-                                      "description": "has_tip"
-                                    },
-                                    "test": "enabled"
-                                  },
-                                  "children": [
+                                  "kind": "text",
+                                  "id": "annotation-markdown.question",
+                                  "source": "content/annotations/markdown-question.md",
+                                  "bindings": [
                                     {
-                                      "kind": "text",
-                                      "id": "annotation-markdown.comment-line",
-                                      "source": "content/annotations/markdown-comment-line.md",
-                                      "keep_final_newline": true,
-                                      "bindings": [
-                                        {
-                                          "name": "tip",
-                                          "node": {
-                                            "kind": "input",
-                                            "field": {
-                                              "name": "tip",
-                                              "kind": "text",
-                                              "description": "tip"
-                                            }
-                                          }
+                                      "name": "quote",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "quote",
+                                          "kind": "text",
+                                          "description": "quote"
                                         }
-                                      ]
+                                      }
+                                    },
+                                    {
+                                      "name": "comment",
+                                      "node": {
+                                        "kind": "input",
+                                        "field": {
+                                          "name": "comment",
+                                          "kind": "text",
+                                          "description": "comment"
+                                        }
+                                      }
+                                    },
+                                    {
+                                      "name": "answer",
+                                      "node": {
+                                        "kind": "choose",
+                                        "condition": {
+                                          "field": {
+                                            "name": "has_answer",
+                                            "kind": "flag",
+                                            "description": "has_answer"
+                                          },
+                                          "test": "enabled"
+                                        },
+                                        "children": [
+                                          {
+                                            "kind": "text",
+                                            "id": "annotation-markdown.answer",
+                                            "source": "content/annotations/markdown-answer.md",
+                                            "keep_final_newline": true,
+                                            "bindings": [
+                                              {
+                                                "name": "answer",
+                                                "node": {
+                                                  "kind": "input",
+                                                  "field": {
+                                                    "name": "answer",
+                                                    "kind": "text",
+                                                    "description": "answer"
+                                                  }
+                                                }
+                                              }
+                                            ]
+                                          },
+                                          {
+                                            "kind": "text",
+                                            "id": "annotation-markdown.unanswered",
+                                            "source": "content/annotations/markdown-unanswered.md",
+                                            "keep_final_newline": true
+                                          }
+                                        ]
+                                      }
                                     }
                                   ]
                                 }
                               ]
                             },
                             {
-                              "kind": "text",
-                              "id": "annotation-markdown.comment",
-                              "source": "content/annotations/markdown-comment.md",
-                              "keep_final_newline": true,
-                              "bindings": [
+                              "kind": "choose",
+                              "condition": {
+                                "field": {
+                                  "name": "quick_label",
+                                  "kind": "flag",
+                                  "description": "quick_label"
+                                },
+                                "test": "enabled"
+                              },
+                              "children": [
                                 {
-                                  "name": "quote",
-                                  "node": {
-                                    "kind": "input",
-                                    "field": {
-                                      "name": "quote",
+                                  "kind": "join",
+                                  "children": [
+                                    {
                                       "kind": "text",
-                                      "description": "quote"
+                                      "id": "annotation-markdown.quick-label",
+                                      "source": "content/annotations/markdown-quick-label.md",
+                                      "keep_final_newline": true,
+                                      "bindings": [
+                                        {
+                                          "name": "label",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "label",
+                                              "kind": "text",
+                                              "description": "label"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "quote",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "quote",
+                                              "kind": "text",
+                                              "description": "quote"
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "kind": "when",
+                                      "condition": {
+                                        "field": {
+                                          "name": "has_tip",
+                                          "kind": "flag",
+                                          "description": "has_tip"
+                                        },
+                                        "test": "enabled"
+                                      },
+                                      "children": [
+                                        {
+                                          "kind": "text",
+                                          "id": "annotation-markdown.comment-line",
+                                          "source": "content/annotations/markdown-comment-line.md",
+                                          "keep_final_newline": true,
+                                          "bindings": [
+                                            {
+                                              "name": "tip",
+                                              "node": {
+                                                "kind": "input",
+                                                "field": {
+                                                  "name": "tip",
+                                                  "kind": "text",
+                                                  "description": "tip"
+                                                }
+                                              }
+                                            }
+                                          ]
+                                        }
+                                      ]
                                     }
-                                  }
+                                  ]
                                 },
                                 {
-                                  "name": "comment",
-                                  "node": {
-                                    "kind": "input",
+                                  "kind": "choose",
+                                  "condition": {
                                     "field": {
-                                      "name": "comment",
+                                      "name": "has_file",
+                                      "kind": "flag",
+                                      "description": "has_file"
+                                    },
+                                    "test": "enabled"
+                                  },
+                                  "children": [
+                                    {
                                       "kind": "text",
-                                      "description": "comment"
+                                      "id": "annotation-markdown.code-comment",
+                                      "source": "content/annotations/markdown-code-comment.md",
+                                      "keep_final_newline": true,
+                                      "bindings": [
+                                        {
+                                          "name": "place",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "place",
+                                              "kind": "text",
+                                              "description": "place"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "fence",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "fence",
+                                              "kind": "text",
+                                              "description": "fence"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "quote",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "quote",
+                                              "kind": "text",
+                                              "description": "quote"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "comment",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "comment",
+                                              "kind": "text",
+                                              "description": "comment"
+                                            }
+                                          }
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "kind": "text",
+                                      "id": "annotation-markdown.comment",
+                                      "source": "content/annotations/markdown-comment.md",
+                                      "keep_final_newline": true,
+                                      "bindings": [
+                                        {
+                                          "name": "quote",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "quote",
+                                              "kind": "text",
+                                              "description": "quote"
+                                            }
+                                          }
+                                        },
+                                        {
+                                          "name": "comment",
+                                          "node": {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "comment",
+                                              "kind": "text",
+                                              "description": "comment"
+                                            }
+                                          }
+                                        }
+                                      ]
                                     }
-                                  }
+                                  ]
                                 }
                               ]
                             }
@@ -5780,5 +6436,5 @@
       ]
     }
   ],
-  "definitions_hash": "b9d2ff3ceea68f454e09d220167ea4716ff1d562435933540bb2da1bdb10737d"
+  "definitions_hash": "6806c439efa28759bf86dc657af9a51e93a5a7d20d9e1e924a0716ead5ed36e5"
 }

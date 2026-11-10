@@ -96,6 +96,8 @@ const (
 	CmdReviewCheck                   = "review_check"
 	CmdReviewFile                    = "review_file"
 	CmdReviewSearch                  = "review_search"
+	CmdReviewSent                    = "review_sent"
+	CmdReviewAnswer                  = "review_answer"
 	CmdSeedArtifactTransferHere      = "seed_artifact_transfer_here"
 	CmdJournalAppend                 = "journal_append"
 	CmdNotebookBacklinks             = "notebook_backlinks"
@@ -620,4 +622,19 @@ const (
 	CmdMonitorStateTrace      = "monitor_state_trace"
 	CmdMonitorTranscriptPage  = "monitor_transcript_page"
 	CmdMonitorLastAssistant   = "monitor_last_assistant"
+)
+
+// Kinds of markdown annotation the daemon formats differently.
+const (
+	MarkdownAnnotationComment  = "comment"
+	MarkdownAnnotationDeletion = "deletion"
+	MarkdownAnnotationGlobal   = "global"
+	MarkdownAnnotationQuestion = "question"
+)
+
+// Verdicts a review send carries.
+const (
+	ReviewVerdictApprove        = "approve"
+	ReviewVerdictRequestChanges = "request_changes"
+	ReviewVerdictComment        = "comment"
 )

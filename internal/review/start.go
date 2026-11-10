@@ -84,6 +84,20 @@ func Start(ctx context.Context, client *git.Client, document, dir, base string) 
 	return result, nil
 }
 
+// MarkSent records that the user sent a review of head, so the next start
+// takes it as its base and the user sees what changed since.
+func MarkSent(ctx context.Context, client *git.Client, document, text, head string) error {
+	repository, ok := parse(text).meta.get("repository")
+	if !ok || !filepath.IsAbs(repository.value) {
+		return fmt.Errorf("%s names no repository in its frontmatter. Run `attn review start %s` from the repository under review", document, document)
+	}
+	commit, err := client.ResolveCommit(ctx, repository.value, head)
+	if err != nil {
+		return fmt.Errorf("the reviewed head %s: %w", head, err)
+	}
+	return client.UpdateRef(ctx, repository.value, SentRef(document), commit)
+}
+
 func startBase(ctx context.Context, client *git.Client, root, document, asked string, meta frontmatter) (string, error) {
 	if asked != "" {
 		commit, err := client.ResolveCommit(ctx, root, asked)

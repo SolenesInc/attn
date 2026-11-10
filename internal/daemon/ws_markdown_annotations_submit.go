@@ -2,11 +2,13 @@ package daemon
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/setting"
 	"github.com/victorarias/attn/internal/who"
 )
 
@@ -53,6 +55,18 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		fail("markdown_annotations_submit: target_seed_id must match the seed document source")
 		return
 	}
+	verdict := protocol.Deref(msg.Verdict)
+	asking := len(msg.OnlyIds) > 0
+	if verdict != "" || asking {
+		if !d.on(setting.CodeReviewEnabled) {
+			fail("markdown_annotations_submit: " + reviewOff())
+			return
+		}
+		if errText := reviewSendProblem(source, targetSession, verdict, asking); errText != "" {
+			fail("markdown_annotations_submit: " + errText)
+			return
+		}
+	}
 	draft, err := d.store.GetMarkdownAnnotationDraft(source.draftKey)
 	if err != nil {
 		d.logf("markdown_annotations_submit: %s: %v", source.draftKey, err)
@@ -65,7 +79,16 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		fail("stored annotation draft is corrupt: " + err.Error())
 		return
 	}
-	if len(annotations) == 0 {
+	whole := annotations
+	if asking {
+		questions, missing := draftQuestions(annotations, msg.OnlyIds)
+		if missing != "" {
+			fail("no question " + missing + " in the draft")
+			return
+		}
+		annotations = questions
+	}
+	if len(annotations) == 0 && verdict == "" {
 		fail("no annotations to send")
 		return
 	}
@@ -77,7 +100,19 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	if source.host != "" {
 		machine = d.outpostName(source.host)
 	}
-	payload := formatMarkdownAnnotationPayload(source, machine, annotations, orphaned)
+	var payload string
+	switch {
+	case asking:
+		asked := make([]string, 0, len(annotations))
+		for _, question := range annotations {
+			asked = append(asked, formatQuestionPayload(source, machine, question))
+		}
+		payload = strings.Join(asked, "\n\n")
+	case verdict != "":
+		payload = formatReviewPayload(source, machine, verdict, annotations, orphaned)
+	default:
+		payload = formatMarkdownAnnotationPayload(source, machine, annotations, orphaned)
+	}
 	if targetSession != "" {
 		session := d.store.Get(targetSession)
 		if session == nil {
@@ -111,6 +146,12 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		result.Status = annotationSubmitStatusNoted
 	}
 	result.Success = true
+	if asking {
+		result.Annotations = whole
+		result.Generation = protocol.Ptr(draft.Generation)
+		d.sendToClient(client, result)
+		return
+	}
 	remaining, generation, err := d.store.SpendMarkdownAnnotations(source.draftKey, annotations, time.Now())
 	if err != nil {
 		verb := result.Status
@@ -121,5 +162,43 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	}
 	result.Annotations = remaining
 	result.Generation = protocol.Ptr(generation)
+	if head := protocol.Deref(msg.Head); verdict != "" && head != "" {
+		sent := protocol.ReviewSentMessage{Cmd: protocol.CmdReviewSent, Document: source.path, Head: head}
+		if source.host != "" {
+			sent.Host = protocol.Ptr(source.host)
+		}
+		if _, err := Call[struct{}](d.life.Context(), d.router(), sent); err != nil {
+			d.logf("markdown_annotations_submit: %s: delivered but recording the sent review failed: %v", source.draftKey, err)
+			result.Error = protocol.Ptr("delivered; the next review start cannot show what changed since: " + d.tileDocumentError(source.host, err).Error())
+		}
+	}
 	d.sendToClient(client, result)
+}
+
+func reviewSendProblem(source annotationDocumentSource, targetSession protocol.SessionID, verdict string, asking bool) string {
+	switch {
+	case verdict != "" && asking:
+		return "a question is asked on its own; send only_ids or verdict, not both"
+	case source.kind != annotationSourceFile:
+		return "only a review document takes a question or a verdict"
+	case targetSession == "":
+		return "a question or a review goes to a session; set target_session_id"
+	case verdict != "" && verdict != protocol.ReviewVerdictApprove && verdict != protocol.ReviewVerdictRequestChanges && verdict != protocol.ReviewVerdictComment:
+		return "verdict " + verdict + " is not a verdict. Use approve, request_changes or comment"
+	}
+	return ""
+}
+
+func draftQuestions(annotations []protocol.MarkdownAnnotation, ids []string) ([]protocol.MarkdownAnnotation, string) {
+	questions := make([]protocol.MarkdownAnnotation, 0, len(ids))
+	for _, id := range ids {
+		at := slices.IndexFunc(annotations, func(mark protocol.MarkdownAnnotation) bool {
+			return mark.ID == id && mark.Type == protocol.MarkdownAnnotationQuestion
+		})
+		if at < 0 {
+			return nil, id
+		}
+		questions = append(questions, annotations[at])
+	}
+	return questions, ""
 }

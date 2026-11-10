@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "8481fa6ac926";
+pub const PROTOCOL_VERSION: &str = "c714b1a7aa8c";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3889,6 +3889,8 @@ impl DesktopShowSessionMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DesktopTileContentMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotations_generation: Option<i64>,
     pub content: String,
     pub desktop_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6283,6 +6285,8 @@ impl ListWorktreesMessage {
 pub struct MarkdownAnnotation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<MarkdownAnnotationAnchor>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub answer: Option<String>,
     pub created_at: i64,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6302,6 +6306,12 @@ pub struct MarkdownAnnotationAnchor {
     pub end: i64,
     pub end_line: i64,
     pub exact: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_end_line: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_start_line: Option<i64>,
     pub prefix: String,
     pub start: i64,
     pub start_line: i64,
@@ -6420,7 +6430,11 @@ pub struct MarkdownAnnotationsSubmitMessage {
     pub cmd: String,
     pub document_uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub only_ids: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orphaned_ids: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6433,6 +6447,8 @@ pub struct MarkdownAnnotationsSubmitMessage {
     pub target_seed_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_session_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<String>,
 }
 
 impl MarkdownAnnotationsSubmitMessage {
@@ -9036,6 +9052,23 @@ impl RestartSharedCodexResultMessage {
     }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewAnswerMessage {
+    pub annotation_id: String,
+    pub cmd: String,
+    pub document: String,
+    pub text: String,
+}
+
+impl ReviewAnswerMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_answer".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewBundle {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
@@ -9248,6 +9281,24 @@ impl ReviewSearchResultMessage {
     pub fn new() -> Self {
         Self {
             event: "review_search_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewSentMessage {
+    pub cmd: String,
+    pub document: String,
+    pub head: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+}
+
+impl ReviewSentMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_sent".to_string(),
             ..Self::default()
         }
     }
