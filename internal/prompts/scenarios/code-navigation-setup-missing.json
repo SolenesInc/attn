@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "code-navigation-setup-missing",
+  "description": "The setup key on a review whose go server is not installed.",
+  "recipient": "code-navigation",
+  "event": "setup",
+  "values": {
+    "language": "go",
+    "repository": "/Users/me/projects/attn",
+    "document": "/Users/me/projects/attn/reviews/poll.md",
+    "file": "internal/daemon/daemon.go",
+    "failed": "false",
+    "reason": "gopls is not in /Users/me/.attn/code-navigation/bin or on PATH. Install it, or link it with `attn nav link <path-to-gopls>`"
+  }
+}

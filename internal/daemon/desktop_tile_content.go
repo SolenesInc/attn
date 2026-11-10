@@ -214,7 +214,9 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument]bool) 
 		if delivered[tile.key] == want {
 			continue
 		}
-		if !d.sendToClient(client, desktopTileContentMessage(tile.key, tile.document, held)) {
+		message := desktopTileContentMessage(tile.key, tile.document, held)
+		message.Review = d.codeNavSetups.withSetups(tile.document.host, message.Review)
+		if !d.sendToClient(client, message) {
 			continue
 		}
 		if delivered == nil {

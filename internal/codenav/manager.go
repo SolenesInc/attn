@@ -80,12 +80,19 @@ func Reap(clock *stepclock.Clock, reapDir string) []procreap.ReapResult {
 	return results
 }
 
+// Needed is a server a document needs, with the first of its files the server
+// serves.
+type Needed struct {
+	Key  Key
+	File string
+}
+
 // Need marks the servers for these files as needed by document and starts each
-// that is not running. It returns the languages the files belong to.
-func (m *Manager) Need(document, repository string, files []string) []Key {
+// that is not running. It returns the servers the files need, in file order.
+func (m *Manager) Need(document, repository string, files []string) []Needed {
 	defs := m.cfg.Definitions(repository)
 	seen := map[Key]bool{}
-	var keys []Key
+	var needed []Needed
 	for _, file := range files {
 		language := defs.LanguageOf(file)
 		if language == "" {
@@ -97,10 +104,10 @@ func (m *Manager) Need(document, repository string, files []string) []Key {
 			continue
 		}
 		seen[key] = true
-		keys = append(keys, key)
+		needed = append(needed, Needed{Key: key, File: file})
 		m.ensure(key, def, document, false)
 	}
-	return keys
+	return needed
 }
 
 // Release drops document's need of every server, arming the idle stop of each

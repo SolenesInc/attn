@@ -147,16 +147,17 @@ func (d *Daemon) needCodeNavigation(document string, bundle *protocol.ReviewBund
 		return
 	}
 	nav := d.codeNav
-	keys := nav.Need(document, bundle.Repository, codeNavFiles(*bundle))
+	needed := nav.Need(document, bundle.Repository, codeNavFiles(*bundle))
 	d.releaseUnlessShown(document)
 	languages := map[string]protocol.ReviewNavigation{}
-	for _, key := range keys {
-		state, detail := nav.State(key)
-		current, seen := languages[key.Language]
+	for _, need := range needed {
+		state, detail := nav.State(need.Key)
+		current, seen := languages[need.Key.Language]
 		if seen && navigationRank[current.State] <= navigationRank[state] {
 			continue
 		}
-		languages[key.Language] = protocol.ReviewNavigation{Language: key.Language, State: state, Detail: optional(detail)}
+		file, _ := filepath.Rel(bundle.Repository, need.File)
+		languages[need.Key.Language] = protocol.ReviewNavigation{Language: need.Key.Language, State: state, Detail: optional(detail), File: filepath.ToSlash(file)}
 	}
 	bundle.Navigation = make([]protocol.ReviewNavigation, 0, len(languages))
 	for _, navigation := range languages {

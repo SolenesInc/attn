@@ -3922,6 +3922,8 @@ model ReviewNavigation {
   language: string;
   state: string;                 // ready | starting | missing | failed
   detail?: string;
+  file: string;                  // the review's first file in the language, relative to the repository
+  setup_session_id?: SessionID;  // the session setting up a server for the language, set by the home
 }
 
 model ReviewProblem {
@@ -4177,6 +4179,31 @@ model CodeNavDefineResult {
   key: string;
   origin: string;
   definition?: string;
+}
+
+// Starts an agent on the review's machine that installs and links a language
+// server for a language of a shown review, until `attn nav check` resolves a
+// definition in the review's file.
+@extension("x-on", #{ home: true })
+model CodeNavSetupMessage {
+  cmd: "code_nav_setup";
+  request_id?: string;
+  desktop_id: string;            // the review tile's desktop; the agent joins its profile
+  host?: string;                 // the review's machine; absent for the home
+  document: string;
+  repository: string;
+  language: string;
+  file: string;                  // relative to the repository
+  state: string;                 // missing | failed
+  detail?: string;               // why there is no working server
+}
+
+model CodeNavSetupResultMessage {
+  event: "code_nav_setup_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  session_id?: SessionID;
 }
 
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])

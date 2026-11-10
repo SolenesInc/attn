@@ -56,15 +56,63 @@ const STATE_TEXT: Record<string, string> = {
   failed: 'failed',
 };
 
+/** What the reader needs to offer a language server's setup, from the tile that shows it. */
+export interface ReviewSetup {
+  /** Starts an agent that sets up the language's server; resolves to why it could not, or null. */
+  start(navigation: ReviewNavigation): Promise<string | null>;
+  /** The session's label while it exists. */
+  sessionLabel(sessionId: string): string | undefined;
+  openSession(sessionId: string): void;
+  /** False once the user said not to offer setup in this repository. */
+  offered: boolean;
+  setOffered(offered: boolean): void;
+}
+
+function hasNoServer(navigation: ReviewNavigation): boolean {
+  return navigation.state === 'missing' || navigation.state === 'failed';
+}
+
+function runningSetup(navigation: ReviewNavigation, setup: ReviewSetup | undefined): string | undefined {
+  const session = navigation.setup_session_id;
+  return session && hasNoServer(navigation) ? setup?.sessionLabel(session) : undefined;
+}
+
+/** The first language with no working server and no setup running: the one s sets up. */
+export function languageToSetUp(navigation: readonly ReviewNavigation[], setup: ReviewSetup | undefined): ReviewNavigation | undefined {
+  if (!setup) return undefined;
+  return navigation.find((entry) => hasNoServer(entry) && runningSetup(entry, setup) === undefined);
+}
+
 /** Each language's server, as the review's navigation reports it; the detail says what it is doing or why it is not there. */
-function NavigationStates({ navigation }: { navigation: readonly ReviewNavigation[] }) {
+function NavigationStates({ navigation, setup }: { navigation: readonly ReviewNavigation[]; setup?: ReviewSetup }) {
+  const offer = setup?.offered ? languageToSetUp(navigation, setup) : undefined;
   return (
     <span className="review-nav-states" aria-label="Language servers">
-      {navigation.map(({ language, state, detail }) => (
-        <span key={language} className={`review-nav-state review-nav-state--${state}`} title={detail}>
-          {language} {STATE_TEXT[state] ?? state}{state === 'starting' && detail ? `: ${detail}` : ''}
-        </span>
-      ))}
+      {navigation.map((entry) => {
+        const { language, state, detail } = entry;
+        const setupLabel = runningSetup(entry, setup);
+        if (setupLabel !== undefined && setup && entry.setup_session_id) {
+          const session = entry.setup_session_id;
+          return (
+            <button key={language} type="button" tabIndex={-1} className="review-nav-state review-nav-state--setup" title={detail} onClick={() => setup.openSession(session)}>
+              {language} setting up in {setupLabel}
+            </button>
+          );
+        }
+        return (
+          <span key={language} className="review-nav-state-entry">
+            <span className={`review-nav-state review-nav-state--${state}`} title={detail}>
+              {language} {STATE_TEXT[state] ?? state}{(state === 'starting' || state === 'failed') && detail ? `: ${detail}` : ''}
+            </span>
+            {offer === entry ? (
+              <>
+                <span><Keys keys={['s']} /> set up</span>
+                <span><Keys keys={['x']} /> not here</span>
+              </>
+            ) : null}
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -83,6 +131,7 @@ export function ReviewKeyLine({
   sides,
   marking,
   navigation,
+  setup,
   onFrame,
 }: {
   frame: Frame;
@@ -91,6 +140,7 @@ export function ReviewKeyLine({
   sides: boolean;
   marking: boolean;
   navigation: readonly ReviewNavigation[];
+  setup?: ReviewSetup;
   onFrame: (frame: Frame) => void;
 }) {
   const keys = [...keysFor(frame, fileOpen, sides).slice(0, 2), ...NAV_KEYS, ...keysFor(frame, fileOpen, sides).slice(2)];
@@ -106,7 +156,7 @@ export function ReviewKeyLine({
             ))}
           </span>
         ) : null}
-        {navigation.length > 0 ? <NavigationStates navigation={navigation} /> : null}
+        {navigation.length > 0 ? <NavigationStates navigation={navigation} setup={setup} /> : null}
         {(marking ? [...keys.slice(0, 2), ...MARK_KEYS, ...keys.slice(2)] : keys).map(([keys, what]) => (
           <span key={what}><Keys keys={keys} /> {what}</span>
         ))}
@@ -130,6 +180,8 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on waits in a list instead of moving you.'],
   [['r'], 'List the uses of a name on the line; ↑↓ pick one, ↵ opens it.'],
   [['h'], 'Show the type of a name on the line.'],
+  [['s'], 'When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.'],
+  [['x'], 'Stop offering setup in this repository, or offer it again. s still sets up.'],
   [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked.'],
   [['e'], 'Show 10 more lines on each side of the stop.'],
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],

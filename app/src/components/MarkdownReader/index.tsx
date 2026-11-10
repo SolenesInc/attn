@@ -39,6 +39,7 @@ import type { ReviewBundle, SeedArtifact, SeedArtifactTargetResult } from '../..
 import type { MarkdownAnnotationsDraft } from './annotations/transport';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { ReviewReader, type ReviewReaderHandle } from '../ReviewReader/ReviewReader';
+import type { ReviewSetup } from '../ReviewReader/ReviewKeys';
 import type { ReviewMarks } from '../ReviewReader/ReviewMarks';
 import { NotShownSlot, StopSlot, SummarySlot } from '../ReviewReader/ReviewLists';
 import rehypeReviewChrome, { reviewChromeKey, reviewChromeOf, type ReviewChrome } from '../ReviewReader/reviewChrome';
@@ -553,6 +554,7 @@ export interface MarkdownReaderProps {
   reviewSend?: ReviewSend;
   /** Opens a file under a folder in the editor tile. */
   openInEditor?: (root: string, path: string) => void;
+  reviewSetup?: ReviewSetup;
   /** The annotation draft generation the daemon announced for this document. */
   annotationsGeneration?: number;
 }
@@ -613,6 +615,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   reviewHost,
   reviewSend,
   openInEditor,
+  reviewSetup,
   annotationsGeneration,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
@@ -720,7 +723,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       tabIndex={annotationsEnabled ? -1 : undefined}
     >
       {review ? (
-        <ReviewReader key={`${reviewHost ?? ''}:${path}`} bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef} openInEditor={openInEditor}>
+        <ReviewReader key={`${reviewHost ?? ''}:${path}`} bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef} openInEditor={openInEditor} setup={reviewSetup}>
           {documentView}
         </ReviewReader>
       ) : documentView}

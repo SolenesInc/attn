@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "9a03cace9feb";
+pub const PROTOCOL_VERSION: &str = "6a594d8f237b";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2132,6 +2132,53 @@ pub struct CodeNavServer {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rss_bytes: Option<i64>,
     pub state: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CodeNavSetupMessage {
+    pub cmd: String,
+    pub desktop_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub document: String,
+    pub file: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub language: String,
+    pub repository: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub state: String,
+}
+
+impl CodeNavSetupMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "code_nav_setup".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CodeNavSetupResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_id: Option<SessionID>,
+    pub success: bool,
+}
+
+impl CodeNavSetupResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "code_nav_setup_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CodeNavStatusMessage {
@@ -9466,7 +9513,10 @@ pub struct ReviewLeftOut {
 pub struct ReviewNavigation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
+    pub file: String,
     pub language: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub setup_session_id: Option<SessionID>,
     pub state: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

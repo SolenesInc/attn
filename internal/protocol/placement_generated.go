@@ -64,6 +64,7 @@ var Placements = map[string][]Placement{
 	"code_nav_check":                   {Placement{LocatorHere, ""}},
 	"code_nav_define":                  {Placement{LocatorHere, ""}},
 	"code_nav_link":                    {Placement{LocatorHere, ""}},
+	"code_nav_setup":                   {Placement{LocatorHome, ""}},
 	"code_nav_status":                  {Placement{LocatorHere, ""}},
 	"code_nav_unlink":                  {Placement{LocatorHere, ""}},
 	"codex_status":                     {Placement{LocatorHere, ""}},
@@ -736,6 +737,18 @@ func (m CodeNavLinkMessage) Placement() Placement {
 }
 
 func (m CodeNavLinkMessage) Locate() string {
+	return ""
+}
+
+func (CodeNavSetupMessage) CommandName() string {
+	return "code_nav_setup"
+}
+
+func (m CodeNavSetupMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m CodeNavSetupMessage) Locate() string {
 	return ""
 }
 

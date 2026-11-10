@@ -11,7 +11,7 @@ import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offer
 import { MapFrame } from './MapFrame';
 import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
-import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
+import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
@@ -208,6 +208,7 @@ export function ReviewReader({
   marks,
   handleRef,
   openInEditor,
+  setup,
   children,
 }: {
   bundle: ReviewBundle;
@@ -218,6 +219,7 @@ export function ReviewReader({
   marks?: ReviewMarks;
   handleRef?: Ref<ReviewReaderHandle>;
   openInEditor?: (root: string, path: string) => void;
+  setup?: ReviewSetup;
   children: ReactNode;
 }) {
   const bundle = useReviewContent(delivered);
@@ -895,6 +897,23 @@ export function ReviewReader({
   }, [document, follow, host, sendCodeNav]);
   askRef.current = ask;
 
+  const startSetup = useCallback((): boolean => {
+    const language = languageToSetUp(delivered.navigation, setup);
+    if (!setup || !language) return false;
+    setNavNote({ text: `Starting an agent to set up ${language.language} navigation…`, tone: 'asking' });
+    void setup.start(language).then((problem) => {
+      setNavNote(problem ? { text: `Could not start setup: ${problem}`, tone: 'alert' } : null);
+    });
+    return true;
+  }, [delivered.navigation, setup]);
+
+  const toggleSetupOffer = useCallback((): boolean => {
+    if (!setup || !delivered.navigation.some((entry) => entry.state === 'missing' || entry.state === 'failed')) return false;
+    setup.setOffered(!setup.offered);
+    setNavNote({ text: setup.offered ? 'Setup is no longer offered in this repository; s still sets up.' : 'Setup is offered again in this repository.', tone: 'status' });
+    return true;
+  }, [delivered.navigation, setup]);
+
   const startPicking = useCallback((kind: NavKind) => {
     const line = navLine();
     if (typeof line === 'string') {
@@ -1035,6 +1054,8 @@ export function ReviewReader({
         startPicking(navKind);
         return true;
       }
+      if (event.key === 's') return startSetup();
+      if (event.key === 'x') return toggleSetupOffer();
       const frameKey = FRAME_KEYS.find(([key]) => key === event.key);
       if (frameKey) {
         switchFrame(frameKey[1]);
@@ -1098,7 +1119,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, currentTarget, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, stepStage, switchFrame, switchSide, tileWindow, undoEdit]);
+  }, [back, currentTarget, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -1190,7 +1211,7 @@ export function ReviewReader({
       ) : navNote ? (
         <div className={`review-nav-note${navNote.tone === 'alert' ? ' review-nav-note--alert' : ''}`} role={navNote.tone === 'alert' ? 'alert' : 'status'}>{navNote.text}</div>
       ) : null}
-      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined && openFileView?.target.outside !== true} navigation={delivered.navigation} onFrame={switchFrame} />
+      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined && openFileView?.target.outside !== true} navigation={delivered.navigation} setup={setup} onFrame={switchFrame} />
     </ReviewReaderContext.Provider>
   );
 }

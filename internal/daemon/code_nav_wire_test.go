@@ -383,3 +383,81 @@ func TestAServerThatRejectsInitializeFailsAtOnceWithItsReasonAndLeavesNoProcess(
 		}
 	}
 }
+
+func requestCodeNavSetup(app *testworld.Peer, setup protocol.CodeNavSetupMessage) protocol.CodeNavSetupResultMessage {
+	app.T.Helper()
+	id := uuid.NewString()
+	setup.Cmd, setup.RequestID = protocol.CmdCodeNavSetup, protocol.Ptr(id)
+	return testworld.Request(app, setup, protocol.EventCodeNavSetupResult, func(r protocol.CodeNavSetupResultMessage) bool { return protocol.Deref(r.RequestID) == id })
+}
+
+func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownReviewReady(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Name the sum\n\n## Twice uses Add\n\n### use.go:3-5\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	shown := awaitNavigation(app, document, "go", "missing")
+	missing := navigation(shown.Review, "go")
+	if missing.File != "use.go" || !strings.Contains(protocol.Deref(missing.Detail), "gopls") {
+		t.Fatalf("a review with no gopls shows go as %+v, want missing because of gopls, for use.go", missing)
+	}
+
+	setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
+	if !setup.Success || protocol.Deref(setup.SessionID) == "" {
+		t.Fatalf("setup answered %+v (error %s), want the session it started", setup, protocol.Deref(setup.Error))
+	}
+	session := string(protocol.Deref(setup.SessionID))
+	started, err := cli.DelegationStatus(protocol.Deref(setup.RequestID))
+	if err == nil {
+		started, err = cli.AwaitDelegation(started, func(*protocol.DelegationOperation) {})
+	}
+	if err != nil || started.State != protocol.DelegationOperationStateCompleted {
+		t.Fatalf("the setup delegation ended %+v (%v) failure %+v, want completed", started, err, started.Failure)
+	}
+	linked := testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.Path == document && string(protocol.Deref(navigation(m.Review, "go").SetupSessionID)) == session
+	})
+	if got := navigation(linked.Review, "go").State; got != "missing" {
+		t.Errorf("while setup runs go is %s, want still missing", got)
+	}
+	seed := protocol.Deref(started.SeedID)
+	if opening := w.Launched(session).Prompted(); !strings.Contains(opening, seed) {
+		t.Errorf("the setup agent's opening does not name its seed %s:\n%s", seed, opening)
+	}
+	shownSeed, err := cli.SeedShow("", seed)
+	if err != nil {
+		t.Fatalf("seed show: %v", err)
+	}
+	for _, want := range []string{"Set up code navigation for go in " + shown.Review.Repository, protocol.Deref(missing.Detail), "attn skill --reference code-navigation", "attn nav check use.go:<line>"} {
+		if !strings.Contains(shownSeed.Seed.Body, want) {
+			t.Errorf("the setup agent's brief lacks %q:\n%s", want, shownSeed.Seed.Body)
+		}
+	}
+	if host := protocol.Deref(sessionOfDelegate(t, w, session).Host); host != "" {
+		t.Errorf("the setup agent runs on %q, want the review's machine, the home", host)
+	}
+
+	linkFakeLanguageServer(t, w, cli)
+	if _, err := cli.CodeNavCheck(repo, "use.go", 4); err != nil {
+		t.Fatalf("nav check: %v", err)
+	}
+	ready := awaitNavigation(app, document, "go", "ready")
+	if got := string(protocol.Deref(navigation(ready.Review, "go").SetupSessionID)); got != session {
+		t.Errorf("the ready review names setup session %q, want %q", got, session)
+	}
+
+	setSetting(t, app, "code_review_enabled", "false")
+	off := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: "use.go", State: "missing"})
+	if off.Success || !strings.Contains(protocol.Deref(off.Error), "code_review_enabled") {
+		t.Errorf("with code review off setup answered %+v, want a refusal naming code_review_enabled", off)
+	}
+}

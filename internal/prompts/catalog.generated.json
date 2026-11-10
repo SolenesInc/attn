@@ -3381,6 +3381,18 @@
           }
         },
         {
+          "id": "code-navigation",
+          "delivery": "reference",
+          "description": "Printed on demand by attn skill --reference.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.code-navigation",
+            "source": "content/skills/attn/references/code-navigation.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "converse-and-observe",
           "delivery": "reference",
           "description": "Printed on demand by attn skill --reference.",
@@ -5066,6 +5078,120 @@
       ]
     },
     {
+      "id": "code-navigation",
+      "description": "Code navigation in a shown review.",
+      "events": [
+        {
+          "id": "setup",
+          "delivery": "message_fragment",
+          "description": "The brief of the agent the review reader's setup key starts on the review's machine, delegated as a new assignment.",
+          "body": {
+            "kind": "text",
+            "id": "code-navigation.setup",
+            "source": "content/code-navigation/setup.md",
+            "bindings": [
+              {
+                "name": "language",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "language",
+                    "kind": "text",
+                    "description": "The language with no working server, as attn names it, such as go."
+                  }
+                }
+              },
+              {
+                "name": "repository",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "repository",
+                    "kind": "text",
+                    "description": "The review's repository, absolute on the agent's machine."
+                  }
+                }
+              },
+              {
+                "name": "document",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "document",
+                    "kind": "text",
+                    "description": "The review document, absolute."
+                  }
+                }
+              },
+              {
+                "name": "file",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "file",
+                    "kind": "text",
+                    "description": "The review's first file in the language, relative to the repository."
+                  }
+                }
+              },
+              {
+                "name": "failure",
+                "node": {
+                  "kind": "choose",
+                  "condition": {
+                    "field": {
+                      "name": "failed",
+                      "kind": "flag",
+                      "description": "A server started and failed; otherwise none was found."
+                    },
+                    "test": "enabled"
+                  },
+                  "children": [
+                    {
+                      "kind": "text",
+                      "id": "code-navigation.failed",
+                      "source": "content/code-navigation/failed.md",
+                      "bindings": [
+                        {
+                          "name": "reason",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reason",
+                              "kind": "text",
+                              "description": "Why the language has no working server: the program missing, or the failed server's error."
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "kind": "text",
+                      "id": "code-navigation.missing",
+                      "source": "content/code-navigation/missing.md",
+                      "bindings": [
+                        {
+                          "name": "reason",
+                          "node": {
+                            "kind": "input",
+                            "field": {
+                              "name": "reason",
+                              "kind": "text",
+                              "description": "Why the language has no working server: the program missing, or the failed server's error."
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
       "id": "annotation-markdown",
       "description": "Feedback sent from a Markdown document or seed to a session or seed log.",
       "events": [
@@ -6675,5 +6801,5 @@
       ]
     }
   ],
-  "definitions_hash": "45dfa39dd8b770441f752396ffcb94e1a865d6d01e9afc4de47c58e45a96b3a1"
+  "definitions_hash": "1ad8ee4ffa0ca29b81a8428f216f28487307a8fa66fead4da2fe66175e68d754"
 }

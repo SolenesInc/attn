@@ -44,6 +44,8 @@ import type {
   ReviewFileResultMessage,
   CodeNavMessage,
   CodeNavResultMessage,
+  CodeNavSetupMessage,
+  CodeNavSetupResultMessage,
   ReviewSearchResultMessage,
   AskSeedMention,
   CommandUsage,
@@ -2385,6 +2387,10 @@ export function useDaemonSocket({
               settlePendingRequest(pending, 'review_edit', data as ReviewEditResultMessage, (result) => result, 'Could not save the edit');
               break;
             }
+            if (data.event === 'code_nav_setup_result') {
+              settlePendingRequest(pending, 'code_nav_setup', data as CodeNavSetupResultMessage, (result) => result, 'Could not start setup');
+              break;
+            }
             if (data.event === 'code_nav_result') {
               settlePendingRequest(pending, 'code_nav', data as CodeNavResultMessage, (result) => result, 'The language server did not answer');
               break;
@@ -2856,6 +2862,8 @@ export function useDaemonSocket({
     sendRequest('review_edit', { document, path: edit.path, base_hash: edit.baseHash, from: edit.from, to: edit.to, text: edit.text, ...(host ? { host } : {}) }, 'Saving the edit timed out'), [sendRequest]);
   const sendCodeNav = useCallback((host: string | undefined, document: string, at: Pick<CodeNavMessage, 'path' | 'line' | 'character' | 'kind'>): Promise<CodeNavResultMessage> =>
     sendRequest('code_nav', { document, ...at, ...(host ? { host } : {}) }, 'The language server did not answer', null), [sendRequest]);
+  const sendCodeNavSetup = useCallback((setup: Omit<CodeNavSetupMessage, 'cmd' | 'request_id'>): Promise<CodeNavSetupResultMessage> =>
+    sendRequest('code_nav_setup', { ...setup }, 'Starting setup timed out', 120_000), [sendRequest]);
   const sendReviewSearch = useCallback((host: string | undefined, document: string, query: string): Promise<ReviewSearchResultMessage> =>
     sendRequest('review_search', { document, query, ...(host ? { host } : {}) }, 'Searching timed out'), [sendRequest]);
 
@@ -4463,6 +4471,7 @@ export function useDaemonSocket({
     sendReviewEdit,
     sendReviewSearch,
     sendCodeNav,
+    sendCodeNavSetup,
     sendAskSeedMentions,
     sendRestartSharedCodex,
     sendPhonesGet,

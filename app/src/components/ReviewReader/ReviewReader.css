@@ -1047,6 +1047,28 @@
   color: var(--color-warning);
 }
 
+.review-nav-state-entry {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.review-nav-state--failed {
+  max-width: 24em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.review-nav-state--setup {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--color-text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .review-nav-panel {
   position: absolute;
   top: 12%;

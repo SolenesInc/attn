@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "code-navigation-setup-failed",
+  "description": "The setup key on a review whose typescript server started and failed.",
+  "recipient": "code-navigation",
+  "event": "setup",
+  "values": {
+    "language": "typescript",
+    "repository": "/Users/me/projects/attn",
+    "document": "/Users/me/projects/attn/reviews/reader.md",
+    "file": "app/src/components/ReviewReader/ReviewReader.tsx",
+    "failed": "true",
+    "reason": "typescript-language-server exited: Could not find a valid TypeScript installation. Please, install it or pass the path to tsserver."
+  }
+}

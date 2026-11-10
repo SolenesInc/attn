@@ -168,6 +168,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "sessions.filters", machine: false },
     Setting { key: "code_navigation_idle_stop_seconds", machine: false },
     Setting { key: "code_navigation_<origin>_<language>", machine: false },
+    Setting { key: "code_review_setup_offer_<repository>", machine: false },
     Setting { key: "reviewer_model", machine: false },
     Setting { key: "<harness>_executable", machine: true },
     Setting { key: "new_session_yolo_<location>", machine: false },

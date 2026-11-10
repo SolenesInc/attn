@@ -36,6 +36,7 @@ import { ReturnToRowButton } from './ReturnToRowButton';
 import { TileAnnotationControls } from './TileAnnotationControls';
 import { useSeedTileNavigation } from './useSeedTileNavigation';
 import { useTileAnnotations } from './useTileAnnotations';
+import { useReviewSetup } from './useReviewSetup';
 import './DesktopDockTile.css';
 
 function bodyKindModifier(tileKind: string): string {
@@ -348,6 +349,7 @@ function MarkdownBody({
         });
       }
     : undefined), [desktopId, host, sendDesktopDockTile]);
+  const reviewSetup = useReviewSetup(desktopId, source.kind === 'file' ? source.path : '', host, content?.review);
   const hostName = useSessionStore((state) => (host ? state.outposts.find((row) => row.id === host)?.name ?? host : ''));
   const loadImage = useMemo(
     () => (sendTileAssetRead ? (path: string) => sendTileAssetRead(host, path) : undefined),
@@ -390,6 +392,7 @@ function MarkdownBody({
       reviewHost={host}
       reviewSend={reviewSend}
       openInEditor={openInEditor}
+      reviewSetup={reviewSetup}
       annotationsGeneration={content.annotationsGeneration}
     />
   );

@@ -95,6 +95,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdCodeNavLink:                   decodeInto[CodeNavLinkMessage],
 	CmdCodeNavUnlink:                 decodeInto[CodeNavUnlinkMessage],
 	CmdCodeNavDefine:                 decodeInto[CodeNavDefineMessage],
+	CmdCodeNavSetup:                  decodeInto[CodeNavSetupMessage],
 	CmdSeedArtifactTransferHere:      decodeInto[SeedArtifactTransferHereMessage],
 	CmdJournalAppend:                 decodeInto[JournalAppendMessage],
 	CmdNotebookBacklinks:             decodeInto[NotebookBacklinksMessage],

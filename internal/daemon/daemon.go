@@ -277,6 +277,7 @@ type Daemon struct {
 	tileDocuments  tileDocumentWatch
 	codeNav        *codenav.Manager
 	codeNavOutside codeNavOutside
+	codeNavSetups  codeNavSetups
 
 	browserControl  appRequests[browserControlResult]
 	calloutRequests appRequests[calloutReply]

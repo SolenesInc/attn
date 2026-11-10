@@ -2330,6 +2330,55 @@ type CodeNavServer struct {
 	State string `json:"state"`
 }
 
+type CodeNavSetupMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// File corresponds to the JSON schema field "file".
+	File string `json:"file"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
+type CodeNavSetupResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *SessionID `json:"session_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type CodeNavStatusMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -10065,8 +10114,14 @@ type ReviewNavigation struct {
 	// Detail corresponds to the JSON schema field "detail".
 	Detail *string `json:"detail,omitempty,omitzero"`
 
+	// File corresponds to the JSON schema field "file".
+	File string `json:"file"`
+
 	// Language corresponds to the JSON schema field "language".
 	Language string `json:"language"`
+
+	// SetupSessionID corresponds to the JSON schema field "setup_session_id".
+	SetupSessionID *SessionID `json:"setup_session_id,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`

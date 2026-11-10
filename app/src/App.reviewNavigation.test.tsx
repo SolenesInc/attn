@@ -1,6 +1,7 @@
 import { act, fireEvent, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openMarkdownTiles } from './test/appFixtures';
+import { daemonSession } from './test/daemonFixtures';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import type { CodeNavLocation, ReviewBundle, ReviewNavigation, ReviewRow } from './types/generated';
 
@@ -35,7 +36,7 @@ const CALC_ROWS = [
   row(' ', 5, 6, '}'),
 ];
 
-const bundleWith = (navigation: ReviewNavigation[] = [{ language: 'go', state: 'ready' }]): ReviewBundle => ({
+const bundleWith = (navigation: ReviewNavigation[] = [{ language: 'go', state: 'ready', file: 'calc.go' }]): ReviewBundle => ({
   frame: 'brief',
   repository: REPO,
   base: '4be1c0d',
@@ -67,8 +68,8 @@ function serveFiles(daemon: ScriptedDaemon) {
   }));
 }
 
-async function openReview(review = bundleWith()) {
-  const view = await openMarkdownTiles('', { path: DOC, session: { state: 'idle' }, script: serveFiles });
+async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })]) {
+  const view = await openMarkdownTiles('', { path: DOC, script: serveFiles, initialState: { sessions } });
   const show = async (shown: ReviewBundle) => {
     view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown });
     await view.daemon.idle();
@@ -283,13 +284,85 @@ describe('App review navigation', () => {
 
   it('shows each language server’s state in the key line, with what a loading one is doing', async () => {
     const { reader } = await openReview(bundleWith([
-      { language: 'go', state: 'ready' },
-      { language: 'rust', state: 'starting', detail: 'Indexing' },
-      { language: 'zig', state: 'missing', detail: 'zls is not in /data/code-navigation/bin or on PATH' },
+      { language: 'go', state: 'ready', file: 'calc.go' },
+      { language: 'rust', state: 'starting', detail: 'Indexing', file: 'lib.rs' },
+      { language: 'zig', state: 'missing', detail: 'zls is not in /data/code-navigation/bin or on PATH', file: 'main.zig' },
     ]));
     const states = reader.getByLabelText('Language servers');
-    expect(Array.from(states.children).map((state) => state.textContent)).toEqual(['go ready', 'rust loading: Indexing', 'zig no server']);
+    expect(Array.from(states.querySelectorAll('.review-nav-state')).map((state) => state.textContent)).toEqual(['go ready', 'rust loading: Indexing', 'zig no server']);
     expect(within(states).getByText('zig no server')).toHaveAttribute('title', 'zls is not in /data/code-navigation/bin or on PATH');
     expect(reader.getByLabelText('Review keys')).toHaveTextContent('definition');
+  });
+
+  describe('setting up a missing server', () => {
+    const MISSING = 'gopls is not in /data/code-navigation/bin or on PATH';
+    const missingGo = (extra: Partial<ReviewNavigation> = {}) => bundleWith([{ language: 'go', state: 'missing', detail: MISSING, file: 'calc.go', ...extra }]);
+    const show = async (daemon: ScriptedDaemon, review: ReviewBundle) => {
+      daemon.emit({ event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review });
+      await daemon.idle();
+    };
+    const keyLine = (reader: ReturnType<typeof within>) => reader.getByLabelText('Review keys');
+
+    it('offers setup for a language with no server, starts it with s, links the agent while it runs, and shows ready once it works', async () => {
+      const { daemon, press, reader } = await openReview(missingGo(), [daemonSession('s1', { state: 'idle' }), daemonSession('setup-1', { label: 'Set up go navigation' })]);
+      daemon.on('code_nav_setup', () => ({ event: 'code_nav_setup_result' as const, success: true, session_id: 'setup-1' }));
+      expect(keyLine(reader)).toHaveTextContent('go no servers set upx not here');
+
+      await press('s');
+      expect(daemon.sentOf('code_nav_setup')).toEqual([expect.objectContaining({
+        desktop_id: daemon.arrangement.profile.current_desktop_id, document: DOC, repository: REPO, language: 'go', file: 'calc.go', state: 'missing', detail: MISSING,
+      })]);
+      expect(daemon.sentOf('code_nav_setup')[0]).not.toHaveProperty('host');
+      expect(reader.queryByRole('alert')).toBeNull();
+
+      await show(daemon, missingGo({ setup_session_id: 'setup-1' }));
+      const link = reader.getByRole('button', { name: 'go setting up in Set up go navigation' });
+      expect(keyLine(reader)).not.toHaveTextContent('set up·');
+      expect(keyLine(reader)).not.toHaveTextContent('x not here');
+      await press('s');
+      expect(daemon.sentOf('code_nav_setup')).toHaveLength(1);
+      fireEvent.click(link);
+      await daemon.idle();
+      expect(daemon.sentOf('desktop_show_session').map(({ session_id }) => session_id)).toContain('setup-1');
+
+      await show(daemon, bundleWith([{ language: 'go', state: 'ready', file: 'calc.go', setup_session_id: 'setup-1' }]));
+      expect(within(reader.getByLabelText('Language servers')).getByText('go ready')).toBeInTheDocument();
+      expect(keyLine(reader)).not.toHaveTextContent('setting up');
+    });
+
+    it('offers setup again once the setup agent is gone', async () => {
+      const { reader } = await openReview(missingGo({ setup_session_id: 'closed-agent' }));
+      expect(keyLine(reader)).toHaveTextContent('go no servers set up');
+    });
+
+    it('shows a failed server’s reason and sends it with the setup', async () => {
+      const reason = 'gopls exited: go: cannot find main module';
+      const { daemon, press, reader } = await openReview(bundleWith([{ language: 'go', state: 'failed', detail: reason, file: 'calc.go' }]));
+      daemon.on('code_nav_setup', () => ({ event: 'code_nav_setup_result' as const, success: false, error: 'harness claude is not installed' }));
+      expect(within(reader.getByLabelText('Language servers')).getByText(`go failed: ${reason}`)).toHaveAttribute('title', reason);
+
+      await press('s');
+      expect(daemon.sentOf('code_nav_setup')[0]).toMatchObject({ state: 'failed', detail: reason });
+      expect(reader.getByRole('alert')).toHaveTextContent('Could not start setup: harness claude is not installed');
+    });
+
+    it('stops offering setup in the repository with x, and still sets up with s', async () => {
+      const { daemon, press, reader } = await openReview(missingGo());
+      daemon.on('code_nav_setup', () => ({ event: 'code_nav_setup_result' as const, success: true, session_id: 'setup-1' }));
+      const key = `code_review_setup_offer_local_${REPO}`;
+
+      await press('x');
+      expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key, value: 'off' }]);
+      daemon.emit({ event: 'settings_updated', settings: { ...daemon.settings, [key]: 'off' } });
+      await daemon.idle();
+      expect(keyLine(reader)).toHaveTextContent('go no server');
+      expect(keyLine(reader)).not.toHaveTextContent('set up');
+
+      await press('s');
+      expect(daemon.sentOf('code_nav_setup')).toHaveLength(1);
+
+      await press('x');
+      expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key, value: 'off' }, { cmd: 'set_setting', key, value: '' }]);
+    });
   });
 });
