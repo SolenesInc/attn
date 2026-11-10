@@ -21,12 +21,18 @@ want into this folder. Each run starts from an empty instance, creates its
 repos in `~/projects/attn-demo`, and removes them at the end. The run refuses to start if that folder already exists. When you're done recording,
 `attn instance clean demo` removes the instance.
 
+To record on another instance, such as when `demo`'s port is taken, build it
+with `make install INSTANCE=<name> DEMO=1`, set `ATTN_DEMO_INSTANCE=<name>` for
+`demo.mjs`, and clean that instance at the end.
+
 Scenes:
 
 - `guide-stills` writes `home-screen.png`, `ledger-button.png` and
   `ledger-worktrees.png`.
 - `agent-turn` records `agent-turn.mp4`, where a Claude session reads a file,
   edits it and asks a question.
+- `queue-flow` records `queue-flow.mp4`, the raw footage of the
+  [queue flow video](#queue-flow-video).
 
 Clips need the window recorder (`make install-window-recorder`) and screen
 recording permission for it.
@@ -38,6 +44,36 @@ records the full window at a steady 30 fps with nothing cropped or drawn on,
 and writes `<clip>.events.jsonl` next to each clip. Every line is one scripted
 action with `t`, its time in seconds from the start of the recording, so an
 editor can place a zoom or a caption at the moment something happens.
+
+## Queue flow video
+
+The website's queue flow page plays `website/public/recordings/queue-loop.mp4`.
+The video is cut from one raw clip with HyperFrames, and the project is
+`app/scripts/demo-harness/queue-flow-video/`. To make it again after the UI
+changes, record the scene and build:
+
+    node app/scripts/demo-harness/demo.mjs queue-flow --out <dir>
+    node app/scripts/demo-harness/queue-flow-video/build.mjs --clip <dir>/queue-flow.mp4
+
+`build.mjs` places every cut, zoom, caption and sound from the clip's events
+and the narration, renders on this machine, and writes the video, its poster
+(`.jpg`) and its captions (`.vtt`). `--draft` renders faster for a look, and
+`--out <file>` writes somewhere else. HyperFrames telemetry is off, and nothing
+is uploaded.
+
+- The build stops when the clip shows no change where its events record one.
+  The window recorder drops frames on a loaded Mac; record the scene again.
+- `narration.json` holds the script, one line per `id`. After you change a
+  line, speak it again with
+  `ELEVENLABS_API_KEY=... node app/scripts/demo-harness/queue-flow-video/narrate.mjs --only <id>`,
+  which writes `audio/voice/<id>.mp3` and the word timings in
+  `audio/voice/<id>.words.json`. Without `--only` it speaks every line, and
+  `--voice <voice id>` picks another ElevenLabs voice. `audio/CREDITS.md` says
+  where the voice, the music and the sound effects come from.
+- Zooms and outlines follow the scene's `mark` events, and the zoom factors are
+  constants at the top of `build.mjs`. If the scene's prompts or replies
+  change, check those frames.
+- `composition/template.html` holds the look: layout, type, colors and motion.
 
 ## Write a scene
 
@@ -72,6 +108,12 @@ export default {
 - `demo.still(name, { crop, highlight })` captures the window. `crop` takes a
   selector, `highlight` draws a box around one.
 - `demo.clip(name, async () => { ... })` records whatever the callback does.
+- `demo.mark(name, selector)` and `session.markText(name, text)` add a `mark`
+  event with the place of an element, or of the last screen line that shows
+  the text, so an editor can point at it.
+- In a turn, `after(promise)` holds the next step until the promise resolves,
+  for an agent that must stay busy until a moment the scene chooses. `prompt`
+  then returns as soon as the session is working.
 
 A prompt with no scripted turn gets a reply that says so, in the terminal
 where you'll see it.

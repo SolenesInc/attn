@@ -1,0 +1,7 @@
+main.watch { max-width: 960px; }
+.watch p, .watch ol { max-width: 640px; }
+.watch video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; margin: 32px 0 40px; border: 1px solid #2a2a2d; border-radius: 12px; background: #111113; }
+.watch ol { margin: 0 0 24px; padding-left: 22px; font-size: 18px; line-height: 1.6; color: var(--mid); }
+.watch li { margin-bottom: 8px; }
+.watch kbd { padding: 2px 7px; border: 1px solid #4a4a4f; border-bottom-width: 2px; border-radius: 6px; background: #1a1a1d; color: var(--ink); font: 500 15px/1.4 var(--mono); white-space: nowrap; }
+.watch .credit { margin-top: 56px; font-size: 14px; }

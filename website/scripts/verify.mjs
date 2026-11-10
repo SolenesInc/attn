@@ -34,6 +34,7 @@ const PAGES = [
   { path: '/', headline: 'Agents scale. Your attention doesn’t.', text: ['brew install --cask solenesinc/attn/attn', 'brew tap solenesinc/attn https://github.com/SolenesInc/attn'] },
   { path: '/guide/', headline: 'Coming soon', text: [] },
   { path: '/about/', headline: 'Why I built it', text: ['A note about this project', 'GPL-3.0', 'fork it'] },
+  { path: '/queue-flow/', headline: 'Queue flow', text: ['Turn on the agent queue', 'Cmd+Shift+E'] },
 ];
 const VIDEO_SECTIONS = ['queue', 'handoff', 'plan', 'room', 'keyboard'];
 const QUIET_WINDOW_MS = 2500;
@@ -144,7 +145,25 @@ async function checkContent(page, { path, headline, text }, label) {
   }
   if (facts.overflow) problems.push(`${label}: sideways scroll, ${facts.overflow}`);
   if (path === '/') await checkHeroFits(page, label);
+  if (path === '/queue-flow/') await checkQueueFlowVideo(page, label);
   passes.push(`${label}: content checked${path === '/' ? ', install command present' : ''}`);
+}
+
+async function checkQueueFlowVideo(page, label) {
+  try {
+    await page.waitForFunction(() => document.querySelector('video').readyState >= 1, undefined, { timeout: VIDEO_WAIT_MS });
+  } catch {
+    problems.push(`${label}: the queue flow video did not load within ${VIDEO_WAIT_MS}ms`);
+    return;
+  }
+  const facts = await page.evaluate(() => {
+    const video = document.querySelector('video');
+    return { muted: video.muted, controls: video.controls, captions: video.textTracks.length, seconds: video.duration };
+  });
+  if (facts.muted) problems.push(`${label}: the queue flow video starts muted, and it is narrated`);
+  if (!facts.controls) problems.push(`${label}: the queue flow video has no controls`);
+  if (facts.captions !== 1) problems.push(`${label}: the queue flow video has ${facts.captions} caption tracks, expected 1`);
+  if (!(facts.seconds > 0)) problems.push(`${label}: the queue flow video has no duration`);
 }
 
 async function checkHeroFits(page, label) {

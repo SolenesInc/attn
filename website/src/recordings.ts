@@ -1,5 +1,5 @@
 export const recordings = {
-  'queue-loop': { caption: 'Prompt, settle, and attn brings the next agent', seed: 's-kztv1w' },
+  'queue-loop': { caption: 'Queue flow in under a minute: attn brings you each agent that needs you, you answer and settle it, and the rest keep working', seed: 's-nknqy1' },
   callouts: { caption: 'An agent points at a part of the app, and you step through what it says', seed: 's-779vg6' },
   'usage-analytics': { caption: 'Settings → Analytics lists every record the home holds, exactly as it is stored and sent', seed: 's-779vg6' },
   crew: { caption: 'A crew member wakes from its charter and its last letter, and greets you', seed: 's-779vg6' },

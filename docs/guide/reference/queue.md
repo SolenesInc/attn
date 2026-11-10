@@ -12,6 +12,9 @@ The loop has three steps:
 
 ![The queue loop: Attn shows the agent waiting the longest, you prompt it and settle it, and Attn moves to the next agent waiting, or Home when nobody is](../diagrams/queue-loop.svg)
 
+A [one-minute video](https://attn.codes/queue-flow/) shows the loop with five
+agents.
+
 Driving agents costs humans effort. We make impactful decisions much more often
 than before, so cutting the number of decisions saves mental energy. Queue flow
 cuts decisions: you stop asking yourself which agent to go to next, and

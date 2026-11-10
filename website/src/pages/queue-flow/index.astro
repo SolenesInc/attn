@@ -1,0 +1,45 @@
+---
+import '../../landing/fonts.css';
+import '../../landing/about.css';
+import '../../landing/queue-flow.css';
+import { recordings } from '../../recordings';
+
+const REPO = 'https://github.com/SolenesInc/attn';
+const GUIDE = `${REPO}/blob/main/docs/guide/reference/queue.md`;
+---
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Queue flow in attn</title>
+<meta name="description" content="A one-minute video of queue flow: attn brings you each agent that needs you, so you stop checking on them.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/mona-sans.woff2" as="font" type="font/woff2" crossorigin>
+</head>
+<body>
+<header class="bar">
+  <a class="mark" href="/">attn</a>
+  <a href="/">Home</a>
+  <a href="/guide/">Guide</a>
+  <a href={REPO}>GitHub</a>
+</header>
+<main class="watch">
+  <h1>Queue flow</h1>
+  <p>In queue flow you stop checking on your agents. attn brings you each agent that needs you, oldest first, and the rest keep working until they finish or get stuck.</p>
+  <video controls playsinline preload="metadata" poster="/recordings/queue-loop.jpg" aria-label={recordings['queue-loop'].caption}>
+    <source src="/recordings/queue-loop.mp4" type="video/mp4">
+    <track kind="captions" src="/recordings/queue-loop.vtt" srclang="en" label="English">
+  </video>
+  <h2>Try it</h2>
+  <ol>
+    <li>Open the command palette with <kbd>Cmd+Shift+K</kbd> (<kbd>Ctrl+Alt+K</kbd> on Linux) and run "Turn on the agent queue".</li>
+    <li>Press <kbd>Cmd+J</kbd> (<kbd>Ctrl+Shift+J</kbd> on Linux) to go to the agent that has waited longest, and answer it.</li>
+    <li>Settle it with <kbd>Cmd+Shift+E</kbd> (<kbd>Ctrl+Alt+E</kbd> on Linux). attn takes you to the next agent waiting, or Home when nobody is.</li>
+  </ol>
+  <p>The <a href={GUIDE}>queue flow guide</a> covers turns, auto-settle, snooze and priority.</p>
+  <p class="credit">Narration by <a href="https://elevenlabs.io">ElevenLabs</a>. Music: "Corporate company introduction video" by Bertsz, CC0.</p>
+</main>
+</body>
+</html>

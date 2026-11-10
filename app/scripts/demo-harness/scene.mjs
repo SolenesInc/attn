@@ -13,7 +13,7 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const TYPING_MS = 45;
 const READ_PAUSE_MS = 1200;
 const CLIP_FPS = 30;
-const SETTLE_TRIPWIRE_MS = 90_000;
+const SETTLE_TRIPWIRE_MS = 240_000;
 const PROMPT_READY = { claude: ensureClaudePromptReadyViaPty, codex: ensureCodexPromptReadyViaPty };
 
 function ffmpeg(...args) {
@@ -31,6 +31,12 @@ export function createDemo({ world, outDir, log }) {
 
   const bounds = async (selector) => (await client.request('dom_bounds', { selector })).bounds;
 
+  const windowGeometry = async () => {
+    const { logicalBounds } = await client.request('get_window_bounds');
+    const viewport = await bounds('#root');
+    return { width: logicalBounds.width, height: logicalBounds.height, titlebar: logicalBounds.height - viewport.height };
+  };
+
   const sessionState = async (sessionId) => {
     const state = await client.request('get_state');
     return state.sessions.find((session) => session.id === sessionId)?.state;
@@ -47,8 +53,51 @@ export function createDemo({ world, outDir, log }) {
     }
   };
 
+  const wrapSession = ({ sessionId, paneId, cwd }) => {
+    const session = {
+      id: sessionId,
+      async markText(name, text) {
+        const { text: screen, size } = await client.request('read_pane_text', { sessionId, paneId });
+        const lines = screen.split('\n');
+        const index = lines.findLastIndex((line) => line.includes(text));
+        if (index < 0) throw new Error(`session ${sessionId} does not show "${text}"`);
+        const row = index - Math.max(0, lines.length - size.rows);
+        const col = lines[index].indexOf(text);
+        const cell = (cellCol, cellRow) => client.request('get_pane_cell_rect', { sessionId, paneId, cell: { col: cellCol, row: cellRow } });
+        const [first, right, above] = [await cell(col, row), await cell(col + 1, row), await cell(col, row - 1)];
+        const width = right.centerX - first.centerX;
+        const height = first.centerY - above.centerY;
+        const { titlebar } = await windowGeometry();
+        note('mark', { name }, { x: first.centerX - width / 2, y: first.centerY - height / 2 + titlebar, width: width * (lines[index].trimEnd().length - col), height });
+      },
+      async prompt(text, builder) {
+        const spec = router.expect(text, builder, { cwd });
+        await client.request('select_session', { sessionId });
+        note('type', { sessionId, text });
+        for (const char of text) {
+          await client.request('write_pane', { sessionId, paneId, text: char, submit: false });
+          await delay(TYPING_MS);
+        }
+        await delay(TYPING_MS * 4);
+        await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
+        note('turn_start', { sessionId });
+        await waitForState(sessionId, 'working');
+        if (!spec.held && !spec.gated) await waitForState(sessionId, SETTLED_STATE[spec.verdict]);
+        note('turn_settled', { sessionId, state: await sessionState(sessionId) });
+        return session;
+      },
+    };
+    return session;
+  };
+
   const demo = {
     pause: (ms = READ_PAUSE_MS) => delay(ms),
+
+    async mark(name, selector) {
+      const rect = await bounds(selector);
+      const { titlebar } = await windowGeometry();
+      note('mark', { name }, { x: rect.x, y: rect.y + titlebar, width: rect.width, height: rect.height });
+    },
 
     async ui(action, payload = {}) {
       note(action, payload);
@@ -70,26 +119,7 @@ export function createDemo({ world, outDir, log }) {
       const { sessionId } = await client.request('create_session', { cwd, agent, label });
       note('session', { sessionId, agent, label });
       const { paneId } = await PROMPT_READY[agent](client, sessionId);
-      const session = {
-        id: sessionId,
-        async prompt(text, builder) {
-          const spec = router.expect(text, builder, { cwd });
-          await client.request('select_session', { sessionId });
-          note('type', { sessionId, text });
-          for (const char of text) {
-            await client.request('write_pane', { sessionId, paneId, text: char, submit: false });
-            await delay(TYPING_MS);
-          }
-          await delay(TYPING_MS * 4);
-          await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });
-          note('turn_start', { sessionId });
-          await waitForState(sessionId, 'working');
-          if (!spec.held) await waitForState(sessionId, SETTLED_STATE[spec.verdict]);
-          note('turn_settled', { sessionId, state: await sessionState(sessionId) });
-          return session;
-        },
-      };
-      return session;
+      return wrapSession({ sessionId, paneId, cwd });
     },
 
     async still(name, { crop, highlight } = {}) {
@@ -133,8 +163,11 @@ export function createDemo({ world, outDir, log }) {
       const file = path.join(outDir, `${name}.mp4`);
       const raw = `${file}.raw.mp4`;
       const windowId = await driver.mainWindowId();
+      const geometry = await windowGeometry();
       const recording = startWindowRecording({ windowId, outputPath: raw, command: await ensureWindowRecorder(), fps: CLIP_FPS, showCursor: false });
+      await recording.waitForFirstFrame();
       clipLog = Object.assign([], { startedAt: Date.now() });
+      note('window', geometry);
       const outcome = await run().then(() => null, (error) => error);
       const events = clipLog;
       clipLog = null;

@@ -17,7 +17,7 @@ const recorded = existsSync(join(process.cwd(), 'public/recordings', `${id}.mp4`
 <figure class="recording">
   {
     recorded ? (
-      <video src={`/recordings/${id}.mp4`} controls muted playsinline preload="metadata" />
+      <video src={`/recordings/${id}.mp4`} controls playsinline preload="metadata" />
     ) : (
       <div class="recording-slot">
         <span class="label">Recording slot: {id}</span>

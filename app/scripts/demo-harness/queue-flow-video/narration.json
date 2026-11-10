@@ -1,0 +1,10 @@
+[
+  { "id": "which", "text": "You've got five agents running. Which one needs you right now?" },
+  { "id": "queue", "text": "With queue flow, you don't have to check. Attn lines up the agents waiting for you, oldest first." },
+  { "id": "jump", "text": "Press Command J, and you're with the one that has waited longest." },
+  { "id": "settle", "text": "Answer it, settle it with Command Shift E, and Attn brings you the next." },
+  { "id": "rhythm", "text": "Answer. Settle. Next." },
+  { "id": "home", "text": "When nobody is waiting, you land on Home. All settled. The rest are busy working, so you can forget about them." },
+  { "id": "brought", "text": "The moment one finishes or gets stuck, Attn brings you to it." },
+  { "id": "close", "text": "Stop checking on your agents. Let them come to you." }
+]

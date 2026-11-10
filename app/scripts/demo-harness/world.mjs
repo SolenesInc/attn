@@ -17,7 +17,7 @@ import { writeAgentHome } from './agentHome.mjs';
 import { createTurnRouter } from './turns.mjs';
 
 const DEMO_DIR = path.dirname(fileURLToPath(import.meta.url));
-export const DEMO_INSTANCE = 'demo';
+export const DEMO_INSTANCE = process.env.ATTN_DEMO_INSTANCE ?? 'demo';
 export const REPOS_ROOT = path.join(os.homedir(), 'projects', 'attn-demo');
 export const WINDOW = { x: 80, y: 60, width: 1200, height: 800 };
 const STREAM_PACE = { chars: 12, ms: 25 };
@@ -74,7 +74,7 @@ async function createWorktrees(daemon, repos) {
   }
 }
 
-export async function startWorld({ repos, log }) {
+export async function startWorld({ repos, window = WINDOW, log }) {
   const instance = DEMO_INSTANCE;
   process.env.ATTN_HARNESS_INSTANCE = instance;
   const appPath = preflight(instance);
@@ -127,7 +127,7 @@ export async function startWorld({ repos, log }) {
     cleanups.push(() => stopMockGitHubServer({ instance, appPath, log }));
 
     cleanups.push(() => ensureFreshWorld({ instance, appPath, log }));
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '0';
+    process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '20';
     const client = new UiAutomationClient({ appPath, launchEnv });
     await client.launchFreshApp();
     await client.waitForManifest(30_000);
@@ -136,7 +136,7 @@ export async function startWorld({ repos, log }) {
     await client.request('dismiss_whats_new');
     await client.request('dom_wait', { selector: '.dock-collapse-btn[aria-expanded="true"]', timeoutMs: 10_000 });
     await client.request('dom_click', { selector: '.dock-collapse-btn' });
-    await setFrontWindowBounds(WINDOW, { client });
+    await setFrontWindowBounds(window, { client });
     const daemon = new DaemonObserver();
     await daemon.connect();
     cleanups.push(() => daemon.close());

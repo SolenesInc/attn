@@ -37,7 +37,7 @@ const { startWorld } = await import('./world.mjs');
 const { createDemo } = await import('./scene.mjs');
 const { default: spec } = await import(pathToFileURL(path.join(SCENES_DIR, `${scene}.mjs`)).href);
 
-const world = await startWorld({ repos: spec.repos, log });
+const world = await startWorld({ repos: spec.repos, window: spec.window, log });
 try {
   await spec.run(createDemo({ world, outDir, log }));
   log(`wrote ${outDir}`);

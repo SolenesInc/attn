@@ -44,6 +44,11 @@ export function turn() {
     done(text) {
       return builder.end(text, VERDICTS.done);
     },
+    after(gate) {
+      if (current.say != null) close();
+      current.after = gate;
+      return builder;
+    },
     hold() {
       if (current.say != null) {
         throw new Error('hold() right after say() would end the turn first; put a read(), edit() or run() between them');
@@ -54,14 +59,15 @@ export function turn() {
     },
     end(text, endVerdict) {
       if (current.say != null) close();
-      steps.push({ say: text });
+      current.say = text;
+      close();
       verdict = endVerdict;
       return builder;
     },
     build() {
       if (current.say != null) close();
       if (!held && !verdict) throw new Error('a turn ends with ask(), done() or hold()');
-      return { steps, title, verdict, held, finalText: verdict ? steps.at(-1).say : null };
+      return { steps, title, verdict, held, gated: steps.some((step) => step.after), finalText: verdict ? steps.at(-1).say : null };
     },
   };
   return builder;
@@ -148,6 +154,7 @@ export function createTurnRouter({ thinkMs }) {
     if (step.held) {
       await new Promise(() => {});
     }
+    await step.after;
     const answer = { holdMs: thinkMs };
     if (step.say != null) answer.say = step.say;
     if (step.tool) answer.tool = toolCall(request.dialect, step.tool, entry.cwd, `toolu_demo_${nextToolId++}`);
