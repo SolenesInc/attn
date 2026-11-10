@@ -19,7 +19,9 @@ import type {
 } from '../MarkdownReader/annotations/transport';
 import type { WireAnnotation } from '../MarkdownReader/annotations/types';
 import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
-import type { Seed } from '../../types/generated';
+import { useSessionStore } from '../../store/sessions';
+import { useToastStore } from '../../store/toasts';
+import { OutpostReach, OutpostState, type Seed } from '../../types/generated';
 import type { SeedDocument } from '../SeedDocumentView';
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
@@ -1095,5 +1097,40 @@ describe('DesktopDockTile seed reader', () => {
     );
 
     expect(await screen.findByText('no seed s-missing is planted here')).toBeInTheDocument();
+  });
+});
+
+describe('DesktopDockTile outpost markdown links', () => {
+  afterEach(() => {
+    useSessionStore.setState({ outposts: [] });
+    useToastStore.setState({ rows: [], fading: false });
+  });
+
+  it('tells the user which outpost a link could not be opened from, and why', async () => {
+    useSessionStore.setState({
+      outposts: [{ id: 'host-1', name: 'far', destination: 'far', reach: OutpostReach.Unreachable, state: OutpostState.Lost, state_since: '' }],
+    });
+    const sendOpenMarkdown = vi.fn().mockRejectedValue(new Error('far is unreachable; this needs it now'));
+    render(
+      <DesktopDockTile
+        tile={{ type: 'tile', tileId: 'tile-markdown', tileKind: 'markdown', tileParams: '/far/notes.md' }}
+        desktopId="desktop-1"
+        content={{ host: 'host-1', path: '/far/notes.md', content: '[next](/far/next.md)' }}
+        dragging={false}
+        onClose={vi.fn()}
+        onHeaderPointerDown={vi.fn()}
+        onRequestContent={vi.fn()}
+      />,
+      { wrapper: ({ children }) => <NotebookSurfaceTestWrapper api={createMockDaemonApi({ sendOpenMarkdown })}>{children}</NotebookSurfaceTestWrapper> },
+    );
+
+    fireEvent.click(await screen.findByRole('link', { name: 'next' }));
+
+    await waitFor(() => expect(useToastStore.getState().rows).toHaveLength(1));
+    const [row] = useToastStore.getState().rows;
+    expect(row.message).toContain('far');
+    expect(row.message).toContain('/far/next.md');
+    expect(row.source).toBe('far is unreachable; this needs it now');
+    expect(sendOpenMarkdown).toHaveBeenCalledWith('/far/next.md', '', 'host-1');
   });
 });

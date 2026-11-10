@@ -41,7 +41,7 @@ func tileContentWorld(t *testing.T, test func(*testing.T, *desktopTilesWorld)) {
 		w.d.outpost.enrollment = enrollment.Status{DaemonID: "d-home", HomeDaemonID: "d-home"}
 		ctx, cancel := context.WithCancel(context.Background())
 		watched := make(chan struct{})
-		go func() { defer close(watched); w.d.keepTileDocumentsWatched(ctx, "") }()
+		go func() { defer close(watched); w.d.keepTileDocumentsWatched(ctx, "", nil) }()
 		watching := make(chan struct{})
 		go func() { defer close(watching); w.d.runTileDocumentWatcher(ctx.Done()) }()
 		defer func() {

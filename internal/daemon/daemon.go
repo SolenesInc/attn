@@ -744,7 +744,7 @@ func (d *Daemon) Start() error {
 
 	d.life.Go("runDesktopTileContent", func() { d.runDesktopTileContent(d.life.Done()) })
 	d.life.Go("runTileDocumentWatcher", func() { d.runTileDocumentWatcher(d.life.Done()) })
-	d.life.Go("tileDocumentsHere", func() { d.keepTileDocumentsWatched(d.life.Context(), "") })
+	d.life.Go("tileDocumentsHere", func() { d.keepTileDocumentsWatched(d.life.Context(), "", nil) })
 
 	if hooks, ok := d.ptyBackend.(ptybackend.LifecycleHooks); ok {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })

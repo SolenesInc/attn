@@ -6,6 +6,7 @@ import type { Seed } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useDaemonStore } from '../../store/daemonSessions';
 import { useSessionStore } from '../../store/sessions';
+import { useToastStore } from '../../store/toasts';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import {
@@ -332,7 +333,10 @@ function MarkdownBody({
         hostName,
         openMarkdown: (path: string) => {
           void sendOpenMarkdown(path, sessionId ?? '', host).catch((openError) => {
-            console.error('[MarkdownBody] Could not open a markdown link from', hostName, openError);
+            useToastStore.getState().append({
+              message: `Could not open ${path} from ${hostName}`,
+              source: openError instanceof Error ? openError.message : String(openError),
+            });
           });
         },
       }

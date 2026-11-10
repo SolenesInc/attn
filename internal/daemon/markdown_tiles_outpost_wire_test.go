@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -127,6 +128,84 @@ func TestTheOutpostStopsWatchingWhenTheLastAppLeaves(t *testing.T) {
 		}
 		if len(last) != 0 {
 			t.Fatalf("a minute after the last app left, the outpost still watches %v", last)
+		}
+	})
+}
+
+type editableOutpostFile struct {
+	mu      sync.Mutex
+	content string
+	version int
+}
+
+func (f *editableOutpostFile) edit(content string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.content, f.version = content, f.version+1
+}
+
+func (f *editableOutpostFile) answer(_ *bridge.Conn, incoming ssh.NewChannel) {
+	bridge.Answer(incoming, func(_ context.Context, raw []byte) (any, error) {
+		var call struct {
+			Cmd       string   `json:"cmd"`
+			Documents []string `json:"documents"`
+		}
+		if err := json.Unmarshal(raw, &call); err != nil {
+			return nil, err
+		}
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		switch call.Cmd {
+		case protocol.CmdTileDocumentsWatch:
+			versions := protocol.TileDocumentVersions{Documents: []protocol.TileDocumentVersion{}}
+			for _, path := range call.Documents {
+				versions.Documents = append(versions.Documents, protocol.TileDocumentVersion{Path: path, Version: f.version})
+			}
+			return versions, nil
+		case protocol.CmdTileDocumentRead:
+			return protocol.TileDocument{Content: f.content, Version: f.version}, nil
+		}
+		return struct{}{}, nil
+	})
+}
+
+func TestAnOutpostTileSaysWhenItsOutpostIsUnreachableAndRecoversWithTheCurrentFile(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		file := &editableOutpostFile{content: "# before\n", version: 1}
+		far := startFarOutpostWith(t, w, nil, bridge.Handlers{daemon.BridgeCall: file.answer})
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "s1")
+		setSetting(t, app, "outposts_enabled", "true")
+		app.Send(protocol.AddOutpostMessage{Cmd: protocol.CmdAddOutpost, Name: "far", Destination: outpostAddress.String()})
+		host := testworld.Await(app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool {
+			return len(m.Outposts) == 1 && m.Outposts[0].State == protocol.OutpostStateConnected
+		}).Outposts[0].ID
+		app.Send(protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Host: protocol.Ptr(host), Path: "/far/notes.md", SessionID: protocol.Ptr(protocol.SessionID("s1"))})
+		testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return protocol.Deref(m.Host) == host && m.Content == "# before\n" && m.Error == nil
+		})
+
+		mark := app.EventCount()
+		far.link.Store(int32(linkRefused))
+		far.network.Cut(true)
+		w.advance(bridge.LostAfter)
+		lost := testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return protocol.Deref(m.Host) == host && m.Error != nil
+		})
+		if !strings.Contains(*lost.Error, "far") || !strings.Contains(*lost.Error, "unreachable") {
+			t.Fatalf("the tile's error is %q, want it to name the outpost and say it is unreachable", *lost.Error)
+		}
+
+		file.edit("# after the outage\n")
+		mark = app.EventCount()
+		far.link.Store(int32(linkUp))
+		far.network.Cut(false)
+		w.advance(2 * time.Second)
+		back := testworld.AwaitSince(app, mark, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+			return protocol.Deref(m.Host) == host && m.Error == nil
+		})
+		if back.Content != "# after the outage\n" {
+			t.Fatalf("after the outpost came back the tile shows %q, want the file's current content", back.Content)
 		}
 	})
 }

@@ -225,7 +225,7 @@ func (delivery *desktopTileDelivery) signalHostLocked(host string) {
 	}
 }
 
-func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string) {
+func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn *bridge.Conn) {
 	delivery := &d.desktopTiles
 	changed := make(chan struct{}, 1)
 	delivery.mu.Lock()
@@ -240,8 +240,12 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string) {
 		delivery.mu.Lock()
 		if delivery.watching[host] == changed {
 			delete(delivery.watching, host)
+			if host != "" && d.life.Context().Err() == nil {
+				d.failTileDocumentsLocked(host, fmt.Errorf("%s is unreachable", d.outpostName(host)))
+			}
 		}
 		delivery.mu.Unlock()
+		d.nudgeDesktopTileContent()
 	}()
 	for {
 		delivery.mu.Lock()
@@ -255,7 +259,13 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string) {
 		if host != "" {
 			message.Host = protocol.Ptr(host)
 		}
-		answer, err := Call[protocol.TileDocumentVersions](ctx, d.router(), message)
+		var answer protocol.TileDocumentVersions
+		var err error
+		if conn != nil {
+			err = conn.Call(ctx, bridgeCall, message, &answer)
+		} else {
+			answer, err = Call[protocol.TileDocumentVersions](ctx, d.router(), message)
+		}
 		if ctx.Err() != nil {
 			return
 		}
@@ -277,14 +287,18 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string) {
 func (d *Daemon) failTileDocuments(host string, err error) {
 	delivery := &d.desktopTiles
 	delivery.mu.Lock()
-	for document, held := range delivery.documents {
+	d.failTileDocumentsLocked(host, err)
+	delivery.mu.Unlock()
+	d.nudgeDesktopTileContent()
+}
+
+func (d *Daemon) failTileDocumentsLocked(host string, err error) {
+	for document, held := range d.desktopTiles.documents {
 		if document.host == host {
 			held.content, held.err = "", err
 			held.serial++
 		}
 	}
-	delivery.mu.Unlock()
-	d.nudgeDesktopTileContent()
 }
 
 func (d *Daemon) tileDocumentChanged(ctx context.Context, msg protocol.TileDocumentChangedMessage) (struct{}, error) {
@@ -340,10 +354,7 @@ func (d *Daemon) tileDocumentError(host string, err error) error {
 	if host == "" {
 		return err
 	}
-	name := host
-	if row, rowErr := d.resolveOutpost(host); rowErr == nil {
-		name = row.Name
-	}
+	name := d.outpostName(host)
 	if rejected := (*bridge.CallRejected)(nil); errors.As(err, &rejected) {
 		return fmt.Errorf("%s: %s", name, rejected.Reason)
 	}
