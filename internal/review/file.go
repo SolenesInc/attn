@@ -25,7 +25,7 @@ const (
 )
 
 type repository struct {
-	root, base string
+	root, base, head string
 }
 
 func openRepository(ctx context.Context, client *git.Client, text string) (repository, error) {
@@ -41,6 +41,14 @@ func openRepository(ctx context.Context, client *git.Client, text string) (repos
 			return repository{}, fmt.Errorf("base: %s: %w", base.value, err)
 		}
 		repo.base = resolved
+		head, ok := meta.get("head")
+		if !ok {
+			return repository{}, fmt.Errorf("the review has no head in its frontmatter. Run `attn review start <document>` to take the snapshot")
+		}
+		repo.head, err = client.ResolveCommit(ctx, repo.root, head.value)
+		if err != nil {
+			return repository{}, fmt.Errorf("head: %s: %w. Run `attn review start <document>` again to take a fresh snapshot", head.value, err)
+		}
 	}
 	return repo, nil
 }
@@ -69,7 +77,9 @@ func File(ctx context.Context, client *git.Client, text, path string) (protocol.
 	}
 	var base []string
 	if repo.base != "" {
-		base = repo.baseLines(ctx, client, path)
+		if base, err = repo.baseLines(ctx, client, path); err != nil {
+			return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s: %w", path, err)
+		}
 	}
 	answer := protocol.ReviewFileResultMessage{Event: protocol.EventReviewFileResult, Success: true, Path: protocol.Ptr(path), Hash: protocol.Ptr(hash)}
 	switch {
@@ -96,27 +106,25 @@ func File(ctx context.Context, client *git.Client, text, path string) (protocol.
 }
 
 // baseLines are the file's lines at base, following a rename between base
-// and head. A file that is new since base has none.
-func (repo repository) baseLines(ctx context.Context, client *git.Client, path string) []string {
+// and the review's head. A file that is new since base has none.
+func (repo repository) baseLines(ctx context.Context, client *git.Client, path string) ([]string, error) {
+	renames, err := basePaths(ctx, client, repo.root, repo.base, repo.head)
+	if err != nil {
+		return nil, fmt.Errorf("the change from base to head could not be read: %w", err)
+	}
 	basePath := path
-	if blobs, err := client.ReadBlobs(ctx, repo.root, []string{repo.base + ":" + path}); err == nil && !blobs[0].Found {
-		if changes, err := client.TreeChanges(ctx, repo.root, repo.base, "HEAD"); err == nil {
-			for _, change := range changes {
-				if change.Status == 'R' && change.Path == path {
-					basePath = change.OldPath
-				}
-			}
-		}
+	if renamed, ok := renames[path]; ok {
+		basePath = renamed
 	}
 	blobs, err := client.ReadBlobs(ctx, repo.root, []string{repo.base + ":" + basePath})
 	if err != nil || !blobs[0].Found {
-		return nil
+		return nil, nil
 	}
 	lines := splitLines(string(blobs[0].Content))
 	if lines == nil {
 		lines = []string{}
 	}
-	return lines
+	return lines, nil
 }
 
 // Search finds files of the review's repository whose path holds query, and

@@ -221,6 +221,48 @@ func TestTheFileViewReadsAWholeFileOfTheReviewAndSearchFindsItsFilesAndLines(t *
 	}
 }
 
+func TestTheFileViewFollowsARenameTheReviewSnapshotHoldsLikeItsStop(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		app, cli := w.App(), w.Client()
+		placeSessions(t, w, app, cli, "s1")
+		setSetting(t, app, "code_review_enabled", "true")
+		repo := newRepo(t, "calc")
+		commitFile(t, repo, "calc.go", reviewedFileAtBase)
+		runGit(t, repo, "mv", "calc.go", "math.go")
+		if err := os.WriteFile(filepath.Join(repo, "math.go"), []byte("package calc\n\nfunc Add(a, b int) int {\n\tsum := a + b\n\treturn sum\n}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		document := w.Path("reviews", "calc.md")
+		if _, err := cli.ReviewStart(document, repo, "HEAD"); err != nil {
+			t.Fatalf("review start: %v", err)
+		}
+		appendReviewBody(t, document, "# Rename\n\n## Add keeps its result\n\n### math.go:3-6\n")
+		if problems, err := cli.OpenMarkdown(document, "s1"); err != nil || len(problems) != 0 {
+			t.Fatalf("opening the review answered problems %+v, error %v; want none", problems, err)
+		}
+		opened := awaitDocumentContent(app, document)
+		if opened.Review == nil || len(opened.Review.Stops) != 1 {
+			t.Fatalf("the bundle has stops %+v, want one", opened.Review)
+		}
+
+		file := requestReviewFile(app, document, "math.go")
+		if !file.Success {
+			t.Fatalf("review_file failed: %s", protocol.Deref(file.Error))
+		}
+		var rows []string
+		for _, row := range file.Rows {
+			rows = append(rows, row.Kind+row.Text)
+		}
+		want := []string{" package calc", " ", " func Add(a, b int) int {", "-\treturn a + b", "+\tsum := a + b", "+\treturn sum", " }"}
+		if strings.Join(rows, "\n") != strings.Join(want, "\n") {
+			t.Errorf("review_file rows of the renamed file are\n%q\nwant its change from base, unchanged lines as context\n%q", rows, want)
+		}
+		if stopRows := reviewRows(opened.Review.Stops[0]); strings.Join(rows[2:], "\n") != strings.Join(stopRows, "\n") {
+			t.Errorf("the file view shows %q for the stop's lines, the stop shows %q; want the same rows", rows[2:], stopRows)
+		}
+	})
+}
+
 func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

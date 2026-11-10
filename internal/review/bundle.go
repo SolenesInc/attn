@@ -148,21 +148,33 @@ func (r *resolver) readMeta(bundle *protocol.ReviewBundle) {
 	}
 }
 
+// basePaths maps the paths at head of files renamed since base to their paths
+// at base. It is the one place that decides where a file was at base.
+func basePaths(ctx context.Context, client *git.Client, root, base, head string) (map[string]string, error) {
+	changes, err := client.TreeChanges(ctx, root, base, head)
+	if err != nil {
+		return nil, err
+	}
+	renames := map[string]string{}
+	for _, change := range changes {
+		if change.Status == 'R' {
+			renames[change.Path] = change.OldPath
+		}
+	}
+	return renames, nil
+}
+
 func (r *resolver) loadChange() {
 	r.basePath = map[string]string{}
 	if r.base == "" {
 		return
 	}
-	headChange, err := r.client.TreeChanges(r.ctx, r.root, r.base, r.head)
+	renames, err := basePaths(r.ctx, r.client, r.root, r.base, r.head)
 	if err != nil {
 		r.doc.problem(r.headLine, "the change from base to head could not be read: %v", err)
 		return
 	}
-	for _, change := range headChange {
-		if change.Status == 'R' {
-			r.basePath[change.Path] = change.OldPath
-		}
-	}
+	r.basePath = renames
 	change, err := r.client.WorktreeChanges(r.ctx, r.root, r.base, UntrackedLimits)
 	if err != nil {
 		r.doc.problem(r.headLine, "the change from base to now could not be read: %v", err)
