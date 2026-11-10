@@ -145,6 +145,33 @@ func TestAShownReviewAnswersDefinitionUsesAndTypeAndItsServerStopsOnceNoReviewIs
 	}
 }
 
+func TestAServerOnThePathThatNoTestInstalledIsMissingToAReview(t *testing.T) {
+	w := newWorld(t)
+	onPath := t.TempDir()
+	started := filepath.Join(onPath, "started")
+	if err := os.WriteFile(filepath.Join(onPath, "gopls"), []byte("#!/bin/sh\ntouch "+started+"\nexec sleep 3600\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", onPath+string(os.PathListSeparator)+os.Getenv("PATH"))
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Add\n\n### calc.go:3-6\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	awaitNavigation(app, document, "go", "missing")
+	if _, err := os.Stat(started); err == nil {
+		t.Errorf("a gopls on PATH was started; a daemon finds only the servers its test installed")
+	}
+}
+
 func TestALanguageWithNoServerIsMissingAndTheReviewStillReads(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

@@ -140,6 +140,23 @@ func (m Missing) Error() string {
 	return fmt.Sprintf("%s is not in %s or on PATH. Install it, or link it with `attn nav link <path-to-%s>`", m.Program, m.BinDir, m.Program)
 }
 
+// SearchPathEnv replaces PATH as the places Locate looks after binDir, so a
+// test installs the servers a daemon may find and no others.
+const SearchPathEnv = "ATTN_CODE_NAVIGATION_PATH"
+
+func lookPath(program string) (string, error) {
+	dirs, ok := os.LookupEnv(SearchPathEnv)
+	if !ok {
+		return exec.LookPath(program)
+	}
+	for _, dir := range filepath.SplitList(dirs) {
+		if found, err := exec.LookPath(filepath.Join(dir, program)); err == nil {
+			return found, nil
+		}
+	}
+	return "", exec.ErrNotFound
+}
+
 // Locate finds a server's program: linked in binDir first, then on PATH.
 func Locate(binDir, program string) (string, error) {
 	if filepath.IsAbs(program) {
@@ -152,7 +169,7 @@ func Locate(binDir, program string) (string, error) {
 	if info, err := os.Stat(linked); err == nil && !info.IsDir() {
 		return linked, nil
 	}
-	found, err := exec.LookPath(program)
+	found, err := lookPath(program)
 	if err != nil {
 		return "", Missing{Program: program, BinDir: binDir}
 	}
