@@ -46,7 +46,7 @@ function calcRows(lines: readonly string[], heads: readonly (number | undefined)
   ];
 }
 
-function bundleOf(rows: ReviewRow[], hash: string, linesAbove = 0): ReviewBundle {
+function bundleOf(rows: ReviewRow[], hash: string, linesAbove = 0, notShown: ReviewBundle['not_shown'] = []): ReviewBundle {
   const last = rows[rows.length - 1].now!;
   return {
     frame: 'brief',
@@ -60,7 +60,7 @@ function bundleOf(rows: ReviewRow[], hash: string, linesAbove = 0): ReviewBundle
     }],
     files: [{ path: 'calc.go', status: 'modified', added: 2, removed: 1, binary: false }],
     flows: [],
-    not_shown: [],
+    not_shown: notShown,
     navigation: [],
     problems: [],
   };
@@ -137,7 +137,8 @@ class Draft {
   }
 }
 
-async function openReview({ withBundle = true } = {}) {
+async function openReview({ withBundle = true, trailer = '', notShown = [] as ReviewBundle['not_shown'] } = {}) {
+  const document = DOCUMENT + trailer;
   const draft = new Draft();
   const file = new ReviewedFile();
   const view = await openMarkdownTiles('', {
@@ -156,10 +157,10 @@ async function openReview({ withBundle = true } = {}) {
     },
   });
   const desktopId = view.daemon.arrangement.profile.current_desktop_id;
-  const show = async (content = DOCUMENT) => {
+  const show = async (content = document) => {
     view.daemon.emit({
       event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content,
-      ...(withBundle ? { review: bundleOf(file.rows(), file.hash, content.split('\n').length - DOCUMENT.split('\n').length) } : {}),
+      ...(withBundle ? { review: bundleOf(file.rows(), file.hash, content.split('\n').length - document.split('\n').length, notShown) } : {}),
     });
     await view.daemon.idle();
   };
@@ -450,6 +451,30 @@ describe('App review edits', () => {
     const sheet = within(tile).getByRole('dialog', { name: 'Send the review' });
     expect(sheet).toHaveTextContent('Your edits, saved to the files');
     expect(sheet).toHaveTextContent('calc.go:4edit');
+  });
+
+  it('keeps an open edit on top: keys and clicks from the doc go back to it, and the send waits for it', async () => {
+    const { tile, press, toRow, editBox, settle } = await openReview({ trailer: '\n## Not shown\n\n- vendor/: vendored\n', notShown: [{ line: 21, path: 'vendor/', reason: 'vendored' }] });
+    await toRow(4);
+    await press('i');
+    fireEvent.change(within(editBox()).getByRole('textbox'), { target: { value: '\ttotal := a + b' } });
+    const doc = tile.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
+
+    doc.focus();
+    await press('/');
+    expect(tile.querySelector('.review-search')).toBeNull();
+    expect(tile.ownerDocument.activeElement).toBe(within(editBox()).getByRole('textbox'));
+
+    fireEvent.click(tile.querySelector('[data-search="vendor/"]')!);
+    await settle();
+    expect(tile.querySelector('.review-search')).toBeNull();
+    expect(within(editBox()).getByRole('textbox')).toHaveValue('\ttotal := a + b');
+
+    doc.focus();
+    await press('Enter', { metaKey: true });
+    expect(within(tile).queryByRole('dialog', { name: 'Send the review' })).toBeNull();
+    expect(within(tile).getByRole('status')).toHaveTextContent('Save or cancel the open box first');
+    expect(within(editBox()).getByRole('textbox')).toHaveValue('\ttotal := a + b');
   });
 
   it('offers no edit on a document without a review bundle', async () => {

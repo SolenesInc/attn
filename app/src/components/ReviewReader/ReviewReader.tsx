@@ -24,6 +24,7 @@ import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, ty
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
+const OPEN_BOX = 'Save or cancel the open box first: Enter saves, Escape cancels.';
 const REMOVED_LINE = 'This line was removed. i edits the code as it is now.';
 
 interface EditPlace {
@@ -450,7 +451,18 @@ export function ReviewReader({
     loadFile(id, stop.path, (rows, open) => (refresh ? rowIndexAfterRefresh(rows, open) : rowIndexOf(rows, target.line)));
   }, [bundle, loadFile]);
 
-  const openSearch = useCallback((query = '') => setSearch({ query }), []);
+  const returnToOpenBox = useCallback(() => {
+    rootRef.current?.querySelector<HTMLTextAreaElement>('.review-composer textarea')?.focus({ preventScroll: true });
+  }, [rootRef]);
+
+  const openSearch = useCallback((query = '') => {
+    if (editing || composer) {
+      returnToOpenBox();
+      setNotice(OPEN_BOX);
+      return;
+    }
+    setSearch({ query });
+  }, [composer, editing, returnToOpenBox]);
 
   const closeFileView = useCallback(() => {
     setFiles([]);
@@ -880,9 +892,13 @@ export function ReviewReader({
 
   const openSend = useCallback(() => {
     if (!marks) return;
-    setComposer(null);
+    if (editing || composer) {
+      returnToOpenBox();
+      setNotice(OPEN_BOX);
+      return;
+    }
     setSending({ verdict: annotations.length > 0 ? 'request_changes' : 'approve' });
-  }, [annotations.length, marks]);
+  }, [annotations.length, composer, editing, marks, returnToOpenBox]);
 
   useImperativeHandle(handleRef, () => ({ openSend, movedMarkIds: () => movedMarks.map((mark) => mark.id) }), [movedMarks, openSend]);
 
@@ -1067,6 +1083,10 @@ export function ReviewReader({
       if (handled) event.preventDefault();
     };
     const handleKey = (event: KeyboardEvent): boolean => {
+      if (editing || composer) {
+        returnToOpenBox();
+        return !event.metaKey;
+      }
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'o') {
         const canGoBack = frame === 'walkthrough' ? files.length > 1 : openFileView !== null;
         if (canGoBack) back();
@@ -1175,7 +1195,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, currentTarget, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
+  }, [back, composer, currentTarget, editing, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, returnToOpenBox, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
