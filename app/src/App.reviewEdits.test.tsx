@@ -2,7 +2,7 @@ import { act, fireEvent, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openMarkdownTiles } from './test/appFixtures';
 import type { CommandMessage, EventMessage } from './test/protocol';
-import type { ReviewBundle, ReviewRow } from './types/generated';
+import type { ReviewBundle, ReviewRow, ReviewStop } from './types/generated';
 
 type WireAnnotation = EventMessage<'markdown_annotations_get_result'>['annotations'][number];
 
@@ -120,6 +120,14 @@ class ReviewedFile {
   }
 }
 
+/** Shows each line written over a line of head as the head line removed and the new line added, as git does. */
+function pairChangedLines(file: ReviewedFile) {
+  const rowsAsWritten = file.rows.bind(file);
+  file.rows = () => rowsAsWritten().flatMap((written) => (written.kind === ' ' && written.now !== undefined && written.text !== HEAD[written.now - 1]
+    ? [row('-', written.now, undefined, HEAD[written.now - 1]), row('+', undefined, written.now, written.text)]
+    : [written]));
+}
+
 class Draft {
   annotations: WireAnnotation[] = [];
   generation = 1;
@@ -137,7 +145,7 @@ class Draft {
   }
 }
 
-async function openReview({ withBundle = true, trailer = '', notShown = [] as ReviewBundle['not_shown'] } = {}) {
+async function openReview({ withBundle = true, trailer = '', notShown = [] as ReviewBundle['not_shown'], frame = 'brief' } = {}) {
   const document = DOCUMENT + trailer;
   const draft = new Draft();
   const file = new ReviewedFile();
@@ -160,7 +168,7 @@ async function openReview({ withBundle = true, trailer = '', notShown = [] as Re
   const show = async (content = document) => {
     view.daemon.emit({
       event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content,
-      ...(withBundle ? { review: bundleOf(file.rows(), file.hash, content.split('\n').length - document.split('\n').length, notShown) } : {}),
+      ...(withBundle ? { review: { ...bundleOf(file.rows(), file.hash, content.split('\n').length - document.split('\n').length, notShown), frame } } : {}),
     });
     await view.daemon.idle();
   };
@@ -475,6 +483,122 @@ describe('App review edits', () => {
     expect(within(tile).queryByRole('dialog', { name: 'Send the review' })).toBeNull();
     expect(within(tile).getByRole('status')).toHaveTextContent('Save or cancel the open box first');
     expect(within(editBox()).getByRole('textbox')).toHaveValue('\ttotal := a + b');
+  });
+
+  it('moves only the view an edit was made in: a view of the same file below it keeps its line', async () => {
+    const { tile, press, type, toRow, settle } = await openReview({ trailer: '\n## Not shown\n\n- calc.go: also here\n', notShown: [{ line: 21, path: 'calc.go', reason: 'also here' }] });
+    const fileCursor = () => tile.querySelector('.review-file-view .review-cursor');
+    await toRow(9);
+    await press('Enter');
+    expect(fileCursor()).toHaveTextContent('SELECT 1');
+
+    fireEvent.click(tile.querySelector('.review-not-shown [data-path="calc.go"]')!);
+    await settle();
+    expect(fileCursor()).toHaveTextContent('package calc');
+    await press('i');
+    await type('package sums');
+    expect(fileCursor()).toHaveTextContent('package sums');
+
+    await press('o', { ctrlKey: true });
+    expect(fileCursor()).toHaveTextContent('SELECT 1');
+  });
+
+  it('puts the file view cursor on the new text when a delivery arrives before the read after the edit answers', async () => {
+    const { tile, press, type, toRow, show, daemon, file } = await openReview();
+    pairChangedLines(file);
+    await toRow(4);
+    await press('Enter');
+    const fileCursor = () => tile.querySelector('.review-file-view .review-cursor');
+    while (!fileCursor()?.textContent?.includes('package')) await press('ArrowUp');
+
+    const answer = (command: CommandMessage<'review_file'>) => ({ event: 'review_file_result' as const, success: true, path: command.path, rows: file.rows(), hash: file.hash });
+    const held: Array<CommandMessage<'review_file'>> = [];
+    let holding = false;
+    daemon.on('review_file', (command) => {
+      if (!holding) return answer(command);
+      held.push(command);
+      return undefined;
+    });
+    await press('i');
+    holding = true;
+    await type('package sum');
+    expect(held).not.toHaveLength(0);
+    holding = false;
+    await show();
+    expect(fileCursor()?.querySelector('[data-kind]')).toHaveAttribute('data-kind', '+');
+    expect(fileCursor()).toHaveTextContent('package sum');
+
+    held.forEach((command) => daemon.replyTo(command, answer(command)));
+    await show();
+    expect(fileCursor()?.querySelector('[data-kind]')).toHaveAttribute('data-kind', '+');
+    expect(fileCursor()).toHaveTextContent('package sum');
+  });
+
+  it('puts the stage cursor on the new text when a delivery refreshes the Walkthrough stage while the edit is saving', async () => {
+    const { tile, press, type, show, daemon, file } = await openReview({ frame: 'walkthrough' });
+    pairChangedLines(file);
+    const fileCursor = () => tile.querySelector('.review-file-view .review-cursor');
+    for (let moves = 0; !fileCursor()?.textContent?.includes('package calc'); moves += 1) {
+      if (moves > 10) throw new Error(`the stage cursor never reached line 1; it is on ${fileCursor()?.textContent}`);
+      await press('ArrowUp');
+    }
+    let saving: CommandMessage<'review_edit'> | undefined;
+    daemon.on('review_edit', (edit) => {
+      saving = edit;
+      return undefined;
+    });
+    await press('i');
+    await type('package sum');
+    daemon.emit({
+      event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT,
+      review: { ...bundleOf(file.rows(), file.hash), frame: 'walkthrough', head: 'aaaaaaa' },
+    });
+    await daemon.idle();
+    daemon.replyTo(saving!, file.edit(saving!));
+    await show();
+    expect(fileCursor()?.querySelector('[data-kind]')).toHaveAttribute('data-kind', '+');
+    expect(fileCursor()).toHaveTextContent('package sum');
+  });
+
+  it('puts the cursor on the changed line of an edit whose first line stays as it was', async () => {
+    const { tile, press, type, toRow, show, cursorLine, file } = await openReview();
+    pairChangedLines(file);
+    await toRow(9);
+    await press('i');
+    await type('const query = `\nSELECT 2\n`', { metaKey: true });
+    await show();
+    expect(cursorLine()).toBe('9');
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveAttribute('data-kind', '+');
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveTextContent('SELECT 2');
+  });
+
+  it('drops the lines e showed when their stop leaves the review, and never gives them to the stop that takes its place', async () => {
+    const { tile, press, daemon, file } = await openReview();
+    const other = Array.from({ length: 30 }, (_, index) => row(' ', index + 1, index + 1, `other line ${index + 1}`, index + 1));
+    daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: path === 'other.go' ? other : file.rows(), hash: path === 'other.go' ? 'o1' : file.hash }));
+    const section = '### other.go:14-16\n\n- L15: Another stop.\n';
+    const otherStop = (heading: number): ReviewStop => ({
+      heading_line: heading, path: 'other.go', from: 14, to: 16, now_from: 14, now_to: 16, changed_since_presented: false, file_hash: 'o1',
+      rows: other.slice(13, 16), notes: [{ line: heading + 2, from: 15, to: 15, now_from: 15, now_to: 15, look: false, text: 'Another stop.' }],
+    });
+    const deliver = async (content: string, stops: ReviewStop[]) => {
+      const review = bundleOf(file.rows(), file.hash);
+      daemon.emit({
+        event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content,
+        review: { ...review, stops, files: [...review.files, { path: 'other.go', status: 'modified', added: 0, removed: 0, binary: false }] },
+      });
+      await daemon.idle();
+    };
+    const both = `${DOCUMENT}\n${section}`;
+    await deliver(both, [bundleOf(file.rows(), file.hash).stops[0], otherStop(both.split('\n').indexOf('### other.go:14-16') + 1)]);
+    await press('ArrowRight');
+    await press('e');
+    expect(tile.querySelector('.review-doc [data-path="calc.go"][data-line="1"]')).not.toBeNull();
+
+    const onlyOther = DOCUMENT.replace('### calc.go:3-10\n\n- L4!: The sum gets a name.\n', section);
+    await deliver(onlyOther, [otherStop(15)]);
+    expect(tile).toHaveTextContent('Another stop.');
+    expect(Array.from(tile.querySelectorAll('.review-doc [data-path="other.go"][data-line]')).map((line) => line.getAttribute('data-line'))).toEqual(['14', '15', '16']);
   });
 
   it('offers no edit on a document without a review bundle', async () => {

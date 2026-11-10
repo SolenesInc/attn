@@ -3,7 +3,7 @@ import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { Markdown } from '../Markdown';
 import { diffWords, docBlocks, isRewording, renderedWords, type DocBlock, type Word, type WordOp } from './docBlocks';
 import { MarkRow, markKey } from './ReviewMarks';
-import { useReviewReader } from './reviewContext';
+import { expansionKey, useReviewReader } from './reviewContext';
 
 const PROSE = new Set(['paragraph', 'listItem', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 
@@ -67,7 +67,7 @@ function NoteRow({ note }: { note: ReviewNote }) {
  * text struck above the new. */
 export function DocStopRows({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
-  const rows = reader?.expansions.get(stop.heading_line)?.rows ?? stop.rows;
+  const rows = reader?.expansions.get(expansionKey(stop))?.rows ?? stop.rows;
   const { blocks, removedAfter } = useMemo(() => docBlocks(rows), [rows]);
   const within = (block: DocBlock, line: number) => line >= block.from && line <= block.to;
   const unplaced = stop.notes.filter((note) => !blocks.some((block) => note.now_from > 0 && within(block, note.now_to)));

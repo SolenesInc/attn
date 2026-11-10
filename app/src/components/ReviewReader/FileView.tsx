@@ -20,6 +20,8 @@ export interface OpenFile {
   cursor: number;
   /** The other end of a selection that ends at the cursor. */
   selectFrom?: number;
+  /** The line an edit made here changed: the next read puts the cursor on it. */
+  edited?: number;
 }
 
 export function rowIndexOf(rows: readonly ReviewRow[], line: number | undefined): number {

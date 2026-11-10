@@ -12,7 +12,7 @@ import { MapFrame } from './MapFrame';
 import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
-import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
+import { CURSOR_CLASS, expansionKey, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
 import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/types';
@@ -205,6 +205,14 @@ function useReviewContent(delivered: ReviewBundle): ReviewBundle {
   return shownRef.current.bundle;
 }
 
+function firstChangedLine(was: string, now: string): number {
+  const before = was.split('\n');
+  const after = now.split('\n');
+  let line = 0;
+  while (line < after.length - 1 && before[line] === after[line]) line += 1;
+  return line;
+}
+
 function sameStop(a: ReviewStop | undefined, b: ReviewStop | undefined): boolean {
   return a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b);
 }
@@ -257,8 +265,8 @@ export function ReviewReader({
   const [stageKey, setStageKey] = useState<StageKey | null>(null);
   const stageStop = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
   const [cursorKey, setCursorKey] = useState<string | null>(null);
-  const [expansions, setExpansions] = useState<ReadonlyMap<number, StopExpansion>>(new Map());
-  const editCursorRef = useRef<{ path: string; line: number; bundle: ReviewBundle } | null>(null);
+  const [expansions, setExpansions] = useState<ReadonlyMap<string, StopExpansion>>(new Map());
+  const briefEditedRef = useRef<{ path: string; line: number } | null>(null);
   const expansionsRef = useRef(expansions);
   expansionsRef.current = expansions;
   const [markFiles, setMarkFiles] = useState<ReadonlyMap<string, readonly ReviewRow[]>>(new Map());
@@ -352,33 +360,34 @@ export function ReviewReader({
     readBundleRef.current = bundle;
     fileRowsRef.current.clear();
     setMarkFiles(new Map());
-    const stopAt = (stops: readonly ReviewStop[], line: number) => stops.find((stop) => stop.heading_line === line);
-    const changed = [...expansionsRef.current].flatMap(([line, expansion]) => {
-      const stop = stopAt(bundle.stops, line);
-      return stop && !sameStop(stopAt(was.stops, line), stop) ? [{ stop, extraLines: expansion.extraLines }] : [];
+    const stopAt = (stops: readonly ReviewStop[], key: string) => stops.find((stop) => expansionKey(stop) === key);
+    const changed = [...expansionsRef.current].flatMap(([key, expansion]) => {
+      const stop = stopAt(bundle.stops, key);
+      return stop && !sameStop(stopAt(was.stops, key), stop) ? [{ key, stop, extraLines: expansion.extraLines }] : [];
     });
-    setExpansions((current) => new Map([...current].filter(([line]) => stopAt(bundle.stops, line) !== undefined)));
-    changed.forEach(({ stop, extraLines }) => {
+    setExpansions((current) => new Map([...current].filter(([key]) => stopAt(bundle.stops, key) !== undefined)));
+    changed.forEach(({ key, stop, extraLines }) => {
       void wholeFile(stop.path).then((file) => {
         if (readBundleRef.current !== bundle) return;
         const rows = widen(stop.rows, file, extraLines);
         setExpansions((current) => {
           const next = new Map(current);
-          if (rows) next.set(stop.heading_line, { rows, extraLines });
-          else next.delete(stop.heading_line);
+          if (rows) next.set(key, { rows, extraLines });
+          else next.delete(key);
           return next;
         });
       }, () => setExpansions((current) => {
         const next = new Map(current);
-        next.delete(stop.heading_line);
+        next.delete(key);
         return next;
       }));
     });
   }, [bundle, wholeFile]);
 
   /** Reads a file into the stack entry `id`. A newer read of the same entry
-   * replaces an older one, and `place` picks the cursor's row from the entry as
-   * it is when the rows arrive. */
+   * replaces an older one. The entry's edited line, when it has one, places the
+   * cursor; otherwise `place` picks the row from the entry as it is when the
+   * rows arrive. */
   const loadFile = useCallback((id: number, path: string, place: (rows: ReviewRow[], open: OpenFile) => number) => {
     const read = ++fileIdRef.current;
     readsRef.current.set(id, read);
@@ -390,22 +399,21 @@ export function ReviewReader({
     void readFile(path).then(
       (answer) => {
         const rows = answer.rows ?? [];
-        settle((open) => ({ rows, problem: answer.problem, error: undefined, cursor: place(rows, open) }));
+        settle((open) => {
+          const edited = open.edited === undefined ? -1 : rows.findIndex((row) => row.now === open.edited);
+          return { rows, problem: answer.problem, error: undefined, cursor: edited >= 0 ? edited : place(rows, open), edited: undefined };
+        });
       },
       (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
     );
   }, [readFile]);
 
   /** Reads a file the reader wrote again, for the marks and every open view of it. */
-  const refreshFile = useCallback((path: string, edited?: number) => {
+  const refreshFile = useCallback((path: string) => {
     fileRowsRef.current.delete(path);
     void wholeFile(path).then((rows) => setMarkFiles((known) => new Map(known).set(path, rows)), () => undefined);
-    const place = (rows: ReviewRow[], open: OpenFile) => {
-      const at = edited === undefined ? -1 : rows.findIndex((row) => row.now === edited);
-      return at >= 0 ? at : rowIndexAfterRefresh(rows, open);
-    };
     filesRef.current.forEach((file) => {
-      if (file.target.path === path) loadFile(file.id, path, place);
+      if (file.target.path === path) loadFile(file.id, path, rowIndexAfterRefresh);
     });
   }, [loadFile, wholeFile]);
 
@@ -492,7 +500,7 @@ export function ReviewReader({
 
   const setCursor = useCallback((element: HTMLElement | null, scroll: ScrollLogicalPosition = 'nearest') => {
     if (!element) return;
-    editCursorRef.current = null;
+    briefEditedRef.current = null;
     scrollModeRef.current = scroll;
     setCursorKey(cursorKeyOf(element));
   }, []);
@@ -502,12 +510,12 @@ export function ReviewReader({
     cursorElementRef.current = null;
     const root = scope();
     if (cursorKey === null || root === null) return;
-    const edit = editCursorRef.current;
-    if (edit && edit.bundle !== bundle) {
+    const edit = briefEditedRef.current;
+    if (edit) {
       const edited = documentTargets(root).find((target) => target.getAttribute('data-kind') === '+'
         && target.getAttribute('data-path') === edit.path && target.getAttribute('data-line') === String(edit.line));
       if (edited) {
-        editCursorRef.current = null;
+        briefEditedRef.current = null;
         if (cursorKeyOf(edited) !== cursorKey) {
           setCursorKey(cursorKeyOf(edited));
           return;
@@ -604,14 +612,15 @@ export function ReviewReader({
   const expandAtCursor = useCallback(() => {
     const stop = stopOf(currentTarget());
     if (!stop) return;
-    const shown = expansions.get(stop.heading_line);
+    const key = expansionKey(stop);
+    const shown = expansions.get(key);
     const extraLines = (shown?.extraLines ?? 0) + MORE_LINES;
     void wholeFile(stop.path).then(
       (file) => {
         const rows = widen(stop.rows, file, extraLines);
-        if (rows) setExpansions((current) => new Map(current).set(stop.heading_line, { rows, extraLines }));
+        if (rows) setExpansions((current) => new Map(current).set(key, { rows, extraLines }));
       },
-      (error: unknown) => setExpansions((current) => new Map(current).set(stop.heading_line, { rows: shown?.rows ?? stop.rows, extraLines: shown?.extraLines ?? 0, error: error instanceof Error ? error.message : String(error) })),
+      (error: unknown) => setExpansions((current) => new Map(current).set(key, { rows: shown?.rows ?? stop.rows, extraLines: shown?.extraLines ?? 0, error: error instanceof Error ? error.message : String(error) })),
     );
   }, [currentTarget, expansions, stopOf, wholeFile]);
 
@@ -660,6 +669,7 @@ export function ReviewReader({
   const switchFrame = useCallback((next: Frame) => {
     if (next === frame || !offered.includes(next)) return;
     const { stop, line } = place();
+    briefEditedRef.current = null;
     setFiles([]);
     setFilled(false);
     setSearch(null);
@@ -827,11 +837,13 @@ export function ReviewReader({
       }
       const to = editing.from + text.split('\n').length;
       marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, { was, now: text, ...whereEditStands(editing.heads, editing.from, editing.to) });
-      if (!openFileView) editCursorRef.current = { path: editing.path, line: editing.from + 1, bundle };
+      const edited = editing.from + 1 + firstChangedLine(was, text);
+      if (openFileView) setFiles((stack) => stack.map((open, index) => (index === stack.length - 1 && open.target.path === editing.path ? { ...open, edited } : open)));
+      else briefEditedRef.current = { path: editing.path, line: edited };
       closeEdit();
-      refreshFile(editing.path, editing.from + 1);
+      refreshFile(editing.path);
     }, (error: unknown) => setEditing({ ...editing, saving: false, problem: error instanceof Error ? error.message : String(error) }));
-  }, [bundle, closeEdit, document, editing, host, marks, openFileView, refreshFile, sendReviewEdit]);
+  }, [closeEdit, document, editing, host, marks, openFileView, refreshFile, sendReviewEdit]);
 
   const undoEdit = useCallback((): boolean => {
     const found = editPlace();

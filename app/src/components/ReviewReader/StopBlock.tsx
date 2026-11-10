@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
-import { useReviewReader, type FileTarget, type RowLabels } from './reviewContext';
+import { expansionKey, useReviewReader, type FileTarget, type RowLabels } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 import { useTokens } from './tokenize';
 import { DocStopRows, isDocumentPath } from './DocStop';
@@ -94,7 +94,7 @@ export function StopBlock({ stop }: { stop: ReviewStop }) {
 
 function DocStop({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
-  const expansion = reader?.expansions.get(stop.heading_line);
+  const expansion = reader?.expansions.get(expansionKey(stop));
   const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
   return (
     <section className="review-stop review-stop--doc" data-review-stop-head={stop.heading_line} data-path={stop.path}>
@@ -115,7 +115,7 @@ function DocStop({ stop }: { stop: ReviewStop }) {
 
 function CodeStop({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
-  const expansion = reader?.expansions.get(stop.heading_line);
+  const expansion = reader?.expansions.get(expansionKey(stop));
   const rows = expansion?.rows ?? stop.rows;
   const tokens = useTokens(useMemo(() => rows.map((row) => row.text), [rows]), stop.path);
   const notesAfter = useMemo(() => {

@@ -33,9 +33,13 @@ export interface StopExpansion {
   error?: string;
 }
 
+export function expansionKey(stop: ReviewStop): string {
+  return `${stop.path}:${stop.from}-${stop.to}`;
+}
+
 export interface ReviewReaderContextValue {
   bundle: ReviewBundle;
-  expansions: ReadonlyMap<number, StopExpansion>;
+  expansions: ReadonlyMap<string, StopExpansion>;
   frame: Frame;
   stage: StagePlace | null;
   showStop(stop: ReviewStop): void;
