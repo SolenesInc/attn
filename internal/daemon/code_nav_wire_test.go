@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -460,6 +461,41 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 	if got := string(protocol.Deref(navigation(ready.Review, "go").SetupSessionID)); got != session {
 		t.Errorf("the ready review names setup session %q, want %q", got, session)
 	}
+}
+
+func TestASetupRefusesASecondAgentWhileItLaunchesAndKeepsItsAgentWhenTheAppThatAskedDrops(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	launched := w.PauseAt(pausepoint.AgentTerminalStarted)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Name the sum\n\n## Twice uses Add\n\n### use.go:3-5\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	shown := awaitNavigation(app, document, "go", "missing")
+	missing := navigation(shown.Review, "go")
+	setup := protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail}
+
+	asking := w.App()
+	first := setup
+	first.Cmd, first.RequestID = protocol.CmdCodeNavSetup, protocol.Ptr(uuid.NewString())
+	asking.Send(first)
+	launched.Await()
+	if second := requestCodeNavSetup(app, setup); second.Success || !strings.Contains(protocol.Deref(second.Error), "already starting") {
+		t.Errorf("a second setup while the first launches answered %+v (error %s), want a refusal saying one is already starting", second, protocol.Deref(second.Error))
+	}
+	asking.Close()
+	launched.Release()
+
+	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.Path == document && protocol.Deref(navigation(m.Review, "go").SetupSessionID) != ""
+	})
 }
 
 func TestAReviewOfALanguageWithNoDefinitionShowsItMissingUntilOneIsSet(t *testing.T) {
