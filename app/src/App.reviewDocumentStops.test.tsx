@@ -32,7 +32,7 @@ const row = (kind: string, old: number | undefined, now: number | undefined, tex
   text,
 });
 
-/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, and a tight list with a reworded item. */
+/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, and an added paragraph. */
 const GUIDE_NOW = [
   '# Reviews',
   '',
@@ -43,6 +43,8 @@ const GUIDE_NOW = [
   '- one',
   '- two',
   '- three',
+  '',
+  'A paragraph added at the end.',
 ];
 
 function guideRows(now: readonly string[]): ReviewRow[] {
@@ -54,9 +56,11 @@ function guideRows(now: readonly string[]): ReviewRow[] {
     row(' ', 4, 4, now[3]),
     row('-', 5, undefined, 'Nothing else is sent until you send the review.'),
     row('+', undefined, 5, now[4]),
-    ...now.slice(5).flatMap((text, index) => (text === '- two'
-      ? [row('-', 6 + index, undefined, '- to'), row('+', undefined, 6 + index, text)]
-      : [row(' ', 6 + index, 6 + index, text)])),
+    ...now.slice(5).flatMap((text, index) => {
+      if (text === '- two') return [row('-', 6 + index, undefined, '- to'), row('+', undefined, 6 + index, text)];
+      if (text.startsWith('A paragraph added')) return [row('+', undefined, 6 + index, text)];
+      return [row(' ', 6 + index, 6 + index, text)];
+    }),
   ];
 }
 
@@ -137,8 +141,10 @@ describe('App review document stops', () => {
     const { tile } = await openReview();
     const blocks = Array.from(tile.querySelectorAll('.review-stop--doc .review-doc-block'));
     expect(blocks.map((block) => [block.getAttribute('data-line'), block.classList.contains('review-doc-block--changed')])).toEqual([
-      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false],
+      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false], ['11', true],
     ]);
+    expect(blocks[6].querySelector('.review-doc-was')).toBeNull();
+    expect(blocks[6]).toHaveTextContent('A paragraph added at the end.');
     expect(blocks[3].querySelector('del')).toBeNull();
     expect(blocks[4].querySelector('.review-doc-was')).toHaveTextContent('to');
     expect(blocks[4].querySelector('.review-doc-was + div')).toHaveTextContent('two');
@@ -203,11 +209,19 @@ describe('App review document stops', () => {
     })]);
   });
 
-  it('offers no editor tile for a document on an outpost', async () => {
+  it('offers no editor tile for a document on an outpost, and reads and saves its edits on the outpost', async () => {
     const { tile, press, toBlock, daemon } = await openReview({ host: 'outpost-1' });
     expect(tile.querySelector('.review-stop--doc')?.textContent).not.toContain('editor');
     await toBlock(5);
     await press('o');
     expect(daemon.sentOf('desktop_dock_tile')).toEqual([]);
+
+    await press('i');
+    const input = within(within(tile).getByRole('dialog', { name: 'Edit the file' })).getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Questions reach the agent at once.' } });
+    fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
+    await press('Shift');
+    expect(daemon.sentOf('review_file')).toEqual([expect.objectContaining({ host: 'outpost-1', path: 'docs/guide.md' })]);
+    expect(daemon.sentOf('review_edit')).toEqual([expect.objectContaining({ host: 'outpost-1', path: 'docs/guide.md', from: 5, to: 5 })]);
   });
 });
