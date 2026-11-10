@@ -57,7 +57,7 @@ export function PanelButton({ action }: { action: TitleBarAction }) {
   return (
     <button
       type="button"
-      data-callout-anchor={action.id === 'garden' ? 'garden' : undefined}
+      data-callout-anchor={action.id === 'garden' || action.id === 'asks' ? action.id : undefined}
       className={`title-bar-panel-button ${action.active ? 'active' : ''} ${action.toneClassName ?? ''}`.trim()}
       onClick={action.onClick}
       title={action.title}

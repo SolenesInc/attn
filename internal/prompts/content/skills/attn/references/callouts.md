@@ -17,7 +17,7 @@ attn callout show agent:a1b2 "Needs your review on the migration plan"
 
 `anchors --json` gives names, descriptions and which fixed anchors are on
 screen. The fixed anchors are `sidebar`, `home`, `commands`, `garden`,
-`desktops`, `queue`, `crew` and `settings-button`. Which of them are visible
+`asks`, `desktops`, `queue`, `crew` and `settings-button`. Which of them are visible
 depends on the sidebar's shape. `queue` is the waiting-turns card in queue flow.
 
 `agent:<who>` accepts a session id, short id or crew name.

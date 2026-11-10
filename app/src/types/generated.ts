@@ -2535,6 +2535,7 @@ export enum CalloutResultMessageCmd {
 
 export enum CalloutAnchor {
     Agent = "agent",
+    Asks = "asks",
     Commands = "commands",
     Crew = "crew",
     Desktop = "desktop",
@@ -29320,6 +29321,7 @@ const typeMap: any = {
     ],
     "CalloutAnchor": [
         "agent",
+        "asks",
         "commands",
         "crew",
         "desktop",

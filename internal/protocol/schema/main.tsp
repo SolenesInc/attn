@@ -3092,7 +3092,7 @@ model CalloutAnchorsMessage { cmd: "callout_anchors"; session_id: SessionID; }
 model CalloutAnchorsResult { anchors: CalloutAnchorInfo[]; app_showing_profile: boolean; }
 model CalloutAnchorInfo { name: string; description: string; on_screen?: boolean; }
 
-enum CalloutAnchor { sidebar, home, commands, garden, desktops, queue, crew, settings_button: "settings-button", agent, desktop }
+enum CalloutAnchor { sidebar, home, commands, garden, asks, desktops, queue, crew, settings_button: "settings-button", agent, desktop }
 model CalloutStep {
   anchor: CalloutAnchor;
   text: string;

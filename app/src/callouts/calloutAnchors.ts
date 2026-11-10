@@ -11,6 +11,7 @@ export const calloutAnchors: Record<FixedCalloutAnchor, AnchorFinder> = {
   home: named(CalloutAnchor.Home),
   commands: named(CalloutAnchor.Commands),
   garden: named(CalloutAnchor.Garden),
+  asks: named(CalloutAnchor.Asks),
   desktops: named(CalloutAnchor.Desktops),
   queue: named(CalloutAnchor.Queue),
   crew: named(CalloutAnchor.Crew),

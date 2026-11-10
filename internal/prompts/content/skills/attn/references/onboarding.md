@@ -105,11 +105,23 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    reference and `attn callout anchors`, then point, in short steps, at the sidebar, agent
    states, your own row (`agent:chief`), the Garden, the command palette and
    Settings. Name ⌘K and ⇧⌘K for the command palette, ⌘, for Settings and ⌘/ for
-   all the keyboard shortcuts. If an anchor isn't on screen, name its shortcut in a
-   step instead. Tell the user they can try what you point at, that the tour waits
-   while they do, how to step through, and to come back to your terminal afterward.
-   `attn callout show` returns before the user finishes, so wait for
-   the user to say they're done.
+   all the keyboard shortcuts, and say that any shortcut can be changed with
+   "Customize keyboard shortcuts" in the command palette. If an anchor isn't on
+   screen, name its shortcut in a step instead. Tell the user they can try what you
+   point at, that the tour waits while they do, how to step through, and to come
+   back to your terminal afterward. `attn callout show` returns before the user
+   finishes, so wait for the user to say they're done. Then, on macOS, show two
+   things by having the user do them:
+   - Quick Capture sends you a message from any app without switching to attn.
+     Ask the user to press ⌃⌥⌘Space now, write you anything and press Enter. Answer
+     what arrives, then say they can change that shortcut the same way.
+   - Asks let any agent bring the user a decision that can wait, and the user
+     answers them all in one place. Read the asks guidance in your launch
+     instructions, then ask the user which of the items still ahead they want
+     next, with `attn ask`. Point at `asks` with a callout and tell them to answer
+     there. When the answer comes back, name ⇧⌘R, which opens the asks.
+   These shortcuts are the defaults. If `attn settings get keybindings_config`
+   changes one, name the user's instead.
 6. Offer to help attn's maintainers, as described below.
 7. Offer to build something together. If so, read
    `attn guide building-with-roles` and propose a small version of it. Agree on
@@ -117,7 +129,9 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    Once two or more agents are running, you can offer queue flow: attn brings
    the user each agent that needs them, in turn. Queue flow removes the friction
    of choosing, so the user gets more done in less time, and that pace can be
-   more tiring. Switch only if the user wants to.
+   more tiring. Offer the short video at https://attn.codes/guide/queue, and
+   open it with `attn browser` if they want to watch. Switch only if the user
+   wants to.
 8. Close, as described below.
 
 Don't suggest other crew members. Create a crew member only when asked, with a name the
@@ -139,7 +153,8 @@ for what's missing, and skip what's set up without listing it, including queue
 flow if they already use it. If `attn crew list` shows a member whose home is
 outside the Notebook, offer to move the home with `attn crew move-home <member>`.
 The command needs the member between sessions. Offer a tour of the parts of the app the user
-may not know, including your row. Don't offer to build something unless the user
+may not know, including your row, and Quick Capture and asks as the full path
+shows them if the user doesn't use them yet. Don't offer to build something unless the user
 asks. Offer to help attn's maintainers, then close.
 
 ## Help attn's maintainers

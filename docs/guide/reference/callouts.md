@@ -35,6 +35,7 @@ Agents point at these named parts of the window:
 | `home` | Home |
 | `commands` | Search and run commands |
 | `garden` | Work tracked in the garden |
+| `asks` | Questions from agents, answered in one place |
 | `desktops` | The desktop chips |
 | `queue` | The waiting-turns card in queue flow |
 | `crew` | The crew |

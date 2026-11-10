@@ -40,10 +40,10 @@ describe('App callouts', () => {
     daemon.emit({ event: 'callout_anchors_request', request_id: 'list', profile_id: DEFAULT_PROFILE_ID });
     await daemon.idle();
     expect(daemon.sentOf('callout_result')).toEqual([{
-      cmd: 'callout_result', request_id: 'list', on_screen: ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button'],
+      cmd: 'callout_result', request_id: 'list', on_screen: ['sidebar', 'home', 'commands', 'garden', 'asks', 'desktops', 'settings-button'],
     }]);
     expect(await show(daemon, [{ anchor: 'garden', text: 'Work lives here' }])).toEqual({
-      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button'],
+      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'home', 'commands', 'garden', 'asks', 'desktops', 'settings-button'],
     });
     expect(card()).toHaveTextContent('Work lives here');
     expect(card()).toHaveAttribute('data-side', 'below');
@@ -228,10 +228,10 @@ describe('App callouts', () => {
   });
 
   it.each([
-    [false, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
-    [false, true, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'settings-button']],
-    [true, false, ['sidebar', 'home', 'commands', 'garden', 'desktops', 'queue', 'settings-button']],
-    [true, true, ['sidebar', 'commands', 'garden', 'desktops', 'queue', 'settings-button']],
+    [false, false, ['sidebar', 'home', 'commands', 'garden', 'asks', 'desktops', 'settings-button']],
+    [false, true, ['sidebar', 'home', 'commands', 'garden', 'asks', 'desktops', 'settings-button']],
+    [true, false, ['sidebar', 'home', 'commands', 'garden', 'asks', 'desktops', 'queue', 'settings-button']],
+    [true, true, ['sidebar', 'commands', 'garden', 'asks', 'desktops', 'queue', 'settings-button']],
   ])('lists anchors for queue=%s collapsed=%s', async (queue, collapsed, anchors) => {
     const { daemon } = await launch(queue);
     if (collapsed) await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
@@ -262,7 +262,7 @@ describe('App callouts', () => {
     await gesture(daemon, () => pressShortcut('session.toggleSidebar'));
     expect(screen.getByTestId('queue-bar-desktop-extras')).toBeInTheDocument();
     expect(await show(daemon, [{ anchor: 'desktops', text: 'All your desktops' }])).toEqual({
-      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'commands', 'garden', 'desktops', 'queue', 'settings-button'],
+      cmd: 'callout_result', request_id: 'callout-1', on_screen: ['sidebar', 'commands', 'garden', 'asks', 'desktops', 'queue', 'settings-button'],
     });
     expect(card()).toHaveAttribute('data-side', 'below');
     expect(screen.getByTestId('callout-ring')).toBeInTheDocument();

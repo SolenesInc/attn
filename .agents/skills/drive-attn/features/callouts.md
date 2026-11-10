@@ -10,7 +10,7 @@ ends the callout with Esc. Callouts are always on.
 ## Sub-features
 
 - `callout-show`: up to 20 steps, each an anchor and at most 160 characters of text. A new callout replaces the one showing.
-- `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
+- `callout-anchors`: the fixed anchors (`sidebar`, `home`, `commands`, `garden`, `asks`, `desktops`, `queue`, `crew`, `settings-button`) with which are on screen now, and the `agent:<who>` and `desktop:<which>` anchors.
 - `callout-stepping`: Enter and → do the same on every step: they go to the next step, and on the last step they go to its agent or desktop and end the callout. Esc ends it, and so does a click outside a one-step callout.
 
 ## How to get to it

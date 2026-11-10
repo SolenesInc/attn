@@ -1812,6 +1812,7 @@ type CallerSessionMessage struct {
 type CalloutAnchor string
 
 const CalloutAnchorAgent CalloutAnchor = "agent"
+const CalloutAnchorAsks CalloutAnchor = "asks"
 const CalloutAnchorCommands CalloutAnchor = "commands"
 const CalloutAnchorCrew CalloutAnchor = "crew"
 const CalloutAnchorDesktop CalloutAnchor = "desktop"

@@ -28,7 +28,7 @@ func TestCalloutsRefuseInvalidStepsAndListAnchorsWithoutAnApp(t *testing.T) {
 		want  string
 	}{
 		{nil, "at least one step"},
-		{[]protocol.CalloutShowStep{{Anchor: "queue-bar", Text: "Queue"}}, `unknown anchor "queue-bar"; anchors: sidebar, home, commands, garden, desktops, queue, crew, settings-button, agent:<who>, desktop:<which>`},
+		{[]protocol.CalloutShowStep{{Anchor: "queue-bar", Text: "Queue"}}, `unknown anchor "queue-bar"; anchors: sidebar, home, commands, garden, asks, desktops, queue, crew, settings-button, agent:<who>, desktop:<which>`},
 		{[]protocol.CalloutShowStep{{Anchor: "home", Text: " "}}, "step 1 needs its text"},
 		{[]protocol.CalloutShowStep{{Anchor: "home", Text: strings.Repeat("é", 161)}}, "step 1 is 161 characters; the limit is 160"},
 		{make([]protocol.CalloutShowStep, 21), "a callout has at most 20 steps; this one has 21"},
@@ -37,7 +37,7 @@ func TestCalloutsRefuseInvalidStepsAndListAnchorsWithoutAnApp(t *testing.T) {
 		calloutRefused(t, err, tc.want)
 	}
 	listed, err := cli.CalloutAnchors(session.ID)
-	if err != nil || listed.AppShowingProfile || len(listed.Anchors) != 10 || listed.Anchors[0].OnScreen != nil {
+	if err != nil || listed.AppShowingProfile || len(listed.Anchors) != 11 || listed.Anchors[0].OnScreen != nil {
 		t.Fatalf("anchors without an app = %+v (%v), want the directory with no visibility claims", listed, err)
 	}
 }
@@ -95,7 +95,7 @@ func TestCalloutsReachOnlyTheTrustedAppShowingTheCallersProfile(t *testing.T) {
 	}
 	target.Send(protocol.CalloutResultMessage{Cmd: protocol.CmdCalloutResult, RequestID: anchors.RequestID, OnScreen: []protocol.CalloutAnchor{protocol.CalloutAnchorHome}})
 	result := <-listed
-	if result == nil || !result.AppShowingProfile || protocol.Deref(result.Anchors[0].OnScreen) || !protocol.Deref(result.Anchors[1].OnScreen) || result.Anchors[8].OnScreen != nil {
+	if result == nil || !result.AppShowingProfile || protocol.Deref(result.Anchors[0].OnScreen) || !protocol.Deref(result.Anchors[1].OnScreen) || result.Anchors[9].OnScreen != nil {
 		t.Fatalf("anchor visibility = %+v, want fixed visibility and dynamic anchors without it", result)
 	}
 }

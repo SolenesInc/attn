@@ -22,6 +22,7 @@ var calloutAnchorDirectory = []protocol.CalloutAnchorInfo{
 	{Name: "home", Description: "Home"},
 	{Name: "commands", Description: "Search and run commands"},
 	{Name: "garden", Description: "Work tracked in the garden"},
+	{Name: "asks", Description: "Questions from agents, answered in one place"},
 	{Name: "desktops", Description: "The desktop chips"},
 	{Name: "queue", Description: "The waiting-turns card in queue flow"},
 	{Name: "crew", Description: "The crew"},
