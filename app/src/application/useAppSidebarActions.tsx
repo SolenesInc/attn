@@ -27,8 +27,8 @@ import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 export function useAppSidebarActions() {
   const { notificationsUnread, settings } = useAppInputs();
   const asksAvailable = useAsksAvailable(settings);
-  const { profileSessions } = useAppSessionsContext();
-  const openAskCount = useAskLists(profileSessions).live.length;
+  const { visibleEnrichedSessions } = useAppSessionsContext();
+  const openAskCount = useAskLists(visibleEnrichedSessions).live.length;
   const { hasCriticalNotification, zoomModeBySessionId } = useAppShell();
   const {
     toggleDockPanel,

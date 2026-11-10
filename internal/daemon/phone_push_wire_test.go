@@ -346,3 +346,18 @@ func TestAnAskFromASnoozedAgentSendsThePhoneNothing(t *testing.T) {
 	ask("reviewer", "Ship the review?")
 	phone.expect("ask", "Ship the review?")
 }
+
+func TestASnoozedAgentStillWaitingPushesAgainWhenItWakes(t *testing.T) {
+	w, app, cli, phone := phonePushWorld(t, true, true)
+	session, agent, owed := owingIdleAgent(t, w, app, cli)
+	userRunStops(app, agent, settleFromApp(app, owed), "anything to land?", "Should I land this? <!-- attn:state=waiting_input -->")
+	phone.expect("waiting", "Should I land this?")
+
+	if err := cli.SnoozeSession("", protocol.SessionID(session), time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("snooze: %v", err)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TurnSnoozedUntil != nil })
+	app.Send(protocol.WakeTurnMessage{Cmd: protocol.CmdWakeTurn, SessionID: protocol.SessionID(session)})
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TurnSnoozedUntil == nil && protocol.Deref(s.TurnOwed) })
+	phone.expect("waiting", "Should I land this?")
+}

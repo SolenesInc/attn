@@ -6,6 +6,7 @@ import { activityStaleMs } from '../utils/activitySettings';
 import {
   useAppInputs,
   useAppPanelsContext,
+  useAppSessionsContext,
   useAttentionQueueContext,
   useNavigationContext,
   usePRLauncherContext,
@@ -20,7 +21,8 @@ export function AppDashboard() {
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { setSettingsOpen, whatsNew, openAsk } = useAppPanelsContext();
   const { queueBands, queueSessions } = useAttentionQueueContext();
-  const askItems = useAskLists(queueSessions).live;
+  const { visibleEnrichedSessions } = useAppSessionsContext();
+  const askItems = useAskLists(visibleEnrichedSessions).live;
   const asks = useMemo(
     () => askItems.map(({ ask, from }) => ({ id: ask.id, from, subject: ask.subject })),
     [askItems],

@@ -50,7 +50,7 @@ export function AppDock() {
   const { handleSelectSession } = useNavigationContext();
   const { launchAgent } = useSessionLaunchContext();
   const { handleRevealSeedInGarden } = useAppGardenActionsContext();
-  const { profileSessions } = useAppSessionsContext();
+  const { visibleEnrichedSessions } = useAppSessionsContext();
   const {
     listAutomationDefinitions,
     listAutomationRuns,
@@ -99,7 +99,7 @@ export function AppDock() {
             className: 'dock-panel dock-panel--asks',
             children: dockPanelStack.includes('asks') && (
               <AsksDrawer
-                sessions={profileSessions}
+                sessions={visibleEnrichedSessions}
                 onTop={topPanel === 'asks' && !gardenHoldsWindow}
                 onClose={() => closeDockPanel('asks')}
                 onOpenAgent={(sessionId) => {

@@ -74,8 +74,8 @@ export function AppSidebarProvider({ children }: { children: ReactNode }) {
   } = useDaemonApi();
   const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
-  const { profileSessions } = useAppSessionsContext();
-  const asks = useAskLists(profileSessions).live;
+  const { visibleEnrichedSessions } = useAppSessionsContext();
+  const asks = useAskLists(visibleEnrichedSessions).live;
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
   const { handleOpenPalette, sidebarSurface, windowCovered, agentFocused } = useAppShell();
   const { keybindings } = useAppAppearanceContext();

@@ -80,11 +80,11 @@ const landingWeek: Ask = {
 const apiWorking = daemonSession('api', { state: 'working' });
 const webWaiting = daemonSession('web', { state: 'waiting_input', turn_owed: true, turn_opened_at: '2026-01-01T00:06:00Z' });
 
-async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: DaemonSession[] = [apiWorking, webWaiting], seeds: DaemonSeed[] = [], settings: Record<string, string> = {}) {
+async function renderAsks(asks: Ask[] = [cacheStore, releaseDay], sessions: DaemonSession[] = [apiWorking, webWaiting], seeds: DaemonSeed[] = [], settings: Record<string, string> = {}, desktops = sessions.map((session) => soloDesktop(session.id))) {
   const view = await renderApp({
     initialState: {
       sessions,
-      desktops: sessions.map((session) => soloDesktop(session.id)),
+      desktops,
       asks,
       seeds,
       settings,
@@ -408,6 +408,18 @@ describe('App asks', () => {
     expect(document.querySelector('.asks-count')).toHaveTextContent('2');
     expect(within(list).queryByText('Snoozed')).toBeNull();
     expect(screen.getByTestId('asks-row-a-cache1')).not.toHaveTextContent(/until /);
+  });
+
+  it('holds a hidden agent\'s ask on that agent, so its snooze takes the ask out of the counts', async () => {
+    const hiddenSnoozed = daemonSession('api', { state: 'working', hidden: true, turn_snoozed_until: '2999-01-04T09:00:00Z' });
+    const daemon = await renderAsks([cacheStore, releaseDay], [hiddenSnoozed, webWaiting], [], {}, [soloDesktop('web')]);
+    expect(screen.getByRole('button', { name: /^1 open ask \(/ })).toHaveTextContent('1');
+
+    const list = await openDrawer(daemon);
+    expect(rows(list)).toEqual(['asks-row-a-release', 'asks-row-a-cache1']);
+    expect(screen.getByTestId('asks-row-a-cache1')).toHaveTextContent(/^api/);
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('asks-row-a-cache1')));
+    expect(screen.getByRole('button', { name: 'Wake' })).toBeInTheDocument();
   });
 
   it('snoozes the asking agent from the drawer and wakes it again', async () => {

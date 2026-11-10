@@ -217,8 +217,12 @@ func (d *Daemon) waitingNote(ctx context.Context, pushes *phonePushes, sessionID
 	default:
 		return phonePushNote{}, false
 	}
-	episode := string(session.State) + "@" + session.StateSince
-	since := protocol.Timestamp(session.StateSince).Time()
+	began := session.StateSince
+	if opened := protocol.Deref(session.TurnOpenedAt); protocol.Timestamp(opened).Time().After(protocol.Timestamp(began).Time()) {
+		began = opened
+	}
+	episode := string(session.State) + "@" + began
+	since := protocol.Timestamp(began).Time()
 	if d.clock.Now().Sub(since) > phonePushFreshFor || pushes.pushedEpisode[sessionID] == episode {
 		return phonePushNote{}, false
 	}
