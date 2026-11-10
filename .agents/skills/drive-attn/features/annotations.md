@@ -24,12 +24,12 @@ quotes each marked passage with what the user said about it.
 - Keys (`app/src/shortcuts/registry.ts`): ⌘↩ sends a terminal's marks (`terminal.sendAnnotations`) or a markdown tile's (`markdown.sendAnnotations`), whichever tile is active. Inside a comment box, ⌘↩ saves the comment instead.
 - In an agent's terminal (`app/src/components/TerminalAnnotations/AnnotatedTerminal.tsx`): ⌥-drag across its message. The mark's popup has "More labels", "Write a comment" and "Remove this annotation", and, once a comment is being written, the "Annotation comment" box with its Comment button. The "Annotations" panel has "Remove annotation", "Note sent with these annotations" and "Send all".
 - In a markdown or seed tile (`app/src/components/MarkdownReader/annotations/SelectionToolbar.tsx`, `AnnotationPopover.tsx`, `AnnotationSidebar.tsx`): select text, then Delete, Comment, Quick label or a label's emoji, and the "Review notes" list.
-- The tile header (`app/src/components/SessionTerminalDesktop/TileAnnotationControls.tsx`): "Overall note", "Notes <n>", the send button ("Send <n>" to the bound session, or "Note on seed <n>"), and "Change annotation destination" with its "Send annotations to session" menu.
+- The tile header (`app/src/components/SessionTerminalDesktop/TileAnnotationControls.tsx`): "Overall note", "Notes <n>", the send button ("Send <n>" to the bound session, or "Note on seed <n>"; "Review <n>" on a review document, which opens the send sheet ([markdown.md](markdown.md))), and "Change annotation destination" with its "Send annotations to session" menu.
 - Where people see what agents do: the batch arrives in the agent's conversation as the user's message, and the agent's reply follows in its terminal.
 
 ### Agents
 
-- Prompts: agents have no verb. They receive annotations. The terminal batch starts "Feedback on your last message." and quotes each mark with its label and comment (`internal/prompts/content/annotations/terminal-*.md`). The markdown batch starts "# Markdown Annotations", names the file, and lists each mark by line (`internal/prompts/content/annotations/markdown-*.md`). Label instructions come from `internal/prompts/content/annotations/labels/`.
+- Prompts: agents have no verb. They receive annotations. The terminal batch starts "Feedback on your last message." and quotes each mark with its label and comment (`internal/prompts/content/annotations/terminal-*.md`). The markdown batch starts "# Markdown Annotations", names the file, and lists each mark by line (`internal/prompts/content/annotations/markdown-*.md`). On a review document, a question arrives alone as "# A question from the user's review" with the `attn review answer` command, and the send arrives as "# Review" with the marks in reading order and the verdict. Label instructions come from `internal/prompts/content/annotations/labels/`.
 
 ## Driving it
 
