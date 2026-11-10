@@ -38,11 +38,16 @@ type deliveredTileFile struct {
 	serial   int
 }
 
+type tileWatcher struct {
+	changed chan struct{}
+	conn    *bridge.Conn
+}
+
 type desktopTileDelivery struct {
 	mu        sync.Mutex
 	nudge     chan struct{}
 	documents map[tileDocument]*heldTileDocument
-	watching  map[string]chan struct{}
+	watching  map[string]*tileWatcher
 	delivered map[*wsClient]map[desktopTileKey]deliveredTileFile
 }
 
@@ -50,7 +55,7 @@ func newDesktopTileDelivery() desktopTileDelivery {
 	return desktopTileDelivery{
 		nudge:     make(chan struct{}, 1),
 		documents: map[tileDocument]*heldTileDocument{},
-		watching:  map[string]chan struct{}{},
+		watching:  map[string]*tileWatcher{},
 		delivered: map[*wsClient]map[desktopTileKey]deliveredTileFile{},
 	}
 }
@@ -219,17 +224,21 @@ func (d *Daemon) holdTileDocumentLocked(document tileDocument) *heldTileDocument
 }
 
 func (delivery *desktopTileDelivery) signalHostLocked(host string) {
+	watcher := delivery.watching[host]
+	if watcher == nil {
+		return
+	}
 	select {
-	case delivery.watching[host] <- struct{}{}:
+	case watcher.changed <- struct{}{}:
 	default:
 	}
 }
 
 func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn *bridge.Conn) {
 	delivery := &d.desktopTiles
-	changed := make(chan struct{}, 1)
+	watcher := &tileWatcher{changed: make(chan struct{}, 1), conn: conn}
 	delivery.mu.Lock()
-	delivery.watching[host] = changed
+	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
 			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, err: held.err}
@@ -238,7 +247,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.mu.Unlock()
 	defer func() {
 		delivery.mu.Lock()
-		if delivery.watching[host] == changed {
+		if delivery.watching[host] == watcher {
 			delete(delivery.watching, host)
 			if host != "" && d.life.Context().Err() == nil {
 				d.failTileDocumentsLocked(host, fmt.Errorf("%s is unreachable", d.outpostName(host)))
@@ -259,13 +268,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 		if host != "" {
 			message.Host = protocol.Ptr(host)
 		}
-		var answer protocol.TileDocumentVersions
-		var err error
-		if conn != nil {
-			err = conn.Call(ctx, bridgeCall, message, &answer)
-		} else {
-			answer, err = Call[protocol.TileDocumentVersions](ctx, d.router(), message)
-		}
+		answer, err := callTileDocuments[protocol.TileDocumentVersions](ctx, d, conn, message)
 		if ctx.Err() != nil {
 			return
 		}
@@ -277,11 +280,20 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 			d.tileDocumentReported(tileDocument{host: host, path: document.Path}, document.Version)
 		}
 		select {
-		case <-changed:
+		case <-watcher.changed:
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func callTileDocuments[R any](ctx context.Context, d *Daemon, conn *bridge.Conn, msg protocol.Placed) (R, error) {
+	if conn == nil {
+		return Call[R](ctx, d.router(), msg)
+	}
+	var answer R
+	err := conn.Call(ctx, bridgeCall, msg, &answer)
+	return answer, terminalBridgeError(err)
 }
 
 func (d *Daemon) failTileDocuments(host string, err error) {
@@ -325,12 +337,16 @@ func (d *Daemon) readStaleTileDocumentLocked(document tileDocument, held *heldTi
 	}
 	held.reading = true
 	target := held.newest
+	var conn *bridge.Conn
+	if watcher := d.desktopTiles.watching[document.host]; watcher != nil {
+		conn = watcher.conn
+	}
 	d.life.Go("readTileDocument", func() {
 		message := protocol.TileDocumentReadMessage{Cmd: protocol.CmdTileDocumentRead, Path: document.path}
 		if document.host != "" {
 			message.Host = protocol.Ptr(document.host)
 		}
-		answer, err := Call[protocol.TileDocument](d.life.Context(), d.router(), message)
+		answer, err := callTileDocuments[protocol.TileDocument](d.life.Context(), d, conn, message)
 		if err != nil {
 			err = d.tileDocumentError(document.host, err)
 		} else if answer.Error != nil {
