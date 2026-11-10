@@ -110,6 +110,10 @@ go ./internal/agent TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
 go ./cmd/attnd TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
 
+group cli-help ^cli/|^internal/prompttest/
+go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
+go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
+
 group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
 go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
