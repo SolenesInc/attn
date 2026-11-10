@@ -79,10 +79,12 @@ export function mapIndexOf(bundle: ReviewBundle, list: readonly MapStop[], place
     const stop = bundle.stops.find((candidate) => candidate.heading_line === at.stopLine);
     return stop !== undefined && stop.path === place.path && stop.from === place.from;
   };
-  const found = [
-    list.findIndex((at) => at.message.text === place.text && showsStop(at)),
-    list.findIndex(showsStop),
-    list.findIndex((at) => at.message.text === place.text),
-  ].find((index) => index >= 0);
-  return found ?? Math.min(place.index, Math.max(0, list.length - 1));
+  const nearest = (matches: (at: MapStop) => boolean) => list
+    .map((at, index) => (matches(at) ? index : -1))
+    .filter((index) => index >= 0)
+    .sort((a, b) => Math.abs(a - place.index) - Math.abs(b - place.index))[0];
+  return nearest((at) => at.message.text === place.text && showsStop(at))
+    ?? nearest(showsStop)
+    ?? nearest((at) => at.message.text === place.text)
+    ?? Math.min(place.index, Math.max(0, list.length - 1));
 }
