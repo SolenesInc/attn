@@ -402,7 +402,12 @@ describe('App review reader', () => {
     await press('/');
     await press('2');
     await press('3');
+    await press('f');
+    await press('r');
+    await press('h');
     expect(daemon.sentOf('review_file')).toEqual([]);
+    expect(daemon.sentOf('code_nav')).toEqual([]);
+    expect(tileElement.querySelector('[data-label], .review-nav-panel, .review-nav-note')).toBeNull();
     expect(reader.queryByRole('textbox', { name: 'Search' })).toBeNull();
     expect(tileElement.querySelector('[data-review-file-view], .review-map')).toBeNull();
   });

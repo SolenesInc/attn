@@ -2,12 +2,22 @@ import { createContext, useContext } from 'react';
 import type { ReviewBundle, ReviewNote, ReviewRow, ReviewStop } from '../../types/generated';
 import type { Annotation } from '../MarkdownReader/annotations/types';
 import type { Frame } from './frames';
+import type { LabeledName } from './navigation';
 
 export interface FileTarget {
   path: string;
   line?: number;
   range?: [number, number];
   notes?: readonly ReviewNote[];
+  /** A file outside the review's repository that a navigation answer named; it opens read-only. */
+  outside?: boolean;
+}
+
+/** The names labeled on one row while the user picks one: a document row by
+ * its cursor key, or a file view row by the open file and its index. */
+export interface RowLabels {
+  at: { cursorKey: string } | { fileId: number; row: number };
+  names: readonly LabeledName[];
 }
 
 /** Where the Walkthrough stands: the stop on the stage and the line the
@@ -37,6 +47,7 @@ export interface ReviewReaderContextValue {
   removeMark?: (id: string) => void;
   /** Opens a file of the review in the editor tile, when the review is on this machine. */
   openInEditor?: (path: string) => void;
+  labels: RowLabels | null;
 }
 
 export const ReviewReaderContext = createContext<ReviewReaderContextValue | null>(null);

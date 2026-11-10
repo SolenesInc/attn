@@ -42,6 +42,8 @@ import type {
   ReviewBundle,
   ReviewEditResultMessage,
   ReviewFileResultMessage,
+  CodeNavMessage,
+  CodeNavResultMessage,
   ReviewSearchResultMessage,
   AskSeedMention,
   CommandUsage,
@@ -2383,6 +2385,10 @@ export function useDaemonSocket({
               settlePendingRequest(pending, 'review_edit', data as ReviewEditResultMessage, (result) => result, 'Could not save the edit');
               break;
             }
+            if (data.event === 'code_nav_result') {
+              settlePendingRequest(pending, 'code_nav', data as CodeNavResultMessage, (result) => result, 'The language server did not answer');
+              break;
+            }
             if (data.event === 'review_search_result') {
               settlePendingRequest(pending, 'review_search', data as ReviewSearchResultMessage, (result) => result, 'Could not search');
               break;
@@ -2414,7 +2420,7 @@ export function useDaemonSocket({
       setIsReady(false);
       const quickCaptureFailure = event.reason || 'Disconnected. Quick capture acceptance is unconfirmed.';
       rejectPendingByPredicate(key => key.startsWith('quick_capture_'), new Error(quickCaptureFailure));
-      rejectPendingByPredicate((key) => key.startsWith('pty_input:'), new Error('The daemon disconnected before answering'));
+      rejectPendingByPredicate((key) => key.startsWith('pty_input:') || key.startsWith('code_nav:'), new Error('The daemon disconnected before answering'));
       rejectPendingByPredicate(key => key.startsWith(`${INSTALL_CODEX_UPDATE}:`), new CodexInstallUntracked());
       if (event.reason && !circuitOpenRef.current) setConnectionError(event.reason);
       canceledAttachIdsRef.current.clear();
@@ -2848,6 +2854,8 @@ export function useDaemonSocket({
 
   const sendReviewEdit = useCallback((host: string | undefined, document: string, edit: ReviewEdit): Promise<ReviewEditResultMessage> =>
     sendRequest('review_edit', { document, path: edit.path, base_hash: edit.baseHash, from: edit.from, to: edit.to, text: edit.text, ...(host ? { host } : {}) }, 'Saving the edit timed out'), [sendRequest]);
+  const sendCodeNav = useCallback((host: string | undefined, document: string, at: Pick<CodeNavMessage, 'path' | 'line' | 'character' | 'kind'>): Promise<CodeNavResultMessage> =>
+    sendRequest('code_nav', { document, ...at, ...(host ? { host } : {}) }, 'The language server did not answer', null), [sendRequest]);
   const sendReviewSearch = useCallback((host: string | undefined, document: string, query: string): Promise<ReviewSearchResultMessage> =>
     sendRequest('review_search', { document, query, ...(host ? { host } : {}) }, 'Searching timed out'), [sendRequest]);
 
@@ -4454,6 +4462,7 @@ export function useDaemonSocket({
     sendReviewFile,
     sendReviewEdit,
     sendReviewSearch,
+    sendCodeNav,
     sendAskSeedMentions,
     sendRestartSharedCodex,
     sendPhonesGet,

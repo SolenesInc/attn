@@ -1,7 +1,31 @@
+import type { ReactNode } from 'react';
 import type { ReviewRow } from '../../types/generated';
+import type { LabeledName } from './navigation';
 import type { TokenLine } from './tokenize';
 
-export function CodeText({ text, tokens }: { text: string; tokens?: TokenLine }) {
+/** The line's text with a label at the start of each name, keeping the tokens' colors. */
+function LabeledText({ text, tokens, labels }: { text: string; tokens?: TokenLine; labels: readonly LabeledName[] }) {
+  const pieces = tokens ?? [{ content: text }];
+  const nodes: ReactNode[] = [];
+  let next = 0;
+  let offset = 0;
+  pieces.forEach((token, index) => {
+    let cut = 0;
+    while (next < labels.length && labels[next].character < offset + token.content.length) {
+      const at = labels[next].character - offset;
+      if (at > cut) nodes.push(<span key={`${index}:${cut}`} style={token.style}>{token.content.slice(cut, at)}</span>);
+      nodes.push(<span key={`label:${labels[next].label}`} className="review-name-label" data-label={labels[next].label} />);
+      cut = at;
+      next += 1;
+    }
+    nodes.push(<span key={`${index}:${cut}`} style={token.style}>{token.content.slice(cut)}</span>);
+    offset += token.content.length;
+  });
+  return <>{nodes}</>;
+}
+
+export function CodeText({ text, tokens, labels }: { text: string; tokens?: TokenLine; labels?: readonly LabeledName[] }) {
+  if (labels && labels.length > 0) return <LabeledText text={text} tokens={tokens} labels={labels} />;
   if (!tokens) return <>{text || ' '}</>;
   return (
     <>
@@ -27,6 +51,7 @@ export function CodeRow({
   inRange,
   cursorKey,
   cursor,
+  labels,
 }: {
   row: ReviewRow;
   tokens?: TokenLine;
@@ -34,6 +59,7 @@ export function CodeRow({
   inRange?: boolean;
   cursorKey?: string;
   cursor?: boolean;
+  labels?: readonly LabeledName[];
 }) {
   return (
     <div
@@ -49,7 +75,7 @@ export function CodeRow({
       <span className="review-row-number">{row.old ?? ''}</span>
       <span className="review-row-number">{row.now ?? ''}</span>
       <span className="review-row-sign">{SIGN[row.kind] ?? ''}</span>
-      <span className="review-row-text md-shiki"><CodeText text={row.text} tokens={tokens} /></span>
+      <span className="review-row-text md-shiki"><CodeText text={row.text} tokens={tokens} labels={labels} /></span>
     </div>
   );
 }

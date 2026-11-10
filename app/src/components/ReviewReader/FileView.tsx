@@ -120,6 +120,7 @@ export function FileView({
   const noted = useMemo(() => notedLines(notes), [notes]);
   const resizeWatch = useResizeWatch();
   const reader = useReviewReader();
+  const labels = reader?.labels;
   const path = file.target.path;
   const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
   const cursorLine = rows?.[file.cursor]?.now;
@@ -159,6 +160,7 @@ export function FileView({
       <header className="review-file-view-header">
         <button type="button" tabIndex={-1} disabled={!canGoBack} onClick={onBack}>← back <kbd>⌃o</kbd></button>
         <PathLabel path={file.target.path} />
+        {file.target.outside ? <span className="review-badge" title="A definition outside the review's repository, shown as it is on disk">outside the repository · read-only</span> : null}
         {rows ? <span className="review-file-view-lines">{rows.filter((row) => row.now !== undefined).length} lines</span> : null}
         <span className="review-grow" />
         {onClose ? <button type="button" tabIndex={-1} onClick={onClose}>close <kbd>esc</kbd></button> : null}
@@ -186,6 +188,7 @@ export function FileView({
                     tokens={tokens[index]}
                     path={file.target.path}
                     inRange={range !== undefined && row.now !== undefined && row.now >= range[0] && row.now <= range[1]}
+                    labels={labels && 'fileId' in labels.at && labels.at.fileId === file.id && labels.at.row === index ? labels.names : undefined}
                   />
                 </div>
               );

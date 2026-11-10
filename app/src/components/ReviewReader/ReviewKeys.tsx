@@ -1,3 +1,4 @@
+import type { ReviewNavigation } from '../../types/generated';
 import { FRAME_KEYS, type Frame } from './frames';
 
 const DOCUMENT_KEYS: Array<[string[], string]> = [
@@ -37,6 +38,10 @@ const FILE_KEYS: Array<[string[], string]> = [
   [['?'], 'all keys'],
 ];
 
+const NAV_KEYS: Array<[string[], string]> = [
+  [['f', 'r', 'h'], 'definition, uses, type'],
+];
+
 const MARK_KEYS: Array<[string[], string]> = [
   [['c'], 'note'],
   [['a'], 'ask'],
@@ -46,6 +51,26 @@ const MARK_KEYS: Array<[string[], string]> = [
 
 function Keys({ keys }: { keys: string[] }) {
   return <>{keys.map((key) => <kbd key={key}>{key}</kbd>)}</>;
+}
+
+const STATE_TEXT: Record<string, string> = {
+  ready: 'ready',
+  starting: 'loading',
+  missing: 'no server',
+  failed: 'failed',
+};
+
+/** Each language's server, as the review's navigation reports it; the detail says what it is doing or why it is not there. */
+function NavigationStates({ navigation }: { navigation: readonly ReviewNavigation[] }) {
+  return (
+    <span className="review-nav-states" aria-label="Language servers">
+      {navigation.map(({ language, state, detail }) => (
+        <span key={language} className={`review-nav-state review-nav-state--${state}`} title={detail}>
+          {language} {STATE_TEXT[state] ?? state}{state === 'starting' && detail ? `: ${detail}` : ''}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function keysFor(frame: Frame, fileOpen: boolean, sides: boolean): Array<[string[], string]> {
@@ -61,6 +86,7 @@ export function ReviewKeyLine({
   fileOpen,
   sides,
   marking,
+  navigation,
   onFrame,
 }: {
   frame: Frame;
@@ -68,9 +94,10 @@ export function ReviewKeyLine({
   fileOpen: boolean;
   sides: boolean;
   marking: boolean;
+  navigation: readonly ReviewNavigation[];
   onFrame: (frame: Frame) => void;
 }) {
-  const keys = keysFor(frame, fileOpen, sides);
+  const keys = [...keysFor(frame, fileOpen, sides).slice(0, 2), ...NAV_KEYS, ...keysFor(frame, fileOpen, sides).slice(2)];
   return (
     <div className="review-key-line" aria-label="Review keys">
       {offered.length > 1 ? (
@@ -82,6 +109,7 @@ export function ReviewKeyLine({
           ))}
         </span>
       ) : null}
+      {navigation.length > 0 ? <NavigationStates navigation={navigation} /> : null}
       {(marking ? [...keys.slice(0, 2), ...MARK_KEYS, ...keys.slice(2)] : keys).map(([keys, what]) => (
         <span key={what}><Keys keys={keys} /> {what}</span>
       ))}
@@ -100,6 +128,9 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['⌘↵'], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
+  [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on waits in a list instead of moving you.'],
+  [['r'], 'List the uses of a name on the line; ↑↓ pick one, ↵ opens it.'],
+  [['h'], 'Show the type of a name on the line.'],
   [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked.'],
   [['e'], 'Show 10 more lines on each side of the stop.'],
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],

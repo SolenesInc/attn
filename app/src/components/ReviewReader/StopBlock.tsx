@@ -1,10 +1,14 @@
 import { Fragment, useMemo } from 'react';
 import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
-import { useReviewReader, type FileTarget } from './reviewContext';
+import { useReviewReader, type FileTarget, type RowLabels } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 import { useTokens } from './tokenize';
 import { DocStopRows, isDocumentPath } from './DocStop';
+
+function labelsAt(labels: RowLabels | null | undefined, cursorKey: string) {
+  return labels && 'cursorKey' in labels.at && labels.at.cursorKey === cursorKey ? labels.names : undefined;
+}
 
 function splitPath(path: string): { dir: string; name: string } {
   const at = path.lastIndexOf('/');
@@ -148,6 +152,7 @@ function CodeStop({ stop }: { stop: ReviewStop }) {
               path={stop.path}
               inRange={row.now !== undefined && row.now >= stop.now_from && row.now <= stop.now_to}
               cursorKey={`stop:${stop.path}:${rowKey(row)}`}
+              labels={labelsAt(reader?.labels, `stop:${stop.path}:${rowKey(row)}`)}
             />
             {row.now !== undefined ? notesAfter.get(row.now)?.map((note) => <NoteRow key={note.line} note={note} />) : null}
             {row.now !== undefined ? reader?.marksByLine.get(markKey(stop.path, row.now))?.map((mark) => (

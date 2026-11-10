@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, Ref, RefObject } from 'react';
-import type { ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
+import type { CodeNavLocation, ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useTileWindow } from '../../tileWindow';
@@ -9,8 +9,10 @@ import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
 import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MapFrame } from './MapFrame';
+import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
+import { NavPanel } from './NavPanel';
 import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
-import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
+import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
 import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/types';
@@ -32,6 +34,37 @@ export interface ReviewReaderHandle {
   movedMarkIds(): string[];
 }
 const PAGE_ROWS = 20;
+const NAV_KEYS: Record<string, NavKind> = { f: 'definition', r: 'references', h: 'hover' };
+
+function askingText(kind: NavKind, name: string): string {
+  switch (kind) {
+    case 'definition': return `Finding the definition of ${name}…`;
+    case 'references': return `Finding the uses of ${name}…`;
+    case 'hover': return `Reading the type of ${name}…`;
+  }
+}
+
+function emptyText(kind: NavKind, name: string): string {
+  switch (kind) {
+    case 'definition': return `The language server knows no definition of ${name}.`;
+    case 'references': return `The language server knows no uses of ${name}.`;
+    case 'hover': return `The language server has no type for ${name}.`;
+  }
+}
+
+function pickingText(kind: NavKind): string {
+  switch (kind) {
+    case 'definition': return 'Go to the definition of which name? Type its label.';
+    case 'references': return 'List the uses of which name? Type its label.';
+    case 'hover': return 'Show the type of which name? Type its label.';
+  }
+}
+
+/** A line above the keys: a question on its way, or why one got no answer. */
+interface NavNote {
+  text: string;
+  tone: 'asking' | 'status' | 'alert';
+}
 
 function isEditable(node: EventTarget | null): boolean {
   if (!isDomInstance(node, 'Element')) return false;
@@ -178,6 +211,7 @@ export function ReviewReader({
     () => (openInEditor && bundle.repository ? (path: string) => openInEditor(bundle.repository, path) : undefined),
     [bundle.repository, openInEditor],
   );
+  const sendCodeNav = daemon?.sendCodeNav;
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -205,6 +239,11 @@ export function ReviewReader({
   const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
   const [editing, setEditing] = useState<OpenEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [picking, setPicking] = useState<Picking | null>(null);
+  const [navPanel, setNavPanel] = useState<NavAnswer | null>(null);
+  const [navNote, setNavNote] = useState<NavNote | null>(null);
+  const questionRef = useRef(0);
+  const positionRef = useRef('');
   const selectedRef = useRef<HTMLElement[]>([]);
   const annotations = marks?.annotations ?? NO_MARKS;
   const cursorElementRef = useRef<HTMLElement | null>(null);
@@ -219,6 +258,7 @@ export function ReviewReader({
   filesRef.current = files;
   const onStage = frame === 'walkthrough' && files.length === 1 && openFileView !== null;
   const stageCursorLine = onStage ? openFileView.rows?.[openFileView.cursor]?.now : undefined;
+  positionRef.current = `${frame}|${cursorKey ?? ''}|${files.length}|${openFileView ? `${openFileView.target.path}:${openFileView.cursor}` : ''}`;
 
   const docLineFor = useCallback((path: string, line: number): number => {
     const stops = bundle.stops.filter((stop) => stop.path === path);
@@ -756,6 +796,113 @@ export function ReviewReader({
     setSending(null);
   }, [marks, sending]);
 
+  /** The line of code the cursor stands on, or why there is none to ask about. */
+  const navLine = useCallback((): NavLine | string => {
+    if (openFileView) {
+      const row = openFileView.rows?.[openFileView.cursor];
+      if (!row) return 'The file is still being read.';
+      if (row.now === undefined) return 'This line was removed. Navigation reads the code as it is now.';
+      return { path: openFileView.target.path, line: row.now, text: row.text, at: { fileId: openFileView.id, row: openFileView.cursor } };
+    }
+    const element = currentTarget();
+    if (!element || element.getAttribute('data-review-cursor') !== 'row') return 'Put the cursor on a line of code to ask about its names.';
+    const path = element.getAttribute('data-path');
+    const line = Number(element.getAttribute('data-line'));
+    if (!path || !(line > 0)) return 'This line was removed. Navigation reads the code as it is now.';
+    return { path, line, text: rowText(element), at: { cursorKey: cursorKeyOf(element) } };
+  }, [currentTarget, openFileView]);
+
+  const follow = useCallback((location: CodeNavLocation) => {
+    setNavPanel(null);
+    openFile({ path: location.path, line: location.line, ...(location.outside ? { outside: true } : {}) });
+  }, [openFile]);
+
+  const askRef = useRef<(kind: NavKind, line: NavLine, name: LabeledName) => void>(() => undefined);
+  const ask = useCallback((kind: NavKind, line: NavLine, name: LabeledName) => {
+    setPicking(null);
+    setNavPanel(null);
+    if (!sendCodeNav) {
+      setNavNote({ text: 'Not connected to the daemon.', tone: 'alert' });
+      return;
+    }
+    const question = ++questionRef.current;
+    const askedAt = Date.now();
+    const askedFrom = positionRef.current;
+    setNavNote({ text: askingText(kind, name.name), tone: 'asking' });
+    void sendCodeNav(host, document, { path: line.path, line: line.line, character: name.character, kind }).then(
+      (answer) => {
+        if (questionRef.current !== question) return;
+        const locations = answer.locations ?? [];
+        if (kind === 'definition' && locations.length === 1 && isOwnDefinition(locations[0], line.path, line.line, name.character)) {
+          askRef.current('references', line, name);
+          return;
+        }
+        if (locations.length === 0 && !answer.text) {
+          setNavNote({ text: emptyText(kind, name.name), tone: 'status' });
+          return;
+        }
+        setNavNote(null);
+        const late = Date.now() - askedAt > LATE_ANSWER_MS && positionRef.current !== askedFrom;
+        if (kind === 'definition' && locations.length === 1 && !late) {
+          follow(locations[0]);
+          return;
+        }
+        setNavPanel({ kind, name: name.name, locations, text: answer.text, offered: late, cursor: 0 });
+      },
+      (error: unknown) => {
+        if (questionRef.current !== question) return;
+        setNavNote({ text: error instanceof Error ? error.message : String(error), tone: 'alert' });
+      },
+    );
+  }, [document, follow, host, sendCodeNav]);
+  askRef.current = ask;
+
+  const startPicking = useCallback((kind: NavKind) => {
+    const line = navLine();
+    if (typeof line === 'string') {
+      setNavNote({ text: line, tone: 'status' });
+      return;
+    }
+    const names = labelNames(namesOn(line.text));
+    if (names.length === 0) {
+      setNavNote({ text: 'This line has no names to ask about.', tone: 'status' });
+      return;
+    }
+    if (names.length === 1) {
+      ask(kind, line, names[0]);
+      return;
+    }
+    setNavNote(null);
+    setPicking({ kind, line, names, typed: '' });
+  }, [ask, navLine]);
+
+  const pickLabel = useCallback((key: string) => {
+    if (!picking) return;
+    const typed = picking.typed + key;
+    const matching = picking.names.filter((name) => name.label.startsWith(typed));
+    if (matching.length === 0) {
+      setPicking(null);
+      return;
+    }
+    const exact = matching.find((name) => name.label === typed);
+    if (exact) ask(picking.kind, picking.line, exact);
+    else setPicking({ ...picking, typed });
+  }, [ask, picking]);
+
+  const cancelQuestion = useCallback(() => {
+    questionRef.current += 1;
+    setNavNote(null);
+  }, []);
+
+  const movePanelCursor = useCallback((delta: number) => {
+    setNavPanel((panel) => (panel ? { ...panel, cursor: Math.max(0, Math.min(panel.locations.length - 1, panel.cursor + delta)) } : panel));
+  }, []);
+
+  const labels = useMemo<RowLabels | null>(
+    () => (picking ? { at: picking.line.at, names: picking.names.filter((name) => name.label.startsWith(picking.typed)) } : null),
+    [picking],
+  );
+
   const searchOpen = search !== null;
   const searchWasOpenRef = useRef(false);
   useEffect(() => {
@@ -771,14 +918,20 @@ export function ReviewReader({
       : sending ? 'send'
         : searchOpen ? 'search'
           : help ? 'help'
-            : selecting ? 'selection'
-              : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
-                : openFileView ? 'file' : null;
+            : picking ? 'picking'
+              : navPanel ? 'answer'
+                : navNote ? 'note'
+                  : selecting ? 'selection'
+                    : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
+                      : openFileView ? 'file' : null;
   useEscapeStack(closeEdit, escapes === 'editor');
   useEscapeStack(cancelComposer, escapes === 'composer');
   useEscapeStack(() => setSending(null), escapes === 'send');
   useEscapeStack(() => setSearch(null), escapes === 'search');
   useEscapeStack(() => setHelp(false), escapes === 'help');
+  useEscapeStack(() => setPicking(null), escapes === 'picking');
+  useEscapeStack(() => setNavPanel(null), escapes === 'answer');
+  useEscapeStack(cancelQuestion, escapes === 'note');
   useEscapeStack(() => {
     setSelectFrom(null);
     if (openFileView?.selectFrom !== undefined) moveFileCursor((file) => file.cursor);
@@ -815,6 +968,33 @@ export function ReviewReader({
         const verdict = verdictForKey(event.key);
         if (verdict) setSending({ verdict });
         if (event.key === 'Enter') sendReview();
+        return true;
+      }
+      if (picking) {
+        if (event.key === 'Escape') return false;
+        if (isPrintable(event)) pickLabel(event.key);
+        else setPicking(null);
+        return true;
+      }
+      if (navPanel) {
+        switch (event.key) {
+          case 'ArrowDown': movePanelCursor(1); return true;
+          case 'ArrowUp': movePanelCursor(-1); return true;
+          case 'PageDown': movePanelCursor(PAGE_ROWS); return true;
+          case 'PageUp': movePanelCursor(-PAGE_ROWS); return true;
+          case 'Enter': {
+            const location = navPanel.locations[navPanel.cursor];
+            if (location) follow(location);
+            return true;
+          }
+          case 'Escape': return false;
+        }
+        return true;
+      }
+      if (navNote && navNote.tone !== 'asking') setNavNote(null);
+      const navKind = NAV_KEYS[event.key];
+      if (navKind && !event.shiftKey) {
+        startPicking(navKind);
         return true;
       }
       const frameKey = FRAME_KEYS.find(([key]) => key === event.key);
@@ -875,7 +1055,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, stepStage, switchFrame, switchSide, tileWindow, undoEdit, openDocumentInEditor, currentTarget]);
+  }, [back, currentTarget, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, stepStage, switchFrame, switchSide, tileWindow, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -894,8 +1074,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor }),
-    [asking, bundle, expansions, frame, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels }),
+    [asking, bundle, expansions, frame, labels, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
   );
 
   return (
@@ -955,13 +1135,19 @@ export function ReviewReader({
       {help ? <ReviewKeySheet /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
       {notice ? <div className="review-notice" role="status">{notice}</div> : null}
+      {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}
       {composer && marks ? (
         <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
       ) : null}
       {sending && marks ? (
         <SendSheet marks={annotations} verdict={sending.verdict} destination={marks.destination} onPick={(verdict) => setSending({ verdict })} onSend={sendReview} />
       ) : null}
-      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined} onFrame={switchFrame} />
+      {picking ? (
+        <div className="review-nav-note" role="status">{pickingText(picking.kind)} <kbd>esc</kbd> cancels.</div>
+      ) : navNote ? (
+        <div className={`review-nav-note${navNote.tone === 'alert' ? ' review-nav-note--alert' : ''}`} role={navNote.tone === 'alert' ? 'alert' : 'status'}>{navNote.text}</div>
+      ) : null}
+      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined} navigation={bundle.navigation} onFrame={switchFrame} />
     </ReviewReaderContext.Provider>
   );
 }
