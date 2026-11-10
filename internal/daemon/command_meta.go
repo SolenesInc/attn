@@ -165,6 +165,8 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdEnsureRepo:                    commandMetadata(false, true),
 	protocol.CmdGetRepoInfo:                   commandMetadata(false, true),
 	protocol.CmdTileAssetRead:                 commandMetadata(false, false),
+	protocol.CmdReviewStart:                   commandMetadata(true, true),
+	protocol.CmdReviewCheck:                   commandMetadata(false, true),
 	protocol.CmdAskOpen:                       commandMetadata(false, true),
 	protocol.CmdAskList:                       commandMetadata(false, true),
 	protocol.CmdAskClose:                      commandMetadata(false, true),

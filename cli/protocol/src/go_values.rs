@@ -106,6 +106,7 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "analytics.enabled", machine: false },
     Setting { key: "self_update_enabled", machine: false },
     Setting { key: "direct_agent_launch_enabled", machine: false },
+    Setting { key: "code_review_enabled", machine: false },
     Setting { key: "pty_shared_host_enabled", machine: false },
     Setting { key: "notebook_sync_state", machine: true },
     Setting { key: "notebook_sync_last_error", machine: true },
@@ -194,6 +195,7 @@ pub const FEATURES: &[Feature] = &[
     Feature { key: "analytics.enabled", name: "Usage analytics", stage: "experimental", applies: "Now" },
     Feature { key: "self_update_enabled", name: "Self-update", stage: "experimental", applies: "Now" },
     Feature { key: "direct_agent_launch_enabled", name: "Direct agent launches", stage: "on by default", applies: "New agents" },
+    Feature { key: "code_review_enabled", name: "Code review", stage: "experimental", applies: "Now" },
     Feature { key: "pty_shared_host_enabled", name: "Shared terminal host", stage: "on by default", applies: "New terminals" },
 ];
 

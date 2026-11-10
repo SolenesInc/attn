@@ -17,6 +17,7 @@ current while the user reads it. For review notes on a markdown tile, see
 - `terminal-link`: ⌘-click a markdown path in a terminal to dock it, bound to the session that terminal shows ([terminals.md](terminals.md)).
 - `document-focus`: show the document alone on the desktop, and return with Escape.
 - `open-in-editor`: open the active agent's folder in the user's editor.
+- `review-document`: experimental, behind `code_review_enabled`. A markdown file with `attn: review` in its frontmatter is a review document. Its tile also receives a bundle: each `### path:from-to` stop resolved to rows of the file now with the change from base, its notes, flows and problems. The tile still renders it as plain markdown.
 
 ## How to get to it
 
@@ -34,11 +35,13 @@ current while the user reads it. For review notes on a markdown tile, see
 ### Agents
 
 - `attn open <file.md|seed-id> [--session <id>]` (`cmd/attnd/main.go`): a relative path resolves against the folder `attn` runs in. The tile docks beside the caller, or beside the tile of `--session`.
+- `attn review start <document> [--base <commit>]` (`cli/attn/src/commands/review.rs`) snapshots the working tree of the repository it runs in as head and writes `frame`, `repository`, `base` and `head` into the frontmatter, creating the document when it is missing. `attn review check <document>` prints each problem with its line and the fix, and exits 1 when there are any. `attn open` on a review document prints the same problems as `attn open: warning:` lines and still opens the tile. With `code_review_enabled` off, `attn review` refuses and names the setting.
 - Prompts: `attn skill --reference markdown` (`internal/prompts/content/skills/attn/references/markdown.md`), named in the attn map as "Show the user a markdown document" (`internal/prompts/content/session/attn-map.md`), and `attn open <plot>` in the seed craft (`internal/prompts/content/resources/seed-guide.md`).
 
 ### Triggers
 
 - An open markdown tile re-reads its file when the file changes on disk, and shows an error when the file goes away or grows past 1 MiB (`internal/daemon/tilecontent.go`).
+- An open review document also gets a new bundle when a file one of its stops shows changes (`internal/daemon/tile_documents.go`).
 
 ## Driving it
 
@@ -72,6 +75,7 @@ Preconditions:
 - **The editor setting in Settings, and its fallback.**
   - Press ⌘, and click `[data-testid="settings-nav-desktop"]` natively, click `#settings-editor-exec` natively, type `touch <A>/editor-opened2 && echo` and press Enter: `./attn settings get editor_executable` prints it, and "Open in editor" from the palette creates `$A/editor-opened2`. Set `editor_executable` back to empty.
   - For the fallback, append `export EDITOR='touch <A>/editor-env-opened && echo'` to the env file, quit the app with `./attn instance stop-app` and launch it again with `bridge --launch --wait-ready ping`: with `editor_executable` empty, "Open in editor" creates `$A/editor-env-opened`. Append `unset EDITOR` afterwards.
+- **A review document.** Run `./attn settings set code_review_enabled true`. Make a clone with an uncommitted change, such as `git clone -q --no-checkout . $A/subject && git -C $A/subject checkout -q <commit> && git -C $A/subject reset -q --mixed <commit>~1`. From `$A/subject`, `./attn review start $A/review.md --base <commit>~1` prints `created`, the head over the base, and the next commands. Below the frontmatter, write a `### path:from-to` stop for one changed file with a range past its end, and list every other changed file under `## Not shown`. `./attn review check $A/review.md` prints `L<n>: the stop … ends past the file (… lines at head). Use …` and exits 1. `./attn open $A/review.md` prints `opened` and the same line after `attn open: warning:`, exits 0 and docks the tile. Fix the range: both print no problem. `./attn review start $A/review.md` again prints a new head over the same base. With `code_review_enabled` set back to false, `./attn review start` and `./attn review check` exit 1 naming the setting, and `./attn open` prints only `opened`.
 - **Refusals.** `./attn open $A/missing.md` exits 1 with `open:` and the missing file's error. `./attn open` exits 1 with `usage: attn open <file.md|seed-id> [--session <id>]`.
 - **Proof.** In `$P`, keep each `./attn` command's output and exit code, `wsctl list` after each open, `bridge markdown_opener_get_state` with the opener open on the empty query and on `secnd`, `./attn agent peek md-agent` after the agent opens a file, and `bridge dom_text '{"selector":"[data-tile-kind=\"markdown\"] .md-reader-doc"}'` before and after the edit. Capture `bridge capture_screenshot '{"path":"<P>/markdown-tiles.png"}'` with both tiles docked and `<P>/markdown-opener.png` with the opener open, `<P>` written out. Name each file for its way in, such as `markdown-agent-open-list.json`.
 
@@ -87,7 +91,8 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`, `internal/daemon/markdown_tiles_outpost_wire_test.go`.
+- Kernel: `internal/review/corpus_test.go` (documents and the bundles they resolve to, in `internal/review/testdata/corpus`), `internal/review/linemap_test.go`.
+- Wire: `internal/daemon/review_wire_test.go`, `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`, `internal/daemon/markdown_tiles_outpost_wire_test.go`.
 - Stack: `cmd/attnd/agent_commands_stack_test.go`, `cmd/attnd/markdown_tiles_outpost_stack_test.go`, `cmd/attnd/outpost_paths_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`.
 - Scenario: `markdown-opener`, `terminal-md-link`.
 - App: `app/src/App.markdownOpener.test.tsx`, `app/src/App.markdownRendering.test.tsx`, `app/src/components/MarkdownReader/*.test.*`, `app/src/components/palette/openerRank.test.ts`, `app/src/components/palette/pathMode.test.ts`, `app/src/utils/terminalMarkdown.test.ts`, `app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx`.

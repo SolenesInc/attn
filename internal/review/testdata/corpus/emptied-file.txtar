@@ -1,0 +1,79 @@
+A stop on a file emptied after review start shows the base lines as removed
+and is changed since presented.
+-- base/a.go --
+package a
+
+func A() {}
+-- head/a.go --
+package a
+
+func A() { println() }
+-- now/a.go --
+-- review.md --
+# Emptied
+
+## A
+
+### a.go:1-3
+
+- L2: The blank line.
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 0,
+      "binary": false,
+      "path": "a.go",
+      "removed": 3,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": true,
+      "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [
+        {
+          "from": 2,
+          "line": 14,
+          "look": false,
+          "now_from": 0,
+          "now_to": 0,
+          "text": "The blank line.",
+          "to": 2
+        }
+      ],
+      "now_from": 0,
+      "now_to": 0,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 1,
+          "text": "package a"
+        },
+        {
+          "kind": "-",
+          "old": 2,
+          "text": ""
+        },
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

@@ -1039,7 +1039,8 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	}, nil
 }
 
-func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) error {
+// OpenMarkdown answers the problems of a review document, as review check lists them.
+func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) ([]protocol.ReviewProblem, error) {
 	msg := protocol.OpenMarkdownMessage{
 		Cmd:  protocol.CmdOpenMarkdown,
 		Path: path,
@@ -1047,8 +1048,31 @@ func (c *Client) OpenMarkdown(path string, sessionID protocol.SessionID) error {
 	if sessionID != "" {
 		msg.SessionID = protocol.Ptr(sessionID)
 	}
-	_, err := c.send(msg)
-	return err
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.ReviewProblems, nil
+}
+
+func (c *Client) ReviewStart(document, repository, base string) (*protocol.ReviewStartResult, error) {
+	msg := protocol.ReviewStartMessage{Cmd: protocol.CmdReviewStart, Document: document, Repository: repository}
+	if base != "" {
+		msg.Base = protocol.Ptr(base)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.ReviewStartResult, nil
+}
+
+func (c *Client) ReviewCheck(document string) ([]protocol.ReviewProblem, error) {
+	resp, err := c.send(protocol.ReviewCheckMessage{Cmd: protocol.CmdReviewCheck, Document: document})
+	if err != nil {
+		return nil, err
+	}
+	return resp.ReviewCheckResult.Problems, nil
 }
 
 func (c *Client) OpenSeed(seedID string, sessionID protocol.SessionID) error {

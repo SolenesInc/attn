@@ -83,7 +83,7 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	app.TypeLine(shell, "attn open "+notes+" && printf '__opened_%s\\n' yes")
 	app.AwaitScreen(shell, "__opened_yes")
 	awaitOutpostTileContent(app, pair.Host, "# outpost notes\n")
-	if err := home.Client().OpenMarkdown(notes, ""); err != nil {
+	if _, err := home.Client().OpenMarkdown(notes, ""); err != nil {
 		t.Fatal(err)
 	}
 	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {

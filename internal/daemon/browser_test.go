@@ -62,7 +62,7 @@ func TestOpenBrowserDocksBesideTheTileOfAPanelessDesktop(t *testing.T) {
 	if err := os.WriteFile(notes, []byte("# notes"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := d.openMarkdownTile("", notes, "", true); err != nil {
+	if _, _, _, err := d.openMarkdownTile("", notes, "", true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.store.RemoveSessionPlacement("session-1"); err != nil {

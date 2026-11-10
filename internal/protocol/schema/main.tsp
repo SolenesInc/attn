@@ -3762,6 +3762,7 @@ model DesktopTileContentMessage {
   path: string;
   content: string;
   error?: string;
+  review?: ReviewBundle;
 }
 
 // The home sends each machine the full set of markdown documents its shown
@@ -3800,6 +3801,126 @@ model TileDocument {
   content: string;
   version: safeint;
   error?: string;
+  // Present for a review document while code_review_enabled is on.
+  review?: ReviewBundle;
+}
+
+// A review document resolved on the machine that holds its files. Line
+// numbers in the document are at head; rows show the file now with the change
+// from base.
+model ReviewBundle {
+  frame: string;                 // brief | walkthrough | map
+  repository: string;
+  base?: string;                 // absent for a tour of unchanged code
+  head: string;
+  stops: ReviewStop[];
+  files: ReviewFile[];           // the change, base to now
+  flows: ReviewFlow[];
+  not_shown: ReviewNotShown[];
+  navigation: ReviewNavigation[];
+  problems: ReviewProblem[];
+}
+
+model ReviewStop {
+  heading_line: int32;           // the stop's heading in the document
+  path: string;
+  from: int32;                   // at head, as written
+  to: int32;
+  now_from: int32;
+  now_to: int32;
+  changed_since_presented: boolean;
+  file_hash: string;             // sha256 of the file now; empty when it is gone
+  language?: string;
+  rows: ReviewRow[];
+  notes: ReviewNote[];
+}
+
+model ReviewRow {
+  kind: string;                  // " " unchanged, "+" added, "-" removed since base
+  old?: int32;                   // the line at base
+  now?: int32;                   // the line now
+  text: string;
+}
+
+model ReviewNote {
+  line: int32;                   // the note's line in the document
+  from: int32;                   // at head, as written
+  to: int32;
+  now_from: int32;
+  now_to: int32;
+  look: boolean;                 // written L12!: the place to look
+  text: string;
+}
+
+model ReviewFile {
+  path: string;
+  old_path?: string;             // set for a rename
+  status: string;                // added | deleted | modified | renamed | copied | type_changed
+  added: int32;
+  removed: int32;
+  binary: boolean;
+}
+
+model ReviewFlow {
+  line: int32;                   // the opening fence in the document
+  messages: ReviewFlowMessage[];
+}
+
+model ReviewFlowMessage {
+  line: int32;
+  text: string;
+  stop_line?: int32;             // heading_line of the stop its %% stop: comment names
+}
+
+model ReviewNotShown {
+  line: int32;
+  path: string;
+  reason: string;
+}
+
+model ReviewNavigation {
+  language: string;
+  state: string;                 // ready | starting | missing | failed
+  detail?: string;
+}
+
+model ReviewProblem {
+  line: int32;                   // the document line; 0 for the document as a whole
+  message: string;               // what is wrong and the fix
+}
+
+// Takes a fresh head for a review document and writes frame, repository,
+// base and head into its frontmatter, creating the document when it is missing.
+@extension("x-on", #{ here: true })
+model ReviewStartMessage {
+  cmd: "review_start";
+  document: string;
+  repository: string;            // a directory inside the repository under review
+  base?: string;
+}
+
+model ReviewStartResult {
+  document: string;
+  created: boolean;
+  repository: string;
+  base?: string;
+  head: string;
+  left_out: ReviewLeftOut[];
+}
+
+model ReviewLeftOut {
+  path: string;
+  reason: string;
+}
+
+@extension("x-on", #{ here: true })
+model ReviewCheckMessage {
+  cmd: "review_check";
+  document: string;
+}
+
+model ReviewCheckResult {
+  problems: ReviewProblem[];
 }
 
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
@@ -7158,6 +7279,10 @@ model Response {
   repos?: RepoState[];
   authors?: AuthorState[];
   journal_append_result?: JournalAppendResult;
+  review_start_result?: ReviewStartResult;
+  review_check_result?: ReviewCheckResult;
+  // open_markdown on a review document: the problems `attn review check` reports.
+  review_problems?: ReviewProblem[];
   activity_status_result?: ActivityStatusResult;
   kept_conversation_list_result?: KeptConversationListResult;
   kept_conversation_forget_result?: KeptConversationForgetResult;
@@ -8582,6 +8707,7 @@ model WebSocketEvent {
   tile_id?: string;
   tile_kind?: string;
   content?: string;
+  review?: ReviewBundle;
   runtime_id?: TerminalID;
   session_id?: SessionID;
   session?: Session;

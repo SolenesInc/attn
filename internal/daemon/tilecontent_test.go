@@ -43,7 +43,7 @@ func TestOpenMarkdownForAnUnknownSessionNamesIt(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Remote"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := d.openMarkdownTile("", file, "session-remote", true); err == nil || !strings.Contains(err.Error(), "session-remote") {
+	if _, _, _, err := d.openMarkdownTile("", file, "session-remote", true); err == nil || !strings.Contains(err.Error(), "session-remote") {
 		t.Fatalf("open for an unknown session = %v, want an error naming it", err)
 	}
 	after, err := d.store.GetDesktop(desktop.ID)
@@ -67,7 +67,7 @@ func TestOpenMarkdownReusesATileAlreadyShowingTheFile(t *testing.T) {
 		t.Fatalf("dock the existing tile: %v", err)
 	}
 
-	gotDesktop, gotTile, err := d.openMarkdownTile("", file, "session-1", true)
+	gotDesktop, gotTile, _, err := d.openMarkdownTile("", file, "session-1", true)
 	if err != nil {
 		t.Fatalf("openMarkdownTile: %v", err)
 	}

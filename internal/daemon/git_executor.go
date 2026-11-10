@@ -32,6 +32,7 @@ const (
 	gitTaskFileIndex        gitTaskKind = "file_index"
 	gitTaskSeedArtifact     gitTaskKind = "seed_artifact"
 	gitTaskPluginInstall    gitTaskKind = "plugin_install"
+	gitTaskReview           gitTaskKind = "review"
 )
 
 type gitTask struct {

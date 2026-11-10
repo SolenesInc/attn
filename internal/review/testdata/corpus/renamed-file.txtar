@@ -1,0 +1,105 @@
+A stop on a file renamed since base diffs against the file's old path.
+-- base/old.go --
+package p
+
+func One() int { return 1 }
+
+func Two() int { return 2 }
+
+func Three() int { return 3 }
+-- head/new.go --
+package p
+
+func One() int { return 1 }
+
+func Two() int { return 22 }
+
+func Three() int { return 3 }
+-- review.md --
+# Rename
+
+## The file moved and one value changed
+
+### new.go:1-7
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 1,
+      "binary": false,
+      "old_path": "old.go",
+      "path": "new.go",
+      "removed": 1,
+      "status": "renamed"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "68544fc6f2f774f74ee80fedebdf5344a7344fcc083a947df6e01a387a3a217f",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 1,
+      "now_to": 7,
+      "path": "new.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 1,
+          "old": 1,
+          "text": "package p"
+        },
+        {
+          "kind": " ",
+          "now": 2,
+          "old": 2,
+          "text": ""
+        },
+        {
+          "kind": " ",
+          "now": 3,
+          "old": 3,
+          "text": "func One() int { return 1 }"
+        },
+        {
+          "kind": " ",
+          "now": 4,
+          "old": 4,
+          "text": ""
+        },
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func Two() int { return 2 }"
+        },
+        {
+          "kind": "+",
+          "now": 5,
+          "text": "func Two() int { return 22 }"
+        },
+        {
+          "kind": " ",
+          "now": 6,
+          "old": 6,
+          "text": ""
+        },
+        {
+          "kind": " ",
+          "now": 7,
+          "old": 7,
+          "text": "func Three() int { return 3 }"
+        }
+      ],
+      "to": 7
+    }
+  ]
+}

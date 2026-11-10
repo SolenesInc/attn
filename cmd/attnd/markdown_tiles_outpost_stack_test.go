@@ -75,7 +75,7 @@ func TestAMarkdownTileFromAnOutpostShowsTheOutpostsFile(t *testing.T) {
 		}
 	}
 
-	if err := home.Client().OpenMarkdown(notes, ""); err != nil {
+	if _, err := home.Client().OpenMarkdown(notes, ""); err != nil {
 		t.Fatal(err)
 	}
 	testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {

@@ -1,0 +1,103 @@
+A stop on code the change touched: rows interleave removed and added lines,
+and a note keeps its head line.
+-- base/calc.go --
+package calc
+
+func Add(a, b int) int {
+	return a + b
+}
+
+func Sub(a, b int) int {
+	return a - b
+}
+-- head/calc.go --
+package calc
+
+func Add(a, b int) int {
+	sum := a + b
+	return sum
+}
+
+func Sub(a, b int) int {
+	return a - b
+}
+-- review.md --
+# Name the sum
+
+## Add keeps its result
+
+### calc.go:3-6
+
+- L4!: The sum gets a name.
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "calc.go",
+      "removed": 1,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "6af72c2b8db07de5d42e5d18f62f33d2a3caa086bb8a64d04e8fa086f8c302f8",
+      "from": 3,
+      "heading_line": 12,
+      "notes": [
+        {
+          "from": 4,
+          "line": 14,
+          "look": true,
+          "now_from": 4,
+          "now_to": 4,
+          "text": "The sum gets a name.",
+          "to": 4
+        }
+      ],
+      "now_from": 3,
+      "now_to": 6,
+      "path": "calc.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 3,
+          "old": 3,
+          "text": "func Add(a, b int) int {"
+        },
+        {
+          "kind": "-",
+          "old": 4,
+          "text": "\treturn a + b"
+        },
+        {
+          "kind": "+",
+          "now": 4,
+          "text": "\tsum := a + b"
+        },
+        {
+          "kind": "+",
+          "now": 5,
+          "text": "\treturn sum"
+        },
+        {
+          "kind": " ",
+          "now": 6,
+          "old": 5,
+          "text": "}"
+        }
+      ],
+      "to": 6
+    }
+  ]
+}

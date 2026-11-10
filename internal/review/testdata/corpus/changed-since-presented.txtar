@@ -1,0 +1,149 @@
+Lines inserted above a stop after review start move the stop and its notes;
+an edit inside the stop marks it changed since presented.
+-- base/a.go --
+package a
+
+func A() int {
+	return 1
+}
+
+func B() int {
+	return 1
+}
+-- head/a.go --
+package a
+
+func A() int {
+	return 2
+}
+
+func B() int {
+	return 1
+}
+-- now/a.go --
+package a
+
+// A doc comment added after presenting.
+// A second line.
+
+func A() int {
+	return 2
+}
+
+func B() int {
+	return 3
+}
+-- review.md --
+# Moved
+
+## A
+
+### a.go:3-5
+
+- L4: Returns two.
+
+## B
+
+### a.go:7-9
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 5,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "36f57a283262a5058e2751d23b5b2adc013583b5023ff2a5d85cc5e48197ac8e",
+      "from": 3,
+      "heading_line": 12,
+      "notes": [
+        {
+          "from": 4,
+          "line": 14,
+          "look": false,
+          "now_from": 7,
+          "now_to": 7,
+          "text": "Returns two.",
+          "to": 4
+        }
+      ],
+      "now_from": 6,
+      "now_to": 8,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 6,
+          "old": 3,
+          "text": "func A() int {"
+        },
+        {
+          "kind": "-",
+          "old": 4,
+          "text": "\treturn 1"
+        },
+        {
+          "kind": "+",
+          "now": 7,
+          "text": "\treturn 2"
+        },
+        {
+          "kind": " ",
+          "now": 8,
+          "old": 5,
+          "text": "}"
+        }
+      ],
+      "to": 5
+    },
+    {
+      "changed_since_presented": true,
+      "file_hash": "36f57a283262a5058e2751d23b5b2adc013583b5023ff2a5d85cc5e48197ac8e",
+      "from": 7,
+      "heading_line": 18,
+      "notes": [],
+      "now_from": 10,
+      "now_to": 12,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 10,
+          "old": 7,
+          "text": "func B() int {"
+        },
+        {
+          "kind": "-",
+          "old": 8,
+          "text": "\treturn 1"
+        },
+        {
+          "kind": "+",
+          "now": 11,
+          "text": "\treturn 3"
+        },
+        {
+          "kind": " ",
+          "now": 12,
+          "old": 9,
+          "text": "}"
+        }
+      ],
+      "to": 9
+    }
+  ]
+}

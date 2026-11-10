@@ -280,7 +280,7 @@ func TestATileOpenedFromTheCLILandsBesideItsAgentWithoutFocus(t *testing.T) {
 		cli := w.Client()
 
 		cliFile := markdownFile(t, w, "cli.md")
-		if err := cli.OpenMarkdown(cliFile, "a"); err != nil {
+		if _, err := cli.OpenMarkdown(cliFile, "a"); err != nil {
 			t.Fatal(err)
 		}
 		desktop.requireActive("c")
@@ -292,7 +292,7 @@ func TestATileOpenedFromTheCLILandsBesideItsAgentWithoutFocus(t *testing.T) {
 			desktop.requireRow("a/b " + cliTile + " c")
 		}
 
-		if err := cli.OpenMarkdown(cliFile, "a"); err != nil {
+		if _, err := cli.OpenMarkdown(cliFile, "a"); err != nil {
 			t.Fatal(err)
 		}
 		desktop.requireActive("c")

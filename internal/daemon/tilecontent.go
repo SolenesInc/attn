@@ -152,25 +152,31 @@ func observeTileContent(path string, sig tileContentSig, now time.Time) (tileCon
 	return next, next.hasHash != sig.hasHash || next.hash != sig.hash
 }
 
-func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, err error) {
+// openMarkdownTile answers the problems of a review document beside the tile,
+// so whoever opened it hears what `attn review check` would say.
+func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, problems []protocol.ReviewProblem, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return "", "", fmt.Errorf("path is required")
+		return "", "", nil, fmt.Errorf("path is required")
 	}
 	if !filepath.IsAbs(path) {
-		return "", "", fmt.Errorf("path must be absolute: %s", path)
+		return "", "", nil, fmt.Errorf("path must be absolute: %s", path)
 	}
 	document := tileDocument{host: host, path: filepath.Clean(path)}
 	read := protocol.TileDocumentReadMessage{Cmd: protocol.CmdTileDocumentRead, Path: document.path}
 	if host != "" {
 		read.Host = protocol.Ptr(host)
 	}
-	if _, err := Call[protocol.TileDocument](d.life.Context(), d.router(), read); err != nil {
-		return "", "", d.tileDocumentError(host, err)
+	opened, err := Call[protocol.TileDocument](d.life.Context(), d.router(), read)
+	if err != nil {
+		return "", "", nil, d.tileDocumentError(host, err)
+	}
+	if opened.Review != nil {
+		problems = opened.Review.Problems
 	}
 	location, err := d.currentAgent(callerSessionID)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
@@ -181,10 +187,10 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 		sessionID: location.sessionID,
 	}, focus)
 	if err != nil {
-		return "", "", err
+		return "", "", nil, err
 	}
 	d.store.RecordFileActivity(store.FileActivity{Host: host, Path: document.path, Source: store.FileActivitySourceOpened, SessionID: location.sessionID, At: time.Now()})
-	return desktop.ID, tileID, nil
+	return desktop.ID, tileID, problems, nil
 }
 
 func (d *Daemon) openSeedTile(seedID string, callerSessionID protocol.SessionID, standalone, focus bool, selectedProfile ...string) (desktopID, tileID string, err error) {
@@ -250,13 +256,13 @@ func markdownOpenHost(ctx context.Context, msg *protocol.OpenMarkdownMessage) st
 }
 
 func (d *Daemon) handleOpenMarkdown(ctx context.Context, conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	desktopID, tileID, err := d.openMarkdownTile(markdownOpenHost(ctx, msg), msg.Path, protocol.Deref(msg.SessionID), false)
+	desktopID, tileID, problems, err := d.openMarkdownTile(markdownOpenHost(ctx, msg), msg.Path, protocol.Deref(msg.SessionID), false)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
 	}
 	d.logf("open_markdown: %s as %s on desktop %s", strings.TrimSpace(msg.Path), tileID, desktopID)
-	d.sendOK(conn)
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewProblems: problems})
 }
 
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
@@ -314,7 +320,7 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string, at time.Time) {
 	host := d.sessionHost(sessionID)
 	if d.openSentFilesEnabled() {
-		desktopID, tileID, err := d.openMarkdownTile(host, path, sessionID, false)
+		desktopID, tileID, _, err := d.openMarkdownTile(host, path, sessionID, false)
 		if err == nil {
 			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 			return
@@ -342,7 +348,7 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	}
 	client.holdArrangements()
 	defer d.releaseArrangements(client)
-	desktopID, tileID, err := d.openMarkdownTile(protocol.Deref(msg.Host), msg.Path, protocol.Deref(msg.SessionID), true)
+	desktopID, tileID, _, err := d.openMarkdownTile(protocol.Deref(msg.Host), msg.Path, protocol.Deref(msg.SessionID), true)
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())

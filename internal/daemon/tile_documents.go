@@ -14,11 +14,47 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/review"
+	"github.com/victorarias/attn/internal/setting"
 )
 
 type watchedTileDocument struct {
-	sig     tileContentSig
-	version int
+	sig       tileContentSig
+	reviewing bool
+	stops     map[string]tileContentSig
+	version   int
+}
+
+// watchStops follows the files a review document's stops show, so their
+// changes reach the tile as a new version of the document.
+func (doc *watchedTileDocument) watchStops(path string, reviewing bool, now time.Time) {
+	doc.reviewing, doc.stops = reviewing, nil
+	if !reviewing {
+		return
+	}
+	content, err := readMarkdownFile(path)
+	if err != nil || !review.IsReview(content) {
+		return
+	}
+	doc.stops = map[string]tileContentSig{}
+	for _, file := range review.StopFiles(content) {
+		doc.stops[file] = refreshTileContentHash(file, statSig(file), now)
+	}
+}
+
+func (doc *watchedTileDocument) observe(path string, reviewing bool, now time.Time) bool {
+	next, differs := observeTileContent(path, doc.sig, now)
+	doc.sig = next
+	for file, sig := range doc.stops {
+		next, stopDiffers := observeTileContent(file, sig, now)
+		doc.stops[file] = next
+		differs = differs || stopDiffers
+	}
+	if differs || reviewing != doc.reviewing {
+		doc.watchStops(path, reviewing, now)
+		return true
+	}
+	return false
 }
 
 type tileDocumentWatch struct {
@@ -35,6 +71,7 @@ func newTileDocumentWatch() tileDocumentWatch {
 func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocumentsWatchMessage) (protocol.TileDocumentVersions, error) {
 	w := &d.tileDocuments
 	now := time.Now()
+	reviewing := d.on(setting.CodeReviewEnabled)
 	answer := protocol.TileDocumentVersions{Documents: make([]protocol.TileDocumentVersion, 0, len(msg.Documents))}
 	w.mu.Lock()
 	listed := make(map[string]*watchedTileDocument, len(msg.Documents))
@@ -43,6 +80,7 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 		if doc == nil {
 			w.versions++
 			doc = &watchedTileDocument{sig: refreshTileContentHash(path, statSig(path), now), version: w.versions}
+			doc.watchStops(path, reviewing, now)
 		}
 		listed[path] = doc
 		answer.Documents = append(answer.Documents, protocol.TileDocumentVersion{Path: path, Version: doc.version})
@@ -56,14 +94,12 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 	return answer, nil
 }
 
-func (w *tileDocumentWatch) observe(now time.Time) []protocol.TileDocumentVersion {
+func (w *tileDocumentWatch) observe(reviewing bool, now time.Time) []protocol.TileDocumentVersion {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	var changed []protocol.TileDocumentVersion
 	for path, doc := range w.watched {
-		next, differs := observeTileContent(path, doc.sig, now)
-		doc.sig = next
-		if differs {
+		if doc.observe(path, reviewing, now) {
 			w.versions++
 			doc.version = w.versions
 			changed = append(changed, protocol.TileDocumentVersion{Path: path, Version: doc.version})
@@ -109,7 +145,7 @@ func (d *Daemon) runTileDocumentWatcher(done <-chan struct{}) {
 			continue
 		case <-ticker.C:
 		}
-		for _, changed := range w.observe(time.Now()) {
+		for _, changed := range w.observe(d.on(setting.CodeReviewEnabled), time.Now()) {
 			report := protocol.TileDocumentChangedMessage{Cmd: protocol.CmdTileDocumentChanged, Path: changed.Path, Version: changed.Version}
 			if _, err := Call[struct{}](d.life.Context(), d.router(), report); err != nil {
 				d.logf("tile document %s changed: %v", changed.Path, err)
@@ -118,7 +154,7 @@ func (d *Daemon) runTileDocumentWatcher(done <-chan struct{}) {
 	}
 }
 
-func (d *Daemon) readTileDocument(_ context.Context, msg protocol.TileDocumentReadMessage) (protocol.TileDocument, error) {
+func (d *Daemon) readTileDocument(ctx context.Context, msg protocol.TileDocumentReadMessage) (protocol.TileDocument, error) {
 	if _, err := os.Stat(msg.Path); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return protocol.TileDocument{}, fmt.Errorf("file not found: %s", msg.Path)
@@ -130,6 +166,14 @@ func (d *Daemon) readTileDocument(_ context.Context, msg protocol.TileDocumentRe
 	answer.Content = content
 	if err != nil {
 		answer.Error = protocol.Ptr(err.Error())
+		return answer, nil
+	}
+	if d.on(setting.CodeReviewEnabled) && review.IsReview(content) {
+		bundle, err := d.resolveReview(ctx, msg.Path, content)
+		if err != nil {
+			return answer, err
+		}
+		answer.Review = &bundle
 	}
 	return answer, nil
 }

@@ -30,6 +30,7 @@ type heldTileDocument struct {
 	reading bool
 	serial  int
 	content string
+	review  *protocol.ReviewBundle
 	err     error
 }
 
@@ -136,6 +137,7 @@ func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *
 		TileKind:  string(layouttree.TileKindMarkdown),
 		Path:      document.path,
 		Content:   held.content,
+		Review:    held.review,
 	}
 	if document.host != "" {
 		message.Host = protocol.Ptr(document.host)
@@ -241,7 +243,7 @@ func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string, conn
 	delivery.watching[host] = watcher
 	for document, held := range delivery.documents {
 		if document.host == host {
-			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, err: held.err}
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, review: held.review, err: held.err}
 		}
 	}
 	delivery.mu.Unlock()
@@ -307,7 +309,7 @@ func (d *Daemon) failTileDocuments(host string, err error) {
 func (d *Daemon) failTileDocumentsLocked(host string, err error) {
 	for document, held := range d.desktopTiles.documents {
 		if document.host == host {
-			held.content, held.err = "", err
+			held.content, held.review, held.err = "", nil, err
 			held.serial++
 		}
 	}
@@ -357,7 +359,7 @@ func (d *Daemon) readStaleTileDocumentLocked(document tileDocument, held *heldTi
 		held.reading = false
 		if delivery.documents[document] == held {
 			held.version = max(target, answer.Version)
-			held.content, held.err = answer.Content, err
+			held.content, held.review, held.err = answer.Content, answer.Review, err
 			held.serial++
 			d.readStaleTileDocumentLocked(document, held)
 		}

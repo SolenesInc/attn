@@ -1,0 +1,85 @@
+A stop on a markdown file resolves like any file; the reader renders it as a
+document.
+-- base/docs/guide.md --
+# Guide
+
+Old sentence.
+-- head/docs/guide.md --
+# Guide
+
+New sentence.
+
+A new paragraph.
+-- review.md --
+# Docs
+
+## The guide
+
+### docs/guide.md:1-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 3,
+      "binary": false,
+      "path": "docs/guide.md",
+      "removed": 1,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "341afd4a240ed923a0aeda9157ce9ce70ad9f8e2b2198108f36f7835b03c17cb",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 1,
+      "now_to": 5,
+      "path": "docs/guide.md",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 1,
+          "old": 1,
+          "text": "# Guide"
+        },
+        {
+          "kind": " ",
+          "now": 2,
+          "old": 2,
+          "text": ""
+        },
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "Old sentence."
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "New sentence."
+        },
+        {
+          "kind": "+",
+          "now": 4,
+          "text": ""
+        },
+        {
+          "kind": "+",
+          "now": 5,
+          "text": "A new paragraph."
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

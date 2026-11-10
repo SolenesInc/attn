@@ -1,8 +1,11 @@
+use super::review::problem_lines;
 use super::support::{client, current_session_or_exit, parse_interspersed, string_flag};
 use super::{Run, Stop, absolute, print_stdout};
 use crate::paths::os_error_text;
 use attn::go::flag::FlagSet;
-use attn_protocol::{OpenMarkdownMessage, OpenSeedMessage};
+use attn_protocol::{OpenMarkdownMessage, OpenSeedMessage, ReviewProblem};
+
+const REVIEW_PROBLEMS_FIELD: &str = "review_problems";
 
 pub const USAGE: &str = "usage: attn open <file.md|seed-id> [--session <id>]\n";
 
@@ -51,9 +54,13 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     let mut message = OpenMarkdownMessage::new();
     message.path.clone_from(&path);
     message.session_id = session;
-    client(run)
-        .send(&message)
+    let reply = client(run)
+        .call(&message)
         .map_err(|error| run.fail_send("open", &error))?;
     print_stdout(&format!("opened {path}\n"));
+    let problems: Vec<ReviewProblem> = reply.value(REVIEW_PROBLEMS_FIELD).unwrap_or_default();
+    if !problems.is_empty() {
+        eprint!("{}", problem_lines(&problems, "attn open: warning: "));
+    }
     Ok(())
 }

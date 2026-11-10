@@ -77,6 +77,15 @@ var (
 		Since:   "2026-10-15",
 		Search:  "memory launcher",
 	})
+	CodeReviewEnabled = feature("code_review_enabled", "Let agents present a change for review as a review document: true or false. Experimental; off by default.", Info{
+		Name:    "Code review",
+		Summary: "Agents present a change as a review document that resolves against its repository.",
+		Group:   Agents,
+		Applies: Now,
+		Stage:   Experimental,
+		Since:   "2026-11-10",
+		Search:  "review diff change walkthrough attn review",
+	})
 	SharedPTYHostEnabled = feature("pty_shared_host_enabled", "Use the shared terminal host, and stream output only to terminals the window draws: true or false. On by default; applies to new and reloaded terminals.", Info{
 		Name:    "Shared terminal host",
 		Summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.",

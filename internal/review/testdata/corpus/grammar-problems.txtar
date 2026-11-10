@@ -1,0 +1,160 @@
+Each grammar problem names its line and the fix, and the parts that resolve
+are kept.
+-- base/a.go --
+package a
+
+func A() {}
+-- base/b.go --
+package b
+-- head/a.go --
+package a
+
+func A() { println() }
+-- head/b.go --
+package b
+
+var B = 1
+-- head/c.go --
+package c
+-- review.md --
+---
+frame: slides
+---
+# Problems
+
+- L3: A note before any stop.
+
+## A
+
+### a.go
+
+### a.go:3-1
+
+- L9: Outside the stop.
+- L3 missing colon
+
+### /abs/a.go:1-2
+
+## Not shown
+
+- b.go: covered elsewhere
+- zzz.go: never changed
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 1,
+      "binary": false,
+      "path": "a.go",
+      "removed": 1,
+      "status": "modified"
+    },
+    {
+      "added": 2,
+      "binary": false,
+      "path": "b.go",
+      "removed": 0,
+      "status": "modified"
+    },
+    {
+      "added": 1,
+      "binary": false,
+      "path": "c.go",
+      "removed": 0,
+      "status": "added"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [
+    {
+      "line": 25,
+      "path": "b.go",
+      "reason": "covered elsewhere"
+    },
+    {
+      "line": 26,
+      "path": "zzz.go",
+      "reason": "never changed"
+    }
+  ],
+  "problems": [
+    {
+      "line": 0,
+      "message": "1 changed file is neither shown by a stop nor listed under `## Not shown`: c.go. Add a stop, or list each as `- path: why it is left out`."
+    },
+    {
+      "line": 2,
+      "message": "frame: slides is not a frame. Use brief, walkthrough or map."
+    },
+    {
+      "line": 10,
+      "message": "the note \"- L3: A note before any stop.\" sits outside a stop. Put it under a `### path:from-to` heading."
+    },
+    {
+      "line": 14,
+      "message": "the stop a.go has no range. Write `### a.go:\u003cfrom\u003e-\u003cto\u003e` with lines at head."
+    },
+    {
+      "line": 16,
+      "message": "the stop a.go:3-1 runs backwards. Write a.go:1-3."
+    },
+    {
+      "line": 18,
+      "message": "the note L9 is outside the stop a.go:1-3. Move it under a stop that shows those lines, or widen the range."
+    },
+    {
+      "line": 19,
+      "message": "\"- L3 missing colon\" looks like a note but does not parse. Write `- L12: text`, `- L12-14: text`, or `- L12!: text` for the place to look."
+    },
+    {
+      "line": 21,
+      "message": "the stop path /abs/a.go must be relative to the repository root, like internal/store/store.go."
+    },
+    {
+      "line": 26,
+      "message": "zzz.go is listed under Not shown but did not change since base. Remove it."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "e15c6a730b0c8bab5f1a47eb2a3811e807c97b54f46ce94d86802f604124d0f0",
+      "from": 1,
+      "heading_line": 16,
+      "notes": [],
+      "now_from": 1,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 1,
+          "old": 1,
+          "text": "package a"
+        },
+        {
+          "kind": " ",
+          "now": 2,
+          "old": 2,
+          "text": ""
+        },
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { println() }"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

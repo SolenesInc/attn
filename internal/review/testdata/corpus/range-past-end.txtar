@@ -1,0 +1,75 @@
+A range past the end of the file is clipped, and the problem names the fix.
+-- base/a.go --
+package a
+-- head/a.go --
+package a
+
+func A() {}
+-- review.md --
+# Past the end
+
+## A
+
+### a.go:1-40
+
+### a.go:50-60
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 0,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [
+    {
+      "line": 12,
+      "message": "the stop a.go:1-40 ends past the file (3 lines at head). Use 1-3."
+    },
+    {
+      "line": 14,
+      "message": "the stop a.go:50-60 starts past the end of the file (3 lines at head). Use a range inside 1-3."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "04425de7870bb11be56958f228b7209a66925eb30528718126b23452f6363352",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 1,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 1,
+          "old": 1,
+          "text": "package a"
+        },
+        {
+          "kind": "+",
+          "now": 2,
+          "text": ""
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "func A() {}"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

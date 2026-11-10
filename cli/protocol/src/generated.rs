@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "7e2b5e70aa95";
+pub const PROTOCOL_VERSION: &str = "cd279d3d74f6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3897,6 +3897,8 @@ pub struct DesktopTileContentMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewBundle>,
     pub tile_id: String,
     pub tile_kind: String,
 }
@@ -8899,6 +8901,12 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repos: Option<Vec<RepoState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_check_result: Option<ReviewCheckResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_problems: Option<Vec<ReviewProblem>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_start_result: Option<ReviewStartResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_artifact_transfer_result: Option<SeedArtifactTransferResult>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub seed_authorization_result: Option<SeedAuthorizationResult>,
@@ -9026,6 +9034,157 @@ impl RestartSharedCodexResultMessage {
             ..Self::default()
         }
     }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewBundle {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub files: Vec<ReviewFile>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub flows: Vec<ReviewFlow>,
+    pub frame: String,
+    pub head: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub navigation: Vec<ReviewNavigation>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub not_shown: Vec<ReviewNotShown>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub problems: Vec<ReviewProblem>,
+    pub repository: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub stops: Vec<ReviewStop>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewCheckMessage {
+    pub cmd: String,
+    pub document: String,
+}
+
+impl ReviewCheckMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_check".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewCheckResult {
+    #[serde(deserialize_with = "null_as_default")]
+    pub problems: Vec<ReviewProblem>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFile {
+    pub added: i64,
+    pub binary: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    pub path: String,
+    pub removed: i64,
+    pub status: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFlow {
+    pub line: i64,
+    #[serde(deserialize_with = "null_as_default")]
+    pub messages: Vec<ReviewFlowMessage>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFlowMessage {
+    pub line: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stop_line: Option<i64>,
+    pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewLeftOut {
+    pub path: String,
+    pub reason: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewNavigation {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    pub language: String,
+    pub state: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewNotShown {
+    pub line: i64,
+    pub path: String,
+    pub reason: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewNote {
+    pub from: i64,
+    pub line: i64,
+    pub look: bool,
+    pub now_from: i64,
+    pub now_to: i64,
+    pub text: String,
+    pub to: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewProblem {
+    pub line: i64,
+    pub message: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewRow {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old: Option<i64>,
+    pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewStartMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    pub cmd: String,
+    pub document: String,
+    pub repository: String,
+}
+
+impl ReviewStartMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_start".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewStartResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    pub created: bool,
+    pub document: String,
+    pub head: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub left_out: Vec<ReviewLeftOut>,
+    pub repository: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewStop {
+    pub changed_since_presented: bool,
+    pub file_hash: String,
+    pub from: i64,
+    pub heading_line: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub notes: Vec<ReviewNote>,
+    pub now_from: i64,
+    pub now_to: i64,
+    pub path: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub rows: Vec<ReviewRow>,
+    pub to: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RuntimeRespawnedMessage {
@@ -13004,6 +13163,8 @@ pub struct TileDocument {
     pub content: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewBundle>,
     pub version: i64,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -13450,6 +13611,8 @@ pub struct WebSocketEvent {
     pub repos: Option<Vec<RepoState>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<ReviewBundle>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rows: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -14045,6 +14208,12 @@ impl ResponseField for QuickCaptureResult {
 }
 impl ResponseField for Vent {
     const FIELD: &'static str = "record_vent_result";
+}
+impl ResponseField for ReviewCheckResult {
+    const FIELD: &'static str = "review_check_result";
+}
+impl ResponseField for ReviewStartResult {
+    const FIELD: &'static str = "review_start_result";
 }
 impl ResponseField for SeedArtifactTransferResult {
     const FIELD: &'static str = "seed_artifact_transfer_result";

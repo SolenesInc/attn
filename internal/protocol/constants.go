@@ -92,6 +92,8 @@ const (
 	CmdTileDocumentChanged           = "tile_document_changed"
 	CmdTileDocumentRead              = "tile_document_read"
 	CmdTileAssetRead                 = "tile_asset_read"
+	CmdReviewStart                   = "review_start"
+	CmdReviewCheck                   = "review_check"
 	CmdSeedArtifactTransferHere      = "seed_artifact_transfer_here"
 	CmdJournalAppend                 = "journal_append"
 	CmdNotebookBacklinks             = "notebook_backlinks"

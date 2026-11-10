@@ -165,6 +165,8 @@ var Placements = map[string][]Placement{
 	"reopen_inspect":                   {Placement{LocatorMachine, "host"}},
 	"reopen_worktree":                  {Placement{LocatorMachine, "host"}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
+	"review_check":                     {Placement{LocatorHere, ""}},
+	"review_start":                     {Placement{LocatorHere, ""}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
 	"seed_authorization":               {Placement{LocatorHome, ""}},
@@ -1971,6 +1973,30 @@ func (m RestartSharedCodexMessage) Placement() Placement {
 }
 
 func (m RestartSharedCodexMessage) Locate() string {
+	return ""
+}
+
+func (ReviewCheckMessage) CommandName() string {
+	return "review_check"
+}
+
+func (m ReviewCheckMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m ReviewCheckMessage) Locate() string {
+	return ""
+}
+
+func (ReviewStartMessage) CommandName() string {
+	return "review_start"
+}
+
+func (m ReviewStartMessage) Placement() Placement {
+	return Placement{LocatorHere, ""}
+}
+
+func (m ReviewStartMessage) Locate() string {
 	return ""
 }
 

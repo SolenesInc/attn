@@ -170,7 +170,7 @@ func TestABareMarkdownOpenLandsBesideTheFocusedAgent(t *testing.T) {
 	file := markdownFile(t, w, "focused.md")
 
 	focusAgent(t, w, app, "s1")
-	if err := cli.OpenMarkdown(file, ""); err != nil {
+	if _, err := cli.OpenMarkdown(file, ""); err != nil {
 		t.Fatalf("opening a file beside the focused agent: %v", err)
 	}
 	tiles := desktopTree(t, currentDesktop(t, w)).tiles()

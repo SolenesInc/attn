@@ -11,6 +11,7 @@ pub mod instance_resolve;
 pub mod journal;
 pub mod open;
 pub mod pr;
+pub mod review;
 pub mod seed;
 pub mod send;
 pub mod settings;

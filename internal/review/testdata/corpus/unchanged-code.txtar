@@ -1,0 +1,132 @@
+A stop on code the change did not touch shows only unchanged rows, beside a
+stop on the change.
+-- base/calc.go --
+package calc
+
+func Add(a, b int) int {
+	return a + b
+}
+
+func Sub(a, b int) int {
+	return a - b
+}
+-- head/calc.go --
+package calc
+
+func Add(a, b int) int {
+	return b + a
+}
+
+func Sub(a, b int) int {
+	return a - b
+}
+-- review.md --
+# Commute
+
+## The change
+
+### calc.go:3-5
+
+## The caller that stays
+
+### calc.go:7-9
+
+- L8: Unchanged, shown for contrast.
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 1,
+      "binary": false,
+      "path": "calc.go",
+      "removed": 1,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "8653b52752d22ff8a68cc333ed53a995e9a55f47418ee002a2c5975461ddf49b",
+      "from": 3,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 5,
+      "path": "calc.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 3,
+          "old": 3,
+          "text": "func Add(a, b int) int {"
+        },
+        {
+          "kind": "-",
+          "old": 4,
+          "text": "\treturn a + b"
+        },
+        {
+          "kind": "+",
+          "now": 4,
+          "text": "\treturn b + a"
+        },
+        {
+          "kind": " ",
+          "now": 5,
+          "old": 5,
+          "text": "}"
+        }
+      ],
+      "to": 5
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "8653b52752d22ff8a68cc333ed53a995e9a55f47418ee002a2c5975461ddf49b",
+      "from": 7,
+      "heading_line": 16,
+      "notes": [
+        {
+          "from": 8,
+          "line": 18,
+          "look": false,
+          "now_from": 8,
+          "now_to": 8,
+          "text": "Unchanged, shown for contrast.",
+          "to": 8
+        }
+      ],
+      "now_from": 7,
+      "now_to": 9,
+      "path": "calc.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 7,
+          "old": 7,
+          "text": "func Sub(a, b int) int {"
+        },
+        {
+          "kind": " ",
+          "now": 8,
+          "old": 8,
+          "text": "\treturn a - b"
+        },
+        {
+          "kind": " ",
+          "now": 9,
+          "old": 9,
+          "text": "}"
+        }
+      ],
+      "to": 9
+    }
+  ]
+}

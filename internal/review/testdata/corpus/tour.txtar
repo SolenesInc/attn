@@ -1,0 +1,60 @@
+A tour has no base: rows are the file now, with no old lines, and nothing
+asks for changed files to be covered.
+-- options --
+tour
+-- base/a.go --
+package a
+
+func A() {}
+-- review.md --
+---
+frame: walkthrough
+---
+# Tour
+
+## Where A lives
+
+### a.go:3-3
+
+- L3: Start here.
+-- bundle.json --
+{
+  "files": [],
+  "flows": [],
+  "frame": "walkthrough",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "04425de7870bb11be56958f228b7209a66925eb30528718126b23452f6363352",
+      "from": 3,
+      "heading_line": 11,
+      "notes": [
+        {
+          "from": 3,
+          "line": 13,
+          "look": false,
+          "now_from": 3,
+          "now_to": 3,
+          "text": "Start here.",
+          "to": 3
+        }
+      ],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": " ",
+          "now": 3,
+          "text": "func A() {}"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

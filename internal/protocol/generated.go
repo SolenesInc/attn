@@ -4199,6 +4199,9 @@ type DesktopTileContentMessage struct {
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
 
+	// Review corresponds to the JSON schema field "review".
+	Review *ReviewBundle `json:"review,omitempty,omitzero"`
+
 	// TileID corresponds to the JSON schema field "tile_id".
 	TileID string `json:"tile_id"`
 
@@ -9363,6 +9366,15 @@ type Response struct {
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`
 
+	// ReviewCheckResult corresponds to the JSON schema field "review_check_result".
+	ReviewCheckResult *ReviewCheckResult `json:"review_check_result,omitempty,omitzero"`
+
+	// ReviewProblems corresponds to the JSON schema field "review_problems".
+	ReviewProblems []ReviewProblem `json:"review_problems,omitempty,omitzero"`
+
+	// ReviewStartResult corresponds to the JSON schema field "review_start_result".
+	ReviewStartResult *ReviewStartResult `json:"review_start_result,omitempty,omitzero"`
+
 	// SeedArtifactTransferResult corresponds to the JSON schema field
 	// "seed_artifact_transfer_result".
 	SeedArtifactTransferResult *SeedArtifactTransferResult `json:"seed_artifact_transfer_result,omitempty,omitzero"`
@@ -9539,6 +9551,235 @@ type RestartSharedCodexResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
+}
+
+type ReviewBundle struct {
+	// Base corresponds to the JSON schema field "base".
+	Base *string `json:"base,omitempty,omitzero"`
+
+	// Files corresponds to the JSON schema field "files".
+	Files []ReviewFile `json:"files"`
+
+	// Flows corresponds to the JSON schema field "flows".
+	Flows []ReviewFlow `json:"flows"`
+
+	// Frame corresponds to the JSON schema field "frame".
+	Frame string `json:"frame"`
+
+	// Head corresponds to the JSON schema field "head".
+	Head string `json:"head"`
+
+	// Navigation corresponds to the JSON schema field "navigation".
+	Navigation []ReviewNavigation `json:"navigation"`
+
+	// NotShown corresponds to the JSON schema field "not_shown".
+	NotShown []ReviewNotShown `json:"not_shown"`
+
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []ReviewProblem `json:"problems"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+
+	// Stops corresponds to the JSON schema field "stops".
+	Stops []ReviewStop `json:"stops"`
+}
+
+type ReviewCheckMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+}
+
+type ReviewCheckResult struct {
+	// Problems corresponds to the JSON schema field "problems".
+	Problems []ReviewProblem `json:"problems"`
+}
+
+type ReviewFile struct {
+	// Added corresponds to the JSON schema field "added".
+	Added int `json:"added"`
+
+	// Binary corresponds to the JSON schema field "binary".
+	Binary bool `json:"binary"`
+
+	// OldPath corresponds to the JSON schema field "old_path".
+	OldPath *string `json:"old_path,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Removed corresponds to the JSON schema field "removed".
+	Removed int `json:"removed"`
+
+	// Status corresponds to the JSON schema field "status".
+	Status string `json:"status"`
+}
+
+type ReviewFlow struct {
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Messages corresponds to the JSON schema field "messages".
+	Messages []ReviewFlowMessage `json:"messages"`
+}
+
+type ReviewFlowMessage struct {
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// StopLine corresponds to the JSON schema field "stop_line".
+	StopLine *int `json:"stop_line,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type ReviewLeftOut struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+}
+
+type ReviewNavigation struct {
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
+type ReviewNotShown struct {
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Reason corresponds to the JSON schema field "reason".
+	Reason string `json:"reason"`
+}
+
+type ReviewNote struct {
+	// From corresponds to the JSON schema field "from".
+	From int `json:"from"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Look corresponds to the JSON schema field "look".
+	Look bool `json:"look"`
+
+	// NowFrom corresponds to the JSON schema field "now_from".
+	NowFrom int `json:"now_from"`
+
+	// NowTo corresponds to the JSON schema field "now_to".
+	NowTo int `json:"now_to"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+
+	// To corresponds to the JSON schema field "to".
+	To int `json:"to"`
+}
+
+type ReviewProblem struct {
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message string `json:"message"`
+}
+
+type ReviewRow struct {
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Now corresponds to the JSON schema field "now".
+	Now *int `json:"now,omitempty,omitzero"`
+
+	// Old corresponds to the JSON schema field "old".
+	Old *int `json:"old,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type ReviewStartMessage struct {
+	// Base corresponds to the JSON schema field "base".
+	Base *string `json:"base,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+}
+
+type ReviewStartResult struct {
+	// Base corresponds to the JSON schema field "base".
+	Base *string `json:"base,omitempty,omitzero"`
+
+	// Created corresponds to the JSON schema field "created".
+	Created bool `json:"created"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Head corresponds to the JSON schema field "head".
+	Head string `json:"head"`
+
+	// LeftOut corresponds to the JSON schema field "left_out".
+	LeftOut []ReviewLeftOut `json:"left_out"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+}
+
+type ReviewStop struct {
+	// ChangedSincePresented corresponds to the JSON schema field
+	// "changed_since_presented".
+	ChangedSincePresented bool `json:"changed_since_presented"`
+
+	// FileHash corresponds to the JSON schema field "file_hash".
+	FileHash string `json:"file_hash"`
+
+	// From corresponds to the JSON schema field "from".
+	From int `json:"from"`
+
+	// HeadingLine corresponds to the JSON schema field "heading_line".
+	HeadingLine int `json:"heading_line"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language *string `json:"language,omitempty,omitzero"`
+
+	// Notes corresponds to the JSON schema field "notes".
+	Notes []ReviewNote `json:"notes"`
+
+	// NowFrom corresponds to the JSON schema field "now_from".
+	NowFrom int `json:"now_from"`
+
+	// NowTo corresponds to the JSON schema field "now_to".
+	NowTo int `json:"now_to"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []ReviewRow `json:"rows"`
+
+	// To corresponds to the JSON schema field "to".
+	To int `json:"to"`
 }
 
 type RuntimeRespawnedMessage struct {
@@ -14049,6 +14290,9 @@ type TileDocument struct {
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 
+	// Review corresponds to the JSON schema field "review".
+	Review *ReviewBundle `json:"review,omitempty,omitzero"`
+
 	// Version corresponds to the JSON schema field "version".
 	Version int `json:"version"`
 }
@@ -14569,6 +14813,9 @@ type WebSocketEvent struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Review corresponds to the JSON schema field "review".
+	Review *ReviewBundle `json:"review,omitempty,omitzero"`
 
 	// Rows corresponds to the JSON schema field "rows".
 	Rows *int `json:"rows,omitempty,omitzero"`

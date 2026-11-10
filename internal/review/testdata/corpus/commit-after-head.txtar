@@ -1,0 +1,63 @@
+Committing the working tree after review start changes nothing the bundle
+shows: head is the snapshot, and now is the working tree.
+-- options --
+commit after head
+-- base/a.go --
+package a
+
+func A() int { return 1 }
+-- head/a.go --
+package a
+
+func A() int { return 2 }
+-- review.md --
+# Value
+
+## A returns two
+
+### a.go:3-3
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 1,
+      "binary": false,
+      "path": "a.go",
+      "removed": 1,
+      "status": "modified"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "fb625efbfd0688e1ae1a9d216b9549c8e946699e089ccbc1a8782fc61459a6ef",
+      "from": 3,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() int { return 1 }"
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "func A() int { return 2 }"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

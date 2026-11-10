@@ -3194,6 +3194,10 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleInjectTestSession(conn, msg.(*protocol.InjectTestSessionMessage))
 	case protocol.CmdOpenMarkdown:
 		d.handleOpenMarkdown(ctx, conn, msg.(*protocol.OpenMarkdownMessage))
+	case protocol.CmdReviewStart:
+		d.handleReviewStart(ctx, conn, msg.(*protocol.ReviewStartMessage))
+	case protocol.CmdReviewCheck:
+		d.handleReviewCheck(ctx, conn, msg.(*protocol.ReviewCheckMessage))
 	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:

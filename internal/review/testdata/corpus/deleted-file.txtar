@@ -1,0 +1,65 @@
+A stop on a file deleted at head shows its lines at base as removed.
+-- base/keep.go --
+package p
+-- base/gone.go --
+package p
+
+func Gone() {}
+-- head/keep.go --
+package p
+-- review.md --
+# Delete
+
+## Gone is gone
+
+### gone.go:1-3
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 0,
+      "binary": false,
+      "path": "gone.go",
+      "removed": 3,
+      "status": "deleted"
+    }
+  ],
+  "flows": [],
+  "frame": "brief",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "",
+      "from": 1,
+      "heading_line": 12,
+      "notes": [],
+      "now_from": 0,
+      "now_to": 0,
+      "path": "gone.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 1,
+          "text": "package p"
+        },
+        {
+          "kind": "-",
+          "old": 2,
+          "text": ""
+        },
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func Gone() {}"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

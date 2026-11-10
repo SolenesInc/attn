@@ -82,6 +82,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdTileDocumentChanged:           decodeInto[TileDocumentChangedMessage],
 	CmdTileDocumentRead:              decodeInto[TileDocumentReadMessage],
 	CmdTileAssetRead:                 decodeInto[TileAssetReadMessage],
+	CmdReviewStart:                   decodeInto[ReviewStartMessage],
+	CmdReviewCheck:                   decodeInto[ReviewCheckMessage],
 	CmdSeedArtifactTransferHere:      decodeInto[SeedArtifactTransferHereMessage],
 	CmdJournalAppend:                 decodeInto[JournalAppendMessage],
 	CmdNotebookBacklinks:             decodeInto[NotebookBacklinksMessage],
