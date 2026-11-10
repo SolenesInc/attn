@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type GrepHit struct {
@@ -52,7 +53,7 @@ type GrepResult struct {
 
 // Grep finds query as fixed text, ignoring case, in the working tree's text
 // files. It stops git once limit hits are kept.
-func (c *Client) Grep(ctx context.Context, root, query string, perFile, limit int) (GrepResult, error) {
+func (c *Client) Grep(ctx context.Context, root, query string, perFile, limit, lineBytes int) (GrepResult, error) {
 	var result GrepResult
 	inFile := map[string]int{}
 	read := func(stdout io.Reader) bool {
@@ -66,6 +67,7 @@ func (c *Client) Grep(ctx context.Context, root, query string, perFile, limit in
 					result.More = true
 					return true
 				case inFile[hit.Path] <= perFile:
+					hit.Text = aroundMatch(hit.Text, query, lineBytes)
 					result.Hits = append(result.Hits, hit)
 				case inFile[hit.Path] == perFile+1:
 					result.Crowded = append(result.Crowded, hit.Path)
@@ -99,4 +101,31 @@ func grepHit(record []byte) (GrepHit, bool) {
 		return GrepHit{}, false
 	}
 	return GrepHit{Path: string(parts[0]), Line: line, Text: strings.TrimRight(string(parts[2]), "\r")}, true
+}
+
+func aroundMatch(line, query string, width int) string {
+	if len(line) <= width {
+		return line
+	}
+	at := 0
+	if lower := strings.ToLower(line); len(lower) == len(line) {
+		at = max(strings.Index(lower, strings.ToLower(query)), 0)
+	}
+	start := runeStart(line, max(0, at-width/8))
+	end := runeStart(line, min(len(line), start+width))
+	part := line[start:end]
+	if start > 0 {
+		part = "…" + part
+	}
+	if end < len(line) {
+		part += "…"
+	}
+	return part
+}
+
+func runeStart(s string, i int) int {
+	for i > 0 && i < len(s) && !utf8.RuneStart(s[i]) {
+		i--
+	}
+	return i
 }

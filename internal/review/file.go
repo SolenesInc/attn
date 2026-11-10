@@ -20,11 +20,15 @@ const MaxFileRowsBytes = protocol.MaxSocketFrameBytes - 1<<20
 
 // Search limits: a name or a word common across the repository matches
 // thousands of lines, and the list is for picking one, so it stops early and
-// says so. A specific name matched fewer than 10 lines across attn.
+// says so. A specific name matched fewer than 10 lines across attn. A hit
+// shows about 80 characters, and attn's longest hit for common words was
+// 8,889 bytes beside a 92 KB generated line, so a hit carries the part of its
+// line around the match.
 const (
 	MaxSearchFiles      = 200
 	MaxSearchHits       = 500
 	MaxSearchHitsInFile = 20
+	MaxSearchHitBytes   = 512
 )
 
 type repository struct {
@@ -187,7 +191,7 @@ func Search(ctx context.Context, client *git.Client, text, query string) (protoc
 		return protocol.ReviewSearchResultMessage{}, err
 	}
 	answer.Files = filesNamed(files, query)
-	found, err := client.Grep(ctx, repo.root, query, MaxSearchHitsInFile, MaxSearchHits)
+	found, err := client.Grep(ctx, repo.root, query, MaxSearchHitsInFile, MaxSearchHits, MaxSearchHitBytes)
 	if err != nil {
 		return protocol.ReviewSearchResultMessage{}, err
 	}

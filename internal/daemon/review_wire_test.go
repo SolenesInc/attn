@@ -220,6 +220,22 @@ func TestTheFileViewReadsAWholeFileOfTheReviewAndSearchFindsItsFilesAndLines(t *
 	if len(common.Hits) != review.MaxSearchHits || !strings.Contains(protocol.Deref(common.Problem), fmt.Sprintf("over %d lines match", review.MaxSearchHits)) {
 		t.Errorf("searching a word on more than %d lines found %d hits with problem %q, want %d and the limit named", review.MaxSearchHits, len(common.Hits), protocol.Deref(common.Problem), review.MaxSearchHits)
 	}
+
+	minified := strings.Repeat("var a=1;", 6000) + "needle()" + strings.Repeat("var b=2;", 6000)
+	if err := os.WriteFile(filepath.Join(repo, "bundle.min.js"), []byte(minified+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	long := requestReviewSearch(app, document, "NEEDLE")
+	if len(long.Hits) != 1 || len(long.Hits[0].Text) > review.MaxSearchHitBytes+2*len("…") || !strings.Contains(long.Hits[0].Text, "needle()") || !strings.HasPrefix(long.Hits[0].Text, "…") || !strings.HasSuffix(long.Hits[0].Text, "…") {
+		t.Errorf("searching NEEDLE in a %d-byte line answered %d hits, the first %d bytes long, want one hit of at most %d bytes around the match, cut with … on both sides", len(minified), len(long.Hits), len(protocol.Deref(firstHitText(long))), review.MaxSearchHitBytes)
+	}
+}
+
+func firstHitText(answer protocol.ReviewSearchResultMessage) *string {
+	if len(answer.Hits) == 0 {
+		return nil
+	}
+	return &answer.Hits[0].Text
 }
 
 func TestSearchFindsLinesWithAGitThatPredatesGrepMaxCount(t *testing.T) {
