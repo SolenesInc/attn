@@ -82,6 +82,15 @@ function rowSlidePx(before: RowMotionLayout, after: RowMotionLayout): number {
   return Math.sign(before.firstColumnIndex - after.firstColumnIndex) * after.widthPx;
 }
 
+function animateFromFirstFrame(element: HTMLElement, keyframes: Keyframe[], options: KeyframeAnimationOptions): Animation {
+  const animation = element.animate(keyframes, options);
+  animation.pause();
+  requestAnimationFrame(() => {
+    if (animation.playState === 'paused') animation.startTime = document.timeline.currentTime;
+  });
+  return animation;
+}
+
 function remainingOffset(move: Move): { x: number; y: number } {
   const elapsed = Number(move.animation.currentTime ?? MOVE_MS);
   const left = elapsed >= MOVE_MS ? 0 : 1 - springProgress(elapsed);
@@ -93,7 +102,8 @@ function cancelMove(state: MotionState, leafId: string): void {
 }
 
 function startMove(state: MotionState, leafId: string, element: HTMLElement, dx: number, dy: number): void {
-  const animation = element.animate(
+  const animation = animateFromFirstFrame(
+    element,
     springKeyframes((progress) => `translate(${dx * (1 - progress)}px, ${dy * (1 - progress)}px)`),
     { duration: MOVE_MS },
   );
@@ -109,7 +119,8 @@ function startMove(state: MotionState, leafId: string, element: HTMLElement, dx:
 function startEntering(state: MotionState, leafId: string, element: HTMLElement): void {
   cancelMove(state, leafId);
   element.style.zIndex = ENTERING_Z_INDEX;
-  const animation = element.animate(
+  const animation = animateFromFirstFrame(
+    element,
     springKeyframes((progress) => `scale(${ENTER_SCALE + (1 - ENTER_SCALE) * progress})`),
     { duration: MOVE_MS },
   );
@@ -121,7 +132,7 @@ function startEntering(state: MotionState, leafId: string, element: HTMLElement)
   };
   animation.onfinish = settle;
   animation.oncancel = settle;
-  element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: FADE_MS, easing: 'ease-out' });
+  animateFromFirstFrame(element, [{ opacity: 0 }, { opacity: 1 }], { duration: FADE_MS, easing: 'ease-out' });
 }
 
 function detachFromTheLayout(element: HTMLElement): void {
@@ -154,8 +165,9 @@ function holdLeaving(state: MotionState, container: HTMLElement, leafId: string,
   running?.animation.cancel();
   const from = `translate(${drawnAt.x}px, ${drawnAt.y}px)`;
   const animation = slidePx
-    ? element.animate(springKeyframes((progress) => `${from} translateX(${slidePx * progress}px)`), { duration: MOVE_MS })
-    : element.animate(
+    ? animateFromFirstFrame(element, springKeyframes((progress) => `${from} translateX(${slidePx * progress}px)`), { duration: MOVE_MS })
+    : animateFromFirstFrame(
+        element,
         [{ opacity: 1, transform: `${from} scale(1)` }, { opacity: 0, transform: `${from} scale(${EXIT_SCALE})` }],
         { duration: EXIT_MS, easing: 'ease-out' },
       );

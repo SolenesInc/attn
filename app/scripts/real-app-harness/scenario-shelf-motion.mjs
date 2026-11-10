@@ -132,10 +132,12 @@ function summarizeMove(move, events) {
     panes[final.id] = summary;
   }
   const entering = Object.fromEntries(Object.entries(mounts).map(([pane, mountedAt]) => {
-    const elementAt = frames.find((frame) => frame.panes.some((sample) => sample.id === pane))?.at;
+    const firstShown = frames.find((frame) => frame.panes.some((sample) => sample.id === pane));
+    const elementAt = firstShown?.at;
     const since = (at) => (at ? at - move.pressedAt : null);
     return [pane, {
       elementFromKey: since(elementAt),
+      firstFrameOpacity: firstShown ? Number(firstShown.panes.find((sample) => sample.id === pane).opacity) : null,
       mountFromKey: since(mountedAt),
       firstPaintFromKey: since(move.firstPaints[pane]),
       firstContentFromKey: since(move.firstContentPaints[pane]),
@@ -367,6 +369,9 @@ try {
       if (summary.name.startsWith('emptied-')) {
         runner.assert(summary.heldPeak === 0, `${summary.name} never shows the tile that left`, { summary });
         runner.assert(summary.animated.includes('opacity') && summary.animated.includes('transform'), `${summary.name} grows and fades the new tile in`, { summary });
+      }
+      if (['open', 'close'].includes(summary.name) || summary.name.startsWith('emptied-')) {
+        runner.assert(Object.values(summary.entering).every((pane) => pane.firstFrameOpacity === 0), `${summary.name} draws the new tile at opacity 0 on its first frame`, { entering: summary.entering });
       }
       if (summary.heldPeak > 0) runner.assert(summary.heldInkPeak > 1, `${summary.name} keeps the leaving terminal's text on screen`, { summary });
       runner.assert(summary.rest.animations === 0 && summary.rest.heldPanes === 0 && summary.rest.willChange === 0 && summary.rest.layoutTransitions === 0, `${summary.name} leaves nothing at rest`, { rest: summary.rest });
