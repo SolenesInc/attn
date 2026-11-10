@@ -10,15 +10,12 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Runtime};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Runtime, State};
 
 use crate::instance;
 use crate::native_input;
 
 const REQUEST_EVENT: &str = "attn://ui-automation/request";
-const RESPONSE_EVENT: &str = "attn://ui-automation/response";
-const READY_EVENT: &str = "attn://ui-automation/ready";
-const CAPTURE_READY_EVENT: &str = "attn://capture/automation-ready";
 const CAPTURE_READY_TRIPWIRE: Duration = Duration::from_secs(30);
 // The perf harness can intentionally keep the frontend busy for tens of seconds.
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
@@ -27,7 +24,7 @@ const LOG_RELATIVE_PATH: &str = "debug/ui-automation-server.log";
 const LOG_FRESH_START_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Default)]
-struct CaptureBridge {
+pub struct CaptureBridge {
     ready: Mutex<bool>,
     changed: Condvar,
 }
@@ -48,6 +45,11 @@ impl CaptureBridge {
             ))
         }
     }
+}
+
+pub struct FrontendBridge {
+    pending: PendingAutomationResponses,
+    ready: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -125,7 +127,7 @@ struct BridgeRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct BridgeResponse {
+pub struct BridgeResponse {
     request_id: String,
     ok: bool,
     #[serde(default)]
@@ -901,28 +903,11 @@ pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
 
     let pending = PendingAutomationResponses::new();
     let frontend_ready = Arc::new(AtomicBool::new(false));
-    let pending_for_events = pending.clone();
-    let _event_id = app.listen_any(RESPONSE_EVENT, move |event| {
-        match serde_json::from_str::<BridgeResponse>(event.payload()) {
-            Ok(response) => pending_for_events.resolve(response),
-            Err(error) => eprintln!("[UIAutomation] Failed to parse frontend response: {error}"),
-        }
+    app.manage(FrontendBridge {
+        pending: pending.clone(),
+        ready: frontend_ready.clone(),
     });
-    let ready_state = frontend_ready.clone();
-    let app_for_ready = app.clone();
-    let _ready_event_id = app.listen_any(READY_EVENT, move |_event| {
-        ready_state.store(true, Ordering::Relaxed);
-        append_log(&app_for_ready, "frontend ready");
-    });
-
     app.manage(CaptureBridge::default());
-    let app_for_capture = app.clone();
-    let _capture_ready_event_id = app.listen_any(CAPTURE_READY_EVENT, move |_event| {
-        let bridge = app_for_capture.state::<CaptureBridge>();
-        *bridge.ready.lock().unwrap() = true;
-        bridge.changed.notify_all();
-        append_log(&app_for_capture, "capture bridge ready");
-    });
 
     let app_handle = app.clone();
     let request_counter = Arc::new(AtomicU64::new(1));
@@ -953,6 +938,24 @@ pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
             }
         }
     });
+}
+
+#[tauri::command]
+pub fn ui_automation_respond(bridge: State<'_, FrontendBridge>, response: BridgeResponse) {
+    bridge.pending.resolve(response);
+}
+
+#[tauri::command]
+pub fn ui_automation_ready(app: AppHandle, bridge: State<'_, FrontendBridge>) {
+    bridge.ready.store(true, Ordering::Relaxed);
+    append_log(&app, "frontend ready");
+}
+
+#[tauri::command]
+pub fn capture_automation_ready(app: AppHandle, bridge: State<'_, CaptureBridge>) {
+    *bridge.ready.lock().unwrap() = true;
+    bridge.changed.notify_all();
+    append_log(&app, "capture bridge ready");
 }
 
 fn chrono_like_now() -> String {

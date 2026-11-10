@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect } from 'react';
-import { emit, listen } from '@tauri-apps/api/event';
-import { isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { waitForAutomationDom } from './uiAutomationDom';
 import {
@@ -15,8 +15,6 @@ import { recordUiDiagToFileOnly, supportUiDiagnosticsSnapshot } from '../utils/u
 import { isDomInstance } from '../utils/realm';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
-const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
-const UI_AUTOMATION_READY_EVENT = 'attn://ui-automation/ready';
 
 export interface AutomationRequest {
   request_id: string;
@@ -655,10 +653,10 @@ export function useAutomationRequestListener() {
         ok: response.ok,
         elapsedMs: Math.round(performance.now() - receivedAt),
       });
-      await emit(UI_AUTOMATION_RESPONSE_EVENT, response);
+      await invoke('ui_automation_respond', { response });
     });
     void unlistenPromise.then(() => {
-      if (!stopped) void emit(UI_AUTOMATION_READY_EVENT, { ready: true });
+      if (!stopped) void invoke('ui_automation_ready');
     });
 
     return () => {

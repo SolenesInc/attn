@@ -1255,6 +1255,9 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             #[cfg(target_os = "macos")]
             browser_shortcut::browser_shortcut_capture,
             native_input_diagnostics::native_input_diagnostics_snapshot,
+            ui_automation::ui_automation_respond,
+            ui_automation::ui_automation_ready,
+            ui_automation::capture_automation_ready,
         ])
         .setup(|app| {
             #[cfg(any(target_os = "macos", target_os = "linux"))]

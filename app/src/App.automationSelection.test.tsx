@@ -1,6 +1,6 @@
 import { act, screen } from '@testing-library/react';
-import { isTauri } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import { daemonSession, soloDesktop, splitDesktop } from './test/daemonFixtures';
 import { serveMachine } from './test/locations';
@@ -31,9 +31,9 @@ async function renderAutomatedApp(desktops = [soloDesktop('s1'), soloDesktop('s2
     settings,
   } });
   const request = (event: { payload: unknown }) => [...listeners].forEach((handler) => handler(event));
-  const responses = () => vi.mocked(emit).mock.calls
-    .filter(([event]) => event === 'attn://ui-automation/response')
-    .map(([, payload]) => payload as AutomationResponse);
+  const responses = () => vi.mocked(invoke).mock.calls
+    .filter(([command]) => command === 'ui_automation_respond')
+    .map(([, args]) => (args as { response: AutomationResponse }).response);
   const ask = async (action: string, payload: Record<string, unknown>) => {
     const requestId = `${action}-${responses().length}`;
     act(() => request({ payload: { request_id: requestId, action, payload } }));

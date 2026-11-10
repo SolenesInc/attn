@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { emit, listen } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { QuickCaptureClient, QuickCaptureItem } from './client';
@@ -47,9 +47,9 @@ export function installQuickCaptureAutomationBridge(options: QuickCaptureAutomat
         else if (payload.action === 'capture_wait_native_input_witness') { result = await waitForNativeInputWitness(); await settleUi(); }
         else throw new Error(`Unknown capture action ${payload.action}`);
       } catch (e) { error = String(e); }
-      await emit('attn://ui-automation/response', { request_id: payload.request_id, ok: !error, result, error });
+      await invoke('ui_automation_respond', { response: { request_id: payload.request_id, ok: !error, result, error } });
     });
-    void automation.then(() => emit('attn://capture/automation-ready'));
+    void automation.then(() => invoke('capture_automation_ready'));
  return () => {
   ['keydown', 'beforeinput', 'input'].forEach(type => document.removeEventListener(type, traceInput, true));
   disarmNativeInputWitness();

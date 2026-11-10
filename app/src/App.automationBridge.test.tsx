@@ -1,14 +1,12 @@
 import { act, screen } from '@testing-library/react';
-import { isTauri } from '@tauri-apps/api/core';
-import { emit, listen } from '@tauri-apps/api/event';
+import { invoke, isTauri } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { describe, expect, it, vi } from 'vitest';
 import { daemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 import { initialState } from './test/scriptedDaemon';
 
 const REQUEST_EVENT = 'attn://ui-automation/request';
-const READY_EVENT = 'attn://ui-automation/ready';
-const RESPONSE_EVENT = 'attn://ui-automation/response';
 
 describe('automation bridge from first paint', () => {
   it('reports ready once, after it listens, and answers on the connecting screen and the shell', async () => {
@@ -22,12 +20,12 @@ describe('automation bridge from first paint', () => {
       listeners.add(listener);
       return () => listeners.delete(listener);
     });
-    vi.mocked(emit).mockImplementation(async (event) => {
-      if (event === READY_EVENT) listenersAtReady.push(listeners.size);
+    vi.mocked(invoke).mockImplementation(async (command) => {
+      if (command === 'ui_automation_ready') listenersAtReady.push(listeners.size);
     });
-    const responses = () => vi.mocked(emit).mock.calls
-      .filter(([event]) => event === RESPONSE_EVENT)
-      .map(([, payload]) => payload as { request_id: string; ok: boolean; result?: { sessions?: unknown[] } });
+    const responses = () => vi.mocked(invoke).mock.calls
+      .filter(([command]) => command === 'ui_automation_respond')
+      .map(([, args]) => (args as { response: { request_id: string; ok: boolean; result?: { sessions?: unknown[] } } }).response);
     const getState = async (requestId: string) => {
       act(() => [...listeners].forEach((handler) => handler({ payload: { request_id: requestId, action: 'get_state' } })));
       await act(() => vi.advanceTimersByTimeAsync(100));
