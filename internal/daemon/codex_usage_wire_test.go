@@ -33,11 +33,12 @@ func TestCodexUsageCountsNestedSubagentsAndGuardianReviewsAndANewConversationCou
 	if err != nil {
 		t.Fatal(err)
 	}
+	terminal := app.Terminal(session)
 	app.TypeLine(session, "/new")
 	if got := codex.Prompted(); got != "/new" {
 		t.Fatalf("codex received %q, want /new", got)
 	}
-	app.TypeLine(session, "now fix it")
+	typeInto(app, terminal, "now fix it\r")
 	codex.Prompted()
 	next := awaitSuccessor(app, session)
 	fixed := "Fixed with a lock. <!-- attn:state=idle -->"

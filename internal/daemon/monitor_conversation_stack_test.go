@@ -461,9 +461,10 @@ func TestAReplyWrittenWhileANewConversationIsBoundCountsTowardItsSession(t *test
 	found := "It races the tax lookup. <!-- attn:state=idle -->"
 	codex.Reply(found)
 	awaitUsageTokens(app, first, claudeTokens(found))
+	terminal := app.Terminal(first)
 	app.TypeLine(first, "/new")
 	codex.Prompted()
-	app.TypeLine(first, "now fix it")
+	typeInto(app, terminal, "now fix it\r")
 	codex.Prompted()
 	binding.Await()
 	next := awaitSuccessor(app, first)

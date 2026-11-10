@@ -21,11 +21,12 @@ func codexUpdateNotifications(app *testworld.Peer) map[string]protocol.Notificat
 }
 
 func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
+	w.start()
 	app := w.App()
-	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+	awaitSharedCodexFromConnect(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})
 	install := []protocol.NotificationAction{{Kind: "install_codex_update", Label: "Install", TargetID: ""}}
@@ -39,7 +40,7 @@ func TestANewerCodexIsOfferedWithAnInstallActionUntilItIsInstalled(t *testing.T)
 	w.SetCodexLatest("0.164.0")
 	w.restart()
 	app = w.App()
-	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+	awaitSharedCodexFromConnect(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.164.0", protocol.SharedCodexRestartNone)
 	})
 	notes = codexUpdateNotifications(app)

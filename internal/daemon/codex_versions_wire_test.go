@@ -15,17 +15,26 @@ func awaitSharedCodex(app *testworld.Peer, match func(*protocol.SharedCodexState
 	testworld.Await(app, protocol.EventSharedCodexChanged, func(m protocol.SharedCodexChangedMessage) bool { return match(m.SharedCodex) })
 }
 
+func awaitSharedCodexFromConnect(app *testworld.Peer, match func(*protocol.SharedCodexState) bool) {
+	app.T.Helper()
+	if s := app.Initial.SharedCodex; s != nil && match(s) {
+		return
+	}
+	awaitSharedCodex(app, match)
+}
+
 func sharedCodexVersions(s *protocol.SharedCodexState, running, installed, latest string, restart protocol.SharedCodexRestart) bool {
 	return s != nil && protocol.Deref(s.RunningVersion) == running && protocol.Deref(s.InstalledVersion) == installed &&
 		protocol.Deref(s.LatestVersion) == latest && s.Restart == restart
 }
 
 func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.163.0")
+	w.start()
 	app := w.App()
-	awaitSharedCodex(app, func(s *protocol.SharedCodexState) bool {
+	awaitSharedCodexFromConnect(app, func(s *protocol.SharedCodexState) bool {
 		return sharedCodexVersions(s, "", "0.162.1", "0.163.0", protocol.SharedCodexRestartNone)
 	})
 
@@ -62,9 +71,10 @@ func TestSharedCodexReportsTheVersionItRunsWhatIsInstalledAndTheNewestRelease(t 
 }
 
 func TestATerminalStillOnAnOlderCodexThanItsAppServerIsReported(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := &world{World: prepareWorld(t, fakeagent.Codex)}
 	w.SetCodexVersion("0.162.1")
 	w.SetCodexLatest("0.162.1")
+	w.start()
 	app := w.App()
 	session := w.Spawn(app, fakeagent.Codex, w.Path("shop"))
 	codex := w.Launched(session)

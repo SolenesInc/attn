@@ -368,9 +368,11 @@ func TestACodexSessionsFactsNameItsRootRolloutsModelOverASubagents(t *testing.T)
 	app.TypeLine(session, "continue")
 	codex.Prompted()
 	reply := "Ready. <!-- attn:state=idle -->"
+	mark := len(app.Log())
 	codex.Reply(reply)
 	tokens := 2 * len(reply)
 	awaitUsageTokens(app, session, tokens)
+	testworld.AwaitSessionSince(app, mark, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
 	codex.CodexSettings("gpt-5.5", "default")
 	research := strings.Repeat("The refund flow reads the ledger. ", 10)
