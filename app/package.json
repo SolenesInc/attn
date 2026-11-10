@@ -110,7 +110,7 @@
     "@lezer/common": "^1.5.2",
     "@lezer/highlight": "^1.2.3",
     "@lezer/markdown": "^1.6.4",
-    "@tauri-apps/api": "^2.11.0",
+    "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-deep-link": "~2.4.5",
     "@tauri-apps/plugin-dialog": "^2.7.0",
@@ -138,7 +138,7 @@
   "devDependencies": {
     "@oxlint/plugins": "1.80.0",
     "@playwright/test": "^1.63.0",
-    "@tauri-apps/cli": "^2.11.0",
+    "@tauri-apps/cli": "^2.12.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",

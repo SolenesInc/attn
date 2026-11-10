@@ -9,7 +9,7 @@ publish = false
 name = "app_core"
 
 [dependencies]
-tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable", "macos-private-api"] }
+tauri = { version = "=2.12.5", features = ["protocol-asset", "unstable", "macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
@@ -37,7 +37,7 @@ zbus = "5.9"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"
-tao = { version = "=0.35.3", default-features = false }
+tao = { version = "=0.37.2", default-features = false }
 tauri-nspanel = { git = "https://github.com/ahkohd/tauri-nspanel", rev = "6e595d776e9ac594b73e5a180155800f4da6c87d" }
 global-hotkey = { path = "../vendor/global-hotkey" }
 objc2 = "0.6"

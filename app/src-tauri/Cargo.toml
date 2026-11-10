@@ -16,7 +16,7 @@ default-members = [".", "core"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "=2.11.2", features = ["protocol-asset", "unstable", "macos-private-api"] }
+tauri = { version = "=2.12.5", features = ["protocol-asset", "unstable", "macos-private-api"] }
 app-core = { path = "core" }
 # `generate_context!` expands to code that names serde_json in the calling crate.
 serde_json = "1"

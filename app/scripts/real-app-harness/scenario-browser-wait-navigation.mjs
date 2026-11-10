@@ -18,7 +18,25 @@ const exec = promisify(execFile);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const receipts = [];
 const pageRequests = new Map();
+const heldRequests = new Map();
+const heldRequest = id => {
+  if (!heldRequests.has(id)) {
+    const held = {};
+    held.opened = new Promise(resolve => { held.open = resolve; });
+    held.ended = new Promise(resolve => { held.end = resolve; });
+    heldRequests.set(id, held);
+  }
+  return heldRequests.get(id);
+};
 const server = http.createServer((request, response) => {
+  if (request.url.startsWith('/held/')) {
+    const held = heldRequest(request.url.slice('/held/'.length));
+    response.on('close', held.end);
+    response.writeHead(200, { 'content-type': 'text/event-stream' });
+    response.flushHeaders();
+    held.open();
+    return;
+  }
   const id = request.url.slice(1);
   pageRequests.set(id, (pageRequests.get(id) ?? 0) + 1);
   response.setHeader('content-type', 'text/html');
@@ -155,10 +173,23 @@ try {
   });
   await client.request('set_window_bounds', { logicalBounds: { ...logicalBounds, width: 1900, height: 900 } });
   await runner.step('initial_open_then_wait', () => openAndWait('initial'));
-  await runner.step('reopen_then_wait', async () => {
+  await runner.step('closing_the_tile_ends_its_page', async () => {
+    const within = async promise => {
+      let deadline;
+      const settled = await Promise.race([
+        promise.then(() => true),
+        new Promise(resolve => { deadline = setTimeout(() => resolve(false), observer.connectTimeoutMs); }),
+      ]);
+      clearTimeout(deadline);
+      return settled;
+    };
+    const held = heldRequest('initial');
+    await script('fetch("/held/initial"); return null;');
+    runner.assert(await within(held.opened), 'the page opens a request the server holds', { timeoutMs: observer.connectTimeoutMs });
     await closeBrowserTile();
-    await openAndWait('reopened');
+    runner.assert(await within(held.ended), 'closing the browser tile frees its web view, ending the page and its open request', { timeoutMs: observer.connectTimeoutMs });
   });
+  await runner.step('reopen_then_wait', () => openAndWait('reopened'));
   await runner.step('command_wait_after_navigation', async () => {
     const id = 'command';
     await cli('browser', 'open', `http://127.0.0.1:${server.address().port}/${id}`, '--session', sessionId);

@@ -100,13 +100,13 @@ Preconditions:
 - **Outposts**: the browser tile lives on a home desktop and the page loads in the app on the user's machine, so `localhost` in a URL is that machine, not the outpost an agent runs on.
 - **Profiles**: the tile opens on a desktop of the caller's profile, and `--session` targets a session's desktop in its own profile.
 - **The shelf**: an off-screen browser tile keeps its native view, hidden, so `attn browser` verbs work and the screen stays as it is. Its page survives the trip back on screen, with no reload.
-- **Performance and idle cost**: a hidden or covered browser tile hides its native view. A callout over the tile hides the native view until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
+- **Performance and idle cost**: closing a browser tile frees its web view, so its WebContent process exits. A hidden or covered browser tile hides its native view. A callout over the tile hides the native view until the callout ends ([callouts.md](callouts.md)). Nothing measures an idle browser tile's cost.
 - **Harnesses**: every harness drives the browser with the same `attn browser` verbs and reads the same reference.
 - **Keyboard and native input**: the page is a native view. Once a click puts focus in the page, keys go to the page, and attn's own shortcuts reach attn again after a click on attn's chrome. ⌘W still closes the tile through the File menu. ⌘Z and ⇧⌘Z undo and redo in the page's text fields through the browser runtime, as in attn's own fields, because attn's Edit menu has no Undo item.
 
 ## Tests
 
-- Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
+- Packaged CLI: `browser-wait-navigation` checks the verbs on a tile that opened on the shelf, with the screen unchanged and the page kept when the tile comes on screen. It checks a wait immediately after an open, a wait after a close and reopen, and zero-timeout results. It also checks that closing the tile frees its web view: a request the page holds open ends when the tile closes. It also checks `command wait_for` immediately after navigation. It starts a wait on a loaded page whose condition is unsatisfied, then navigates while that wait is pending. It also verifies that an asynchronous action executes once, and that later actions keep the action's element reference.
 
 - Wire: `internal/daemon/browser_wire_test.go`, `internal/daemon/browser_test.go`.
 - Stack: `cmd/attnd/agent_commands_stack_test.go`.
