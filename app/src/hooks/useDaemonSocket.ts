@@ -114,7 +114,7 @@ import {
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
-import { keepUnchangedReview, tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
+import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import { crewRef } from '../utils/crewName';
 import type { CrewRenameResult } from '../types/generated';
@@ -1363,7 +1363,7 @@ export function useDaemonSocket({
                 ...(typeof data.annotations_generation === 'number' ? { annotationsGeneration: data.annotations_generation } : {}),
               };
               const { desktops, currentDesktopId } = useProfilesStore.getState();
-              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: keepUnchangedReview(prev[key], content) }, desktops, currentDesktopId));
+              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: content }, desktops, currentDesktopId));
             }
             break;
           }
