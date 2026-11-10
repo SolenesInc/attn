@@ -170,7 +170,7 @@ func Resolve(terminal TerminalEvidence, conversation ConversationEvidence, polic
 		if r, ok := programStatusEdge(*e.ProgramStatus); ok {
 			return r
 		}
-	} else if fresh(e.Heartbeat, ClaimBusy, now, policy.HeartbeatTTL) {
+	} else if fresh(e.Heartbeat, ClaimBusy, now, policy.HeartbeatTTL) && !readBefore(e.Heartbeat, e.LastHarnessEvent) {
 		return running(e)
 	}
 
@@ -474,6 +474,10 @@ func ClearProgramStatus(terminal *TerminalEvidence, conversation *ConversationEv
 
 func supersededByProgramStatus(o *Observation, e evidence) bool {
 	return e.ProgramStatus != nil && !o.ObservedAt.After(e.ProgramStatus.ObservedAt)
+}
+
+func readBefore(frame, event *Observation) bool {
+	return event != nil && !frame.ObservedAt.After(event.ObservedAt)
 }
 
 func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {

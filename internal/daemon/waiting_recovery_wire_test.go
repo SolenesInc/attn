@@ -34,3 +34,30 @@ func TestAWaitingClaudeKeepsItsStateAcrossADaemonRestart(t *testing.T) {
 		}
 	})
 }
+
+func TestABusyFrameReadBeforeTheVerdictLeavesTheWaitingTurnAloneAcrossARestart(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.App()
+		agent := w.bubbleClaude(t, app, "shop")
+		app.TypeLine(agent.id, "pick a colour")
+		w.advance(0)
+
+		lastFrameRead := time.Now()
+		w.advance(10 * time.Millisecond)
+		agent.reply("Which colour? <!-- attn:state=waiting_input -->")
+		waiting := testworld.AwaitSession(app, agent.id, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateWaitingInput && protocol.Deref(s.TurnOwed)
+		})
+		agent.term.HeartbeatReadAt("busy", "Claude Code", lastFrameRead)
+		w.advance(0)
+
+		w.restart()
+		w.App()
+		got := queriedSession(t, w.Client(), agent.id)
+		if got.State != protocol.SessionStateWaitingInput || got.StateSince != waiting.StateSince ||
+			!protocol.Deref(got.TurnOwed) || !openedAt(got).Equal(openedAt(waiting)) {
+			t.Fatalf("after restart: state=%s since=%s owed=%v opened=%s; want waiting_input since=%s owed at=%s, because the terminal's last frame was read before the verdict",
+				got.State, got.StateSince, protocol.Deref(got.TurnOwed), openedAt(got), waiting.StateSince, openedAt(waiting))
+		}
+	})
+}
