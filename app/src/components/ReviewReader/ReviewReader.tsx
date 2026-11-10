@@ -24,6 +24,15 @@ import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, ty
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
+const REMOVED_LINE = 'This line was removed. i edits the code as it is now.';
+
+interface EditPlace {
+  path: string;
+  line: number;
+  selection?: [number, number];
+  block?: [number, number];
+  docLine: number;
+}
 const SELECTED_CLASS = 'review-selected';
 const NO_MARKS: ReviewMarks['annotations'] = [];
 
@@ -248,6 +257,9 @@ export function ReviewReader({
   const stageStop = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
   const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [expansions, setExpansions] = useState<ReadonlyMap<number, StopExpansion>>(new Map());
+  const editCursorRef = useRef<{ path: string; line: number; bundle: ReviewBundle } | null>(null);
+  const expansionsRef = useRef(expansions);
+  expansionsRef.current = expansions;
   const [markFiles, setMarkFiles] = useState<ReadonlyMap<string, readonly ReviewRow[]>>(new Map());
   const [files, setFiles] = useState<OpenFile[]>([]);
   const [filled, setFilled] = useState(false);
@@ -317,19 +329,6 @@ export function ReviewReader({
     return frame === 'brief' ? docRef.current : null;
   }, [frame]);
 
-  const readBundleRef = useRef(bundle);
-  useEffect(() => {
-    const was = readBundleRef.current;
-    if (was === bundle) return;
-    readBundleRef.current = bundle;
-    fileRowsRef.current.clear();
-    setMarkFiles(new Map());
-    setExpansions((current) => new Map([...current].filter(([line]) => sameStop(
-      was.stops.find((stop) => stop.heading_line === line),
-      bundle.stops.find((stop) => stop.heading_line === line),
-    ))));
-  }, [bundle]);
-
   const readFile = useCallback((path: string): Promise<ReviewFileResultMessage> => {
     if (!sendReviewFile) return Promise.reject(new Error('Not connected to the daemon'));
     return sendReviewFile(host, document, path);
@@ -344,6 +343,37 @@ export function ReviewReader({
     }
     return rows;
   }, [readFile]);
+
+  const readBundleRef = useRef(bundle);
+  useEffect(() => {
+    const was = readBundleRef.current;
+    if (was === bundle) return;
+    readBundleRef.current = bundle;
+    fileRowsRef.current.clear();
+    setMarkFiles(new Map());
+    const stopAt = (stops: readonly ReviewStop[], line: number) => stops.find((stop) => stop.heading_line === line);
+    const changed = [...expansionsRef.current].flatMap(([line, expansion]) => {
+      const stop = stopAt(bundle.stops, line);
+      return stop && !sameStop(stopAt(was.stops, line), stop) ? [{ stop, extraLines: expansion.extraLines }] : [];
+    });
+    setExpansions((current) => new Map([...current].filter(([line]) => stopAt(bundle.stops, line) !== undefined)));
+    changed.forEach(({ stop, extraLines }) => {
+      void wholeFile(stop.path).then((file) => {
+        if (readBundleRef.current !== bundle) return;
+        const rows = widen(stop.rows, file, extraLines);
+        setExpansions((current) => {
+          const next = new Map(current);
+          if (rows) next.set(stop.heading_line, { rows, extraLines });
+          else next.delete(stop.heading_line);
+          return next;
+        });
+      }, () => setExpansions((current) => {
+        const next = new Map(current);
+        next.delete(stop.heading_line);
+        return next;
+      }));
+    });
+  }, [bundle, wholeFile]);
 
   /** Reads a file into the stack entry `id`. A newer read of the same entry
    * replaces an older one, and `place` picks the cursor's row from the entry as
@@ -366,11 +396,15 @@ export function ReviewReader({
   }, [readFile]);
 
   /** Reads a file the reader wrote again, for the marks and every open view of it. */
-  const refreshFile = useCallback((path: string) => {
+  const refreshFile = useCallback((path: string, edited?: number) => {
     fileRowsRef.current.delete(path);
     void wholeFile(path).then((rows) => setMarkFiles((known) => new Map(known).set(path, rows)), () => undefined);
+    const place = (rows: ReviewRow[], open: OpenFile) => {
+      const at = edited === undefined ? -1 : rows.findIndex((row) => row.now === edited);
+      return at >= 0 ? at : rowIndexAfterRefresh(rows, open);
+    };
     filesRef.current.forEach((file) => {
-      if (file.target.path === path) loadFile(file.id, path, rowIndexAfterRefresh);
+      if (file.target.path === path) loadFile(file.id, path, place);
     });
   }, [loadFile, wholeFile]);
 
@@ -446,6 +480,7 @@ export function ReviewReader({
 
   const setCursor = useCallback((element: HTMLElement | null, scroll: ScrollLogicalPosition = 'nearest') => {
     if (!element) return;
+    editCursorRef.current = null;
     scrollModeRef.current = scroll;
     setCursorKey(cursorKeyOf(element));
   }, []);
@@ -455,6 +490,18 @@ export function ReviewReader({
     cursorElementRef.current = null;
     const root = scope();
     if (cursorKey === null || root === null) return;
+    const edit = editCursorRef.current;
+    if (edit && edit.bundle !== bundle) {
+      const edited = documentTargets(root).find((target) => target.getAttribute('data-kind') === '+'
+        && target.getAttribute('data-path') === edit.path && target.getAttribute('data-line') === String(edit.line));
+      if (edited) {
+        editCursorRef.current = null;
+        if (cursorKeyOf(edited) !== cursorKey) {
+          setCursorKey(cursorKeyOf(edited));
+          return;
+        }
+      }
+    }
     const element = findTarget(root, cursorKey);
     if (!element) {
       const targets = documentTargets(root);
@@ -545,13 +592,14 @@ export function ReviewReader({
   const expandAtCursor = useCallback(() => {
     const stop = stopOf(currentTarget());
     if (!stop) return;
-    const shown = expansions.get(stop.heading_line)?.rows ?? stop.rows;
+    const shown = expansions.get(stop.heading_line);
+    const extraLines = (shown?.extraLines ?? 0) + MORE_LINES;
     void wholeFile(stop.path).then(
       (file) => {
-        const rows = widen(shown, file, MORE_LINES);
-        if (rows) setExpansions((current) => new Map(current).set(stop.heading_line, { rows }));
+        const rows = widen(stop.rows, file, extraLines);
+        if (rows) setExpansions((current) => new Map(current).set(stop.heading_line, { rows, extraLines }));
       },
-      (error: unknown) => setExpansions((current) => new Map(current).set(stop.heading_line, { rows: shown, error: error instanceof Error ? error.message : String(error) })),
+      (error: unknown) => setExpansions((current) => new Map(current).set(stop.heading_line, { rows: shown?.rows ?? stop.rows, extraLines: shown?.extraLines ?? 0, error: error instanceof Error ? error.message : String(error) })),
     );
   }, [currentTarget, expansions, stopOf, wholeFile]);
 
@@ -689,13 +737,14 @@ export function ReviewReader({
     return anchor ? { kind: 'file', anchor } : null;
   }, [currentTarget, docLineFor, openFileView, scope, selectedRows, stopOf]);
 
-  /** The file, line and selected lines the cursor stands on, for an edit. */
-  const editPlace = useCallback((): { path: string; line: number; selection?: [number, number]; block?: [number, number]; docLine: number } | null => {
+  /** The file, line and selected lines the cursor stands on, for an edit, or why there is none. */
+  const editPlace = useCallback((): EditPlace | string => {
     const span = (lines: number[]): [number, number] => [Math.min(...lines), Math.max(...lines)];
     if (openFileView) {
       const rows = openFileView.rows;
-      const line = rows?.[openFileView.cursor]?.now;
-      if (!rows || line === undefined) return null;
+      if (!rows) return 'The file is still being read.';
+      const line = rows[openFileView.cursor]?.now;
+      if (line === undefined) return REMOVED_LINE;
       const from = Math.min(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
       const to = Math.max(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
       const lines = rows.slice(from, to + 1).map((row) => row.now).filter((now): now is number => now !== undefined);
@@ -703,21 +752,26 @@ export function ReviewReader({
       return { path, line, selection: openFileView.selectFrom !== undefined && lines.length > 0 ? span(lines) : undefined, docLine: docLineFor(path, line) };
     }
     const element = currentTarget();
+    const kind = element?.getAttribute('data-review-cursor');
     const path = element?.getAttribute('data-path');
-    const line = Number(element?.getAttribute('data-line')) || undefined;
-    if (!element || !path || line === undefined) return null;
-    if (element.getAttribute('data-review-cursor') === 'block') {
+    if (!element || !path || (kind !== 'row' && kind !== 'block')) return 'Put the cursor on a line of code or a document stop to edit it.';
+    const line = Number(element.getAttribute('data-line')) || undefined;
+    if (line === undefined) return REMOVED_LINE;
+    if (kind === 'block') {
       const to = Number(element.getAttribute('data-line-to')) || line;
       return { path, line, block: [line, to], docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
     }
-    if (element.getAttribute('data-review-cursor') !== 'row') return null;
     const lines = selectedRows(element).map((row) => Number(row.getAttribute('data-line'))).filter((now) => now > 0);
     return { path, line, selection: selectFrom !== null && lines.length > 0 ? span(lines) : undefined, docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
   }, [currentTarget, docLineFor, openFileView, selectFrom, selectedRows, stopOf]);
 
   const startEdit = useCallback(() => {
     const place = editPlace();
-    if (!place || !marks) return;
+    if (!marks) return;
+    if (typeof place === 'string') {
+      setNotice(place);
+      return;
+    }
     setNotice(null);
     void readFile(place.path).then(async (answer) => {
       const { lines, heads } = fileLines(answer.rows);
@@ -761,13 +815,15 @@ export function ReviewReader({
       }
       const to = editing.from + text.split('\n').length;
       marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, { was, now: text, ...whereEditStands(editing.heads, editing.from, editing.to) });
+      if (!openFileView) editCursorRef.current = { path: editing.path, line: editing.from + 1, bundle };
       closeEdit();
-      refreshFile(editing.path);
+      refreshFile(editing.path, editing.from + 1);
     }, (error: unknown) => setEditing({ ...editing, saving: false, problem: error instanceof Error ? error.message : String(error) }));
-  }, [closeEdit, document, editing, host, marks, refreshFile, sendReviewEdit]);
+  }, [bundle, closeEdit, document, editing, host, marks, openFileView, refreshFile, sendReviewEdit]);
 
   const undoEdit = useCallback((): boolean => {
-    const place = editPlace();
+    const found = editPlace();
+    const place = typeof found === 'string' ? null : found;
     const covers = (annotation: Annotation) => {
       const last = markPlaces.get(annotation.id);
       if (typeof last !== 'number' || !place || annotation.fileAnchor?.path !== place.path) return false;

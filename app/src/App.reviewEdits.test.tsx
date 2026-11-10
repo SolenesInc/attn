@@ -392,6 +392,55 @@ describe('App review edits', () => {
     expect(tile.querySelector('.review-file-view .review-cursor')).toHaveTextContent('// the named sum');
   });
 
+  it('puts the cursor on the new text after editing an unchanged line, and says why i does nothing on a removed line', async () => {
+    const { tile, press, type, toRow, show, cursorLine, editBox, file } = await openReview();
+    const rowsAsWritten = file.rows.bind(file);
+    file.rows = () => rowsAsWritten().flatMap((written) => (written.now !== undefined && written.now <= 3 && written.text !== HEAD[written.now - 1]
+      ? [row('-', written.now, undefined, HEAD[written.now - 1]), row('+', undefined, written.now, written.text)]
+      : [written]));
+    await press('ArrowRight');
+    await press('e');
+    await toRow(3);
+    await press('i');
+    await type('func Add(a, b int) int { // named');
+    await show();
+    expect(cursorLine()).toBe('3');
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveTextContent('// named');
+    await press('i');
+    expect(within(editBox()).getByRole('textbox')).toHaveValue('func Add(a, b int) int { // named');
+    await press('Escape');
+
+    await press('ArrowUp');
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveAttribute('data-kind', '-');
+    await press('i');
+    expect(within(tile).queryByRole('dialog')).toBeNull();
+    expect(within(tile).getByRole('status')).toHaveTextContent('This line was removed. i edits the code as it is now.');
+
+    await press('Enter');
+    const fileCursor = () => tile.querySelector('.review-file-view .review-cursor');
+    for (let moves = 0; !fileCursor()?.textContent?.includes('package calc'); moves += 1) {
+      if (moves > 10) throw new Error(`the file view cursor never reached line 1; it is on ${fileCursor()?.textContent}`);
+      await press('ArrowUp');
+    }
+    await press('i');
+    await type('package sum');
+    await show();
+    expect(fileCursor()).toHaveTextContent('package sum');
+  });
+
+  it('keeps the lines e showed when an edit there changes the file, with the cursor and the edit on them', async () => {
+    const { tile, press, type, toRow, show, cursorLine } = await openReview();
+    await press('ArrowRight');
+    await press('e');
+    await toRow(1);
+    await press('i');
+    await type('package sum');
+    await show();
+    expect(cursorLine()).toBe('1');
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveTextContent('package sum');
+    expect(tile.querySelector('.review-mark--edit')).toHaveTextContent('you editedL1');
+  });
+
   it('lists edits apart from notes in the send', async () => {
     const { tile, press, type, toRow } = await openReview();
     await toRow(4);

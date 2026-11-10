@@ -216,7 +216,7 @@ describe('App review navigation', () => {
     expect(reader.getByRole('dialog', { name: 'Review keys' })).toHaveTextContent('This file is outside the repository and read-only');
   });
 
-  it('keeps expanded lines and reads no file when only a language server’s state changes', async () => {
+  it('keeps expanded lines, reading no file when only a language server’s state changes and the file again when it changes', async () => {
     const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]));
     daemon.on('review_file', ({ path }) => ({
       event: 'review_file_result', success: true, path, hash: 'h1',
@@ -237,7 +237,8 @@ describe('App review navigation', () => {
     expect(rows()).toBe(9);
     const changed = bundleWith();
     await show({ ...changed, stops: [{ ...changed.stops[0], file_hash: 'h2' }] });
-    expect(rows()).toBe(5);
+    expect(rows()).toBe(9);
+    expect(daemon.sentOf('review_file')).toHaveLength(reads + 1);
   });
 
   it('shows the type with h, lists uses with r, and opens a definition outside the repository read-only', async () => {

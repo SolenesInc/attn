@@ -29,6 +29,7 @@ export interface StagePlace {
 
 export interface StopExpansion {
   rows: ReviewRow[];
+  extraLines: number;
   error?: string;
 }
 
