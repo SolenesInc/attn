@@ -122,7 +122,6 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 		// Some hosts' /etc/profile runs /etc/bashrc, which sets a window-title PROMPT_COMMAND when none is set
 		// (Fedora). A world's shells keep the titles their tests write.
 		"PROMPT_COMMAND=:",
-		// A daemon finds a language server only where the test installed it, never one the developer has on PATH.
 		codenav.SearchPathEnv + "=",
 	}
 	if w.kit != nil {

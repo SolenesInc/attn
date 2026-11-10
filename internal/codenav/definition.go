@@ -140,8 +140,6 @@ func (m Missing) Error() string {
 	return fmt.Sprintf("%s is not in %s or on PATH. Install it, or link it with `attn nav link <path-to-%s>`", m.Program, m.BinDir, m.Program)
 }
 
-// SearchPathEnv replaces PATH as the places Locate looks after binDir, so a
-// test installs the servers a daemon may find and no others.
 const SearchPathEnv = "ATTN_CODE_NAVIGATION_PATH"
 
 func lookPath(program string) (string, error) {
