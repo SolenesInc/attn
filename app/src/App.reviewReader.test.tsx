@@ -96,9 +96,12 @@ const BUNDLE: ReviewBundle = {
 
 const UTIL_FILE = [row(' ', 1, 1, 'package calc'), row('+', undefined, 2, 'func helper() {}')];
 
+let calcFile = CALC_FILE;
+
 function serveRepository(daemon: ScriptedDaemon) {
+  calcFile = CALC_FILE;
   daemon.on('review_file', ({ path }) => {
-    if (path === 'calc.go') return { event: 'review_file_result', success: true, path, rows: CALC_FILE, hash: 'h1' };
+    if (path === 'calc.go') return { event: 'review_file_result', success: true, path, rows: calcFile, hash: 'h1' };
     if (path === 'util.go') return { event: 'review_file_result', success: true, path, rows: UTIL_FILE, hash: 'h2' };
     return { event: 'review_file_result', success: true, path, rows: [row(' ', 1, 1, `// ${path}`)], hash: 'h3' };
   });
@@ -125,6 +128,17 @@ async function openReview({ review = BUNDLE, content = DOCUMENT }: { review?: Re
   };
   return { ...view, reader: within(tile), tileElement: tile, press };
 }
+
+/** calc.go after someone inserts two lines above Add: every line from 3 on moves down by two. */
+function calcWithTwoLinesAbove(): ReviewRow[] {
+  const inserted = [row('+', undefined, 3, '// Add sums.'), row('+', undefined, 4, '// It names the sum.')];
+  const shifted = CALC_FILE.map((at) => (at.now === undefined || at.now < 3 ? at : { ...at, now: at.now + 2 }));
+  return [...shifted.slice(0, 2), ...inserted, ...shifted.slice(2)];
+}
+
+const emitBundle = (daemon: ScriptedDaemon, review: ReviewBundle) => act(() => daemon.emit({
+  event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review,
+}));
 
 const cursor = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-doc .review-cursor');
 const fileView = (scope: HTMLElement) => scope.querySelector<HTMLElement>('[data-review-file-view]');
@@ -233,6 +247,65 @@ describe('App review reader', () => {
     await press('Escape');
     expect(fileView(tileElement)).toBeNull();
     expect(cursor(tileElement)).toHaveAttribute('data-line', '4');
+  });
+
+  it('keeps an open file view current: a new bundle reads the file again and the cursor stays on its line', async () => {
+    const { tileElement, daemon, press } = await openReview();
+    await press('ArrowRight');
+    await press('ArrowDown');
+    await press('ArrowDown');
+    await press('Enter');
+    expect(fileCursorText(tileElement)).toBe('4+\tsum := a + b');
+
+    calcFile = calcWithTwoLinesAbove();
+    emitBundle(daemon, { ...BUNDLE, head: 'aaaaaaa' });
+    await daemon.idle();
+
+    expect(daemon.sentOf('review_file').map(({ path }) => path)).toEqual(['calc.go', 'calc.go']);
+    expect(fileView(tileElement)).toHaveTextContent('// It names the sum.');
+    expect(fileCursorText(tileElement)).toBe('6+\tsum := a + b');
+
+    await press('ArrowDown');
+    expect(fileCursorText(tileElement)).toBe('7+\treturn sum');
+  });
+
+  it('keeps the cursor on a repeated line of a file with no base when the bundle is recomputed', async () => {
+    const { tileElement, daemon, press } = await openReview();
+    calcFile = ['package calc', '', 'func A() {', '\tx()', '', '\ty()', '}'].map((text, at) => row('+', undefined, at + 1, text));
+    await press('ArrowRight');
+    await press('ArrowDown');
+    await press('ArrowDown');
+    await press('Enter');
+    await press('ArrowDown');
+    expect(fileCursorText(tileElement)).toBe('5+ ');
+
+    calcFile = calcFile.slice();
+    emitBundle(daemon, { ...BUNDLE, head: 'aaaaaaa' });
+    await daemon.idle();
+    expect(daemon.sentOf('review_file')).toHaveLength(2);
+    expect(fileCursorText(tileElement)).toBe('5+ ');
+  });
+
+  it('reads every file on the stack again, not only the top one', async () => {
+    const { tileElement, daemon, press } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
+    await press('ArrowDown');
+    await press('/');
+    fireEvent.change(within(tileElement).getByRole('textbox', { name: 'Search' }), { target: { value: 'sub' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await daemon.idle();
+    fireEvent.keyDown(within(tileElement).getByRole('textbox', { name: 'Search' }), { key: 'Enter' });
+    await daemon.idle();
+    expect(fileCursorText(tileElement)).toBe('9+\treturn b - a');
+
+    calcFile = calcWithTwoLinesAbove();
+    emitBundle(daemon, { ...BUNDLE, frame: 'walkthrough', head: 'aaaaaaa' });
+    await daemon.idle();
+    expect(fileCursorText(tileElement)).toBe('11+\treturn b - a');
+
+    await press('o', { ctrlKey: true });
+    expect(stageStop(tileElement)).toBe('calc.go');
+    expect(fileView(tileElement)).toHaveTextContent('// It names the sum.');
+    expect(fileCursorText(tileElement)).toBe('7+\treturn sum');
   });
 
   it('leaves Escape to the rest of the app while focus is outside the review tile', async () => {

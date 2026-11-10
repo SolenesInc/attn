@@ -6,7 +6,7 @@ import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
-import { changeStarts, FileView, rowIndexOf, type OpenFile } from './FileView';
+import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
 import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MapFrame } from './MapFrame';
 import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
@@ -192,6 +192,7 @@ export function ReviewReader({
   const scrollModeRef = useRef<ScrollLogicalPosition>('nearest');
   const fileRowsRef = useRef(new Map<string, Promise<ReviewRow[]>>());
   const fileIdRef = useRef(0);
+  const readsRef = useRef(new Map<number, number>());
   const openFileView = files.length > 0 ? files[files.length - 1] : null;
   const filesRef = useRef(files);
   filesRef.current = files;
@@ -223,41 +224,51 @@ export function ReviewReader({
     return rows;
   }, [readFile]);
 
+  /** Reads a file into the stack entry `id`. A newer read of the same entry
+   * replaces an older one, and `place` picks the cursor's row from the entry as
+   * it is when the rows arrive. */
+  const loadFile = useCallback((id: number, path: string, place: (rows: ReviewRow[], open: OpenFile) => number) => {
+    const read = ++fileIdRef.current;
+    readsRef.current.set(id, read);
+    const settle = (change: (open: OpenFile) => Partial<OpenFile>) => {
+      if (readsRef.current.get(id) !== read) return;
+      readsRef.current.delete(id);
+      setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, ...change(open) } : open)));
+    };
+    void readFile(path).then(
+      (answer) => {
+        const rows = answer.rows ?? [];
+        settle((open) => ({ rows, problem: answer.problem, error: undefined, cursor: place(rows, open) }));
+      },
+      (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
+    );
+  }, [readFile]);
+
   const openFile = useCallback((target: FileTarget, options?: { fill?: boolean }) => {
     setSearch(null);
     if (options?.fill) setFilled(true);
     const id = ++fileIdRef.current;
     setFiles((stack) => [...stack, { id, target, rows: null, cursor: 0 }]);
-    const settle = (next: Partial<OpenFile>) => setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, ...next } : open)));
-    void readFile(target.path).then(
-      (answer) => {
-        const rows = answer.rows ?? [];
-        settle({ rows, problem: answer.problem, cursor: rowIndexOf(rows, target.line ?? target.range?.[0]) });
-      },
-      (error: unknown) => settle({ error: error instanceof Error ? error.message : String(error) }),
-    );
-  }, [readFile]);
+    loadFile(id, target.path, (rows) => rowIndexOf(rows, target.line ?? target.range?.[0]));
+  }, [loadFile]);
 
   /** Puts a stop's file on the Walkthrough's stage. A refresh keeps the files
-   * opened on top of it; a move to another stop drops them. */
+   * opened on top of it and the cursor in the stage's file; a move to another
+   * stop drops them. */
   const showStage = useCallback((stop: ReviewStop, line?: number, refresh = false) => {
     if (!refresh) setSearch(null);
     setStageKey(stageKeyOf(bundle, stop));
     const target = stopTarget(stop, line ?? stageLine(stop));
     const id = ++fileIdRef.current;
     setFiles((stack) => {
-      const kept = stack[0]?.target.path === stop.path ? stack[0].rows : null;
-      const stage = { id, target, rows: kept, cursor: kept ? rowIndexOf(kept, target.line) : 0 };
+      const previous = stack[0]?.target.path === stop.path ? stack[0] : undefined;
+      const stage = refresh && previous
+        ? { ...previous, id, target }
+        : { id, target, rows: previous?.rows ?? null, cursor: previous?.rows ? rowIndexOf(previous.rows, target.line) : 0 };
       return refresh ? [stage, ...stack.slice(1)] : [stage];
     });
-    void readFile(stop.path).then(
-      (answer) => {
-        const rows = answer.rows ?? [];
-        setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, rows, problem: answer.problem, cursor: rowIndexOf(rows, target.line) } : open)));
-      },
-      (error: unknown) => setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, error: error instanceof Error ? error.message : String(error) } : open))),
-    );
-  }, [bundle, readFile]);
+    loadFile(id, stop.path, (rows, open) => (refresh ? rowIndexAfterRefresh(rows, open) : rowIndexOf(rows, target.line)));
+  }, [bundle, loadFile]);
 
   const openSearch = useCallback((query = '') => setSearch({ query }), []);
 
@@ -486,11 +497,11 @@ export function ReviewReader({
     if (shownBundleRef.current === bundle) return;
     shownBundleRef.current = bundle;
     const stage = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
-    if (!stage) return;
-    const shown = filesRef.current[0];
-    const line = shown?.target.path === stage.path ? shown.rows?.[shown.cursor]?.now : undefined;
-    showStage(stage, line, true);
-  }, [bundle, frame, showStage, stageKey]);
+    filesRef.current.forEach((file, index) => {
+      if (index === 0 && stage) showStage(stage, undefined, true);
+      else loadFile(file.id, file.target.path, rowIndexAfterRefresh);
+    });
+  }, [bundle, frame, loadFile, showStage, stageKey]);
 
   useEffect(() => {
     if (!stageStop) return;

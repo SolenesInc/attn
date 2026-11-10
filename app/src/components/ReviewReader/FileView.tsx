@@ -30,6 +30,31 @@ export function rowIndexOf(rows: readonly ReviewRow[], line: number | undefined)
   return after >= 0 ? after : Math.max(0, rows.length - 1);
 }
 
+/** The row of a file's new rows that the cursor stood on in its old rows. A row
+ * that exists in the base is found by its base line, which an edit of the file
+ * never moves. An added row is found among the added rows after the nearest
+ * base row above it, by its text nearest where it stood in that run, else by its place in it. */
+export function rowIndexAfterRefresh(rows: readonly ReviewRow[], before: OpenFile): number {
+  const was = before.rows?.[before.cursor];
+  if (!before.rows || !was) return rowIndexOf(rows, before.target.line);
+  if (was.old !== undefined) {
+    const same = rows.findIndex((row) => row.old === was.old);
+    return same >= 0 ? same : rowIndexOf(rows, was.now);
+  }
+  let anchor = before.cursor;
+  while (anchor >= 0 && before.rows[anchor].old === undefined) anchor -= 1;
+  const newAnchor = anchor < 0 ? -1 : rows.findIndex((row) => row.old === before.rows![anchor].old);
+  if (anchor >= 0 && newAnchor < 0) return rowIndexOf(rows, was.now);
+  let end = newAnchor + 1;
+  while (end < rows.length && rows[end].old === undefined) end += 1;
+  const run = rows.slice(newAnchor + 1, end);
+  if (run.length === 0) return rowIndexOf(rows, was.now);
+  const expected = Math.min(run.length - 1, before.cursor - anchor - 1);
+  const sameText = run.map((row, at) => (row.text === was.text ? at : -1)).filter((at) => at >= 0);
+  const nearest = sameText.reduce((best, at) => (Math.abs(at - expected) < Math.abs(best - expected) ? at : best), sameText[0] ?? expected);
+  return newAnchor + 1 + nearest;
+}
+
 /** The first row of each run of changed rows. */
 export function changeStarts(rows: readonly ReviewRow[]): number[] {
   const starts: number[] = [];
