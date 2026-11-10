@@ -128,11 +128,20 @@ fn set_menu_accelerator(app: &AppHandle, enabled: bool) -> Result<(), String> {
     if let Some(menu) = app.menu() {
         for item in menu.items().map_err(|error| error.to_string())? {
             if let tauri::menu::MenuItemKind::Submenu(submenu) = item {
-                if let Some(tauri::menu::MenuItemKind::MenuItem(item)) =
-                    submenu.get(crate::POP_OUT_TILE_MENU_ID)
+                let items = submenu.items().map_err(|error| error.to_string())?;
+                if let Some((position, tauri::menu::MenuItemKind::MenuItem(item))) = items
+                    .into_iter()
+                    .enumerate()
+                    .find(|(_, item)| item.id() == crate::POP_OUT_TILE_MENU_ID)
                 {
                     item.set_accelerator(accelerator)
                         .map_err(|error| error.to_string())?;
+                    if accelerator.is_none() {
+                        submenu.remove(&item).map_err(|error| error.to_string())?;
+                        submenu
+                            .insert(&item, position)
+                            .map_err(|error| error.to_string())?;
+                    }
                     break;
                 }
             }
