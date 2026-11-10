@@ -54,6 +54,7 @@ func Resolve(ctx context.Context, client *git.Client, document, text string) pro
 		r.checkCoverage()
 	}
 	bundle.Flows = r.flows()
+	r.checkFrame(bundle)
 	for _, entry := range doc.notShown {
 		bundle.NotShown = append(bundle.NotShown, protocol.ReviewNotShown{Line: entry.line, Path: entry.path, Reason: entry.reason})
 	}
@@ -451,9 +452,15 @@ func plural(n int, one, many string) string {
 func (r *resolver) flows() []protocol.ReviewFlow {
 	flows := []protocol.ReviewFlow{}
 	for _, f := range r.doc.flows {
-		wire := protocol.ReviewFlow{Line: f.line, Messages: []protocol.ReviewFlowMessage{}}
+		wire := protocol.ReviewFlow{Line: f.line, Drawn: f.undrawable == 0, Participants: []protocol.ReviewFlowParticipant{}, Messages: []protocol.ReviewFlowMessage{}}
+		if f.side != "" {
+			wire.Side = protocol.Ptr(f.side)
+		}
+		for _, p := range f.participants {
+			wire.Participants = append(wire.Participants, protocol.ReviewFlowParticipant{ID: p.id, Label: p.label, Actor: p.actor})
+		}
 		for _, message := range f.messages {
-			entry := protocol.ReviewFlowMessage{Line: message.line, Text: message.text}
+			entry := protocol.ReviewFlowMessage{Line: message.line, From: message.from, To: message.to, Arrow: message.arrow, Text: message.text}
 			if ref := message.ref; ref != nil {
 				if s, ok := r.stopShowing(*ref); ok {
 					entry.StopLine = protocol.Ptr(s.line)
@@ -475,4 +482,30 @@ func (r *resolver) stopShowing(ref stopRef) (stop, bool) {
 		}
 	}
 	return stop{}, false
+}
+
+// checkFrame names a frame pick the document cannot fill; the reader then
+// opens the review in Brief.
+func (r *resolver) checkFrame(bundle protocol.ReviewBundle) {
+	frame, _ := r.doc.meta.get("frame")
+	switch {
+	case bundle.Frame == FrameWalkthrough && len(bundle.Stops) == 0:
+		r.doc.problem(frame.line, "frame: walkthrough steps through the stops, and the document has none, so the review opens in brief. Add a `### path:from-to` stop, or pick brief.")
+	case bundle.Frame == FrameMap && !hasMap(bundle.Flows):
+		r.doc.problem(frame.line, "frame: map walks a sequence diagram's messages, and no diagram attn draws has a message with `%%%% stop: path:from-to` after it, so the review opens in brief. Add one, or pick walkthrough or brief.")
+	}
+}
+
+func hasMap(flows []protocol.ReviewFlow) bool {
+	for _, f := range flows {
+		if !f.Drawn {
+			continue
+		}
+		for _, message := range f.Messages {
+			if message.StopLine != nil {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import type { ReviewBundle, ReviewFileResultMessage, ReviewRow } from '../../types/generated';
+import type { ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexOf, type OpenFile } from './FileView';
+import { FRAME_KEYS, hasSides, mapFlows, mapStops, offeredFrames, openingFrame, type Frame, type Side } from './frames';
+import { MapFrame } from './MapFrame';
 import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
+import { stopTarget } from './StopBlock';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -50,6 +53,35 @@ function useFocusAround(rootRef: RefObject<HTMLElement | null>, tileWindow: Wind
 function cursorKeyOf(element: Element): string {
   const key = element.getAttribute('data-cursor-key');
   return key ?? `block:${element.getAttribute('data-block-id')}`;
+}
+
+function stopCursorKey(stop: ReviewStop, line?: number): string | null {
+  const row = (line === undefined ? undefined : stop.rows.find((candidate) => candidate.now === line)) ?? stop.rows[0];
+  return row ? `stop:${stop.path}:${rowKey(row)}` : null;
+}
+
+/** Where the Walkthrough opens a stop: the place to look, else its first change, else its first line. */
+function stageLine(stop: ReviewStop): number | undefined {
+  const look = stop.notes.find((note) => note.look && note.now_from > 0);
+  if (look) return look.now_from;
+  const change = stop.rows.find((row) => row.kind === '+' && row.now !== undefined && row.now >= stop.now_from && row.now <= stop.now_to);
+  return change?.now ?? (stop.now_from || undefined);
+}
+
+interface StageKey {
+  path: string;
+  from: number;
+  index: number;
+}
+
+function stageKeyOf(bundle: ReviewBundle, stop: ReviewStop): StageKey {
+  return { path: stop.path, from: stop.from, index: bundle.stops.indexOf(stop) };
+}
+
+function stopOfStage(bundle: ReviewBundle, key: StageKey | null): ReviewStop | undefined {
+  if (!key || bundle.stops.length === 0) return undefined;
+  return bundle.stops.find((stop) => stop.path === key.path && stop.from === key.from)
+    ?? bundle.stops[Math.min(key.index, bundle.stops.length - 1)];
 }
 
 function documentTargets(doc: HTMLElement | null): HTMLElement[] {
@@ -95,6 +127,18 @@ export function ReviewReader({
   const sendReviewSearch = daemon?.sendReviewSearch;
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
+  const detailRef = useRef<HTMLDivElement | null>(null);
+  const offered = useMemo(() => offeredFrames(bundle), [bundle]);
+  const [chosenFrame, setChosenFrame] = useState<Frame>(() => openingFrame(bundle));
+  const frame: Frame = offered.includes(chosenFrame) ? chosenFrame : 'brief';
+  const sides = useMemo(() => hasSides(bundle), [bundle]);
+  const [side, setSide] = useState<Side>('after');
+  const flows = useMemo(() => mapFlows(bundle, side), [bundle, side]);
+  const messageStops = useMemo(() => mapStops(flows), [flows]);
+  const [mapAt, setMapAt] = useState(0);
+  const mapIndex = Math.min(mapAt, Math.max(0, messageStops.length - 1));
+  const [stageKey, setStageKey] = useState<StageKey | null>(null);
+  const stageStop = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
   const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [expansions, setExpansions] = useState<ReadonlyMap<number, StopExpansion>>(new Map());
   const [files, setFiles] = useState<OpenFile[]>([]);
@@ -108,6 +152,15 @@ export function ReviewReader({
   const fileRowsRef = useRef(new Map<string, Promise<ReviewRow[]>>());
   const fileIdRef = useRef(0);
   const openFileView = files.length > 0 ? files[files.length - 1] : null;
+  const filesRef = useRef(files);
+  filesRef.current = files;
+  const onStage = frame === 'walkthrough' && files.length === 1 && openFileView !== null;
+  const stageCursorLine = onStage ? openFileView.rows?.[openFileView.cursor]?.now : undefined;
+
+  const scope = useCallback((): HTMLElement | null => {
+    if (frame === 'map') return detailRef.current;
+    return frame === 'brief' ? docRef.current : null;
+  }, [frame]);
 
   useEffect(() => {
     fileRowsRef.current.clear();
@@ -144,6 +197,24 @@ export function ReviewReader({
     );
   }, [readFile]);
 
+  const showStage = useCallback((stop: ReviewStop, line?: number) => {
+    setSearch(null);
+    setStageKey(stageKeyOf(bundle, stop));
+    const target = stopTarget(stop, line ?? stageLine(stop));
+    const id = ++fileIdRef.current;
+    setFiles((stack) => {
+      const kept = stack[0]?.target.path === stop.path ? stack[0].rows : null;
+      return [{ id, target, rows: kept, cursor: kept ? rowIndexOf(kept, target.line) : 0 }];
+    });
+    void readFile(stop.path).then(
+      (answer) => {
+        const rows = answer.rows ?? [];
+        setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, rows, problem: answer.problem, cursor: rowIndexOf(rows, target.line) } : open)));
+      },
+      (error: unknown) => setFiles((stack) => stack.map((open) => (open.id === id ? { ...open, error: error instanceof Error ? error.message : String(error) } : open))),
+    );
+  }, [bundle, readFile]);
+
   const openSearch = useCallback((query = '') => setSearch({ query }), []);
 
   const closeFileView = useCallback(() => {
@@ -152,9 +223,15 @@ export function ReviewReader({
   }, []);
 
   const back = useCallback(() => {
+    if (frame === 'walkthrough') {
+      setFiles((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+      return;
+    }
     setFiles((stack) => stack.slice(0, -1));
     if (files.length <= 1) setFilled(false);
-  }, [files.length]);
+  }, [files.length, frame]);
+
+  const backToStage = useCallback(() => setFiles((stack) => stack.slice(0, 1)), []);
 
   const moveFileCursor = useCallback((to: (file: OpenFile) => number) => {
     setFiles((stack) => {
@@ -174,32 +251,33 @@ export function ReviewReader({
   useLayoutEffect(() => {
     cursorElementRef.current?.classList.remove(CURSOR_CLASS);
     cursorElementRef.current = null;
-    if (cursorKey === null) return;
-    const element = findTarget(docRef.current, cursorKey);
+    const root = scope();
+    if (cursorKey === null || root === null) return;
+    const element = findTarget(root, cursorKey);
     if (!element) {
-      const targets = documentTargets(docRef.current);
+      const targets = documentTargets(root);
       const nearest = targets[Math.min(cursorIndexRef.current, targets.length - 1)];
       if (nearest) setCursorKey(cursorKeyOf(nearest));
       return;
     }
     element.classList.add(CURSOR_CLASS);
     cursorElementRef.current = element;
-    cursorIndexRef.current = Math.max(0, documentTargets(docRef.current).indexOf(element));
+    cursorIndexRef.current = Math.max(0, documentTargets(root).indexOf(element));
     if (scrolledKeyRef.current !== cursorKey) {
       scrolledKeyRef.current = cursorKey;
       element.scrollIntoView?.({ block: scrollModeRef.current });
     }
     scrollModeRef.current = 'nearest';
-  }, [cursorKey, content, bundle, expansions]);
+  }, [cursorKey, content, bundle, expansions, scope, mapIndex, side]);
 
-  const currentTarget = useCallback(() => findTarget(docRef.current, cursorKey), [cursorKey]);
+  const currentTarget = useCallback(() => findTarget(scope(), cursorKey), [cursorKey, scope]);
 
   const moveLine = useCallback((delta: number) => {
-    const targets = documentTargets(docRef.current);
+    const targets = documentTargets(scope());
     if (targets.length === 0) return;
     const at = targets.findIndex((element) => cursorKeyOf(element) === cursorKey);
     setCursor(targets[at < 0 ? 0 : Math.max(0, Math.min(targets.length - 1, at + delta))]);
-  }, [cursorKey, setCursor]);
+  }, [cursorKey, scope, setCursor]);
 
   const moveStop = useCallback((delta: number) => {
     const doc = docRef.current;
@@ -236,8 +314,7 @@ export function ReviewReader({
     if (!path) return null;
     const line = Number(element.getAttribute('data-line')) || undefined;
     const stop = stopOf(element);
-    const range: [number, number] | undefined = stop?.now_from ? [stop.now_from, stop.now_to] : undefined;
-    return { path, line: line ?? range?.[0], range };
+    return stop ? stopTarget(stop, line) : { path, line };
   }, [currentTarget, openSearch, stopOf]);
 
   const openAtCursor = useCallback((fill: boolean) => {
@@ -258,6 +335,113 @@ export function ReviewReader({
     );
   }, [currentTarget, expansions, stopOf, wholeFile]);
 
+  const showCursorAt = useCallback((stop: ReviewStop, line?: number, scroll: ScrollLogicalPosition = 'start') => {
+    scrolledKeyRef.current = null;
+    scrollModeRef.current = scroll;
+    setCursorKey(stopCursorKey(stop, line));
+  }, []);
+
+  const selectMessage = useCallback((index: number, list = messageStops, line?: number) => {
+    const at = list[index];
+    setMapAt(index);
+    const stop = at ? bundle.stops.find((candidate) => candidate.heading_line === at.stopLine) : undefined;
+    if (stop) showCursorAt(stop, line);
+  }, [bundle, messageStops, showCursorAt]);
+
+  const pickMessage = useCallback((message: ReviewFlowMessage) => {
+    const index = messageStops.findIndex((at) => at.message === message);
+    if (index >= 0) selectMessage(index);
+  }, [messageStops, selectMessage]);
+
+  const switchSide = useCallback((next: Side) => {
+    if (!sides || next === side) return;
+    const list = mapStops(mapFlows(bundle, next));
+    const current = messageStops[mapIndex];
+    const same = current ? list.findIndex((at) => at.stopLine === current.stopLine) : -1;
+    setSide(next);
+    selectMessage(Math.max(0, same), list);
+  }, [bundle, mapIndex, messageStops, selectMessage, side, sides]);
+
+  /** The stop and line the cursor stands on in the current frame. */
+  const place = useCallback((): { stop?: ReviewStop; line?: number } => {
+    if (frame === 'walkthrough') return { stop: stageStop, line: stageCursorLine };
+    const element = currentTarget();
+    const stop = stopOf(element);
+    if (stop) return { stop, line: Number(element?.getAttribute('data-line')) || undefined };
+    if (frame === 'map') {
+      const at = messageStops[mapIndex];
+      return { stop: bundle.stops.find((candidate) => candidate.heading_line === at?.stopLine) };
+    }
+    const following = Array.from(docRef.current?.querySelectorAll<HTMLElement>('[data-review-stop-head]') ?? [])
+      .find((head) => element !== null && (element.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+    return { stop: stopOf(following ?? null) };
+  }, [bundle, currentTarget, frame, mapIndex, messageStops, stageCursorLine, stageStop, stopOf]);
+
+  const switchFrame = useCallback((next: Frame) => {
+    if (next === frame || !offered.includes(next)) return;
+    const { stop, line } = place();
+    setFiles([]);
+    setFilled(false);
+    setSearch(null);
+    setChosenFrame(next);
+    if (next === 'brief') {
+      if (stop) showCursorAt(stop, line, 'center');
+    } else if (next === 'walkthrough') {
+      const target = stop ?? bundle.stops[0];
+      if (target) showStage(target, stop ? line : undefined);
+    } else {
+      const forSide = (value: Side) => mapStops(mapFlows(bundle, value));
+      const otherSide: Side = side === 'after' ? 'before' : 'after';
+      const index = stop ? forSide(side).findIndex((at) => at.stopLine === stop.heading_line) : -1;
+      const other = stop && index < 0 && sides ? forSide(otherSide).findIndex((at) => at.stopLine === stop.heading_line) : -1;
+      if (other >= 0) {
+        setSide(otherSide);
+        selectMessage(other, forSide(otherSide), line);
+      } else {
+        selectMessage(Math.max(0, index), forSide(side), index >= 0 ? line : undefined);
+      }
+    }
+  }, [bundle, frame, offered, place, selectMessage, showCursorAt, showStage, side, sides]);
+
+  const stepStage = useCallback((delta: number) => {
+    if (!stageStop) return;
+    const index = bundle.stops.indexOf(stageStop);
+    const next = bundle.stops[Math.max(0, Math.min(bundle.stops.length - 1, index + delta))];
+    if (next && next !== stageStop) showStage(next);
+  }, [bundle, showStage, stageStop]);
+
+  const openedRef = useRef(false);
+  useEffect(() => {
+    if (openedRef.current) return;
+    openedRef.current = true;
+    if (frame === 'walkthrough' && bundle.stops[0]) showStage(bundle.stops[0]);
+    if (frame === 'map') selectMessage(0);
+  }, [bundle, frame, selectMessage, showStage]);
+
+  const shownBundleRef = useRef(bundle);
+  useEffect(() => {
+    if (shownBundleRef.current === bundle) return;
+    shownBundleRef.current = bundle;
+    const stage = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
+    for (const open of filesRef.current) {
+      const isStage = stage !== undefined && open === filesRef.current[0];
+      void readFile(open.target.path).then((answer) => {
+        const rows = answer.rows ?? [];
+        setFiles((stack) => stack.map((entry) => {
+          if (entry.id !== open.id) return entry;
+          const line = entry.rows?.[entry.cursor]?.now ?? entry.target.line;
+          const target = isStage ? stopTarget(stage, entry.target.line) : entry.target;
+          return { ...entry, target, rows, problem: answer.problem, cursor: rowIndexOf(rows, line) };
+        }));
+      }, () => undefined);
+    }
+  }, [bundle, frame, readFile, stageKey]);
+
+  useEffect(() => {
+    if (!stageStop) return;
+    docRef.current?.querySelector(`[data-review-stop-head="${stageStop.heading_line}"]`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [stageStop]);
+
   const searchOpen = search !== null;
   const searchWasOpenRef = useRef(false);
   useEffect(() => {
@@ -268,7 +452,8 @@ export function ReviewReader({
   const focused = useFocusAround(rootRef, tileWindow);
   useEscapeStack(() => setSearch(null), focused && searchOpen);
   useEscapeStack(() => setHelp(false), focused && help);
-  useEscapeStack(closeFileView, focused && openFileView !== null && !searchOpen && !help);
+  useEscapeStack(closeFileView, focused && frame !== 'walkthrough' && openFileView !== null && !searchOpen && !help);
+  useEscapeStack(backToStage, focused && frame === 'walkthrough' && files.length > 1 && !searchOpen && !help);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -285,16 +470,32 @@ export function ReviewReader({
     };
     const handleKey = (event: KeyboardEvent): boolean => {
       if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'o') {
-        if (openFileView) back();
-        return openFileView !== null;
+        const canGoBack = frame === 'walkthrough' ? files.length > 1 : openFileView !== null;
+        if (canGoBack) back();
+        return canGoBack;
       }
       if (event.ctrlKey || event.metaKey || event.altKey) return false;
       if (help) {
         if (event.key === '?') setHelp(false);
         return event.key === '?';
       }
+      const frameKey = FRAME_KEYS.find(([key]) => key === event.key);
+      if (frameKey) {
+        switchFrame(frameKey[1]);
+        return true;
+      }
       const fileRows = openFileView?.rows;
-      if (openFileView) {
+      if (frame === 'walkthrough') {
+        switch (event.key) {
+          case 'ArrowDown': moveFileCursor((file) => file.cursor + 1); return true;
+          case 'ArrowUp': moveFileCursor((file) => file.cursor - 1); return true;
+          case 'PageDown': moveFileCursor((file) => file.cursor + PAGE_ROWS); return true;
+          case 'PageUp': moveFileCursor((file) => file.cursor - PAGE_ROWS); return true;
+          case 'ArrowRight': stepStage(1); return true;
+          case 'ArrowLeft': stepStage(-1); return true;
+          case 'z': setFilled((value) => !value); return true;
+        }
+      } else if (openFileView) {
         switch (event.key) {
           case 'ArrowDown': moveFileCursor((file) => file.cursor + 1); return true;
           case 'ArrowUp': moveFileCursor((file) => file.cursor - 1); return true;
@@ -308,8 +509,9 @@ export function ReviewReader({
         switch (event.key) {
           case 'ArrowDown': moveLine(1); return true;
           case 'ArrowUp': moveLine(-1); return true;
-          case 'ArrowRight': moveStop(1); return true;
-          case 'ArrowLeft': moveStop(-1); return true;
+          case 'ArrowRight': if (frame === 'map') selectMessage(Math.min(messageStops.length - 1, mapIndex + 1)); else moveStop(1); return true;
+          case 'ArrowLeft': if (frame === 'map') selectMessage(Math.max(0, mapIndex - 1)); else moveStop(-1); return true;
+          case 'b': if (frame !== 'map' || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
           case 'Enter': openAtCursor(false); return true;
           case 'z': openAtCursor(true); return true;
           case 'e': expandAtCursor(); return true;
@@ -323,30 +525,60 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, expandAtCursor, help, moveFileCursor, moveLine, moveStop, openAtCursor, openFileView, openSearch, rootRef, tileWindow]);
+  }, [back, expandAtCursor, files.length, frame, help, mapIndex, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openFileView, openSearch, rootRef, selectMessage, side, sides, stepStage, switchFrame, switchSide, tileWindow]);
 
-  const onDocClick = useCallback((event: React.MouseEvent) => {
+  const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
     const element = target.closest<HTMLElement>('[data-review-cursor], [data-block-id]');
-    if (element && docRef.current?.contains(element)) setCursor(element);
-  }, [setCursor]);
+    if (element && scope()?.contains(element)) setCursor(element);
+  }, [scope, setCursor]);
 
   const searchRepository = useCallback((query: string) => {
     if (!sendReviewSearch) return Promise.reject(new Error('Not connected to the daemon'));
     return sendReviewSearch(host, document, query);
   }, [document, host, sendReviewSearch]);
 
+  const stage = useMemo(
+    () => (stageStop ? { stopLine: stageStop.heading_line, line: stageCursorLine } : null),
+    [stageCursorLine, stageStop],
+  );
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, openFile, openSearch }),
-    [bundle, expansions, openFile, openSearch],
+    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch }),
+    [bundle, expansions, frame, stage, showStage, openFile, openSearch],
   );
 
   return (
     <ReviewReaderContext.Provider value={context}>
-      <div className="review-doc" ref={docRef} onClick={onDocClick}>
-        {children}
+      <div className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}`}>
+        <div className="review-doc" ref={docRef} onClick={onScopeClick} hidden={frame === 'map'}>
+          {children}
+        </div>
+        {frame === 'walkthrough' && openFileView ? (
+          <FileView
+            file={openFileView}
+            filled={filled}
+            stage
+            canGoBack={files.length > 1}
+            onBack={back}
+            onPick={(index) => moveFileCursor(() => index)}
+          />
+        ) : null}
+        {frame === 'map' ? (
+          <MapFrame
+            bundle={bundle}
+            flows={flows}
+            stops={messageStops}
+            at={mapIndex}
+            side={side}
+            sides={sides}
+            detailRef={detailRef}
+            onPick={pickMessage}
+            onSide={switchSide}
+            onDetailClick={onScopeClick}
+          />
+        ) : null}
       </div>
-      {openFileView ? (
+      {frame !== 'walkthrough' && openFileView ? (
         <FileView
           file={openFileView}
           filled={filled}
@@ -358,7 +590,7 @@ export function ReviewReader({
       ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet /> : null}
-      <ReviewKeyLine fileOpen={openFileView !== null} />
+      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} onFrame={switchFrame} />
     </ReviewReaderContext.Provider>
   );
 }

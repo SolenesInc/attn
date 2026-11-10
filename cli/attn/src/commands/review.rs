@@ -45,7 +45,14 @@ The document, below the frontmatter:
 
 Every changed file needs a stop or a Not shown entry. A mermaid
 sequenceDiagram ties a message to a stop with `%% stop: path:from-to` on the
-line after it.
+line after it. attn draws participants, actors and messages; a diagram with
+any other line shows as a mermaid figure. Open fences with ```mermaid before
+and ```mermaid after to give the change's two sides.
+
+`frame:` in the frontmatter picks the frame the review opens in: brief reads
+top to bottom, walkthrough steps through the stops beside the file, and map
+walks a sequence diagram's messages beside their code. The user switches with
+1, 2 and 3.
 
 Needs the experimental setting code_review_enabled.
 ";

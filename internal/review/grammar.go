@@ -62,14 +62,24 @@ type note struct {
 }
 
 type flow struct {
-	line     int
-	messages []flowMessage
+	line         int
+	side         string
+	undrawable   int
+	participants []flowParticipant
+	messages     []flowMessage
+}
+
+type flowParticipant struct {
+	id, label string
+	actor     bool
 }
 
 type flowMessage struct {
-	line int
-	text string
-	ref  *stopRef
+	line     int
+	from, to string
+	arrow    string
+	text     string
+	ref      *stopRef
 }
 
 type stopRef struct {
@@ -120,12 +130,13 @@ func IsReview(text string) bool {
 }
 
 var (
-	stopHeading  = pattern(`^(\S+):(\d+)(?:\s*[-–—]\s*(\d+))?$`)
-	noteItem     = pattern(`^- L(\d+)(?:\s*[-–—]\s*L?(\d+))?(!?):\s*(.*)$`)
-	noteLike     = pattern(`^\s*[-*+]\s*\**\s*[Ll]\s*\d`)
-	flowArrow    = pattern(`^\s*[^%\s][^:]*?(?:-{1,2}(?:>>|>|x|\)))[+-]?\s*[^:]+:\s*(.*)$`)
-	flowStopNote = pattern(`^\s*%%\s*stop:\s*(.*?)\s*$`)
-	fence        = pattern("^\\s*(```+|~~~+)\\s*(\\S*)")
+	stopHeading     = pattern(`^(\S+):(\d+)(?:\s*[-–—]\s*(\d+))?$`)
+	noteItem        = pattern(`^- L(\d+)(?:\s*[-–—]\s*L?(\d+))?(!?):\s*(.*)$`)
+	noteLike        = pattern(`^\s*[-*+]\s*\**\s*[Ll]\s*\d`)
+	flowMessageLine = pattern(`^\s*([^\s%:;+-][^:;]*?)\s*(-{1,2}(?:>>|>|x|\)))([+-]?)\s*([^:;]+?)\s*:(.*)$`)
+	participantLine = pattern(`^\s*(participant|actor)\s+(.+?)(?:\s+as\s+(.+?))?\s*$`)
+	flowStopNote    = pattern(`^\s*%%\s*stop:\s*(.*?)\s*$`)
+	fence           = pattern("^\\s*(```+|~~~+)\\s*(\\S*)\\s*(\\S*)")
 )
 
 func pattern(expr string) func() *regexp.Regexp {
@@ -155,7 +166,11 @@ func parse(text string) document {
 		if match := fence().FindStringSubmatch(line); match != nil {
 			fenceMark = match[1]
 			if match[2] == "mermaid" && sequenceDiagramFollows(lines[i+1:]) {
-				doc.flows = append(doc.flows, flow{line: number})
+				side := ""
+				if match[3] == "before" || match[3] == "after" {
+					side = match[3]
+				}
+				doc.flows = append(doc.flows, flow{line: number, side: side})
 				openFlow = &doc.flows[len(doc.flows)-1]
 			}
 			lastNote = nil
@@ -237,9 +252,42 @@ func (d *document) flowLine(open *flow, line string, number int) {
 		last.ref = &ref
 		return
 	}
-	if match := flowArrow().FindStringSubmatch(line); match != nil {
-		open.messages = append(open.messages, flowMessage{line: number, text: strings.TrimSpace(match[1])})
+	if match := flowMessageLine().FindStringSubmatch(line); match != nil {
+		from, to := open.participant(match[1], "", false), open.participant(match[4], "", false)
+		open.messages = append(open.messages, flowMessage{line: number, from: from, to: to, arrow: match[2], text: strings.TrimSpace(match[5])})
+		return
 	}
+	if match := participantLine().FindStringSubmatch(line); match != nil {
+		open.participant(match[2], match[3], match[1] == "actor")
+		return
+	}
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" || trimmed == "sequenceDiagram" || strings.HasPrefix(trimmed, "%%") || open.undrawable != 0 {
+		return
+	}
+	open.undrawable = number
+	d.problem(number, "attn draws participants, actors and messages; `%s` is outside that, so this diagram shows as a mermaid figure and the Map frame cannot walk it. Remove the line, or say it in the prose.", trimmed)
+}
+
+// participant returns the id a participant line or message names, declaring
+// it on first use as mermaid does.
+func (f *flow) participant(id, label string, actor bool) string {
+	id = strings.TrimSpace(id)
+	label = strings.TrimSpace(label)
+	for i := range f.participants {
+		if f.participants[i].id == id {
+			if label != "" {
+				f.participants[i].label = label
+			}
+			f.participants[i].actor = f.participants[i].actor || actor
+			return id
+		}
+	}
+	if label == "" {
+		label = id
+	}
+	f.participants = append(f.participants, flowParticipant{id: id, label: label, actor: actor})
+	return id
 }
 
 func parseRange(text string) (stopRef, bool) {

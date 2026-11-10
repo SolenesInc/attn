@@ -1,0 +1,231 @@
+A diagram fence's info string names its side, before or after. A fence with a
+line outside the participants, actors and messages attn draws is kept with
+drawn false and one problem naming the first such line. Participants a message
+names first are declared in order of use.
+-- base/a.go --
+package a
+
+func A() {}
+
+func B() {}
+-- head/a.go --
+package a
+
+func A() { B() }
+
+func B() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid before
+sequenceDiagram
+  actor u as User
+  u->>a: calls A
+  %% stop: a.go:3-3
+```
+
+```mermaid after
+sequenceDiagram
+  participant a as A
+  u-)a: calls A
+  a-->>+b: calls B
+  %% stop: a.go:3-3
+  b--xa: fails
+```
+
+```mermaid
+sequenceDiagram
+  a->>b: calls B
+  loop every poll
+    b->>b: refresh
+  end
+  Note over a: never drawn
+```
+
+## A calls B
+
+### a.go:3-3
+
+### a.go:5-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "u",
+          "line": 13,
+          "stop_line": 37,
+          "text": "calls A",
+          "to": "a"
+        }
+      ],
+      "participants": [
+        {
+          "actor": true,
+          "id": "u",
+          "label": "User"
+        },
+        {
+          "actor": false,
+          "id": "a",
+          "label": "a"
+        }
+      ],
+      "side": "before"
+    },
+    {
+      "drawn": true,
+      "line": 17,
+      "messages": [
+        {
+          "arrow": "-)",
+          "from": "u",
+          "line": 20,
+          "text": "calls A",
+          "to": "a"
+        },
+        {
+          "arrow": "--\u003e\u003e",
+          "from": "a",
+          "line": 21,
+          "stop_line": 37,
+          "text": "calls B",
+          "to": "b"
+        },
+        {
+          "arrow": "--x",
+          "from": "b",
+          "line": 23,
+          "text": "fails",
+          "to": "a"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "A"
+        },
+        {
+          "actor": false,
+          "id": "u",
+          "label": "u"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "b"
+        }
+      ],
+      "side": "after"
+    },
+    {
+      "drawn": false,
+      "line": 26,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 28,
+          "text": "calls B",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "b",
+          "line": 30,
+          "text": "refresh",
+          "to": "b"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "a"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "b"
+        }
+      ]
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [
+    {
+      "line": 29,
+      "message": "attn draws participants, actors and messages; `loop every poll` is outside that, so this diagram shows as a mermaid figure and the Map frame cannot walk it. Remove the line, or say it in the prose."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 3,
+      "heading_line": 37,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { B() }"
+        }
+      ],
+      "to": 3
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 5,
+      "heading_line": 39,
+      "notes": [],
+      "now_from": 5,
+      "now_to": 5,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func B() {}"
+        },
+        {
+          "kind": "+",
+          "now": 5,
+          "text": "func B() { println() }"
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

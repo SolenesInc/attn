@@ -9662,14 +9662,29 @@ type ReviewFileResultMessage struct {
 }
 
 type ReviewFlow struct {
+	// Drawn corresponds to the JSON schema field "drawn".
+	Drawn bool `json:"drawn"`
+
 	// Line corresponds to the JSON schema field "line".
 	Line int `json:"line"`
 
 	// Messages corresponds to the JSON schema field "messages".
 	Messages []ReviewFlowMessage `json:"messages"`
+
+	// Participants corresponds to the JSON schema field "participants".
+	Participants []ReviewFlowParticipant `json:"participants"`
+
+	// Side corresponds to the JSON schema field "side".
+	Side *string `json:"side,omitempty,omitzero"`
 }
 
 type ReviewFlowMessage struct {
+	// Arrow corresponds to the JSON schema field "arrow".
+	Arrow string `json:"arrow"`
+
+	// From corresponds to the JSON schema field "from".
+	From string `json:"from"`
+
 	// Line corresponds to the JSON schema field "line".
 	Line int `json:"line"`
 
@@ -9678,6 +9693,20 @@ type ReviewFlowMessage struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// To corresponds to the JSON schema field "to".
+	To string `json:"to"`
+}
+
+type ReviewFlowParticipant struct {
+	// Actor corresponds to the JSON schema field "actor".
+	Actor bool `json:"actor"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
 }
 
 type ReviewLeftOut struct {

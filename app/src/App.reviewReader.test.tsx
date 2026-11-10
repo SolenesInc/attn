@@ -94,10 +94,14 @@ const BUNDLE: ReviewBundle = {
   problems: [],
 };
 
+const UTIL_FILE = [row(' ', 1, 1, 'package calc'), row('+', undefined, 2, 'func helper() {}')];
+
 function serveRepository(daemon: ScriptedDaemon) {
-  daemon.on('review_file', ({ path }) => (path === 'calc.go'
-    ? { event: 'review_file_result', success: true, path, rows: CALC_FILE, hash: 'h1' }
-    : { event: 'review_file_result', success: true, path, rows: [row(' ', 1, 1, `// ${path}`)], hash: 'h3' }));
+  daemon.on('review_file', ({ path }) => {
+    if (path === 'calc.go') return { event: 'review_file_result', success: true, path, rows: CALC_FILE, hash: 'h1' };
+    if (path === 'util.go') return { event: 'review_file_result', success: true, path, rows: UTIL_FILE, hash: 'h2' };
+    return { event: 'review_file_result', success: true, path, rows: [row(' ', 1, 1, `// ${path}`)], hash: 'h3' };
+  });
   daemon.on('review_search', ({ query }) => ({
     event: 'review_search_result',
     success: true,
@@ -106,10 +110,10 @@ function serveRepository(daemon: ScriptedDaemon) {
   }));
 }
 
-async function openReview({ review = BUNDLE }: { review?: ReviewBundle | null } = {}) {
+async function openReview({ review = BUNDLE, content = DOCUMENT }: { review?: ReviewBundle | null; content?: string } = {}) {
   const view = await openMarkdownTiles('', { path: DOC, script: serveRepository });
   const desktopId = view.daemon.arrangement.profile.current_desktop_id;
-  view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, ...(review ? { review } : {}) });
+  view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content, ...(review ? { review } : {}) });
   await view.daemon.idle();
   const tile = view.tile();
   const body = tile.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
@@ -323,7 +327,176 @@ describe('App review reader', () => {
     await press('ArrowRight');
     await press('Enter');
     await press('/');
+    await press('2');
+    await press('3');
     expect(daemon.sentOf('review_file')).toEqual([]);
     expect(reader.queryByRole('textbox', { name: 'Search' })).toBeNull();
+    expect(tileElement.querySelector('[data-review-file-view], .review-map')).toBeNull();
+  });
+});
+
+const MAP_DOCUMENT = `${DOCUMENT}
+\`\`\`mermaid before
+sequenceDiagram
+  participant poll as Poll
+  participant calc as Calc
+  poll->>calc: Add(a, b)
+  %% stop: calc.go:3-6
+\`\`\`
+
+\`\`\`mermaid after
+sequenceDiagram
+  participant poll as Poll
+  participant calc as Calc
+  participant util as Util
+  poll->>calc: Add(a, b)
+  %% stop: calc.go:4-5
+  calc->>util: helper()
+  %% stop: util.go:1-2
+  util-->>calc: returns
+\`\`\`
+
+\`\`\`mermaid
+sequenceDiagram
+  loop every poll
+    poll->>calc: Add(a, b)
+  end
+\`\`\`
+`;
+
+const participant = (id: string, label: string) => ({ id, label, actor: false });
+const message = (line: number, from: string, to: string, text: string, stopLine?: number) => ({
+  line, from, to, arrow: '->>', text, ...(stopLine !== undefined ? { stop_line: stopLine } : {}),
+});
+
+const MAP_BUNDLE: ReviewBundle = {
+  ...BUNDLE,
+  frame: 'map',
+  flows: [
+    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)] },
+    {
+      line: 39, side: 'after', drawn: true,
+      participants: [participant('poll', 'Poll'), participant('calc', 'Calc'), participant('util', 'Util')],
+      messages: [message(44, 'poll', 'calc', 'Add(a, b)', 15), message(46, 'calc', 'util', 'helper()', 22), message(48, 'util', 'calc', 'returns')],
+    },
+    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')] },
+  ],
+};
+
+const frameTabs = (scope: HTMLElement) => Array.from(scope.querySelectorAll('.review-frames [role="tab"]')).map((tab) => `${tab.textContent}${tab.getAttribute('aria-selected') === 'true' ? ' *' : ''}`);
+const script = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-frame--walkthrough > .review-doc');
+const stageStop = (scope: HTMLElement) => script(scope)?.querySelector('.review-stop--current')?.getAttribute('data-path');
+const diagrams = (scope: HTMLElement) => Array.from(scope.querySelectorAll('.review-map [data-review-flow]')).map((svg) => svg.getAttribute('data-review-flow'));
+const currentMessage = (scope: HTMLElement) => scope.querySelector('.review-map [aria-current="true"][data-review-message]')?.getAttribute('data-review-message');
+const mapDetail = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-map-detail');
+const mapCursor = (scope: HTMLElement) => mapDetail(scope)?.querySelector<HTMLElement>('.review-cursor');
+
+describe('App review reader frames', () => {
+  it('opens in the Walkthrough the document picks: the stops as a script beside the file of the current stop', async () => {
+    const { tileElement, daemon, press } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
+
+    expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough *']);
+    expect(stageStop(tileElement)).toBe('calc.go');
+    expect(script(tileElement)).toHaveTextContent('Add keeps its result');
+    expect(script(tileElement)?.querySelector('.review-stop[data-path="calc.go"] .review-row')).toBeNull();
+    expect(fileView(tileElement)).toHaveClass('review-file-view--stage');
+    expect(fileCursorText(tileElement)).toBe('4+\tsum := a + b');
+    expect(fileView(tileElement)?.querySelector('.review-file-view-row--look')?.textContent).toBe('4+\tsum := a + b');
+    expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('The sum gets a name.');
+
+    await press('ArrowDown');
+    expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
+    expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('Then it is returned.');
+
+    await press('ArrowRight');
+    expect(stageStop(tileElement)).toBe('util.go');
+    expect(fileCursorText(tileElement)).toBe('2+func helper() {}');
+    await press('ArrowRight');
+    expect(stageStop(tileElement)).toBe('util.go');
+    await press('ArrowLeft');
+    expect(stageStop(tileElement)).toBe('calc.go');
+    expect(daemon.sentOf('review_file').map(({ path }) => path)).toEqual(['calc.go', 'util.go', 'calc.go']);
+
+    await press('z');
+    expect(tileElement.querySelector('.review-frame--script-hidden')).not.toBeNull();
+    await press('z');
+    expect(tileElement.querySelector('.review-frame--script-hidden')).toBeNull();
+
+    await press('o', { ctrlKey: true });
+    await press('Escape');
+    expect(fileView(tileElement)).toHaveClass('review-file-view--stage');
+    expect(stageStop(tileElement)).toBe('calc.go');
+  });
+
+  it('opens in the Map the document picks and walks the messages tied to stops, with the code of each beside the diagram', async () => {
+    const { tileElement, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
+
+    expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough', '3Map *']);
+    expect(diagrams(tileElement)).toEqual(['39']);
+    expect(currentMessage(tileElement)).toBe('44');
+    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 2 · after the change');
+    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'calc.go');
+    expect(mapCursor(tileElement)).toHaveAttribute('data-line', '3');
+
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(mapCursor(tileElement)).toHaveAttribute('data-line', '4');
+
+    await press('ArrowRight');
+    expect(currentMessage(tileElement)).toBe('46');
+    expect(mapDetail(tileElement)).toHaveTextContent('helper()Calc → Util');
+    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    await press('ArrowRight');
+    expect(currentMessage(tileElement)).toBe('46');
+
+    await press('Enter');
+    expect(fileView(tileElement)).toHaveTextContent('util.go');
+    await press('Escape');
+
+    await press('b');
+    expect(diagrams(tileElement)).toEqual(['31']);
+    expect(currentMessage(tileElement)).toBe('35');
+    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1 · before the change');
+    await press('b');
+    expect(diagrams(tileElement)).toEqual(['39']);
+    expect(currentMessage(tileElement)).toBe('44');
+  });
+
+  it('switches frames with 1, 2 and 3 and keeps the stop and line the cursor is on', async () => {
+    const { tileElement, press } = await openReview({ review: { ...MAP_BUNDLE, frame: 'brief' }, content: MAP_DOCUMENT });
+    expect(frameTabs(tileElement)).toEqual(['1Brief *', '2Walkthrough', '3Map']);
+    await press('ArrowRight');
+    await press('ArrowRight');
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveAttribute('data-line', '2');
+
+    await press('2');
+    expect(stageStop(tileElement)).toBe('util.go');
+    expect(fileCursorText(tileElement)).toBe('2+func helper() {}');
+
+    await press('ArrowLeft');
+    await press('ArrowDown');
+    expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
+    await press('3');
+    expect(currentMessage(tileElement)).toBe('44');
+    expect(mapCursor(tileElement)).toHaveAttribute('data-line', '5');
+
+    await press('ArrowRight');
+    await press('1');
+    expect(tileElement.querySelector('.review-map')).toBeNull();
+    expect(cursor(tileElement)?.closest('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(cursor(tileElement)).toHaveAttribute('data-line', '1');
+  });
+
+  it('leaves out a frame the document cannot fill, and shows a diagram outside the drawn subset as a mermaid figure', async () => {
+    const undrawn: ReviewBundle = { ...MAP_BUNDLE, flows: [MAP_BUNDLE.flows[2]] };
+    const { tileElement, press } = await openReview({ review: undrawn, content: MAP_DOCUMENT });
+
+    expect(frameTabs(tileElement)).toEqual(['1Brief *', '2Walkthrough']);
+    await press('3');
+    expect(tileElement.querySelector('.review-map')).toBeNull();
+    await act(() => vi.dynamicImportSettled());
+    expect(tileElement.querySelectorAll('.review-doc .markdown-mermaid-frame')).toHaveLength(3);
+    expect(tileElement.querySelector('.review-seq')).toBeNull();
   });
 });

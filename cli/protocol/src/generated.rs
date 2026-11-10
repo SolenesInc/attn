@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "e89bbbca24c6";
+pub const PROTOCOL_VERSION: &str = "8481fa6ac926";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9134,16 +9134,30 @@ impl ReviewFileResultMessage {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewFlow {
+    pub drawn: bool,
     pub line: i64,
     #[serde(deserialize_with = "null_as_default")]
     pub messages: Vec<ReviewFlowMessage>,
+    #[serde(deserialize_with = "null_as_default")]
+    pub participants: Vec<ReviewFlowParticipant>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub side: Option<String>,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewFlowMessage {
+    pub arrow: String,
+    pub from: String,
     pub line: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stop_line: Option<i64>,
     pub text: String,
+    pub to: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFlowParticipant {
+    pub actor: bool,
+    pub id: String,
+    pub label: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewLeftOut {

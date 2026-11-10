@@ -9,10 +9,208 @@
   --review-range: color-mix(in srgb, var(--color-accent) 8%, transparent);
 }
 
-.md-reader--review > .review-doc {
+.md-reader--review > .review-frame {
   flex: 1;
   min-height: 0;
+  display: flex;
+}
+
+.review-frame > .review-doc {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
+}
+
+.review-frame > .review-doc[hidden] {
+  display: none;
+}
+
+.review-frame--walkthrough > .review-doc {
+  flex: 0 0 min(440px, 38%);
+  border-right: 1px solid var(--color-border);
+  font-size: 0.875rem;
+}
+
+.review-frame--script-hidden > .review-doc {
+  display: none;
+}
+
+.review-file-view.review-file-view--stage {
+  position: static;
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  border-left: 0;
+  box-shadow: none;
+}
+
+.review-stop--script {
+  cursor: pointer;
+}
+
+.review-stop--script.review-stop--current {
+  border-color: var(--color-accent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.review-stop--script .review-rows {
+  font-family: inherit;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.review-note-at .review-note {
+  background: var(--review-cursor);
+}
+
+.review-file-view-row--noted .review-row-sign {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+.review-file-view-row--look .review-row-sign {
+  box-shadow: inset 3px 0 0 var(--color-warning, var(--color-accent));
+}
+
+.review-map {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
+.review-map-diagrams {
+  flex: 0 1 auto;
+  max-width: 58%;
+  overflow: auto;
+  padding: 0.75rem;
+  border-right: 1px solid var(--color-border);
+}
+
+.review-map-sides {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.75rem;
+}
+
+.review-map-sides button,
+.review-frames button {
+  padding: 0.125rem 0.5rem;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: none;
+  color: var(--color-text-secondary);
+  font: inherit;
+}
+
+.review-map-sides button[aria-pressed='true'],
+.review-frames button[aria-selected='true'] {
+  border-color: var(--color-border);
+  background: var(--review-range);
+  color: var(--color-text-primary, inherit);
+}
+
+.review-map-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 0.75rem 1rem;
+}
+
+.review-map-message h2 {
+  margin: 0.25rem 0;
+  font-size: 1.05rem;
+}
+
+.review-map-route {
+  display: block;
+  margin-bottom: 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.review-seq {
+  display: block;
+  font-size: 12px;
+}
+
+.review-seq-participant rect {
+  fill: var(--color-bg-panel);
+  stroke: var(--color-border);
+}
+
+.review-seq-participant--actor rect {
+  stroke: var(--color-text-muted);
+}
+
+.review-seq-participant text {
+  fill: var(--color-text-primary, currentColor);
+  font-weight: 600;
+}
+
+.review-seq-life {
+  stroke: var(--color-border);
+  stroke-dasharray: 3 4;
+}
+
+.review-seq-hit {
+  fill: transparent;
+}
+
+.review-seq-message--stop {
+  cursor: pointer;
+}
+
+.review-seq-message--current .review-seq-hit {
+  fill: var(--review-cursor);
+}
+
+.review-seq-line,
+.review-seq-open {
+  fill: none;
+  stroke: var(--color-text-muted);
+  stroke-width: 1.4;
+}
+
+.review-seq-line--dashed {
+  stroke-dasharray: 5 4;
+}
+
+.review-seq-head {
+  fill: var(--color-text-muted);
+}
+
+.review-seq-label {
+  fill: var(--color-text-muted);
+}
+
+.review-seq-message--stop .review-seq-label {
+  fill: var(--color-text-primary, currentColor);
+}
+
+.review-seq-message--stop .review-seq-line,
+.review-seq-message--stop .review-seq-open {
+  stroke: var(--color-text-secondary);
+}
+
+.review-seq-message--stop .review-seq-head {
+  fill: var(--color-text-secondary);
+}
+
+.review-seq-message--current .review-seq-line,
+.review-seq-message--current .review-seq-open {
+  stroke: var(--color-accent);
+}
+
+.review-seq-message--current .review-seq-head {
+  fill: var(--color-accent);
+}
+
+.review-frames {
+  display: flex;
+  gap: 0.125rem;
+  padding-right: 0.5rem;
+  border-right: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
 }
 
 .md-reader--review .md-reader-wrap {

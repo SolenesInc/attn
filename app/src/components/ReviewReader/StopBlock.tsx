@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
-import { useReviewReader } from './reviewContext';
+import { useReviewReader, type FileTarget } from './reviewContext';
 import { useTokens } from './tokenize';
 
 function splitPath(path: string): { dir: string; name: string } {
@@ -35,7 +35,54 @@ function NoteRow({ note }: { note: ReviewNote }) {
   );
 }
 
+export function stopTarget(stop: ReviewStop, line?: number): FileTarget {
+  const range: [number, number] | undefined = stop.now_from ? [stop.now_from, stop.now_to] : undefined;
+  return { path: stop.path, line: line ?? range?.[0], range, notes: stop.notes };
+}
+
+function noteCovers(note: ReviewNote, line: number | undefined): boolean {
+  return line !== undefined && note.now_from > 0 && line >= note.now_from && line <= note.now_to;
+}
+
+/** A stop in the Walkthrough's script: where it is and what the agent says;
+ * the code is on the stage beside it. */
+function ScriptStop({ stop }: { stop: ReviewStop }) {
+  const reader = useReviewReader();
+  const stage = reader?.stage;
+  const current = stage?.stopLine === stop.heading_line;
+  const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
+  return (
+    <section
+      className={`review-stop review-stop--script${current ? ' review-stop--current' : ''}`}
+      data-review-stop-head={stop.heading_line}
+      data-path={stop.path}
+      aria-current={current || undefined}
+      onClick={() => reader?.showStop(stop)}
+    >
+      <header className="review-stop-header">
+        <PathLabel path={stop.path} />
+        <span className="review-stop-range">{nowRange}</span>
+        {stop.changed_since_presented ? <span className="review-badge">changed since presented</span> : null}
+      </header>
+      {stop.notes.length > 0 ? (
+        <div className="review-rows">
+          {stop.notes.map((note) => (
+            <div key={note.line} className={current && noteCovers(note, stage?.line) ? 'review-note-at' : undefined}>
+              <NoteRow note={note} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function StopBlock({ stop }: { stop: ReviewStop }) {
+  const reader = useReviewReader();
+  return reader?.frame === 'walkthrough' ? <ScriptStop stop={stop} /> : <CodeStop stop={stop} />;
+}
+
+function CodeStop({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
   const expansion = reader?.expansions.get(stop.heading_line);
   const rows = expansion?.rows ?? stop.rows;
@@ -51,7 +98,7 @@ export function StopBlock({ stop }: { stop: ReviewStop }) {
   const shownLines = new Set(rows.map((row) => row.now).filter((line): line is number => line !== undefined));
   const unplaced = stop.notes.filter((note) => !shownLines.has(note.now_to));
   const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
-  const open = () => reader?.openFile({ path: stop.path, line: stop.now_from || undefined, range: stop.now_from ? [stop.now_from, stop.now_to] : undefined });
+  const open = () => reader?.openFile(stopTarget(stop));
 
   return (
     <section className="review-stop" data-review-stop-head={stop.heading_line} data-path={stop.path}>

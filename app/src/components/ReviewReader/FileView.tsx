@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
@@ -51,9 +51,20 @@ function useFileTokens(rows: ReviewRow[] | null, path: string): readonly (TokenL
   return tokens;
 }
 
+/** The lines agent notes point at, and whether any of them is the place to look. */
+function notedLines(file: OpenFile): ReadonlyMap<number, boolean> {
+  const noted = new Map<number, boolean>();
+  for (const note of file.target.notes ?? []) {
+    if (note.now_from === 0) continue;
+    for (let line = note.now_from; line <= note.now_to; line += 1) noted.set(line, (noted.get(line) ?? false) || note.look);
+  }
+  return noted;
+}
+
 export function FileView({
   file,
   filled,
+  stage = false,
   canGoBack,
   onBack,
   onClose,
@@ -61,9 +72,10 @@ export function FileView({
 }: {
   file: OpenFile;
   filled: boolean;
+  stage?: boolean;
   canGoBack: boolean;
   onBack: () => void;
-  onClose: () => void;
+  onClose?: () => void;
   onPick: (index: number) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -71,6 +83,7 @@ export function FileView({
   const rows = file.rows;
   const tokens = useFileTokens(rows, file.target.path);
   const range = file.target.range;
+  const noted = useMemo(() => notedLines(file), [file]);
   const resizeWatch = useResizeWatch();
 
   useLayoutEffect(() => {
@@ -97,13 +110,17 @@ export function FileView({
   const last = rows ? Math.min(rows.length, Math.ceil((view.top + view.height) / FILE_ROW_HEIGHT) + OVERSCAN_ROWS) : 0;
 
   return (
-    <aside className={`review-file-view${filled ? ' review-file-view--filled' : ''}`} aria-label="File view" data-review-file-view="">
+    <aside
+      className={`review-file-view${stage ? ' review-file-view--stage' : filled ? ' review-file-view--filled' : ''}`}
+      aria-label="File view"
+      data-review-file-view=""
+    >
       <header className="review-file-view-header">
         <button type="button" tabIndex={-1} disabled={!canGoBack} onClick={onBack}>← back <kbd>⌃o</kbd></button>
         <PathLabel path={file.target.path} />
         {rows ? <span className="review-file-view-lines">{rows.filter((row) => row.now !== undefined).length} lines</span> : null}
         <span className="review-grow" />
-        <button type="button" tabIndex={-1} onClick={onClose}>close <kbd>esc</kbd></button>
+        {onClose ? <button type="button" tabIndex={-1} onClick={onClose}>close <kbd>esc</kbd></button> : null}
       </header>
       {file.problem ? <div className="review-file-view-problem" role="status">{file.problem}</div> : null}
       <div className="review-file-view-body" ref={scrollRef} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
@@ -113,10 +130,12 @@ export function FileView({
           <div className="review-file-view-rows" style={{ height: rows.length * FILE_ROW_HEIGHT }}>
             {rows.slice(first, last).map((row, offset) => {
               const index = first + offset;
+              const look = row.now === undefined ? undefined : noted.get(row.now);
+              const mark = look === undefined ? '' : look ? ' review-file-view-row--look' : ' review-file-view-row--noted';
               return (
                 <div
                   key={rowKey(row)}
-                  className={`review-file-view-row${index === file.cursor ? ' review-cursor' : ''}`}
+                  className={`review-file-view-row${mark}${index === file.cursor ? ' review-cursor' : ''}`}
                   style={{ top: index * FILE_ROW_HEIGHT, height: FILE_ROW_HEIGHT }}
                   data-row-index={index}
                   onClick={() => onPick(index)}

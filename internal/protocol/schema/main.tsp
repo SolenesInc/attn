@@ -3861,13 +3861,28 @@ model ReviewFile {
   binary: boolean;
 }
 
+// A mermaid sequenceDiagram fence. attn draws the subset of participants,
+// actors and messages; a fence with any other line is not drawn and shows as
+// a mermaid figure.
 model ReviewFlow {
   line: int32;                   // the opening fence in the document
+  side?: string;                 // before | after, from the fence's info string
+  drawn: boolean;
+  participants: ReviewFlowParticipant[];
   messages: ReviewFlowMessage[];
+}
+
+model ReviewFlowParticipant {
+  id: string;
+  label: string;
+  actor: boolean;
 }
 
 model ReviewFlowMessage {
   line: int32;
+  from: string;                  // a participant id
+  to: string;
+  arrow: string;                 // the mermaid arrow as written: ->>, -->>, ->, -->, -x, --x, -), --)
   text: string;
   stop_line?: int32;             // heading_line of the stop its %% stop: comment names
 }

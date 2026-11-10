@@ -46,16 +46,35 @@ sequenceDiagram
   ],
   "flows": [
     {
+      "drawn": true,
       "line": 10,
       "messages": [
         {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
           "line": 14,
           "stop_line": 23,
-          "text": "calls B"
+          "text": "calls B",
+          "to": "b"
         },
         {
+          "arrow": "--\u003e\u003e",
+          "from": "b",
           "line": 16,
-          "text": "returns"
+          "text": "returns",
+          "to": "a"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "A"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "B"
         }
       ]
     }

@@ -1,0 +1,58 @@
+frame: map needs a drawn diagram with a message tied to a stop; without one,
+the bundle keeps the pick and names the problem, and the reader opens Brief.
+-- base/a.go --
+package a
+-- review.md --
+---
+frame: map
+---
+# Map without stops
+
+```mermaid
+sequenceDiagram
+  a->>b: calls B
+```
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [],
+  "flows": [
+    {
+      "drawn": true,
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 12,
+          "text": "calls B",
+          "to": "b"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "a"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "b"
+        }
+      ]
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [
+    {
+      "line": 2,
+      "message": "frame: map walks a sequence diagram's messages, and no diagram attn draws has a message with `%% stop: path:from-to` after it, so the review opens in brief. Add one, or pick walkthrough or brief."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": []
+}

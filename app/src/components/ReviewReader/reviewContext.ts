@@ -1,10 +1,19 @@
 import { createContext, useContext } from 'react';
-import type { ReviewBundle, ReviewRow } from '../../types/generated';
+import type { ReviewBundle, ReviewNote, ReviewRow, ReviewStop } from '../../types/generated';
+import type { Frame } from './frames';
 
 export interface FileTarget {
   path: string;
   line?: number;
   range?: [number, number];
+  notes?: readonly ReviewNote[];
+}
+
+/** Where the Walkthrough stands: the stop on the stage and the line the
+ * file view's cursor is on. */
+export interface StagePlace {
+  stopLine: number;
+  line?: number;
 }
 
 export interface StopExpansion {
@@ -15,6 +24,9 @@ export interface StopExpansion {
 export interface ReviewReaderContextValue {
   bundle: ReviewBundle;
   expansions: ReadonlyMap<number, StopExpansion>;
+  frame: Frame;
+  stage: StagePlace | null;
+  showStop(stop: ReviewStop): void;
   openFile(target: FileTarget, options?: { fill?: boolean }): void;
   openSearch(query?: string): void;
 }
