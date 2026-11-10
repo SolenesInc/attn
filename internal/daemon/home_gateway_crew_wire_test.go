@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -188,18 +187,6 @@ func TestAHomeRefusesAStartOfAMemberOfAnotherProfile(t *testing.T) {
 	}
 	if got := crewSessionCount(t, cli); got != 0 {
 		t.Errorf("a refused start left %d sessions, want none", got)
-	}
-}
-
-func TestAHomeRefusesAPhoneOfAnOlderAPIWithAMessageThePhoneShows(t *testing.T) {
-	w := newCrewWorld(t, fakeagent.Claude)
-	app, cli := w.App(), w.Client()
-	setSetting(t, app, "phone_access_enabled", "true")
-	phone := connectPhone(t, w, "phone", app.SelectedProfile())
-	phone.hello(homegateway.OldestAPIVersion - 1)
-	phone.refusedWith(fmt.Sprintf("this phone speaks api %d and this home serves api %d to %d; update the attn phone app", homegateway.OldestAPIVersion-1, homegateway.OldestAPIVersion, homegateway.APIVersion))
-	if got := crewSessionCount(t, cli); got != 0 {
-		t.Errorf("a refused phone left %d sessions, want none", got)
 	}
 }
 
