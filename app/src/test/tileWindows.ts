@@ -1,4 +1,8 @@
 import { vi } from 'vitest';
+import { _resetTileWindowsForTest } from '../tileWindow/pool';
+import { storeResets } from './storeResets';
+
+storeResets.add(_resetTileWindowsForTest);
 
 const happyDomWithoutItsNodeTypes: string = 'happy-dom';
 
