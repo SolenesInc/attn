@@ -132,12 +132,14 @@ frame: slides
       "path": "a.go",
       "rows": [
         {
+          "head": 1,
           "kind": " ",
           "now": 1,
           "old": 1,
           "text": "package a"
         },
         {
+          "head": 2,
           "kind": " ",
           "now": 2,
           "old": 2,
@@ -149,6 +151,7 @@ frame: slides
           "text": "func A() {}"
         },
         {
+          "head": 3,
           "kind": "+",
           "now": 3,
           "text": "func A() { println() }"

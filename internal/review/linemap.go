@@ -58,6 +58,39 @@ func (m lineMap) span(from, to int) (start, end int, ok bool) {
 	return start, end, true
 }
 
+// withHeads gives each row the line at head that it shows: a line now through
+// the map from head to now, and a line removed since head through the map from
+// base to head.
+func withHeads(rows []protocol.ReviewRow, base, head, now []string) {
+	if head == nil {
+		return
+	}
+	nowToHead := make(map[int]int)
+	if now != nil {
+		for line, kept := range newLineMap(head, now).kept {
+			if kept > 0 {
+				nowToHead[kept] = line + 1
+			}
+		}
+	}
+	var baseToHead []int
+	if base != nil {
+		baseToHead = newLineMap(base, head).kept
+	}
+	for i := range rows {
+		line := 0
+		switch {
+		case rows[i].Now != nil:
+			line = nowToHead[*rows[i].Now]
+		case rows[i].Old != nil && *rows[i].Old <= len(baseToHead):
+			line = baseToHead[*rows[i].Old-1]
+		}
+		if line > 0 {
+			rows[i].Head = protocol.Ptr(line)
+		}
+	}
+}
+
 // rows are the lines now..to of the text now with the change from base:
 // unchanged and added lines, and the removed lines that sat between them.
 func rows(base, now []string, from, to int) ([]protocol.ReviewRow, bool) {

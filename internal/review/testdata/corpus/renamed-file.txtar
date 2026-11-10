@@ -53,24 +53,28 @@ func Three() int { return 3 }
       "path": "new.go",
       "rows": [
         {
+          "head": 1,
           "kind": " ",
           "now": 1,
           "old": 1,
           "text": "package p"
         },
         {
+          "head": 2,
           "kind": " ",
           "now": 2,
           "old": 2,
           "text": ""
         },
         {
+          "head": 3,
           "kind": " ",
           "now": 3,
           "old": 3,
           "text": "func One() int { return 1 }"
         },
         {
+          "head": 4,
           "kind": " ",
           "now": 4,
           "old": 4,
@@ -82,17 +86,20 @@ func Three() int { return 3 }
           "text": "func Two() int { return 2 }"
         },
         {
+          "head": 5,
           "kind": "+",
           "now": 5,
           "text": "func Two() int { return 22 }"
         },
         {
+          "head": 6,
           "kind": " ",
           "now": 6,
           "old": 6,
           "text": ""
         },
         {
+          "head": 7,
           "kind": " ",
           "now": 7,
           "old": 7,

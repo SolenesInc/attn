@@ -63,6 +63,7 @@ func Sub(a, b int) int {
       "path": "calc.go",
       "rows": [
         {
+          "head": 3,
           "kind": " ",
           "now": 3,
           "old": 3,
@@ -74,11 +75,13 @@ func Sub(a, b int) int {
           "text": "\treturn a + b"
         },
         {
+          "head": 4,
           "kind": "+",
           "now": 4,
           "text": "\treturn b + a"
         },
         {
+          "head": 5,
           "kind": " ",
           "now": 5,
           "old": 5,
@@ -108,18 +111,21 @@ func Sub(a, b int) int {
       "path": "calc.go",
       "rows": [
         {
+          "head": 7,
           "kind": " ",
           "now": 7,
           "old": 7,
           "text": "func Sub(a, b int) int {"
         },
         {
+          "head": 8,
           "kind": " ",
           "now": 8,
           "old": 8,
           "text": "\treturn a - b"
         },
         {
+          "head": 9,
           "kind": " ",
           "now": 9,
           "old": 9,

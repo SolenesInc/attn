@@ -843,3 +843,25 @@
   color: var(--color-text-primary);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
+
+.review-marks-moved {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.review-marks-moved h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+
+.review-marks-moved p {
+  margin: 0 0 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.review-marks-moved .review-mark {
+  margin-left: 0;
+}

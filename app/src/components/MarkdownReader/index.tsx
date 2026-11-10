@@ -674,7 +674,7 @@ export const MarkdownReader = memo(function MarkdownReader({
     isHydrated: () => annotationsApiRef.current.isHydrated(),
     adoptSentDraft: (uri: string, draft: MarkdownAnnotationsDraft) =>
       annotationsApiRef.current.adoptSentDraft(uri, draft),
-    getOrphanedIds: () => Array.from(annotationsApiRef.current.orphans.keys()),
+    getOrphanedIds: () => [...annotationsApiRef.current.orphans.keys(), ...(reviewHandleRef.current?.movedMarkIds() ?? [])],
     openInspector: () => annotationLayerRef.current?.openInspector(),
     openGlobalComment: (anchorEl: HTMLElement) => annotationLayerRef.current?.openGlobalComment(anchorEl),
     openReviewSend: () => {

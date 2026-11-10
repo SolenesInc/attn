@@ -10051,6 +10051,9 @@ type ReviewProblem struct {
 }
 
 type ReviewRow struct {
+	// Head corresponds to the JSON schema field "head".
+	Head *int `json:"head,omitempty,omitzero"`
+
 	// Kind corresponds to the JSON schema field "kind".
 	Kind string `json:"kind"`
 

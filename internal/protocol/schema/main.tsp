@@ -2782,8 +2782,8 @@ model MarkdownAnnotationAnchor {
   end: int32;
   content_hash: string;
   // A mark on a review's code: the file, relative to the review's repository,
-  // and its lines now. block_id is then empty, exact holds the quoted code, and
-  // start_line is the document line the mark reads at.
+  // and its lines at head. block_id is then empty, exact holds the quoted code,
+  // and start_line is the document line the mark reads at.
   file?: string;
   file_start_line?: int32;
   file_end_line?: int32;
@@ -3856,6 +3856,7 @@ model ReviewRow {
   kind: string;                  // " " unchanged, "+" added, "-" removed since base
   old?: int32;                   // the line at base
   now?: int32;                   // the line now
+  head?: int32;                  // the line at head, the snapshot the review presents; absent for a line head does not have
   text: string;
 }
 

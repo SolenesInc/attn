@@ -47,12 +47,14 @@ A new paragraph.
       "path": "docs/guide.md",
       "rows": [
         {
+          "head": 1,
           "kind": " ",
           "now": 1,
           "old": 1,
           "text": "# Guide"
         },
         {
+          "head": 2,
           "kind": " ",
           "now": 2,
           "old": 2,
@@ -64,16 +66,19 @@ A new paragraph.
           "text": "Old sentence."
         },
         {
+          "head": 3,
           "kind": "+",
           "now": 3,
           "text": "New sentence."
         },
         {
+          "head": 4,
           "kind": "+",
           "now": 4,
           "text": ""
         },
         {
+          "head": 5,
           "kind": "+",
           "now": 5,
           "text": "A new paragraph."

@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "b79e6b1b07db";
+pub const PROTOCOL_VERSION: &str = "bff4cc349622";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9436,6 +9436,8 @@ pub struct ReviewProblem {
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewRow {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub head: Option<i64>,
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub now: Option<i64>,

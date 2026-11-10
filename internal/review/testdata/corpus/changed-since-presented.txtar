@@ -86,6 +86,7 @@ func B() int {
       "path": "a.go",
       "rows": [
         {
+          "head": 3,
           "kind": " ",
           "now": 6,
           "old": 3,
@@ -97,11 +98,13 @@ func B() int {
           "text": "\treturn 1"
         },
         {
+          "head": 4,
           "kind": "+",
           "now": 7,
           "text": "\treturn 2"
         },
         {
+          "head": 5,
           "kind": " ",
           "now": 8,
           "old": 5,
@@ -121,12 +124,14 @@ func B() int {
       "path": "a.go",
       "rows": [
         {
+          "head": 7,
           "kind": " ",
           "now": 10,
           "old": 7,
           "text": "func B() int {"
         },
         {
+          "head": 8,
           "kind": "-",
           "old": 8,
           "text": "\treturn 1"
@@ -137,6 +142,7 @@ func B() int {
           "text": "\treturn 3"
         },
         {
+          "head": 9,
           "kind": " ",
           "now": 12,
           "old": 9,

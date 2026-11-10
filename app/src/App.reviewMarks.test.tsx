@@ -29,10 +29,11 @@ Add used to return its sum directly.
 - L4!: The sum gets a name.
 `;
 
-const row = (kind: string, old: number | undefined, now: number | undefined, text: string): ReviewRow => ({
+const row = (kind: string, old: number | undefined, now: number | undefined, text: string, head: number | null = kind === '-' ? null : now ?? null): ReviewRow => ({
   kind,
   ...(old !== undefined ? { old } : {}),
   ...(now !== undefined ? { now } : {}),
+  ...(head !== null ? { head } : {}),
   text,
 });
 
@@ -66,9 +67,9 @@ class Draft {
 
   change({ upserts, removed_ids }: { upserts: WireAnnotation[]; removed_ids: string[] }) {
     const kept = this.annotations.filter((mark) => !removed_ids.includes(mark.id));
-    for (const upsert of upserts) {
+    for (const { answer: _ignored, ...upsert } of upserts) {
       const at = kept.findIndex((mark) => mark.id === upsert.id);
-      if (at >= 0) kept[at] = upsert;
+      if (at >= 0) kept[at] = { ...upsert, ...(kept[at].answer === undefined ? {} : { answer: kept[at].answer }) };
       else kept.push(upsert);
     }
     this.annotations = kept;
@@ -86,8 +87,11 @@ class Draft {
   }
 }
 
+const FILE_TOP = [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, '')];
+
 async function openReview({ review = BUNDLE as ReviewBundle | null } = {}) {
   const draft = new Draft();
+  let presented = review ?? BUNDLE;
   const view = await openMarkdownTiles('', {
     path: DOC,
     session: { state: 'idle' },
@@ -99,11 +103,12 @@ async function openReview({ review = BUNDLE as ReviewBundle | null } = {}) {
         event: 'markdown_annotations_save_result', document_uri: save.document_uri, source_kind: save.source_kind, success: true, ...draft.change(save),
       }));
       daemon.on('markdown_annotations_submit', () => undefined);
-      daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: BUNDLE.stops[0].rows, hash: 'h1' }));
+      daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: [...FILE_TOP, ...presented.stops[0].rows], hash: 'h1' }));
     },
   });
   const desktopId = view.daemon.arrangement.profile.current_desktop_id;
   const show = async (fields: Record<string, unknown> = {}) => {
+    if (fields.review) presented = fields.review as ReviewBundle;
     view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, ...(review ? { review } : {}), ...fields });
     await view.daemon.idle();
   };
@@ -220,6 +225,87 @@ describe('App review marks', () => {
     await show({ content: DOCUMENT.replace('Add used to return its sum directly.', 'Add used to return its sum directly.\n\nIt reads better with a name.'), review: moved });
     expect(tile).toHaveTextContent('It reads better with a name.');
     expect(marksUnder(tile)).toEqual(['row 3', 'row -', 'row 4', 'note', 'row 5', 'mark youL4–5Return a + b directly.×', 'row 6']);
+  });
+
+  it('keeps a mark on its lines at head when the agent adds lines above them', async () => {
+    const { tile, press, write, toRow, show, settle, daemon } = await openReview();
+    await toRow(4);
+    await press('ArrowDown', { shiftKey: true });
+    await press('c');
+    await write('Return a + b directly.');
+    const saves = daemon.sentOf('markdown_annotations_save').length;
+
+    const edited = [
+      row(' ', 3, 3, 'func Add(a, b int) int {'),
+      row('+', undefined, 4, '\t// Add names its sum.', null),
+      row('-', 4, undefined, '\treturn a + b'),
+      row('+', undefined, 5, '\tsum := a + b', 4),
+      row('+', undefined, 6, '\treturn sum', 5),
+      row(' ', 5, 7, '}', 6),
+    ];
+    const notes = BUNDLE.stops[0].notes.map((note) => ({ ...note, now_from: 5, now_to: 5 }));
+    await show({ review: { ...BUNDLE, stops: [{ ...BUNDLE.stops[0], now_to: 7, rows: edited, notes }] } });
+    await settle();
+    expect(marksUnder(tile)).toEqual(['row 3', 'row 4', 'row -', 'row 5', 'note', 'row 6', 'mark youL4–5Return a + b directly.×', 'row 7']);
+    expect(daemon.sentOf('markdown_annotations_save')).toHaveLength(saves);
+  });
+
+  it('keeps an answer that arrives while the reader still holds an unsaved copy of its question', async () => {
+    const { tile, press, write, show, settle, daemon, draft } = await openReview();
+    while (!tile.querySelector('.review-doc .review-cursor[data-block-id]')) await press('ArrowDown');
+    await press('a');
+    await write('Why name it?');
+    const [submit] = daemon.sentOf('markdown_annotations_submit');
+    answerSubmit(daemon, submit, draft, false);
+    await daemon.idle();
+    const [question] = draft.annotations;
+    expect(question).toMatchObject({ type: 'question', anchor: { block_id: expect.any(String) } });
+
+    draft.answer(question.id, 'So the return reads as a value.');
+    await show({ content: DOCUMENT.replace('head: 9f3a7e2', 'head: 1c2d3e4'), annotations_generation: draft.generation });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    await daemon.idle();
+    fireEvent.click(within(tile).getByRole('button', { name: /^Notes/ }));
+    await settle();
+    expect(draft.annotations[0].answer).toBe('So the return reads as a value.');
+    expect(tile).toHaveTextContent('So the return reads as a value.');
+  });
+
+  it('keeps a mark on context lines shown around a stop, and shows it as moved when those lines change', async () => {
+    const { tile, press, write, toRow, show, settle, daemon } = await openReview();
+    await toRow(3);
+    await press('e');
+    while (tile.querySelector('.review-doc .review-cursor')?.getAttribute('data-line') !== '1') await press('ArrowUp');
+    await press('c');
+    await write('Name the package for what it does.');
+    expect(marksUnder(tile).slice(0, 2)).toEqual(['row 1', 'mark youL1Name the package for what it does.×']);
+
+    daemon.on('review_file', ({ path }) => ({
+      event: 'review_file_result', success: true, path, hash: 'h2',
+      rows: [row('-', 1, undefined, 'package calc'), row('+', undefined, 1, 'package arith', null), row(' ', 2, 2, ''), ...BUNDLE.stops[0].rows],
+    }));
+    await show({ review: { ...BUNDLE, stops: [{ ...BUNDLE.stops[0], file_hash: 'h2' }] } });
+    await settle();
+    expect(within(tile).getByRole('region', { name: 'Moved notes' })).toHaveTextContent('Name the package for what it does.');
+  });
+
+  it('shows a mark as moved when its code is gone, and sends it marked as moved', async () => {
+    const { tile, press, write, toRow, show, daemon } = await openReview();
+    await toRow(4);
+    await press('ArrowDown', { shiftKey: true });
+    await press('c');
+    await write('Return a + b directly.');
+    const [mark] = daemon.sentOf('markdown_annotations_save')[0].upserts;
+
+    const reverted = [row(' ', 3, 3, 'func Add(a, b int) int {'), row(' ', 4, 4, '\treturn a + b', null), row(' ', 5, 5, '}', 6)];
+    await show({ review: { ...BUNDLE, stops: [{ ...BUNDLE.stops[0], now_to: 5, rows: reverted, notes: [] }] } });
+    expect(tile.querySelector('.review-rows .review-mark')).toBeNull();
+    expect(within(tile).getByRole('region', { name: 'Moved notes' })).toHaveTextContent('calc.go:4–5');
+    expect(within(tile).getByRole('region', { name: 'Moved notes' })).toHaveTextContent('Return a + b directly.');
+
+    await press('Enter', { metaKey: true });
+    await press('Enter');
+    expect(daemon.sentOf('markdown_annotations_submit')).toEqual([expect.objectContaining({ verdict: 'request_changes', orphaned_ids: [mark.id] })]);
   });
 
   it('asks a question at once, keeps it, and shows the answer when the daemon says the draft moved', async () => {

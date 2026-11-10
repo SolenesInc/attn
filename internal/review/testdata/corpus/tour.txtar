@@ -49,6 +49,7 @@ frame: walkthrough
       "path": "a.go",
       "rows": [
         {
+          "head": 3,
           "kind": " ",
           "now": 3,
           "text": "func A() {}"

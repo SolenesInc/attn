@@ -4791,10 +4791,11 @@ export interface NoteElement {
 }
 
 export interface RowElement {
-    kind: string;
-    now?: number;
-    old?: number;
-    text: string;
+    head?: number;
+    kind:  string;
+    now?:  number;
+    old?:  number;
+    text:  string;
     [property: string]: any;
 }
 
@@ -10712,10 +10713,11 @@ export interface ReviewProblem {
 }
 
 export interface ReviewRow {
-    kind: string;
-    now?: number;
-    old?: number;
-    text: string;
+    head?: number;
+    kind:  string;
+    now?:  number;
+    old?:  number;
+    text:  string;
     [property: string]: any;
 }
 
@@ -24511,6 +24513,7 @@ const typeMap: any = {
         { json: "to", js: "to", typ: 0 },
     ], "any"),
     "RowElement": o([
+        { json: "head", js: "head", typ: u(undefined, 0) },
         { json: "kind", js: "kind", typ: "" },
         { json: "now", js: "now", typ: u(undefined, 0) },
         { json: "old", js: "old", typ: u(undefined, 0) },
@@ -28288,6 +28291,7 @@ const typeMap: any = {
         { json: "message", js: "message", typ: "" },
     ], "any"),
     "ReviewRow": o([
+        { json: "head", js: "head", typ: u(undefined, 0) },
         { json: "kind", js: "kind", typ: "" },
         { json: "now", js: "now", typ: u(undefined, 0) },
         { json: "old", js: "old", typ: u(undefined, 0) },

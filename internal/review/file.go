@@ -35,20 +35,22 @@ func openRepository(ctx context.Context, client *git.Client, text string) (repos
 		return repository{}, fmt.Errorf("the review names no absolute repository in its frontmatter. Run `attn review start <document>` from the repository under review")
 	}
 	repo := repository{root: root.value}
+	if head, ok := meta.get("head"); ok && head.value != "" {
+		resolved, err := client.ResolveCommit(ctx, repo.root, head.value)
+		if err != nil {
+			return repository{}, fmt.Errorf("head: %s: %w. Run `attn review start <document>` again to take a fresh snapshot", head.value, err)
+		}
+		repo.head = resolved
+	}
 	if base, ok := meta.get("base"); ok && base.value != "" {
+		if repo.head == "" {
+			return repository{}, fmt.Errorf("the review has no head in its frontmatter. Run `attn review start <document>` to take the snapshot")
+		}
 		resolved, err := client.ResolveCommit(ctx, repo.root, base.value)
 		if err != nil {
 			return repository{}, fmt.Errorf("base: %s: %w", base.value, err)
 		}
 		repo.base = resolved
-		head, ok := meta.get("head")
-		if !ok {
-			return repository{}, fmt.Errorf("the review has no head in its frontmatter. Run `attn review start <document>` to take the snapshot")
-		}
-		repo.head, err = client.ResolveCommit(ctx, repo.root, head.value)
-		if err != nil {
-			return repository{}, fmt.Errorf("head: %s: %w. Run `attn review start <document>` again to take a fresh snapshot", head.value, err)
-		}
 	}
 	return repo, nil
 }
@@ -99,6 +101,7 @@ func File(ctx context.Context, client *git.Client, text, path string) (protocol.
 			answer.Problem = protocol.Ptr(fmt.Sprintf("%s changed too much since base to diff line by line within %d search steps, so part of it shows as one replaced block.", path, diffBudget))
 		}
 	}
+	withHeads(answer.Rows, base, repo.headLines(ctx, client, path), now)
 	if encoded, err := json.Marshal(answer.Rows); err == nil && len(encoded) > MaxFileRowsBytes {
 		return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s with its change from base is %d bytes as rows; the file view carries at most %d bytes in one frame", path, len(encoded), MaxFileRowsBytes)
 	}
@@ -123,6 +126,23 @@ func OutsideFile(path string) (protocol.ReviewFileResultMessage, error) {
 		return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s is %d bytes as rows; the file view carries at most %d bytes in one frame", path, len(encoded), MaxFileRowsBytes)
 	}
 	return answer, nil
+}
+
+// headLines are the file's lines in the snapshot the review presents, or
+// none when the file is not in it.
+func (repo repository) headLines(ctx context.Context, client *git.Client, path string) []string {
+	if repo.head == "" {
+		return nil
+	}
+	blobs, err := client.ReadBlobs(ctx, repo.root, []string{repo.head + ":" + path})
+	if err != nil || !blobs[0].Found {
+		return nil
+	}
+	lines := splitLines(string(blobs[0].Content))
+	if lines == nil {
+		lines = []string{}
+	}
+	return lines
 }
 
 // baseLines are the file's lines at base, following a rename between base

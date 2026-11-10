@@ -58,11 +58,13 @@ func A() { println() }
       "path": "a.go",
       "rows": [
         {
+          "head": 1,
           "kind": "-",
           "old": 1,
           "text": "package a"
         },
         {
+          "head": 2,
           "kind": "-",
           "old": 2,
           "text": ""

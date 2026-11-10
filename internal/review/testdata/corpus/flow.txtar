@@ -111,6 +111,7 @@ sequenceDiagram
           "text": "func A() {}"
         },
         {
+          "head": 3,
           "kind": "+",
           "now": 3,
           "text": "func A() { B() }"

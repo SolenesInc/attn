@@ -54,7 +54,7 @@ export function rebaseOnDraft(
       .filter((annotation) => !removedHere(annotation))
       .map((annotation) => {
         const mine = localById.get(annotation.id);
-        return mine && changedHere(mine, synced) ? mine : annotation;
+        return mine && changedHere(mine, synced) ? { ...mine, answer: annotation.answer } : annotation;
       }),
     ...local.filter((annotation) => !draftIds.has(annotation.id) && worthKeeping(annotation)),
   ];

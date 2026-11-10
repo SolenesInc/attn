@@ -53,17 +53,20 @@ func A() {}
       "path": "a.go",
       "rows": [
         {
+          "head": 1,
           "kind": " ",
           "now": 1,
           "old": 1,
           "text": "package a"
         },
         {
+          "head": 2,
           "kind": "+",
           "now": 2,
           "text": ""
         },
         {
+          "head": 3,
           "kind": "+",
           "now": 3,
           "text": "func A() {}"

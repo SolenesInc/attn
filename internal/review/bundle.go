@@ -281,6 +281,7 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 				resolved.Rows = append(resolved.Rows, protocol.ReviewRow{Kind: "-", Old: protocol.Ptr(line), Text: base[line-1]})
 			}
 		}
+		withHeads(resolved.Rows, base, head, nil)
 		r.resolveNotes(s, &resolved, nil)
 		return resolved, true
 	}
@@ -295,6 +296,7 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 		for line, text := range base {
 			resolved.Rows = append(resolved.Rows, protocol.ReviewRow{Kind: "-", Old: protocol.Ptr(line + 1), Text: text})
 		}
+		withHeads(resolved.Rows, base, head, nil)
 		r.resolveNotes(s, &resolved, &headToNow)
 		return resolved, true
 	}
@@ -318,6 +320,7 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 	if !headToNow.complete {
 		r.overBudget(s, "head")
 	}
+	withHeads(resolved.Rows, base, head, now)
 	r.resolveNotes(s, &resolved, &headToNow)
 	return resolved, true
 }

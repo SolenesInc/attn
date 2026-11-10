@@ -13,7 +13,8 @@ import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
-import { fileRowsAnchor, MarkComposer, marksByLastLine, SendSheet, verdictForKey, type MarkKind, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
+import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
+import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -23,6 +24,8 @@ const NO_MARKS: ReviewMarks['annotations'] = [];
 export interface ReviewReaderHandle {
   /** Shows what a send carries and takes the verdict. */
   openSend(): void;
+  /** The file marks whose code is no longer where they were made. */
+  movedMarkIds(): string[];
 }
 const PAGE_ROWS = 20;
 
@@ -115,7 +118,7 @@ function rowOf(element: Element): ReviewRow {
     const value = Number(element.getAttribute(name));
     return value > 0 ? value : undefined;
   };
-  return { kind: element.getAttribute('data-kind') ?? ' ', old: number('data-old'), now: number('data-line'), text: rowText(element) };
+  return { kind: element.getAttribute('data-kind') ?? ' ', old: number('data-old'), now: number('data-line'), head: number('data-head'), text: rowText(element) };
 }
 
 /** The targets from one cursor key to another, both included, in document order. */
@@ -175,6 +178,7 @@ export function ReviewReader({
   const stageStop = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
   const [cursorKey, setCursorKey] = useState<string | null>(null);
   const [expansions, setExpansions] = useState<ReadonlyMap<number, StopExpansion>>(new Map());
+  const [markFiles, setMarkFiles] = useState<ReadonlyMap<string, readonly ReviewRow[]>>(new Map());
   const [files, setFiles] = useState<OpenFile[]>([]);
   const [filled, setFilled] = useState(false);
   const [search, setSearch] = useState<{ query: string } | null>(null);
@@ -185,7 +189,6 @@ export function ReviewReader({
   const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
   const selectedRef = useRef<HTMLElement[]>([]);
   const annotations = marks?.annotations ?? NO_MARKS;
-  const marksByLine = useMemo(() => marksByLastLine(annotations), [annotations]);
   const cursorElementRef = useRef<HTMLElement | null>(null);
   const cursorIndexRef = useRef(0);
   const scrolledKeyRef = useRef<string | null>(null);
@@ -199,6 +202,30 @@ export function ReviewReader({
   const onStage = frame === 'walkthrough' && files.length === 1 && openFileView !== null;
   const stageCursorLine = onStage ? openFileView.rows?.[openFileView.cursor]?.now : undefined;
 
+  const docLineFor = useCallback((path: string, line: number): number => {
+    const stops = bundle.stops.filter((stop) => stop.path === path);
+    const holding = stops.find((stop) => line >= stop.from && line <= stop.to);
+    return (holding ?? stops[0])?.heading_line ?? content.split('\n').length + 1;
+  }, [bundle, content]);
+
+  const markPlaces = useMemo(() => {
+    const places = new Map<string, MarkPlace>();
+    for (const annotation of annotations) {
+      const anchor = annotation.fileAnchor;
+      if (!anchor) continue;
+      const whole = markFiles.get(anchor.path);
+      const lists = whole
+        ? [{ rows: whole, covers: () => true }]
+        : bundle.stops.filter((stop) => stop.path === anchor.path)
+          .map((stop) => ({ rows: stop.rows, covers: (line: number) => line >= stop.from && line <= stop.to }));
+      const place = placeFileMark(anchor, lists);
+      if (place !== null) places.set(annotation.id, place);
+    }
+    return places;
+  }, [annotations, bundle, markFiles]);
+  const marksByLine = useMemo(() => marksAtLines(annotations, markPlaces), [annotations, markPlaces]);
+  const movedMarks = useMemo(() => annotations.filter((annotation) => markPlaces.get(annotation.id) === 'moved'), [annotations, markPlaces]);
+
   const scope = useCallback((): HTMLElement | null => {
     if (frame === 'map') return detailRef.current;
     return frame === 'brief' ? docRef.current : null;
@@ -207,6 +234,7 @@ export function ReviewReader({
   useEffect(() => {
     fileRowsRef.current.clear();
     setExpansions(new Map());
+    setMarkFiles(new Map());
   }, [bundle]);
 
   const readFile = useCallback((path: string): Promise<ReviewFileResultMessage> => {
@@ -243,6 +271,22 @@ export function ReviewReader({
       (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
     );
   }, [readFile]);
+
+  const markedPaths = useMemo(
+    () => [...new Set(annotations.flatMap((annotation) => (annotation.fileAnchor ? [annotation.fileAnchor.path] : [])))].sort().join('\n'),
+    [annotations],
+  );
+  useEffect(() => {
+    if (!markedPaths) return;
+    let current = true;
+    for (const path of markedPaths.split('\n')) {
+      void wholeFile(path).then(
+        (rows) => { if (current) setMarkFiles((known) => (known.get(path) === rows ? known : new Map(known).set(path, rows))); },
+        () => undefined,
+      );
+    }
+    return () => { current = false; };
+  }, [bundle, markedPaths, wholeFile]);
 
   const openFile = useCallback((target: FileTarget, options?: { fill?: boolean }) => {
     setSearch(null);
@@ -508,12 +552,6 @@ export function ReviewReader({
     docRef.current?.querySelector(`[data-review-stop-head="${stageStop.heading_line}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [stageStop]);
 
-  const docLineFor = useCallback((path: string, line: number): number => {
-    const stops = bundle.stops.filter((stop) => stop.path === path);
-    const holding = stops.find((stop) => stop.now_from && line >= stop.now_from && line <= stop.now_to);
-    return (holding ?? stops[0])?.heading_line ?? content.split('\n').length + 1;
-  }, [bundle, content]);
-
   const markTarget = useCallback((): MarkTarget | null => {
     if (openFileView) {
       const rows = openFileView.rows;
@@ -574,7 +612,7 @@ export function ReviewReader({
     setSending({ verdict: annotations.length > 0 ? 'request_changes' : 'approve' });
   }, [annotations.length, marks]);
 
-  useImperativeHandle(handleRef, () => ({ openSend }), [openSend]);
+  useImperativeHandle(handleRef, () => ({ openSend, movedMarkIds: () => movedMarks.map((mark) => mark.id) }), [movedMarks, openSend]);
 
   const sendReview = useCallback(() => {
     if (!sending || !marks || marks.destination === null) return;
@@ -715,6 +753,18 @@ export function ReviewReader({
       <div className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}`}>
         <div className="review-doc" ref={docRef} onClick={onScopeClick} hidden={frame === 'map'}>
           {children}
+          {movedMarks.length > 0 ? (
+            <section className="review-marks-moved" aria-label="Moved notes">
+              <h3>Moved notes</h3>
+              <p>The lines these were written on changed. They still go with the review, marked as moved.</p>
+              {movedMarks.map((mark) => (
+                <div key={mark.id} className="review-marks-moved-entry">
+                  <span className="review-send-place">{mark.fileAnchor ? fileAnchorPlace(mark.fileAnchor) : ''}</span>
+                  <MarkRow mark={mark} asking={asking.get(mark.id)} onRemove={marks ? () => marks.deleteAnnotation(mark.id) : undefined} />
+                </div>
+              ))}
+            </section>
+          ) : null}
         </div>
         {frame === 'walkthrough' && openFileView ? (
           <FileView

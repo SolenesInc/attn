@@ -28,30 +28,56 @@ export function markKey(path: string, line: number): string {
   return `${path}:${line}`;
 }
 
-/** File marks keyed by the file and the last line they cover, where they show. */
-export function marksByLastLine(annotations: readonly Annotation[]): ReadonlyMap<string, Annotation[]> {
+/** File marks keyed by the file and the line they show under. Moved marks show elsewhere. */
+export function marksByLine(annotations: readonly Annotation[], places: ReadonlyMap<string, MarkPlace>): ReadonlyMap<string, Annotation[]> {
   const byLine = new Map<string, Annotation[]>();
   for (const annotation of sortAnnotations([...annotations])) {
     const anchor = annotation.fileAnchor;
-    if (!anchor) continue;
-    const key = markKey(anchor.path, anchor.to);
+    const place = places.get(annotation.id);
+    if (!anchor || place === undefined || place === 'moved') continue;
+    const key = markKey(anchor.path, place);
     byLine.set(key, [...(byLine.get(key) ?? []), annotation]);
   }
   return byLine;
 }
 
 /**
- * The anchor for a mark on rows of a file. It covers the head lines the rows show; rows
- * that only show removed code sit before the next head line. With removed code in it,
- * the quote keeps each row's diff sign so it cannot pass for the code at those lines.
+ * The anchor for a mark on rows of a file: the lines at head the rows show. Rows head does
+ * not have sit before the next row it has. With removed code in it, the quote keeps each
+ * row's diff sign so it cannot pass for the code at those lines.
  */
 export function fileRowsAnchor(path: string, picked: readonly ReviewRow[], following: readonly ReviewRow[], docLine: (line: number) => number): FileAnchor | null {
-  const lines = picked.map((row) => row.now).filter((line): line is number => line !== undefined);
-  const line = lines[0] ?? following.find((row) => row.now !== undefined)?.now ?? [...picked].reverse().find((row) => row.old !== undefined)?.old;
-  if (line === undefined) return null;
+  const heads = picked.map((row) => row.head).filter((line): line is number => line !== undefined);
+  const from = heads[0] ?? following.find((row) => row.head !== undefined)?.head;
+  if (from === undefined) return null;
+  const to = heads[heads.length - 1] ?? from;
   const diff = picked.some((row) => row.kind === '-');
   const quote = picked.map((row) => (diff ? `${row.kind}${row.text}` : row.text)).join('\n');
-  return { path, from: line, to: lines[lines.length - 1] ?? line, docLine: docLine(line), quote };
+  return { path, from, to, docLine: docLine(from), quote };
+}
+
+/** Where a file mark shows: under a line now, or moved when its lines at head are gone. */
+export type MarkPlace = number | 'moved';
+
+/** Rows of a file, with the lines at head they cover. */
+export interface FileRows {
+  rows: readonly ReviewRow[];
+  covers(head: number): boolean;
+}
+
+/**
+ * Places a file mark by its lines at head: under the line now that holds its last line. It
+ * is moved when rows that cover its lines show one of them gone, and null when no rows
+ * cover them.
+ */
+export function placeFileMark(anchor: FileAnchor, lists: readonly FileRows[]): MarkPlace | null {
+  for (const { rows, covers } of lists) {
+    if (!covers(anchor.from) || !covers(anchor.to)) continue;
+    const now = new Map(rows.flatMap((row) => (row.head !== undefined && row.now !== undefined ? [[row.head, row.now] as const] : [])));
+    for (let line = anchor.from; line <= anchor.to; line++) if (!now.has(line)) return 'moved';
+    return now.get(anchor.to) ?? 'moved';
+  }
+  return null;
 }
 
 function targetPlace(target: MarkTarget): string {

@@ -52,6 +52,7 @@ func A() int { return 2 }
           "text": "func A() int { return 1 }"
         },
         {
+          "head": 3,
           "kind": "+",
           "now": 3,
           "text": "func A() int { return 2 }"

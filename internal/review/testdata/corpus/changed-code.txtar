@@ -70,6 +70,7 @@ func Sub(a, b int) int {
       "path": "calc.go",
       "rows": [
         {
+          "head": 3,
           "kind": " ",
           "now": 3,
           "old": 3,
@@ -81,16 +82,19 @@ func Sub(a, b int) int {
           "text": "\treturn a + b"
         },
         {
+          "head": 4,
           "kind": "+",
           "now": 4,
           "text": "\tsum := a + b"
         },
         {
+          "head": 5,
           "kind": "+",
           "now": 5,
           "text": "\treturn sum"
         },
         {
+          "head": 6,
           "kind": " ",
           "now": 6,
           "old": 5,
