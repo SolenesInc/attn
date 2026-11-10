@@ -19,10 +19,20 @@ func formatMarkdownAnnotationPayload(source annotationDocumentSource, machine st
 }
 
 func formatReviewPayload(source annotationDocumentSource, machine, verdict string, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
-	entries, _ := formatMarkdownEntries(inReadingOrder(anns), orphaned)
+	var marks, edits []protocol.MarkdownAnnotation
+	for _, a := range inReadingOrder(anns) {
+		if a.Type == protocol.MarkdownAnnotationEdit {
+			edits = append(edits, a)
+		} else {
+			marks = append(marks, a)
+		}
+	}
+	entries, _ := formatMarkdownEntries(marks, orphaned)
+	editEntries, _ := formatMarkdownEntries(edits, orphaned)
 	return prompts.RenderText("annotation-markdown", "review", prompts.Values{
 		"path": source.path, "machine": machine, "document": shellQuote(source.path),
-		"has_marks": fmt.Sprint(len(anns) > 0), "count": fmt.Sprint(len(anns)), "singular": fmt.Sprint(len(anns) == 1), "entries": entries,
+		"has_marks": fmt.Sprint(len(marks) > 0), "count": fmt.Sprint(len(marks)), "singular": fmt.Sprint(len(marks) == 1), "entries": entries,
+		"has_edits": fmt.Sprint(len(edits) > 0), "edit_count": fmt.Sprint(len(edits)), "edit_singular": fmt.Sprint(len(edits) == 1), "edit_entries": editEntries,
 		"approve": fmt.Sprint(verdict == protocol.ReviewVerdictApprove), "request_changes": fmt.Sprint(verdict == protocol.ReviewVerdictRequestChanges),
 	})
 }
@@ -104,6 +114,8 @@ func markValues(a protocol.MarkdownAnnotation) prompts.Values {
 		"start_line": fmt.Sprint(start), "end_line": fmt.Sprint(end), "quote": quote, "comment": protocol.Deref(a.Text),
 		"deletion": fmt.Sprint(a.Type == protocol.MarkdownAnnotationDeletion), "global": fmt.Sprint(a.Type == protocol.MarkdownAnnotationGlobal),
 		"question": fmt.Sprint(a.Type == protocol.MarkdownAnnotationQuestion), "has_answer": fmt.Sprint(answer != ""), "answer": answer,
+		"edit": fmt.Sprint(a.Type == protocol.MarkdownAnnotationEdit), "was": protocol.Deref(a.EditWas), "now": protocol.Deref(a.EditNow),
+		"was_fence": codeFence(protocol.Deref(a.EditWas)), "now_fence": codeFence(protocol.Deref(a.EditNow)),
 		"has_file": fmt.Sprint(file != ""), "place": filePlace(a.Anchor), "fence": codeFence(quote),
 		"quick_label": fmt.Sprint(protocol.Deref(a.QuickLabelID) != ""), "label": markdownQuickLabelDisplay(a),
 		"tip": protocol.Deref(a.QuickLabelTip), "has_tip": fmt.Sprint(protocol.Deref(a.QuickLabelTip) != ""),

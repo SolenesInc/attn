@@ -169,6 +169,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdReviewCheck:                   commandMetadata(false, true),
 	protocol.CmdReviewFile:                    commandMetadata(false, false),
 	protocol.CmdReviewSearch:                  commandMetadata(false, false),
+	protocol.CmdReviewEdit:                    commandMetadata(false, true),
 	protocol.CmdReviewSent:                    commandMetadata(false, true),
 	protocol.CmdReviewAnswer:                  commandMetadata(false, true),
 	protocol.CmdCodeNav:                       commandMetadata(false, false),

@@ -96,6 +96,7 @@ const (
 	CmdReviewCheck                   = "review_check"
 	CmdReviewFile                    = "review_file"
 	CmdReviewSearch                  = "review_search"
+	CmdReviewEdit                    = "review_edit"
 	CmdReviewSent                    = "review_sent"
 	CmdReviewAnswer                  = "review_answer"
 	CmdCodeNav                       = "code_nav"
@@ -526,6 +527,7 @@ const (
 	EventReviewFileResult                = "review_file_result"
 	EventReviewSearchResult              = "review_search_result"
 	EventCodeNavResult                   = "code_nav_result"
+	EventReviewEditResult                = "review_edit_result"
 	EventPtyOutput                       = "pty_output"
 	EventPtyInputProbeResult             = "pty_input_probe_result"
 	EventSupportSnapshotResult           = "support_snapshot_result"
@@ -637,6 +639,7 @@ const (
 	MarkdownAnnotationDeletion = "deletion"
 	MarkdownAnnotationGlobal   = "global"
 	MarkdownAnnotationQuestion = "question"
+	MarkdownAnnotationEdit     = "edit"
 )
 
 // Verdicts a review send carries.

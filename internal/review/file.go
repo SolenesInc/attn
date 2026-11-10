@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -225,4 +227,54 @@ func filesNamed(files []string, query string) []string {
 	sort.Strings(byName)
 	sort.Strings(byDirectory)
 	return append(append([]string{}, byName...), byDirectory...)
+}
+
+// Edit replaces the lines from..to of a file of the review's repository, as it
+// is now, with text, while the file still has the hash the text was edited
+// against. A file that changed since is left untouched and reported as a
+// conflict.
+func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResultMessage, error) {
+	root, ok := parse(text).meta.get("repository")
+	if !ok || !filepath.IsAbs(root.value) {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("the review names no absolute repository in its frontmatter. Run `attn review start <document>` from the repository under review")
+	}
+	repo := repository{root: root.value}
+	full, err := repo.local(edit.Path)
+	if err != nil {
+		return protocol.ReviewEditResultMessage{}, err
+	}
+	if info, err := os.Stat(full); err == nil && info.Size() > fsdoc.MaxFileSize {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s is %d bytes; attn edits files up to %d bytes. Make this change in an editor", edit.Path, info.Size(), fsdoc.MaxFileSize)
+	}
+	store := fsdoc.NewStore(repo.root)
+	current, hash, err := store.Read(edit.Path)
+	if err != nil {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s: %w", edit.Path, err)
+	}
+	conflict := func(current string) protocol.ReviewEditResultMessage {
+		return protocol.ReviewEditResultMessage{Event: protocol.EventReviewEditResult, Success: true, Conflict: true, CurrentHash: protocol.Ptr(current)}
+	}
+	if hash != edit.BaseHash {
+		return conflict(hash), nil
+	}
+	lines := splitLines(string(current))
+	if edit.From < 1 || edit.To < edit.From || int(edit.To) > len(lines) {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s has %d lines; lines %d–%d are not in it", edit.Path, len(lines), edit.From, edit.To)
+	}
+	replaced := append(append(append([]string{}, lines[:edit.From-1]...), strings.Split(edit.Text, "\n")...), lines[edit.To:]...)
+	written := strings.Join(replaced, "\n")
+	if strings.HasSuffix(string(current), "\n") {
+		written += "\n"
+	}
+	if len(written) > fsdoc.MaxFileSize {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s would be %d bytes after the edit; attn edits files up to %d bytes. Make this change in an editor", edit.Path, len(written), fsdoc.MaxFileSize)
+	}
+	newHash, refused, err := store.Write(edit.Path, []byte(written), edit.BaseHash)
+	if err != nil {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s: %w", edit.Path, err)
+	}
+	if refused != nil {
+		return conflict(refused.CurrentHash), nil
+	}
+	return protocol.ReviewEditResultMessage{Event: protocol.EventReviewEditResult, Success: true, Hash: protocol.Ptr(newHash)}, nil
 }

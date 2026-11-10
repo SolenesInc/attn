@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "bff4cc349622";
+pub const PROTOCOL_VERSION: &str = "6f94a01462fc";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6491,6 +6491,10 @@ pub struct MarkdownAnnotation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub answer: Option<String>,
     pub created_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit_now: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit_was: Option<String>,
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub quick_label_id: Option<String>,
@@ -9316,6 +9320,54 @@ impl ReviewCheckMessage {
 pub struct ReviewCheckResult {
     #[serde(deserialize_with = "null_as_default")]
     pub problems: Vec<ReviewProblem>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewEditMessage {
+    pub base_hash: String,
+    pub cmd: String,
+    pub document: String,
+    pub from: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub text: String,
+    pub to: i64,
+}
+
+impl ReviewEditMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_edit".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewEditResultMessage {
+    pub conflict: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+}
+
+impl ReviewEditResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "review_edit_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewFile {

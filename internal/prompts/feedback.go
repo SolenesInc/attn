@@ -53,9 +53,11 @@ func markdownAnnotationRecipient() Recipient {
 			Exact(Use("annotation-markdown.code-comment", "content/annotations/markdown-code-comment.md",
 				Bind("place", place), Bind("fence", Input(text("fence"))), Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))))),
 			fragment("comment", text("quote"), text("comment"))))
+	edit := fragment("edit", text("place"), text("was_fence"), text("was"), text("now_fence"), text("now"))
 	body := Choose(flag("deletion"), fragment("deletion", text("quote")),
 		Choose(flag("global"), fragment("global", text("comment")),
-			Choose(flag("question"), question, comment)))
+			Choose(flag("edit"), edit,
+				Choose(flag("question"), question, comment))))
 	entry := Exact(Use("annotation-markdown.entry", "content/annotations/markdown-entry.md",
 		Bind("index", Input(text("index"))), Bind("line", line), Bind("body", body)))
 	seed := Use("annotation-markdown.seed", "content/annotations/markdown-seed.md",
@@ -78,6 +80,10 @@ func markdownAnnotationRecipient() Recipient {
 		Bind("subject", file),
 		Bind("marks", When(flag("has_marks"), Use("annotation-markdown.review-marks", "content/annotations/markdown-review-marks.md",
 			Bind("count", Input(text("count"))), Bind("pieces", pieces), Bind("entries", entries)))),
+		Bind("edits", When(flag("has_edits"), Use("annotation-markdown.review-edits", "content/annotations/markdown-review-edits.md",
+			Bind("count", Input(text("edit_count"))),
+			Bind("places", Choose(flag("edit_singular"), fragment("place"), fragment("places"))),
+			Bind("entries", Input(ProducedBy(text("edit_entries"), "annotation-markdown/entry")))))),
 		Bind("verdict", verdict))
 	ask := Use("annotation-markdown.ask", "content/annotations/markdown-ask.md",
 		Bind("subject", file),
@@ -88,9 +94,9 @@ func markdownAnnotationRecipient() Recipient {
 		Bind("id", Input(text("id"))))
 	return Recipient{ID: "annotation-markdown", Description: "Feedback sent from a Markdown document or seed to a session or seed log.", Events: []Event{
 		On("submit", "user_message", "Sorted feedback entries and label counts are prepared by the adapter.", submit),
-		On("review", "user_message", "A review the user sent from a review document: its marks in reading order, then the verdict, which may come alone.", review),
+		On("review", "user_message", "A review the user sent from a review document: its marks in reading order, then the edits the user saved to the files, then the verdict, which may come alone.", review),
 		On("question", "user_message", "A question the user asked on a review document, delivered at once. The agent answers it with attn review answer.", ask),
-		On("entry", "message_fragment", "One annotation, including its place in the document or the code it marks, its kind, an answer to a question, and optional quick-label guidance.", entry),
+		On("entry", "message_fragment", "One annotation, including its place in the document or the code it marks, its kind, an answer to a question, an edit's text before and after, and optional quick-label guidance.", entry),
 	}}
 }
 

@@ -299,8 +299,16 @@ func writeAtomic(absPath string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err
 	}
+	mode := os.FileMode(0o644)
+	if info, err := os.Stat(absPath); err == nil {
+		mode = info.Mode().Perm()
+	}
 	tmp := filepath.Join(filepath.Dir(absPath), fmt.Sprintf(".%s.tmp.%d.%d", filepath.Base(absPath), os.Getpid(), time.Now().UnixNano()))
-	if err := os.WriteFile(tmp, content, 0o644); err != nil {
+	if err := os.WriteFile(tmp, content, mode); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil {
 		_ = os.Remove(tmp)
 		return err
 	}

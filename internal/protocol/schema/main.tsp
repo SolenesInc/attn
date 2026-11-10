@@ -2794,7 +2794,7 @@ model MarkdownAnnotationAnchor {
 // "comment" carrying quick_label_id (+ tip snapshotted at creation).
 model MarkdownAnnotation {
   id: string;
-  // "comment" | "deletion" | "global" | "question". Plain string so codegen yields string
+  // "comment" | "deletion" | "global" | "question" | "edit". Plain string so codegen yields string
   // on both sides (a literal union becomes anyOf -> Go interface{}).
   `type`: string;
   text?: string;
@@ -2807,6 +2807,9 @@ model MarkdownAnnotation {
   quick_label_text?: string;
   // The agent's answer to a question, set by review_answer.
   answer?: string;
+  // An edit the user saved to a review's file: the lines before and after.
+  edit_was?: string;
+  edit_now?: string;
   created_at: safeint; // epoch ms (int64 would codegen as string)
 }
 
@@ -3976,6 +3979,31 @@ model ReviewFileResultMessage {
   rows?: ReviewRow[];            // every line now, and the lines removed since base
   hash?: string;                 // sha256 of the file now; empty when it is gone
   problem?: string;              // a limit the rows hit, and what it left out
+}
+
+// Replaces lines of a review's file with the user's text, on the machine that
+// holds it, only while the file still has base_hash.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ReviewEditMessage {
+  cmd: "review_edit";
+  host?: string;
+  document: string;
+  path: string;                  // relative to the review's repository
+  base_hash: string;             // sha256 of the file the text was edited against
+  from: int32;                   // the lines now that the text replaces
+  to: int32;
+  text: string;
+  request_id?: string;
+}
+
+model ReviewEditResultMessage {
+  event: "review_edit_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  hash?: string;                 // sha256 of the file as written
+  conflict: boolean;             // the file changed since base_hash; nothing was written
+  current_hash?: string;
 }
 
 // Files of a review's repository by name, and lines by text, found with git

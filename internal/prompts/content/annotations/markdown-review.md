@@ -2,4 +2,4 @@
 
 {{subject}}
 
-{{marks}}{{verdict}}
+{{marks}}{{edits}}{{verdict}}

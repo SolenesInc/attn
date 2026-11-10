@@ -6806,6 +6806,12 @@ type MarkdownAnnotation struct {
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt int `json:"created_at"`
 
+	// EditNow corresponds to the JSON schema field "edit_now".
+	EditNow *string `json:"edit_now,omitempty,omitzero"`
+
+	// EditWas corresponds to the JSON schema field "edit_was".
+	EditWas *string `json:"edit_was,omitempty,omitzero"`
+
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
@@ -9876,6 +9882,58 @@ type ReviewCheckMessage struct {
 type ReviewCheckResult struct {
 	// Problems corresponds to the JSON schema field "problems".
 	Problems []ReviewProblem `json:"problems"`
+}
+
+type ReviewEditMessage struct {
+	// BaseHash corresponds to the JSON schema field "base_hash".
+	BaseHash string `json:"base_hash"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// From corresponds to the JSON schema field "from".
+	From int `json:"from"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+
+	// To corresponds to the JSON schema field "to".
+	To int `json:"to"`
+}
+
+type ReviewEditResultMessage struct {
+	// Conflict corresponds to the JSON schema field "conflict".
+	Conflict bool `json:"conflict"`
+
+	// CurrentHash corresponds to the JSON schema field "current_hash".
+	CurrentHash *string `json:"current_hash,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Hash corresponds to the JSON schema field "hash".
+	Hash *string `json:"hash,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type ReviewFile struct {

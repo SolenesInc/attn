@@ -173,6 +173,7 @@ var Placements = map[string][]Placement{
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
 	"review_answer":                    {Placement{LocatorHome, ""}},
 	"review_check":                     {Placement{LocatorHere, ""}},
+	"review_edit":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_file":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_search":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_sent":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
@@ -2085,6 +2086,24 @@ func (m ReviewCheckMessage) Placement() Placement {
 }
 
 func (m ReviewCheckMessage) Locate() string {
+	return ""
+}
+
+func (ReviewEditMessage) CommandName() string {
+	return "review_edit"
+}
+
+func (m ReviewEditMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ReviewEditMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

@@ -34,6 +34,7 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, true, d.readTileAsset)
 	runs(parts, true, d.readReviewFile)
 	runs(parts, true, d.searchReview)
+	runs(parts, false, d.editReviewFile)
 	runs(parts, false, d.markReviewSent)
 	runs(parts, true, d.answerCodeNav)
 	runs(parts, false, d.transferSeedArtifactHere)

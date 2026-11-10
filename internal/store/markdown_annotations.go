@@ -174,5 +174,7 @@ func sameFeedback(a, b protocol.MarkdownAnnotation) bool {
 	return a.Type == b.Type &&
 		protocol.Deref(a.Text) == protocol.Deref(b.Text) &&
 		protocol.Deref(a.QuickLabelID) == protocol.Deref(b.QuickLabelID) &&
-		protocol.Deref(a.Answer) == protocol.Deref(b.Answer)
+		protocol.Deref(a.Answer) == protocol.Deref(b.Answer) &&
+		protocol.Deref(a.EditWas) == protocol.Deref(b.EditWas) &&
+		protocol.Deref(a.EditNow) == protocol.Deref(b.EditNow)
 }

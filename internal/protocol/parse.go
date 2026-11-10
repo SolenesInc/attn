@@ -86,6 +86,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdReviewCheck:                   decodeInto[ReviewCheckMessage],
 	CmdReviewFile:                    decodeInto[ReviewFileMessage],
 	CmdReviewSearch:                  decodeInto[ReviewSearchMessage],
+	CmdReviewEdit:                    decodeInto[ReviewEditMessage],
 	CmdReviewSent:                    decodeInto[ReviewSentMessage],
 	CmdReviewAnswer:                  decodeInto[ReviewAnswerMessage],
 	CmdCodeNav:                       decodeInto[CodeNavMessage],

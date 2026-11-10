@@ -165,3 +165,22 @@ func (d *Daemon) handleReviewAnswer(ctx context.Context, conn net.Conn, msg *pro
 	d.annotationsChanged(key, generation)
 	d.sendOK(conn)
 }
+
+func (d *Daemon) editReviewFile(_ context.Context, msg protocol.ReviewEditMessage) (protocol.ReviewEditResultMessage, error) {
+	content, err := d.reviewDocumentHere(msg.Document)
+	if err != nil {
+		return protocol.ReviewEditResultMessage{}, err
+	}
+	return review.Edit(content, msg)
+}
+
+func (d *Daemon) handleReviewEditWS(client *wsClient, msg *protocol.ReviewEditMessage) {
+	d.life.Go("handleReviewEditWS", func() {
+		result, err := Call[protocol.ReviewEditResultMessage](d.life.Context(), d.router(), *msg)
+		if err != nil {
+			result = protocol.ReviewEditResultMessage{Event: protocol.EventReviewEditResult, Error: protocol.Ptr(d.tileDocumentError(protocol.Deref(msg.Host), err).Error())}
+		}
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
+	})
+}
