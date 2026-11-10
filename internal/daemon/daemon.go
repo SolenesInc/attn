@@ -28,6 +28,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/classifier"
+	"github.com/victorarias/attn/internal/codenav"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/crashpoint"
 	"github.com/victorarias/attn/internal/crew"
@@ -272,8 +273,10 @@ type Daemon struct {
 
 	openTileMu sync.Mutex
 
-	desktopTiles  desktopTileDelivery
-	tileDocuments tileDocumentWatch
+	desktopTiles   desktopTileDelivery
+	tileDocuments  tileDocumentWatch
+	codeNav        *codenav.Manager
+	codeNavOutside codeNavOutside
 
 	browserControl  appRequests[browserControlResult]
 	calloutRequests appRequests[calloutReply]
@@ -522,6 +525,7 @@ func New(socketPath string) *Daemon {
 	d.sessionTitleExec = d.execSessionTitle
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	d.pluginStartEnded = make(chan struct{})
+	d.codeNav = d.newCodeNavigation()
 	return d
 }
 
@@ -740,6 +744,7 @@ func (d *Daemon) Start() error {
 		d.startSessionMonitor(session.ID)
 	}
 	d.reapStrandedPluginRuntimes()
+	d.reapStrandedLanguageServers()
 	d.life.Go("followLoginEnv", d.followLoginEnv)
 
 	d.life.Go("runDesktopTileContent", func() { d.runDesktopTileContent(d.life.Done()) })
@@ -1640,6 +1645,7 @@ func (d *Daemon) stop() {
 	// PTYs shut next so no real exit lands between the drain and the shutdown.
 	d.life.wait(d.logf)
 	d.stopMonitorCatchUps()
+	d.codeNav.Stop()
 	d.closeGitExecution(ErrGitExecutorClosed)
 	if d.ptyBackend != nil {
 		_ = d.ptyBackend.Shutdown(context.Background())
@@ -3200,6 +3206,16 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleReviewCheck(ctx, conn, msg.(*protocol.ReviewCheckMessage))
 	case protocol.CmdReviewAnswer:
 		d.handleReviewAnswer(ctx, conn, msg.(*protocol.ReviewAnswerMessage))
+	case protocol.CmdCodeNavCheck:
+		d.handleCodeNavCheck(ctx, conn, msg.(*protocol.CodeNavCheckMessage))
+	case protocol.CmdCodeNavStatus:
+		d.handleCodeNavStatus(ctx, conn, msg.(*protocol.CodeNavStatusMessage))
+	case protocol.CmdCodeNavLink:
+		d.handleCodeNavLink(conn, msg.(*protocol.CodeNavLinkMessage))
+	case protocol.CmdCodeNavUnlink:
+		d.handleCodeNavUnlink(conn, msg.(*protocol.CodeNavUnlinkMessage))
+	case protocol.CmdCodeNavDefine:
+		d.handleCodeNavDefine(ctx, conn, msg.(*protocol.CodeNavDefineMessage))
 	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:

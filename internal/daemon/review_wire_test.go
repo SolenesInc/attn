@@ -280,6 +280,14 @@ func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *test
 	for name, refused := range map[string]func() error{
 		"review start": func() error { _, err := cli.ReviewStart(document, repo, "HEAD"); return err },
 		"review check": func() error { _, err := cli.ReviewCheck(document); return err },
+		"nav status":   func() error { _, err := cli.CodeNavStatus(repo); return err },
+		"nav check":    func() error { _, err := cli.CodeNavCheck(repo, "calc.go", 3); return err },
+		"nav link":     func() error { _, err := cli.CodeNavLink("/bin/sh"); return err },
+		"nav unlink":   func() error { return cli.CodeNavUnlink("sh") },
+		"nav set": func() error {
+			_, err := cli.CodeNavDefine(repo, "zig", `{"command":["zls"],"extensions":[".zig"]}`)
+			return err
+		},
 	} {
 		if err := refused(); err == nil || !strings.Contains(err.Error(), "code_review_enabled") {
 			t.Errorf("%s with code review off answered %v, want a refusal naming code_review_enabled", name, err)
@@ -290,6 +298,9 @@ func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *test
 	}
 	if search := requestReviewSearch(app, document, "sum"); search.Success || !strings.Contains(protocol.Deref(search.Error), "code_review_enabled") {
 		t.Errorf("review_search with code review off answered %+v, want a refusal naming code_review_enabled", search)
+	}
+	if nav := requestCodeNav(app, document, "calc.go", 3, 5, "definition"); nav.Success || !strings.Contains(protocol.Deref(nav.Error), "code_review_enabled") {
+		t.Errorf("code_nav with code review off answered %+v, want a refusal naming code_review_enabled", nav)
 	}
 	problems, err := cli.OpenMarkdown(document, "s1")
 	if err != nil || len(problems) != 0 {

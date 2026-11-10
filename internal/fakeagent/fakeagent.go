@@ -128,6 +128,9 @@ func Main() {
 	if name == winsizeProgram {
 		os.Exit(runWinsize())
 	}
+	if name == LanguageServerName {
+		os.Exit(runLanguageServer())
+	}
 	program, ok := programs[name]
 	if !ok {
 		fmt.Fprintf(os.Stderr, "fakeagent: run as %q; it runs only under the names a test world links to it\n", name)

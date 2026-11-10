@@ -2131,6 +2131,235 @@ type ClientHelloMessage struct {
 	Version string `json:"version"`
 }
 
+type CodeNavCheckMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+}
+
+type CodeNavCheckResult struct {
+	// ElapsedMs corresponds to the JSON schema field "elapsed_ms".
+	ElapsedMs int `json:"elapsed_ms"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// Location corresponds to the JSON schema field "location".
+	Location *CodeNavLocation `json:"location,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
+	// Program corresponds to the JSON schema field "program".
+	Program string `json:"program"`
+
+	// Tried corresponds to the JSON schema field "tried".
+	Tried []string `json:"tried"`
+}
+
+type CodeNavDefineMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Definition corresponds to the JSON schema field "definition".
+	Definition *string `json:"definition,omitempty,omitzero"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository string `json:"repository"`
+}
+
+type CodeNavDefineResult struct {
+	// Definition corresponds to the JSON schema field "definition".
+	Definition *string `json:"definition,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// Origin corresponds to the JSON schema field "origin".
+	Origin string `json:"origin"`
+}
+
+type CodeNavLanguage struct {
+	// Definition corresponds to the JSON schema field "definition".
+	Definition string `json:"definition"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// Missing corresponds to the JSON schema field "missing".
+	Missing *string `json:"missing,omitempty,omitzero"`
+
+	// Program corresponds to the JSON schema field "program".
+	Program *string `json:"program,omitempty,omitzero"`
+
+	// SettingKey corresponds to the JSON schema field "setting_key".
+	SettingKey *string `json:"setting_key,omitempty,omitzero"`
+
+	// Source corresponds to the JSON schema field "source".
+	Source string `json:"source"`
+}
+
+type CodeNavLinkMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name *string `json:"name,omitempty,omitzero"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target string `json:"target"`
+}
+
+type CodeNavLinkResult struct {
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Target corresponds to the JSON schema field "target".
+	Target *string `json:"target,omitempty,omitzero"`
+}
+
+type CodeNavLocation struct {
+	// Character corresponds to the JSON schema field "character".
+	Character int `json:"character"`
+
+	// EndCharacter corresponds to the JSON schema field "end_character".
+	EndCharacter int `json:"end_character"`
+
+	// EndLine corresponds to the JSON schema field "end_line".
+	EndLine int `json:"end_line"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Outside corresponds to the JSON schema field "outside".
+	Outside bool `json:"outside"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type CodeNavMessage struct {
+	// Character corresponds to the JSON schema field "character".
+	Character int `json:"character"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type CodeNavResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language *string `json:"language,omitempty,omitzero"`
+
+	// Locations corresponds to the JSON schema field "locations".
+	Locations []CodeNavLocation `json:"locations,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text *string `json:"text,omitempty,omitzero"`
+}
+
+type CodeNavServer struct {
+	// Detail corresponds to the JSON schema field "detail".
+	Detail *string `json:"detail,omitempty,omitzero"`
+
+	// Folder corresponds to the JSON schema field "folder".
+	Folder string `json:"folder"`
+
+	// Language corresponds to the JSON schema field "language".
+	Language string `json:"language"`
+
+	// NeededBy corresponds to the JSON schema field "needed_by".
+	NeededBy []string `json:"needed_by"`
+
+	// Pid corresponds to the JSON schema field "pid".
+	Pid int `json:"pid"`
+
+	// Program corresponds to the JSON schema field "program".
+	Program string `json:"program"`
+
+	// RssBytes corresponds to the JSON schema field "rss_bytes".
+	RssBytes *int `json:"rss_bytes,omitempty,omitzero"`
+
+	// State corresponds to the JSON schema field "state".
+	State string `json:"state"`
+}
+
+type CodeNavStatusMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Repository corresponds to the JSON schema field "repository".
+	Repository *string `json:"repository,omitempty,omitzero"`
+}
+
+type CodeNavStatusResult struct {
+	// BinDir corresponds to the JSON schema field "bin_dir".
+	BinDir string `json:"bin_dir"`
+
+	// Languages corresponds to the JSON schema field "languages".
+	Languages []CodeNavLanguage `json:"languages"`
+
+	// Origin corresponds to the JSON schema field "origin".
+	Origin *string `json:"origin,omitempty,omitzero"`
+
+	// Servers corresponds to the JSON schema field "servers".
+	Servers []CodeNavServer `json:"servers"`
+}
+
+type CodeNavUnlinkMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
 type CodexStatusMessage struct {
 	// CallerSessionID corresponds to the JSON schema field "caller_session_id".
 	CallerSessionID *SessionID `json:"caller_session_id,omitempty,omitzero"`
@@ -9231,6 +9460,21 @@ type Response struct {
 	// CalloutAnchorsResult corresponds to the JSON schema field
 	// "callout_anchors_result".
 	CalloutAnchorsResult *CalloutAnchorsResult `json:"callout_anchors_result,omitempty,omitzero"`
+
+	// CodeNavCheckResult corresponds to the JSON schema field
+	// "code_nav_check_result".
+	CodeNavCheckResult *CodeNavCheckResult `json:"code_nav_check_result,omitempty,omitzero"`
+
+	// CodeNavDefineResult corresponds to the JSON schema field
+	// "code_nav_define_result".
+	CodeNavDefineResult *CodeNavDefineResult `json:"code_nav_define_result,omitempty,omitzero"`
+
+	// CodeNavLinkResult corresponds to the JSON schema field "code_nav_link_result".
+	CodeNavLinkResult *CodeNavLinkResult `json:"code_nav_link_result,omitempty,omitzero"`
+
+	// CodeNavStatusResult corresponds to the JSON schema field
+	// "code_nav_status_result".
+	CodeNavStatusResult *CodeNavStatusResult `json:"code_nav_status_result,omitempty,omitzero"`
 
 	// CodexStatusResult corresponds to the JSON schema field "codex_status_result".
 	CodexStatusResult *CodexStatusResult `json:"codex_status_result,omitempty,omitzero"`

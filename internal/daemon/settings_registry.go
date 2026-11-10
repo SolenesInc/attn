@@ -142,6 +142,8 @@ var settingValidators = map[*setting.Setting]func(*Daemon, string, string) error
 	setting.Executable:              func(d *Daemon, key, value string) error { return d.validateExecutableSetting(value) },
 	setting.NewSessionDestination:   func(d *Daemon, key, value string) error { return validateNewSessionDestination(value) },
 	setting.DefaultContextWindowCap: func(d *Daemon, key, value string) error { return validateContextWindowCap(value) },
+	setting.CodeNavIdleStop:         func(d *Daemon, key, value string) error { return validateCodeNavIdleStop(value) },
+	setting.CodeNavDefinition:       func(d *Daemon, key, value string) error { return validateCodeNavDefinition(value) },
 	setting.CrewCacheTTLFor: func(d *Daemon, key, value string) error {
 		return validateBoundedIntSetting("crew cache TTL", value, crewCacheTTLMinSeconds, crewCacheTTLMaxSeconds)
 	},

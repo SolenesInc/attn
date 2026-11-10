@@ -67,6 +67,16 @@ func Resolve(ctx context.Context, client *git.Client, document, text string) pro
 	return bundle
 }
 
+// Repository is the absolute repository a review document names in its
+// frontmatter.
+func Repository(text string) (string, bool) {
+	root, ok := parse(text).meta.get("repository")
+	if !ok || !filepath.IsAbs(root.value) {
+		return "", false
+	}
+	return root.value, true
+}
+
 // StopFiles are the files a document's stops show, absolute, so a watcher can
 // tell when the bundle changes. A document that does not name its repository
 // has none.

@@ -1080,6 +1080,51 @@ func (c *Client) ReviewAnswer(document, annotationID, text string) error {
 	return err
 }
 
+func (c *Client) CodeNavCheck(repository, path string, line int) (*protocol.CodeNavCheckResult, error) {
+	resp, err := c.send(protocol.CodeNavCheckMessage{Cmd: protocol.CmdCodeNavCheck, Repository: repository, Path: path, Line: line})
+	if err != nil {
+		return nil, err
+	}
+	return resp.CodeNavCheckResult, nil
+}
+
+func (c *Client) CodeNavStatus(repository string) (*protocol.CodeNavStatusResult, error) {
+	msg := protocol.CodeNavStatusMessage{Cmd: protocol.CmdCodeNavStatus}
+	if repository != "" {
+		msg.Repository = protocol.Ptr(repository)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.CodeNavStatusResult, nil
+}
+
+func (c *Client) CodeNavLink(target string) (*protocol.CodeNavLinkResult, error) {
+	resp, err := c.send(protocol.CodeNavLinkMessage{Cmd: protocol.CmdCodeNavLink, Target: target})
+	if err != nil {
+		return nil, err
+	}
+	return resp.CodeNavLinkResult, nil
+}
+
+func (c *Client) CodeNavUnlink(name string) error {
+	_, err := c.send(protocol.CodeNavUnlinkMessage{Cmd: protocol.CmdCodeNavUnlink, Name: name})
+	return err
+}
+
+func (c *Client) CodeNavDefine(repository, language, definition string) (*protocol.CodeNavDefineResult, error) {
+	msg := protocol.CodeNavDefineMessage{Cmd: protocol.CmdCodeNavDefine, Repository: repository, Language: language}
+	if definition != "" {
+		msg.Definition = protocol.Ptr(definition)
+	}
+	resp, err := c.send(msg)
+	if err != nil {
+		return nil, err
+	}
+	return resp.CodeNavDefineResult, nil
+}
+
 func (c *Client) OpenSeed(seedID string, sessionID protocol.SessionID) error {
 	msg := protocol.OpenSeedMessage{Cmd: protocol.CmdOpenSeed, SeedID: seedID}
 	if sessionID != "" {

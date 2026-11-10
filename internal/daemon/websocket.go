@@ -1219,6 +1219,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleReviewFileWS(client, msg.(*protocol.ReviewFileMessage))
 	case protocol.CmdReviewSearch:
 		d.handleReviewSearchWS(client, msg.(*protocol.ReviewSearchMessage))
+	case protocol.CmdCodeNav:
+		d.handleCodeNavWS(client, msg.(*protocol.CodeNavMessage))
 	case protocol.CmdAgentCatalog:
 		d.handleAgentCatalogWS(client, msg.(*protocol.AgentCatalogMessage))
 	case protocol.CmdAskImage:

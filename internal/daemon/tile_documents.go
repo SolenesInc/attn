@@ -72,9 +72,15 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 	w := &d.tileDocuments
 	now := time.Now()
 	reviewing := d.on(setting.CodeReviewEnabled)
+	var unlisted map[string]bool
 	answer := protocol.TileDocumentVersions{Documents: make([]protocol.TileDocumentVersion, 0, len(msg.Documents))}
 	w.mu.Lock()
 	listed := make(map[string]*watchedTileDocument, len(msg.Documents))
+	defer func() {
+		for path := range unlisted {
+			d.releaseCodeNavigation(path)
+		}
+	}()
 	for _, path := range msg.Documents {
 		doc := w.watched[path]
 		if doc == nil {
@@ -84,6 +90,12 @@ func (d *Daemon) watchTileDocuments(_ context.Context, msg protocol.TileDocument
 		}
 		listed[path] = doc
 		answer.Documents = append(answer.Documents, protocol.TileDocumentVersion{Path: path, Version: doc.version})
+	}
+	unlisted = map[string]bool{}
+	for path := range w.watched {
+		if listed[path] == nil {
+			unlisted[path] = true
+		}
 	}
 	w.watched = listed
 	w.mu.Unlock()
@@ -106,6 +118,31 @@ func (w *tileDocumentWatch) observe(reviewing bool, now time.Time) []protocol.Ti
 		}
 	}
 	return changed
+}
+
+// bump gives each watched document of paths a new version, so its tile reads
+// it again.
+func (w *tileDocumentWatch) bump(paths []string) []protocol.TileDocumentVersion {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var changed []protocol.TileDocumentVersion
+	for _, path := range paths {
+		if doc := w.watched[path]; doc != nil {
+			w.versions++
+			doc.version = w.versions
+			changed = append(changed, protocol.TileDocumentVersion{Path: path, Version: doc.version})
+		}
+	}
+	return changed
+}
+
+func (d *Daemon) reportTileDocuments(changed []protocol.TileDocumentVersion) {
+	for _, document := range changed {
+		report := protocol.TileDocumentChangedMessage{Cmd: protocol.CmdTileDocumentChanged, Path: document.Path, Version: document.Version}
+		if _, err := Call[struct{}](d.life.Context(), d.router(), report); err != nil {
+			d.logf("tile document %s changed: %v", document.Path, err)
+		}
+	}
 }
 
 func (w *tileDocumentWatch) idle() bool {
@@ -145,12 +182,7 @@ func (d *Daemon) runTileDocumentWatcher(done <-chan struct{}) {
 			continue
 		case <-ticker.C:
 		}
-		for _, changed := range w.observe(d.on(setting.CodeReviewEnabled), time.Now()) {
-			report := protocol.TileDocumentChangedMessage{Cmd: protocol.CmdTileDocumentChanged, Path: changed.Path, Version: changed.Version}
-			if _, err := Call[struct{}](d.life.Context(), d.router(), report); err != nil {
-				d.logf("tile document %s changed: %v", changed.Path, err)
-			}
-		}
+		d.reportTileDocuments(w.observe(d.on(setting.CodeReviewEnabled), time.Now()))
 	}
 }
 
@@ -168,13 +200,18 @@ func (d *Daemon) readTileDocument(ctx context.Context, msg protocol.TileDocument
 		answer.Error = protocol.Ptr(err.Error())
 		return answer, nil
 	}
-	if d.on(setting.CodeReviewEnabled) && review.IsReview(content) {
-		bundle, err := d.resolveReview(ctx, msg.Path, content)
-		if err != nil {
-			return answer, err
-		}
-		answer.Review = &bundle
+	if !d.on(setting.CodeReviewEnabled) || !review.IsReview(content) {
+		d.releaseCodeNavigation(msg.Path)
+		return answer, nil
 	}
+	bundle, err := d.resolveReview(ctx, msg.Path, content)
+	if err != nil {
+		return answer, err
+	}
+	if answer.Version > 0 {
+		d.needCodeNavigation(msg.Path, &bundle)
+	}
+	answer.Review = &bundle
 	return answer, nil
 }
 

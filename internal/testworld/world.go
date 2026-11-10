@@ -17,6 +17,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/codenav"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -89,6 +90,7 @@ func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness,
 		t.Fatalf("world directory %s resolves under production %s (%v)", dir, production, err)
 	}
 	w := &World{T: t, Dir: dir, Socket: filepath.Join(dir, "attn.sock")}
+	t.Cleanup(func() { codenav.Reap(nil, filepath.Join(dir, "code-navigation", "servers")) })
 	if err := os.MkdirAll(filepath.Join(dir, "toolhome"), 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -4023,6 +4023,129 @@ model ReviewAnswerMessage {
   text: string;
 }
 
+// Definition, uses or type of the name at a position in a review's file,
+// answered by a language server on the machine that holds it.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model CodeNavMessage {
+  cmd: "code_nav";
+  host?: string;
+  document: string;
+  path: string;                  // relative to the review's repository, or absolute outside it
+  line: int32;                   // 1-based
+  character: int32;              // UTF-16 code units, 0-based
+  kind: string;                  // definition | references | hover
+  request_id?: string;
+}
+
+model CodeNavLocation {
+  path: string;                  // relative to the review's repository; absolute when outside it
+  outside: boolean;              // outside the review's repository: shown read-only
+  line: int32;                   // 1-based
+  character: int32;              // UTF-16 code units, 0-based
+  end_line: int32;
+  end_character: int32;
+  text: string;                  // the line, for a list of uses
+}
+
+model CodeNavResultMessage {
+  event: "code_nav_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  language?: string;
+  locations?: CodeNavLocation[];
+  text?: string;                 // hover: the type, as the server words it
+}
+
+// Resolves the first name on a line that has a definition, to prove a server
+// works: `attn nav check path:line`.
+@extension("x-on", #{ here: true })
+model CodeNavCheckMessage {
+  cmd: "code_nav_check";
+  repository: string;            // a directory inside the repository
+  path: string;                  // relative to the repository
+  line: int32;
+}
+
+model CodeNavCheckResult {
+  language: string;
+  program: string;
+  name?: string;                 // the name that resolved
+  location?: CodeNavLocation;
+  elapsed_ms: safeint;           // from the question to the answer, including a start
+  tried: string[];               // the names asked about, in order
+}
+
+@extension("x-on", #{ here: true })
+model CodeNavStatusMessage {
+  cmd: "code_nav_status";
+  repository?: string;           // a directory inside a repository, for its definitions
+}
+
+model CodeNavStatusResult {
+  bin_dir: string;
+  origin?: string;
+  languages: CodeNavLanguage[];
+  servers: CodeNavServer[];
+}
+
+model CodeNavLanguage {
+  language: string;
+  source: string;                // built-in | setting
+  setting_key?: string;
+  definition: string;            // JSON, as stored
+  program?: string;              // where the program was found
+  missing?: string;              // why it was not
+}
+
+model CodeNavServer {
+  language: string;
+  folder: string;
+  program: string;
+  pid: safeint;
+  state: string;                 // ready | starting | missing | failed
+  detail?: string;
+  needed_by: string[];           // the shown review documents that need it
+  rss_bytes?: safeint;
+}
+
+// Links a language server's program into this machine's code navigation
+// folder, which is searched before PATH.
+@extension("x-on", #{ here: true })
+model CodeNavLinkMessage {
+  cmd: "code_nav_link";
+  target: string;                // absolute path of the program
+  name?: string;                 // the name to link it as; the target's file name when absent
+}
+
+@extension("x-on", #{ here: true })
+model CodeNavUnlinkMessage {
+  cmd: "code_nav_unlink";
+  name: string;
+}
+
+model CodeNavLinkResult {
+  name: string;
+  path: string;                  // the link
+  target?: string;               // absent after an unlink
+}
+
+// Sets or removes the server definition of a language for the repository's
+// origin, a home setting that outposts copy.
+@extension("x-on", #{ here: true })
+model CodeNavDefineMessage {
+  cmd: "code_nav_define";
+  repository: string;            // a directory inside the repository
+  language: string;
+  definition?: string;           // JSON; absent removes it
+}
+
+model CodeNavDefineResult {
+  key: string;
+  origin: string;
+  definition?: string;
+}
+
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model TileAssetReadMessage {
   cmd: "tile_asset_read";
@@ -7381,6 +7504,10 @@ model Response {
   journal_append_result?: JournalAppendResult;
   review_start_result?: ReviewStartResult;
   review_check_result?: ReviewCheckResult;
+  code_nav_check_result?: CodeNavCheckResult;
+  code_nav_status_result?: CodeNavStatusResult;
+  code_nav_link_result?: CodeNavLinkResult;
+  code_nav_define_result?: CodeNavDefineResult;
   // open_markdown on a review document: the problems `attn review check` reports.
   review_problems?: ReviewProblem[];
   activity_status_result?: ActivityStatusResult;

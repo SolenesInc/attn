@@ -18,6 +18,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/stepclock"
 
+	"github.com/victorarias/attn/internal/codenav"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/procreap"
@@ -316,6 +317,7 @@ func (s *Stack) reap() {
 		}
 	}
 	reaped := append(ptyhost.ReapDataDir(s.Dir), plugins.ReapRuntimeProcesses(stepclock.Process(), s.Dir)...)
+	reaped = append(reaped, codenav.Reap(nil, filepath.Join(s.Dir, "code-navigation", "servers"))...)
 	for _, r := range reaped {
 		if r.Outcome != procreap.ReapTerminated && r.Outcome != procreap.ReapAlreadyGone {
 			s.T.Errorf("process %s (pid %d) %s: %v", r.ID, r.PID, r.Outcome, r.Err)

@@ -43,6 +43,7 @@ func (d *Daemon) handleReviewStart(ctx context.Context, conn net.Conn, msg *prot
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewStartResult: &result})
+	d.warmCodeNavigation(document)
 }
 
 func (d *Daemon) handleReviewCheck(ctx context.Context, conn net.Conn, msg *protocol.ReviewCheckMessage) {
@@ -82,6 +83,9 @@ func (d *Daemon) readReviewFile(ctx context.Context, msg protocol.ReviewFileMess
 	content, err := d.reviewDocumentHere(msg.Document)
 	if err != nil {
 		return protocol.ReviewFileResultMessage{}, err
+	}
+	if filepath.IsAbs(msg.Path) && d.codeNavOutside.allowed(filepath.Clean(msg.Document), filepath.Clean(msg.Path)) {
+		return review.OutsideFile(filepath.Clean(msg.Path))
 	}
 	return gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewFileResultMessage, error) {
 		return review.File(ctx, client, content, msg.Path)

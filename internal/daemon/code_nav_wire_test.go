@@ -1,0 +1,324 @@
+package daemon_test
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"syscall"
+	"testing"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/daemon"
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
+)
+
+const useOfAdd = "package calc\n\nfunc Twice(a int) int {\n\treturn Add(a, a)\n}\n"
+
+// navigatedRepo is reviewRepo with a file that uses Add, and an origin, which
+// keys the server definitions set for it.
+func navigatedRepo(t *testing.T) string {
+	t.Helper()
+	repo := reviewRepo(t)
+	commitFile(t, repo, "use.go", useOfAdd)
+	runGit(t, repo, "remote", "add", "origin", "https://example.test/calc.git")
+	return repo
+}
+
+func linkFakeLanguageServer(t *testing.T, w *world, cli *client.Client) {
+	t.Helper()
+	fake := fakeagent.InstallLanguageServer(t, testworld.FakeAgentBinary(t), w.Path("installed"))
+	if _, err := cli.CodeNavLink(fake); err != nil {
+		t.Fatalf("nav link: %v", err)
+	}
+}
+
+func requestCodeNav(app *testworld.Peer, document, path string, line, character int, kind string) protocol.CodeNavResultMessage {
+	app.T.Helper()
+	id := uuid.NewString()
+	return testworld.Request(app, protocol.CodeNavMessage{Cmd: protocol.CmdCodeNav, Document: document, Path: path, Line: line, Character: character, Kind: kind, RequestID: protocol.Ptr(id)},
+		protocol.EventCodeNavResult, func(r protocol.CodeNavResultMessage) bool { return protocol.Deref(r.RequestID) == id })
+}
+
+func navigation(review *protocol.ReviewBundle, language string) protocol.ReviewNavigation {
+	if review != nil {
+		for _, nav := range review.Navigation {
+			if nav.Language == language {
+				return nav
+			}
+		}
+	}
+	return protocol.ReviewNavigation{}
+}
+
+func awaitNavigation(app *testworld.Peer, document, language, state string) protocol.DesktopTileContentMessage {
+	app.T.Helper()
+	return testworld.Await(app, protocol.EventDesktopTileContent, func(m protocol.DesktopTileContentMessage) bool {
+		return m.Path == document && navigation(m.Review, language).State == state
+	})
+}
+
+func places(locations []protocol.CodeNavLocation) []string {
+	var out []string
+	for _, l := range locations {
+		out = append(out, fmt.Sprintf("%s:%d:%d %s", l.Path, l.Line, l.Character, strings.TrimSpace(l.Text)))
+	}
+	return out
+}
+
+func processGone(pid int) bool {
+	return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
+}
+
+func runningServers(t *testing.T, cli *client.Client) []protocol.CodeNavServer {
+	t.Helper()
+	status, err := cli.CodeNavStatus("")
+	if err != nil {
+		t.Fatalf("nav status: %v", err)
+	}
+	return status.Servers
+}
+
+func TestAShownReviewAnswersDefinitionUsesAndTypeAndItsServerStopsOnceNoReviewIsShown(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+	document := w.Path("reviews", "calc.md")
+
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	w.awaitTimer(daemon.CodeNavIdleStopTimer)
+	appendReviewBody(t, document, "# Name the sum\n\n## Add keeps its result\n\n### calc.go:3-6\n\n### use.go:3-5\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	shown := awaitNavigation(app, document, "go", "ready")
+
+	definition := requestCodeNav(app, document, "use.go", 4, strings.Index("\treturn Add(a, a)", "Add"), "definition")
+	if got, want := places(definition.Locations), []string{"calc.go:3:5 func Add(a, b int) int {"}; !definition.Success || strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("the definition of Add answered %v (error %s), want %v", got, protocol.Deref(definition.Error), want)
+	}
+	uses := requestCodeNav(app, document, "calc.go", 3, 5, "references")
+	if got, want := places(uses.Locations), []string{"use.go:4:8 return Add(a, a)"}; !uses.Success || strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("the uses of Add answered %v (error %s), want %v", got, protocol.Deref(uses.Error), want)
+	}
+	hover := requestCodeNav(app, document, "use.go", 4, 8, "hover")
+	if got := protocol.Deref(hover.Text); !hover.Success || got != "func Add(a, b int) int {" {
+		t.Errorf("the type of Add answered %q (error %s), want its declaration", got, protocol.Deref(hover.Error))
+	}
+
+	servers := runningServers(t, cli)
+	if len(servers) != 1 || servers[0].Language != "go" || servers[0].State != "ready" || strings.Join(servers[0].NeededBy, ",") != document {
+		t.Fatalf("nav status lists servers %+v, want one ready go server needed by %s", servers, document)
+	}
+	first := servers[0].Pid
+
+	if closed := desktopAction(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, DesktopID: shown.DesktopID, LeafID: shown.TileID}); !closed.Success {
+		t.Fatalf("closing the review's tile failed: %s", protocol.Deref(closed.Error))
+	}
+	w.awaitTimer(daemon.CodeNavIdleStopTimer)
+	w.advance(299 * time.Second)
+	if servers := runningServers(t, cli); len(servers) != 1 || processGone(first) {
+		t.Fatalf("a second before the idle stop the servers are %+v (pid %d gone: %v), want the server still running", servers, first, processGone(first))
+	}
+	w.advance(time.Second)
+	if servers := runningServers(t, cli); len(servers) != 0 || !processGone(first) {
+		t.Fatalf("after the idle stop the servers are %+v (pid %d gone: %v), want none running", servers, first, processGone(first))
+	}
+
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open again: %v", err)
+	}
+	awaitNavigation(app, document, "go", "ready")
+	if servers := runningServers(t, cli); len(servers) != 1 || servers[0].Pid == first {
+		t.Fatalf("showing the review again runs servers %+v, want one new server", servers)
+	}
+}
+
+func TestALanguageWithNoServerIsMissingAndTheReviewStillReads(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+	if err := os.WriteFile(filepath.Join(repo, "add.zig"), []byte("fn add(a: i32, b: i32) i32 {\n    return a + b;\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	set, err := cli.CodeNavDefine(repo, "zig", `{"command": ["attn-no-such-zls"], "extensions": [".zig"]}`)
+	if err != nil || set.Key != "code_navigation_example.test/calc_zig" {
+		t.Fatalf("nav set answered %+v, %v; want the key for the repository's origin", set, err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~1"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Add in two languages\n\n### calc.go:3-6\n\n### add.zig:1-3\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	tile := awaitNavigation(app, document, "go", "ready")
+	zig := navigation(tile.Review, "zig")
+	if zig.State != "missing" || !strings.Contains(protocol.Deref(zig.Detail), "attn-no-such-zls is not in") {
+		t.Errorf("zig navigation is %+v, want missing, naming the program it looked for", zig)
+	}
+	if len(tile.Review.Stops) != 2 || len(tile.Review.Stops[1].Rows) != 3 {
+		t.Errorf("the review's stops are %+v, want both, with the zig file's three lines", tile.Review.Stops)
+	}
+	asked := requestCodeNav(app, document, "add.zig", 1, 3, "definition")
+	if asked.Success || !strings.Contains(protocol.Deref(asked.Error), "attn-no-such-zls is not in") {
+		t.Errorf("asking about a zig name answered %+v, want a refusal naming the missing program", asked)
+	}
+	if _, err := cli.CodeNavDefine(repo, "zig", `{"command": ["gopls"], "extensions": [".zig"]}`); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	if asked := requestCodeNav(app, document, "add.zig", 1, 3, "definition"); !asked.Success {
+		t.Errorf("after nav set named a program that is there, asking about a zig name answered %q, want an answer from it", protocol.Deref(asked.Error))
+	}
+	file := requestReviewFile(app, document, "add.zig")
+	if !file.Success || len(file.Rows) != 3 {
+		t.Errorf("the file view of the zig file answered %+v, want its three lines", file)
+	}
+
+	status, err := cli.CodeNavStatus(repo)
+	if err != nil {
+		t.Fatalf("nav status: %v", err)
+	}
+	var listed []string
+	for _, language := range status.Languages {
+		listed = append(listed, language.Language+" "+language.Source)
+	}
+	if !strings.Contains(strings.Join(listed, ","), "zig setting") || !strings.Contains(strings.Join(listed, ","), "go built-in") {
+		t.Errorf("nav status lists languages %v, want go built-in and zig from its setting", listed)
+	}
+	if _, err := cli.CodeNavDefine(repo, "zig", ""); err != nil {
+		t.Fatalf("nav rm: %v", err)
+	}
+	if _, err := cli.CodeNavDefine(repo, "zig", ""); err == nil || !strings.Contains(err.Error(), "no definition of zig is set") {
+		t.Errorf("removing zig twice answered %v, want a refusal saying none is set", err)
+	}
+}
+
+func TestAnAnswerOutsideTheRepositoryOpensThatFileAndNoOtherOutsideFile(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+	library := w.Path("library")
+	if err := os.MkdirAll(library, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	printer := filepath.Join(library, "print.go")
+	if err := os.WriteFile(printer, []byte("package fmt\n\nfunc Println(a ...any) {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(library, "secret.go"), []byte("package fmt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	commitFile(t, repo, "say.go", "package calc\n\nfunc Say() {\n\tfmt.Println(Add(1, 2))\n}\n")
+	if _, err := cli.CodeNavDefine(repo, "go", `{"command": ["gopls"], "extensions": [".go"], "settings": {"search": ["`+library+`"]}}`); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~2"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	appendReviewBody(t, document, "# Say the sum\n\n### calc.go:3-6\n\n### say.go:3-5\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	awaitNavigation(app, document, "go", "ready")
+
+	refused := requestReviewFile(app, document, printer)
+	if refused.Success {
+		t.Fatalf("review_file of an outside file before any answer named it answered %+v, want a refusal", refused)
+	}
+	definition := requestCodeNav(app, document, "say.go", 4, strings.Index("\tfmt.Println(Add(1, 2))", "Println"), "definition")
+	if len(definition.Locations) != 1 || !definition.Locations[0].Outside || definition.Locations[0].Path != printer {
+		t.Fatalf("the definition of Println answered %+v (error %s), want %s marked outside", definition.Locations, protocol.Deref(definition.Error), printer)
+	}
+	file := requestReviewFile(app, document, printer)
+	if !file.Success || len(file.Rows) != 3 || file.Rows[2].Text != "func Println(a ...any) {}" || file.Rows[2].Kind != " " {
+		t.Errorf("review_file of the answered outside file answered %+v, want its three lines unchanged", file)
+	}
+	if other := requestReviewFile(app, document, filepath.Join(library, "secret.go")); other.Success {
+		t.Errorf("review_file of an outside file no answer named answered %+v, want a refusal", other)
+	}
+	if inside := requestCodeNav(app, document, printer, 3, 5, "references"); !inside.Success {
+		t.Errorf("asking from inside the answered outside file answered %s, want the uses", protocol.Deref(inside.Error))
+	}
+}
+
+func TestAPrepareRunsBeforeTheServerStartsAndAgainOnlyOnceItsInputsChange(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	commitFile(t, repo, "go.mod", "module calc\n")
+	linkFakeLanguageServer(t, w, cli)
+	ran := w.Path("prepared.log")
+	definition := `{"command": ["gopls"], "extensions": [".go"], "roots": ["go.mod"], "prepare": {"command": ["sh", "-c", "echo ran >> ` + ran + `"], "inputs": ["*.mod"]}}`
+	if _, err := cli.CodeNavDefine(repo, "go", definition); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~2"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	w.awaitTimer(daemon.CodeNavIdleStopTimer)
+	appendReviewBody(t, document, "# Name the sum\n\n### calc.go:3-6\n\n### use.go:3-5\n\n## Not shown\n\n- go.mod: the module\n")
+	prepared := func() int {
+		content, _ := os.ReadFile(ran)
+		return strings.Count(string(content), "ran")
+	}
+	showUntilReady := func() protocol.DesktopTileContentMessage {
+		t.Helper()
+		if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+			t.Fatalf("open: %v", err)
+		}
+		return awaitNavigation(app, document, "go", "ready")
+	}
+	closeAndStop := func(shown protocol.DesktopTileContentMessage) {
+		t.Helper()
+		if closed := desktopAction(app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, DesktopID: shown.DesktopID, LeafID: shown.TileID}); !closed.Success {
+			t.Fatalf("closing the review's tile failed: %s", protocol.Deref(closed.Error))
+		}
+		w.awaitTimer(daemon.CodeNavIdleStopTimer)
+		w.advance(300 * time.Second)
+		if servers := runningServers(t, cli); len(servers) != 0 {
+			t.Fatalf("after the idle stop the servers are %+v, want none", servers)
+		}
+	}
+
+	shown := showUntilReady()
+	if got := prepared(); got != 1 {
+		t.Fatalf("the server started after the prepare ran %d times, want once", got)
+	}
+	closeAndStop(shown)
+	shown = showUntilReady()
+	if got := prepared(); got != 1 {
+		t.Errorf("a start with the prepare's inputs unchanged ran it again (%d runs), want it left alone", got)
+	}
+	closeAndStop(shown)
+	if err := os.WriteFile(filepath.Join(repo, "go.mod"), []byte("module calc\n\ngo 1.26\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	showUntilReady()
+	if got := prepared(); got != 2 {
+		t.Errorf("a start after go.mod changed ran the prepare %d times in all, want twice", got)
+	}
+}

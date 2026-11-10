@@ -27,6 +27,20 @@ func (c *Client) ListFiles(ctx context.Context, root string) ([]string, error) {
 	return splitNUL(out), nil
 }
 
+// ListFilesMatching names the working tree's files that match any of globs,
+// git pathspec globs such as "**/BUILD.bazel", relative to root.
+func (c *Client) ListFilesMatching(ctx context.Context, root string, globs []string) ([]string, error) {
+	args := []string{"ls-files", "-z", "--cached", "--others", "--exclude-standard", "--"}
+	for _, glob := range globs {
+		args = append(args, ":(glob)"+glob)
+	}
+	out, err := c.outputWithEnv(ctx, OpMetadata, root, nil, nil, args...)
+	if err != nil {
+		return nil, err
+	}
+	return splitNUL(out), nil
+}
+
 // GrepResult holds the first hits of a search, at most perFile in each file.
 // Crowded names the files that had more, and More says the search stopped at
 // its limit before reading every match.

@@ -105,6 +105,26 @@ func File(ctx context.Context, client *git.Client, text, path string) (protocol.
 	return answer, nil
 }
 
+// OutsideFile is a file outside the review's repository that a navigation
+// answer named, such as the standard library: its lines now, with no change.
+func OutsideFile(path string) (protocol.ReviewFileResultMessage, error) {
+	now, hash, gone, err := readNow(path)
+	if err != nil {
+		return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s: %w", path, err)
+	}
+	if gone {
+		return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s does not exist", path)
+	}
+	answer := protocol.ReviewFileResultMessage{Event: protocol.EventReviewFileResult, Success: true, Path: protocol.Ptr(path), Hash: protocol.Ptr(hash), Rows: make([]protocol.ReviewRow, 0, len(now))}
+	for line, text := range now {
+		answer.Rows = append(answer.Rows, protocol.ReviewRow{Kind: " ", Now: protocol.Ptr(line + 1), Text: text})
+	}
+	if encoded, err := json.Marshal(answer.Rows); err == nil && len(encoded) > MaxFileRowsBytes {
+		return protocol.ReviewFileResultMessage{}, fmt.Errorf("%s is %d bytes as rows; the file view carries at most %d bytes in one frame", path, len(encoded), MaxFileRowsBytes)
+	}
+	return answer, nil
+}
+
 // baseLines are the file's lines at base, following a rename between base
 // and the review's head. A file that is new since base has none.
 func (repo repository) baseLines(ctx context.Context, client *git.Client, path string) ([]string, error) {

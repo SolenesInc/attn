@@ -166,6 +166,8 @@ pub const SETTINGS: &[Setting] = &[
     Setting { key: "garden.tender_resume", machine: false },
     Setting { key: "keybindings_config", machine: false },
     Setting { key: "sessions.filters", machine: false },
+    Setting { key: "code_navigation_idle_stop_seconds", machine: false },
+    Setting { key: "code_navigation_<origin>_<language>", machine: false },
     Setting { key: "reviewer_model", machine: false },
     Setting { key: "<harness>_executable", machine: true },
     Setting { key: "new_session_yolo_<location>", machine: false },

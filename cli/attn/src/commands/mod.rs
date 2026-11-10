@@ -9,6 +9,7 @@ pub mod enrollment;
 pub mod instance_env;
 pub mod instance_resolve;
 pub mod journal;
+pub mod nav;
 pub mod open;
 pub mod pr;
 pub mod review;
