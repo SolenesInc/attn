@@ -594,11 +594,11 @@ func TestSSHRemoveForgetsAfterRemoteStopFailure(t *testing.T) {
 		}
 	})
 	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
-	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	warning := testworld.Await[protocol.CommandErrorMessage](app, protocol.EventCommandError, func(m protocol.CommandErrorMessage) bool { return protocol.Deref(m.Cmd) == protocol.CmdRemoveOutpost })
 	if !strings.Contains(warning.Error, "may still be running") || !strings.Contains(warning.Error, "enrollment leave") || !strings.Contains(warning.Error, "daemon stop") {
 		t.Fatalf("missing remote-stop warning: %+v", warning)
 	}
+	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 	t.Log(warning.Error)
 	if rows := home.App().Initial.Outposts; len(rows) != 0 {
 		t.Fatalf("removed row returned: %+v", rows)

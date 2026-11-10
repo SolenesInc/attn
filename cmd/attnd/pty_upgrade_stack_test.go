@@ -1044,6 +1044,10 @@ func TestAnOutpostAddedByAddressOnTheReleaseExplainsItselfAfterTheUpdate(t *test
 		t.Errorf("the refused row does not say how to recover: %q", protocol.Deref(row.LastError))
 	}
 	app.Send(protocol.RemoveOutpostMessage{Cmd: protocol.CmdRemoveOutpost, ID: row.ID})
+	warning := testworld.Await(app, protocol.EventCommandError, func(m protocol.CommandErrorMessage) bool { return protocol.Deref(m.Cmd) == protocol.CmdRemoveOutpost })
+	if !strings.Contains(warning.Error, "enrollment leave") {
+		t.Errorf("the remove warning does not say how to stop the outpost: %q", warning.Error)
+	}
 	testworld.Await[protocol.OutpostsUpdatedMessage](app, protocol.EventOutpostsUpdated, func(m protocol.OutpostsUpdatedMessage) bool { return len(m.Outposts) == 0 })
 }
 
