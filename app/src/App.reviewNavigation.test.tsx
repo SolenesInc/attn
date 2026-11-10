@@ -217,7 +217,7 @@ describe('App review navigation', () => {
   });
 
   it('keeps expanded lines and reads no file when only a language server’s state changes', async () => {
-    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting' }]));
+    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]));
     daemon.on('review_file', ({ path }) => ({
       event: 'review_file_result', success: true, path, hash: 'h1',
       rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
@@ -228,7 +228,7 @@ describe('App review navigation', () => {
     expect(rows()).toBe(9);
     const reads = daemon.sentOf('review_file').length;
 
-    await show(bundleWith([{ language: 'go', state: 'ready' }]));
+    await show(bundleWith([{ language: 'go', state: 'ready', file: 'calc.go' }]));
     expect(reader.getByLabelText('Language servers')).toHaveTextContent('go ready');
     expect(rows()).toBe(9);
     expect(daemon.sentOf('review_file')).toHaveLength(reads);
