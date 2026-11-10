@@ -80,9 +80,9 @@ The app tells the daemon its process id when it connects, and the daemon finds
 the app's WebKit processes from it. WebKit processes of other apps, and of other
 attn instances, are not counted. On macOS, the kernel ties the WebKit processes of
 an app started from a terminal to that terminal, so that app's sample has an
-`app` entry and no `webkit_*` entries. The sample reads the kernel's process tables.
-On macOS it also runs `/usr/bin/footprint` once for the WebContent processes,
-which took 20-40 ms for a WebContent of 0.4 to 1.9 GB. With
+`app` entry and no `webkit_*` entries. The sample reads the kernel's process
+tables and, on macOS, runs `/usr/bin/footprint` once for all WebContent
+processes, which took 30-50 ms for WebContent of 0.4 to 1.9 GB. With
 `analytics.enabled` off, it reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
