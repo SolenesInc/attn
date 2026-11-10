@@ -99,6 +99,7 @@ async function openReview({ review = BUNDLE as ReviewBundle | null } = {}) {
         event: 'markdown_annotations_save_result', document_uri: save.document_uri, source_kind: save.source_kind, success: true, ...draft.change(save),
       }));
       daemon.on('markdown_annotations_submit', () => undefined);
+      daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: BUNDLE.stops[0].rows, hash: 'h1' }));
     },
   });
   const desktopId = view.daemon.arrangement.profile.current_desktop_id;
@@ -176,6 +177,18 @@ describe('App review marks', () => {
     await write('Keep this line.');
     const [save] = daemon.sentOf('markdown_annotations_save');
     expect(save.upserts[0].anchor).toMatchObject({ exact: '-\treturn a + b', file: 'calc.go', file_start_line: 4, file_end_line: 4 });
+  });
+
+  it('writes a note on the selected lines of the file the Walkthrough shows', async () => {
+    const { tile, press, write, daemon } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
+    expect(tile.querySelector('.review-file-view .review-cursor')).toHaveTextContent('sum := a + b');
+    await press('ArrowDown', { shiftKey: true });
+    await press('c');
+    expect(within(tile).getByRole('dialog', { name: 'Write a note' })).toHaveTextContent('calc.go:4–5');
+    await write('Return a + b directly.');
+    const [save] = daemon.sentOf('markdown_annotations_save');
+    expect(save.upserts[0].anchor).toMatchObject({ start_line: 15, exact: '\tsum := a + b\n\treturn sum', file: 'calc.go', file_start_line: 4, file_end_line: 5 });
+    expect(tile.querySelector('.review-file-view-marks')).toHaveTextContent('Return a + b directly.');
   });
 
   it('asks a question at once, keeps it, and shows the answer when the daemon says the draft moved', async () => {
