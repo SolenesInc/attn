@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "1f44dc54d8b9";
+pub const PROTOCOL_VERSION: &str = "86e0a3c826ba";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -3894,6 +3894,8 @@ pub struct DesktopTileContentMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub path: String,
     pub tile_id: String,
     pub tile_kind: String,
@@ -7075,6 +7077,8 @@ impl OpenBrowserMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OpenMarkdownMessage {
     pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
@@ -12940,6 +12944,114 @@ pub struct TierDefaults {
     pub light: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub standard: Option<String>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileAssetReadMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl TileAssetReadMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "tile_asset_read".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileAssetReadResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data_uri: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+}
+
+impl TileAssetReadResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "tile_asset_read_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocument {
+    pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub version: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentChangedMessage {
+    pub cmd: String,
+    pub path: String,
+    pub version: i64,
+}
+
+impl TileDocumentChangedMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "tile_document_changed".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentReadMessage {
+    pub cmd: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub path: String,
+}
+
+impl TileDocumentReadMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "tile_document_read".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentVersion {
+    pub path: String,
+    pub version: i64,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentVersions {
+    #[serde(deserialize_with = "null_as_default")]
+    pub documents: Vec<TileDocumentVersion>,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TileDocumentsWatchMessage {
+    pub cmd: String,
+    #[serde(deserialize_with = "null_as_default")]
+    pub documents: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+}
+
+impl TileDocumentsWatchMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "tile_documents_watch".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TileWindowFrame {

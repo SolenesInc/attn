@@ -1,3 +1,4 @@
+import { tileParamsPath } from '../../utils/tilePresentation';
 import { useDesktopContext } from './DesktopContext';
 
 export function DesktopReviewTabs() {
@@ -6,7 +7,7 @@ export function DesktopReviewTabs() {
   return (
     <div className="desktop-review-tabs" role="tablist" aria-label="Open review documents">
       {reviewDeckTiles.map((tile) => {
-        const label = (tile.tileParams ?? '').split('/').filter(Boolean).pop() || tile.tileKind || 'Document';
+        const label = tileParamsPath(tile).split('/').filter(Boolean).pop() || tile.tileKind || 'Document';
         const selected = tile.tileId === effectivePaneId;
         return (
           <button

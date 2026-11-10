@@ -79,7 +79,7 @@ Preconditions:
 
 - **Durability across restarts**: a markdown tile is part of its desktop and comes back after any restart, re-reading the file. Recent files are kept too. The file itself is the source, so a tile shows whatever is on disk now.
 - **Linux**: `attn open` works the same where the daemon and CLI run on Linux. The opener is Ctrl+Shift+P there (`LINUX_SHORTCUTS`).
-- **Outposts**: markdown tiles read files on the home's machine. attn refuses ⌘-click on a path in a terminal on an outpost, and "Open in editor" for an agent on an outpost, with `<path> is on <outpost>; opening files on an outpost isn't supported yet`.
+- **Outposts**: a markdown tile reads, watches and loads images from the machine that holds its file. `attn open` from an outpost agent, and a markdown file it sends, open the outpost's file, never a home file at the same path. Links to other markdown files open on that outpost; other local links name it. Annotations are off on outpost tiles. Drive it with `./scripts/test-go.sh --packages -run TestAMarkdownTileFromAnOutpostShowsTheOutpostsFile -v ./cmd/attnd`. attn refuses ⌘-click on a path in a terminal on an outpost, and "Open in editor" for an agent on an outpost, with `<path> is on <outpost>; opening files on an outpost isn't supported yet`.
 - **Profiles**: tiles open on a desktop of the caller's profile. Without a session, a tile opens on the current desktop of the profile used most recently.
 - **Performance and idle cost**: each open markdown tile keeps checking its file while it is open, so tiles nobody reads still cost a little. Close them. attn refuses files over 1 MiB and names the size and the limit. Large Mermaid diagrams scroll instead of shrinking (`app/e2e/mermaid-diagram.spec.ts`).
 - **Harnesses**: every harness opens files with the same `attn open`.
@@ -87,8 +87,8 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`.
-- Stack: `cmd/attnd/agent_commands_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`.
+- Wire: `internal/daemon/markdown_tiles_wire_test.go`, `internal/daemon/fs_wire_test.go`, `internal/daemon/fs_watch_wire_test.go`, `internal/daemon/fs_watch_darwin_wire_test.go`, `internal/daemon/fs_index_wire_test.go`, `internal/daemon/fs_containment_wire_test.go`, `internal/daemon/recent_files_wire_test.go`, `internal/daemon/agent_tiles_test.go`, `internal/daemon/markdown_tiles_outpost_wire_test.go`.
+- Stack: `cmd/attnd/agent_commands_stack_test.go`, `cmd/attnd/markdown_tiles_outpost_stack_test.go`, `app/e2e/mermaid-diagram.spec.ts`.
 - Scenario: `markdown-opener`, `terminal-md-link`.
 - App: `app/src/App.markdownOpener.test.tsx`, `app/src/App.markdownRendering.test.tsx`, `app/src/components/MarkdownReader/*.test.*`, `app/src/components/palette/openerRank.test.ts`, `app/src/components/palette/pathMode.test.ts`, `app/src/utils/terminalMarkdown.test.ts`, `app/src/components/SessionTerminalDesktop/DesktopDockTile.test.tsx`.
 

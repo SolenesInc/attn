@@ -49,6 +49,13 @@ type farOutpost struct {
 
 func startFarOutpost(t *testing.T, w *world, connected func(*bridge.Conn)) *farOutpost {
 	t.Helper()
+	return startFarOutpostWith(t, w, connected, bridge.Handlers{})
+}
+
+func startFarOutpostWith(t *testing.T, w *world, connected func(*bridge.Conn), handlers bridge.Handlers) *farOutpost {
+	t.Helper()
+	handlers[daemon.BridgeCallRecovery] = answerBridgeCall
+	handlers[daemon.BridgeCallCopy] = answerBridgeCall
 	o := &farOutpost{network: memnet.Listen()}
 	if connected == nil {
 		connected = func(*bridge.Conn) {}
@@ -61,10 +68,7 @@ func startFarOutpost(t *testing.T, w *world, connected func(*bridge.Conn)) *farO
 		served <- bridge.Serve(ctx, o.network, bridge.ServerConfig{
 			Self:        self,
 			HostKeyPath: filepath.Join(t.TempDir(), "bridge_host_key"),
-			Handlers: bridge.Handlers{
-				daemon.BridgeCallRecovery: answerBridgeCall,
-				daemon.BridgeCallCopy:     answerBridgeCall,
-			},
+			Handlers:    handlers,
 		}, connected)
 	}()
 	t.Cleanup(func() {

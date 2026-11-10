@@ -230,6 +230,10 @@ var Placements = map[string][]Placement{
 	"terminal_wait":                    {Placement{LocatorHome, ""}},
 	"terminal_wait_block":              {Placement{LocatorTerminal, "terminal_id"}},
 	"terminal_write":                   {Placement{LocatorTerminal, "terminal_id"}},
+	"tile_asset_read":                  {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"tile_document_changed":            {Placement{LocatorHome, ""}},
+	"tile_document_read":               {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"tile_documents_watch":             {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"transcript_activity":              {Placement{LocatorSession, "session_id"}},
 	"unregister":                       {Placement{LocatorHome, ""}},
 	"update_outpost":                   {Placement{LocatorHome, ""}},
@@ -2748,6 +2752,72 @@ func (m TerminalWriteMessage) Placement() Placement {
 
 func (m TerminalWriteMessage) Locate() string {
 	return string(m.TerminalID)
+}
+
+func (TileAssetReadMessage) CommandName() string {
+	return "tile_asset_read"
+}
+
+func (m TileAssetReadMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m TileAssetReadMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (TileDocumentChangedMessage) CommandName() string {
+	return "tile_document_changed"
+}
+
+func (m TileDocumentChangedMessage) Placement() Placement {
+	return Placement{LocatorHome, ""}
+}
+
+func (m TileDocumentChangedMessage) Locate() string {
+	return ""
+}
+
+func (TileDocumentReadMessage) CommandName() string {
+	return "tile_document_read"
+}
+
+func (m TileDocumentReadMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m TileDocumentReadMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (TileDocumentsWatchMessage) CommandName() string {
+	return "tile_documents_watch"
+}
+
+func (m TileDocumentsWatchMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m TileDocumentsWatchMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
 }
 
 func (TranscriptActivityMessage) CommandName() string {

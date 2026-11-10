@@ -385,7 +385,7 @@ func (h *wsHub) BroadcastValue(message interface{}) {
 	}
 }
 
-func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClient) bool, delivery *arrangementDelivery) {
+func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClient) bool, delivery *arrangementDelivery) (shownChanged bool) {
 	var targets []*wsClient
 	h.ForEachClient(func(client *wsClient) {
 		if match(client) {
@@ -393,10 +393,13 @@ func (h *wsHub) SendArrangementToMatchingClients(data []byte, match func(*wsClie
 		}
 	})
 	for _, client := range targets {
-		if h.deliverArrangement(client, outboundMessage{kind: messageKindText, payload: data}, delivery) {
+		outcome := h.deliverArrangement(client, outboundMessage{kind: messageKindText, payload: data}, delivery)
+		if outcome.evicted {
 			h.forget(client)
 		}
+		shownChanged = shownChanged || outcome.shownChanged
 	}
+	return shownChanged
 }
 
 func (h *wsHub) forget(client *wsClient) {
@@ -754,6 +757,7 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 		d.dictationRefinements.dropClient(client)
 		close(client.recv)
 		d.wsHub.remove(client)
+		d.nudgeDesktopTileContent()
 		client.conn.Close(websocket.StatusNormalClosure, "")
 		d.logf("WebSocket client disconnected (%d remaining)", d.wsHub.ClientCount())
 	}()
@@ -1209,6 +1213,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleEnsureRepoWS(client, msg.(*protocol.EnsureRepoMessage))
 	case protocol.CmdGetRepoInfo:
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
+	case protocol.CmdTileAssetRead:
+		d.handleTileAssetReadWS(client, msg.(*protocol.TileAssetReadMessage))
 	case protocol.CmdAgentCatalog:
 		d.handleAgentCatalogWS(client, msg.(*protocol.AgentCatalogMessage))
 	case protocol.CmdAskImage:

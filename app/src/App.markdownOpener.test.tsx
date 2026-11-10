@@ -175,6 +175,7 @@ describe('App markdown opener', () => {
       },
     });
     serveOpener(view.daemon);
+    view.daemon.on('tile_asset_read', () => ({ event: 'tile_asset_read_result', success: true, data_uri: 'data:image/png;base64,aW1hZ2U=' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await view.daemon.idle();
     view.daemon.emit({ event: 'desktop_tile_content', desktop_id: 'ws', tile_id: 'tile-doc', tile_kind: 'markdown', path: '/repo/doc.md', content: '![chart](chart.png)' });

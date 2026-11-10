@@ -2722,11 +2722,14 @@ model OpenSentFilesMessage {
 // `attn open` CLI over the unix socket and by the frontend over the websocket
 // when the user cmd+clicks a markdown path in a session terminal. The tile is
 // bound to session_id (the opener); when empty the daemon falls back to the
-// currently selected session. request_id correlates the websocket reply
-// (OpenMarkdownResultMessage) and is unused on the unix-socket path.
+// currently selected session. host names the outpost that holds the file;
+// a call forwarded from an outpost takes the outpost it came from instead.
+// request_id correlates the websocket reply (OpenMarkdownResultMessage) and
+// is unused on the unix-socket path.
 @extension("x-on", #{ home: true })
 model OpenMarkdownMessage {
   cmd: "open_markdown";
+  host?: string;
   path: string;
   session_id?: SessionID;
   request_id?: string;
@@ -3747,8 +3750,63 @@ model DesktopTileContentMessage {
   desktop_id: string;
   tile_id: string;
   tile_kind: string;
+  host?: string;
   path: string;
   content: string;
+  error?: string;
+}
+
+// The home sends each machine the full set of markdown documents its shown
+// tiles hold; the machine watches them and answers each one's version.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model TileDocumentsWatchMessage {
+  cmd: "tile_documents_watch";
+  host?: string;
+  documents: string[];
+}
+
+model TileDocumentVersion {
+  path: string;
+  version: safeint;
+}
+
+model TileDocumentVersions {
+  documents: TileDocumentVersion[];
+}
+
+@extension("x-on", #{ home: true })
+model TileDocumentChangedMessage {
+  cmd: "tile_document_changed";
+  path: string;
+  version: safeint;
+}
+
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model TileDocumentReadMessage {
+  cmd: "tile_document_read";
+  host?: string;
+  path: string;
+}
+
+model TileDocument {
+  content: string;
+  version: safeint;
+  error?: string;
+}
+
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model TileAssetReadMessage {
+  cmd: "tile_asset_read";
+  host?: string;
+  path: string;
+  request_id?: string;
+}
+
+model TileAssetReadResultMessage {
+  event: "tile_asset_read_result";
+  request_id?: string;
+  success: boolean;
+  data_uri?: string;
   error?: string;
 }
 

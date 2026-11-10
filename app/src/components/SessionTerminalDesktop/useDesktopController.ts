@@ -70,6 +70,7 @@ import { useSessionStore } from '../../store/sessions';
 import { FONT_FAMILY, measureCellWidth } from '../../utils/terminalSizing';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { isDomInstance } from '../../utils/realm';
+import { tileParamsPath } from '../../utils/tilePresentation';
 
 const COLUMN_DRAG_ACTIVATION_PX = 4;
 
@@ -1136,7 +1137,7 @@ export function useDesktopController(
     }
     const tile = tileLeafById.get(effectiveDraggingLeafId);
     if (tile) {
-      const base = (tile.tileParams ?? '').split('/').filter(Boolean).pop();
+      const base = tileParamsPath(tile).split('/').filter(Boolean).pop();
       return base || tile.tileKind || 'Tile';
     }
     return 'Pane';

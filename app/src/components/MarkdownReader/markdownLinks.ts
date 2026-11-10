@@ -50,6 +50,11 @@ export function isSafeLocalMarkdownTarget(path: string): boolean {
   return safeLocalDocumentExtensions.has(extension) || safeLocalImageExtensions.has(extension);
 }
 
+export function isMarkdownDocumentTarget(path: string): boolean {
+  const extension = localTargetExtension(path);
+  return extension === '.md' || extension === '.markdown';
+}
+
 export function isSafeLocalMarkdownImageTarget(path: string): boolean {
   return safeLocalImageExtensions.has(localTargetExtension(path));
 }

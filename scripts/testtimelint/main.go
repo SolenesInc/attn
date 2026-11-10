@@ -17,6 +17,7 @@ var harnessDirs = []string{"internal/testworld", "internal/fakeagent", "internal
 // Each allowance names a function by file and receiver and says why it may wait real time.
 var allowed = map[string]string{
 	"internal/daemon/world_test.go (*world).elapse":                                                                  "moves the synctest clock of a world inBubble; refuses outside a bubble",
+	"internal/daemon/desktop_tiles_protocol_test.go (*desktopTilesWorld).deliver":                                    "runs in tileContentWorld's synctest bubble, so the sleep moves its clock past the tile watcher's tick",
 	"internal/daemon/exit_screen_wire_test.go TestAnExitReleasesItsRuntimeAtOnceAndReportsTheExitOnceStorageReturns": "runs inBubbleWithAgents, so the sleep moves the synctest clock",
 	"internal/jobs/stores_test.go TestDueJobsRunByPriorityThenByScheduleWithinASecond":                               "runs in onTheJobDatabase's synctest bubble",
 	"internal/jobs/stores_test.go TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes":                     "runs in onTheJobDatabase's synctest bubble",

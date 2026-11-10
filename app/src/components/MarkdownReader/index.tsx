@@ -13,6 +13,7 @@ import { CodeBlock } from './CodeBlock';
 import { extractFrontmatter, type FrontmatterEntry } from './frontmatter';
 import { ImageLightbox } from './ImageLightbox';
 import {
+  isMarkdownDocumentTarget,
   isSafeLocalMarkdownImageTarget,
   isSafeLocalMarkdownTarget,
   openMarkdownTarget,
@@ -261,6 +262,33 @@ export type LocalImageLoader = (path: string) => Promise<string>;
 
 const LocalImageLoaderContext = createContext<LocalImageLoader | null>(null);
 
+export interface RemoteMarkdownDocument {
+  hostName: string;
+  openMarkdown: (path: string) => void;
+}
+
+const RemoteMarkdownDocumentContext = createContext<RemoteMarkdownDocument | null>(null);
+
+function LocalLink({ path, href, children }: { path: string; href: string | undefined; children: ReactNode }) {
+  const remote = useContext(RemoteMarkdownDocumentContext);
+  if (remote && !isMarkdownDocumentTarget(path)) {
+    return <span title={`${path} is on ${remote.hostName}; only markdown files open from there`}>{children}</span>;
+  }
+  return (
+    <a
+      href={href}
+      title={remote ? `${path} on ${remote.hostName}` : path}
+      onClick={(event) => {
+        event.preventDefault();
+        if (remote) remote.openMarkdown(path);
+        else openMarkdownTarget({ kind: 'local', value: path });
+      }}
+    >
+      {children}
+    </a>
+  );
+}
+
 function LocalImage({
   path,
   alt,
@@ -404,10 +432,12 @@ function readerComponents(
         }
         return <SeedArtifactLink target={target.value}>{children}</SeedArtifactLink>;
       }
+      if (target.kind === 'local') {
+        return <LocalLink path={target.value} href={href}>{children}</LocalLink>;
+      }
       return (
         <a
           href={href}
-          title={target.kind === 'local' ? target.value : undefined}
           onClick={(event) => {
             event.preventDefault();
             openMarkdownTarget(target);
@@ -499,6 +529,7 @@ export interface MarkdownReaderProps {
   onOpenSeed?: (seedId: string) => void;
   seedMentions?: SeedMentionIndex | null;
   loadLocalImage?: LocalImageLoader;
+  remoteDocument?: RemoteMarkdownDocument;
 }
 
 interface MarkdownReaderBodyProps {
@@ -550,6 +581,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   onOpenSeed,
   seedMentions,
   loadLocalImage,
+  remoteDocument,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
@@ -621,6 +653,7 @@ export const MarkdownReader = memo(function MarkdownReader({
         <div className="md-reader-wrap">
           <SeedArtifactReaderContext.Provider value={seedArtifactContext}>
             <LocalImageLoaderContext.Provider value={loadLocalImage ?? null}>
+              <RemoteMarkdownDocumentContext.Provider value={remoteDocument ?? null}>
               <MarkdownReaderBody
                 content={content}
                 path={path}
@@ -631,6 +664,7 @@ export const MarkdownReader = memo(function MarkdownReader({
                 onOpenSeed={onOpenSeed}
                 plugins={plugins}
               />
+              </RemoteMarkdownDocumentContext.Provider>
             </LocalImageLoaderContext.Provider>
           </SeedArtifactReaderContext.Provider>
         </div>

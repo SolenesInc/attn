@@ -31,6 +31,7 @@ export interface TileLeaf {
 export type TerminalLeaf = TerminalPaneLeaf | TileLeaf;
 
 export interface TileContentState {
+  host?: string;
   path: string;
   content: string;
   error?: string;
@@ -442,6 +443,28 @@ export function tileIdsFromLayoutJSON(layoutJSON: string, kind?: TileKind): stri
     .filter((leaf): leaf is TileLeaf => leaf.type === 'tile')
     .filter((tile) => !kind || tile.tileKind === kind)
     .map((tile) => tile.tileId);
+}
+
+export interface MarkdownTileParams {
+  host?: string;
+  path: string;
+}
+
+export function parseMarkdownTileParams(raw: string | undefined | null): MarkdownTileParams {
+  if (!raw) {
+    return { path: '' };
+  }
+  if (raw.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof parsed.host === 'string' && parsed.host && typeof parsed.path === 'string' && parsed.path) {
+        return { host: parsed.host, path: parsed.path };
+      }
+    } catch {
+      return { path: raw };
+    }
+  }
+  return { path: raw };
 }
 
 export interface NotebookTileParams {

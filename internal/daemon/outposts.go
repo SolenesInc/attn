@@ -351,6 +351,7 @@ func (d *Daemon) bridgeOutpost(ctx context.Context, id string, run *outpostDial,
 	}
 	close(recorded)
 	defer d.setOutpostConn(id, run, nil)
+	d.life.Go("tileDocuments:"+id, func() { d.keepTileDocumentsWatched(conn.Context(), id) })
 	d.life.Go("notebookFolders:"+id, func() {
 		d.pushNotebookFolders(conn, func() { d.life.Go("notebookStream:"+id, func() { d.keepNotebookStream(conn) }) })
 	})

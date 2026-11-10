@@ -1,14 +1,20 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/stepclock"
 )
 
 type desktopTilesWorld struct {
@@ -26,6 +32,33 @@ func newDesktopTilesWorld(t *testing.T) *desktopTilesWorld {
 	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
 	drainClientPayloads(t, client)
 	return &desktopTilesWorld{profilesTestDaemon: w, client: client, profileID: created.Profile.ID, desktop: created.Desktops[0]}
+}
+
+func tileContentWorld(t *testing.T, test func(*testing.T, *desktopTilesWorld)) {
+	synctest.Test(t, func(t *testing.T) {
+		w := newDesktopTilesWorld(t)
+		w.d.rootWatch = func(*stepclock.Clock, string, func([]string)) (*notebook.Watcher, error) { return nil, nil }
+		w.d.outpost.enrollment = enrollment.Status{DaemonID: "d-home", HomeDaemonID: "d-home"}
+		ctx, cancel := context.WithCancel(context.Background())
+		watched := make(chan struct{})
+		go func() { defer close(watched); w.d.keepTileDocumentsWatched(ctx, "") }()
+		watching := make(chan struct{})
+		go func() { defer close(watching); w.d.runTileDocumentWatcher(ctx.Done()) }()
+		defer func() {
+			cancel()
+			<-watched
+			<-watching
+			w.d.stop()
+		}()
+		test(t, w)
+	})
+}
+
+func (w *desktopTilesWorld) deliver() {
+	w.d.deliverDesktopTileContent()
+	time.Sleep(time.Second)
+	synctest.Wait()
+	w.d.deliverDesktopTileContent()
 }
 
 func (w *desktopTilesWorld) apply(command map[string]any) protocol.ProfileActionResultMessage {
@@ -304,112 +337,115 @@ func contentsOf(messages []protocol.DesktopTileContentMessage) []string {
 }
 
 func TestTheDaemonSendsMarkdownContentToEveryClientOnTheCurrentDesktopOnce(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	path := w.dockMarkdown("tile-md", "# first")
-	second, _ := w.connect(w.profileID)
-	outsider, _ := w.connect("")
-	elsewhere := w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
-	w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": elsewhere.Profile.ID})
-	drainClientPayloads(t, w.client)
-	drainClientPayloads(t, second)
-	drainClientPayloads(t, outsider)
+	tileContentWorld(t, func(t *testing.T, w *desktopTilesWorld) {
+		path := w.dockMarkdown("tile-md", "# first")
+		second, _ := w.connect(w.profileID)
+		outsider, _ := w.connect("")
+		elsewhere := w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
+		w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": elsewhere.Profile.ID})
+		drainClientPayloads(t, w.client)
+		drainClientPayloads(t, second)
+		drainClientPayloads(t, outsider)
 
-	w.d.deliverDesktopTileContent()
-	for name, client := range map[string]*wsClient{"the docking client": w.client, "a second client": second} {
-		got := tileContents(t, client)
-		if len(got) != 1 || got[0].Content != "# first" || got[0].Path != path || got[0].DesktopID != w.desktop.ID {
-			t.Fatalf("%s received %+v, want the tile's content once", name, got)
+		w.deliver()
+		for name, client := range map[string]*wsClient{"the docking client": w.client, "a second client": second} {
+			got := tileContents(t, client)
+			if len(got) != 1 || got[0].Content != "# first" || got[0].Path != path || got[0].DesktopID != w.desktop.ID {
+				t.Fatalf("%s received %+v, want the tile's content once", name, got)
+			}
 		}
-	}
-	if leaked := tileContents(t, outsider); len(leaked) != 0 {
-		t.Fatalf("a client on another profile received %d content messages", len(leaked))
-	}
+		if leaked := tileContents(t, outsider); len(leaked) != 0 {
+			t.Fatalf("a client on another profile received %d content messages", len(leaked))
+		}
 
-	w.d.deliverDesktopTileContent()
-	if again := tileContents(t, w.client); len(again) != 0 {
-		t.Fatalf("an unchanged file was sent again: %v", contentsOf(again))
-	}
+		w.deliver()
+		if again := tileContents(t, w.client); len(again) != 0 {
+			t.Fatalf("an unchanged file was sent again: %v", contentsOf(again))
+		}
 
-	replacement := path + ".next"
-	if err := os.WriteFile(replacement, []byte("# second, written elsewhere and renamed over"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Rename(replacement, path); err != nil {
-		t.Fatal(err)
-	}
-	w.d.deliverDesktopTileContent()
-	if changed := contentsOf(tileContents(t, second)); len(changed) != 1 || changed[0] != "# second, written elsewhere and renamed over" {
-		t.Fatalf("after an atomic replace the second client received %v", changed)
-	}
+		replacement := path + ".next"
+		if err := os.WriteFile(replacement, []byte("# second, written elsewhere and renamed over"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Rename(replacement, path); err != nil {
+			t.Fatal(err)
+		}
+		w.deliver()
+		if changed := contentsOf(tileContents(t, second)); len(changed) != 1 || changed[0] != "# second, written elsewhere and renamed over" {
+			t.Fatalf("after an atomic replace the second client received %v", changed)
+		}
+	})
 }
 
 func TestLeavingADesktopStopsItsContentAndReturningSendsItAgain(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	path := w.dockMarkdown("tile-md", "# notes")
-	first := w.desktop
-	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
-	w.d.deliverDesktopTileContent()
-	drainClientPayloads(t, w.client)
+	tileContentWorld(t, func(t *testing.T, w *desktopTilesWorld) {
+		path := w.dockMarkdown("tile-md", "# notes")
+		first := w.desktop
+		other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
+		w.deliver()
+		drainClientPayloads(t, w.client)
 
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": other.ID})
-	w.d.deliverDesktopTileContent()
-	if err := os.WriteFile(path, []byte("# edited while away"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	w.d.deliverDesktopTileContent()
-	if late := tileContents(t, w.client); len(late) != 0 {
-		t.Fatalf("a desktop the client left still streamed %v", contentsOf(late))
-	}
-	if held := w.deliveredTiles(w.client); held != 0 {
-		t.Fatalf("leaving the desktop left %d delivered tiles tracked for the client", held)
-	}
+		w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": other.ID})
+		w.deliver()
+		if err := os.WriteFile(path, []byte("# edited while away"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		w.deliver()
+		if late := tileContents(t, w.client); len(late) != 0 {
+			t.Fatalf("a desktop the client left still streamed %v", contentsOf(late))
+		}
+		if held := w.deliveredTiles(w.client); held != 0 {
+			t.Fatalf("leaving the desktop left %d delivered tiles tracked for the client", held)
+		}
 
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": first.ID})
-	w.d.deliverDesktopTileContent()
-	if back := contentsOf(tileContents(t, w.client)); len(back) != 1 || back[0] != "# edited while away" {
-		t.Fatalf("returning to the desktop sent %v, want the current file once", back)
-	}
+		w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": first.ID})
+		w.deliver()
+		if back := contentsOf(tileContents(t, w.client)); len(back) != 1 || back[0] != "# edited while away" {
+			t.Fatalf("returning to the desktop sent %v, want the current file once", back)
+		}
+	})
 }
 
 func TestARescopedClientGetsTheContentOfItsNewProfileOnly(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	w.dockMarkdown("tile-md", "# old profile")
-	w.d.deliverDesktopTileContent()
+	tileContentWorld(t, func(t *testing.T, w *desktopTilesWorld) {
+		w.dockMarkdown("tile-md", "# old profile")
+		w.deliver()
 
-	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
-	w.profileID, w.desktop = doomed.Profile.ID, doomed.Desktops[0]
-	w.dockMarkdown("tile-doomed", "# doomed profile")
-	drainClientPayloads(t, w.client)
-	w.d.deliverDesktopTileContent()
-	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# doomed profile" {
-		t.Fatalf("after profile_select the client received %v, want only the new profile's tile", got)
-	}
+		doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
+		w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
+		w.profileID, w.desktop = doomed.Profile.ID, doomed.Desktops[0]
+		w.dockMarkdown("tile-doomed", "# doomed profile")
+		drainClientPayloads(t, w.client)
+		w.deliver()
+		if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# doomed profile" {
+			t.Fatalf("after profile_select the client received %v, want only the new profile's tile", got)
+		}
 
-	refused := w.send(w.client, map[string]any{"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": doomed.Profile.Revision})
-	if refused.Success {
-		t.Fatal("deletion must refuse a profile with a tile")
-	}
-	w.apply(map[string]any{"cmd": protocol.CmdDesktopRemoveLeaf, "leaf_id": "tile-doomed"})
+		refused := w.send(w.client, map[string]any{"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": doomed.Profile.Revision})
+		if refused.Success {
+			t.Fatal("deletion must refuse a profile with a tile")
+		}
+		w.apply(map[string]any{"cmd": protocol.CmdDesktopRemoveLeaf, "leaf_id": "tile-doomed"})
 
-	current, err := w.d.store.GetProfile(doomed.Profile.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	w.mustSend(w.client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision,
+		current, err := w.d.store.GetProfile(doomed.Profile.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		w.mustSend(w.client, map[string]any{
+			"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision,
+		})
+		drainClientPayloads(t, w.client)
+		w.deliver()
+		if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# old profile" {
+			t.Fatalf("after its profile was deleted the client received %v, want the destination's tile again", got)
+		}
+
+		w.d.wsHub.remove(w.client)
+		w.deliver()
+		if held := w.deliveredTiles(w.client); held != 0 {
+			t.Fatalf("a disconnected client still has %d delivered tiles tracked", held)
+		}
 	})
-	drainClientPayloads(t, w.client)
-	w.d.deliverDesktopTileContent()
-	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# old profile" {
-		t.Fatalf("after its profile was deleted the client received %v, want the destination's tile again", got)
-	}
-
-	w.d.wsHub.remove(w.client)
-	w.d.deliverDesktopTileContent()
-	if held := w.deliveredTiles(w.client); held != 0 {
-		t.Fatalf("a disconnected client still has %d delivered tiles tracked", held)
-	}
 }
 
 func TestArrangementChangesAndHelloWakeTheContentSender(t *testing.T) {
@@ -437,69 +473,50 @@ func TestArrangementChangesAndHelloWakeTheContentSender(t *testing.T) {
 	}
 }
 
-func TestContentAClientCouldNotQueueIsSentAgainOnTheNextTick(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	w.dockMarkdown("tile-md", "# notes")
-	drainClientPayloads(t, w.client)
-	for len(w.client.send) < cap(w.client.send) {
-		w.client.send <- outboundMessage{kind: messageKindText, payload: []byte(`{"event":"filler"}`)}
-	}
-
-	w.d.deliverDesktopTileContent()
-	if held := w.deliveredTiles(w.client); held != 0 {
-		t.Fatalf("content that could not be queued was recorded as delivered (%d tiles)", held)
-	}
-
-	drainClientPayloads(t, w.client)
-	w.d.deliverDesktopTileContent()
-	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# notes" {
-		t.Fatalf("once the queue drained the client received %v, want the tile's content", got)
-	}
-}
-
 func TestTileContentAlwaysFollowsTheArrangementItBelongsTo(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	first := w.desktop
-	firstPath := w.dockMarkdown("tile-first", "# first desktop")
-	second := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
-	w.desktop = second
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": second.ID})
-	secondPath := w.dockMarkdown("tile-second", "# second desktop")
+	tileContentWorld(t, func(t *testing.T, w *desktopTilesWorld) {
+		first := w.desktop
+		firstPath := w.dockMarkdown("tile-first", "# first desktop")
+		second := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
+		w.desktop = second
+		w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": second.ID})
+		secondPath := w.dockMarkdown("tile-second", "# second desktop")
 
-	var stream [][]byte
-	record := func() { stream = append(stream, drainClientPayloads(t, w.client)...) }
-	for round, target := range []string{first.ID, second.ID, first.ID, second.ID} {
-		w.d.deliverDesktopTileContent()
-		record()
-		for _, path := range []string{firstPath, secondPath} {
-			if err := os.WriteFile(path, []byte(fmt.Sprintf("# edit %d", round)), 0o600); err != nil {
-				t.Fatal(err)
+		var stream [][]byte
+		record := func() { stream = append(stream, drainClientPayloads(t, w.client)...) }
+		for round, target := range []string{first.ID, second.ID, first.ID, second.ID} {
+			w.deliver()
+			record()
+			for _, path := range []string{firstPath, secondPath} {
+				if err := os.WriteFile(path, []byte(fmt.Sprintf("# edit %d", round)), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": target})
+			w.deliver()
+			record()
+		}
+
+		current, contents := "", 0
+		for _, payload := range stream {
+			switch eventName(t, payload) {
+			case protocol.EventProfileArrangementChanged:
+				var arrangement protocol.ProfileArrangementChangedMessage
+				decodeInto(t, payload, &arrangement)
+				current = arrangement.Profile.CurrentDesktopID
+			case protocol.EventDesktopTileContent:
+				var content protocol.DesktopTileContentMessage
+				decodeInto(t, payload, &content)
+				contents++
+				if content.DesktopID != current {
+					t.Fatalf("content for desktop %s arrived while the client's arrangement had %s current", content.DesktopID, current)
+				}
 			}
 		}
-		w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": target})
-		w.d.deliverDesktopTileContent()
-		record()
-	}
-
-	current, contents := "", 0
-	for _, payload := range stream {
-		switch eventName(t, payload) {
-		case protocol.EventProfileArrangementChanged:
-			var arrangement protocol.ProfileArrangementChangedMessage
-			decodeInto(t, payload, &arrangement)
-			current = arrangement.Profile.CurrentDesktopID
-		case protocol.EventDesktopTileContent:
-			var content protocol.DesktopTileContentMessage
-			decodeInto(t, payload, &content)
-			contents++
-			if content.DesktopID != current {
-				t.Fatalf("content for desktop %s arrived while the client's arrangement had %s current", content.DesktopID, current)
-			}
+		if contents == 0 {
+			t.Fatal("no tile content was sent at all")
 		}
-	}
-	if contents == 0 {
-		t.Fatal("no tile content was sent at all")
-	}
+	})
 }
 
 func (w *desktopTilesWorld) focus(leafID string) protocol.ProfileActionResultMessage {

@@ -272,7 +272,8 @@ type Daemon struct {
 
 	openTileMu sync.Mutex
 
-	desktopTiles desktopTileDelivery
+	desktopTiles  desktopTileDelivery
+	tileDocuments tileDocumentWatch
 
 	browserControl  appRequests[browserControlResult]
 	calloutRequests appRequests[calloutReply]
@@ -501,6 +502,7 @@ func New(socketPath string) *Daemon {
 		wsHub:               newWSHub(),
 		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
+		tileDocuments:       newTileDocumentWatch(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
@@ -740,7 +742,9 @@ func (d *Daemon) Start() error {
 	d.reapStrandedPluginRuntimes()
 	d.life.Go("followLoginEnv", d.followLoginEnv)
 
-	d.life.Go("runMarkdownContentWatcher", func() { d.runMarkdownContentWatcher(d.life.Done()) })
+	d.life.Go("runDesktopTileContent", func() { d.runDesktopTileContent(d.life.Done()) })
+	d.life.Go("runTileDocumentWatcher", func() { d.runTileDocumentWatcher(d.life.Done()) })
+	d.life.Go("tileDocumentsHere", func() { d.keepTileDocumentsWatched(d.life.Context(), "") })
 
 	if hooks, ok := d.ptyBackend.(ptybackend.LifecycleHooks); ok {
 		hooks.SetExitHandler(func(info ptybackend.ExitInfo) { d.handlePTYExit(info) })
@@ -2891,7 +2895,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 
 	if origin, remote := OriginOf(ctx); remote {
 		switch cmd {
-		case protocol.CmdOpenMarkdown, protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
+		case protocol.CmdOpenBrowser, protocol.CmdBrowserControl:
 			d.sendError(conn, fmt.Sprintf("%s is not supported from %s", cmd, origin.Name))
 			return
 		case protocol.CmdOpenSentFiles:
@@ -3189,7 +3193,7 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 	case protocol.CmdInjectTestSession:
 		d.handleInjectTestSession(conn, msg.(*protocol.InjectTestSessionMessage))
 	case protocol.CmdOpenMarkdown:
-		d.handleOpenMarkdown(conn, msg.(*protocol.OpenMarkdownMessage))
+		d.handleOpenMarkdown(ctx, conn, msg.(*protocol.OpenMarkdownMessage))
 	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
 	case protocol.CmdOpenSentFiles:

@@ -1,11 +1,14 @@
 package daemon
 
 import (
+	"context"
 	"crypto/sha256"
-	"strings"
+	"errors"
+	"fmt"
+	"slices"
 	"sync"
-	"time"
 
+	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
@@ -17,30 +20,39 @@ type desktopTileKey struct {
 }
 
 type desktopMarkdownTile struct {
-	key  desktopTileKey
-	path string
+	key      desktopTileKey
+	document tileDocument
 }
 
-type desktopTileFile struct {
-	path    string
-	sig     tileContentSig
+type heldTileDocument struct {
 	version int
+	newest  int
+	reading bool
+	serial  int
+	content string
+	err     error
 }
 
 type deliveredTileFile struct {
-	path    string
-	version int
+	document tileDocument
+	serial   int
 }
 
 type desktopTileDelivery struct {
 	mu        sync.Mutex
 	nudge     chan struct{}
-	files     map[desktopTileKey]*desktopTileFile
+	documents map[tileDocument]*heldTileDocument
+	watching  map[string]chan struct{}
 	delivered map[*wsClient]map[desktopTileKey]deliveredTileFile
 }
 
 func newDesktopTileDelivery() desktopTileDelivery {
-	return desktopTileDelivery{nudge: make(chan struct{}, 1)}
+	return desktopTileDelivery{
+		nudge:     make(chan struct{}, 1),
+		documents: map[tileDocument]*heldTileDocument{},
+		watching:  map[string]chan struct{}{},
+		delivered: map[*wsClient]map[desktopTileKey]deliveredTileFile{},
+	}
 }
 
 func (d *Daemon) nudgeDesktopTileContent() {
@@ -57,9 +69,11 @@ func markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles
 			continue
 		}
 		for _, leaf := range layouttree.TileLeaves(desktop.Tree) {
-			path := strings.TrimSpace(leaf.TileParams)
-			if leaf.TileKind == string(layouttree.TileKindMarkdown) && path != "" {
-				tiles = append(tiles, desktopMarkdownTile{key: desktopTileKey{desktopID: desktop.ID, tileID: leaf.TileID}, path: path})
+			if leaf.TileKind != string(layouttree.TileKindMarkdown) {
+				continue
+			}
+			if document, err := markdownTileDocument(leaf.TileParams); err == nil {
+				tiles = append(tiles, desktopMarkdownTile{key: desktopTileKey{desktopID: desktop.ID, tileID: leaf.TileID}, document: document})
 			}
 		}
 	}
@@ -75,51 +89,56 @@ type arrangementDelivery struct {
 	print [sha256.Size]byte
 }
 
-func (h *wsHub) deliverArrangement(client *wsClient, message outboundMessage, delivery *arrangementDelivery) (evicted bool) {
+type arrangementDelivered struct {
+	evicted      bool
+	shownChanged bool
+}
+
+func (h *wsHub) deliverArrangement(client *wsClient, message outboundMessage, delivery *arrangementDelivery) arrangementDelivered {
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
 	if client.arrangementsHeld > 0 {
 		client.arrangementsMissed = true
-		return false
+		return arrangementDelivered{}
 	}
 	if delivery.seq <= client.arrangementSeq {
-		return false
+		return arrangementDelivered{}
 	}
 	if delivery.print == client.arrangementPrint {
 		client.arrangementSeq = delivery.seq
-		return false
+		return arrangementDelivered{}
 	}
 	return h.deliverArrangementLocked(client, message, delivery)
 }
 
-func (h *wsHub) deliverArrangementLocked(client *wsClient, message outboundMessage, delivery *arrangementDelivery) (evicted bool) {
+func (h *wsHub) deliverArrangementLocked(client *wsClient, message outboundMessage, delivery *arrangementDelivery) arrangementDelivered {
 	queued, evicted := h.deliver(client, message)
+	outcome := arrangementDelivered{evicted: evicted}
 	if queued {
+		outcome.shownChanged = !slices.Equal(client.shownTiles, delivery.shown)
 		client.shownTiles = delivery.shown
 		client.arrangementPrint = delivery.print
 		client.arrangementSeq = delivery.seq
 	}
-	return evicted
+	return outcome
 }
 
-func desktopTileContentMessage(desktopID, tileID, path, content string, readErr error) protocol.DesktopTileContentMessage {
+func desktopTileContentMessage(key desktopTileKey, document tileDocument, held *heldTileDocument) protocol.DesktopTileContentMessage {
 	message := protocol.DesktopTileContentMessage{
 		Event:     protocol.EventDesktopTileContent,
-		DesktopID: desktopID,
-		TileID:    tileID,
+		DesktopID: key.desktopID,
+		TileID:    key.tileID,
 		TileKind:  string(layouttree.TileKindMarkdown),
-		Path:      path,
-		Content:   content,
+		Path:      document.path,
+		Content:   held.content,
 	}
-	if readErr != nil {
-		message.Error = protocol.Ptr(readErr.Error())
+	if document.host != "" {
+		message.Host = protocol.Ptr(document.host)
+	}
+	if held.err != nil {
+		message.Error = protocol.Ptr(held.err.Error())
 	}
 	return message
-}
-
-type tileRead struct {
-	content string
-	err     error
 }
 
 func (d *Daemon) deliverDesktopTileContent() {
@@ -130,34 +149,26 @@ func (d *Daemon) deliverDesktopTileContent() {
 	delivery := &d.desktopTiles
 	delivery.mu.Lock()
 	defer delivery.mu.Unlock()
-	if delivery.delivered == nil {
-		delivery.delivered = map[*wsClient]map[desktopTileKey]deliveredTileFile{}
-	}
-	if delivery.files == nil {
-		delivery.files = map[desktopTileKey]*desktopTileFile{}
-	}
 	connected := map[*wsClient]bool{}
-	shownKeys := map[desktopTileKey]bool{}
-	checked := map[desktopTileKey]*desktopTileFile{}
-	reads := map[desktopTileKey]tileRead{}
-	now := time.Now()
+	shown := map[tileDocument]bool{}
 	for _, client := range clients {
 		connected[client] = true
-		d.deliverToClient(client, now, shownKeys, checked, reads)
+		d.deliverToClient(client, shown)
 	}
 	for client := range delivery.delivered {
 		if !connected[client] {
 			delete(delivery.delivered, client)
 		}
 	}
-	for key := range delivery.files {
-		if !shownKeys[key] {
-			delete(delivery.files, key)
+	for document := range delivery.documents {
+		if !shown[document] {
+			delete(delivery.documents, document)
+			delivery.signalHostLocked(document.host)
 		}
 	}
 }
 
-func (d *Daemon) deliverToClient(client *wsClient, now time.Time, shownKeys map[desktopTileKey]bool, checked map[desktopTileKey]*desktopTileFile, reads map[desktopTileKey]tileRead) {
+func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument]bool) {
 	delivery := &d.desktopTiles
 	client.arrangementMu.Lock()
 	defer client.arrangementMu.Unlock()
@@ -165,22 +176,19 @@ func (d *Daemon) deliverToClient(client *wsClient, now time.Time, shownKeys map[
 	onShown := map[desktopTileKey]bool{}
 	for _, tile := range client.shownTiles {
 		onShown[tile.key] = true
-		shownKeys[tile.key] = true
-		file := checked[tile.key]
-		if file == nil {
-			file = delivery.currentFile(tile, now)
-			checked[tile.key] = file
+		shown[tile.document] = true
+		held := delivery.documents[tile.document]
+		if held == nil {
+			held = d.holdTileDocumentLocked(tile.document)
 		}
-		want := deliveredTileFile{path: file.path, version: file.version}
+		if held.serial == 0 {
+			continue
+		}
+		want := deliveredTileFile{document: tile.document, serial: held.serial}
 		if delivered[tile.key] == want {
 			continue
 		}
-		read, done := reads[tile.key]
-		if !done {
-			read.content, read.err = readMarkdownFile(file.path)
-			reads[tile.key] = read
-		}
-		if !d.sendToClient(client, desktopTileContentMessage(tile.key.desktopID, tile.key.tileID, file.path, read.content, read.err)) {
+		if !d.sendToClient(client, desktopTileContentMessage(tile.key, tile.document, held)) {
 			continue
 		}
 		if delivered == nil {
@@ -196,29 +204,148 @@ func (d *Daemon) deliverToClient(client *wsClient, now time.Time, shownKeys map[
 	}
 }
 
-func (delivery *desktopTileDelivery) currentFile(tile desktopMarkdownTile, now time.Time) *desktopTileFile {
-	file := delivery.files[tile.key]
-	if file == nil || file.path != tile.path {
-		next := &desktopTileFile{path: tile.path, sig: refreshTileContentHash(tile.path, statSig(tile.path), now), version: 1}
-		if file != nil {
-			next.version = file.version + 1
+func (d *Daemon) holdTileDocumentLocked(document tileDocument) *heldTileDocument {
+	delivery := &d.desktopTiles
+	held := &heldTileDocument{}
+	delivery.documents[document] = held
+	delivery.signalHostLocked(document.host)
+	if _, watched := delivery.watching[document.host]; !watched && document.host != "" {
+		if _, _, err := d.outpostConn(document.host); err != nil {
+			held.err = err
+			held.serial++
 		}
-		delivery.files[tile.key] = next
-		return next
 	}
-	sig := statSig(file.path)
-	if sig.mod != file.sig.mod || sig.size != file.sig.size || sig.missing != file.sig.missing {
-		file.sig = refreshTileContentHash(file.path, sig, now)
-		file.version++
-		return file
+	return held
+}
+
+func (delivery *desktopTileDelivery) signalHostLocked(host string) {
+	select {
+	case delivery.watching[host] <- struct{}{}:
+	default:
 	}
-	if now.Sub(file.sig.hashCheckedAt) < markdownHashPollInterval {
-		return file
+}
+
+func (d *Daemon) keepTileDocumentsWatched(ctx context.Context, host string) {
+	delivery := &d.desktopTiles
+	changed := make(chan struct{}, 1)
+	delivery.mu.Lock()
+	delivery.watching[host] = changed
+	for document, held := range delivery.documents {
+		if document.host == host {
+			delivery.documents[document] = &heldTileDocument{serial: held.serial, content: held.content, err: held.err}
+		}
 	}
-	next := refreshTileContentHash(file.path, sig, now)
-	if next.hasHash != file.sig.hasHash || next.hash != file.sig.hash {
-		file.version++
+	delivery.mu.Unlock()
+	defer func() {
+		delivery.mu.Lock()
+		if delivery.watching[host] == changed {
+			delete(delivery.watching, host)
+		}
+		delivery.mu.Unlock()
+	}()
+	for {
+		delivery.mu.Lock()
+		message := protocol.TileDocumentsWatchMessage{Cmd: protocol.CmdTileDocumentsWatch, Documents: []string{}}
+		for document := range delivery.documents {
+			if document.host == host {
+				message.Documents = append(message.Documents, document.path)
+			}
+		}
+		delivery.mu.Unlock()
+		if host != "" {
+			message.Host = protocol.Ptr(host)
+		}
+		answer, err := Call[protocol.TileDocumentVersions](ctx, d.router(), message)
+		if ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			d.logf("tile documents on %q: %v", host, err)
+			d.failTileDocuments(host, d.tileDocumentError(host, err))
+		}
+		for _, document := range answer.Documents {
+			d.tileDocumentReported(tileDocument{host: host, path: document.Path}, document.Version)
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return
+		}
 	}
-	file.sig = next
-	return file
+}
+
+func (d *Daemon) failTileDocuments(host string, err error) {
+	delivery := &d.desktopTiles
+	delivery.mu.Lock()
+	for document, held := range delivery.documents {
+		if document.host == host {
+			held.content, held.err = "", err
+			held.serial++
+		}
+	}
+	delivery.mu.Unlock()
+	d.nudgeDesktopTileContent()
+}
+
+func (d *Daemon) tileDocumentChanged(ctx context.Context, msg protocol.TileDocumentChangedMessage) (struct{}, error) {
+	origin, _ := OriginOf(ctx)
+	d.tileDocumentReported(tileDocument{host: origin.Host, path: msg.Path}, msg.Version)
+	return struct{}{}, nil
+}
+
+func (d *Daemon) tileDocumentReported(document tileDocument, version int) {
+	delivery := &d.desktopTiles
+	delivery.mu.Lock()
+	defer delivery.mu.Unlock()
+	held := delivery.documents[document]
+	if held == nil {
+		return
+	}
+	held.newest = max(held.newest, version)
+	d.readStaleTileDocumentLocked(document, held)
+}
+
+func (d *Daemon) readStaleTileDocumentLocked(document tileDocument, held *heldTileDocument) {
+	if held.reading || held.newest <= held.version {
+		return
+	}
+	held.reading = true
+	target := held.newest
+	d.life.Go("readTileDocument", func() {
+		message := protocol.TileDocumentReadMessage{Cmd: protocol.CmdTileDocumentRead, Path: document.path}
+		if document.host != "" {
+			message.Host = protocol.Ptr(document.host)
+		}
+		answer, err := Call[protocol.TileDocument](d.life.Context(), d.router(), message)
+		if err != nil {
+			err = d.tileDocumentError(document.host, err)
+		} else if answer.Error != nil {
+			err = errors.New(*answer.Error)
+		}
+		delivery := &d.desktopTiles
+		delivery.mu.Lock()
+		held.reading = false
+		if delivery.documents[document] == held {
+			held.version = max(target, answer.Version)
+			held.content, held.err = answer.Content, err
+			held.serial++
+			d.readStaleTileDocumentLocked(document, held)
+		}
+		delivery.mu.Unlock()
+		d.nudgeDesktopTileContent()
+	})
+}
+
+func (d *Daemon) tileDocumentError(host string, err error) error {
+	if host == "" {
+		return err
+	}
+	name := host
+	if row, rowErr := d.resolveOutpost(host); rowErr == nil {
+		name = row.Name
+	}
+	if rejected := (*bridge.CallRejected)(nil); errors.As(err, &rejected) {
+		return fmt.Errorf("%s: %s", name, rejected.Reason)
+	}
+	return err
 }

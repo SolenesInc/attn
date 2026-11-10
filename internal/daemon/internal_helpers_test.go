@@ -33,6 +33,7 @@ func NewForTesting(socketPath string) *Daemon {
 		wsHub:               newWSHub(),
 		startedAt:           time.Now(),
 		desktopTiles:        newDesktopTileDelivery(),
+		tileDocuments:       newTileDocumentWatch(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		ptyBackend:          testworld.NewInProcessPTY(nil),

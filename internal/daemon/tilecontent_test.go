@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"os"
@@ -22,7 +23,7 @@ func TestOpenMarkdownDocksBesideTheCurrentAgent(t *testing.T) {
 	}
 	clientConn, serverConn := net.Pipe()
 	defer clientConn.Close()
-	go d.handleOpenMarkdown(serverConn, &protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: file})
+	go d.handleOpenMarkdown(context.Background(), serverConn, &protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: file})
 	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var resp protocol.Response
 	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
@@ -42,7 +43,7 @@ func TestOpenMarkdownForAnUnknownSessionNamesIt(t *testing.T) {
 	if err := os.WriteFile(file, []byte("# Remote"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := d.openMarkdownTile(file, "session-remote", true); err == nil || !strings.Contains(err.Error(), "session-remote") {
+	if _, _, err := d.openMarkdownTile("", file, "session-remote", true); err == nil || !strings.Contains(err.Error(), "session-remote") {
 		t.Fatalf("open for an unknown session = %v, want an error naming it", err)
 	}
 	after, err := d.store.GetDesktop(desktop.ID)
@@ -66,7 +67,7 @@ func TestOpenMarkdownReusesATileAlreadyShowingTheFile(t *testing.T) {
 		t.Fatalf("dock the existing tile: %v", err)
 	}
 
-	gotDesktop, gotTile, err := d.openMarkdownTile(file, "session-1", true)
+	gotDesktop, gotTile, err := d.openMarkdownTile("", file, "session-1", true)
 	if err != nil {
 		t.Fatalf("openMarkdownTile: %v", err)
 	}

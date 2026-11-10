@@ -193,7 +193,7 @@ func TestOutpostForwardRefusalsNameTheHostAndHome(t *testing.T) {
 	if err := outpost.Client().OpenSentFiles("", nil); err == nil || !strings.Contains(err.Error(), "outpost") {
 		t.Fatalf("id-form sent files must refuse outpost paths: %v", err)
 	}
-	for _, args := range [][]string{{"open", "/tmp/outpost.md"}, {"browser", "open", "https://example.com"}} {
+	for _, args := range [][]string{{"open", "/tmp/missing-on-the-outpost.md"}, {"browser", "open", "https://example.com"}} {
 		result := outpost.Attn(args...)
 		if result.Code == 0 || !strings.Contains(result.Stderr, "outpost") {
 			t.Fatalf("refuse %v naming outpost: %+v", args, result)

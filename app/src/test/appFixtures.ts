@@ -63,13 +63,14 @@ export async function openTiles(tiles: DaemonTile[], { desktop = {}, session = {
 
 export async function openMarkdownTiles(
   content: string,
-  { path, tileIds = ['tile-a'], ...options }: TileOptions & { path: string; tileIds?: string[] },
+  { path, host, tileIds = ['tile-a'], ...options }: TileOptions & { path: string; host?: string; tileIds?: string[] },
 ) {
-  const view = await openTiles(tileIds.map((tileId) => ({ tile_id: tileId, tile_kind: 'markdown', tile_params: path, tile_session_id: 's1' })), options);
+  const params = host ? JSON.stringify({ host, path }) : path;
+  const view = await openTiles(tileIds.map((tileId) => ({ tile_id: tileId, tile_kind: 'markdown', tile_params: params, tile_session_id: 's1' })), options);
   const desktopId = view.daemon.arrangement.profile.current_desktop_id;
   const show = async (next: string) => {
     for (const tileId of tileIds) {
-      view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: tileId, tile_kind: 'markdown', path, content: next });
+      view.daemon.emit({ event: 'desktop_tile_content', desktop_id: desktopId, tile_id: tileId, tile_kind: 'markdown', path, content: next, ...(host ? { host } : {}) });
     }
     await view.daemon.idle();
   };

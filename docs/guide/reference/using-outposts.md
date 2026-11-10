@@ -8,7 +8,8 @@ Claude, Codex and shells on an outpost appear in terminal tiles beside your
 local terminals. The tile header shows the outpost's name under the title.
 Input, screen updates and terminal commands pass through your home. Agents
 run on the outpost. The agents' state, turns, cost and PR links reach the Mac.
-File tiles stay on the home's machine.
+A markdown tile shows its file from the machine that holds it. Editor tiles stay
+on the home's machine.
 
 ## Add an outpost
 
@@ -144,7 +145,14 @@ subscriptions use the home's records. Hooks run on the outpost, and the command 
 immediately and names the home. If the bridge is lost during a command, the
 error reports that the command may have run.
 
-Files on an outpost don't open on the Mac yet. **Open in editor** and
+`attn open notes.md` from an outpost agent, and a markdown file the agent sends,
+open a markdown tile that reads the file on the outpost. Edits on the outpost
+reach the tile, and its relative images load from the outpost. A link to
+another markdown file opens that file from the outpost; other local links name
+the outpost and don't open. A file with the same path on the Mac is never shown.
+Annotations are off in these tiles for now.
+
+Other files on an outpost don't open on the Mac yet. **Open in editor** and
 Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing
 opens a Mac file that happens to have the same path. With an outpost shell in
 front, the editor tile and the file opener (Cmd+P) start at your notebook root.
@@ -198,7 +206,7 @@ asks where the new agent should work and starts it on the home.
 The Chief and the rest of the crew run only at the home. Attn refuses to start
 or hand off a crew member on an outpost, and the refusal names that limit. Plugin harnesses also run only at the home.
 
-Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent open no tile and enter no recent-file list. Transcript
+Outpost conversations have no kept copy at the home. If the harness deleted the conversation, Attn says the conversation is no longer in storage when you resume it. Files sent by an outpost agent enter no recent-file list. Transcript
 reads go to the outpost, so they need its connection.
 
 ## Start on an outpost from the launcher

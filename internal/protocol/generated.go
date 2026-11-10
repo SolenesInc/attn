@@ -4193,6 +4193,9 @@ type DesktopTileContentMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
 
@@ -7407,6 +7410,9 @@ type OpenBrowserMessage struct {
 type OpenMarkdownMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path string `json:"path"`
@@ -13982,6 +13988,94 @@ type TierDefaults struct {
 
 	// Standard corresponds to the JSON schema field "standard".
 	Standard *string `json:"standard,omitempty,omitzero"`
+}
+
+type TileAssetReadMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type TileAssetReadResultMessage struct {
+	// DataUri corresponds to the JSON schema field "data_uri".
+	DataUri *string `json:"data_uri,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type TileDocument struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+}
+
+type TileDocumentChangedMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+}
+
+type TileDocumentReadMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+}
+
+type TileDocumentVersion struct {
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Version corresponds to the JSON schema field "version".
+	Version int `json:"version"`
+}
+
+type TileDocumentVersions struct {
+	// Documents corresponds to the JSON schema field "documents".
+	Documents []TileDocumentVersion `json:"documents"`
+}
+
+type TileDocumentsWatchMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Documents corresponds to the JSON schema field "documents".
+	Documents []string `json:"documents"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 }
 
 type TileWindowFrame struct {

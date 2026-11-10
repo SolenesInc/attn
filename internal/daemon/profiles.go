@@ -314,8 +314,12 @@ func (d *Daemon) sendArrangement(client *wsClient, requestID string, moved []pro
 	if delivery.seq <= client.arrangementSeq || (requestID == "" && delivery.print == client.arrangementPrint) {
 		return
 	}
-	if d.wsHub.deliverArrangementLocked(client, outboundMessage{kind: messageKindText, payload: data}, delivery) {
+	outcome := d.wsHub.deliverArrangementLocked(client, outboundMessage{kind: messageKindText, payload: data}, delivery)
+	if outcome.evicted {
 		d.wsHub.forget(client)
+	}
+	if outcome.shownChanged {
+		d.nudgeDesktopTileContent()
 	}
 }
 
@@ -807,9 +811,11 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 	if !ok {
 		return
 	}
-	d.wsHub.SendArrangementToMatchingClients(data, func(client *wsClient) bool {
+	if d.wsHub.SendArrangementToMatchingClients(data, func(client *wsClient) bool {
 		return client.selectedProfile() == ev.Subject
-	}, delivery)
+	}, delivery) {
+		d.nudgeDesktopTileContent()
+	}
 }
 
 func (d *Daemon) sendProfileSnapshots(client *wsClient) {

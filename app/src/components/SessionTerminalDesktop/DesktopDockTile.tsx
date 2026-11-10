@@ -1,21 +1,23 @@
 import type { PointerEvent as ReactPointerEvent, Ref, RefObject } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { browserHostLabel, claimBrowserHostFocus, controlBrowserHost } from '../../browser/host';
-import { useDaemonApi } from '../../contexts/DaemonApiContext';
+import { useDaemonApi, useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useDaemonStore } from '../../store/daemonSessions';
+import { useSessionStore } from '../../store/sessions';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import {
+  parseMarkdownTileParams,
   parseNotebookTileParams,
   serializeNotebookTileParams,
   type TileContentState,
   type TileLeaf,
 } from '../../types/desktop';
-import { deriveTileTitle } from '../../utils/tilePresentation';
+import { deriveTileTitle, tileParamsPath } from '../../utils/tilePresentation';
 import { GardenIcon } from '../GardenIcon';
-import type { MarkdownAnnotationsSendHandle } from '../MarkdownReader';
+import type { MarkdownAnnotationsSendHandle, RemoteMarkdownDocument } from '../MarkdownReader';
 import { MarkdownReader } from '../MarkdownReader';
 import {
   fileMarkdownSource,
@@ -110,13 +112,14 @@ export function DesktopDockTile({
   const persistedPath = persistedTilePath(tile, content);
   const isMarkdown = tile.tileKind === 'markdown';
   const isSeed = tile.tileKind === 'seed';
+  const documentHost = isMarkdown ? content?.host ?? parseMarkdownTileParams(tile.tileParams).host : undefined;
   const baseTitle = deriveTileTitle(tile, content);
   const browserLabel = browserHostLabel(desktopId, tile.tileId);
   // Lets the root switcher below flush a dirty buffer to the OLD root before swapping
   // params: the 700ms autosave debounce would otherwise lose an in-flight edit.
   const notebookSurfaceRef = useRef<NotebookSurfaceHandle | null>(null);
 
-  const isAnnotatedDocument = isMarkdown || isSeed;
+  const isAnnotatedDocument = (isMarkdown && !documentHost) || isSeed;
   const seedNavigation = useSeedTileNavigation({
     isSeed,
     persistedPath,
@@ -279,6 +282,7 @@ export function DesktopDockTile({
           onClose={onClose}
           notebookSurfaceRef={notebookSurfaceRef}
           documentSource={documentSource}
+          documentHost={documentHost}
         />
       </div>
     </div>
@@ -303,14 +307,36 @@ function FocusDocumentIcon() {
 function MarkdownBody({
   content,
   source,
+  host,
+  sessionId,
   onAnnotationsCountChange,
   annotationsSendRef,
 }: {
   content?: TileContentState;
   source: MarkdownDocumentSource;
+  host?: string;
+  sessionId?: string;
   onAnnotationsCountChange: (count: number) => void;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
 }) {
+  const daemon = useOptionalDaemonApi();
+  const sendTileAssetRead = daemon?.sendTileAssetRead;
+  const sendOpenMarkdown = daemon?.sendOpenMarkdown;
+  const hostName = useSessionStore((state) => (host ? state.outposts.find((row) => row.id === host)?.name ?? host : ''));
+  const loadImage = useMemo(
+    () => (sendTileAssetRead ? (path: string) => sendTileAssetRead(host, path) : undefined),
+    [host, sendTileAssetRead],
+  );
+  const remoteDocument = useMemo<RemoteMarkdownDocument | undefined>(() => (host && sendOpenMarkdown
+    ? {
+        hostName,
+        openMarkdown: (path: string) => {
+          void sendOpenMarkdown(path, sessionId ?? '', host).catch((openError) => {
+            console.error('[MarkdownBody] Could not open a markdown link from', hostName, openError);
+          });
+        },
+      }
+    : undefined), [host, hostName, sendOpenMarkdown, sessionId]);
   if (content === undefined) {
     return <div className="desktop-dock-tile-message">Loading…</div>;
   }
@@ -326,9 +352,11 @@ function MarkdownBody({
     <MarkdownReader
       content={content.content}
       source={source}
-      annotationsEnabled
+      annotationsEnabled={!host}
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
+      loadLocalImage={loadImage}
+      remoteDocument={remoteDocument}
     />
   );
 }
@@ -412,6 +440,7 @@ interface ContentProps {
   onClose: () => void;
   notebookSurfaceRef: RefObject<NotebookSurfaceHandle | null>;
   documentSource: MarkdownDocumentSource;
+  documentHost?: string;
 }
 function DesktopTileContent({
   tile,
@@ -431,12 +460,15 @@ function DesktopTileContent({
   onClose,
   notebookSurfaceRef,
   documentSource,
+  documentHost,
 }: ContentProps) {
   if (tile.tileKind === 'markdown')
     return (
       <MarkdownBody
         content={content}
         source={documentSource}
+        host={documentHost}
+        sessionId={tile.tileSessionId}
         onAnnotationsCountChange={setAnnotationCount}
         annotationsSendRef={annotationsSendRef}
       />
@@ -622,9 +654,7 @@ function SeedTileLocation({
 }
 
 function persistedTilePath(tile: TileLeaf, content?: TileContentState) {
-  if (content?.path) return content.path;
-  if (tile.tileKind === 'notebook') return parseNotebookTileParams(tile.tileParams).path || '';
-  return tile.tileParams || '';
+  return content?.path || tileParamsPath(tile);
 }
 
 function DesktopTileTitle({

@@ -9,8 +9,19 @@ import { gesture } from './test/renderApp';
 
 const DOC = '/tmp/doc.md';
 
-async function openMarkdown(content: string, { tiles = ['tile-a'] }: { tiles?: string[] } = {}) {
-  const view = await openMarkdownTiles(content, { path: DOC, tileIds: tiles });
+const IMAGE = 'data:image/png;base64,aW1hZ2U=';
+
+async function openMarkdown(content: string, { tiles = ['tile-a'], host }: { tiles?: string[]; host?: string } = {}) {
+  const view = await openMarkdownTiles(content, {
+    path: DOC,
+    host,
+    tileIds: tiles,
+    script: (daemon) => {
+      daemon.on('tile_asset_read', () => ({ event: 'tile_asset_read_result', success: true, data_uri: IMAGE }));
+      daemon.on('open_markdown', ({ path }) => ({ event: 'open_markdown_result', success: true, path }));
+    },
+  });
+  await view.daemon.idle();
   return { ...view, reader: within(view.tile()) };
 }
 
@@ -120,17 +131,18 @@ describe('App markdown rendering', () => {
     expect(prose.join('\n')).not.toMatch(/\|[^\n|]*\|/);
   });
 
-  it('shows a local image through the asset protocol in a lightbox, and blocks remote and escaping images', async () => {
-    const { reader } = await openMarkdown('![the diagram](docs/pic%20name.png)\n\n![remote](https://example.test/pixel.png)\n\n![script](../evil.sh)\n');
+  it('shows a local image the daemon reads in a lightbox, and blocks remote and escaping images', async () => {
+    const { daemon, reader } = await openMarkdown('![the diagram](docs/pic%20name.png)\n\n![remote](https://example.test/pixel.png)\n\n![script](../evil.sh)\n');
 
     const image = reader.getByRole('img', { name: 'the diagram' });
-    expect(image).toHaveAttribute('src', 'asset://localhost//tmp/docs/pic name.png');
+    expect(image).toHaveAttribute('src', IMAGE);
+    expect(daemon.sentOf('tile_asset_read').map(({ host, path }) => [host, path])).toEqual([[undefined, '/tmp/docs/pic name.png']]);
     expect(reader.getByText('[blocked image: remote]')).toBeInTheDocument();
     expect(reader.getByText('[blocked image: script]')).toBeInTheDocument();
 
     fireEvent.click(image);
     const lightbox = () => document.body.querySelector<HTMLElement>('.md-lightbox');
-    expect(within(lightbox()!).getByRole('img')).toHaveAttribute('src', 'asset://localhost//tmp/docs/pic name.png');
+    expect(within(lightbox()!).getByRole('img')).toHaveAttribute('src', IMAGE);
     expect(lightbox()).toHaveTextContent('the diagram');
     fireEvent.click(within(lightbox()!).getByRole('img'));
     expect(lightbox()).toBeInTheDocument();
@@ -140,6 +152,19 @@ describe('App markdown rendering', () => {
     fireEvent.click(image);
     fireEvent.click(lightbox()!);
     expect(lightbox()).toBeNull();
+  });
+
+  it('reads an outpost document’s images and markdown links on the outpost, and names it for any other link', async () => {
+    const { daemon, reader, tile } = await openMarkdown('![chart](chart.png)\n\n[next](next.md)\n\n[log](build.txt)\n', { host: 'outpost-1' });
+
+    expect(reader.getByRole('img', { name: 'chart' })).toHaveAttribute('src', IMAGE);
+    expect(daemon.sentOf('tile_asset_read').map(({ host, path }) => [host, path])).toEqual([['outpost-1', '/tmp/chart.png']]);
+    await gesture(daemon, () => fireEvent.click(reader.getByRole('link', { name: 'next' })));
+    expect(daemon.sentOf('open_markdown').map(({ host, path, session_id }) => [host, path, session_id])).toEqual([['outpost-1', '/tmp/next.md', 's1']]);
+    expect(reader.queryByRole('link', { name: 'log' })).toBeNull();
+    expect(reader.getByText('log')).toHaveAttribute('title', '/tmp/build.txt is on outpost-1; only markdown files open from there');
+    expect(invoke).not.toHaveBeenCalledWith('open_safe_markdown_target', expect.anything());
+    expect(tile().querySelector('.md-reader--annotating')).toBeNull();
   });
 
   it('keeps what the user opened when the daemon re-sends the same content, and re-renders changed content', async () => {

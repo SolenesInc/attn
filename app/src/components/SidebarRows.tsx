@@ -2,9 +2,9 @@ import { sessionDisplayName } from '../utils/sessionDisplayName';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
-import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
+import { type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
-import { deriveTileTitle, tileKindLabel } from '../utils/tilePresentation';
+import { deriveTileTitle, tileKindLabel, tileParamsPath } from '../utils/tilePresentation';
 import { useDaemonStore } from '../store/daemonSessions';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
 import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
@@ -86,9 +86,7 @@ export function TileSidebarRow({
   const seeds = useDaemonStore((state) => state.seeds);
   const title = deriveTileTitle(tile, content, (id) => seeds.find((seed) => seed.id === id)?.title);
   const kind = tileKindLabel(tile.tileKind);
-  const tileIdentifier = tile.tileKind === 'notebook'
-    ? parseNotebookTileParams(tile.tileParams).path
-    : tile.tileParams;
+  const tileIdentifier = tileParamsPath(tile);
   return (
     <div
       className={`session-item sidebar-leaf-row desktop-tile-item ${selected ? 'selected' : ''}`.trim()}

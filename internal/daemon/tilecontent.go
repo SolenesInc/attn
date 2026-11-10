@@ -1,8 +1,10 @@
 package daemon
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -26,6 +28,46 @@ const seedTileIDPrefix = "tile-seed-"
 func markdownTileIDForPath(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	return markdownTileIDPrefix + hex.EncodeToString(sum[:8])
+}
+
+type tileDocument struct {
+	host string
+	path string
+}
+
+type locatedTileDocument struct {
+	Host string `json:"host"`
+	Path string `json:"path"`
+}
+
+func markdownTileDocument(params string) (tileDocument, error) {
+	params = strings.TrimSpace(params)
+	if params == "" {
+		return tileDocument{}, fmt.Errorf("a markdown tile needs the path of its file in tile_params")
+	}
+	if !strings.HasPrefix(params, "{") {
+		return tileDocument{path: params}, nil
+	}
+	var located locatedTileDocument
+	if err := json.Unmarshal([]byte(params), &located); err != nil || located.Host == "" || located.Path == "" {
+		return tileDocument{}, fmt.Errorf("markdown tile_params %s are neither a path nor {\"host\", \"path\"}", params)
+	}
+	return tileDocument{host: located.Host, path: located.Path}, nil
+}
+
+func (document tileDocument) params() string {
+	if document.host == "" {
+		return document.path
+	}
+	encoded, _ := json.Marshal(locatedTileDocument{Host: document.host, Path: document.path})
+	return string(encoded)
+}
+
+func (document tileDocument) tileID() string {
+	if document.host == "" {
+		return markdownTileIDForPath(document.path)
+	}
+	return markdownTileIDForPath(document.host + "\x00" + document.path)
 }
 
 func seedTileIDForID(seedID string) string {
@@ -98,7 +140,19 @@ func refreshTileContentHash(path string, sig tileContentSig, now time.Time) tile
 	return sig
 }
 
-func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, err error) {
+func observeTileContent(path string, sig tileContentSig, now time.Time) (tileContentSig, bool) {
+	current := statSig(path)
+	if current.mod != sig.mod || current.size != sig.size || current.missing != sig.missing {
+		return refreshTileContentHash(path, current, now), true
+	}
+	if now.Sub(sig.hashCheckedAt) < markdownHashPollInterval {
+		return sig, false
+	}
+	next := refreshTileContentHash(path, current, now)
+	return next, next.hasHash != sig.hasHash || next.hash != sig.hash
+}
+
+func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.SessionID, focus bool) (desktopID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
@@ -106,9 +160,13 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 	if !filepath.IsAbs(path) {
 		return "", "", fmt.Errorf("path must be absolute: %s", path)
 	}
-	path = filepath.Clean(path)
-	if _, statErr := os.Stat(path); statErr != nil {
-		return "", "", statErr
+	document := tileDocument{host: host, path: filepath.Clean(path)}
+	read := protocol.TileDocumentReadMessage{Cmd: protocol.CmdTileDocumentRead, Path: document.path}
+	if host != "" {
+		read.Host = protocol.Ptr(host)
+	}
+	if _, err := Call[protocol.TileDocument](d.life.Context(), d.router(), read); err != nil {
+		return "", "", d.tileDocumentError(host, err)
 	}
 	location, err := d.currentAgent(callerSessionID)
 	if err != nil {
@@ -117,15 +175,17 @@ func (d *Daemon) openMarkdownTile(path string, callerSessionID protocol.SessionI
 	d.openTileMu.Lock()
 	defer d.openTileMu.Unlock()
 	desktop, tileID, err := d.openAgentTile(location, agentTile{
-		tileID:    markdownTileIDForPath(path),
+		tileID:    document.tileID(),
 		tileKind:  string(layouttree.TileKindMarkdown),
-		params:    path,
+		params:    document.params(),
 		sessionID: location.sessionID,
 	}, focus)
 	if err != nil {
 		return "", "", err
 	}
-	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, location.sessionID)
+	if host == "" {
+		d.store.RecordFileActivity(document.path, store.FileActivitySourceOpened, location.sessionID)
+	}
 	return desktop.ID, tileID, nil
 }
 
@@ -184,8 +244,15 @@ func (d *Daemon) seedTileSession(tenderParty who.Party, location agentLocation) 
 	return location.sessionID
 }
 
-func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID), false)
+func markdownOpenHost(ctx context.Context, msg *protocol.OpenMarkdownMessage) string {
+	if origin, remote := OriginOf(ctx); remote {
+		return origin.Host
+	}
+	return protocol.Deref(msg.Host)
+}
+
+func (d *Daemon) handleOpenMarkdown(ctx context.Context, conn net.Conn, msg *protocol.OpenMarkdownMessage) {
+	desktopID, tileID, err := d.openMarkdownTile(markdownOpenHost(ctx, msg), msg.Path, protocol.Deref(msg.SessionID), false)
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
@@ -246,16 +313,17 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 }
 
 func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
-	if d.sessionHost(sessionID) != "" {
-		return
-	}
+	host := d.sessionHost(sessionID)
 	if d.openSentFilesEnabled() {
-		desktopID, tileID, err := d.openMarkdownTile(path, sessionID, false)
+		desktopID, tileID, err := d.openMarkdownTile(host, path, sessionID, false)
 		if err == nil {
 			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 			return
 		}
 		d.logf("open_sent_files: %s: %v", path, err)
+	}
+	if host != "" {
+		return
 	}
 	if location, err := d.currentAgent(sessionID); err == nil {
 		sessionID = location.sessionID
@@ -274,7 +342,7 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	}
 	client.holdArrangements()
 	defer d.releaseArrangements(client)
-	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID), true)
+	desktopID, tileID, err := d.openMarkdownTile(protocol.Deref(msg.Host), msg.Path, protocol.Deref(msg.SessionID), true)
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
@@ -311,16 +379,12 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 	d.sendToClient(client, result)
 }
 
-func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
-	ticker := time.NewTicker(markdownPollInterval)
-	defer ticker.Stop()
+func (d *Daemon) runDesktopTileContent(done <-chan struct{}) {
 	for {
 		select {
 		case <-done:
 			return
 		case <-d.desktopTiles.nudge:
-			d.deliverDesktopTileContent()
-		case <-ticker.C:
 			d.deliverDesktopTileContent()
 		}
 	}

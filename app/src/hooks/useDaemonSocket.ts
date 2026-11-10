@@ -38,6 +38,7 @@ import type {
   PhonePairingCode,
   AskAnswer,
   AskImageResultMessage,
+  TileAssetReadResultMessage,
   AskSeedMention,
   CommandUsage,
   Session as GeneratedSession,
@@ -1337,6 +1338,7 @@ export function useDaemonSocket({
             if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
               const key = tileContentKey(data.desktop_id, data.tile_id);
               const content = {
+                ...(typeof data.host === 'string' && data.host ? { host: data.host } : {}),
                 path: typeof data.path === 'string' ? data.path : '',
                 content: typeof data.content === 'string' ? data.content : '',
                 error: typeof data.error === 'string' ? data.error : undefined,
@@ -2353,6 +2355,10 @@ export function useDaemonSocket({
             if (handleLaunchDesktopEvent(data, pending)) break;
             if (handleCommandUsageEvent(data, pending)) break;
             if (handleAskDaemonEvent(data, pending)) break;
+            if (data.event === 'tile_asset_read_result') {
+              settlePendingRequest(pending, 'tile_asset_read', data as TileAssetReadResultMessage, (result) => result.data_uri, 'Could not load the image');
+              break;
+            }
             if (handleSharedCodexDaemonEvent(data, pending)) break;
             if (handleUpdateRunDaemonEvent(data, pending, setUpdateRun)) break;
             if (handlePhoneDaemonEvent(data, pending)) break;
@@ -2799,12 +2805,16 @@ export function useDaemonSocket({
     });
   }, [reconcileAttachedRuntimeGeometry, sendAttachSessionWithRetry, sendPtyResize]);
 
-  const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ desktopId?: string; tileId?: string }> => {
+  const sendOpenMarkdown = useCallback((path: string, sessionId: string, host?: string): Promise<{ desktopId?: string; tileId?: string }> => {
     return sendRequest('open_markdown', {
       path,
       ...(sessionId ? { session_id: sessionId } : {}),
+      ...(host ? { host } : {}),
     }, 'Open markdown timed out');
   }, [sendRequest]);
+
+  const sendTileAssetRead = useCallback((host: string | undefined, path: string): Promise<string> =>
+    sendRequest('tile_asset_read', { path, ...(host ? { host } : {}) }, 'Loading the image timed out'), [sendRequest]);
 
   const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ desktopId?: string; tileId?: string }> => {
     return sendRequest('open_seed', {
@@ -4400,6 +4410,7 @@ export function useDaemonSocket({
     sendSetVentKind,
     sendAskAnswer,
     sendAskImage,
+    sendTileAssetRead,
     sendAskSeedMentions,
     sendRestartSharedCodex,
     sendPhonesGet,

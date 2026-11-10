@@ -27,6 +27,7 @@ import (
 
 type Stack struct {
 	*World
+	DaemonDir  string
 	binary     string
 	daemon     *os.Process
 	exited     chan error
@@ -189,6 +190,7 @@ func (s *Stack) spawn(vars ...string) {
 	}
 	defer stderr.Close()
 	cmd := exec.Command(s.binary, "daemon")
+	cmd.Dir = s.DaemonDir
 	cmd.Env = append(append(append(s.env(), s.pauses.env()...), vars...), "ATTN_DAEMON_READY_FD=3", "GOTRACEBACK=all")
 	cmd.ExtraFiles = []*os.File{signal}
 	file, err := s.wsListener.File()

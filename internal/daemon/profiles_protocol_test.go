@@ -38,6 +38,9 @@ func (w *profilesTestDaemon) start() {
 	}
 	w.d = newDaemonForTest(w.t)
 	w.d.clientToken = "the-token"
+	if w.d.store != nil {
+		_ = w.d.store.Close()
+	}
 	w.d.store = persistent
 	w.t.Cleanup(func() { persistent.Close() })
 }

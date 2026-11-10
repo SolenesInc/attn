@@ -169,8 +169,8 @@ func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID protocol
 func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 	switch layouttree.TileKind(kind) {
 	case layouttree.TileKindMarkdown:
-		if params == "" {
-			return "", profiles.Errorf(profiles.CodeInvalid, "a markdown tile needs the path of its file in tile_params")
+		if _, err := markdownTileDocument(params); err != nil {
+			return "", profiles.Errorf(profiles.CodeInvalid, "%v", err)
 		}
 		return params, nil
 	case layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:

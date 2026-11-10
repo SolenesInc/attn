@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from 'react';
 import { GardenIcon } from '../components/GardenIcon';
 import { BrowserIcon, MarkdownIcon, NotebookIcon } from '../components/SidebarIcons';
-import { parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
+import { parseMarkdownTileParams, parseNotebookTileParams, type TileContentState, type TileLeaf } from '../types/desktop';
 
 export function tileKindLabel(kind: string): { word: string; icon: ReactNode } {
   switch (kind) {
@@ -75,6 +75,12 @@ export function deriveTileTitle(
     const { path } = parseNotebookTileParams(tile.tileParams);
     return path ? tilePathBasename(path) : 'Editor';
   }
-  const path = content?.path || tile.tileParams || '';
+  const path = content?.path || tileParamsPath(tile);
   return path ? tilePathBasename(path) : tile.tileKind;
+}
+
+export function tileParamsPath(tile: TileLeaf): string {
+  if (tile.tileKind === 'markdown') return parseMarkdownTileParams(tile.tileParams).path;
+  if (tile.tileKind === 'notebook') return parseNotebookTileParams(tile.tileParams).path || '';
+  return tile.tileParams || '';
 }
