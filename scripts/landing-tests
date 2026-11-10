@@ -113,6 +113,7 @@ go ./internal/sessioninstructions TestLegacyPromptCompatibility
 go ./internal/agent TestLegacyPromptCompatibility
 go ./internal/hooks TestLegacyPromptCompatibility
 go ./cmd/attnd TestAPlotPayloadPlacesItsPlotAndOrdersItsChildren
+go ./cmd/attnd TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself
 
 group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations

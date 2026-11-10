@@ -9,6 +9,7 @@ import (
 
 	attn "github.com/victorarias/attn/cmd/attnd"
 	"github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -78,9 +79,11 @@ func TestHelpListsEveryCommandAndReferenceAndEachCommandExplainsItself(t *testin
 		}
 	}
 
+	launchedWithEveryGatedRow := prompts.Launch{CodeReview: true}.Instructions()
 	for _, reference := range agent.SkillReferenceNames() {
-		if reference != "onboarding" && !strings.Contains(help, "`"+reference+"`") {
-			t.Errorf("attn --help does not name the reference %q, so no agent can find it", reference)
+		if reference == "onboarding" || strings.Contains(help, "`"+reference+"`") || strings.Contains(launchedWithEveryGatedRow, "| `"+reference+"` |") {
+			continue
 		}
+		t.Errorf("neither attn --help nor the attn map of an agent launched with every setting-gated row names the reference %q, so no agent can find it", reference)
 	}
 }
