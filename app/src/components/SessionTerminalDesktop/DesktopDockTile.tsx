@@ -309,6 +309,7 @@ function FocusDocumentIcon() {
 }
 
 function MarkdownBody({
+  desktopId,
   content,
   source,
   host,
@@ -317,6 +318,7 @@ function MarkdownBody({
   annotationsSendRef,
   reviewSend,
 }: {
+  desktopId: string;
   content?: TileContentState;
   source: MarkdownDocumentSource;
   host?: string;
@@ -328,6 +330,24 @@ function MarkdownBody({
   const daemon = useOptionalDaemonApi();
   const sendTileAssetRead = daemon?.sendTileAssetRead;
   const sendOpenMarkdown = daemon?.sendOpenMarkdown;
+  const sendDesktopDockTile = daemon?.sendDesktopDockTile;
+  const openInEditor = useMemo(() => (!host && sendDesktopDockTile
+    ? (root: string, path: string) => {
+        void sendDesktopDockTile({
+          desktopId,
+          tileId: `notebook-tile-${crypto.randomUUID()}`,
+          tileKind: 'notebook',
+          tileParams: serializeNotebookTileParams({ root, path }),
+          edge: 'right',
+          tileShare: 0.4,
+        }).catch((openError) => {
+          useToastStore.getState().append({
+            message: `Could not open ${path} in the editor tile`,
+            source: openError instanceof Error ? openError.message : String(openError),
+          });
+        });
+      }
+    : undefined), [desktopId, host, sendDesktopDockTile]);
   const hostName = useSessionStore((state) => (host ? state.outposts.find((row) => row.id === host)?.name ?? host : ''));
   const loadImage = useMemo(
     () => (sendTileAssetRead ? (path: string) => sendTileAssetRead(host, path) : undefined),
@@ -369,6 +389,7 @@ function MarkdownBody({
       review={content.review}
       reviewHost={host}
       reviewSend={reviewSend}
+      openInEditor={openInEditor}
       annotationsGeneration={content.annotationsGeneration}
     />
   );
@@ -480,6 +501,7 @@ function DesktopTileContent({
   if (tile.tileKind === 'markdown')
     return (
       <MarkdownBody
+        desktopId={desktopId}
         content={content}
         source={documentSource}
         host={documentHost}

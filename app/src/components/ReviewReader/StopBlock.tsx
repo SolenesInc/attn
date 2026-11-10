@@ -4,6 +4,7 @@ import { CodeRow, rowKey } from './CodeRows';
 import { useReviewReader, type FileTarget } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 import { useTokens } from './tokenize';
+import { DocStopRows, isDocumentPath } from './DocStop';
 
 function splitPath(path: string): { dir: string; name: string } {
   const at = path.lastIndexOf('/');
@@ -83,7 +84,29 @@ function ScriptStop({ stop }: { stop: ReviewStop }) {
 
 export function StopBlock({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
-  return reader?.frame === 'walkthrough' ? <ScriptStop stop={stop} /> : <CodeStop stop={stop} />;
+  if (reader?.frame === 'walkthrough') return <ScriptStop stop={stop} />;
+  return isDocumentPath(stop.path) ? <DocStop stop={stop} /> : <CodeStop stop={stop} />;
+}
+
+function DocStop({ stop }: { stop: ReviewStop }) {
+  const reader = useReviewReader();
+  const expansion = reader?.expansions.get(stop.heading_line);
+  const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
+  return (
+    <section className="review-stop review-stop--doc" data-review-stop-head={stop.heading_line} data-path={stop.path}>
+      <header className="review-stop-header">
+        <PathLabel path={stop.path} />
+        <span className="review-stop-range">{nowRange}</span>
+        {stop.changed_since_presented ? <span className="review-badge">changed since presented</span> : null}
+        <span className="review-stop-actions">
+          {reader?.openInEditor ? <button type="button" tabIndex={-1} onClick={() => reader.openInEditor?.(stop.path)}>editor <kbd>o</kbd></button> : null}
+          <button type="button" tabIndex={-1} onClick={() => reader?.openFile(stopTarget(stop))}>source <kbd>↵</kbd></button>
+        </span>
+      </header>
+      {expansion?.error ? <div className="review-stop-error" role="alert">{expansion.error}</div> : null}
+      <DocStopRows stop={stop} />
+    </section>
+  );
 }
 
 function CodeStop({ stop }: { stop: ReviewStop }) {

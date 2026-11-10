@@ -16,6 +16,8 @@ import { stopTarget } from './StopBlock';
 import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import { findEditUnit } from './editUnit';
+import { docBlocks } from './docBlocks';
+import { isDocumentPath } from './DocStop';
 import { EditBox, editText, locateEdit, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
 
@@ -69,6 +71,11 @@ function cursorKeyOf(element: Element): string {
 }
 
 function stopCursorKey(stop: ReviewStop, line?: number): string | null {
+  if (isDocumentPath(stop.path)) {
+    const { blocks } = docBlocks(stop.rows);
+    const block = (line === undefined ? undefined : blocks.find((candidate) => line >= candidate.from && line <= candidate.to)) ?? blocks[0];
+    return block ? `stop:${stop.path}:block:${block.from}` : null;
+  }
   const row = (line === undefined ? undefined : stop.rows.find((candidate) => candidate.now === line)) ?? stop.rows[0];
   return row ? `stop:${stop.path}:${rowKey(row)}` : null;
 }
@@ -150,6 +157,7 @@ export function ReviewReader({
   rootRef,
   marks,
   handleRef,
+  openInEditor,
   children,
 }: {
   bundle: ReviewBundle;
@@ -159,12 +167,17 @@ export function ReviewReader({
   rootRef: RefObject<HTMLDivElement | null>;
   marks?: ReviewMarks;
   handleRef?: Ref<ReviewReaderHandle>;
+  openInEditor?: (root: string, path: string) => void;
   children: ReactNode;
 }) {
   const daemon = useOptionalDaemonApi();
   const sendReviewFile = daemon?.sendReviewFile;
   const sendReviewSearch = daemon?.sendReviewSearch;
   const sendReviewEdit = daemon?.sendReviewEdit;
+  const openDocumentInEditor = useMemo(
+    () => (openInEditor && bundle.repository ? (path: string) => openInEditor(bundle.repository, path) : undefined),
+    [bundle.repository, openInEditor],
+  );
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -573,6 +586,14 @@ export function ReviewReader({
       const blockId = element.getAttribute('data-block-id');
       return blockId ? { kind: 'block', blockId, quote: element.textContent ?? '' } : null;
     }
+    if (element.getAttribute('data-review-cursor') === 'block') {
+      const path = element.getAttribute('data-path');
+      const from = Number(element.getAttribute('data-line'));
+      const to = Number(element.getAttribute('data-line-to'));
+      const stop = stopOf(element);
+      if (!path || !stop || !(from > 0)) return null;
+      return { kind: 'file', anchor: { path, from, to: Math.max(from, to), docLine: stop.heading_line, quote: element.textContent ?? '' } };
+    }
     const picked = selectedRows(element);
     const path = element.getAttribute('data-path');
     const stop = stopOf(element);
@@ -585,7 +606,7 @@ export function ReviewReader({
   }, [currentTarget, docLineFor, openFileView, scope, selectedRows, stopOf]);
 
   /** The file, line and selected lines the cursor stands on, for an edit. */
-  const editPlace = useCallback((): { path: string; line: number; selection?: [number, number]; docLine: number } | null => {
+  const editPlace = useCallback((): { path: string; line: number; selection?: [number, number]; block?: [number, number]; docLine: number } | null => {
     const span = (lines: number[]): [number, number] | undefined => (lines.length > 1 ? [Math.min(...lines), Math.max(...lines)] : undefined);
     if (openFileView) {
       const rows = openFileView.rows;
@@ -600,7 +621,12 @@ export function ReviewReader({
     const element = currentTarget();
     const path = element?.getAttribute('data-path');
     const line = Number(element?.getAttribute('data-line')) || undefined;
-    if (!element || !path || line === undefined || element.getAttribute('data-review-cursor') !== 'row') return null;
+    if (!element || !path || line === undefined) return null;
+    if (element.getAttribute('data-review-cursor') === 'block') {
+      const to = Number(element.getAttribute('data-line-to')) || line;
+      return { path, line, block: [line, to], docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
+    }
+    if (element.getAttribute('data-review-cursor') !== 'row') return null;
     const lines = selectedRows(element).map((row) => Number(row.getAttribute('data-line'))).filter((now) => now > 0);
     return { path, line, selection: span(lines), docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
   }, [currentTarget, docLineFor, openFileView, selectedRows, stopOf]);
@@ -612,7 +638,9 @@ export function ReviewReader({
     void readFile(place.path).then(async (answer) => {
       const lines = (answer.rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text);
       const selection = place.selection ? [place.selection[0] - 1, place.selection[1] - 1] as const : undefined;
-      const unit = await findEditUnit(lines, place.path, place.line - 1, selection);
+      const unit = place.block
+        ? { kind: 'block' as const, from: place.block[0] - 1, to: place.block[1] - 1 }
+        : await findEditUnit(lines, place.path, place.line - 1, selection);
       setEditing({ path: place.path, hash: answer.hash ?? '', lines, kind: unit.kind, from: unit.from, to: unit.to, docLine: place.docLine });
     }, (error: unknown) => setNotice(`Could not open the edit: ${error instanceof Error ? error.message : String(error)}`));
   }, [editPlace, marks, readFile]);
@@ -789,6 +817,12 @@ export function ReviewReader({
         return true;
       }
       if (marks && event.key === 'u') return undoEdit();
+      if (event.key === 'o' && openDocumentInEditor && !openFileView) {
+        const path = currentTarget()?.getAttribute('data-path');
+        if (!path || !isDocumentPath(path)) return false;
+        openDocumentInEditor(path);
+        return true;
+      }
       if (marks && (event.key === 'c' || event.key === 'a')) {
         openComposer(event.key === 'a' ? 'question' : 'comment');
         return true;
@@ -831,7 +865,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, stepStage, switchFrame, switchSide, tileWindow, undoEdit]);
+  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, stepStage, switchFrame, switchSide, tileWindow, undoEdit, openDocumentInEditor, currentTarget]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -850,8 +884,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark }),
-    [asking, bundle, expansions, frame, marksByLine, stage, showStage, openFile, openSearch, removeMark],
+    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor }),
+    [asking, bundle, expansions, frame, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
   );
 
   return (

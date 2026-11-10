@@ -35,6 +35,8 @@ export interface ReviewReaderContextValue {
   /** What became of a question asked from this reader, by mark id. */
   asking: ReadonlyMap<string, string>;
   removeMark?: (id: string) => void;
+  /** Opens a file of the review in the editor tile, when the review is on this machine. */
+  openInEditor?: (path: string) => void;
 }
 
 export const ReviewReaderContext = createContext<ReviewReaderContextValue | null>(null);

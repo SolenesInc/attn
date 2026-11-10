@@ -930,3 +930,49 @@
 .review-send-edits ins {
   text-decoration: none;
 }
+
+.review-doc-blocks {
+  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  white-space: normal;
+}
+
+.review-doc-block {
+  padding: 0.125rem 0.75rem 0.125rem 0.875rem;
+  border-left: 2px solid transparent;
+}
+
+.review-doc-block > div > :first-child,
+.review-doc-block .review-doc-words {
+  margin-top: 0.25rem;
+}
+
+.review-doc-block > div > :last-child {
+  margin-bottom: 0.25rem;
+}
+
+.review-doc-block--changed {
+  border-left-color: color-mix(in srgb, var(--color-success) 70%, transparent);
+}
+
+.review-doc-words ins {
+  text-decoration: none;
+  background: var(--review-added);
+}
+
+.review-doc-words del {
+  color: var(--color-text-muted);
+  background: var(--review-removed);
+}
+
+.review-doc-was {
+  display: block;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.review-doc-was * {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--color-error) 60%, transparent);
+}

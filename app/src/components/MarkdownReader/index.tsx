@@ -551,6 +551,8 @@ export interface MarkdownReaderProps {
   review?: ReviewBundle;
   reviewHost?: string;
   reviewSend?: ReviewSend;
+  /** Opens a file under a folder in the editor tile. */
+  openInEditor?: (root: string, path: string) => void;
   /** The annotation draft generation the daemon announced for this document. */
   annotationsGeneration?: number;
 }
@@ -610,6 +612,7 @@ export const MarkdownReader = memo(function MarkdownReader({
   review,
   reviewHost,
   reviewSend,
+  openInEditor,
   annotationsGeneration,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
@@ -717,7 +720,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       tabIndex={annotationsEnabled ? -1 : undefined}
     >
       {review ? (
-        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef}>
+        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef} openInEditor={openInEditor}>
           {documentView}
         </ReviewReader>
       ) : documentView}
