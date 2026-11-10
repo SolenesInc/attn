@@ -61,6 +61,8 @@ type Launch struct {
 	LastSeen             time.Time
 	PendingConversations []Conversation
 	PullRequests         map[string]PullRequest
+	SentFiles            map[string]FileReport
+	EditedFiles          map[string]FileReport
 }
 
 func (m *Monitor) SetPolicy(policy Policy) {

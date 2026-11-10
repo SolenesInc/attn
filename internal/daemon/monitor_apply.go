@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"time"
 
 	"github.com/victorarias/attn/internal/pausepoint"
@@ -144,7 +145,39 @@ func (s storeSaver) SaveRuntime(session protocol.SessionID, saved, view sessionm
 	if runtime != runtimeStateOf(saved) && !d.store.SaveSessionRuntime(session, runtime) {
 		return fmt.Errorf("runtime state was not saved")
 	}
+	if !sameFileReports(saved, view) && !d.store.SaveSessionFileReports(session, encodeFileReports(view)) {
+		return fmt.Errorf("file reports were not saved")
+	}
 	return nil
+}
+
+type savedFileReports struct {
+	Sent   map[string]sessionmonitor.FileReport `json:",omitempty"`
+	Edited map[string]sessionmonitor.FileReport `json:",omitempty"`
+}
+
+func sameFileReports(a, b sessionmonitor.View) bool {
+	return maps.EqualFunc(a.SentFiles.Entries, b.SentFiles.Entries, sessionmonitor.FileReport.Same) &&
+		maps.EqualFunc(a.EditedFiles.Entries, b.EditedFiles.Entries, sessionmonitor.FileReport.Same)
+}
+
+func encodeFileReports(view sessionmonitor.View) string {
+	if len(view.SentFiles.Entries) == 0 && len(view.EditedFiles.Entries) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(savedFileReports{Sent: view.SentFiles.Entries, Edited: view.EditedFiles.Entries})
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
+}
+
+func decodeFileReports(raw string) savedFileReports {
+	var reports savedFileReports
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &reports)
+	}
+	return reports
 }
 
 func sameExitScreen(a, b *sessionmonitor.Exit) bool {

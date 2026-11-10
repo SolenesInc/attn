@@ -145,6 +145,8 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	if err := outpost.Client().OpenSentFilesFromTerminal(terminal, []string{gapSent}); err != nil {
 		t.Fatal(err)
 	}
+	outpost.Stop()
+	outpost.Start()
 	mark := app.EventCount()
 	pair.Reconnect()
 	stopRetries := home.FireTimers(bridge.RetryTimer)
@@ -191,5 +193,5 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 		t.Fatalf("the home's draft after removing the outpost = %+v, want it kept", marks)
 	}
 
-	t.Logf("recents: %s opened and %s edited on %s, kept after the home's cleanup; %s sent and %s edited while the outpost was away arrived on reconnect without a tile, and none counted again after a home restart, and all forgotten when the outpost was removed; drafts of %s on %s and on the home stayed separate, and sending the outpost's spent only its own, naming the outpost to the agent", sent, edited, pair.Host, gapSent, gapEdited, notes, pair.Host)
+	t.Logf("recents: %s opened and %s edited on %s, kept after the home's cleanup; %s sent and %s edited while the outpost was away arrived on reconnect after an outpost restart without a tile, and none counted again after a home restart, and all forgotten when the outpost was removed; drafts of %s on %s and on the home stayed separate, and sending the outpost's spent only its own, naming the outpost to the agent", sent, edited, pair.Host, gapSent, gapEdited, notes, pair.Host)
 }

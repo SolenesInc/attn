@@ -338,6 +338,8 @@ func (m *Monitor) initializeLocked(start Start) {
 		m.pendingConversations = append(m.pendingConversations, pendingConversation{Conversation: pending})
 	}
 	m.pullRequests = launch.PullRequests
+	m.sentFiles = launch.SentFiles
+	m.editedFiles = launch.EditedFiles
 	m.initialized = launch.Known
 }
 

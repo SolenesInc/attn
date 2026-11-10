@@ -227,6 +227,8 @@ func (d *Daemon) monitorLaunch(sessionID protocol.SessionID) sessionmonitor.Laun
 		PendingConversations: decodePendingConversations(records.PendingConversations),
 		PullRequests:         decodePullRequests(records.PullRequests),
 	}
+	files := decodeFileReports(records.FileReports)
+	launch.SentFiles, launch.EditedFiles = files.Sent, files.Edited
 	if cost, err := d.store.SessionCostCheckpoint(sessionID); err == nil {
 		launch.Cost = cost
 	} else {

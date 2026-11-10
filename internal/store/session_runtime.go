@@ -125,6 +125,25 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	return err == nil
 }
 
+func (s *Store) SaveSessionFileReports(id protocol.SessionID, reports string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		records, ok := s.runtimeRecords[id]
+		if !ok {
+			return false
+		}
+		records.FileReports = reports
+		s.runtimeRecords[id] = records
+		return true
+	}
+	if _, err := s.db.Exec(`UPDATE session_runtime SET file_reports = ? WHERE session_id = ?`, reports, id); err != nil {
+		log.Printf("[store] save session file reports: session=%s: %v", id, err)
+		return false
+	}
+	return true
+}
+
 func turnStamp(at time.Time) string {
 	if at.IsZero() {
 		return ""
@@ -137,6 +156,7 @@ type SessionRuntimeRecords struct {
 	Agent                      string
 	PendingConversations       string
 	PullRequests               string
+	FileReports                string
 	HomeDaemonID               string
 	ConversationNativeID       string
 	ConversationTranscriptPath string
@@ -149,7 +169,7 @@ func (s *Store) SessionRuntimeRecords(id protocol.SessionID) SessionRuntimeRecor
 		return s.runtimeRecords[id]
 	}
 	var records SessionRuntimeRecords
-	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, home_daemon_id, agent, live, conversation_native_id, conversation_transcript_path FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.HomeDaemonID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath); err != nil && !errors.Is(err, sql.ErrNoRows) {
+	if err := s.db.QueryRow(`SELECT pending_conversations, pull_requests, file_reports, home_daemon_id, agent, live, conversation_native_id, conversation_transcript_path FROM session_runtime WHERE session_id = ?`, id).Scan(&records.PendingConversations, &records.PullRequests, &records.FileReports, &records.HomeDaemonID, &records.Agent, &records.Live, &records.ConversationNativeID, &records.ConversationTranscriptPath); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		log.Printf("[store] session %s runtime records: %v", id, err)
 	}
 	return records

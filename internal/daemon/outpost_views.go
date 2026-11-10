@@ -141,6 +141,8 @@ func (d *Daemon) storedMonitorView(id protocol.SessionID) sessionmonitor.View {
 		LastModelRequestAt: sessionmonitor.Value[time.Time]{V: launch.LastModelRequestAt},
 		HarnessTitle:       sessionmonitor.Value[string]{V: launch.HarnessTitle},
 		PullRequests:       sessionmonitor.KeyedSet[string, sessionmonitor.PullRequest]{Entries: d.recordedLinks(id)},
+		SentFiles:          sessionmonitor.KeyedSet[string, sessionmonitor.FileReport]{Entries: launch.SentFiles},
+		EditedFiles:        sessionmonitor.KeyedSet[string, sessionmonitor.FileReport]{Entries: launch.EditedFiles},
 		CostInitialized:    sessionmonitor.Value[bool]{V: launch.Cost.Initialized},
 		Cost:               sessionmonitor.KeyedSet[string, sessioncost.SourceTotals]{Entries: launch.Cost.SourceTotals()},
 		Exit:               sessionmonitor.Value[*sessionmonitor.Exit]{V: launch.Exit},
