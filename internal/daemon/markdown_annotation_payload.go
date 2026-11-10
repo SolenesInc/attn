@@ -11,7 +11,7 @@ import (
 )
 
 func formatMarkdownAnnotationPayload(source annotationDocumentSource, machine string, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
-	entries, summary := formatMarkdownEntries(inReadingOrder(anns), orphaned)
+	entries, summary := formatMarkdownEntries(inReadingOrder(anns), 1, orphaned)
 	return prompts.RenderText("annotation-markdown", "submit", prompts.Values{
 		"has_title": fmt.Sprint(source.seedTitle != ""), "seed": fmt.Sprint(source.kind == annotationSourceSeed), "seed_id": source.seedID, "title": source.seedTitle, "path": source.path, "machine": machine,
 		"count": fmt.Sprint(len(anns)), "singular": fmt.Sprint(len(anns) == 1), "entries": entries, "summary_rows": summary,
@@ -27,8 +27,8 @@ func formatReviewPayload(source annotationDocumentSource, machine, verdict strin
 			marks = append(marks, a)
 		}
 	}
-	entries, _ := formatMarkdownEntries(marks, orphaned)
-	editEntries, _ := formatMarkdownEntries(edits, orphaned)
+	entries, _ := formatMarkdownEntries(marks, 1, orphaned)
+	editEntries, _ := formatMarkdownEntries(edits, len(marks)+1, orphaned)
 	return prompts.RenderText("annotation-markdown", "review", prompts.Values{
 		"path": source.path, "machine": machine, "document": shellQuote(source.path),
 		"has_marks": fmt.Sprint(len(marks) > 0), "count": fmt.Sprint(len(marks)), "singular": fmt.Sprint(len(marks) == 1), "entries": entries,
@@ -80,7 +80,7 @@ func readingPlace(a protocol.MarkdownAnnotation) [3]int {
 	return [3]int{a.Anchor.StartLine, protocol.Deref(a.Anchor.FileStartLine), a.Anchor.Start}
 }
 
-func formatMarkdownEntries(sorted []protocol.MarkdownAnnotation, orphaned map[string]bool) (entries, summary string) {
+func formatMarkdownEntries(sorted []protocol.MarkdownAnnotation, first int, orphaned map[string]bool) (entries, summary string) {
 	var out strings.Builder
 	var labelOrder []string
 	labelCounts := map[string]int{}
@@ -93,7 +93,7 @@ func formatMarkdownEntries(sorted []protocol.MarkdownAnnotation, orphaned map[st
 			}
 			labelCounts[label]++
 		}
-		values["index"], values["orphaned"] = fmt.Sprint(i+1), fmt.Sprint(orphaned[a.ID])
+		values["index"], values["orphaned"] = fmt.Sprint(first+i), fmt.Sprint(orphaned[a.ID])
 		out.WriteString(prompts.RenderText("annotation-markdown", "entry", values))
 	}
 	var rows strings.Builder

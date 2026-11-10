@@ -32,7 +32,7 @@ const row = (kind: string, old: number | undefined, now: number | undefined, tex
   text,
 });
 
-/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, and a list. */
+/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, and a tight list with a reworded item. */
 const GUIDE_NOW = [
   '# Reviews',
   '',
@@ -54,7 +54,9 @@ function guideRows(now: readonly string[]): ReviewRow[] {
     row(' ', 4, 4, now[3]),
     row('-', 5, undefined, 'Nothing else is sent until you send the review.'),
     row('+', undefined, 5, now[4]),
-    ...now.slice(5).map((text, index) => row(' ', 6 + index, 6 + index, text)),
+    ...now.slice(5).flatMap((text, index) => (text === '- two'
+      ? [row('-', 6 + index, undefined, '- to'), row('+', undefined, 6 + index, text)]
+      : [row(' ', 6 + index, 6 + index, text)])),
   ];
 }
 
@@ -135,8 +137,11 @@ describe('App review document stops', () => {
     const { tile } = await openReview();
     const blocks = Array.from(tile.querySelectorAll('.review-stop--doc .review-doc-block'));
     expect(blocks.map((block) => [block.getAttribute('data-line'), block.classList.contains('review-doc-block--changed')])).toEqual([
-      ['1', false], ['3', true], ['5', true], ['7', false], ['8', false], ['9', false],
+      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false],
     ]);
+    expect(blocks[3].querySelector('del')).toBeNull();
+    expect(blocks[4].querySelector('.review-doc-was')).toHaveTextContent('to');
+    expect(blocks[4].querySelector('.review-doc-was + div')).toHaveTextContent('two');
     const reworded = blocks[1];
     expect(Array.from(reworded.querySelectorAll('ins')).map((word) => word.textContent)).toEqual(['leave', 'the']);
     expect(Array.from(reworded.querySelectorAll('del')).map((word) => word.textContent)).toEqual(['write', 'a']);

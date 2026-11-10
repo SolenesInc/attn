@@ -16,8 +16,9 @@ import (
 const MaxFileSize = 2 << 20
 
 type Store struct {
-	root string
-	mu   sync.Mutex
+	root     string
+	dotPaths bool
+	mu       sync.Mutex
 }
 
 func NewStore(root string) *Store {
@@ -25,6 +26,14 @@ func NewStore(root string) *Store {
 		root = filepath.Clean(root)
 	}
 	return &Store{root: root}
+}
+
+// NewRepositoryStore is a store over a repository's working tree, where files
+// under dot directories such as .github are ordinary files.
+func NewRepositoryStore(root string) *Store {
+	store := NewStore(root)
+	store.dotPaths = true
+	return store
 }
 
 func (s *Store) Root() string { return s.root }
@@ -42,7 +51,7 @@ type Conflict struct {
 }
 
 func (s *Store) List(dir string) ([]Entry, error) {
-	rel, err := cleanRel(dir, true)
+	rel, err := s.cleanRel(dir, true)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +115,7 @@ func (s *Store) Read(p string) (content []byte, hash string, err error) {
 }
 
 func (s *Store) ReadWithLimit(p string, maxBytes int64) (content []byte, hash string, err error) {
-	rel, err := cleanRel(p, false)
+	rel, err := s.cleanRel(p, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -138,7 +147,7 @@ func (s *Store) ReadWithLimit(p string, maxBytes int64) (content []byte, hash st
 }
 
 func (s *Store) Write(p string, content []byte, baseHash string) (newHash string, conflict *Conflict, err error) {
-	rel, err := cleanRel(p, false)
+	rel, err := s.cleanRel(p, false)
 	if err != nil {
 		return "", nil, err
 	}
@@ -177,7 +186,7 @@ func (s *Store) Write(p string, content []byte, baseHash string) (newHash string
 }
 
 func (s *Store) Exists(p string) (bool, error) {
-	rel, err := cleanRel(p, false)
+	rel, err := s.cleanRel(p, false)
 	if err != nil {
 		return false, err
 	}
@@ -195,11 +204,11 @@ func (s *Store) Exists(p string) (bool, error) {
 }
 
 func (s *Store) Rename(from, to string) error {
-	fromRel, err := cleanRel(from, false)
+	fromRel, err := s.cleanRel(from, false)
 	if err != nil {
 		return err
 	}
-	toRel, err := cleanRel(to, false)
+	toRel, err := s.cleanRel(to, false)
 	if err != nil {
 		return err
 	}
@@ -239,7 +248,7 @@ func (s *Store) Rename(from, to string) error {
 }
 
 func (s *Store) Delete(p string) error {
-	rel, err := cleanRel(p, false)
+	rel, err := s.cleanRel(p, false)
 	if err != nil {
 		return err
 	}
@@ -262,9 +271,13 @@ func (s *Store) Delete(p string) error {
 	return os.Remove(abs)
 }
 
-func CleanPath(p string) (string, error) { return cleanRel(p, false) }
+func CleanPath(p string) (string, error) { return cleanRel(p, false, false) }
 
-func cleanRel(p string, allowRoot bool) (string, error) {
+func (s *Store) cleanRel(p string, allowRoot bool) (string, error) {
+	return cleanRel(p, allowRoot, s.dotPaths)
+}
+
+func cleanRel(p string, allowRoot, dotPaths bool) (string, error) {
 	trimmed := strings.TrimSpace(p)
 	rel := strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(trimmed, "/")), "/")
 	if rel == "" || rel == "." {
@@ -277,7 +290,7 @@ func cleanRel(p string, allowRoot bool) (string, error) {
 		if seg == "" {
 			return "", fmt.Errorf("fsdoc: %q has an empty path segment", p)
 		}
-		if strings.HasPrefix(seg, ".") {
+		if !dotPaths && strings.HasPrefix(seg, ".") {
 			return "", fmt.Errorf("fsdoc: %q has a dotfile/dotdir segment", p)
 		}
 	}

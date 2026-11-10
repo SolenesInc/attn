@@ -90,6 +90,27 @@ func TestAnEditWritesTheFileTheStopShowsItAndUndoRestoresIt(t *testing.T) {
 	awaitStopShowing(r.app, r.document, "\treturn sum")
 }
 
+func TestAnEditKeepsTheFilesLineEndingsAndReachesFilesUnderDotDirectories(t *testing.T) {
+	r := openCalcReview(t)
+	workflow := filepath.Join(r.repo, ".github", "workflows", "ci.yml")
+	if err := os.MkdirAll(filepath.Dir(workflow), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	crlf := "name: ci\r\non: push\r\njobs: {}\r\n"
+	if err := os.WriteFile(workflow, []byte(crlf), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	edited := requestReviewEdit(r.app, r.document, ".github/workflows/ci.yml", sha(crlf), 2, 2, "on:\n  push: {}")
+	want := "name: ci\r\non:\r\n  push: {}\r\njobs: {}\r\n"
+	if !edited.Success || edited.Conflict {
+		t.Fatalf("the edit of a file under .github answered %+v, want success", edited)
+	}
+	if got := readFile(t, workflow); got != want {
+		t.Errorf("ci.yml after the edit is\n%q\nwant its CRLF endings kept\n%q", got, want)
+	}
+}
+
 func TestAnEditOfAFileThatChangedUnderneathIsRefusedAndWritesNothing(t *testing.T) {
 	r := openCalcReview(t)
 	calc := filepath.Join(r.repo, "calc.go")
@@ -143,7 +164,7 @@ func TestASentReviewListsTheUsersEditsApartFromTheNotesWithBothTexts(t *testing.
 		"## 1. Note on calc.go:5–6\n```\n    return sum\n}\n```\n> Return a + b directly.\n\n" +
 		"---\n\n" +
 		"I edited the files in 1 place while reviewing. The edits are saved in the working tree: build on them, and do not undo them.\n\n" +
-		"## 1. Edit to calc.go:4\nIt was:\n```\n    sum := a + b\n```\nIt is now:\n```\n    total := a + b\n```\n\n---\nVerdict: approve."
+		"## 2. Edit to calc.go:4\nIt was:\n```\n    sum := a + b\n```\nIt is now:\n```\n    total := a + b\n```\n\n---\nVerdict: approve."
 	if !strings.Contains(got, want) {
 		t.Errorf("the agent got\n%s\nwant it to list the note, then the edit with both texts:\n%s", got, want)
 	}

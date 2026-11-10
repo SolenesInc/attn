@@ -15,7 +15,7 @@
     "has_edits": "true",
     "edit_count": "2",
     "edit_singular": "false",
-    "edit_entries": "## 1. Edit to docs/guide/review.md:12–13\nIt was:\n```\nThe reader shows the change, and you can leave notes.\n```\nIt is now:\n```\nThe reader shows the change. Leave a note with `c`.\n```\n\n## 2. Edit to internal/store/store.go:1301\nIt was:\n```\n\t// compare the two reads\n```\nIt is now:\n```\n\t// DeepEqual: wireEqual drops unexported fields\n```\n\n",
+    "edit_entries": "## 2. Edit to docs/guide/review.md:12–13\nIt was:\n```\nThe reader shows the change, and you can leave notes.\n```\nIt is now:\n```\nThe reader shows the change. Leave a note with `c`.\n```\n\n## 3. Edit to internal/store/store.go:1301\nIt was:\n```\n\t// compare the two reads\n```\nIt is now:\n```\n\t// DeepEqual: wireEqual drops unexported fields\n```\n\n",
     "approve": "true",
     "request_changes": "false"
   }

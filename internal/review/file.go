@@ -246,7 +246,7 @@ func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResu
 	if info, err := os.Stat(full); err == nil && info.Size() > fsdoc.MaxFileSize {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s is %d bytes; attn edits files up to %d bytes. Make this change in an editor", edit.Path, info.Size(), fsdoc.MaxFileSize)
 	}
-	store := fsdoc.NewStore(repo.root)
+	store := fsdoc.NewRepositoryStore(repo.root)
 	current, hash, err := store.Read(edit.Path)
 	if err != nil {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s: %w", edit.Path, err)
@@ -261,7 +261,13 @@ func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResu
 	if edit.From < 1 || edit.To < edit.From || int(edit.To) > len(lines) {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s has %d lines; lines %d–%d are not in it", edit.Path, len(lines), edit.From, edit.To)
 	}
-	replaced := append(append(append([]string{}, lines[:edit.From-1]...), strings.Split(edit.Text, "\n")...), lines[edit.To:]...)
+	replacement := strings.Split(edit.Text, "\n")
+	if strings.HasSuffix(lines[edit.From-1], "\r") {
+		for i := range replacement {
+			replacement[i] += "\r"
+		}
+	}
+	replaced := append(append(append([]string{}, lines[:edit.From-1]...), replacement...), lines[edit.To:]...)
 	written := strings.Join(replaced, "\n")
 	if strings.HasSuffix(string(current), "\n") {
 		written += "\n"

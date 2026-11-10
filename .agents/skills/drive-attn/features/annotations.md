@@ -29,7 +29,7 @@ quotes each marked passage with what the user said about it.
 
 ### Agents
 
-- Prompts: agents have no verb. They receive annotations. The terminal batch starts "Feedback on your last message." and quotes each mark with its label and comment (`internal/prompts/content/annotations/terminal-*.md`). The markdown batch starts "# Markdown Annotations", names the file, and lists each mark by line (`internal/prompts/content/annotations/markdown-*.md`). On a review document, a question arrives alone as "# A question from the user's review" with the `attn review answer` command, and the send arrives as "# Review" with the marks in reading order and the verdict. Label instructions come from `internal/prompts/content/annotations/labels/`.
+- Prompts: agents have no verb. They receive annotations. The terminal batch starts "Feedback on your last message." and quotes each mark with its label and comment (`internal/prompts/content/annotations/terminal-*.md`). The markdown batch starts "# Markdown Annotations", names the file, and lists each mark by line (`internal/prompts/content/annotations/markdown-*.md`). On a review document, a question arrives alone as "# A question from the user's review" with the `attn review answer` command, and the send arrives as "# Review" with the marks in reading order, then the edits the user saved to the files with the text before and after, then the verdict. Label instructions come from `internal/prompts/content/annotations/labels/`.
 
 ## Driving it
 

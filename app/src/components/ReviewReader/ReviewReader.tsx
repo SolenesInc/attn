@@ -18,7 +18,7 @@ import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, pla
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
 import { isDocumentPath } from './DocStop';
-import { EditBox, editText, locateEdit, type OpenEdit } from './ReviewEdits';
+import { EditBox, editText, fileLines, locateEdit, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -205,6 +205,7 @@ export function ReviewReader({
   const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
   const [editing, setEditing] = useState<OpenEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const staleEditRef = useRef<string | null>(null);
   const selectedRef = useRef<HTMLElement[]>([]);
   const annotations = marks?.annotations ?? NO_MARKS;
   const cursorElementRef = useRef<HTMLElement | null>(null);
@@ -636,7 +637,7 @@ export function ReviewReader({
     if (!place || !marks) return;
     setNotice(null);
     void readFile(place.path).then(async (answer) => {
-      const lines = (answer.rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text);
+      const lines = fileLines(answer.rows);
       const selection = place.selection ? [place.selection[0] - 1, place.selection[1] - 1] as const : undefined;
       const unit = place.block
         ? { kind: 'block' as const, from: place.block[0] - 1, to: place.block[1] - 1 }
@@ -650,7 +651,8 @@ export function ReviewReader({
       if (!edit) return edit;
       const from = direction < 0 ? Math.max(0, edit.from - 1) : edit.from;
       const to = direction > 0 ? Math.min(edit.lines.length - 1, edit.to + 1) : edit.to;
-      return { ...edit, from, to, kind: edit.kind === 'block' ? 'block' : 'selection' };
+      if (from === edit.from && to === edit.to) return edit;
+      return { ...edit, from, to, kind: edit.kind === 'block' ? 'block' : 'selection', taken: direction };
     });
   }, []);
 
@@ -682,17 +684,23 @@ export function ReviewReader({
 
   const undoEdit = useCallback((): boolean => {
     const place = editPlace();
-    const mark = place && annotations.find((annotation) => annotation.type === 'edit' && annotation.fileAnchor?.path === place.path
+    const mark = place && [...annotations].reverse().find((annotation) => annotation.type === 'edit' && annotation.fileAnchor?.path === place.path
       && place.line >= annotation.fileAnchor.from && place.line <= annotation.fileAnchor.to);
     if (!mark?.edit || !mark.fileAnchor || !marks || !sendReviewEdit) return false;
+    if (staleEditRef.current === mark.id) {
+      staleEditRef.current = null;
+      marks.deleteAnnotation(mark.id);
+      return true;
+    }
     const { path } = mark.fileAnchor;
     const was = mark.edit.was;
     setNotice(null);
     void readFile(path).then(async (answer) => {
-      const lines = (answer.rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text);
+      const lines = fileLines(answer.rows);
       const at = locateEdit(lines, mark);
       if (at === null) {
-        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone.`);
+        staleEditRef.current = mark.id;
+        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone. Press u again to drop it from the review; the file stays as it is.`);
         return;
       }
       const result = await sendReviewEdit(host, document, { path, baseHash: answer.hash ?? '', from: at + 1, to: at + mark.edit!.now.split('\n').length, text: was });
@@ -787,6 +795,7 @@ export function ReviewReader({
       const selection = tileWindow.getSelection();
       if (selection && !selection.isCollapsed && root.contains(selection.anchorNode) && isPrintable(event)) return;
       setNotice(null);
+      if (event.key !== 'u') staleEditRef.current = null;
       const handled = handleKey(event);
       if (handled) event.preventDefault();
     };

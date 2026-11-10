@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReviewRow } from '../../types/generated';
 import type { Annotation } from '../MarkdownReader/annotations/types';
 import type { EditUnitKind } from './editUnit';
 
@@ -13,8 +14,15 @@ export interface OpenEdit {
   from: number;
   to: number;
   docLine: number;
+  taken?: -1 | 1;
   problem?: string;
   saving?: boolean;
+}
+
+/** A file's lines as the edit box shows them: without the carriage return of a
+ * CRLF file, which the daemon writes back around the edited lines. */
+export function fileLines(rows: readonly ReviewRow[] | undefined): string[] {
+  return (rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text.replace(/\r$/, ''));
 }
 
 export function editText(edit: Pick<OpenEdit, 'lines' | 'from' | 'to'>): string {
@@ -64,12 +72,10 @@ export function EditBox({
     if (takenRef.current === original) return;
     const before = takenRef.current;
     takenRef.current = original;
-    setText((current) => {
-      if (original.endsWith(before)) return original.slice(0, original.length - before.length) + current;
-      if (original.startsWith(before)) return current + original.slice(before.length);
-      return original;
-    });
-  }, [original]);
+    setText((current) => (edit.taken === -1
+      ? original.slice(0, original.length - before.length) + current
+      : current + original.slice(before.length)));
+  }, [edit.taken, original]);
   useEffect(() => {
     const input = inputRef.current;
     if (!input) return;

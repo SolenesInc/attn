@@ -34,8 +34,8 @@ function blockNodes(root: Root): RootContent[] {
 
 /**
  * The blocks of a document stop's rows: each top-level block, and each item of a
- * list, with the lines it holds now. Removed rows belong to the block they sit
- * in or before; a block with added lines or removed lines changed.
+ * list, with the lines it holds now. Removed rows belong to the block of the
+ * next line still in the file; a block with added lines or removed lines changed.
  */
 export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; removedAfter: string | null } {
   const shown = rows.filter((row) => row.now !== undefined);
@@ -55,24 +55,23 @@ export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; rem
       was: null,
     };
   });
-  const removed = new Map<DocBlock | null, string[]>();
   let next = 0;
+  let removed: string[] = [];
   for (const row of rows) {
-    if (row.now !== undefined) {
-      while (next < blocks.length && blocks[next].to < row.now) next += 1;
-      const block = blocks[next];
-      if (row.kind === '+' && block && row.now >= block.from) block.added = true;
+    if (row.now === undefined) {
+      if (row.kind === '-' && row.text.trim() !== '') removed.push(row.text);
       continue;
     }
-    if (row.kind !== '-' || row.text.trim() === '') continue;
-    const block = blocks[next] ?? null;
-    removed.set(block, [...(removed.get(block) ?? []), row.text]);
+    while (next < blocks.length && blocks[next].to < row.now) next += 1;
+    const block = blocks[next];
+    if (!block) continue;
+    if (row.kind === '+' && row.now >= block.from) block.added = true;
+    if (removed.length > 0) {
+      block.was = [...(block.was === null ? [] : [block.was]), ...removed].join('\n');
+      removed = [];
+    }
   }
-  for (const block of blocks) {
-    const was = removed.get(block);
-    if (was) block.was = was.join('\n');
-  }
-  return { blocks, removedAfter: removed.get(null)?.join('\n') ?? null };
+  return { blocks, removedAfter: removed.length > 0 ? removed.join('\n') : null };
 }
 
 /** A word of rendered text with the inline marks around it. */

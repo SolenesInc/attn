@@ -230,6 +230,54 @@ describe('App review edits', () => {
     expect(tile.querySelector('.review-mark--edit')).toBeNull();
   });
 
+  it('keeps typed text above a line Option-Down takes in, even from a blank line', async () => {
+    const { press, editBox, toRow } = await openReview();
+    await toRow(7);
+    await press('i');
+    const input = within(editBox()).getByRole('textbox');
+    fireEvent.change(input, { target: { value: '// the query' } });
+    fireEvent.keyDown(input, { key: 'ArrowDown', altKey: true });
+    await press('Shift');
+    expect(within(editBox()).getByRole('textbox')).toHaveValue('// the query\nconst query = `');
+  });
+
+  it('undoes the newest edit of a line, and a second u drops an edit the file no longer holds without writing', async () => {
+    const { tile, press, type, toRow, daemon, draft, show, file } = await openReview();
+    await toRow(4);
+    await press('i');
+    await type('\ttotal := a + b');
+    await show();
+    await press('i');
+    await type('\tresult := a + b');
+    await show();
+
+    await press('u');
+    expect(daemon.sentOf('review_edit')[2]).toMatchObject({ from: 4, to: 4, text: '\ttotal := a + b' });
+    expect(file.added[0]).toBe('\ttotal := a + b');
+    expect(draft.annotations).toEqual([expect.objectContaining({ edit_was: '\tsum := a + b', edit_now: '\ttotal := a + b' })]);
+    await show();
+
+    file.added = ['\tagent := a + b', '\treturn sum'];
+    file.version += 1;
+    await show();
+    await press('u');
+    expect(daemon.sentOf('review_edit')).toHaveLength(3);
+    expect(tile.querySelector('.review-notice')).toHaveTextContent('Press u again to drop it from the review; the file stays as it is.');
+    await press('u');
+    expect(daemon.sentOf('review_edit')).toHaveLength(3);
+    expect(draft.annotations).toEqual([]);
+    expect(file.added[0]).toBe('\tagent := a + b');
+  });
+
+  it('edits a line of a CRLF file without its carriage return', async () => {
+    const { press, editBox, toRow, file, show } = await openReview();
+    file.added = ['\tsum := a + b\r', '\treturn sum\r'];
+    await show();
+    await toRow(4);
+    await press('i');
+    expect(within(editBox()).getByRole('textbox')).toHaveValue('\tsum := a + b');
+  });
+
   it('keeps the cursor on the edited line when the edit changes the stop under it', async () => {
     const { tile, press, type, toRow, show, cursorLine } = await openReview();
     await toRow(5);
