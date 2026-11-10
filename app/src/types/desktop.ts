@@ -1,5 +1,4 @@
-
-import type { TileWindowFrame } from './generated';
+import type { ReviewBundle, TileWindowFrame } from './generated';
 
 export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
@@ -35,6 +34,7 @@ export interface TileContentState {
   path: string;
   content: string;
   error?: string;
+  review?: ReviewBundle;
 }
 
 export function tileContentKey(desktopId: string, tileId: string): string {

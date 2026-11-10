@@ -29,6 +29,7 @@ import {
 import { annotationFromWire, type Annotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
+import type { ReviewChrome } from '../../ReviewReader/reviewChrome';
 import { isDomInstance } from '../../../utils/realm';
 import { useFrameScheduler, useTileWindow } from '../../../tileWindow';
 
@@ -49,6 +50,8 @@ export interface UseAnnotationsOptions {
   source: MarkdownDocumentSource;
   enabled: boolean;
   transport?: MarkdownAnnotationsTransport | null;
+  /** MUST be the chrome the reader body renders with. */
+  reviewChrome?: ReviewChrome | null;
 }
 
 export interface UseAnnotationsApi {
@@ -97,6 +100,7 @@ export function useAnnotations({
   source,
   enabled,
   transport,
+  reviewChrome = null,
 }: UseAnnotationsOptions): UseAnnotationsApi {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [orphans, setOrphans] = useState<Map<string, AnnotationOrphanReason>>(new Map());
@@ -111,6 +115,8 @@ export function useAnnotations({
   const rangesRef = useRef<Map<string, Range>>(new Map());
   const contentRef = useRef(content);
   contentRef.current = content;
+  const reviewChromeRef = useRef(reviewChrome);
+  reviewChromeRef.current = reviewChrome;
   // Written by the hydrate effect (not render) so its CLEANUP still sees the
   // previous document and can flush that document's pending save.
   const sourceRef = useRef(source);
@@ -262,7 +268,7 @@ export function useAnnotations({
       painter.clearAll();
       rangesRef.current.clear();
 
-      const blocks = extractBlockTexts(nextContent);
+      const blocks = extractBlockTexts(nextContent, reviewChromeRef.current);
       blocksRef.current = blocks;
 
       const next: Annotation[] = [];
@@ -374,7 +380,7 @@ export function useAnnotations({
       painterRef.current?.clearAll();
       rangesRef.current.clear();
     };
-  }, [content, enabled, frames, refreshAndPaint, rootRef, tileWindow]);
+  }, [content, enabled, frames, refreshAndPaint, reviewChrome, rootRef, tileWindow]);
 
 
   const adoptDraft = useCallback(
@@ -547,7 +553,7 @@ export function useAnnotations({
       if (!root) {
         return null;
       }
-      const blocks = (blocksRef.current ??= extractBlockTexts(contentRef.current));
+      const blocks = (blocksRef.current ??= extractBlockTexts(contentRef.current, reviewChromeRef.current));
       const next = evaluateSelection(root, selection, contentRef.current, blocks);
       if (!next) {
         clearPendingSelection();
@@ -565,7 +571,7 @@ export function useAnnotations({
   const beginBlockSelection = useCallback(
     (blockId: string): PendingSelection | null => {
       const root = rootRef.current;
-      const blocks = (blocksRef.current ??= extractBlockTexts(contentRef.current));
+      const blocks = (blocksRef.current ??= extractBlockTexts(contentRef.current, reviewChromeRef.current));
       const block = blocks.find((b) => b.blockId === blockId);
       if (!root || !block || block.nonPaintable || block.text.trim() === '') {
         return null;

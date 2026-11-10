@@ -35,26 +35,31 @@ import { tilePathBasename } from '../../utils/tilePresentation';
 import { isSeedId } from '../../utils/seedId';
 import type { SeedMentionIndex } from '../../utils/seedMentions';
 import { SeedMentionButton } from '../SeedMentionText';
-import type { SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
+import type { ReviewBundle, SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
 import type { MarkdownAnnotationsDraft } from './annotations/transport';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
+import { ReviewReader } from '../ReviewReader/ReviewReader';
+import { NotShownSlot, StopSlot, SummarySlot } from '../ReviewReader/ReviewLists';
+import rehypeReviewChrome, { reviewChromeKey, reviewChromeOf, type ReviewChrome } from '../ReviewReader/reviewChrome';
 import './MarkdownReader.css';
 
 // Parsing WITH remark-frontmatter is what makes the anchor lineOffset 0. Both
 // arrays MUST stay module-level: react-markdown re-parses on identity change.
 const remarkPlugins = [remarkGfm, remarkFrontmatter];
-const rehypePlugins: PluggableList = [
-  // Order is load-bearing: sanitize before anchors so author HTML cannot forge
-  // data-*; anchors before alerts; heading slugs before prose transforms.
-  rehypeRaw,
-  [rehypeSanitize, readerSanitizeSchema],
-  [rehypeSourceAnchors, { lineOffset: 0 }],
-  rehypeAlerts,
-  rehypeHeadingSlugs,
-  rehypeProseTransforms,
-];
-function pluginsWithSeedMentions(index: SeedMentionIndex | null | undefined): PluggableList {
-  return index ? [...rehypePlugins, [rehypeSeedMentions, { index }]] : rehypePlugins;
+// Order is load-bearing: sanitize before anchors so author HTML cannot forge
+// data-*; anchors before the review chrome and alerts; heading slugs before
+// prose transforms.
+function readerPlugins(index: SeedMentionIndex | null | undefined, reviewChrome: ReviewChrome | null): PluggableList {
+  return [
+    rehypeRaw,
+    [rehypeSanitize, readerSanitizeSchema],
+    [rehypeSourceAnchors, { lineOffset: 0 }],
+    ...(reviewChrome ? [[rehypeReviewChrome, { chrome: reviewChrome }] as PluggableList[number]] : []),
+    rehypeAlerts,
+    rehypeHeadingSlugs,
+    rehypeProseTransforms,
+    ...(index ? [[rehypeSeedMentions, { index }] as PluggableList[number]] : []),
+  ];
 }
 const EMPTY_SEED_ARTIFACTS: readonly SeedArtifact[] = [];
 
@@ -394,6 +399,13 @@ function readerComponents(
         </div>
       );
     },
+    div({ node: _node, children, ...props }) {
+      const attributes = props as Record<string, unknown>;
+      const stopLine = attributes['data-review-stop'];
+      if (stopLine !== undefined) return <StopSlot line={Number(stopLine)} />;
+      if (attributes['data-review-not-shown'] !== undefined) return <NotShownSlot />;
+      return <div {...(props as HTMLAttributes<HTMLDivElement>)}>{children}</div>;
+    },
     span({ node: _node, children, ...props }) {
       const mention = (props as Record<string, unknown>)['data-seed-mention'];
       if (typeof mention === 'string' && onOpenSeed) {
@@ -530,6 +542,8 @@ export interface MarkdownReaderProps {
   seedMentions?: SeedMentionIndex | null;
   loadLocalImage?: LocalImageLoader;
   remoteDocument?: RemoteMarkdownDocument;
+  review?: ReviewBundle;
+  reviewHost?: string;
 }
 
 interface MarkdownReaderBodyProps {
@@ -541,6 +555,7 @@ interface MarkdownReaderBodyProps {
   onImageClick: (src: string, alt: string) => void;
   onOpenSeed?: (seedId: string) => void;
   plugins: PluggableList;
+  reviewing: boolean;
 }
 
 // The live-reload poller re-reads the file every 750ms, so an unchanged file must
@@ -554,13 +569,14 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
   onImageClick,
   onOpenSeed,
   plugins,
+  reviewing,
 }: MarkdownReaderBodyProps) {
   const frontmatter = extractFrontmatter(content);
   const components = readerComponents(path, allowLocalTargets, seedDocument, rootRef, onImageClick, onOpenSeed);
 
   return (
     <article className="md-reader-card">
-      <FrontmatterCard entries={frontmatter.entries} />
+      {reviewing ? <SummarySlot /> : <FrontmatterCard entries={frontmatter.entries} />}
       <ReaderPresentation>
         <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={plugins} components={components}>
           {content}
@@ -582,13 +598,17 @@ export const MarkdownReader = memo(function MarkdownReader({
   seedMentions,
   loadLocalImage,
   remoteDocument,
+  review,
+  reviewHost,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
   const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const localTargetsEnabled = allowLocalTargets && source.kind === 'file';
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const plugins = useMemo(() => pluginsWithSeedMentions(seedMentions), [seedMentions]);
+  const reviewKey = reviewChromeKey(reviewChromeOf(review));
+  const reviewChrome = useMemo<ReviewChrome | null>(() => (reviewKey ? JSON.parse(reviewKey) as ReviewChrome : null), [reviewKey]);
+  const plugins = useMemo(() => readerPlugins(seedMentions, reviewChrome), [seedMentions, reviewChrome]);
   const annotationLayerRef = useRef<AnnotationLayerHandle | null>(null);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string; artifactVersion: string } | null>(null);
   const seedArtifactVersion = useMemo(() => seedArtifacts
@@ -615,6 +635,7 @@ export const MarkdownReader = memo(function MarkdownReader({
     content,
     source,
     enabled: annotationsEnabled,
+    reviewChrome,
   });
 
   // The send handle must read call-time state, not a captured api identity.
@@ -641,14 +662,7 @@ export const MarkdownReader = memo(function MarkdownReader({
     openGlobalComment: (anchorEl: HTMLElement) => annotationLayerRef.current?.openGlobalComment(anchorEl),
   }), []);
 
-  return (
-    <div
-      className={`md-reader ${annotationsEnabled ? 'md-reader--annotating' : ''}`.trim()}
-      ref={rootRef}
-      // Focusable so a selection can claim keyboard focus: WebKit leaves focus
-      // on the terminal's hidden input otherwise, leaking keys to the shell.
-      tabIndex={annotationsEnabled ? -1 : undefined}
-    >
+  const documentView = (
       <div className="md-reader-doc">
         <div className="md-reader-wrap">
           <SeedArtifactReaderContext.Provider value={seedArtifactContext}>
@@ -663,12 +677,28 @@ export const MarkdownReader = memo(function MarkdownReader({
                 onImageClick={handleImageClick}
                 onOpenSeed={onOpenSeed}
                 plugins={plugins}
+                reviewing={review !== undefined}
               />
               </RemoteMarkdownDocumentContext.Provider>
             </LocalImageLoaderContext.Provider>
           </SeedArtifactReaderContext.Provider>
         </div>
       </div>
+  );
+
+  return (
+    <div
+      className={`md-reader${annotationsEnabled ? ' md-reader--annotating' : ''}${review ? ' md-reader--review' : ''}`}
+      ref={rootRef}
+      // Focusable so a selection can claim keyboard focus: WebKit leaves focus
+      // on the terminal's hidden input otherwise, leaking keys to the shell.
+      tabIndex={annotationsEnabled ? -1 : undefined}
+    >
+      {review ? (
+        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef}>
+          {documentView}
+        </ReviewReader>
+      ) : documentView}
       {annotationsEnabled && (
         <AnnotationLayer ref={annotationLayerRef} api={annotationsApi} rootRef={rootRef} source={source} />
       )}

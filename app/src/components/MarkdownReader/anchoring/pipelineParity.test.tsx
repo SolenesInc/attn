@@ -7,6 +7,8 @@ import { MarkdownReader } from '../index';
 import { fileMarkdownSource } from '../documentSource';
 import { blockDomText, resolveDomRange } from './domRange';
 import { extractBlockTexts } from './extractBlocks';
+import { reviewChromeOf } from '../../ReviewReader/reviewChrome';
+import type { ReviewBundle } from '../../../types/generated';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn(async () => {}),
@@ -26,15 +28,18 @@ const shikiMock = vi.hoisted(() => ({
       .split('\n')
       .map((line) => `<span style="--shiki-light:#000;--shiki-dark:#fff">${line}</span>`)
       .join('<br>')),
+  codeToTokens: vi.fn(async (code: string) => ({ tokens: code.split('\n').map((line) => [{ content: line }]) })),
+  bundledLanguages: { go: {} },
 }));
 vi.mock('shiki', () => shikiMock);
 
-function renderReader(content: string) {
+function renderReader(content: string, review?: ReviewBundle) {
   return render(
     <MarkdownReader
       content={content}
       source={fileMarkdownSource('/tmp/project/README.md')}
       allowLocalTargets={true}
+      review={review}
     />,
   );
 }
@@ -115,5 +120,29 @@ describe('pipeline parity (headless extraction vs live DOM)', () => {
     const start = block.text.indexOf('const c = 3;');
     const range = resolveDomRange(el, start, start + 'const c = 3;'.length);
     expect(range?.toString()).toBe('const c = 3;');
+  });
+
+  it('keeps parity and the prose offsets around review stops, which render as chrome', () => {
+    const review = '---\nattn: review\nrepository: /repo\nhead: abc\n---\n\n# Title\n\nBefore the stop.\n\n### calc.go:1-2\n\n- L1: A note.\n- L2!: Look.\n\nAfter the stop.\n\n## Not shown\n\n- go.sum: checksums.\n';
+    const bundle: ReviewBundle = {
+      frame: 'brief', repository: '/repo', head: 'abc', files: [], flows: [], navigation: [], problems: [],
+      stops: [{ heading_line: 11, path: 'calc.go', from: 1, to: 2, now_from: 1, now_to: 2, changed_since_presented: false, file_hash: 'h',
+        rows: [{ kind: ' ', old: 1, now: 1, text: 'package calc' }],
+        notes: [{ line: 13, from: 1, to: 1, now_from: 1, now_to: 1, look: false, text: 'A note.' }, { line: 14, from: 2, to: 2, now_from: 2, now_to: 2, look: true, text: 'Look.' }] }],
+      not_shown: [{ line: 20, path: 'go.sum', reason: 'checksums.' }],
+    };
+    const { container } = renderReader(review, bundle);
+    const blocks = extractBlockTexts(review, reviewChromeOf(bundle));
+    const plain = extractBlockTexts(review);
+
+    const domBlocks = [...container.querySelectorAll('[data-block-id]')];
+    expect(domBlocks.map((el) => el.getAttribute('data-block-id'))).toEqual(blocks.map((b) => b.blockId));
+    for (const block of blocks) {
+      expect(blockDomText(container.querySelector(`[data-block-id="${block.blockId}"]`)!), block.blockId).toBe(block.text);
+    }
+    const after = (list: typeof blocks) => list.find((b) => b.text === 'After the stop.');
+    expect(after(blocks)?.blockId).toBe(after(plain)?.blockId);
+    expect(blocks.map((b) => b.text)).not.toContain('calc.go:1-2');
+    expect(container.querySelector('.review-stop')).toHaveTextContent('package calc');
   });
 });

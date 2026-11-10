@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 let shikiModule: Promise<typeof import('shiki') | null> | null = null;
-function loadShiki() {
+export function loadShiki() {
   shikiModule ??= import('shiki').catch((error) => {
     console.warn('[Markdown] Failed to load shiki:', error);
     return null;

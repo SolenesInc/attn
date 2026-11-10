@@ -361,6 +361,8 @@ function MarkdownBody({
       annotationsSendRef={annotationsSendRef}
       loadLocalImage={loadImage}
       remoteDocument={remoteDocument}
+      review={content.review}
+      reviewHost={host}
     />
   );
 }

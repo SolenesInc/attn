@@ -14,10 +14,11 @@ import rehypeHeadingSlugs from '../rehypeHeadingSlugs';
 import rehypeProseTransforms from '../proseTransforms';
 import rehypeSourceAnchors from '../rehypeSourceAnchors';
 import { readerSanitizeSchema } from '../sanitizeSchema';
+import rehypeReviewChrome, { type ReviewChrome } from '../../ReviewReader/reviewChrome';
 import type { BlockText } from './types';
 
 /** Order is load-bearing; mirrors MarkdownReader's plugin list (index.tsx). */
-function readerProcessor() {
+function readerProcessor(reviewChrome: ReviewChrome | null) {
   return unified()
     .use(remarkParse)
     .use(remarkGfm)
@@ -26,13 +27,14 @@ function readerProcessor() {
     .use(rehypeRaw)
     .use(rehypeSanitize, readerSanitizeSchema)
     .use(rehypeSourceAnchors, { lineOffset: 0 })
+    .use(reviewChrome ? [[rehypeReviewChrome, { chrome: reviewChrome }]] : [])
     .use(rehypeAlerts)
     .use(rehypeHeadingSlugs)
     .use(rehypeProseTransforms);
 }
 
-export function runReaderPipeline(content: string): Root {
-  const processor = readerProcessor();
+export function runReaderPipeline(content: string, reviewChrome: ReviewChrome | null = null): Root {
+  const processor = readerProcessor(reviewChrome);
   return processor.runSync(processor.parse(content)) as Root;
 }
 
@@ -65,7 +67,7 @@ interface OpenBlock {
   out: BlockText;
 }
 
-export function extractBlockTexts(content: string): BlockText[] {
+export function extractBlockTexts(content: string, reviewChrome: ReviewChrome | null = null): BlockText[] {
   const blocks: BlockText[] = [];
   const stack: OpenBlock[] = [];
 
@@ -132,7 +134,7 @@ export function extractBlockTexts(content: string): BlockText[] {
     }
   };
 
-  walk(runReaderPipeline(content));
+  walk(runReaderPipeline(content, reviewChrome));
   return blocks;
 }
 

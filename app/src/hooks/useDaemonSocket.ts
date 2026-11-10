@@ -39,6 +39,9 @@ import type {
   AskAnswer,
   AskImageResultMessage,
   TileAssetReadResultMessage,
+  ReviewBundle,
+  ReviewFileResultMessage,
+  ReviewSearchResultMessage,
   AskSeedMention,
   CommandUsage,
   Session as GeneratedSession,
@@ -1343,6 +1346,7 @@ export function useDaemonSocket({
                 path: typeof data.path === 'string' ? data.path : '',
                 content: typeof data.content === 'string' ? data.content : '',
                 error: typeof data.error === 'string' ? data.error : undefined,
+                ...(data.review ? { review: data.review as ReviewBundle } : {}),
               };
               const { desktops, currentDesktopId } = useProfilesStore.getState();
               setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: content }, desktops, currentDesktopId));
@@ -2361,6 +2365,14 @@ export function useDaemonSocket({
               settlePendingRequest(pending, 'tile_asset_read', data as TileAssetReadResultMessage, (result) => result.data_uri, 'Could not load the image');
               break;
             }
+            if (data.event === 'review_file_result') {
+              settlePendingRequest(pending, 'review_file', data as ReviewFileResultMessage, (result) => result, 'Could not read the file');
+              break;
+            }
+            if (data.event === 'review_search_result') {
+              settlePendingRequest(pending, 'review_search', data as ReviewSearchResultMessage, (result) => result, 'Could not search');
+              break;
+            }
             if (handleSharedCodexDaemonEvent(data, pending)) break;
             if (handleUpdateRunDaemonEvent(data, pending, setUpdateRun)) break;
             if (handlePhoneDaemonEvent(data, pending)) break;
@@ -2817,6 +2829,10 @@ export function useDaemonSocket({
 
   const sendTileAssetRead = useCallback((host: string | undefined, path: string): Promise<string> =>
     sendRequest('tile_asset_read', { path, ...(host ? { host } : {}) }, 'Loading the image timed out'), [sendRequest]);
+  const sendReviewFile = useCallback((host: string | undefined, document: string, path: string): Promise<ReviewFileResultMessage> =>
+    sendRequest('review_file', { document, path, ...(host ? { host } : {}) }, 'Reading the file timed out'), [sendRequest]);
+  const sendReviewSearch = useCallback((host: string | undefined, document: string, query: string): Promise<ReviewSearchResultMessage> =>
+    sendRequest('review_search', { document, query, ...(host ? { host } : {}) }, 'Searching timed out'), [sendRequest]);
 
   const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ desktopId?: string; tileId?: string }> => {
     return sendRequest('open_seed', {
@@ -4413,6 +4429,8 @@ export function useDaemonSocket({
     sendAskAnswer,
     sendAskImage,
     sendTileAssetRead,
+    sendReviewFile,
+    sendReviewSearch,
     sendAskSeedMentions,
     sendRestartSharedCodex,
     sendPhonesGet,
