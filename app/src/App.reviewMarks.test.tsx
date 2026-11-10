@@ -196,6 +196,28 @@ describe('App review marks', () => {
     expect(tile.querySelector('.review-file-view-marks')).toHaveTextContent('Return a + b directly.');
   });
 
+  it('keeps the file view cursor on its marked line when the agent adds a copy of that line above it', async () => {
+    const walkthrough = { ...BUNDLE, frame: 'walkthrough' };
+    const { tile, press, write, show, settle } = await openReview({ review: walkthrough });
+    await press('ArrowDown');
+    expect(tile.querySelector('.review-file-view .review-cursor')).toHaveTextContent('return sum');
+    await press('c');
+    await write('Return a + b directly.');
+
+    const copied = [
+      row(' ', 3, 3, 'func Add(a, b int) int {'),
+      row('-', 4, undefined, '\treturn a + b'),
+      row('+', undefined, 4, '\tsum := a + b'),
+      row('+', undefined, 5, '\treturn sum', null),
+      row('+', undefined, 6, '\treturn sum', 5),
+      row(' ', 5, 7, '}', 6),
+    ];
+    await show({ review: { ...walkthrough, stops: [{ ...BUNDLE.stops[0], file_hash: 'h2', now_to: 7, rows: copied }] } });
+    await settle();
+    expect(tile.querySelector('.review-file-view .review-cursor')).toHaveClass('review-file-view-row--marked');
+    expect(tile.querySelector('.review-file-view-marks')).toHaveTextContent('Return a + b directly.');
+  });
+
   it('closes the composer first on Escape, then the selection, then the file view', async () => {
     const { tile, press, toRow } = await openReview();
     await toRow(4);

@@ -37,6 +37,10 @@ export function rowIndexOf(rows: readonly ReviewRow[], line: number | undefined)
 export function rowIndexAfterRefresh(rows: readonly ReviewRow[], before: OpenFile): number {
   const was = before.rows?.[before.cursor];
   if (!before.rows || !was) return rowIndexOf(rows, before.target.line);
+  if (was.head !== undefined) {
+    const same = rows.findIndex((row) => row.head === was.head);
+    if (same >= 0) return same;
+  }
   if (was.old !== undefined) {
     const same = rows.findIndex((row) => row.old === was.old);
     return same >= 0 ? same : rowIndexOf(rows, was.now);
