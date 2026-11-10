@@ -66,12 +66,15 @@ seconds after its last terminal closes, or after it starts without a terminal.
 The next launch starts a fresh host.
 
 When a host dies, or a worker can't be reached for 30 seconds, the daemon treats
-each of its terminals as it treats a reboot. It records no exit, marks the
-session recoverable and starts it again, resuming the conversation, at the size
-its pane asked for. The new run starts a fresh host. A terminal that can't come back shows
-the exit: an agent that never had a conversation, a harness that is no longer
-offered, or a run that fails to start. On an outpost the terminal still shows the exit, and the
-user reopens it.
+each of its terminals as it treats a reboot. When the host or worker process is
+gone, the daemon first kills each terminal's process group, ending any program
+that outlived the hangup, such as a Codex app-server that drains a running turn
+([Codex app-server](harnesses/codex-app-server.md)). It records no exit, marks
+the session recoverable and starts it again, resuming the conversation, at the
+size its pane asked for. The new run starts a fresh host. A terminal that can't
+come back shows the exit: an agent that never had a conversation, a harness that
+is no longer offered, or a run that fails to start. On an outpost the terminal
+still shows the exit, and the user reopens it.
 
 ## Moving running terminals to a new build
 

@@ -464,7 +464,7 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 
 	for id, command := range map[string][]string{
 		"exited-before-crash": {"/bin/cat"},
-		"running-at-crash":    {"/bin/cat"},
+		"running-at-crash":    {"/bin/sh", "-c", "trap '' HUP; read go; printf '__HANG%s__\\n' UP_IGNORED; exec /bin/sleep 100000"},
 	} {
 		if err := backend.Spawn(context.Background(), SpawnOptions{
 			ID: harness.TerminalID(id), CWD: root, Agent: "crash-probe", AgentArgv: command, Cols: 80, Rows: 24,
@@ -495,6 +495,15 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 	waitForExitInfo(t, exits, "exited-before-crash", func(info ExitInfo) bool {
 		return info.Signal == "SIGTERM"
 	})
+	_, running, err := backend.Attach(context.Background(), "running-at-crash", "crash-hangup")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.Input(context.Background(), "running-at-crash", []byte("go\n")); err != nil {
+		t.Fatal(err)
+	}
+	waitForStreamText(t, running, "__HANGUP_IGNORED__")
+	running.Close()
 	if err := syscall.Kill(oldHostPID, syscall.SIGKILL); err != nil {
 		t.Fatalf("kill shared host: %v", err)
 	}
@@ -502,6 +511,9 @@ func TestSharedHost_CrashEvictsEverySessionAndRestartsCleanly(t *testing.T) {
 		return info.Signal == "worker_unreachable"
 	})
 	waitForSessionIDs(t, backend, nil)
+	if !waitForPIDsGone(fakeagent.HangGuard, runningInfo.PID) {
+		t.Fatalf("child %d that ignores the hangup outlived its crashed host", runningInfo.PID)
+	}
 
 	if err := backend.Spawn(context.Background(), SpawnOptions{
 		ID: "after-crash", CWD: root, Agent: "crash-probe",

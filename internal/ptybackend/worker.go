@@ -2231,8 +2231,26 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 	b.stopPoller(session)
 	b.closePersistentControlConn(session, "force_evict")
 	b.forgetSession(session)
+	b.endProcessGroupOutlivingRuntime(session, workerPID)
 	b.pruneSessionFiles(session.SessionID, session.RegistryPath, session.SocketPath)
 	b.reapWorkerPID(workerPID, session.SessionID)
+}
+
+func (b *WorkerBackend) endProcessGroupOutlivingRuntime(session *workerSession, workerPID int) {
+	if pidAlive(workerPID) {
+		return
+	}
+	entry, err := ptyworker.ReadRegistry(session.RegistryPath)
+	if err != nil || entry.WorkerPID != workerPID || entry.ChildPID <= 0 {
+		return
+	}
+	err = syscall.Kill(-entry.ChildPID, syscall.SIGKILL)
+	switch {
+	case err == nil:
+		b.cfg.Logf("worker backend: killed process group %d of session %s, which outlived its runtime %d", entry.ChildPID, session.SessionID, workerPID)
+	case !errors.Is(err, syscall.ESRCH):
+		b.cfg.Logf("worker backend: killing process group %d of session %s after its runtime %d ended: %v", entry.ChildPID, session.SessionID, workerPID, err)
+	}
 }
 
 func (b *WorkerBackend) evictLostSession(session *workerSession) {

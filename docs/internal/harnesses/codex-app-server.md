@@ -199,6 +199,16 @@ these.
   reaches the server twice and forces its exit. A second SIGTERM sent to the
   node process alone is not forwarded.
 
+Probed on 0.167.0 on macOS, with the server as a shared PTY host's terminal
+and a model that never answers:
+
+- When the host dies, the server, the session leader of its PTY, gets the
+  hangup's SIGHUP and starts a drain. With no turn running it exits at once.
+  With a turn running it drains with no end, reparented to launchd: servers
+  a demo run left behind still answered `Server is draining` hours later.
+  attn therefore kills a terminal's process group when its PTY host or worker
+  dies.
+
 Probed on 0.162.1 and 0.164.0 on a copy of a real `CODEX_HOME`, with its
 plugins and MCP servers, and with a 0.162.1 `--remote` TUI:
 
