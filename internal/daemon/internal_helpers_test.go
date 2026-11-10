@@ -51,6 +51,7 @@ func NewForTesting(socketPath string) *Daemon {
 	d.ensureEventBus()
 	d.loginEnv = newLoginEnv(&d.life, d.logf)
 	d.pluginStartEnded = make(chan struct{})
+	d.codeNav = d.newCodeNavigation()
 	return d
 }
 
