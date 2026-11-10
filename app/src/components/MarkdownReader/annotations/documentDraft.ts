@@ -32,7 +32,7 @@ export function unsavedChanges(
 function sameFeedback(a: Annotation, b: Annotation): boolean {
   return a.type === b.type && a.text === b.text && a.quickLabelId === b.quickLabelId && a.answer === b.answer
     && a.edit?.was === b.edit?.was && a.edit?.now === b.edit?.now
-    && a.edit?.afterHead === b.edit?.afterHead && a.edit?.offset === b.edit?.offset;
+    && a.edit?.afterHead === b.edit?.afterHead && a.edit?.beforeHead === b.edit?.beforeHead;
 }
 
 /** The daemon's marks, with this reader's unsaved changes applied on top. A mark the

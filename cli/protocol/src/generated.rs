@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ed7dee1bb61c";
+pub const PROTOCOL_VERSION: &str = "9a03cace9feb";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6494,9 +6494,9 @@ pub struct MarkdownAnnotation {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit_after_head: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub edit_now: Option<String>,
+    pub edit_before_head: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub edit_offset: Option<i64>,
+    pub edit_now: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit_was: Option<String>,
     pub id: String,

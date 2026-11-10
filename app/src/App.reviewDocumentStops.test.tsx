@@ -32,7 +32,7 @@ const row = (kind: string, old: number | undefined, now: number | undefined, tex
   text,
 });
 
-/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, an added paragraph, and a hard-wrapped paragraph with one word changed. */
+/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, an added paragraph, a hard-wrapped paragraph with one word changed, and a paragraph deleted before one kept as it was. */
 const GUIDE_NOW = [
   '# Reviews',
   '',
@@ -49,6 +49,8 @@ const GUIDE_NOW = [
   'Hard-wrapped lines',
   'keep their words',
   'when one of them changes.',
+  '',
+  'A paragraph kept as it was.',
 ];
 
 function guideRows(now: readonly string[]): ReviewRow[] {
@@ -61,6 +63,9 @@ function guideRows(now: readonly string[]): ReviewRow[] {
     row('-', 5, undefined, 'Nothing else is sent until you send the review.'),
     row('+', undefined, 5, now[4]),
     ...now.slice(5).flatMap((text, index) => {
+      if (text === 'A paragraph kept as it was.') {
+        return [row('-', 6 + index, undefined, 'A paragraph that was deleted.'), row('-', 6 + index, undefined, ''), row(' ', 6 + index, 6 + index, text)];
+      }
       if (text === 'keep their words') return [row('-', 6 + index, undefined, 'keep all words'), row('+', undefined, 6 + index, text)];
       if (text === '- two') return [row('-', 6 + index, undefined, '- to'), row('+', undefined, 6 + index, text)];
       if (text.startsWith('A paragraph added')) return [row('+', undefined, 6 + index, text)];
@@ -144,10 +149,14 @@ async function openReview({ host }: { host?: string } = {}) {
 describe('App review document stops', () => {
   it('renders a markdown stop as a document: a light rewording marks its words, a rewrite strikes the old text above the new', async () => {
     const { tile } = await openReview();
-    const blocks = Array.from(tile.querySelectorAll('.review-stop--doc .review-doc-block'));
+    const blocks = Array.from(tile.querySelectorAll('.review-stop--doc [data-review-cursor="block"]'));
     expect(blocks.map((block) => [block.getAttribute('data-line'), block.classList.contains('review-doc-block--changed')])).toEqual([
-      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false], ['11', true], ['13', true],
+      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false], ['11', true], ['13', true], ['17', false],
     ]);
+    const kept = blocks[8];
+    expect(kept.querySelector('del')).toBeNull();
+    expect(kept.previousElementSibling).toHaveClass('review-doc-was');
+    expect(kept.previousElementSibling).toHaveTextContent('A paragraph that was deleted.');
     const wrapped = blocks[7];
     expect(Array.from(wrapped.querySelectorAll('ins')).map((word) => word.textContent)).toEqual(['their']);
     expect(Array.from(wrapped.querySelectorAll('del')).map((word) => word.textContent)).toEqual(['all']);

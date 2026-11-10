@@ -20,13 +20,13 @@ export interface FileAnchor {
 }
 
 /** An edit saved to a review's file: its lines before and after, and where it
- * stands: offset lines below the line at the review's head it follows (0 when
- * none comes before it). */
+ * stands: between the nearest lines at the review's head above and below it
+ * when it was saved, each 0 when there was none. */
 export interface AnnotationEdit {
   was: string;
   now: string;
   afterHead: number;
-  offset: number;
+  beforeHead: number;
 }
 
 export interface Annotation {
@@ -122,7 +122,7 @@ export function annotationToWire(annotation: Annotation): WireAnnotation {
     ...(annotation.quickLabelTip !== undefined ? { quick_label_tip: annotation.quickLabelTip } : {}),
     ...(annotation.quickLabelText !== undefined ? { quick_label_text: annotation.quickLabelText } : {}),
     ...(annotation.answer !== undefined ? { answer: annotation.answer } : {}),
-    ...(annotation.edit ? { edit_was: annotation.edit.was, edit_now: annotation.edit.now, edit_after_head: annotation.edit.afterHead, edit_offset: annotation.edit.offset } : {}),
+    ...(annotation.edit ? { edit_was: annotation.edit.was, edit_now: annotation.edit.now, edit_after_head: annotation.edit.afterHead, edit_before_head: annotation.edit.beforeHead } : {}),
     created_at: annotation.createdAt,
   };
 }
@@ -154,7 +154,7 @@ export function annotationFromWire(wire: WireAnnotation): Annotation | null {
     ...(typeof wire.quick_label_text === 'string' ? { quickLabelText: wire.quick_label_text } : {}),
     ...(typeof wire.answer === 'string' ? { answer: wire.answer } : {}),
     ...(typeof wire.edit_was === 'string' && typeof wire.edit_now === 'string'
-      ? { edit: { was: wire.edit_was, now: wire.edit_now, afterHead: wire.edit_after_head ?? 0, offset: wire.edit_offset ?? 0 } }
+      ? { edit: { was: wire.edit_was, now: wire.edit_now, afterHead: wire.edit_after_head ?? 0, beforeHead: wire.edit_before_head ?? 0 } }
       : {}),
     createdAt: wire.created_at,
   };

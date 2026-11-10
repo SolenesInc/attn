@@ -42,37 +42,47 @@ function describe(edit: OpenEdit): string {
   }
 }
 
-/** Where an edit that starts at the 0-based line `from` stands: below the
- * nearest line above it that head has. */
-export function whereEditStands(heads: readonly (number | undefined)[], from: number): Pick<AnnotationEdit, 'afterHead' | 'offset'> {
+/** Where an edit of the 0-based lines `from` to `to` stands: between the
+ * nearest lines head has above and below it, 0 where there is none. */
+export function whereEditStands(heads: readonly (number | undefined)[], from: number, to: number): Pick<AnnotationEdit, 'afterHead' | 'beforeHead'> {
   let above = from - 1;
   while (above >= 0 && heads[above] === undefined) above -= 1;
-  return { afterHead: above >= 0 ? heads[above]! : 0, offset: from - above - 1 };
+  let below = to + 1;
+  while (below < heads.length && heads[below] === undefined) below += 1;
+  return { afterHead: above >= 0 ? heads[above]! : 0, beforeHead: below < heads.length ? heads[below]! : 0 };
 }
 
-/** The line now where an edit's text starts, found from the line at head it
- * follows, the way marks are. Moved when rows show that line gone or other
- * text there; null when the rows do not reach it and the whole file is not
- * read. Never searched for elsewhere in the file. */
+/**
+ * The line now where an edit's text starts. It is looked for only between the
+ * lines head has that hold it in, found the way marks are: the nearest still
+ * there at or above the line it followed and at or below the line it
+ * preceded. Moved when the text is not there exactly once; null when the rows
+ * do not reach that span and the whole file is not read.
+ */
 export function editStart(rows: readonly ReviewRow[], edit: AnnotationEdit, whole: boolean): number | 'moved' | null {
-  const nowOfHead = new Map<number, number>();
   const textOfNow = new Map<number, string>();
+  let low = 0;
+  let high = Infinity;
+  let last = 0;
   for (const row of rows) {
     if (row.now === undefined) continue;
     textOfNow.set(row.now, row.text.replace(/\r$/, ''));
-    if (row.head !== undefined) nowOfHead.set(row.head, row.now);
+    last = Math.max(last, row.now);
+    if (row.head === undefined) continue;
+    if (row.head <= edit.afterHead) low = Math.max(low, row.now);
+    if (edit.beforeHead > 0 && row.head >= edit.beforeHead) high = Math.min(high, row.now);
   }
   const unseen = whole ? 'moved' : null;
-  const base = edit.afterHead === 0 ? 0 : nowOfHead.get(edit.afterHead);
-  if (base === undefined) return unseen;
-  const start = base + edit.offset + 1;
+  const end = high === Infinity ? (whole ? last + 1 : Infinity) : high;
+  if (end === Infinity || (!whole && edit.afterHead > 0 && low === 0)) return unseen;
   const wanted = edit.now.split('\n');
-  for (const [index, line] of wanted.entries()) {
-    const text = textOfNow.get(start + index);
-    if (text === undefined) return unseen;
-    if (text !== line) return 'moved';
+  const found: number[] = [];
+  for (let start = low + 1; start + wanted.length <= end; start += 1) {
+    const texts = wanted.map((_, index) => textOfNow.get(start + index));
+    if (texts.some((text) => text === undefined)) return unseen;
+    if (texts.every((text, index) => text === wanted[index])) found.push(start);
   }
-  return start;
+  return found.length === 1 ? found[0] : 'moved';
 }
 
 /** Where an edit's mark shows: under the line now that holds its last line. */

@@ -4,15 +4,17 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import type { ReviewRow } from '../../types/generated';
 
-/** One block of a document stop: its lines now and, when it changed, the whole block it was. */
+/** One block of a document stop: its lines now and, when it changed, the
+ * blocks it was. Blocks deleted just before it show above it. */
 export interface DocBlock {
   from: number;
   to: number;
   source: string;
   kind: string;
   node: RootContent;
-  added: boolean;
+  changed: boolean;
   was: string | null;
+  deletedBefore: string | null;
 }
 
 const parser = unified().use(remarkParse).use(remarkGfm).use(remarkFrontmatter);
@@ -32,59 +34,78 @@ function blockNodes(root: Root): RootContent[] {
   return root.children.flatMap((node): RootContent[] => (node.type === 'list' ? node.children : [node]));
 }
 
-/**
- * The blocks of a document stop's rows: each top-level block, and each item of a
- * list, with the lines it holds now. Removed rows belong to the block of the
- * next line still in the file; a block with added lines or removed lines
- * changed, and its old text is its unchanged lines with the removed ones.
- */
-export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; removedAfter: string | null } {
-  const shown = rows.filter((row) => row.now !== undefined);
-  const source = shown.map((row) => row.text).join('\n');
-  const root = parser.parse(source);
-  const nowOf = (line: number) => shown[line - 1]?.now ?? 0;
-  const blocks: DocBlock[] = blockNodes(root).map((node) => {
+/** The blocks of one side of the rows: each with its source and the rows it holds. */
+function sideBlocks(rows: readonly ReviewRow[]): Array<{ node: RootContent; rows: ReviewRow[]; source: string }> {
+  return blockNodes(parser.parse(rows.map((row) => row.text).join('\n'))).map((node) => {
     const start = node.position?.start.line ?? 1;
     const end = node.position?.end.line ?? start;
-    return {
-      from: nowOf(start),
-      to: nowOf(end),
-      source: shown.slice(start - 1, end).map((row) => row.text).join('\n'),
-      kind: node.type === 'heading' ? `h${node.depth}` : node.type,
-      node,
-      added: false,
-      was: null,
-    };
+    const held = rows.slice(start - 1, end);
+    return { node, rows: held, source: held.map((row) => row.text).join('\n') };
   });
-  const old = new Map<DocBlock, string[]>();
-  const lostRows = new Set<DocBlock>();
-  let next = 0;
-  let removed: string[] = [];
-  for (const row of rows) {
-    if (row.now === undefined) {
-      if (row.kind === '-' && row.text.trim() !== '') removed.push(row.text);
-      continue;
+}
+
+/**
+ * The blocks of a document stop's rows: each top-level block, and each item of
+ * a list, with the lines it holds now. A block now and a block before are one
+ * block when they share an unchanged line, or when nothing but changed or
+ * blank lines stands between the old one and the new one that replaced it. A
+ * block changed when it has an added line, or the block it was has a removed
+ * line; its old text is that whole block. A block before with no block now
+ * was deleted, and shows above the next block, or after the last.
+ */
+export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; removedAfter: string | null } {
+  const now = sideBlocks(rows.filter((row) => row.now !== undefined));
+  const before = sideBlocks(rows.filter((row) => row.old !== undefined));
+  const position = new Map(rows.map((row, index) => [row, index]));
+  const blockOfRow = new Map<ReviewRow, number>();
+  now.forEach((block, index) => block.rows.forEach((row) => blockOfRow.set(row, index)));
+  const blocks: DocBlock[] = now.map(({ node, rows: held, source }) => ({
+    from: held[0]?.now ?? 0,
+    to: held[held.length - 1]?.now ?? 0,
+    source,
+    kind: node.type === 'heading' ? `h${node.depth}` : node.type,
+    node,
+    changed: held.some((row) => row.kind === '+'),
+    was: null,
+    deletedBefore: null,
+  }));
+  const pairs = before.map((old) => [...new Set(old.rows.flatMap((row) => (blockOfRow.has(row) ? [blockOfRow.get(row)!] : [])))]);
+  const pairedNow = new Set(pairs.flat());
+  const span = (held: readonly ReviewRow[]) => [position.get(held[0]) ?? 0, position.get(held[held.length - 1]) ?? 0];
+  now.forEach((block, index) => {
+    if (pairedNow.has(index) || block.rows.length === 0) return;
+    const [first] = span(block.rows);
+    let replaced = -1;
+    before.forEach((old, oldIndex) => {
+      if (pairs[oldIndex].length === 0 && old.rows.length > 0 && span(old.rows)[1] < first) replaced = oldIndex;
+    });
+    if (replaced < 0) return;
+    const between = rows.slice(span(before[replaced].rows)[1] + 1, first);
+    if (between.some((row) => blockOfRow.has(row) || (row.kind === ' ' && row.text.trim() !== ''))) return;
+    pairs[replaced] = [index];
+  });
+  const wasOf = new Map<DocBlock, string[]>();
+  let deleted: string[] = [];
+  before.forEach((old, oldIndex) => {
+    const paired = pairs[oldIndex].map((index) => blocks[index]);
+    if (paired.length === 0) {
+      deleted.push(old.source);
+      return;
     }
-    while (next < blocks.length && blocks[next].to < row.now) next += 1;
-    const block = blocks[next];
-    if (!block) continue;
-    const before = old.get(block) ?? [];
-    if (removed.length > 0) {
-      lostRows.add(block);
-      before.push(...removed);
-      removed = [];
+    const lost = old.rows.some((row) => row.kind === '-');
+    for (const block of paired) {
+      if (lost || paired.length > 1) block.changed = true;
+      wasOf.set(block, [...(wasOf.get(block) ?? []), old.source]);
     }
-    if (row.now >= block.from) {
-      if (row.kind === '+') block.added = true;
-      else before.push(row.text);
+    if (deleted.length > 0) {
+      paired[0].deletedBefore = deleted.join('\n\n');
+      deleted = [];
     }
-    old.set(block, before);
-  }
+  });
   for (const block of blocks) {
-    const before = old.get(block) ?? [];
-    if ((block.added || lostRows.has(block)) && before.length > 0) block.was = before.join('\n');
+    if (block.changed && wasOf.has(block)) block.was = wasOf.get(block)!.join('\n\n');
   }
-  return { blocks, removedAfter: removed.length > 0 ? removed.join('\n') : null };
+  return { blocks, removedAfter: deleted.length > 0 ? deleted.join('\n\n') : null };
 }
 
 /** A word of rendered text with the inline marks around it. */

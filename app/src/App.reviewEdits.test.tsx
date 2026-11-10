@@ -67,9 +67,27 @@ function bundleOf(rows: ReviewRow[], hash: string, linesAbove = 0): ReviewBundle
 }
 
 /** The file on the review's machine: review_file reads it, review_edit writes it while its hash holds. */
+const HEAD = ['package calc', '', 'func Add(a, b int) int {', '\tsum := a + b', '\treturn sum', '}', '', 'const query = `', 'SELECT 1', '`'];
+
+/** Each line's line at head, as the daemon gives it: through the longest run of lines head and now share. */
+function headsOf(lines: readonly string[]): Array<number | undefined> {
+  const table = Array.from({ length: HEAD.length + 1 }, () => Array.from({ length: lines.length + 1 }, () => 0));
+  for (let i = HEAD.length - 1; i >= 0; i -= 1) {
+    for (let j = lines.length - 1; j >= 0; j -= 1) {
+      table[i][j] = HEAD[i] === lines[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+    }
+  }
+  const heads: Array<number | undefined> = lines.map(() => undefined);
+  for (let i = 0, j = 0; i < HEAD.length && j < lines.length;) {
+    if (HEAD[i] === lines[j]) heads[j++] = ++i;
+    else if (table[i + 1][j] >= table[i][j + 1]) i += 1;
+    else j += 1;
+  }
+  return heads;
+}
+
 class ReviewedFile {
-  lines = ['package calc', '', 'func Add(a, b int) int {', '\tsum := a + b', '\treturn sum', '}', '', 'const query = `', 'SELECT 1', '`'];
-  heads: Array<number | undefined> = this.lines.map((_, index) => index + 1);
+  lines = [...HEAD];
   version = 1;
   conflictNext = false;
 
@@ -82,14 +100,12 @@ class ReviewedFile {
   }
 
   rows() {
-    return calcRows(this.lines, this.heads);
+    return calcRows(this.lines, headsOf(this.lines));
   }
 
-  /** Lines written after head, by the user's edit or by the agent: head does not have them. */
+  /** Lines written after head, by the user's edit or by the agent. */
   write(from: number, to: number, text: string) {
-    const written = text.split('\n');
-    this.lines.splice(from - 1, to - from + 1, ...written);
-    this.heads.splice(from - 1, to - from + 1, ...written.map(() => undefined));
+    this.lines.splice(from - 1, to - from + 1, ...text.split('\n'));
     this.version += 1;
   }
 
@@ -168,7 +184,12 @@ async function openReview({ withBundle = true } = {}) {
   const cursorLine = () => tile.querySelector('.review-doc .review-cursor')?.getAttribute('data-line');
   const toRow = async (line: number) => {
     await press('ArrowRight');
-    while (cursorLine() !== String(line)) await press('ArrowDown');
+    const passed: Array<string | null | undefined> = [];
+    while (cursorLine() !== String(line)) {
+      if (passed.length > 40) throw new Error(`the cursor never reached line ${line}; it passed ${passed.join(', ')}`);
+      passed.push(cursorLine());
+      await press(Number(cursorLine()) > line ? 'ArrowUp' : 'ArrowDown');
+    }
   };
   return { ...view, draft, file, tile, show, press, type, editBox, toRow, cursorLine, settle };
 }
@@ -320,6 +341,29 @@ describe('App review edits', () => {
     expect(daemon.sentOf('review_edit')).toHaveLength(2);
     expect(file.lines[5]).toBe('}');
     expect(draft.annotations).toHaveLength(2);
+  });
+
+  it('keeps an edit on its line when the line above is edited and the agent adds lines above both, and u finds it there', async () => {
+    const { tile, press, type, toRow, daemon, show, file } = await openReview();
+    await toRow(5);
+    await press('i');
+    await type('\treturn sum // named');
+    await show();
+    await toRow(4);
+    await press('i');
+    await type('\ttotal := a + b');
+    file.write(1, 1, '// Package calc adds.\npackage calc');
+    await show();
+    expect(within(tile).queryByRole('region', { name: 'Moved notes' })).toBeNull();
+    expect(Array.from(tile.querySelectorAll('.review-doc [data-review-mark]')).map((mark) => mark.textContent)).toEqual([
+      expect.stringContaining('L4Saved to the file. It was: \tsum := a + b'),
+      expect.stringContaining('L5Saved to the file. It was: \treturn sum'),
+    ]);
+
+    await toRow(6);
+    await press('u');
+    expect(daemon.sentOf('review_edit')[2]).toMatchObject({ from: 6, to: 6, text: '\treturn sum' });
+    expect(file.lines.slice(4, 6)).toEqual(['\ttotal := a + b', '\treturn sum']);
   });
 
   it('edits a line of a CRLF file without its carriage return', async () => {

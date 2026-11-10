@@ -75,13 +75,13 @@ export function DocStopRows({ stop }: { stop: ReviewStop }) {
     <div className="review-rows review-doc-blocks">
       {unplaced.map((note) => <NoteRow key={note.line} note={note} />)}
       {blocks.map((block) => {
-        const changed = block.added || block.was !== null;
         const marks = [];
         for (let line = block.from; line <= block.to; line += 1) marks.push(...(reader?.marksByLine.get(markKey(stop.path, line)) ?? []));
         return (
           <Fragment key={block.from}>
+            {block.deletedBefore !== null ? <del className="review-doc-was review-doc-block"><Markdown>{block.deletedBefore}</Markdown></del> : null}
             <div
-              className={`review-doc-block review-doc-block--${block.kind}${changed ? ' review-doc-block--changed' : ''}${block.from <= stop.now_to && block.to >= stop.now_from ? ' review-row--in-range' : ''}`}
+              className={`review-doc-block review-doc-block--${block.kind}${block.changed ? ' review-doc-block--changed' : ''}${block.from <= stop.now_to && block.to >= stop.now_from ? ' review-row--in-range' : ''}`}
               data-review-cursor="block"
               data-cursor-key={`stop:${stop.path}:block:${block.from}`}
               data-path={stop.path}

@@ -758,7 +758,7 @@ export function ReviewReader({
         return;
       }
       const to = editing.from + text.split('\n').length;
-      marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, { was, now: text, ...whereEditStands(editing.heads, editing.from) });
+      marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, { was, now: text, ...whereEditStands(editing.heads, editing.from, editing.to) });
       closeEdit();
       refreshFile(editing.path);
     }, (error: unknown) => setEditing({ ...editing, saving: false, problem: error instanceof Error ? error.message : String(error) }));
