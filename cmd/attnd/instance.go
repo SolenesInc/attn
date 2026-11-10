@@ -340,27 +340,8 @@ func stopAndRemoveInstance(w io.Writer, r instanceResolved, removeApp func(io.Wr
 	if err := outpostssh.ExitInstanceMasters(context.Background(), r.Label); err != nil {
 		return err
 	}
-	workers := ptyworker.ReapDataDir(r.DataDir)
-	reportWorkerReap(w, workers)
-	for _, result := range workers {
-		if result.Outcome != ptyworker.ReapRemoved && result.Outcome != ptyworker.ReapAlreadyGone {
-			return fmt.Errorf("PTY worker for session %s (pid %d) was not stopped (%s): %v; instance data was preserved", result.SessionID, result.WorkerPID, result.Outcome, result.Err)
-		}
-	}
-	sharedHosts := ptyhost.ReapDataDir(r.DataDir)
-	reportProcReap(w, "pty hosts", "generation", sharedHosts)
-	for _, result := range sharedHosts {
-		if result.Outcome != procreap.ReapTerminated && result.Outcome != procreap.ReapAlreadyGone {
-			return fmt.Errorf("shared PTY host %s was not stopped (%s): %v; instance data was preserved", result.ID, result.Outcome, result.Err)
-		}
-	}
-
-	unregistered, err := ptyhost.RunningHostPIDs(r.DataDir)
-	if err != nil {
-		return fmt.Errorf("could not check for shared PTY hosts still running from %s: %w; instance data was preserved", r.DataDir, err)
-	}
-	if len(unregistered) > 0 {
-		return fmt.Errorf("%d shared PTY host(s) still run from %s with no registry to stop them through (pids %v): their terminals and agents would be orphaned; instance data was preserved. Check each PID's command, stop it by PID, and re-run", len(unregistered), r.DataDir, unregistered)
+	if err := stopTerminals(w, r.DataDir); err != nil {
+		return err
 	}
 
 	reportProcReap(w, "plugins", "plugin", plugins.ReapRuntimeProcesses(stepclock.Process(), r.DataDir))
@@ -406,6 +387,48 @@ func stopAndRemoveInstance(w io.Writer, r instanceResolved, removeApp func(io.Wr
 
 	fmt.Fprintf(w, "Cleaned instance %s.\n", r.Label)
 	return nil
+}
+
+func stopTerminals(w io.Writer, dataDir string) error {
+	workers := ptyworker.ReapDataDir(dataDir)
+	reportWorkerReap(w, workers)
+	for _, result := range workers {
+		if result.Outcome != ptyworker.ReapRemoved && result.Outcome != ptyworker.ReapAlreadyGone {
+			return fmt.Errorf("PTY worker for session %s (pid %d) was not stopped (%s): %v; instance data was preserved", result.SessionID, result.WorkerPID, result.Outcome, result.Err)
+		}
+	}
+	sharedHosts := ptyhost.ReapDataDir(dataDir)
+	reportProcReap(w, "pty hosts", "generation", sharedHosts)
+	for _, result := range sharedHosts {
+		if result.Outcome != procreap.ReapTerminated && result.Outcome != procreap.ReapAlreadyGone {
+			return fmt.Errorf("shared PTY host %s was not stopped (%s): %v; instance data was preserved", result.ID, result.Outcome, result.Err)
+		}
+	}
+
+	unregistered, err := ptyhost.RunningHostPIDs(dataDir)
+	if err != nil {
+		return fmt.Errorf("could not check for shared PTY hosts still running from %s: %w; instance data was preserved", dataDir, err)
+	}
+	if len(unregistered) > 0 {
+		return fmt.Errorf("%d shared PTY host(s) still run from %s with no registry to stop them through (pids %v): their terminals and agents would be orphaned; instance data was preserved. Check each PID's command, stop it by PID, and re-run", len(unregistered), dataDir, unregistered)
+	}
+	return nil
+}
+
+func runningTerminalRuntimes(dataDir string) []int {
+	var pids []int
+	for _, path := range ptyhost.HostRegistryPaths(dataDir) {
+		if entry, err := ptyhost.ReadHostRegistry(path); err == nil && entry.HostPID > 0 && procreap.ProcessAlive(entry.HostPID) {
+			pids = append(pids, entry.HostPID)
+		}
+	}
+	workers, _ := filepath.Glob(filepath.Join(dataDir, "workers", "*", "registry", "*.json"))
+	for _, path := range workers {
+		if entry, err := ptyworker.ReadRegistry(path); err == nil && entry.WorkerPID > 0 && procreap.ProcessAlive(entry.WorkerPID) {
+			pids = append(pids, entry.WorkerPID)
+		}
+	}
+	return pids
 }
 
 func removeInstanceApp(w io.Writer, r instanceResolved) error {

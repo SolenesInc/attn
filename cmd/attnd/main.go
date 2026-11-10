@@ -211,8 +211,12 @@ func runDaemonCommand() {
 		runDaemonEnsure()
 	case "stop":
 		setCommandPath("daemon stop")
-		refuseDaemonCommandArgs("stop", os.Args[3:])
-		runDaemonStop()
+		args := os.Args[3:]
+		endTerminals := len(args) == 1 && args[0] == stopTerminalsFlag
+		if !endTerminals {
+			refuseDaemonCommandArgs("stop", args)
+		}
+		runDaemonStop(endTerminals)
 	case "help", "-h", "--help":
 		writeDaemonHelp(os.Stdout)
 	default:
@@ -246,7 +250,10 @@ commands:
   ensure    start the daemon in the background, or restart one that does not
             match this binary, and print the outcome as JSON: status is
             started, already_running or restarted (with a reason)
-  stop      stop the running daemon
+  stop      stop the running daemon. Terminals keep running in their PTY
+            host or workers, so they come back when the daemon starts again
+  stop --terminals
+            stop the daemon and end every terminal and agent of the instance
 
 Both act on the active instance's daemon; attn instance status names it.
 `)
@@ -325,7 +332,9 @@ func runDaemonEnsure() {
 	printJSON(result)
 }
 
-func runDaemonStop() {
+const stopTerminalsFlag = "--terminals"
+
+func runDaemonStop(endTerminals bool) {
 	result, err := daemonctl.Stop(config.PIDPath(), "stop")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon stop error: %v\n", err)
@@ -340,9 +349,19 @@ func runDaemonStop() {
 		} else {
 			fmt.Printf("stopped daemon (pid %d)\n", result.PID)
 		}
+	} else {
+		fmt.Printf("daemon %s\n", result.Note)
+	}
+	if endTerminals {
+		if err := stopTerminals(os.Stdout, config.DataDir()); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon stop: %v\n", err)
+			exit(1)
+		}
 		return
 	}
-	fmt.Printf("daemon %s\n", result.Note)
+	if pids := runningTerminalRuntimes(config.DataDir()); len(pids) > 0 {
+		fmt.Printf("terminals keep running in pids %v so they come back with the daemon; `attn daemon stop %s` ends them\n", pids, stopTerminalsFlag)
+	}
 }
 
 func runList() {

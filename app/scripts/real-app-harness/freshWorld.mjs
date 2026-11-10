@@ -125,30 +125,6 @@ async function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
-async function terminateProcesses({ pids, name, log }) {
-  if (pids.length === 0) {
-    log(`no leaked ${name} processes found`);
-    return;
-  }
-
-  log(`leaked ${name} pids=[${pids.join(', ')}] from a previous run — killing`);
-  for (const pid of pids) {
-    try {
-      process.kill(pid, 'SIGTERM');
-    } catch {
-    }
-  }
-  await sleep(2_000);
-  for (const pid of pids) {
-    try {
-      process.kill(pid, 0);
-      log(`${name} pid=${pid} survived SIGTERM — sending SIGKILL`);
-      process.kill(pid, 'SIGKILL');
-    } catch {
-    }
-  }
-}
-
 export function resetInstanceData({ instance, appPath }) {
   assertFreshWorldTargetSafe({ instance, appPath });
   const result = spawnSync(attnBinaryPath(appPath), ['instance', 'clean', instance, '--keep-app'], {
@@ -176,26 +152,22 @@ export async function ensureFreshWorld({
   log(`quitting app bundle ${bundleId}${appWasRunning ? ' (was running)' : ' (not running)'}`);
   requestAppQuit({ instance, appPath, bundleId });
 
-  let daemonStopped = false;
-  log(`stopping daemon for instance '${instance}'`);
-  const stopResult = spawnSync(attnBinaryPath(appPath), ['daemon', 'stop'], {
+  log(`stopping daemon and terminals for instance '${instance}'`);
+  const stopResult = spawnSync(attnBinaryPath(appPath), ['daemon', 'stop', '--terminals'], {
     env: instanceCliEnv(instance),
     encoding: 'utf8',
   });
-  if (stopResult.error) {
-    log(`daemon stop could not run: ${stopResult.error.message} (continuing — daemon may already be down)`);
-  } else if (stopResult.status === 0) {
-    daemonStopped = true;
-  } else {
-    log(`daemon stop exited ${stopResult.status} (no daemon running is expected here)`);
+  for (const line of `${stopResult.stdout ?? ''}`.split('\n').filter(Boolean)) log(line.trim());
+  if (stopResult.status !== 0) {
+    throw new Error(`fresh-world preflight failed: attn daemon stop --terminals exited ${stopResult.status}: ${stopResult.error?.message ?? stopResult.stderr}`);
   }
-
-  const leaked = processes();
-  const leakedPids = (name) => leaked.filter((entry) => entry.name === name).map((entry) => entry.pid);
-  const leakedWorkerPids = leakedPids('pty-worker');
-  const leakedPtyHostPids = leakedPids('attn-pty-host');
-  await terminateProcesses({ pids: leakedWorkerPids, name: 'pty-worker', log });
-  await terminateProcesses({ pids: leakedPtyHostPids, name: 'attn-pty-host', log });
+  for (const name of ['pty-worker', 'attn-pty-host']) {
+    const leaked = processes().filter((entry) => entry.name === name).map(({ pid }) => pid);
+    if (leaked.length > 0) {
+      throw new Error(`fresh-world preflight failed: ${name} pids=[${leaked.join(', ')}] still run after attn daemon stop --terminals; check each with ps and stop it by pid`);
+    }
+    log(`no leaked ${name} processes found`);
+  }
 
   const deadline = Date.now() + timeoutMs;
   let survivors = processes();
@@ -208,12 +180,6 @@ export async function ensureFreshWorld({
     throw new Error(`fresh-world preflight failed: processes survived cleanup — ${detail}`);
   }
 
-  const summary = {
-    appWasRunning,
-    daemonStopped,
-    leakedWorkersKilled: leakedWorkerPids.length,
-    leakedPtyHostsKilled: leakedPtyHostPids.length,
-  };
-  log(`fresh world ready: appWasRunning=${summary.appWasRunning} daemonStopped=${summary.daemonStopped} leakedWorkersKilled=${summary.leakedWorkersKilled} leakedPtyHostsKilled=${summary.leakedPtyHostsKilled}`);
-  return summary;
+  log(`fresh world ready: appWasRunning=${appWasRunning}`);
+  return { appWasRunning };
 }
