@@ -609,7 +609,6 @@ func (d *Daemon) defineCodeNav(ctx context.Context, msg *protocol.CodeNavDefineM
 	if _, err := d.setSetting(&protocol.SetSettingMessage{Cmd: protocol.CmdSetSetting, Key: key, Value: value}); err != nil {
 		return protocol.CodeNavDefineResult{}, err
 	}
-	d.reportTileDocuments(d.tileDocuments.bumpAll())
 	return protocol.CodeNavDefineResult{Key: key, Origin: origin, Definition: optional(value)}, nil
 }
 

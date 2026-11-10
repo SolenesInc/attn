@@ -68,10 +68,10 @@ function serveFiles(daemon: ScriptedDaemon) {
   }));
 }
 
-async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })]) {
-  const view = await openMarkdownTiles('', { path: DOC, script: serveFiles, initialState: { sessions } });
+async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })], host?: string) {
+  const view = await openMarkdownTiles('', { path: DOC, host, script: serveFiles, initialState: { sessions } });
   const show = async (shown: ReviewBundle) => {
-    view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown });
+    view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown, ...(host ? { host } : {}) });
     await view.daemon.idle();
   };
   await show(review);
@@ -372,6 +372,16 @@ describe('App review navigation', () => {
 
       await press('x');
       expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key, value: 'off' }, { cmd: 'set_setting', key, value: '' }]);
+    });
+
+    it('sets up a review on an outpost on that outpost, and stops offering it there with x', async () => {
+      const { daemon, press } = await openReview(missingGo(), undefined, 'outpost-1');
+      daemon.on('code_nav_setup', () => ({ event: 'code_nav_setup_result' as const, success: true, session_id: 'setup-1' }));
+
+      await press('s');
+      expect(daemon.sentOf('code_nav_setup')).toEqual([expect.objectContaining({ host: 'outpost-1', repository: REPO, language: 'go' })]);
+      await press('x');
+      expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key: `code_review_setup_offer_outpost-1_${REPO}`, value: 'off' }]);
     });
   });
 });

@@ -149,6 +149,9 @@ func (d *Daemon) settingChanged(key, value string) {
 	if key == setting.ActivityEnabled.Key && !parseBooleanSetting(value) {
 		d.clearAllSessionActivity()
 	}
+	if spec, ok := setting.Lookup(key); ok && spec == setting.CodeNavDefinition {
+		d.life.Go("codeNavDefinitionChanged", func() { d.reportTileDocuments(d.tileDocuments.bumpAll()) })
+	}
 	d.publishFact(FactSettingChanged, key, nil)
 	d.codexShared().settingChanged(key)
 }
