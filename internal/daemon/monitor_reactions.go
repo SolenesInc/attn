@@ -7,7 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
+func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View) {
 	if previous.Live.V != view.Live.V {
 		d.publishFact(FactSessionLiveChanged, string(session), nil)
 	}
@@ -17,7 +17,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if previous.TerminalTitle.V != view.TerminalTitle.V {
 		d.publishFact(FactSessionTitleChanged, string(session), nil)
 	}
-	d.reactFileReports(session, previous, view, catchUp)
+	d.reactFileReports(session, previous, view)
 	if view.AssistantWindow.V != previous.AssistantWindow.V {
 		d.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
 	}
@@ -85,13 +85,13 @@ func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {
 	return now.Sequence == before.Sequence && !sessionmonitor.PromptReady(before.State, before.Reason) && sessionmonitor.PromptReady(now.State, now.Reason)
 }
 
-func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
+func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view sessionmonitor.View) {
 	host := d.sessionHost(session)
 	for path, report := range view.SentFiles.Entries {
 		if previous.SentFiles.Entries[path].Same(report) {
 			continue
 		}
-		if catchUp {
+		if report.AwayFromHome {
 			d.store.CatchUpFileActivity(d.sentFileActivity(session, host, path, report.At))
 		} else {
 			d.receiveSentFile(session, path, report.At)
@@ -102,7 +102,7 @@ func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view ses
 			continue
 		}
 		activity := store.FileActivity{Host: host, Path: path, Source: store.FileActivitySourceEdited, SessionID: session, At: report.At}
-		if catchUp {
+		if report.AwayFromHome {
 			d.store.CatchUpFileActivity(activity)
 		} else {
 			d.store.RecordFileActivity(activity)

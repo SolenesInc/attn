@@ -303,7 +303,7 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 	}
 	if len(paths) > 0 {
 		if monitor := d.sessionMonitor(sessionID); monitor != nil {
-			if !monitor.ReportSentFiles(paths, time.Now()) {
+			if !monitor.ReportSentFiles(paths, time.Now(), d.awayFromHome(sessionID)) {
 				d.sendError(conn, "sent file monitor view was not applied")
 				return
 			}

@@ -22,8 +22,9 @@ type KeyedSet[K comparable, V any] struct{ Entries map[K]V }
 // FileReport is the latest time an agent sent or edited a file; Sequence tells
 // one report of the same file from the next.
 type FileReport struct {
-	Sequence uint64
-	At       time.Time
+	Sequence     uint64
+	At           time.Time
+	AwayFromHome bool `json:",omitempty"`
 }
 
 func (r FileReport) Same(other FileReport) bool {

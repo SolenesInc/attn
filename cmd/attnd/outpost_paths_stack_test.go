@@ -10,6 +10,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bridge"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -139,6 +140,7 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	}
 	const gapSent, gapEdited, after = "/proc/self/cwd/gap-sent.md", "/proc/self/cwd/gap-edited.md", "/proc/self/cwd/after.md"
 	disconnectOutpost(pair)
+	awaitOutpostSees(outpost, "off")
 	if err := outpost.Client().RecordFilesEdited(terminal, []string{gapEdited}); err != nil {
 		t.Fatal(err)
 	}
@@ -146,15 +148,19 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	outpost.Stop()
+	viewsHeld := outpost.PauseAt(pausepoint.OutpostViewsSending)
 	outpost.Start()
 	mark := app.EventCount()
 	pair.Reconnect()
 	stopRetries := home.FireTimers(bridge.RetryTimer)
 	defer stopRetries()
 	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, mark)
+	viewsHeld.Await()
+	awaitOutpostSees(outpost, "bridged")
 	if err := outpost.Client().OpenSentFilesFromTerminal(terminal, []string{after}); err != nil {
 		t.Fatal(err)
 	}
+	viewsHeld.Release()
 	awaitOutpostTileContent(app, pair.Host, "# after the gap\n")
 	caughtUp := recents()
 	for _, want := range []struct{ path, source string }{{gapSent, "opened"}, {gapEdited, "edited"}} {
@@ -171,6 +177,7 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	home.Start()
 	app = home.App()
 	outpostStateOnConnect(app, "outpost", protocol.OutpostStateConnected)
+	awaitOutpostSees(outpost, "bridged")
 	if err := outpost.Client().OpenSentFilesFromTerminal(terminal, []string{"/proc/self/cwd/after-restart.md"}); err != nil {
 		t.Fatal(err)
 	}
@@ -194,4 +201,14 @@ func TestAnOutpostsFilesKeepTheirMachineInRecentsAndDrafts(t *testing.T) {
 	}
 
 	t.Logf("recents: %s opened and %s edited on %s, kept after the home's cleanup; %s sent and %s edited while the outpost was away arrived on reconnect after an outpost restart without a tile, and none counted again after a home restart, and all forgotten when the outpost was removed; drafts of %s on %s and on the home stayed separate, and sending the outpost's spent only its own, naming the outpost to the agent", sent, edited, pair.Host, gapSent, gapEdited, notes, pair.Host)
+}
+
+func awaitOutpostSees(outpost *testworld.Stack, state string) {
+	remote := outpost.App()
+	if remote.Initial.Settings["outpost_state"] == state {
+		return
+	}
+	testworld.Await(remote, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
+		return m.Settings["outpost_state"] == state
+	})
 }

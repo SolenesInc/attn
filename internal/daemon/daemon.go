@@ -3623,7 +3623,7 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 	}
 	now := time.Now()
 	if monitor := d.sessionMonitor(sessionID); monitor != nil {
-		if !monitor.ReportEditedFiles(paths, now) {
+		if !monitor.ReportEditedFiles(paths, now, d.awayFromHome(sessionID)) {
 			d.sendError(conn, "edited file monitor view was not applied")
 			return
 		}

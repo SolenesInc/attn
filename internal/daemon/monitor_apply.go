@@ -109,8 +109,6 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 		return false
 	}
 	binding.applied = view
-	firstOnBridge := h.bridge != nil && binding.bridge != h.bridge
-	binding.bridge = h.bridge
 	h.catchUp(session, binding, nil)
 	r.applyMu.Unlock()
 	for _, id := range linked {
@@ -119,7 +117,7 @@ func (h *monitorHome) apply(view sessionmonitor.View, save bool) bool {
 	if _, _, usageChanged := sessionmonitor.CostChange(previous, view); usageChanged {
 		d.publishFact(FactSessionCostChanged, string(session), nil)
 	}
-	d.reactMonitorView(session, previous, view, firstOnBridge)
+	d.reactMonitorView(session, previous, view)
 	return true
 }
 

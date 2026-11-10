@@ -63,6 +63,7 @@ func (d *Daemon) applyMonitorView(ctx context.Context, msg protocol.ApplyMonitor
 }
 
 func (d *Daemon) sendOutpostViews(ctx context.Context, conn *bridge.Conn) {
+	pausepoint.At(pausepoint.OutpostViewsSending)
 	acknowledged := map[protocol.SessionID]sessionmonitor.View{}
 	var retry time.Duration
 	for {

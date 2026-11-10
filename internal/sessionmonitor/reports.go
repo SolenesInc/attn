@@ -47,15 +47,15 @@ func (m *Monitor) ReportPullRequest(id string, link PullRequest) bool {
 	return m.publishAcknowledged(view)
 }
 
-func (m *Monitor) ReportSentFiles(paths []string, at time.Time) bool {
-	return m.reportFiles(&m.sentFiles, paths, at)
+func (m *Monitor) ReportSentFiles(paths []string, at time.Time, away bool) bool {
+	return m.reportFiles(&m.sentFiles, paths, at, away)
 }
 
-func (m *Monitor) ReportEditedFiles(paths []string, at time.Time) bool {
-	return m.reportFiles(&m.editedFiles, paths, at)
+func (m *Monitor) ReportEditedFiles(paths []string, at time.Time, away bool) bool {
+	return m.reportFiles(&m.editedFiles, paths, at, away)
 }
 
-func (m *Monitor) reportFiles(files *map[string]FileReport, paths []string, at time.Time) bool {
+func (m *Monitor) reportFiles(files *map[string]FileReport, paths []string, at time.Time, away bool) bool {
 	if m == nil {
 		return false
 	}
@@ -65,7 +65,7 @@ func (m *Monitor) reportFiles(files *map[string]FileReport, paths []string, at t
 		*files = make(map[string]FileReport)
 	}
 	for _, path := range paths {
-		(*files)[path] = FileReport{Sequence: m.revision + 1, At: at}
+		(*files)[path] = FileReport{Sequence: m.revision + 1, At: at, AwayFromHome: away}
 	}
 	view := m.viewLocked()
 	m.mu.Unlock()

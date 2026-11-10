@@ -212,6 +212,16 @@ func (d *Daemon) outpostSettings() (state, home, lastError string) {
 	return state, home, lastError
 }
 
+func (d *Daemon) awayFromHome(sessionID protocol.SessionID) bool {
+	if !d.monitors().copied(sessionID) {
+		return false
+	}
+	r := &d.outpost
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.state != "bridged"
+}
+
 func listenBridgeSocket(network, path string) (net.Listener, error) {
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return nil, err

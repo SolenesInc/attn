@@ -18,7 +18,6 @@ import (
 
 type monitorBinding struct {
 	copied     bool
-	bridge     *bridge.Conn
 	monitor    *sessionmonitor.Monitor
 	applied    sessionmonitor.View
 	catchUp    *time.Timer
