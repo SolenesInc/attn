@@ -4729,6 +4729,9 @@ type FileActivity struct {
 	// Count corresponds to the JSON schema field "count".
 	Count int `json:"count"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// LastAt corresponds to the JSON schema field "last_at".
 	LastAt string `json:"last_at"`
 
@@ -6619,6 +6622,9 @@ type MarkdownAnnotationsGetMessage struct {
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
 
@@ -6648,6 +6654,9 @@ type MarkdownAnnotationsGetResultMessage struct {
 	// Generation corresponds to the JSON schema field "generation".
 	Generation int `json:"generation"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
 
@@ -6670,6 +6679,9 @@ type MarkdownAnnotationsSaveMessage struct {
 
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
@@ -6706,6 +6718,9 @@ type MarkdownAnnotationsSaveResultMessage struct {
 	// Generation corresponds to the JSON schema field "generation".
 	Generation int `json:"generation"`
 
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`
 
@@ -6728,6 +6743,9 @@ type MarkdownAnnotationsSubmitMessage struct {
 
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// OrphanedIds corresponds to the JSON schema field "orphaned_ids".
 	OrphanedIds []string `json:"orphaned_ids,omitempty,omitzero"`
@@ -6766,6 +6784,9 @@ type MarkdownAnnotationsSubmitResultMessage struct {
 
 	// Generation corresponds to the JSON schema field "generation".
 	Generation *int `json:"generation,omitempty,omitzero"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
 
 	// Path corresponds to the JSON schema field "path".
 	Path *string `json:"path,omitempty,omitzero"`

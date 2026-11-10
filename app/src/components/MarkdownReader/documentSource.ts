@@ -4,6 +4,8 @@ export interface FileMarkdownDocumentSource {
   kind: 'file';
   uri: string;
   path: string;
+  /** The outpost that holds the file; absent for the home. */
+  host?: string;
 }
 
 export interface SeedMarkdownDocumentSource {
@@ -14,16 +16,15 @@ export interface SeedMarkdownDocumentSource {
 
 export type MarkdownDocumentSource = FileMarkdownDocumentSource | SeedMarkdownDocumentSource;
 
-export function markdownFileDocumentUri(path: string): string {
-  return `attn://file/${encodeURIComponent(path)}`;
+export function markdownFileDocumentUri(path: string, host?: string): string {
+  const uri = `attn://file/${encodeURIComponent(path)}`;
+  return host ? `${uri}?host=${encodeURIComponent(host)}` : uri;
 }
 
-export function fileMarkdownSource(path: string): FileMarkdownDocumentSource {
-  return {
-    kind: 'file',
-    uri: markdownFileDocumentUri(path),
-    path,
-  };
+export function fileMarkdownSource(path: string, host?: string): FileMarkdownDocumentSource {
+  return host
+    ? { kind: 'file', uri: markdownFileDocumentUri(path, host), path, host }
+    : { kind: 'file', uri: markdownFileDocumentUri(path), path };
 }
 
 export function seedMarkdownSource(seedId: string): SeedMarkdownDocumentSource {

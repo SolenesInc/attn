@@ -49,7 +49,8 @@ func markdownAnnotationRecipient() Recipient {
 	seed := Use("annotation-markdown.seed", "content/annotations/markdown-seed.md",
 		Bind("seed_id", Input(seedID)), Bind("title", When(flag("has_title"), fragment("title", text("title")))))
 	submit := Use("annotation-markdown.submit", "content/annotations/markdown-submit.md",
-		Bind("subject", Choose(flag("seed"), seed, fragment("file", text("path")))),
+		Bind("subject", Choose(flag("seed"), seed,
+			Choose(Present(text("machine")), fragment("file-on", text("path"), text("machine")), fragment("file", text("path"))))),
 		Bind("count", Input(text("count"))),
 		Bind("pieces", Choose(flag("singular"), fragment("piece"), fragment("pieces"))),
 		Bind("entries", Input(ProducedBy(text("entries"), "annotation-markdown/entry"))),

@@ -4,6 +4,7 @@ import (
 	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/sessionmonitor"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
@@ -16,11 +17,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if previous.TerminalTitle.V != view.TerminalTitle.V {
 		d.publishFact(FactSessionTitleChanged, string(session), nil)
 	}
-	for path, sequence := range view.SentFiles.Entries {
-		if !catchUp && previous.SentFiles.Entries[path] != sequence {
-			d.receiveSentFile(session, path)
-		}
-	}
+	d.reactFileReports(session, previous, view, catchUp)
 	if view.AssistantWindow.V != previous.AssistantWindow.V {
 		d.publishFact(FactSessionAssistantWindowChanged, string(session), nil)
 	}
@@ -86,4 +83,29 @@ func compactingCloseMayPlace(previous, view sessionmonitor.View) bool {
 func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {
 	before, now := previous.State.V, view.State.V
 	return now.Sequence == before.Sequence && !sessionmonitor.PromptReady(before.State, before.Reason) && sessionmonitor.PromptReady(now.State, now.Reason)
+}
+
+func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view sessionmonitor.View, catchUp bool) {
+	host := d.sessionHost(session)
+	for path, report := range view.SentFiles.Entries {
+		if previous.SentFiles.Entries[path].Same(report) {
+			continue
+		}
+		if catchUp {
+			d.store.CatchUpFileActivity(d.sentFileActivity(session, host, path, report.At))
+		} else {
+			d.receiveSentFile(session, path, report.At)
+		}
+	}
+	for path, report := range view.EditedFiles.Entries {
+		if previous.EditedFiles.Entries[path].Same(report) {
+			continue
+		}
+		activity := store.FileActivity{Host: host, Path: path, Source: store.FileActivitySourceEdited, SessionID: session, At: report.At}
+		if catchUp {
+			d.store.CatchUpFileActivity(activity)
+		} else {
+			d.store.RecordFileActivity(activity)
+		}
+	}
 }

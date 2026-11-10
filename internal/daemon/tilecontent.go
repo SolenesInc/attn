@@ -183,9 +183,7 @@ func (d *Daemon) openMarkdownTile(host, path string, callerSessionID protocol.Se
 	if err != nil {
 		return "", "", err
 	}
-	if host == "" {
-		d.store.RecordFileActivity(document.path, store.FileActivitySourceOpened, location.sessionID)
-	}
+	d.store.RecordFileActivity(store.FileActivity{Host: host, Path: document.path, Source: store.FileActivitySourceOpened, SessionID: location.sessionID, At: time.Now()})
 	return desktop.ID, tileID, nil
 }
 
@@ -299,20 +297,21 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 	}
 	if len(paths) > 0 {
 		if monitor := d.sessionMonitor(sessionID); monitor != nil {
-			if !monitor.ReportSentFiles(paths) {
+			if !monitor.ReportSentFiles(paths, time.Now()) {
 				d.sendError(conn, "sent file monitor view was not applied")
 				return
 			}
 		} else {
+			now := time.Now()
 			for _, path := range paths {
-				d.receiveSentFile(sessionID, path)
+				d.receiveSentFile(sessionID, path, now)
 			}
 		}
 	}
 	d.sendOK(conn)
 }
 
-func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
+func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string, at time.Time) {
 	host := d.sessionHost(sessionID)
 	if d.openSentFilesEnabled() {
 		desktopID, tileID, err := d.openMarkdownTile(host, path, sessionID, false)
@@ -322,13 +321,14 @@ func (d *Daemon) receiveSentFile(sessionID protocol.SessionID, path string) {
 		}
 		d.logf("open_sent_files: %s: %v", path, err)
 	}
-	if host != "" {
-		return
-	}
+	d.store.RecordFileActivity(d.sentFileActivity(sessionID, host, path, at))
+}
+
+func (d *Daemon) sentFileActivity(sessionID protocol.SessionID, host, path string, at time.Time) store.FileActivity {
 	if location, err := d.currentAgent(sessionID); err == nil {
 		sessionID = location.sessionID
 	}
-	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, sessionID)
+	return store.FileActivity{Host: host, Path: path, Source: store.FileActivitySourceOpened, SessionID: sessionID, At: at}
 }
 
 func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdownMessage) {

@@ -3583,6 +3583,7 @@ func (d *Daemon) projectRateLimited(ev bus.Event) {
 
 func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessage) {
 	sessionID := d.sessionInTerminal(msg.ID)
+	var paths []string
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		if !filepath.IsAbs(path) {
@@ -3590,10 +3591,23 @@ func (d *Daemon) handleFilesEdited(conn net.Conn, msg *protocol.FilesEditedMessa
 		}
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".md", ".markdown":
-		default:
-			continue
+			paths = append(paths, path)
 		}
-		d.store.RecordFileActivity(path, store.FileActivitySourceEdited, sessionID)
+	}
+	if len(paths) == 0 {
+		d.sendOK(conn)
+		return
+	}
+	now := time.Now()
+	if monitor := d.sessionMonitor(sessionID); monitor != nil {
+		if !monitor.ReportEditedFiles(paths, now) {
+			d.sendError(conn, "edited file monitor view was not applied")
+			return
+		}
+	} else {
+		for _, path := range paths {
+			d.store.RecordFileActivity(store.FileActivity{Path: path, Source: store.FileActivitySourceEdited, SessionID: sessionID, At: now})
+		}
 	}
 	d.sendOK(conn)
 }

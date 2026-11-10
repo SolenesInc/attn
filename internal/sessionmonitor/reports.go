@@ -47,17 +47,25 @@ func (m *Monitor) ReportPullRequest(id string, link PullRequest) bool {
 	return m.publishAcknowledged(view)
 }
 
-func (m *Monitor) ReportSentFiles(paths []string) bool {
+func (m *Monitor) ReportSentFiles(paths []string, at time.Time) bool {
+	return m.reportFiles(&m.sentFiles, paths, at)
+}
+
+func (m *Monitor) ReportEditedFiles(paths []string, at time.Time) bool {
+	return m.reportFiles(&m.editedFiles, paths, at)
+}
+
+func (m *Monitor) reportFiles(files *map[string]FileReport, paths []string, at time.Time) bool {
 	if m == nil {
 		return false
 	}
 	m.mu.Lock()
-	m.sentFiles = maps.Clone(m.sentFiles)
-	if m.sentFiles == nil {
-		m.sentFiles = make(map[string]uint64)
+	*files = maps.Clone(*files)
+	if *files == nil {
+		*files = make(map[string]FileReport)
 	}
 	for _, path := range paths {
-		m.sentFiles[path] = m.revision + 1
+		(*files)[path] = FileReport{Sequence: m.revision + 1, At: at}
 	}
 	view := m.viewLocked()
 	m.mu.Unlock()

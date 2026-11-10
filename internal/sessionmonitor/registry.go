@@ -100,7 +100,8 @@ type Monitor struct {
 	directory            string
 	branch               attngit.BranchInfo
 	pullRequests         map[string]PullRequest
-	sentFiles            map[string]uint64
+	sentFiles            map[string]FileReport
+	editedFiles          map[string]FileReport
 	harnessTitle         string
 	terminalTitle        string
 	exit                 *Exit

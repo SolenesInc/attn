@@ -100,6 +100,7 @@ interface DocumentOptions {
   generation?: number;
   tiles?: string[];
   path?: string;
+  host?: string;
   getReply?: 'answer' | 'hold' | 'fail';
 }
 
@@ -109,11 +110,13 @@ async function openDocument({
   generation = 5,
   tiles = ['tile-a'],
   path = `/tmp/doc-${++documentCount}.md`,
+  host,
   getReply = 'answer',
 }: DocumentOptions = {}) {
   const draft = new StoredDraft(annotations, generation);
   const view = await openMarkdownTiles(content, {
     path,
+    host,
     tileIds: tiles,
     session: { state: 'idle' },
     script: (daemon) => {
@@ -278,6 +281,18 @@ describe('App markdown annotations', () => {
     expect(daemon.sentOf('markdown_annotations_get')).toEqual([
       expect.objectContaining({ document_uri: 'attn://file/%2Ftmp%2Fa%20plan.md', path: '/tmp/a plan.md' }),
     ]);
+  });
+
+  it('annotates an outpost document under its machine, apart from the home file at the same path', async () => {
+    const { daemon, reader } = await openDocument({ path: '/tmp/plan.md', host: 'outpost-1' });
+    await select(daemon, reader(), 'target words');
+    fireEvent.click(toolbarButton('Delete'));
+    await settleSaves(daemon);
+
+    const identity = { document_uri: 'attn://file/%2Ftmp%2Fplan.md?host=outpost-1', source_kind: 'file', path: '/tmp/plan.md', host: 'outpost-1' };
+    expect(daemon.sentOf('markdown_annotations_get')).toEqual([expect.objectContaining(identity)]);
+    expect(daemon.sentOf('markdown_annotations_save')).toEqual([expect.objectContaining(identity)]);
+    expect(paintedMarks(reader())).toEqual(['target words']);
   });
 });
 

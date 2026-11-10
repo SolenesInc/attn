@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "86e0a3c826ba";
+pub const PROTOCOL_VERSION: &str = "7e2b5e70aa95";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4454,6 +4454,8 @@ impl FetchRemotesResultMessage {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FileActivity {
     pub count: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     pub last_at: String,
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6308,6 +6310,8 @@ pub struct MarkdownAnnotationsGetMessage {
     pub cmd: String,
     pub document_uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     pub request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6334,6 +6338,8 @@ pub struct MarkdownAnnotationsGetResultMessage {
     pub event: String,
     pub generation: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     pub request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6355,6 +6361,8 @@ impl MarkdownAnnotationsGetResultMessage {
 pub struct MarkdownAnnotationsSaveMessage {
     pub cmd: String,
     pub document_uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     #[serde(deserialize_with = "null_as_default")]
@@ -6386,6 +6394,8 @@ pub struct MarkdownAnnotationsSaveResultMessage {
     pub event: String,
     pub generation: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     pub request_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6407,6 +6417,8 @@ impl MarkdownAnnotationsSaveResultMessage {
 pub struct MarkdownAnnotationsSubmitMessage {
     pub cmd: String,
     pub document_uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub orphaned_ids: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -6440,6 +6452,8 @@ pub struct MarkdownAnnotationsSubmitResultMessage {
     pub event: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
     pub request_id: String,

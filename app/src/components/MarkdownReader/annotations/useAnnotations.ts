@@ -117,6 +117,7 @@ export function useAnnotations({
   const sourceUri = source.uri;
   const sourceKind = source.kind;
   const sourcePath = source.kind === 'file' ? source.path : '';
+  const sourceHost = source.kind === 'file' ? source.host : undefined;
   const sourceSeedId = source.kind === 'seed' ? source.seedId : '';
   const generationRef = useRef(0);
   const syncedRef = useRef<SyncedMarks>(new Map());
@@ -453,6 +454,7 @@ export function useAnnotations({
         kind: 'file',
         uri: sourceUri,
         path: sourcePath,
+        ...(sourceHost && { host: sourceHost }),
       }
       : {
         kind: 'seed',
@@ -489,6 +491,7 @@ export function useAnnotations({
     sourceUri,
     sourceKind,
     sourcePath,
+    sourceHost,
     sourceSeedId,
     enabled,
     hydrate,

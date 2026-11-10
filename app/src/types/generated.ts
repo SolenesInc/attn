@@ -4975,6 +4975,7 @@ export enum FetchRemotesResultMessageEvent {
 
 export interface FileActivity {
     count:       number;
+    host?:       string;
     last_at:     string;
     path:        string;
     session_id?: string;
@@ -7088,6 +7089,7 @@ export interface MarkdownAnnotationAnchor {
 export interface MarkdownAnnotationsGetMessage {
     cmd:          MarkdownAnnotationsGetMessageCmd;
     document_uri: string;
+    host?:        string;
     path?:        string;
     request_id:   string;
     seed_id?:     string;
@@ -7105,6 +7107,7 @@ export interface MarkdownAnnotationsGetResultMessage {
     error?:       string;
     event:        MarkdownAnnotationsGetResultMessageEvent;
     generation:   number;
+    host?:        string;
     path?:        string;
     request_id:   string;
     seed_id?:     string;
@@ -7132,6 +7135,7 @@ export enum MarkdownAnnotationsGetResultMessageEvent {
 export interface MarkdownAnnotationsSaveMessage {
     cmd:          MarkdownAnnotationsSaveMessageCmd;
     document_uri: string;
+    host?:        string;
     path?:        string;
     removed_ids:  string[];
     request_id:   string;
@@ -7151,6 +7155,7 @@ export interface MarkdownAnnotationsSaveResultMessage {
     error?:       string;
     event:        MarkdownAnnotationsSaveResultMessageEvent;
     generation:   number;
+    host?:        string;
     path?:        string;
     request_id:   string;
     seed_id?:     string;
@@ -7166,6 +7171,7 @@ export enum MarkdownAnnotationsSaveResultMessageEvent {
 export interface MarkdownAnnotationsSubmitMessage {
     cmd:                MarkdownAnnotationsSubmitMessageCmd;
     document_uri:       string;
+    host?:              string;
     orphaned_ids?:      string[];
     path?:              string;
     request_id:         string;
@@ -7186,6 +7192,7 @@ export interface MarkdownAnnotationsSubmitResultMessage {
     error?:             string;
     event:              MarkdownAnnotationsSubmitResultMessageEvent;
     generation?:        number;
+    host?:              string;
     path?:              string;
     request_id:         string;
     seed_id?:           string;
@@ -8835,6 +8842,7 @@ export enum RecentFilesResultMessageEvent {
 
 export interface FileElement {
     count:       number;
+    host?:       string;
     last_at:     string;
     path:        string;
     session_id?: string;
@@ -23658,6 +23666,7 @@ const typeMap: any = {
     ], "any"),
     "FileActivity": o([
         { json: "count", js: "count", typ: 0 },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "last_at", js: "last_at", typ: "" },
         { json: "path", js: "path", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
@@ -24997,6 +25006,7 @@ const typeMap: any = {
     "MarkdownAnnotationsGetMessage": o([
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsGetMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
@@ -25008,6 +25018,7 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("MarkdownAnnotationsGetResultMessageEvent") },
         { json: "generation", js: "generation", typ: 0 },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
@@ -25027,6 +25038,7 @@ const typeMap: any = {
     "MarkdownAnnotationsSaveMessage": o([
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsSaveMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "removed_ids", js: "removed_ids", typ: a("") },
         { json: "request_id", js: "request_id", typ: "" },
@@ -25040,6 +25052,7 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("MarkdownAnnotationsSaveResultMessageEvent") },
         { json: "generation", js: "generation", typ: 0 },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
@@ -25049,6 +25062,7 @@ const typeMap: any = {
     "MarkdownAnnotationsSubmitMessage": o([
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsSubmitMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "orphaned_ids", js: "orphaned_ids", typ: u(undefined, a("")) },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
@@ -25063,6 +25077,7 @@ const typeMap: any = {
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("MarkdownAnnotationsSubmitResultMessageEvent") },
         { json: "generation", js: "generation", typ: u(undefined, 0) },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "path", js: "path", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
@@ -26015,6 +26030,7 @@ const typeMap: any = {
     ], "any"),
     "FileElement": o([
         { json: "count", js: "count", typ: 0 },
+        { json: "host", js: "host", typ: u(undefined, "") },
         { json: "last_at", js: "last_at", typ: "" },
         { json: "path", js: "path", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },

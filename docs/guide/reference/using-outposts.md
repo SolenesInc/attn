@@ -150,7 +150,12 @@ open a markdown tile that reads the file on the outpost. Edits on the outpost
 reach the tile, and its relative images load from the outpost. A link to
 another markdown file opens that file from the outpost; other local links name
 the outpost and don't open. A file with the same path on the Mac is never shown.
-Annotations are off in these tiles for now.
+Annotations in these tiles belong to the outpost's file, apart from any Mac
+file with the same path.
+
+Markdown files an outpost agent sends or edits show in the file opener (Cmd+P)
+with the outpost's name, also those from while the outpost was away, and open
+on the outpost. The Mac never checks or forgets them on its own disk.
 
 Other files on an outpost don't open on the Mac yet. **Open in editor** and
 Cmd-clicked paths in an outpost shell fail and name the outpost, and nothing

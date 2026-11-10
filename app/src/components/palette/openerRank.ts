@@ -4,6 +4,14 @@ export interface OpenerFile {
   absPath: string;
   label: string;
   recentAt?: string;
+  /** The outpost that holds the file; absent for the home. */
+  host?: string;
+}
+
+export interface OpenerRecent {
+  path: string;
+  lastAt: string;
+  host?: string;
 }
 
 // Enough to win ties and near-ties against an equally good match you've never opened, not
@@ -15,17 +23,19 @@ function joinRoot(root: string, rel: string): string {
 }
 
 export function mergeOpenerFiles(
-  recents: { path: string; lastAt: string }[],
+  recents: OpenerRecent[],
   root: string | null,
   indexFiles: string[],
 ): OpenerFile[] {
   const prefix = root ? (root.endsWith('/') ? root : `${root}/`) : null;
-  const merged: OpenerFile[] = recents.map((recent) => ({
-    absPath: recent.path,
-    label: prefix && recent.path.startsWith(prefix) ? recent.path.slice(prefix.length) : recent.path,
-    recentAt: recent.lastAt,
-  }));
-  const seen = new Set(merged.map((file) => file.absPath));
+  const merged: OpenerFile[] = recents.map((recent) => (recent.host
+    ? { absPath: recent.path, label: recent.path, recentAt: recent.lastAt, host: recent.host }
+    : {
+      absPath: recent.path,
+      label: prefix && recent.path.startsWith(prefix) ? recent.path.slice(prefix.length) : recent.path,
+      recentAt: recent.lastAt,
+    }));
+  const seen = new Set(merged.filter((file) => !file.host).map((file) => file.absPath));
   if (!root) return merged;
   for (const rel of indexFiles) {
     const absPath = joinRoot(root, rel);

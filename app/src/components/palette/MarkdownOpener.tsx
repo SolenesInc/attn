@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Palette } from './Palette';
 import { finderBasename } from './rank';
-import { mergeOpenerFiles, rankOpenerFiles } from './openerRank';
+import { mergeOpenerFiles, rankOpenerFiles, type OpenerRecent } from './openerRank';
+import { useSessionStore } from '../../store/sessions';
 import { isPathQuery, toBrowseInput, descendQuery } from './pathMode';
 import { useFilesystemSuggestions } from '../../hooks/useFilesystemSuggestions';
 import type { BrowseDirectoryResult } from '../../hooks/useDaemonSocket';
@@ -10,10 +11,10 @@ export const OPENER_EXTENSIONS = ['md'];
 
 export interface MarkdownOpenerProps {
   root: string | null;
-  loadRecents: () => Promise<{ path: string; lastAt: string }[]>;
+  loadRecents: () => Promise<OpenerRecent[]>;
   loadIndex: (root: string) => Promise<{ files: string[]; truncated: boolean }>;
   browseDirectory?: (inputPath: string, extensions?: string[]) => Promise<BrowseDirectoryResult>;
-  onPick: (absPath: string) => void;
+  onPick: (absPath: string, host?: string) => void;
   onClose: () => void;
 }
 
@@ -23,11 +24,13 @@ interface OpenerRow {
   path: string;
   isDir: boolean;
   target: string;
+  host?: string;
 }
 
 export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, onPick, onClose }: MarkdownOpenerProps) {
   const [query, setQuery] = useState('');
-  const [recents, setRecents] = useState<{ path: string; lastAt: string }[]>([]);
+  const [recents, setRecents] = useState<OpenerRecent[]>([]);
+  const outposts = useSessionStore((state) => state.outposts);
   const [indexFiles, setIndexFiles] = useState<string[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [indexLoading, setIndexLoading] = useState(!!root);
@@ -75,13 +78,14 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
   );
   const fuzzyRows = useMemo<OpenerRow[]>(
     () => rankOpenerFiles(candidates, query).map((file) => ({
-      key: file.absPath,
+      key: file.host ? `${file.host}:${file.absPath}` : file.absPath,
       title: finderBasename(file.label),
-      path: file.label,
+      path: file.host ? `${file.label} on ${outposts.find((row) => row.id === file.host)?.name ?? file.host}` : file.label,
       isDir: false,
       target: file.absPath,
+      ...(file.host && { host: file.host }),
     })),
-    [candidates, query],
+    [candidates, query, outposts],
   );
   const pathRows = useMemo<OpenerRow[]>(
     () => suggestions.map((entry) => ({
@@ -117,7 +121,7 @@ export function MarkdownOpener({ root, loadRecents, loadIndex, browseDirectory, 
       emptyLabel={emptyLabel}
       onPick={(row) => {
         if (row.isDir) setQuery(row.target);
-        else onPick(row.target);
+        else onPick(row.target, row.host);
       }}
       onClose={onClose}
       renderItem={(row) => (

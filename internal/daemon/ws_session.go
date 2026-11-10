@@ -85,7 +85,7 @@ const recentFileStatDeadline = 500 * time.Millisecond
 func (d *Daemon) forgetUnopenableRecentFiles() {
 	d.recentFilePruneGate <- struct{}{}
 	defer func() { <-d.recentFilePruneGate }()
-	paths := d.store.FileActivityPaths()
+	paths := d.store.HomeFileActivityPaths()
 	if len(paths) == 0 {
 		return
 	}
@@ -122,5 +122,5 @@ collect:
 			break collect
 		}
 	}
-	d.store.DeleteFileActivity(unopenable...)
+	d.store.DeleteHomeFileActivity(unopenable...)
 }

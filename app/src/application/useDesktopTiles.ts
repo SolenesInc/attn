@@ -45,7 +45,7 @@ export function useDesktopTiles({ settings, sessions, contextSessionId, showErro
   const loadOpenerRecents = useCallback(
     () =>
       sendRecentFiles(50, markdownOpenerTarget.root || undefined).then((files) =>
-        files.map((file) => ({ path: file.path, lastAt: file.lastAt })),
+        files.map((file) => ({ path: file.path, lastAt: file.lastAt, ...(file.host && { host: file.host }) })),
       ),
     [sendRecentFiles, markdownOpenerTarget.root],
   );

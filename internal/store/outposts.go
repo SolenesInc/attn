@@ -66,8 +66,10 @@ func (s *Store) DeleteOutpost(id string) error {
 	if err := outpostWriteResult(id, result, err); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`DELETE FROM outpost_outbox WHERE host=?`, id); err != nil {
-		return err
+	for _, table := range []string{"outpost_outbox", "file_activity", "recent_locations", "markdown_annotation_drafts"} {
+		if _, err := tx.Exec(`DELETE FROM `+table+` WHERE host=?`, id); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

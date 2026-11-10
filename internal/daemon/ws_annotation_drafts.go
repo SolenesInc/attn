@@ -180,10 +180,10 @@ func sessionAnnotationDraftAccessors(s *store.Store) annotationDraftAccessors {
 	}
 }
 
-func markdownAnnotationDraftAccessors(s *store.Store) annotationDraftAccessors {
+func markdownAnnotationDraftAccessors(s *store.Store, host string) annotationDraftAccessors {
 	return annotationDraftAccessors{
-		get: func(key string) (annotationDraft, error) {
-			draft, err := s.GetMarkdownAnnotationDraft(key)
+		get: func(path string) (annotationDraft, error) {
+			draft, err := s.GetMarkdownAnnotationDraft(store.HostPath{Host: host, Path: path})
 			if err != nil {
 				return annotationDraft{}, err
 			}

@@ -119,7 +119,7 @@ export function DesktopDockTile({
   // params: the 700ms autosave debounce would otherwise lose an in-flight edit.
   const notebookSurfaceRef = useRef<NotebookSurfaceHandle | null>(null);
 
-  const isAnnotatedDocument = (isMarkdown && !documentHost) || isSeed;
+  const isAnnotatedDocument = isMarkdown || isSeed;
   const seedNavigation = useSeedTileNavigation({
     isSeed,
     persistedPath,
@@ -139,8 +139,8 @@ export function DesktopDockTile({
     seedArrival,
   } = seedNavigation;
   const documentSource = useMemo(
-    () => (isSeed ? seedMarkdownSource(path) : fileMarkdownSource(path)),
-    [isSeed, path],
+    () => (isSeed ? seedMarkdownSource(path) : fileMarkdownSource(path, documentHost)),
+    [isSeed, path, documentHost],
   );
   const annotations = useTileAnnotations({
     desktopId,
@@ -352,7 +352,7 @@ function MarkdownBody({
     <MarkdownReader
       content={content.content}
       source={source}
-      annotationsEnabled={!host}
+      annotationsEnabled
       onAnnotationsCountChange={onAnnotationsCountChange}
       annotationsSendRef={annotationsSendRef}
       loadLocalImage={loadImage}

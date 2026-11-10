@@ -19,6 +19,17 @@ type Key struct {
 type Value[T any] struct{ V T }
 type KeyedSet[K comparable, V any] struct{ Entries map[K]V }
 
+// FileReport is the latest time an agent sent or edited a file; Sequence tells
+// one report of the same file from the next.
+type FileReport struct {
+	Sequence uint64
+	At       time.Time
+}
+
+func (r FileReport) Same(other FileReport) bool {
+	return r.Sequence == other.Sequence && r.At.Equal(other.At)
+}
+
 type PullRequest struct {
 	Repository string
 	Number     int
@@ -122,7 +133,8 @@ type View struct {
 	Driver              Value[DriverMetadata]                      `fact:"session.state.changed"`
 	Branch              Value[attngit.BranchInfo]                  `fact:"session.branch.changed"`
 	PullRequests        KeyedSet[string, PullRequest]              `fact:"session.pull_request.changed"`
-	SentFiles           KeyedSet[string, uint64]                   `fact:"-"`
+	SentFiles           KeyedSet[string, FileReport]               `fact:"-"`
+	EditedFiles         KeyedSet[string, FileReport]               `fact:"-"`
 	HarnessTitle        Value[string]                              `fact:"session.renamed"`
 	TerminalTitle       Value[string]                              `fact:"session.title.changed"`
 	LastSeen            Value[time.Time]                           `fact:"-"`
@@ -172,7 +184,8 @@ func (m *Monitor) snapshotLocked() View {
 		NotificationStop:    Value[bool]{m.notificationStopLocked()},
 		Branch:              Value[attngit.BranchInfo]{m.branch},
 		PullRequests:        KeyedSet[string, PullRequest]{Entries: m.pullRequests},
-		SentFiles:           KeyedSet[string, uint64]{Entries: m.sentFiles},
+		SentFiles:           KeyedSet[string, FileReport]{Entries: m.sentFiles},
+		EditedFiles:         KeyedSet[string, FileReport]{Entries: m.editedFiles},
 		HarnessTitle:        Value[string]{m.harnessTitle},
 		TerminalTitle:       Value[string]{m.terminalTitle},
 		LastSeen:            Value[time.Time]{m.touchedAt},

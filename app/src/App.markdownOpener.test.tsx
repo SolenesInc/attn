@@ -5,6 +5,7 @@ import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const NOTEBOOK_ROOT = '/notebook';
+const STUDIO = { id: 'studio', name: 'Studio', destination: 'studio:2200', state: 'connected' as const, reach: 'reachable' as const, state_since: '2026-10-18T18:00:00Z' };
 const RECENTS = [
   { path: '/repo/docs/plan.md', last_at: '2026-07-24T10:00:00Z', count: 3, source: 'open' },
   { path: '/other/journal.md', last_at: '2026-07-23T10:00:00Z', count: 1, source: 'open' },
@@ -18,8 +19,14 @@ function desktopFor(session: DaemonSession, tiles: Array<{ tile_id: string; tile
   );
 }
 
-function serveOpener(daemon: ScriptedDaemon, index: { files: string[]; truncated?: boolean } | 'hold' = { files: ['docs/design.md', 'README.md', 'docs/plan.md'] }) {
-  daemon.on('recent_files', () => ({ event: 'recent_files_result', success: true, files: RECENTS }));
+type Recent = (typeof RECENTS)[number] & { host?: string };
+
+function serveOpener(
+  daemon: ScriptedDaemon,
+  index: { files: string[]; truncated?: boolean } | 'hold' = { files: ['docs/design.md', 'README.md', 'docs/plan.md'] },
+  recents: Recent[] = RECENTS,
+) {
+  daemon.on('recent_files', () => ({ event: 'recent_files_result', success: true, files: recents }));
   daemon.on('fs_index', ({ root }) => (
     index === 'hold' ? undefined : { event: 'fs_index_result', success: true, root: root!, files: index.files, truncated: index.truncated ?? false }
   ));
@@ -41,9 +48,10 @@ interface OpenerOptions {
   session?: DaemonSession | null;
   notebookRoot?: string;
   index?: Parameters<typeof serveOpener>[1];
+  recents?: Recent[];
 }
 
-async function openOpener({ session = daemonSession('s1', { directory: '/repo' }), notebookRoot = NOTEBOOK_ROOT, index }: OpenerOptions = {}) {
+async function openOpener({ session = daemonSession('s1', { directory: '/repo' }), notebookRoot = NOTEBOOK_ROOT, index, recents }: OpenerOptions = {}) {
   const view = await renderApp({
     initialState: {
       settings: notebookRoot ? { 'notebook.root.effective': notebookRoot } : {},
@@ -51,7 +59,9 @@ async function openOpener({ session = daemonSession('s1', { directory: '/repo' }
       desktops: session ? [desktopFor(session)] : [],
     },
   });
-  serveOpener(view.daemon, index);
+  serveOpener(view.daemon, index, recents);
+  view.daemon.emit({ event: 'outposts_updated', outposts: [STUDIO] });
+  await view.daemon.idle();
   if (session) {
     fireEvent.click(screen.getByRole('button', { name: `Open ${session.id}` }));
     await view.daemon.idle();
@@ -109,6 +119,18 @@ describe('App markdown opener', () => {
 
     expect(daemon.sentOf('open_markdown')).toEqual([expect.objectContaining({ path: '/other/journal.md', session_id: 's1' })]);
     expect(screen.queryByRole('dialog', { name: 'Open a markdown file' })).toBeNull();
+  });
+
+  it('lists an outpost’s recent file with its machine, apart from the home file at the same path, and opens it there', async () => {
+    const { daemon } = await openOpener({ recents: [
+      { path: '/repo/docs/plan.md', last_at: '2026-07-24T10:00:00Z', count: 3, source: 'open', host: 'studio' },
+      { path: '/repo/docs/plan.md', last_at: '2026-07-23T10:00:00Z', count: 1, source: 'open' },
+    ] });
+
+    expect(rows()).toEqual(['plan.md/repo/docs/plan.md on Studio', 'plan.mddocs/plan.md']);
+    await press(daemon, 'Enter');
+
+    expect(daemon.sentOf('open_markdown')).toEqual([expect.objectContaining({ path: '/repo/docs/plan.md', session_id: 's1', host: 'studio' })]);
   });
 
   it('keeps the highlight on a row that still exists as the list shrinks, and opens nothing when nothing matches', async () => {

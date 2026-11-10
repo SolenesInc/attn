@@ -502,6 +502,7 @@ model FileActivity {
   last_at: string;      // ISO timestamp
   count: int32;
   session_id?: SessionID;  // the session in play at the time, when known
+  host?: string;           // the outpost that holds the file; absent for the home
 }
 
 model DirectoryEntry {
@@ -2989,6 +2990,8 @@ model MarkdownAnnotationsGetMessage {
   // file | seed. Typed fields below are the authority the daemon acts on.
   source_kind: string;
   path?: string;
+  // The outpost that holds a file source; absent for the home.
+  host?: string;
   seed_id?: string;
   request_id: string;
 }
@@ -3003,6 +3006,7 @@ model MarkdownAnnotationsGetResultMessage {
   success: boolean;
   error?: string;
   path?: string;
+  host?: string;
   annotations: MarkdownAnnotation[];
   generation: int32;
 }
@@ -3015,6 +3019,7 @@ model MarkdownAnnotationsSaveMessage {
   document_uri: string;
   source_kind: string;
   path?: string;
+  host?: string;
   seed_id?: string;
   upserts: MarkdownAnnotation[];
   removed_ids: string[];
@@ -3031,6 +3036,7 @@ model MarkdownAnnotationsSaveResultMessage {
   success: boolean;
   error?: string;
   path?: string;
+  host?: string;
   annotations: MarkdownAnnotation[];
   generation: int32;
 }
@@ -3043,6 +3049,7 @@ model MarkdownAnnotationsSubmitMessage {
   document_uri: string;
   source_kind: string;
   path?: string;
+  host?: string;
   seed_id?: string;
   // Exactly one typed destination. A seed destination appends the formatted
   // feedback to its log; a session destination delivers it to the agent.
@@ -3069,6 +3076,7 @@ model MarkdownAnnotationsSubmitResultMessage {
   document_uri: string;
   source_kind: string;
   path?: string;
+  host?: string;
   seed_id?: string;
   target_session_id?: SessionID;
   target_seed_id?: string;

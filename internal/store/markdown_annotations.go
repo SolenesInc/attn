@@ -13,30 +13,35 @@ import (
 )
 
 type MarkdownAnnotationDraft struct {
+	Host        string
 	Path        string
 	Annotations string
 	Generation  int
 	UpdatedAt   string
 }
 
-func (s *Store) GetMarkdownAnnotationDraft(path string) (*MarkdownAnnotationDraft, error) {
-	draft, err := markdownDraftTable.get(s, path)
-	if err != nil {
-		return nil, err
+func (s *Store) GetMarkdownAnnotationDraft(key HostPath) (*MarkdownAnnotationDraft, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	draft := &MarkdownAnnotationDraft{Host: key.Host, Path: key.Path, Annotations: "[]"}
+	var generation, tombstone int
+	err := s.db.QueryRow("SELECT annotations_json, generation, tombstone_generation, updated_at FROM markdown_annotation_drafts WHERE host = ? AND path = ?", key.Host, key.Path).
+		Scan(&draft.Annotations, &generation, &tombstone, &draft.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return draft, nil
 	}
-	return &MarkdownAnnotationDraft{
-		Path:        path,
-		Annotations: draft.Annotations,
-		Generation:  draft.Generation,
-		UpdatedAt:   draft.UpdatedAt,
-	}, nil
+	if err != nil {
+		return nil, fmt.Errorf("failed to get markdown_annotation_drafts draft: %w", err)
+	}
+	draft.Generation = max(generation, tombstone)
+	return draft, nil
 }
 
 // ChangeMarkdownAnnotations applies one reader's changes to whatever the draft
 // holds now, so marks the reader did not change stay. It returns the draft as it
 // then stands.
-func (s *Store) ChangeMarkdownAnnotations(path string, upserts []protocol.MarkdownAnnotation, removedIDs []string, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
-	return s.rewriteMarkdownDraft(path, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+func (s *Store) ChangeMarkdownAnnotations(key HostPath, upserts []protocol.MarkdownAnnotation, removedIDs []string, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
+	return s.rewriteMarkdownDraft(key, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
 		return withUpserts(withoutIDs(marks, removedIDs), upserts)
 	})
 }
@@ -44,13 +49,13 @@ func (s *Store) ChangeMarkdownAnnotations(path string, upserts []protocol.Markdo
 // SpendMarkdownAnnotations removes the marks a send delivered from whatever the
 // draft holds now, so marks saved while the send was under way stay. It returns
 // the draft as it then stands.
-func (s *Store) SpendMarkdownAnnotations(path string, sent []protocol.MarkdownAnnotation, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
-	return s.rewriteMarkdownDraft(path, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
+func (s *Store) SpendMarkdownAnnotations(key HostPath, sent []protocol.MarkdownAnnotation, now time.Time) ([]protocol.MarkdownAnnotation, int, error) {
+	return s.rewriteMarkdownDraft(key, now, func(marks []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
 		return withoutDelivered(marks, sent)
 	})
 }
 
-func (s *Store) rewriteMarkdownDraft(path string, now time.Time, rewrite func([]protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation) ([]protocol.MarkdownAnnotation, int, error) {
+func (s *Store) rewriteMarkdownDraft(key HostPath, now time.Time, rewrite func([]protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation) ([]protocol.MarkdownAnnotation, int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -60,13 +65,11 @@ func (s *Store) rewriteMarkdownDraft(path string, now time.Time, rewrite func([]
 	}
 	defer tx.Rollback()
 
-	generation, tombstone, err := markdownDraftTable.readGenerations(tx, path)
-	if err != nil {
-		return nil, 0, err
-	}
-	current := max(generation, tombstone)
+	var generation, tombstone int
 	stored := "[]"
-	err = tx.QueryRow("SELECT annotations_json FROM markdown_annotation_drafts WHERE path = ?", path).Scan(&stored)
+	err = tx.QueryRow("SELECT annotations_json, generation, tombstone_generation FROM markdown_annotation_drafts WHERE host = ? AND path = ?", key.Host, key.Path).
+		Scan(&stored, &generation, &tombstone)
+	current := max(generation, tombstone)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, 0, fmt.Errorf("failed to read annotation draft: %w", err)
 	}
@@ -83,13 +86,13 @@ func (s *Store) rewriteMarkdownDraft(path string, now time.Time, rewrite func([]
 		return nil, 0, fmt.Errorf("failed to encode annotation draft: %w", err)
 	}
 	if _, err := tx.Exec(`
-		INSERT INTO markdown_annotation_drafts (path, annotations_json, generation, tombstone_generation, updated_at)
-		VALUES (?, ?, ?, 0, ?)
-		ON CONFLICT(path) DO UPDATE SET
+		INSERT INTO markdown_annotation_drafts (host, path, annotations_json, generation, tombstone_generation, updated_at)
+		VALUES (?, ?, ?, ?, 0, ?)
+		ON CONFLICT(host, path) DO UPDATE SET
 			annotations_json = excluded.annotations_json,
 			generation = excluded.generation,
 			updated_at = excluded.updated_at
-	`, path, string(rewrittenJSON), current+1, now.UTC().Format(time.RFC3339)); err != nil {
+	`, key.Host, key.Path, string(rewrittenJSON), current+1, now.UTC().Format(time.RFC3339)); err != nil {
 		return nil, 0, fmt.Errorf("failed to save annotation draft: %w", err)
 	}
 	if err := tx.Commit(); err != nil {

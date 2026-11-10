@@ -499,6 +499,7 @@ export interface RecentFile {
   lastAt: string;
   count: number;
   sessionId?: string;
+  host?: string;
 }
 
 interface UseDaemonSocketOptions {
@@ -1520,6 +1521,7 @@ export function useDaemonSocket({
                 lastAt: file.last_at as string,
                 count: (file.count as number) ?? 0,
                 sessionId: file.session_id as string | undefined,
+                ...(typeof file.host === 'string' && file.host && { host: file.host }),
               })));
             } else {
               pending.reject(new Error(data.error || 'Recent files failed'));
@@ -2977,7 +2979,7 @@ export function useDaemonSocket({
     const requestId = crypto.randomUUID();
     const key = pendingRequestKey(op, requestId);
     const sourceFields = source.kind === 'file'
-      ? { source_kind: 'file', path: source.path }
+      ? { source_kind: 'file', path: source.path, ...(source.host && { host: source.host }) }
       : { source_kind: 'seed', seed_id: source.seedId };
     return sendLastWriterWinsRequest<T>(
       mdAnnotationsPendingRef.current,

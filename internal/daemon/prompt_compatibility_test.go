@@ -57,7 +57,7 @@ func TestLegacyPromptCompatibility(t *testing.T) {
 			if mask&2 != 0 {
 				a.QuickLabelTip = protocol.Ptr("tip")
 			}
-			out[fmt.Sprintf("markdown/%s/%d", kind, mask)] = formatMarkdownAnnotationPayload(fileAnnotationSource("/tmp/doc.md"), []protocol.MarkdownAnnotation{a}, map[string]bool{"a": mask&4 != 0})
+			out[fmt.Sprintf("markdown/%s/%d", kind, mask)] = formatMarkdownAnnotationPayload(fileAnnotationSource("/tmp/doc.md"), "", []protocol.MarkdownAnnotation{a}, map[string]bool{"a": mask&4 != 0})
 		}
 	}
 

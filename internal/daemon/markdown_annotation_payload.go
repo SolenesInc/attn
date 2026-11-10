@@ -16,7 +16,7 @@ const (
 	markdownAnnotationTypeGlobal   = "global"
 )
 
-func formatMarkdownAnnotationPayload(source annotationDocumentSource, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
+func formatMarkdownAnnotationPayload(source annotationDocumentSource, machine string, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
 	var anchored, globals []protocol.MarkdownAnnotation
 	for _, a := range anns {
 		if a.Type == markdownAnnotationTypeGlobal {
@@ -66,7 +66,7 @@ func formatMarkdownAnnotationPayload(source annotationDocumentSource, anns []pro
 		fmt.Fprintf(&summary, "- **%s**: %d\n", label, labelCounts[label])
 	}
 	return prompts.RenderText("annotation-markdown", "submit", prompts.Values{
-		"has_title": fmt.Sprint(source.seedTitle != ""), "seed": fmt.Sprint(source.kind == annotationSourceSeed), "seed_id": source.seedID, "title": source.seedTitle, "path": source.path,
+		"has_title": fmt.Sprint(source.seedTitle != ""), "seed": fmt.Sprint(source.kind == annotationSourceSeed), "seed_id": source.seedID, "title": source.seedTitle, "path": source.path, "machine": machine,
 		"count": fmt.Sprint(len(sorted)), "singular": fmt.Sprint(len(sorted) == 1), "entries": entries.String(), "summary_rows": summary.String(),
 	})
 }

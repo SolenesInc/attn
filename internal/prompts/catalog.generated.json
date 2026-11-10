@@ -5104,21 +5104,64 @@
                       ]
                     },
                     {
-                      "kind": "text",
-                      "id": "annotation-markdown.file",
-                      "source": "content/annotations/markdown-file.md",
-                      "keep_final_newline": true,
-                      "bindings": [
+                      "kind": "choose",
+                      "condition": {
+                        "field": {
+                          "name": "machine",
+                          "kind": "text",
+                          "description": "machine"
+                        },
+                        "test": "present"
+                      },
+                      "children": [
                         {
-                          "name": "path",
-                          "node": {
-                            "kind": "input",
-                            "field": {
+                          "kind": "text",
+                          "id": "annotation-markdown.file-on",
+                          "source": "content/annotations/markdown-file-on.md",
+                          "keep_final_newline": true,
+                          "bindings": [
+                            {
                               "name": "path",
-                              "kind": "text",
-                              "description": "path"
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "path",
+                                  "kind": "text",
+                                  "description": "path"
+                                }
+                              }
+                            },
+                            {
+                              "name": "machine",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "machine",
+                                  "kind": "text",
+                                  "description": "machine"
+                                }
+                              }
                             }
-                          }
+                          ]
+                        },
+                        {
+                          "kind": "text",
+                          "id": "annotation-markdown.file",
+                          "source": "content/annotations/markdown-file.md",
+                          "keep_final_newline": true,
+                          "bindings": [
+                            {
+                              "name": "path",
+                              "node": {
+                                "kind": "input",
+                                "field": {
+                                  "name": "path",
+                                  "kind": "text",
+                                  "description": "path"
+                                }
+                              }
+                            }
+                          ]
                         }
                       ]
                     }
@@ -5737,5 +5780,5 @@
       ]
     }
   ],
-  "definitions_hash": "3afc25bf45e4d9811d2b93f2db92c7f4fec7e3563a4514f742ed5589c054eedb"
+  "definitions_hash": "b9d2ff3ceea68f454e09d220167ea4716ff1d562435933540bb2da1bdb10737d"
 }

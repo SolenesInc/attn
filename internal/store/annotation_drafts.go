@@ -15,10 +15,7 @@ type annotationDraftTable struct {
 	note  bool
 }
 
-var (
-	markdownDraftTable = annotationDraftTable{table: "markdown_annotation_drafts", key: "path"}
-	sessionDraftTable  = annotationDraftTable{table: "session_annotation_drafts", key: "session_id", note: true}
-)
+var sessionDraftTable = annotationDraftTable{table: "session_annotation_drafts", key: "session_id", note: true}
 
 type annotationDraft struct {
 	Annotations string

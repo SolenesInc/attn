@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const (
@@ -19,8 +20,9 @@ type annotationDocumentSource struct {
 	documentURI string
 	kind        string
 	path        string
+	host        string
 	seedID      string
-	draftKey    string
+	draftKey    store.HostPath
 	seedTitle   string
 }
 
@@ -43,15 +45,20 @@ func seedDocumentURI(seedID string) string {
 	return "attn://seed/" + encodeURIComponent(seedID)
 }
 
-func fileDocumentURI(path string) string {
-	return "attn://file/" + encodeURIComponent(filepath.Clean(path))
+func fileDocumentURI(host, path string) string {
+	uri := "attn://file/" + encodeURIComponent(filepath.Clean(path))
+	if host != "" {
+		uri += "?host=" + encodeURIComponent(host)
+	}
+	return uri
 }
 
-func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path, seedID *string) (annotationDocumentSource, error) {
+func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path, host, seedID *string) (annotationDocumentSource, error) {
 	source := annotationDocumentSource{
 		documentURI: documentURI,
 		kind:        strings.TrimSpace(kind),
 		path:        strings.TrimSpace(protocol.Deref(path)),
+		host:        strings.TrimSpace(protocol.Deref(host)),
 		seedID:      strings.TrimSpace(protocol.Deref(seedID)),
 	}
 	if strings.TrimSpace(source.documentURI) == "" {
@@ -69,16 +76,16 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 			return source, fmt.Errorf("path must be absolute for file source: %s", source.path)
 		}
 		source.path = filepath.Clean(source.path)
-		source.draftKey = source.path
-		if canonical := fileDocumentURI(source.path); source.documentURI != canonical {
+		source.draftKey = store.HostPath{Host: source.host, Path: source.path}
+		if canonical := fileDocumentURI(source.host, source.path); source.documentURI != canonical {
 			return source, fmt.Errorf("document_uri does not match typed file source: want %s", canonical)
 		}
 	case annotationSourceSeed:
 		if source.seedID == "" {
 			return source, fmt.Errorf("seed_id is required for seed source")
 		}
-		if source.path != "" {
-			return source, fmt.Errorf("path is not valid for seed source")
+		if source.path != "" || source.host != "" {
+			return source, fmt.Errorf("path and host are not valid for seed source")
 		}
 		seed, _, err := d.readSeed(source.seedID)
 		if err != nil {
@@ -86,9 +93,10 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 		}
 		source.seedID = seed.ID
 		source.seedTitle = seed.Title
-		source.draftKey = seedDocumentURI(seed.ID)
-		if source.documentURI != source.draftKey {
-			return source, fmt.Errorf("document_uri does not match typed seed source: want %s", source.draftKey)
+		canonical := seedDocumentURI(seed.ID)
+		source.draftKey = store.HostPath{Path: canonical}
+		if source.documentURI != canonical {
+			return source, fmt.Errorf("document_uri does not match typed seed source: want %s", canonical)
 		}
 	default:
 		return source, fmt.Errorf("source_kind must be file or seed")
@@ -96,9 +104,12 @@ func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, path,
 	return source, nil
 }
 
-func annotationSourcePointers(source annotationDocumentSource) (path, seedID *string) {
+func annotationSourcePointers(source annotationDocumentSource) (path, host, seedID *string) {
 	if source.path != "" {
 		path = protocol.Ptr(source.path)
+	}
+	if source.host != "" {
+		host = protocol.Ptr(source.host)
 	}
 	if source.seedID != "" {
 		seedID = protocol.Ptr(source.seedID)
@@ -107,12 +118,12 @@ func annotationSourcePointers(source annotationDocumentSource) (path, seedID *st
 }
 
 func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.MarkdownAnnotationsGetMessage) {
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.Host, msg.SeedID)
 	if sourceErr == nil && source.seedID != "" {
 		sourceErr = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
 	}
-	path, seedID := annotationSourcePointers(source)
-	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store), "document source",
+	path, host, seedID := annotationSourcePointers(source)
+	handler := newAnnotationDraftHandler(d, client, markdownAnnotationDraftAccessors(d.store, source.host), "document source",
 		func(result annotationDraftResult[protocol.MarkdownAnnotation]) protocol.MarkdownAnnotationsGetResultMessage {
 			if sourceErr != nil {
 				result.err = protocol.Ptr("markdown_annotations_get: " + sourceErr.Error())
@@ -120,11 +131,11 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 			}
 			return protocol.MarkdownAnnotationsGetResultMessage{
 				Event: protocol.EventMarkdownAnnotationsGetResult, RequestID: msg.RequestID,
-				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
+				DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, Host: host, SeedID: seedID,
 				Annotations: result.annotations, Generation: result.generation, Success: result.success, Error: result.err,
 			}
 		})
-	key := source.draftKey
+	key := source.draftKey.Path
 	if sourceErr != nil {
 		key = ""
 	}
@@ -132,14 +143,14 @@ func (d *Daemon) handleMarkdownAnnotationsGet(client *wsClient, msg *protocol.Ma
 }
 
 func (d *Daemon) handleMarkdownAnnotationsSave(client *wsClient, msg *protocol.MarkdownAnnotationsSaveMessage) {
-	source, err := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
+	source, err := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.Host, msg.SeedID)
 	if err == nil && source.seedID != "" {
 		err = d.requireSeedInProfile(source.seedID, client.selectedProfile(), false)
 	}
-	path, seedID := annotationSourcePointers(source)
+	path, host, seedID := annotationSourcePointers(source)
 	result := protocol.MarkdownAnnotationsSaveResultMessage{
 		Event: protocol.EventMarkdownAnnotationsSaveResult, RequestID: msg.RequestID,
-		DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, SeedID: seedID,
+		DocumentUri: source.documentURI, SourceKind: source.kind, Path: path, Host: host, SeedID: seedID,
 		Annotations: []protocol.MarkdownAnnotation{},
 	}
 	if err != nil {

@@ -5,6 +5,7 @@ import { MarkdownOpener } from '../components/palette/MarkdownOpener';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { AppPalette } from './AppPalette';
 import {
+  useAppErrorsContext,
   useAttentionQueueContext,
   useDesktopTilesContext,
 } from './AppContexts';
@@ -20,6 +21,7 @@ export function AppNavigationMenus() {
   } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
   const { snoozeMenu, setSnoozeMenu, restoreSnoozeFocus } = useAttentionQueueContext();
+  const { showError } = useAppErrorsContext();
   return (
     <>
       {markdownOpenerOpen && (
@@ -29,10 +31,14 @@ export function AppNavigationMenus() {
           loadIndex={loadOpenerIndex}
           browseDirectory={sendBrowseDirectory}
           onClose={() => setMarkdownOpenerOpen(false)}
-          onPick={(path) => {
+          onPick={(path, host) => {
             setMarkdownOpenerOpen(false);
-            void openThenShow(() => sendOpenMarkdown(path, markdownOpenerTarget.sessionId))
+            void openThenShow(() => sendOpenMarkdown(path, markdownOpenerTarget.sessionId, host))
               .catch((error) => {
+                if (host) {
+                  showError(`Could not open ${path}: ${error instanceof Error ? error.message : String(error)}`);
+                  return;
+                }
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',
                   error,

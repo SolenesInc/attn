@@ -13,14 +13,15 @@ import (
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
 	targetSession := protocol.SessionID(strings.TrimSpace(protocol.Deref(msg.TargetSessionID)))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
-	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.SeedID)
-	path, seedID := annotationSourcePointers(source)
+	source, sourceErr := d.resolveAnnotationDocumentSource(msg.DocumentUri, msg.SourceKind, msg.Path, msg.Host, msg.SeedID)
+	path, host, seedID := annotationSourcePointers(source)
 	result := protocol.MarkdownAnnotationsSubmitResultMessage{
 		Event:       protocol.EventMarkdownAnnotationsSubmitResult,
 		RequestID:   msg.RequestID,
 		DocumentUri: source.documentURI,
 		SourceKind:  source.kind,
 		Path:        path,
+		Host:        host,
 		SeedID:      seedID,
 		Status:      annotationSubmitStatusError,
 	}
@@ -72,7 +73,11 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	for _, id := range msg.OrphanedIds {
 		orphaned[id] = true
 	}
-	payload := formatMarkdownAnnotationPayload(source, annotations, orphaned)
+	machine := ""
+	if source.host != "" {
+		machine = d.outpostName(source.host)
+	}
+	payload := formatMarkdownAnnotationPayload(source, machine, annotations, orphaned)
 	if targetSession != "" {
 		session := d.store.Get(targetSession)
 		if session == nil {

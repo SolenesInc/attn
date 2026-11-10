@@ -155,7 +155,7 @@ describe('App markdown rendering', () => {
   });
 
   it('reads an outpost document’s images and markdown links on the outpost, and names it for any other link', async () => {
-    const { daemon, reader, tile } = await openMarkdown('![chart](chart.png)\n\n[next](next.md)\n\n[log](build.txt)\n', { host: 'outpost-1' });
+    const { daemon, reader } = await openMarkdown('![chart](chart.png)\n\n[next](next.md)\n\n[log](build.txt)\n', { host: 'outpost-1' });
 
     expect(reader.getByRole('img', { name: 'chart' })).toHaveAttribute('src', IMAGE);
     expect(daemon.sentOf('tile_asset_read').map(({ host, path }) => [host, path])).toEqual([['outpost-1', '/tmp/chart.png']]);
@@ -164,7 +164,6 @@ describe('App markdown rendering', () => {
     expect(reader.queryByRole('link', { name: 'log' })).toBeNull();
     expect(reader.getByText('log')).toHaveAttribute('title', '/tmp/build.txt is on outpost-1; only markdown files open from there');
     expect(invoke).not.toHaveBeenCalledWith('open_safe_markdown_target', expect.anything());
-    expect(tile().querySelector('.md-reader--annotating')).toBeNull();
   });
 
   it('keeps what the user opened when the daemon re-sends the same content, and re-renders changed content', async () => {
