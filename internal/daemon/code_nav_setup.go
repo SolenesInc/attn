@@ -22,12 +22,10 @@ type codeNavSetupKey struct {
 	language   string
 }
 
-// codeNavSetups are the sessions setting up a language server, so every review
-// of the repository links to the one running, and the setups still launching,
-// so a second request does not start a second agent.
+// codeNavSetups are the setups still launching, so a second request does not
+// start a second agent.
 type codeNavSetups struct {
 	mu        sync.Mutex
-	sessions  map[codeNavSetupKey]protocol.SessionID
 	launching map[codeNavSetupKey]bool
 }
 
@@ -44,43 +42,33 @@ func (s *codeNavSetups) begin(key codeNavSetupKey) bool {
 	return true
 }
 
-func (s *codeNavSetups) end(key codeNavSetupKey, session protocol.SessionID) {
+func (s *codeNavSetups) end(key codeNavSetupKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.launching, key)
-	if session == "" {
-		return
-	}
-	if s.sessions == nil {
-		s.sessions = map[codeNavSetupKey]protocol.SessionID{}
-	}
-	s.sessions[key] = session
 }
 
-// withSetups is the review as the app sees it: each language that has a setup
-// running names its session.
-func (s *codeNavSetups) withSetups(host string, review *protocol.ReviewBundle) *protocol.ReviewBundle {
+// withCodeNavSetups is the review as the app sees it: each language whose
+// server an agent was started to set up names that agent's session.
+func (d *Daemon) withCodeNavSetups(host string, review *protocol.ReviewBundle) *protocol.ReviewBundle {
 	if review == nil || len(review.Navigation) == 0 {
 		return review
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var navigation []protocol.ReviewNavigation
-	for i, entry := range review.Navigation {
-		session, ok := s.sessions[codeNavSetupKey{host: host, repository: review.Repository, language: entry.Language}]
-		if !ok {
-			continue
-		}
-		if navigation == nil {
-			navigation = append([]protocol.ReviewNavigation(nil), review.Navigation...)
-		}
-		navigation[i].SetupSessionID = protocol.Ptr(session)
+	setups, err := d.store.CodeNavSetups(host, review.Repository)
+	if err != nil {
+		d.logf("code navigation setups of %s: %v", review.Repository, err)
+		return review
 	}
-	if navigation == nil {
+	if len(setups) == 0 {
 		return review
 	}
 	shown := *review
-	shown.Navigation = navigation
+	shown.Navigation = append([]protocol.ReviewNavigation(nil), review.Navigation...)
+	for i, entry := range shown.Navigation {
+		if session, ok := setups[entry.Language]; ok {
+			shown.Navigation[i].SetupSessionID = protocol.Ptr(session)
+		}
+	}
 	return &shown
 }
 
@@ -120,7 +108,10 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 		return "", fmt.Errorf("a setup of %s in %s is already starting", msg.Language, msg.Repository)
 	}
 	session, err := d.launchCodeNavSetup(ctx, msg, desktop.ProfileID)
-	d.codeNavSetups.end(key, session)
+	if err == nil {
+		err = d.store.RecordCodeNavSetup(host, msg.Repository, msg.Language, session)
+	}
+	d.codeNavSetups.end(key)
 	if err != nil {
 		return "", err
 	}

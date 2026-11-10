@@ -215,7 +215,7 @@ func (d *Daemon) deliverToClient(client *wsClient, shown map[tileDocument]bool) 
 			continue
 		}
 		message := desktopTileContentMessage(tile.key, tile.document, held)
-		message.Review = d.codeNavSetups.withSetups(tile.document.host, message.Review)
+		message.Review = d.withCodeNavSetups(tile.document.host, message.Review)
 		if !d.sendToClient(client, message) {
 			continue
 		}
