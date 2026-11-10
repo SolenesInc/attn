@@ -294,7 +294,7 @@ async function main() {
       note(`remaining desktop session selected after close`, { keptSessionId });
     });
 
-    await runner.step('closing_a_tile_goes_to_the_next_column_and_going_to_tiles_leaves_the_row', async () => {
+    await runner.step('closing_a_tile_returns_to_the_most_recently_used_tile', async () => {
       const b = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 2)).pane;
       const c = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 3)).pane;
       const d = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 4)).pane;
@@ -304,8 +304,8 @@ async function main() {
       }
       await driver.pressKey('w', { command: true, shift: process.platform === 'linux' });
       await waitForSessionAbsentFromDaemon(observer, c.sessionId, 'C closed through native shortcut');
-      await waitForActiveSession(client, d.sessionId, 'row A B C D, close C goes to the next column D');
-      await waitForPaneInputFocused(client, d.sessionId, d.paneId, 'D receives keyboard focus after C closes');
+      await waitForActiveSession(client, b.sessionId, 'row A B C D, A -> B -> C, close C returns to B');
+      await waitForPaneInputFocused(client, b.sessionId, b.paneId, 'B receives keyboard focus after C closes');
 
       const replacementC = (await splitWithShortcut(client, keptSessionId, 'terminal.splitVertical', 4)).pane;
       createdSessionIds.push(replacementC.sessionId);
