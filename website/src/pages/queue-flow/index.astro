@@ -3,6 +3,7 @@ import '../../landing/fonts.css';
 import '../../landing/about.css';
 import '../../landing/queue-flow.css';
 import { recordings } from '../../recordings';
+import narration from '../../../../app/scripts/demo-harness/queue-flow-video/narration.json';
 
 const REPO = 'https://github.com/SolenesInc/attn';
 const GUIDE = `${REPO}/blob/main/docs/guide/reference/queue.md`;
@@ -30,8 +31,11 @@ const GUIDE = `${REPO}/blob/main/docs/guide/reference/queue.md`;
   <p>In queue flow you stop checking on your agents. attn brings you each agent that needs you, oldest first, and the rest keep working until they finish or get stuck.</p>
   <video controls playsinline preload="metadata" poster="/recordings/queue-loop.jpg" aria-label={recordings['queue-loop'].caption}>
     <source src="/recordings/queue-loop.mp4" type="video/mp4">
-    <track kind="captions" src="/recordings/queue-loop.vtt" srclang="en" label="English">
   </video>
+  <details class="transcript">
+    <summary>Transcript</summary>
+    {narration.map(({ text }) => <p>{text}</p>)}
+  </details>
   <h2>Try it</h2>
   <ol>
     <li>Open the command palette with <kbd>Cmd+Shift+K</kbd> (<kbd>Ctrl+Alt+K</kbd> on Linux) and run "Turn on the agent queue".</li>

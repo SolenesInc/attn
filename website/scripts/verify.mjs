@@ -158,11 +158,12 @@ async function checkQueueFlowVideo(page, label) {
   }
   const facts = await page.evaluate(() => {
     const video = document.querySelector('video');
-    return { muted: video.muted, controls: video.controls, captions: video.textTracks.length, seconds: video.duration };
+    return { muted: video.muted, controls: video.controls, tracks: video.textTracks.length, transcript: document.querySelector('.transcript')?.textContent ?? '', seconds: video.duration };
   });
   if (facts.muted) problems.push(`${label}: the queue flow video starts muted, and it is narrated`);
   if (!facts.controls) problems.push(`${label}: the queue flow video has no controls`);
-  if (facts.captions !== 1) problems.push(`${label}: the queue flow video has ${facts.captions} caption tracks, expected 1`);
+  if (facts.tracks !== 0) problems.push(`${label}: the queue flow video has ${facts.tracks} text tracks; a <track> stops it loading in Safari on some iPhones, so the page shows a transcript`);
+  if (!facts.transcript.includes('Let them come to you')) problems.push(`${label}: the queue flow page has no transcript of the narration`);
   if (!(facts.seconds > 0)) problems.push(`${label}: the queue flow video has no duration`);
 }
 

@@ -56,10 +56,9 @@ changes, record the scene and build:
     node app/scripts/demo-harness/queue-flow-video/build.mjs --clip <dir>/queue-flow.mp4
 
 `build.mjs` places every cut, zoom, caption and sound from the clip's events
-and the narration, renders on this machine, and writes the video, its poster
-(`.jpg`) and its captions (`.vtt`). `--draft` renders faster for a look, and
-`--out <file>` writes somewhere else. HyperFrames telemetry is off, and nothing
-is uploaded.
+and the narration, renders on this machine, and writes the video and its poster
+(`.jpg`). `--draft` renders faster for a look, and `--out <file>` writes
+somewhere else. HyperFrames telemetry is off, and nothing is uploaded.
 
 - The build stops when the clip shows no change where its events record one.
   The window recorder drops frames on a loaded Mac; record the scene again.
@@ -74,6 +73,9 @@ is uploaded.
   constants at the top of `build.mjs`. If the scene's prompts or replies
   change, check those frames.
 - `composition/template.html` holds the look: layout, type, colors and motion.
+- The page shows the narration as a transcript read from `narration.json`.
+  Don't give the video a captions `<track>`: with one, the video never loads
+  in Safari on some iPhones.
 
 ## Write a scene
 

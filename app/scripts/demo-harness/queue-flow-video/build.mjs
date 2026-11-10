@@ -22,8 +22,8 @@ const USAGE = `Usage: node app/scripts/demo-harness/queue-flow-video/build.mjs -
 Cuts the queue flow video from the raw clip the queue-flow demo scene records
 and the <clip>.events.jsonl beside it, with the narration, music and sound
 effects in audio/. Writes index.html and assets/ into this folder, checks and
-renders them with HyperFrames, and writes the video with its poster (.jpg) and
-captions (.vtt) beside it. --draft renders faster at lower quality, and
+renders them with HyperFrames, and writes the video with its poster (.jpg)
+beside it. --draft renders faster at lower quality, and
 --no-render stops after writing index.html and assets/. Without --out the
 video goes to website/public/recordings/queue-loop.mp4.`;
 
@@ -309,6 +309,4 @@ fs.mkdirSync(path.dirname(rendered), { recursive: true });
 run('npx', ['--yes', HYPERFRAMES, 'render', PROJECT, '--quality', options.draft ? 'draft' : 'delivery', '--fps', String(FPS), '--output', rendered], { env });
 run('ffmpeg', ['-loglevel', 'error', '-y', '-i', rendered, '-c:v', 'libx264', '-preset', 'slow', '-crf', String(WEB_VIDEO.crf), '-pix_fmt', 'yuv420p', '-af', WEB_VIDEO.loudness, '-ar', '48000', '-c:a', 'aac', '-b:a', WEB_VIDEO.audioBitrate, '-movflags', '+faststart', out]);
 run('ffmpeg', ['-loglevel', 'error', '-y', '-ss', String(POSTER_AT), '-i', rendered, '-frames:v', '1', '-q:v', '3', out.replace(/\.mp4$/, '.jpg')]);
-const clock = (t) => `${String(Math.floor(t / 60)).padStart(2, '0')}:${(t % 60).toFixed(3).padStart(6, '0')}`;
-fs.writeFileSync(out.replace(/\.mp4$/, '.vtt'), `WEBVTT\n\n${voices.map(({ text, start, duration: length }) => `${clock(start)} --> ${clock(start + length)}\n${text}`).join('\n\n')}\n`);
 console.log(`[queue-flow-video] ${out}: ${(fs.statSync(out).size / 1024 / 1024).toFixed(1)} MiB, ${seconds(out).toFixed(1)}s`);

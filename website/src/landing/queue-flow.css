@@ -1,5 +1,9 @@
 main.watch { max-width: 960px; }
-.watch p, .watch ol { max-width: 640px; }
+.watch p, .watch ol, .watch .transcript { max-width: 640px; }
+.watch .transcript { margin: -16px 0 40px; }
+.watch .transcript summary { cursor: pointer; font-size: 16px; color: var(--mid); }
+.watch .transcript summary:hover { color: var(--ink); }
+.watch .transcript p { margin: 12px 0 0; font-size: 16px; }
 .watch video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; margin: 32px 0 40px; border: 1px solid #2a2a2d; border-radius: 12px; background: #111113; }
 .watch ol { margin: 0 0 24px; padding-left: 22px; font-size: 18px; line-height: 1.6; color: var(--mid); }
 .watch li { margin-bottom: 8px; }
