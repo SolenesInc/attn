@@ -113,14 +113,20 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    finishes, so wait for the user to say they're done. Then, on macOS, show two
    things by having the user do them:
    - Quick Capture sends you a message from any app without switching to attn.
-     Its shortcut is ⌃⌥⌘Space unless `attn settings get capture.shortcut` names
-     another. Ask the user to press it now, write you anything and press Enter.
-     Answer what arrives, then say they can change that shortcut the same way.
+     Read `attn settings get capture.shortcut`. If it names a shortcut, ask the
+     user to press it. If it is empty, say the shortcut defaults to ⌃⌥⌘Space but
+     may be off, and ask the user to open **File → Quick Capture** instead. If
+     the shortcut doesn't open the panel, use the menu too. Ask the user to
+     write you anything and press Enter. Answer what arrives, then say they can
+     change or turn off the shortcut the same way.
    - Asks let any agent bring the user a decision that can wait, and the user
-     answers them all in one place. Read the asks guidance in your launch
-     instructions, then ask the user which of the items still ahead they want
-     next, with `attn ask`. Point at `asks` with a callout and tell them to answer
-     there. When the answer comes back, name ⇧⌘R, which opens the asks.
+     answers them all in one place. Check `attn settings get asks_enabled` and
+     `attn ask list --json`. If asks are on and the list says `enabled: true`,
+     read the asks guidance in your launch instructions, then ask the user which
+     of the items still ahead they want next, with `attn ask`. Point at `asks`
+     with a callout and tell them to answer there. When the answer comes back,
+     name ⇧⌘R, which opens the asks. Otherwise explain asks without filing one;
+     leave the setting as it is and continue the tour.
    These shortcuts are the defaults. If `attn settings get keybindings_config`
    changes one, name the user's instead.
 6. Offer to help attn's maintainers, as described below.
