@@ -267,13 +267,16 @@ func (d *document) stopHeading(text string, number int) *stop {
 		d.problem(number, "the stop path %s must be relative to the repository root, like internal/store/store.go.", ref.path)
 		return nil
 	}
-	if ref.from < 1 {
-		d.problem(number, "the stop %s:%d-%d starts before line 1. Lines count from 1.", ref.path, ref.from, ref.to)
-		ref.from = 1
-	}
+	written := strings.Trim(text, "`")
 	if ref.to < ref.from {
-		d.problem(number, "the stop %s:%d-%d runs backwards. Write %s:%d-%d.", ref.path, ref.from, ref.to, ref.path, ref.to, ref.from)
 		ref.from, ref.to = ref.to, ref.from
+		if ref.from >= 1 {
+			d.problem(number, "the stop %s runs backwards. Write %s:%d-%d.", written, ref.path, ref.from, ref.to)
+		}
+	}
+	if ref.from < 1 {
+		ref.from, ref.to = 1, max(ref.to, 1)
+		d.problem(number, "the stop %s starts before line 1. Lines count from 1: write %s:%d-%d.", written, ref.path, ref.from, ref.to)
 	}
 	d.stops = append(d.stops, stop{line: number, path: ref.path, from: ref.from, to: ref.to})
 	return &d.stops[len(d.stops)-1]

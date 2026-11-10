@@ -240,12 +240,13 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 	}
 	if gone {
 		from, to := s.from, s.to
-		if head != nil && base != nil {
-			from, to = newLineMap(head, base).span(s.from, s.to)
+		inBase := base != nil
+		if head != nil && inBase {
+			from, to, inBase = newLineMap(head, base).span(s.from, s.to)
 		}
 		resolved.ChangedSincePresented = head != nil
-		if base != nil {
-			for line := from; line <= to && line <= len(base); line++ {
+		if inBase {
+			for line := from; line <= to; line++ {
 				resolved.Rows = append(resolved.Rows, protocol.ReviewRow{Kind: "-", Old: protocol.Ptr(line), Text: base[line-1]})
 			}
 		}
@@ -257,11 +258,20 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 		return protocol.ReviewStop{}, false
 	}
 	headToNow := newLineMap(head, now)
-	resolved.NowFrom, resolved.NowTo = headToNow.span(s.from, s.to)
-	resolved.ChangedSincePresented = resolved.NowFrom == 0 || !equalLines(head[s.from-1:s.to], now[resolved.NowFrom-1:resolved.NowTo])
+	nowFrom, nowTo, inNow := headToNow.span(s.from, s.to)
+	if !inNow {
+		resolved.ChangedSincePresented = true
+		for line, text := range base {
+			resolved.Rows = append(resolved.Rows, protocol.ReviewRow{Kind: "-", Old: protocol.Ptr(line + 1), Text: text})
+		}
+		r.resolveNotes(s, &resolved, &headToNow)
+		return resolved, true
+	}
+	resolved.NowFrom, resolved.NowTo = nowFrom, nowTo
+	resolved.ChangedSincePresented = !equalLines(head[s.from-1:s.to], now[nowFrom-1:nowTo])
 	switch {
 	case r.base == "":
-		for line := resolved.NowFrom; line <= resolved.NowTo; line++ {
+		for line := nowFrom; line <= nowTo; line++ {
 			resolved.Rows = append(resolved.Rows, protocol.ReviewRow{Kind: " ", Now: protocol.Ptr(line), Text: now[line-1]})
 		}
 	default:
@@ -269,7 +279,7 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 			base = []string{}
 		}
 		var complete bool
-		resolved.Rows, complete = rows(base, now, resolved.NowFrom, resolved.NowTo)
+		resolved.Rows, complete = rows(base, now, nowFrom, nowTo)
 		if !complete {
 			r.overBudget(s, "base")
 		}
@@ -293,7 +303,9 @@ func (r *resolver) resolveNotes(s stop, resolved *protocol.ReviewStop, headToNow
 		}
 		wire := protocol.ReviewNote{Line: n.line, From: n.from, To: n.to, Look: n.look, Text: n.text}
 		if headToNow != nil {
-			wire.NowFrom, wire.NowTo = headToNow.span(n.from, n.to)
+			if from, to, ok := headToNow.span(n.from, n.to); ok {
+				wire.NowFrom, wire.NowTo = from, to
+			}
 		}
 		resolved.Notes = append(resolved.Notes, wire)
 	}

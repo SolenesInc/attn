@@ -52,8 +52,8 @@ func TestLineMapIsTheIdentityWithNoChange(t *testing.T) {
 		m := newLineMap(lines, lines)
 		from := rapid.IntRange(1, len(lines)).Draw(t, "from")
 		to := rapid.IntRange(from, len(lines)).Draw(t, "to")
-		if start, end := m.span(from, to); start != from || end != to {
-			t.Fatalf("span(%d, %d) = %d, %d with no change", from, to, start, end)
+		if start, end, ok := m.span(from, to); !ok || start != from || end != to {
+			t.Fatalf("span(%d, %d) = %d, %d, %t with no change", from, to, start, end, ok)
 		}
 	})
 }
@@ -82,9 +82,12 @@ func TestLineMapNeverReordersLines(t *testing.T) {
 		from := rapid.IntRange(1, len(head)).Draw(t, "from")
 		later := rapid.IntRange(from, len(head)).Draw(t, "later")
 		to := rapid.IntRange(later, len(head)).Draw(t, "to")
-		start, end := m.span(from, to)
-		laterStart, laterEnd := m.span(later, to)
-		if len(now) > 0 && (start < 1 || end > len(now)) {
+		start, end, ok := m.span(from, to)
+		laterStart, laterEnd, _ := m.span(later, to)
+		if ok != (len(now) > 0) {
+			t.Fatalf("span(%d, %d) reports ok=%t into %d lines", from, to, ok, len(now))
+		}
+		if ok && (start < 1 || end > len(now)) {
 			t.Fatalf("span(%d, %d) = %d, %d, outside the %d lines now", from, to, start, end, len(now))
 		}
 		if start > end {

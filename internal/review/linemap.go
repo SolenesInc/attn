@@ -38,12 +38,13 @@ func newLineMap(from, to []string) lineMap {
 
 // span maps the lines from..to, 1-based and inside the text, to the lines that
 // show them in the other text. A range whose lines are all gone maps to the
-// one line where they were; into an empty text it maps to 0, 0.
-func (m lineMap) span(from, to int) (int, int) {
+// one line where they were. ok is false when the other text is empty, so no
+// line shows them.
+func (m lineMap) span(from, to int) (start, end int, ok bool) {
 	if m.length == 0 {
-		return 0, 0
+		return 0, 0, false
 	}
-	start, end := m.kept[from-1], m.kept[to-1]
+	start, end = m.kept[from-1], m.kept[to-1]
 	if start == 0 {
 		start = m.lo[from-1]
 	}
@@ -54,7 +55,7 @@ func (m lineMap) span(from, to int) (int, int) {
 		start = min(max(start, 1), m.length)
 		end = start
 	}
-	return start, end
+	return start, end, true
 }
 
 // rows are the lines now..to of the text now with the change from base:

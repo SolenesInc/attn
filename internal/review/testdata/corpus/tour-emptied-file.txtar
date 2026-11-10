@@ -1,0 +1,55 @@
+A tour whose stop file is emptied after review start shows no rows and is
+changed since presented.
+-- options --
+tour
+-- base/a.go --
+package a
+
+func A() {}
+-- now/a.go --
+-- review.md --
+---
+frame: walkthrough
+---
+# Tour
+
+## Where A lived
+
+### a.go:1-3
+
+- L3: Start here.
+-- bundle.json --
+{
+  "files": [],
+  "flows": [],
+  "frame": "walkthrough",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": true,
+      "file_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "from": 1,
+      "heading_line": 11,
+      "notes": [
+        {
+          "from": 3,
+          "line": 13,
+          "look": false,
+          "now_from": 0,
+          "now_to": 0,
+          "text": "Start here.",
+          "to": 3
+        }
+      ],
+      "now_from": 0,
+      "now_to": 0,
+      "path": "a.go",
+      "rows": [],
+      "to": 3
+    }
+  ]
+}
