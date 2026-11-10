@@ -141,8 +141,9 @@ garden                  a profile's issue tracker
    ├─ state (1)         planted, growing, parked, harvested or withered
    ├─ seed (0..n)       a subtask
    ├─ tender (at most 1)  the assignee: the session or crew member
-   ├─ authorization (at most 1)  the user's words for what agents may do on
-   │                    the seed without asking, and where they stop
+   ├─ authorization (at most 1)  the user's instructions for the seed: the
+   │                    steps agents take beyond the project's guidance
+   │                    without asking, and the steps they stop before
    ├─ reminder (at most 1)  a time and a message. At that time attn posts
    │                    the message to the seed's mailbox; like a calendar
    │                    reminder
