@@ -76,7 +76,7 @@ func (c *Client) Grep(ctx context.Context, root, query string, perFile, limit in
 			}
 		}
 	}
-	args := []string{"grep", "-z", "-n", "-I", "-F", "-i", "--untracked", "--no-color", "-m", strconv.Itoa(perFile + 1), "-e", query, "--"}
+	args := []string{"grep", "-z", "-n", "-I", "-F", "-i", "--untracked", "--no-color", "-e", query, "--"}
 	_, err := launchGit(ctx, OpMetadata, defaultTimeout(OpMetadata), gitProcess{dir: root, env: mergedCommandEnv(nil), read: read}, args...)
 	err = withStderr(args, err)
 	var exitErr *exec.ExitError

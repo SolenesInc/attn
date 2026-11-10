@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -218,6 +219,40 @@ func TestTheFileViewReadsAWholeFileOfTheReviewAndSearchFindsItsFilesAndLines(t *
 	common := requestReviewSearch(app, document, "common")
 	if len(common.Hits) != review.MaxSearchHits || !strings.Contains(protocol.Deref(common.Problem), fmt.Sprintf("over %d lines match", review.MaxSearchHits)) {
 		t.Errorf("searching a word on more than %d lines found %d hits with problem %q, want %d and the limit named", review.MaxSearchHits, len(common.Hits), protocol.Deref(common.Problem), review.MaxSearchHits)
+	}
+}
+
+func TestSearchFindsLinesWithAGitThatPredatesGrepMaxCount(t *testing.T) {
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	shim := t.TempDir()
+	gitBefore238 := "#!/bin/sh\nif [ \"$1\" = grep ]; then for a; do if [ \"$a\" = -m ]; then echo \"error: unknown switch \\`m'\" >&2; exit 129; fi; done; fi\nexec " + realGit + " \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shim, "git"), []byte(gitBefore238), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", shim+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := reviewRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "crowded.txt"), []byte(strings.Repeat("crowd\n", review.MaxSearchHitsInFile+5)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+
+	byText := requestReviewSearch(app, document, "sum")
+	if !byText.Success || len(byText.Hits) != 2 {
+		t.Errorf("searching sum with git 2.34 answered %d hits, error %q, want calc.go's 2 lines", len(byText.Hits), protocol.Deref(byText.Error))
+	}
+	crowded := requestReviewSearch(app, document, "crowd")
+	if len(crowded.Hits) != review.MaxSearchHitsInFile || !strings.Contains(protocol.Deref(crowded.Problem), "crowded.txt match on more than") {
+		t.Errorf("searching crowd with git 2.34 found %d hits with problem %q, error %q, want %d and the file named", len(crowded.Hits), protocol.Deref(crowded.Problem), protocol.Deref(crowded.Error), review.MaxSearchHitsInFile)
 	}
 }
 
