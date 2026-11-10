@@ -55,6 +55,17 @@ export function locateEdit(lines: readonly string[], edit: Annotation): number |
   return found.length === 1 ? found[0] : null;
 }
 
+/** Where an edit's mark shows: under the line now that holds its last line,
+ * found by its text as locateEdit finds it. With the whole file read, an edit
+ * the file no longer holds is moved; with only some of its lines, it waits. */
+export function placeEdit(edit: Annotation, rows: readonly ReviewRow[], whole: boolean): number | 'moved' | null {
+  const lines: string[] = [];
+  for (const row of rows) if (row.now !== undefined) lines[row.now - 1] = row.text.replace(/\r$/, '');
+  const at = locateEdit(lines, edit);
+  if (at === null) return whole ? 'moved' : null;
+  return at + (edit.edit?.now.split('\n').length ?? 1);
+}
+
 export function EditBox({
   edit,
   onSave,

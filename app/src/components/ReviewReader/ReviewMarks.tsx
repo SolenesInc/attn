@@ -85,7 +85,7 @@ function targetPlace(target: MarkTarget): string {
   return target.kind === 'file' ? fileAnchorPlace(target.anchor) : `“${target.quote.length > 80 ? `${target.quote.slice(0, 80)}…` : target.quote}”`;
 }
 
-function EditRow({ mark, range }: { mark: Annotation; range: string }) {
+function EditRow({ mark, range, onRemove }: { mark: Annotation; range: string; onRemove?: () => void }) {
   return (
     <div className="review-mark review-mark--edit" data-review-mark={mark.id}>
       <span className="review-mark-who">you edited</span>
@@ -94,6 +94,9 @@ function EditRow({ mark, range }: { mark: Annotation; range: string }) {
         Saved to the file. It was: <code className="review-mark-was">{mark.edit?.was}</code>
       </span>
       <span className="review-composer-keys"><kbd>u</kbd> undo</span>
+      {onRemove ? (
+        <button type="button" className="review-mark-remove" tabIndex={-1} title="Drop from the review; the file stays as it is" onClick={onRemove}>×</button>
+      ) : null}
     </div>
   );
 }
@@ -102,7 +105,7 @@ export function MarkRow({ mark, asking, onRemove }: { mark: Annotation; asking?:
   const question = mark.type === 'question';
   const anchor = mark.fileAnchor;
   const range = anchor ? (anchor.to > anchor.from ? `L${anchor.from}–${anchor.to}` : `L${anchor.from}`) : '';
-  if (mark.type === 'edit') return <EditRow mark={mark} range={range} />;
+  if (mark.type === 'edit') return <EditRow mark={mark} range={range} onRemove={onRemove} />;
   return (
     <div className={`review-mark${question ? ' review-mark--question' : ''}`} data-review-mark={mark.id}>
       <span className="review-mark-who">{question ? 'you asked' : 'you'}</span>

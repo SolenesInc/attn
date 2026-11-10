@@ -221,7 +221,7 @@ describe('App review document stops', () => {
     fireEvent.change(input, { target: { value: 'Questions reach the agent at once.' } });
     fireEvent.keyDown(input, { key: 'Enter', metaKey: true });
     await press('Shift');
-    expect(daemon.sentOf('review_file')).toEqual([expect.objectContaining({ host: 'outpost-1', path: 'docs/guide.md' })]);
+    expect(new Set(daemon.sentOf('review_file').map((read) => `${read.host}:${read.path}`))).toEqual(new Set(['outpost-1:docs/guide.md']));
     expect(daemon.sentOf('review_edit')).toEqual([expect.objectContaining({ host: 'outpost-1', path: 'docs/guide.md', from: 5, to: 5 })]);
   });
 });

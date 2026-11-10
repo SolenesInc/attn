@@ -241,7 +241,7 @@ describe('App review edits', () => {
     expect(within(editBox()).getByRole('textbox')).toHaveValue('// the query\nconst query = `');
   });
 
-  it('undoes the newest edit of a line, and a second u drops an edit the file no longer holds without writing', async () => {
+  it('undoes the newest edit of a line, and moves an edit the file no longer holds to the moved notes, where dropping it writes nothing', async () => {
     const { tile, press, type, toRow, daemon, draft, show, file } = await openReview();
     await toRow(4);
     await press('i');
@@ -256,16 +256,19 @@ describe('App review edits', () => {
     expect(file.added[0]).toBe('\ttotal := a + b');
     expect(draft.annotations).toEqual([expect.objectContaining({ edit_was: '\tsum := a + b', edit_now: '\ttotal := a + b' })]);
     await show();
+    expect(tile.querySelector('.review-doc [data-review-mark]')).toHaveTextContent('It was: sum := a + b');
 
     file.added = ['\tagent := a + b', '\treturn sum'];
     file.version += 1;
     await show();
+    const moved = within(tile).getByRole('region', { name: 'Moved notes' });
+    expect(moved).toHaveTextContent('It was: sum := a + b');
     await press('u');
     expect(daemon.sentOf('review_edit')).toHaveLength(3);
-    expect(tile.querySelector('.review-notice')).toHaveTextContent('Press u again to drop it from the review; the file stays as it is.');
-    await press('u');
-    expect(daemon.sentOf('review_edit')).toHaveLength(3);
+    fireEvent.click(within(moved).getByTitle('Drop from the review; the file stays as it is'));
+    await press('Shift');
     expect(draft.annotations).toEqual([]);
+    expect(daemon.sentOf('review_edit')).toHaveLength(3);
     expect(file.added[0]).toBe('\tagent := a + b');
   });
 

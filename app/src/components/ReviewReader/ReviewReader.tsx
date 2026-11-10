@@ -13,12 +13,12 @@ import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
-import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
+import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/types';
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
 import { isDocumentPath } from './DocStop';
-import { EditBox, editText, fileLines, locateEdit, type OpenEdit } from './ReviewEdits';
+import { EditBox, editText, fileLines, locateEdit, placeEdit, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -205,7 +205,6 @@ export function ReviewReader({
   const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
   const [editing, setEditing] = useState<OpenEdit | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const staleEditRef = useRef<string | null>(null);
   const selectedRef = useRef<HTMLElement[]>([]);
   const annotations = marks?.annotations ?? NO_MARKS;
   const cursorElementRef = useRef<HTMLElement | null>(null);
@@ -233,6 +232,11 @@ export function ReviewReader({
       const anchor = annotation.fileAnchor;
       if (!anchor) continue;
       const whole = markFiles.get(anchor.path);
+      if (annotation.type === 'edit') {
+        const place = placeEdit(annotation, whole ?? bundle.stops.filter((stop) => stop.path === anchor.path).flatMap((stop) => stop.rows), whole !== undefined);
+        if (place !== null) places.set(annotation.id, place);
+        continue;
+      }
       const lists = whole
         ? [{ rows: whole, covers: () => true }]
         : bundle.stops.filter((stop) => stop.path === anchor.path)
@@ -684,14 +688,13 @@ export function ReviewReader({
 
   const undoEdit = useCallback((): boolean => {
     const place = editPlace();
-    const mark = place && [...annotations].reverse().find((annotation) => annotation.type === 'edit' && annotation.fileAnchor?.path === place.path
-      && place.line >= annotation.fileAnchor.from && place.line <= annotation.fileAnchor.to);
+    const covers = (annotation: Annotation) => {
+      const last = markPlaces.get(annotation.id);
+      if (typeof last !== 'number' || !place || annotation.fileAnchor?.path !== place.path) return false;
+      return place.line <= last && place.line > last - (annotation.edit?.now.split('\n').length ?? 1);
+    };
+    const mark = place && [...annotations].reverse().find((annotation) => annotation.type === 'edit' && covers(annotation));
     if (!mark?.edit || !mark.fileAnchor || !marks || !sendReviewEdit) return false;
-    if (staleEditRef.current === mark.id) {
-      staleEditRef.current = null;
-      marks.deleteAnnotation(mark.id);
-      return true;
-    }
     const { path } = mark.fileAnchor;
     const was = mark.edit.was;
     setNotice(null);
@@ -699,8 +702,7 @@ export function ReviewReader({
       const lines = fileLines(answer.rows);
       const at = locateEdit(lines, mark);
       if (at === null) {
-        staleEditRef.current = mark.id;
-        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone. Press u again to drop it from the review; the file stays as it is.`);
+        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone.`);
         return;
       }
       const result = await sendReviewEdit(host, document, { path, baseHash: answer.hash ?? '', from: at + 1, to: at + mark.edit!.now.split('\n').length, text: was });
@@ -711,7 +713,7 @@ export function ReviewReader({
       marks.deleteAnnotation(mark.id);
     }).catch((error: unknown) => setNotice(`Could not undo the edit: ${error instanceof Error ? error.message : String(error)}`));
     return true;
-  }, [annotations, document, editPlace, host, marks, readFile, sendReviewEdit]);
+  }, [annotations, document, editPlace, host, marks, markPlaces, readFile, sendReviewEdit]);
 
   const openComposer = useCallback((kind: MarkKind) => {
     const target = markTarget();
@@ -795,7 +797,6 @@ export function ReviewReader({
       const selection = tileWindow.getSelection();
       if (selection && !selection.isCollapsed && root.contains(selection.anchorNode) && isPrintable(event)) return;
       setNotice(null);
-      if (event.key !== 'u') staleEditRef.current = null;
       const handled = handleKey(event);
       if (handled) event.preventDefault();
     };
