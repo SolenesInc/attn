@@ -36,7 +36,6 @@ export interface PublishedShelf {
 export interface DocumentReturn {
   firstColumn: FirstColumn;
   shownAtLeafId: string;
-  activeLeafId: string;
 }
 
 export interface SettledRow {

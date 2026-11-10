@@ -2,7 +2,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { Seed } from '../../hooks/useDaemonSocket';
 import { useShortcut } from '../../shortcuts/useShortcut';
 import { useDesktopShelfStore, type PublishedShelf, type ShelfColumn, type ShelfTile } from '../../store/desktopShelf';
-import { useSessionStore } from '../../store/sessions';
 import { tileContentKey, type TileContentState, type TileLeaf, type AgentTerminal } from '../../types/desktop';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import { deriveTileTitle } from '../../utils/tilePresentation';
@@ -180,9 +179,6 @@ export function useRowSettling(input: RowSettlingInput) {
         if (row.has(leafId) || !documentReturn || previousFirstColumn.leafId !== documentReturn.shownAtLeafId) continue;
         if (columnIndexOf(readRow(rowInput.tree), documentReturn.firstColumn.leafId) < 0) continue;
         firstColumn = documentReturn.firstColumn;
-        if (previous.activeLeafId === leafId && row.has(documentReturn.activeLeafId) && activeLeafId !== documentReturn.activeLeafId) {
-          useSessionStore.getState().selectLeaf(desktopId, documentReturn.activeLeafId);
-        }
       }
 
       for (const leafId of arrivals) {
@@ -197,7 +193,6 @@ export function useRowSettling(input: RowSettlingInput) {
         shelf.saveDocumentReturn(desktopId, leafId, {
           firstColumn: previousFirstColumn,
           shownAtLeafId: (revealed ?? plan.firstColumn).leafId,
-          activeLeafId: previous.activeLeafId,
         });
       }
 
@@ -205,7 +200,6 @@ export function useRowSettling(input: RowSettlingInput) {
         shelf.saveDocumentReturn(desktopId, activeLeafId, {
           firstColumn: previousFirstColumn,
           shownAtLeafId: firstColumn.leafId,
-          activeLeafId: previous.activeLeafId,
         });
       }
     }

@@ -754,12 +754,33 @@ describe('Shelf layout', () => {
         daemon.on('desktop_remove_leaf', (command) => {
           const desktop = daemon.arrangement.desktop('ws')!;
           const placed = daemon.arrangement.withTree(desktop, JSON.parse(JSON.stringify(rightChain(IDS.slice(0, 4).map(pane)))));
-          daemon.arrangement.replace({ ...placed, active_pane_id: 'pane-s2' });
+          daemon.arrangement.replace({ ...placed, active_pane_id: 'pane-s3' });
           return [daemon.arrangement.answer(command), { event: 'profile_action_result', action: command.cmd, success: true, request_id: command.request_id ?? '' }];
         });
         await closeDocument(daemon);
 
         expect(paneIds()).toEqual(screenBefore);
+        expect(active()).toBe('pane-s3');
+      });
+
+      it('closing it puts the screen back and keeps the tile the daemon focuses', async () => {
+        const daemon = await renderRow(NARROWEST_66);
+        await slideTo(daemon, 'terminal.focusRight');
+        await agentOpens(daemon, 's3');
+        expect(active()).toBe('pane-s2');
+        expect(paneIds()).toEqual(['pane-s2', 'pane-s3', 'doc']);
+        await slideTo(daemon, 'terminal.focusRight', 'terminal.focusRight');
+        expect(active()).toBe('doc');
+
+        daemon.on('desktop_remove_leaf', (command) => {
+          const desktop = daemon.arrangement.desktop('ws')!;
+          const placed = daemon.arrangement.withTree(desktop, JSON.parse(JSON.stringify(rightChain(IDS.map(pane)))));
+          daemon.arrangement.replace({ ...placed, active_pane_id: 'pane-s3' });
+          return [daemon.arrangement.answer(command), { event: 'profile_action_result', action: command.cmd, success: true, request_id: command.request_id ?? '' }];
+        });
+        await closeDocument(daemon);
+
+        expect(paneIds()).toEqual(onScreen('s1', 's2', 's3'));
         expect(active()).toBe('pane-s3');
       });
 
