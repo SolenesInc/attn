@@ -171,7 +171,7 @@ func (d *Daemon) editReviewFile(_ context.Context, msg protocol.ReviewEditMessag
 	if err != nil {
 		return protocol.ReviewEditResultMessage{}, err
 	}
-	return review.Edit(content, msg)
+	return review.Edit(content, msg, d.fsStore)
 }
 
 func (d *Daemon) handleReviewEditWS(client *wsClient, msg *protocol.ReviewEditMessage) {

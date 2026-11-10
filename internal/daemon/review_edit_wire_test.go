@@ -15,6 +15,8 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
+const raceAttempts = 20
+
 const calcNow = "package calc\n\nfunc Add(a, b int) int {\n\tsum := a + b\n\treturn sum\n}\n"
 
 func requestReviewEdit(app *testworld.Peer, document, path, baseHash string, from, to int, text string) protocol.ReviewEditResultMessage {
@@ -190,5 +192,41 @@ func TestReviewEditIsRefusedWithCodeReviewOff(t *testing.T) {
 	}
 	if got := readFile(t, calc); got != calcNow {
 		t.Errorf("calc.go after the refused edit is %q, want it untouched", got)
+	}
+}
+
+func TestTwoEditsOfAFileAgainstTheSameHashWriteOneAndReportTheOtherAsAConflict(t *testing.T) {
+	r := openCalcReview(t)
+	notes := filepath.Join(r.repo, "notes.txt")
+	base := "first\nsecond\n" + strings.Repeat("padding\n", 4096)
+	for attempt := 1; attempt <= raceAttempts; attempt++ {
+		if err := os.WriteFile(notes, []byte(base), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		first, second := uuid.NewString(), uuid.NewString()
+		r.app.Send(protocol.ReviewEditMessage{Cmd: protocol.CmdReviewEdit, Document: r.document, Path: "notes.txt", BaseHash: sha(base), From: 1, To: 1, Text: "FIRST EDIT", RequestID: protocol.Ptr(first)})
+		r.app.Send(protocol.ReviewEditMessage{Cmd: protocol.CmdReviewEdit, Document: r.document, Path: "notes.txt", BaseHash: sha(base), From: 2, To: 2, Text: "SECOND EDIT", RequestID: protocol.Ptr(second)})
+		answers := map[string]protocol.ReviewEditResultMessage{}
+		for _, id := range []string{first, second} {
+			answers[id] = testworld.Await(r.app, protocol.EventReviewEditResult, func(e protocol.ReviewEditResultMessage) bool { return protocol.Deref(e.RequestID) == id })
+		}
+		written := readFile(t, notes)
+		var wrote []string
+		for id, answer := range answers {
+			if !answer.Success {
+				t.Fatalf("attempt %d: an edit failed: %+v", attempt, answer)
+			}
+			if answer.Conflict {
+				if protocol.Deref(answer.CurrentHash) != sha(written) {
+					t.Fatalf("attempt %d: the conflict names hash %q, want the file's current hash", attempt, protocol.Deref(answer.CurrentHash))
+				}
+				continue
+			}
+			wrote = append(wrote, id)
+		}
+		if len(wrote) != 1 {
+			t.Fatalf("attempt %d: %d of the two edits against the same hash reported success, want exactly one; the file holds FIRST EDIT=%v SECOND EDIT=%v",
+				attempt, len(wrote), strings.Contains(written, "FIRST EDIT"), strings.Contains(written, "SECOND EDIT"))
+		}
 	}
 }

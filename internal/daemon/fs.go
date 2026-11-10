@@ -50,7 +50,17 @@ func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, str
 	if err != nil {
 		return nil, "", err
 	}
+	store := d.fsStore(root)
+	if d.isNotebookRoot(root) {
+		d.ensureNotebookWatcher(root)
+	}
+	return store, root, nil
+}
+
+func (d *Daemon) fsStore(root string) *fsdoc.Store {
+	root = filepath.Clean(root)
 	d.fsMu.Lock()
+	defer d.fsMu.Unlock()
 	if d.fsStores == nil {
 		d.fsStores = make(map[string]*fsdoc.Store)
 	}
@@ -59,11 +69,7 @@ func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, str
 		store = fsdoc.NewStore(root)
 		d.fsStores[root] = store
 	}
-	d.fsMu.Unlock()
-	if d.isNotebookRoot(root) {
-		d.ensureNotebookWatcher(root)
-	}
-	return store, root, nil
+	return store
 }
 
 func (d *Daemon) broadcastFsChanged(root, origin string, paths ...string) {

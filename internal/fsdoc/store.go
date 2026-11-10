@@ -18,22 +18,21 @@ const MaxFileSize = 2 << 20
 type Store struct {
 	root     string
 	dotPaths bool
-	mu       sync.Mutex
+	mu       *sync.Mutex
 }
 
 func NewStore(root string) *Store {
 	if root != "" {
 		root = filepath.Clean(root)
 	}
-	return &Store{root: root}
+	return &Store{root: root, mu: &sync.Mutex{}}
 }
 
-// NewRepositoryStore is a store over a repository's working tree, where files
-// under dot directories such as .github are ordinary files.
-func NewRepositoryStore(root string) *Store {
-	store := NewStore(root)
-	store.dotPaths = true
-	return store
+// WithDotPaths is this store seen as a repository's working tree, where files
+// under dot directories such as .github are ordinary files. It shares the
+// store's writes, so an edit through either one conflicts with the other.
+func (s *Store) WithDotPaths() *Store {
+	return &Store{root: s.root, dotPaths: true, mu: s.mu}
 }
 
 func (s *Store) Root() string { return s.root }

@@ -237,8 +237,8 @@ func filesNamed(files []string, query string) []string {
 // Edit replaces the lines from..to of a file of the review's repository, as it
 // is now, with text, while the file still has the hash the text was edited
 // against. A file that changed since is left untouched and reported as a
-// conflict.
-func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResultMessage, error) {
+// conflict. storeFor gives the one store that writes the files under a root.
+func Edit(text string, edit protocol.ReviewEditMessage, storeFor func(root string) *fsdoc.Store) (protocol.ReviewEditResultMessage, error) {
 	root, ok := parse(text).meta.get("repository")
 	if !ok || !filepath.IsAbs(root.value) {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("the review names no absolute repository in its frontmatter. Run `attn review start <document>` from the repository under review")
@@ -254,7 +254,7 @@ func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResu
 	if info, err := os.Stat(full); err == nil && info.Size() > fsdoc.MaxFileSize {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s is %d bytes; attn edits files up to %d bytes. Make this change in an editor", edit.Path, info.Size(), fsdoc.MaxFileSize)
 	}
-	store := fsdoc.NewRepositoryStore(repo.root)
+	store := storeFor(repo.root).WithDotPaths()
 	current, hash, err := store.Read(edit.Path)
 	if err != nil {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s: %w", edit.Path, err)
