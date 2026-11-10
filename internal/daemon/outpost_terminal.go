@@ -53,6 +53,9 @@ func (d *Daemon) callBridgeHandler(host string, order *terminalOrder) func(*brid
 				if host != "" {
 					return Call[any](ctx, d.router(), full)
 				}
+				if err := d.awaitRecovered(); err != nil {
+					return nil, err
+				}
 				return part.run(ctx, full)
 			})
 		}
@@ -93,6 +96,10 @@ func (d *Daemon) inputBridgeHandler(order *terminalOrder) func(*bridge.Conn, ssh
 				}
 				terminal := protocol.TerminalID(msg.Locate())
 				if !order.queue(terminal, func() {
+					if err := d.awaitRecovered(); err != nil {
+						answer(err)
+						return
+					}
 					_, err := part.run(context.Background(), msg)
 					answer(err)
 				}) {

@@ -257,6 +257,37 @@ func TestRemoteShellSurvivesBridgeLossAndDaemonRestarts(t *testing.T) {
 	t.Log("lost bridge refused input/resize/close/split/kill/reload/attach; live shell survived both daemon restarts; missing worker became recoverable")
 }
 
+func TestATerminalOpenedWhileItsOutpostRecoversOpensOnceRecoveryEnds(t *testing.T) {
+	home, outpost := testworld.NewStack(t), testworld.NewStack(t)
+	pair := testworld.PrepareOutpostPair(t, home, outpost)
+	pair.Start()
+	app := pair.App
+	shell := home.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), outpost.Path("shell"), func(m *protocol.SpawnSessionMessage) { m.Host = protocol.Ptr(pair.Host) })
+	app.TypeLine(shell, "echo before-$((1+1))")
+	app.AwaitScreen(shell, "before-2")
+	terminal := protocol.TerminalID(app.Terminal(shell))
+
+	stopped := len(app.Log())
+	outpost.Stop()
+	outpostStateSince(app, "outpost", protocol.OutpostStateLost, stopped)
+	recovery := outpost.PauseAt(pausepoint.DaemonStartupRecovery)
+	started := len(app.Log())
+	outpost.StartHeldAt(recovery)
+	stopRetries := home.FireTimers(bridge.RetryTimer)
+	outpostStateSince(app, "outpost", protocol.OutpostStateConnected, started)
+	stopRetries()
+
+	fresh := home.App()
+	fresh.Send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: terminal})
+	fresh.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: terminal, Data: "echo during-$((2+2))\r"})
+	recovery.Release()
+	result := testworld.Await(fresh, protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == terminal })
+	if !result.Success {
+		t.Fatalf("attach sent while the outpost recovers: %s", protocol.Deref(result.Error))
+	}
+	fresh.AwaitScreen(shell, "during-4")
+}
+
 func TestRemoteOutputResumesAfterAWorkerUpgradeWithoutDroppingTheBridge(t *testing.T) {
 	old := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-old")
 	current := testworld.AttnBinaryWithSnapshotFormat(t, "remote-stream-current")

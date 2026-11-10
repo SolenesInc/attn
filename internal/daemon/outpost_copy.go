@@ -86,10 +86,8 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 		bridgeCallRecovery: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("reportOutpostMachine", func() {
 				bridge.Answer(incoming, func(_ context.Context, _ []byte) (any, error) {
-					select {
-					case <-d.recoverySettledSignal():
-					case <-d.life.Done():
-						return nil, errDaemonStopping
+					if err := d.awaitRecovered(); err != nil {
+						return nil, err
 					}
 					return d.outpostMachineReport(), nil
 				})
@@ -100,6 +98,9 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 		bridge.AttachChannel: func(conn *bridge.Conn, incoming ssh.NewChannel) {
 			if !d.life.Go("bridgeAttach", func() {
 				if err := conn.ServeAttach(d.life.Context(), incoming, func(req bridge.AttachRequest) (ptybackend.AttachInfo, ptybackend.Stream, error) {
+					if err := d.awaitRecovered(); err != nil {
+						return ptybackend.AttachInfo{}, nil, err
+					}
 					info, stream, err := d.ptyBackend.Attach(d.life.Context(), req.Terminal, req.Subscriber, req.Options)
 					if err != nil {
 						return info, nil, err
@@ -121,6 +122,15 @@ func (d *Daemon) outpostHandlers() bridge.Handlers {
 				_ = incoming.Reject(ssh.ResourceShortage, "daemon is stopping")
 			}
 		},
+	}
+}
+
+func (d *Daemon) awaitRecovered() error {
+	select {
+	case <-d.recoverySettledSignal():
+		return nil
+	case <-d.life.Done():
+		return errDaemonStopping
 	}
 }
 
