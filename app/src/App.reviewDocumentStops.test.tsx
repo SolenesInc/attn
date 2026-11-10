@@ -32,7 +32,7 @@ const row = (kind: string, old: number | undefined, now: number | undefined, tex
   text,
 });
 
-/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, and an added paragraph. */
+/** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, an added paragraph, and a hard-wrapped paragraph with one word changed. */
 const GUIDE_NOW = [
   '# Reviews',
   '',
@@ -45,6 +45,10 @@ const GUIDE_NOW = [
   '- three',
   '',
   'A paragraph added at the end.',
+  '',
+  'Hard-wrapped lines',
+  'keep their words',
+  'when one of them changes.',
 ];
 
 function guideRows(now: readonly string[]): ReviewRow[] {
@@ -57,6 +61,7 @@ function guideRows(now: readonly string[]): ReviewRow[] {
     row('-', 5, undefined, 'Nothing else is sent until you send the review.'),
     row('+', undefined, 5, now[4]),
     ...now.slice(5).flatMap((text, index) => {
+      if (text === 'keep their words') return [row('-', 6 + index, undefined, 'keep all words'), row('+', undefined, 6 + index, text)];
       if (text === '- two') return [row('-', 6 + index, undefined, '- to'), row('+', undefined, 6 + index, text)];
       if (text.startsWith('A paragraph added')) return [row('+', undefined, 6 + index, text)];
       return [row(' ', 6 + index, 6 + index, text)];
@@ -141,8 +146,12 @@ describe('App review document stops', () => {
     const { tile } = await openReview();
     const blocks = Array.from(tile.querySelectorAll('.review-stop--doc .review-doc-block'));
     expect(blocks.map((block) => [block.getAttribute('data-line'), block.classList.contains('review-doc-block--changed')])).toEqual([
-      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false], ['11', true],
+      ['1', false], ['3', true], ['5', true], ['7', false], ['8', true], ['9', false], ['11', true], ['13', true],
     ]);
+    const wrapped = blocks[7];
+    expect(Array.from(wrapped.querySelectorAll('ins')).map((word) => word.textContent)).toEqual(['their']);
+    expect(Array.from(wrapped.querySelectorAll('del')).map((word) => word.textContent)).toEqual(['all']);
+    expect(wrapped).toHaveTextContent('Hard-wrapped lines keep all their words when one of them changes.');
     expect(blocks[6].querySelector('.review-doc-was')).toBeNull();
     expect(blocks[6]).toHaveTextContent('A paragraph added at the end.');
     expect(blocks[3].querySelector('del')).toBeNull();

@@ -4,7 +4,7 @@ import remarkParse from 'remark-parse';
 import { unified } from 'unified';
 import type { ReviewRow } from '../../types/generated';
 
-/** One block of a document stop: its lines now and, when it changed, the text it replaced. */
+/** One block of a document stop: its lines now and, when it changed, the whole block it was. */
 export interface DocBlock {
   from: number;
   to: number;
@@ -35,7 +35,8 @@ function blockNodes(root: Root): RootContent[] {
 /**
  * The blocks of a document stop's rows: each top-level block, and each item of a
  * list, with the lines it holds now. Removed rows belong to the block of the
- * next line still in the file; a block with added lines or removed lines changed.
+ * next line still in the file; a block with added lines or removed lines
+ * changed, and its old text is its unchanged lines with the removed ones.
  */
 export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; removedAfter: string | null } {
   const shown = rows.filter((row) => row.now !== undefined);
@@ -55,6 +56,8 @@ export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; rem
       was: null,
     };
   });
+  const old = new Map<DocBlock, string[]>();
+  const lostRows = new Set<DocBlock>();
   let next = 0;
   let removed: string[] = [];
   for (const row of rows) {
@@ -65,11 +68,21 @@ export function docBlocks(rows: readonly ReviewRow[]): { blocks: DocBlock[]; rem
     while (next < blocks.length && blocks[next].to < row.now) next += 1;
     const block = blocks[next];
     if (!block) continue;
-    if (row.kind === '+' && row.now >= block.from) block.added = true;
+    const before = old.get(block) ?? [];
     if (removed.length > 0) {
-      block.was = [...(block.was === null ? [] : [block.was]), ...removed].join('\n');
+      lostRows.add(block);
+      before.push(...removed);
       removed = [];
     }
+    if (row.now >= block.from) {
+      if (row.kind === '+') block.added = true;
+      else before.push(row.text);
+    }
+    old.set(block, before);
+  }
+  for (const block of blocks) {
+    const before = old.get(block) ?? [];
+    if ((block.added || lostRows.has(block)) && before.length > 0) block.was = before.join('\n');
   }
   return { blocks, removedAfter: removed.length > 0 ? removed.join('\n') : null };
 }

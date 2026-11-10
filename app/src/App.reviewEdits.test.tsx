@@ -27,23 +27,22 @@ Add used to return its sum directly.
 - L4!: The sum gets a name.
 `;
 
-const row = (kind: string, old: number | undefined, now: number | undefined, text: string): ReviewRow => ({
+const row = (kind: string, old: number | undefined, now: number | undefined, text: string, head?: number): ReviewRow => ({
   kind,
   ...(old !== undefined ? { old } : {}),
   ...(now !== undefined ? { now } : {}),
+  ...(head !== undefined ? { head } : {}),
   text,
 });
 
-/** calc.go as rows: the change from base, then a raw string of several lines. */
-function calcRows(added: string[] = ['\tsum := a + b', '\treturn sum']): ReviewRow[] {
-  const after = ['}', '', 'const query = `', 'SELECT 1', '`'];
+/** calc.go as rows: the change from base to its lines now, each with its line at head. */
+function calcRows(lines: readonly string[], heads: readonly (number | undefined)[]): ReviewRow[] {
+  const added = lines.slice(3, lines.length - 5);
   return [
-    row(' ', 1, 1, 'package calc'),
-    row(' ', 2, 2, ''),
-    row(' ', 3, 3, 'func Add(a, b int) int {'),
+    ...lines.slice(0, 3).map((text, index) => row(' ', index + 1, index + 1, text, heads[index])),
     row('-', 4, undefined, '\treturn a + b'),
-    ...added.map((text, index) => row('+', undefined, 4 + index, text)),
-    ...after.map((text, index) => row(' ', 5 + index, 4 + added.length + index, text)),
+    ...added.map((text, index) => row('+', undefined, 4 + index, text, heads[3 + index])),
+    ...lines.slice(3 + added.length).map((text, index) => row(' ', 5 + index, 4 + added.length + index, text, heads[3 + added.length + index])),
   ];
 }
 
@@ -69,7 +68,8 @@ function bundleOf(rows: ReviewRow[], hash: string, linesAbove = 0): ReviewBundle
 
 /** The file on the review's machine: review_file reads it, review_edit writes it while its hash holds. */
 class ReviewedFile {
-  added = ['\tsum := a + b', '\treturn sum'];
+  lines = ['package calc', '', 'func Add(a, b int) int {', '\tsum := a + b', '\treturn sum', '}', '', 'const query = `', 'SELECT 1', '`'];
+  heads: Array<number | undefined> = this.lines.map((_, index) => index + 1);
   version = 1;
   conflictNext = false;
 
@@ -77,8 +77,20 @@ class ReviewedFile {
     return `h${this.version}`;
   }
 
+  get added() {
+    return this.lines.slice(3, this.lines.length - 5);
+  }
+
   rows() {
-    return calcRows(this.added);
+    return calcRows(this.lines, this.heads);
+  }
+
+  /** Lines written after head, by the user's edit or by the agent: head does not have them. */
+  write(from: number, to: number, text: string) {
+    const written = text.split('\n');
+    this.lines.splice(from - 1, to - from + 1, ...written);
+    this.heads.splice(from - 1, to - from + 1, ...written.map(() => undefined));
+    this.version += 1;
   }
 
   edit({ base_hash, from, to, text }: CommandMessage<'review_edit'>) {
@@ -87,10 +99,7 @@ class ReviewedFile {
       this.version += 1;
       return { event: 'review_edit_result' as const, success: true, conflict: true, current_hash: this.hash };
     }
-    const lines = this.rows().filter((candidate) => candidate.now !== undefined).map((candidate) => candidate.text);
-    lines.splice(from - 1, to - from + 1, ...text.split('\n'));
-    this.added = lines.slice(3, lines.length - 5);
-    this.version += 1;
+    this.write(from, to, text);
     return { event: 'review_edit_result' as const, success: true, conflict: false, hash: this.hash };
   }
 }
@@ -258,8 +267,7 @@ describe('App review edits', () => {
     await show();
     expect(tile.querySelector('.review-doc [data-review-mark]')).toHaveTextContent('It was: sum := a + b');
 
-    file.added = ['\tagent := a + b', '\treturn sum'];
-    file.version += 1;
+    file.write(4, 4, '\tagent := a + b');
     await show();
     const moved = within(tile).getByRole('region', { name: 'Moved notes' });
     expect(moved).toHaveTextContent('It was: sum := a + b');
@@ -272,9 +280,51 @@ describe('App review edits', () => {
     expect(file.added[0]).toBe('\tagent := a + b');
   });
 
+  it('shows an edit at once in the open file, outside any stop, and undoes the newer of two edits there', async () => {
+    const { tile, press, type, toRow, daemon, file } = await openReview();
+    await toRow(4);
+    await press('Enter');
+    const fileCursor = () => tile.querySelector('.review-file-view .review-cursor');
+    while (!fileCursor()?.textContent?.includes('package')) await press('ArrowUp');
+
+    await press('i');
+    await type('package sums');
+    expect(fileCursor()).toHaveTextContent('package sums');
+    await press('i');
+    await type('package totals');
+    expect(fileCursor()).toHaveTextContent('package totals');
+    expect(tile.querySelector('.review-file-view')).toHaveTextContent('you edited');
+
+    await press('u');
+    expect(daemon.sentOf('review_edit')[2]).toMatchObject({ from: 1, to: 1, text: 'package sums' });
+    expect(file.lines[0]).toBe('package sums');
+    expect(fileCursor()).toHaveTextContent('package sums');
+  });
+
+  it('never moves an edit onto another line with the same text, and u there writes nothing', async () => {
+    const { tile, press, type, toRow, daemon, draft, show, file } = await openReview();
+    await toRow(4);
+    await press('i');
+    await type('}');
+    await show();
+    await press('i');
+    await type('\tdone := true');
+    await show();
+    expect(file.lines.filter((line) => line === '}')).toHaveLength(1);
+
+    const moved = within(tile).getByRole('region', { name: 'Moved notes' });
+    expect(moved).toHaveTextContent('It was: sum := a + b');
+    await toRow(6);
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveTextContent('}');
+    await press('u');
+    expect(daemon.sentOf('review_edit')).toHaveLength(2);
+    expect(file.lines[5]).toBe('}');
+    expect(draft.annotations).toHaveLength(2);
+  });
+
   it('edits a line of a CRLF file without its carriage return', async () => {
     const { press, editBox, toRow, file, show } = await openReview();
-    file.added = ['\tsum := a + b\r', '\treturn sum\r'];
+    file.write(4, 5, '\tsum := a + b\r\n\treturn sum\r');
     await show();
     await toRow(4);
     await press('i');

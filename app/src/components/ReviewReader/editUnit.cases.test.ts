@@ -29,6 +29,22 @@ const tsFile = [
   'export const n = 1;',
 ];
 
+const workflow = [
+  'name: ci',
+  'on: push',
+  'jobs:',
+  '  test:',
+  '    runs-on: ubuntu-latest',
+  '    steps:',
+  '      - run: |',
+  '          go test ./...',
+  '          echo done',
+];
+
+const script = ['#!/bin/sh', 'echo hello world', 'cd "$dir"', 'printf "%s\\n" one'];
+
+const settings = Array.from({ length: 4000 }, (_, index) => `key${index}: value ${index}`);
+
 const filler = (count: number) => Array.from({ length: count }, (_, index) => `var v${index} = ${index}`);
 const longString = [...filler(250), 'const long = `', ...Array.from({ length: 3 * EXPLAIN_WINDOW_LINES }, (_, index) => `line ${index}`), '`', 'var after = 1'];
 const longStringStart = 250;
@@ -53,6 +69,10 @@ const cases: Case[] = [
   { name: 'a single line of code', lines: goFile, path: 'store.go', cursor: 10, want: { kind: 'line', from: 10, to: 10 } },
   { name: 'a template literal in TypeScript', lines: tsFile, path: 'query.ts', cursor: 1, want: { kind: 'string', from: 0, to: 2 } },
   { name: 'a doc comment in TypeScript', lines: tsFile, path: 'query.ts', cursor: 4, want: { kind: 'comment', from: 3, to: 5 } },
+  { name: 'a plain YAML value', lines: workflow, path: 'ci.yml', cursor: 4, want: { kind: 'line', from: 4, to: 4 } },
+  { name: 'a YAML key and value in a long file of them', lines: settings, path: 'settings.yaml', cursor: 2000, want: { kind: 'line', from: 2000, to: 2000 } },
+  { name: 'shell words', lines: script, path: 'run.sh', cursor: 1, want: { kind: 'line', from: 1, to: 1 } },
+  { name: 'a one-line selection', lines: goFile, path: 'store.go', cursor: 3, selection: [3, 3], want: { kind: 'selection', from: 3, to: 3 } },
   { name: 'selected lines', lines: goFile, path: 'store.go', cursor: 10, selection: [13, 10], want: { kind: 'selection', from: 10, to: 13 } },
   { name: 'a language Shiki does not know', lines: ['`', 'a', '`'], path: 'notes.unknownlang', cursor: 1, want: { kind: 'line', from: 1, to: 1 } },
   {

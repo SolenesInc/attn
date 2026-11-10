@@ -2810,6 +2810,10 @@ model MarkdownAnnotation {
   // An edit the user saved to a review's file: the lines before and after.
   edit_was?: string;
   edit_now?: string;
+  // Where the edit stands: edit_offset lines below the line at the review's
+  // head it follows, which is 0 when no line at head comes before it.
+  edit_after_head?: int32;
+  edit_offset?: int32;
   created_at: safeint; // epoch ms (int64 would codegen as string)
 }
 

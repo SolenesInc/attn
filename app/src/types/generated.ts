@@ -7382,7 +7382,9 @@ export interface MarkdownAnnotation {
     anchor?:           Anchor;
     answer?:           string;
     created_at:        number;
+    edit_after_head?:  number;
     edit_now?:         string;
+    edit_offset?:      number;
     edit_was?:         string;
     id:                string;
     quick_label_id?:   string;
@@ -7459,7 +7461,9 @@ export interface AnnotationElement {
     anchor?:           Anchor;
     answer?:           string;
     created_at:        number;
+    edit_after_head?:  number;
     edit_now?:         string;
+    edit_offset?:      number;
     edit_was?:         string;
     id:                string;
     quick_label_id?:   string;
@@ -26174,7 +26178,9 @@ const typeMap: any = {
         { json: "anchor", js: "anchor", typ: u(undefined, r("Anchor")) },
         { json: "answer", js: "answer", typ: u(undefined, "") },
         { json: "created_at", js: "created_at", typ: 0 },
+        { json: "edit_after_head", js: "edit_after_head", typ: u(undefined, 0) },
         { json: "edit_now", js: "edit_now", typ: u(undefined, "") },
+        { json: "edit_offset", js: "edit_offset", typ: u(undefined, 0) },
         { json: "edit_was", js: "edit_was", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "quick_label_id", js: "quick_label_id", typ: u(undefined, "") },
@@ -26237,7 +26243,9 @@ const typeMap: any = {
         { json: "anchor", js: "anchor", typ: u(undefined, r("Anchor")) },
         { json: "answer", js: "answer", typ: u(undefined, "") },
         { json: "created_at", js: "created_at", typ: 0 },
+        { json: "edit_after_head", js: "edit_after_head", typ: u(undefined, 0) },
         { json: "edit_now", js: "edit_now", typ: u(undefined, "") },
+        { json: "edit_offset", js: "edit_offset", typ: u(undefined, 0) },
         { json: "edit_was", js: "edit_was", typ: u(undefined, "") },
         { json: "id", js: "id", typ: "" },
         { json: "quick_label_id", js: "quick_label_id", typ: u(undefined, "") },

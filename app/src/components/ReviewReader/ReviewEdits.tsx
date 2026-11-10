@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReviewRow } from '../../types/generated';
-import type { Annotation } from '../MarkdownReader/annotations/types';
+import type { AnnotationEdit } from '../MarkdownReader/annotations/types';
 import type { EditUnitKind } from './editUnit';
 
 export type EditKind = EditUnitKind | 'block';
@@ -10,6 +10,7 @@ export interface OpenEdit {
   path: string;
   hash: string;
   lines: readonly string[];
+  heads: readonly (number | undefined)[];
   kind: EditKind;
   from: number;
   to: number;
@@ -19,10 +20,12 @@ export interface OpenEdit {
   saving?: boolean;
 }
 
-/** A file's lines as the edit box shows them: without the carriage return of a
- * CRLF file, which the daemon writes back around the edited lines. */
-export function fileLines(rows: readonly ReviewRow[] | undefined): string[] {
-  return (rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text.replace(/\r$/, ''));
+/** A file's lines as the edit box shows them, without the carriage return of a
+ * CRLF file, which the daemon writes back around the edited lines, and the line
+ * at head each one is. */
+export function fileLines(rows: readonly ReviewRow[] | undefined): { lines: string[]; heads: Array<number | undefined> } {
+  const now = (rows ?? []).filter((row) => row.now !== undefined);
+  return { lines: now.map((row) => row.text.replace(/\r$/, '')), heads: now.map((row) => row.head) };
 }
 
 export function editText(edit: Pick<OpenEdit, 'lines' | 'from' | 'to'>): string {
@@ -39,31 +42,43 @@ function describe(edit: OpenEdit): string {
   }
 }
 
-/** The 0-based line where an edit's new text stands in the file now: at the
- * line it was saved at, else at its only occurrence. Null when the text is
- * not there once. */
-export function locateEdit(lines: readonly string[], edit: Annotation): number | null {
-  if (!edit.edit || !edit.fileAnchor) return null;
-  const wanted = edit.edit.now.split('\n');
-  const standsAt = (at: number) => at >= 0 && wanted.every((line, offset) => lines[at + offset] === line);
-  const saved = edit.fileAnchor.from - 1;
-  if (standsAt(saved)) return saved;
-  const found: number[] = [];
-  for (let at = 0; at + wanted.length <= lines.length; at += 1) {
-    if (standsAt(at)) found.push(at);
-  }
-  return found.length === 1 ? found[0] : null;
+/** Where an edit that starts at the 0-based line `from` stands: below the
+ * nearest line above it that head has. */
+export function whereEditStands(heads: readonly (number | undefined)[], from: number): Pick<AnnotationEdit, 'afterHead' | 'offset'> {
+  let above = from - 1;
+  while (above >= 0 && heads[above] === undefined) above -= 1;
+  return { afterHead: above >= 0 ? heads[above]! : 0, offset: from - above - 1 };
 }
 
-/** Where an edit's mark shows: under the line now that holds its last line,
- * found by its text as locateEdit finds it. With the whole file read, an edit
- * the file no longer holds is moved; with only some of its lines, it waits. */
-export function placeEdit(edit: Annotation, rows: readonly ReviewRow[], whole: boolean): number | 'moved' | null {
-  const lines: string[] = [];
-  for (const row of rows) if (row.now !== undefined) lines[row.now - 1] = row.text.replace(/\r$/, '');
-  const at = locateEdit(lines, edit);
-  if (at === null) return whole ? 'moved' : null;
-  return at + (edit.edit?.now.split('\n').length ?? 1);
+/** The line now where an edit's text starts, found from the line at head it
+ * follows, the way marks are. Moved when rows show that line gone or other
+ * text there; null when the rows do not reach it and the whole file is not
+ * read. Never searched for elsewhere in the file. */
+export function editStart(rows: readonly ReviewRow[], edit: AnnotationEdit, whole: boolean): number | 'moved' | null {
+  const nowOfHead = new Map<number, number>();
+  const textOfNow = new Map<number, string>();
+  for (const row of rows) {
+    if (row.now === undefined) continue;
+    textOfNow.set(row.now, row.text.replace(/\r$/, ''));
+    if (row.head !== undefined) nowOfHead.set(row.head, row.now);
+  }
+  const unseen = whole ? 'moved' : null;
+  const base = edit.afterHead === 0 ? 0 : nowOfHead.get(edit.afterHead);
+  if (base === undefined) return unseen;
+  const start = base + edit.offset + 1;
+  const wanted = edit.now.split('\n');
+  for (const [index, line] of wanted.entries()) {
+    const text = textOfNow.get(start + index);
+    if (text === undefined) return unseen;
+    if (text !== line) return 'moved';
+  }
+  return start;
+}
+
+/** Where an edit's mark shows: under the line now that holds its last line. */
+export function placeEdit(edit: AnnotationEdit, rows: readonly ReviewRow[], whole: boolean): number | 'moved' | null {
+  const start = editStart(rows, edit, whole);
+  return typeof start === 'number' ? start + edit.now.split('\n').length - 1 : start;
 }
 
 export function EditBox({

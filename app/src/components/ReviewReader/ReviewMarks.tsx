@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Annotation, FileAnchor } from '../MarkdownReader/annotations/types';
+import type { Annotation, AnnotationEdit, FileAnchor } from '../MarkdownReader/annotations/types';
 import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
 import { sortAnnotations } from '../MarkdownReader/annotations/sortAnnotations';
 import type { ReviewRow } from '../../types/generated';
@@ -12,7 +12,7 @@ export interface ReviewMarks {
   annotations: Annotation[];
   addFileMark(type: MarkKind, text: string, anchor: FileAnchor): Annotation | null;
   addBlockMark(type: MarkKind, text: string, blockId: string): Annotation | null;
-  addEditMark(anchor: FileAnchor, was: string, now: string): Annotation | null;
+  addEditMark(anchor: FileAnchor, edit: AnnotationEdit): Annotation | null;
   deleteAnnotation(id: string): void;
   /** Delivers a question at once. Resolves to the reason it was not delivered, or null. */
   ask(id: string): Promise<string | null>;

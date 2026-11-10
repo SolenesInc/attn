@@ -26,7 +26,7 @@ import {
   unsavedChanges,
   type SyncedMarks,
 } from './documentDraft';
-import { annotationFromWire, type Annotation, type FileAnchor } from './types';
+import { annotationFromWire, type Annotation, type AnnotationEdit, type FileAnchor } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 import type { ReviewChrome } from '../../ReviewReader/reviewChrome';
@@ -75,7 +75,7 @@ export interface UseAnnotationsApi {
   /** A note or question on a whole prose block. */
   addBlockMark(type: 'comment' | 'question', text: string, blockId: string): Annotation | null;
   /** An edit the user saved to lines of a review's file. */
-  addEditMark(anchor: FileAnchor, was: string, now: string): Annotation | null;
+  addEditMark(anchor: FileAnchor, edit: AnnotationEdit): Annotation | null;
   addGlobalComment(text: string): Annotation | null;
   deleteAnnotation(id: string): void;
   clearAll(): void;
@@ -794,8 +794,8 @@ export function useAnnotations({
   );
 
   const addEditMark = useCallback(
-    (anchor: FileAnchor, was: string, now: string): Annotation | null =>
-      addAnnotation({ id: crypto.randomUUID(), type: 'edit', fileAnchor: anchor, edit: { was, now }, createdAt: Date.now() }),
+    (anchor: FileAnchor, edit: AnnotationEdit): Annotation | null =>
+      addAnnotation({ id: crypto.randomUUID(), type: 'edit', fileAnchor: anchor, edit, createdAt: Date.now() }),
     [addAnnotation],
   );
 

@@ -133,6 +133,16 @@ func TestAnEditOfAFileThatChangedUnderneathIsRefusedAndWritesNothing(t *testing.
 		t.Errorf("an edit of a path outside the repository answered %+v, want a refusal", outside)
 	}
 
+	gitConfig := filepath.Join(r.repo, ".git", "config")
+	config := readFile(t, gitConfig)
+	inGit := requestReviewEdit(r.app, r.document, ".git/config", sha(config), 1, 1, "x")
+	if inGit.Success || !strings.Contains(protocol.Deref(inGit.Error), ".git/config is inside .git") {
+		t.Errorf("an edit of a path inside .git answered %+v, want a refusal", inGit)
+	}
+	if got := readFile(t, gitConfig); got != config {
+		t.Error(".git/config was changed by a refused edit")
+	}
+
 	large := strings.Repeat("// padding\n", fsdoc.MaxFileSize/11+1)
 	if err := os.WriteFile(calc, []byte(large), 0o644); err != nil {
 		t.Fatal(err)

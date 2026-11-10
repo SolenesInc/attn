@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -242,6 +243,9 @@ func Edit(text string, edit protocol.ReviewEditMessage) (protocol.ReviewEditResu
 	full, err := repo.local(edit.Path)
 	if err != nil {
 		return protocol.ReviewEditResultMessage{}, err
+	}
+	if slices.Contains(strings.Split(filepath.ToSlash(filepath.Clean(edit.Path)), "/"), ".git") {
+		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s is inside .git; attn edits only the files of the working tree", edit.Path)
 	}
 	if info, err := os.Stat(full); err == nil && info.Size() > fsdoc.MaxFileSize {
 		return protocol.ReviewEditResultMessage{}, fmt.Errorf("%s is %d bytes; attn edits files up to %d bytes. Make this change in an editor", edit.Path, info.Size(), fsdoc.MaxFileSize)

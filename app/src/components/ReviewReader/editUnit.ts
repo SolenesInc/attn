@@ -57,12 +57,16 @@ function scopesOf(token: ThemedToken): string[] {
 
 type Span = 'string' | 'comment';
 
-/** What a line leaves open at its end: a string or block comment that goes on to the next line. */
+/** What a line leaves open at its end: a delimited string or a block comment
+ * that goes on to the next line. An unquoted string, such as a YAML value or a
+ * shell word, has no delimiter to close, so it never spans lines. */
 function openAtEnd(tokens: readonly ThemedToken[]): Span | null {
   const last = [...tokens].reverse().find((token) => token.content.trim() !== '');
   if (!last) return null;
   const scopes = scopesOf(last);
-  if (scopes.some((scope) => scope.startsWith('string.'))) {
+  const strings = scopes.filter((scope) => scope.startsWith('string.'));
+  if (strings.length > 0) {
+    if (strings.every((scope) => scope.startsWith('string.unquoted'))) return null;
     return scopes.some((scope) => STRING_END.test(scope)) ? null : 'string';
   }
   if (scopes.some((scope) => scope.startsWith('comment.block')) && !last.content.trimEnd().endsWith('*/')) return 'comment';
@@ -100,7 +104,7 @@ function spanAround(tokens: readonly ThemedToken[][], at: number): { kind: Span;
  * explanations only around the cursor.
  */
 export async function findEditUnit(lines: readonly string[], path: string, cursor: number, selection?: readonly [number, number]): Promise<EditUnit> {
-  if (selection && selection[0] !== selection[1]) {
+  if (selection) {
     return { kind: 'selection', from: Math.min(...selection), to: Math.max(...selection) };
   }
   const line: EditUnit = { kind: 'line', from: cursor, to: cursor };

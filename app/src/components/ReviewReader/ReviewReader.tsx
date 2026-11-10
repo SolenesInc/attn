@@ -20,7 +20,7 @@ import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, pla
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
 import { isDocumentPath } from './DocStop';
-import { EditBox, editText, fileLines, locateEdit, placeEdit, type OpenEdit } from './ReviewEdits';
+import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -294,7 +294,7 @@ export function ReviewReader({
       if (!anchor) continue;
       const whole = markFiles.get(anchor.path);
       if (annotation.type === 'edit') {
-        const place = placeEdit(annotation, whole ?? bundle.stops.filter((stop) => stop.path === anchor.path).flatMap((stop) => stop.rows), whole !== undefined);
+        const place = !annotation.edit ? null : placeEdit(annotation.edit, whole ?? bundle.stops.filter((stop) => stop.path === anchor.path).flatMap((stop) => stop.rows), whole !== undefined);
         if (place !== null) places.set(annotation.id, place);
         continue;
       }
@@ -362,6 +362,15 @@ export function ReviewReader({
       (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
     );
   }, [readFile]);
+
+  /** Reads a file the reader wrote again, for the marks and every open view of it. */
+  const refreshFile = useCallback((path: string) => {
+    fileRowsRef.current.delete(path);
+    void wholeFile(path).then((rows) => setMarkFiles((known) => new Map(known).set(path, rows)), () => undefined);
+    filesRef.current.forEach((file) => {
+      if (file.target.path === path) loadFile(file.id, path, rowIndexAfterRefresh);
+    });
+  }, [loadFile, wholeFile]);
 
   const markedPaths = useMemo(
     () => [...new Set(annotations.flatMap((annotation) => (annotation.fileAnchor ? [annotation.fileAnchor.path] : [])))].sort().join('\n'),
@@ -680,7 +689,7 @@ export function ReviewReader({
 
   /** The file, line and selected lines the cursor stands on, for an edit. */
   const editPlace = useCallback((): { path: string; line: number; selection?: [number, number]; block?: [number, number]; docLine: number } | null => {
-    const span = (lines: number[]): [number, number] | undefined => (lines.length > 1 ? [Math.min(...lines), Math.max(...lines)] : undefined);
+    const span = (lines: number[]): [number, number] => [Math.min(...lines), Math.max(...lines)];
     if (openFileView) {
       const rows = openFileView.rows;
       const line = rows?.[openFileView.cursor]?.now;
@@ -689,7 +698,7 @@ export function ReviewReader({
       const to = Math.max(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
       const lines = rows.slice(from, to + 1).map((row) => row.now).filter((now): now is number => now !== undefined);
       const path = openFileView.target.path;
-      return { path, line, selection: span(lines), docLine: docLineFor(path, line) };
+      return { path, line, selection: openFileView.selectFrom !== undefined && lines.length > 0 ? span(lines) : undefined, docLine: docLineFor(path, line) };
     }
     const element = currentTarget();
     const path = element?.getAttribute('data-path');
@@ -701,20 +710,20 @@ export function ReviewReader({
     }
     if (element.getAttribute('data-review-cursor') !== 'row') return null;
     const lines = selectedRows(element).map((row) => Number(row.getAttribute('data-line'))).filter((now) => now > 0);
-    return { path, line, selection: span(lines), docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
-  }, [currentTarget, docLineFor, openFileView, selectedRows, stopOf]);
+    return { path, line, selection: selectFrom !== null && lines.length > 0 ? span(lines) : undefined, docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
+  }, [currentTarget, docLineFor, openFileView, selectFrom, selectedRows, stopOf]);
 
   const startEdit = useCallback(() => {
     const place = editPlace();
     if (!place || !marks) return;
     setNotice(null);
     void readFile(place.path).then(async (answer) => {
-      const lines = fileLines(answer.rows);
+      const { lines, heads } = fileLines(answer.rows);
       const selection = place.selection ? [place.selection[0] - 1, place.selection[1] - 1] as const : undefined;
       const unit = place.block
         ? { kind: 'block' as const, from: place.block[0] - 1, to: place.block[1] - 1 }
         : await findEditUnit(lines, place.path, place.line - 1, selection);
-      setEditing({ path: place.path, hash: answer.hash ?? '', lines, kind: unit.kind, from: unit.from, to: unit.to, docLine: place.docLine });
+      setEditing({ path: place.path, hash: answer.hash ?? '', lines, heads, kind: unit.kind, from: unit.from, to: unit.to, docLine: place.docLine });
     }, (error: unknown) => setNotice(`Could not open the edit: ${error instanceof Error ? error.message : String(error)}`));
   }, [editPlace, marks, readFile]);
 
@@ -749,10 +758,11 @@ export function ReviewReader({
         return;
       }
       const to = editing.from + text.split('\n').length;
-      marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, was, text);
+      marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, { was, now: text, ...whereEditStands(editing.heads, editing.from) });
       closeEdit();
+      refreshFile(editing.path);
     }, (error: unknown) => setEditing({ ...editing, saving: false, problem: error instanceof Error ? error.message : String(error) }));
-  }, [closeEdit, document, editing, host, marks, sendReviewEdit]);
+  }, [closeEdit, document, editing, host, marks, refreshFile, sendReviewEdit]);
 
   const undoEdit = useCallback((): boolean => {
     const place = editPlace();
@@ -764,24 +774,24 @@ export function ReviewReader({
     const mark = place && [...annotations].reverse().find((annotation) => annotation.type === 'edit' && covers(annotation));
     if (!mark?.edit || !mark.fileAnchor || !marks || !sendReviewEdit) return false;
     const { path } = mark.fileAnchor;
-    const was = mark.edit.was;
+    const edit = mark.edit;
     setNotice(null);
     void readFile(path).then(async (answer) => {
-      const lines = fileLines(answer.rows);
-      const at = locateEdit(lines, mark);
-      if (at === null) {
-        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone.`);
+      const start = editStart(answer.rows ?? [], edit, true);
+      if (start === 'moved' || start === null) {
+        setNotice(`Your edit is no longer where you saved it in ${path}, so nothing was undone.`);
         return;
       }
-      const result = await sendReviewEdit(host, document, { path, baseHash: answer.hash ?? '', from: at + 1, to: at + mark.edit!.now.split('\n').length, text: was });
+      const result = await sendReviewEdit(host, document, { path, baseHash: answer.hash ?? '', from: start, to: start + edit.now.split('\n').length - 1, text: edit.was });
       if (result.conflict) {
         setNotice(`${path} changed while undoing, so nothing was written. Press u again.`);
         return;
       }
       marks.deleteAnnotation(mark.id);
+      refreshFile(path);
     }).catch((error: unknown) => setNotice(`Could not undo the edit: ${error instanceof Error ? error.message : String(error)}`));
     return true;
-  }, [annotations, document, editPlace, host, marks, markPlaces, readFile, sendReviewEdit]);
+  }, [annotations, document, editPlace, host, marks, markPlaces, readFile, refreshFile, sendReviewEdit]);
 
   const openComposer = useCallback((kind: MarkKind) => {
     const target = markTarget();

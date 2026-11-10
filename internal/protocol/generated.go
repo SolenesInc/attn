@@ -6806,8 +6806,14 @@ type MarkdownAnnotation struct {
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt int `json:"created_at"`
 
+	// EditAfterHead corresponds to the JSON schema field "edit_after_head".
+	EditAfterHead *int `json:"edit_after_head,omitempty,omitzero"`
+
 	// EditNow corresponds to the JSON schema field "edit_now".
 	EditNow *string `json:"edit_now,omitempty,omitzero"`
+
+	// EditOffset corresponds to the JSON schema field "edit_offset".
+	EditOffset *int `json:"edit_offset,omitempty,omitzero"`
 
 	// EditWas corresponds to the JSON schema field "edit_was".
 	EditWas *string `json:"edit_was,omitempty,omitzero"`
