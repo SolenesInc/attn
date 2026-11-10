@@ -191,6 +191,37 @@ describe('App review marks', () => {
     expect(tile.querySelector('.review-file-view-marks')).toHaveTextContent('Return a + b directly.');
   });
 
+  it('closes the composer first on Escape, then the selection, then the file view', async () => {
+    const { tile, press, toRow } = await openReview();
+    await toRow(4);
+    await press('Enter');
+    await press('ArrowDown', { shiftKey: true });
+    await press('c');
+    expect(within(tile).getByRole('dialog', { name: 'Write a note' })).toHaveTextContent('calc.go:4–5');
+
+    await press('Escape');
+    expect(within(tile).queryByRole('dialog')).toBeNull();
+    expect(tile.querySelectorAll('.review-file-view .review-selected')).toHaveLength(2);
+    await press('Escape');
+    expect(tile.querySelector('.review-file-view .review-selected')).toBeNull();
+    expect(tile.querySelector('.review-file-view')).not.toBeNull();
+    await press('Escape');
+    expect(tile.querySelector('.review-file-view')).toBeNull();
+  });
+
+  it('keeps a mark on its line when the document changes above the stop', async () => {
+    const { tile, press, write, toRow, show } = await openReview();
+    await toRow(4);
+    await press('ArrowDown', { shiftKey: true });
+    await press('c');
+    await write('Return a + b directly.');
+
+    const moved = { ...BUNDLE, stops: BUNDLE.stops.map((stop) => ({ ...stop, heading_line: stop.heading_line + 2, notes: stop.notes.map((note) => ({ ...note, line: note.line + 2 })) })) };
+    await show({ content: DOCUMENT.replace('Add used to return its sum directly.', 'Add used to return its sum directly.\n\nIt reads better with a name.'), review: moved });
+    expect(tile).toHaveTextContent('It reads better with a name.');
+    expect(marksUnder(tile)).toEqual(['row 3', 'row -', 'row 4', 'note', 'row 5', 'mark youL4–5Return a + b directly.×', 'row 6']);
+  });
+
   it('asks a question at once, keeps it, and shows the answer when the daemon says the draft moved', async () => {
     const { tile, press, write, toRow, daemon, draft, show } = await openReview();
     await toRow(5);

@@ -84,13 +84,11 @@ export function MarkComposer({
   target,
   destination,
   onSave,
-  onCancel,
 }: {
   kind: MarkKind;
   target: MarkTarget;
   destination: string | null;
   onSave: (text: string) => void;
-  onCancel: () => void;
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -119,11 +117,7 @@ export function MarkComposer({
         placeholder={asking ? 'Ask the agent about these lines' : 'A note for the review'}
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            event.stopPropagation();
-            onCancel();
-          } else if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
+          if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
             event.stopPropagation();
             if (text.trim() !== '' && !blocked) onSave(text.trim());

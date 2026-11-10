@@ -579,16 +579,25 @@ export function ReviewReader({
   }, [rootRef, searchOpen]);
 
   const focused = useFocusAround(rootRef, tileWindow);
-  useEscapeStack(() => setSearch(null), focused && searchOpen);
-  useEscapeStack(() => setHelp(false), focused && help);
-  useEscapeStack(() => setSending(null), focused && sending !== null);
   const selecting = selectFrom !== null || openFileView?.selectFrom !== undefined;
-  useEscapeStack(closeFileView, focused && frame !== 'walkthrough' && openFileView !== null && !searchOpen && !help && !sending && !selecting);
-  useEscapeStack(backToStage, focused && frame === 'walkthrough' && files.length > 1 && !searchOpen && !help && !sending && !selecting);
+  const escapes = !focused ? null
+    : composer ? 'composer'
+      : sending ? 'send'
+        : searchOpen ? 'search'
+          : help ? 'help'
+            : selecting ? 'selection'
+              : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
+                : openFileView ? 'file' : null;
+  useEscapeStack(cancelComposer, escapes === 'composer');
+  useEscapeStack(() => setSending(null), escapes === 'send');
+  useEscapeStack(() => setSearch(null), escapes === 'search');
+  useEscapeStack(() => setHelp(false), escapes === 'help');
   useEscapeStack(() => {
     setSelectFrom(null);
     if (openFileView?.selectFrom !== undefined) moveFileCursor((file) => file.cursor);
-  }, focused && !sending && !help && !searchOpen && selecting);
+  }, escapes === 'selection');
+  useEscapeStack(backToStage, escapes === 'stage');
+  useEscapeStack(closeFileView, escapes === 'file');
 
   useEffect(() => {
     const root = rootRef.current;
@@ -734,7 +743,7 @@ export function ReviewReader({
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet /> : null}
       {composer && marks ? (
-        <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} onCancel={cancelComposer} />
+        <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
       ) : null}
       {sending && marks ? (
         <SendSheet marks={annotations} verdict={sending.verdict} destination={marks.destination} onPick={(verdict) => setSending({ verdict })} onSend={sendReview} />
