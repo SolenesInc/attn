@@ -4,8 +4,8 @@ import { useAnnotationSend } from '../../annotations/useAnnotationSend';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { useFrameScheduler, useTileWindow } from '../../tileWindow';
-import type { MarkdownAnnotationsSendHandle } from '../MarkdownReader';
-import type { MarkdownAnnotationsDestination } from '../MarkdownReader/annotations/transport';
+import type { MarkdownAnnotationsSendHandle, ReviewSend } from '../MarkdownReader';
+import type { MarkdownAnnotationsDestination, MarkdownAnnotationsSubmitOptions } from '../MarkdownReader/annotations/transport';
 import { getMarkdownAnnotationsTransport } from '../MarkdownReader/annotations/transport';
 import { type MarkdownDocumentSource } from '../MarkdownReader/documentSource';
 import { type SeedDocument } from '../SeedDocumentView';
@@ -32,6 +32,8 @@ interface Options {
   desktopSessions: DesktopTileSessionOption[];
   boundSessionIdInput?: string;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
+  /** The head of the review the tile shows; absent for any other document. */
+  reviewHead?: string;
 }
 export function useTileAnnotations({
   desktopId,
@@ -45,7 +47,9 @@ export function useTileAnnotations({
   desktopSessions,
   boundSessionIdInput,
   onRetargetTile,
+  reviewHead,
 }: Options) {
+  const isReview = reviewHead !== undefined;
   const seedTenderSessionId = seedDocument?.seed.claimed
     ? seedDocument.seed.tender?.session_id ?? ''
     : '';
@@ -74,10 +78,11 @@ export function useTileAnnotations({
   const performAnnotationSend = useCallback(
     (
       destination: MarkdownAnnotationsDestination | null,
+      options?: MarkdownAnnotationsSubmitOptions,
     ): MarkdownSendResult | null | Promise<MarkdownSendResult> => {
       const handle = annotationsSendRef.current;
       const transport = getMarkdownAnnotationsTransport();
-      if (annotationCount === 0 || !destination || !handle || !transport || !path) {
+      if ((annotationCount === 0 && !options) || !destination || !handle || !transport || !path) {
         return null;
       }
       if (!handle.isHydrated()) {
@@ -93,6 +98,7 @@ export function useTileAnnotations({
           documentSource,
           destination,
           handle.getOrphanedIds(),
+          options,
         );
         if ((result.status === 'delivered' || result.status === 'noted') && result.error) {
           return { kind: 'warning', message: result.error };
@@ -111,20 +117,37 @@ export function useTileAnnotations({
   );
 
   const sendEnabled =
-    visible && hasFocusWithin && annotationCount > 0 && !!primaryDestination && transportAvailable;
+    visible && hasFocusWithin && (annotationCount > 0 || isReview) && !!primaryDestination && transportAvailable;
   const {
     outcome: sendOutcome,
     send: sendNow,
     sendAlternative,
     clearOutcome: clearSendOutcome,
   } = useAnnotationSend<MarkdownSendResult>({
-    send: () => performAnnotationSend(primaryDestination),
+    send: () => {
+      if (annotationsSendRef.current?.openReviewSend()) return null;
+      return performAnnotationSend(primaryDestination);
+    },
     shortcutId: 'markdown.sendAnnotations',
     enabled: sendEnabled,
     shortcutScope: { desktopId, leafId, active: !popped },
     sentClearMs: SEND_SENT_CLEAR_MS,
   });
   const sendStatus = sendOutcome ?? { kind: 'idle' as const };
+
+  const reviewDestination = primaryDestination?.kind === 'session' ? targetSessionLabel : null;
+  const reviewSend = useMemo<ReviewSend | undefined>(() => (isReview
+    ? {
+        destination: reviewDestination,
+        ask: async (id: string) => {
+          const result = await performAnnotationSend(primaryDestination, { onlyIds: [id] });
+          if (result === null) return 'no session to ask';
+          if (result.kind === 'sent') return null;
+          return result.kind === 'skipped' ? SKIPPED_APPROVAL_MESSAGE : result.message;
+        },
+        send: (verdict: string) => sendAlternative(() => performAnnotationSend(primaryDestination, { verdict, head: reviewHead })),
+      }
+    : undefined), [isReview, performAnnotationSend, primaryDestination, reviewDestination, reviewHead, sendAlternative]);
 
   const handleTileFocus = useCallback(() => {
     setHasFocusWithin(true);
@@ -137,7 +160,7 @@ export function useTileAnnotations({
 
   const sending = sendStatus.kind === 'sending';
   const sendDisabled =
-    sending || annotationCount === 0 || !primaryDestination || !transportAvailable;
+    sending || (annotationCount === 0 && !isReview) || !primaryDestination || !transportAvailable;
   const {
     destinationGroupRef,
     destinationCaretRef,
@@ -172,6 +195,7 @@ export function useTileAnnotations({
     annotationCount,
     targetSessionId,
     targetSessionLabel,
+    isReview,
   );
   return {
     annotationsSendRef,
@@ -202,6 +226,7 @@ export function useTileAnnotations({
     targetSessionId,
     targetSessionLabel,
     retargetSession,
+    reviewSend,
   };
 }
 
@@ -216,6 +241,7 @@ function annotationSendPresentation(
   annotationCount: number,
   targetSessionId: string,
   targetSessionLabel: string,
+  isReview: boolean,
 ) {
   const sendHasProblem =
     sendStatus.kind === 'skipped' || sendStatus.kind === 'warning' || sendStatus.kind === 'error';
@@ -244,8 +270,10 @@ function annotationSendPresentation(
             ? 'Send failed'
             : isSeed && !seedTenderSessionId
               ? `Note on seed ${annotationCount}`
-              : `Send ${annotationCount}`;
-  const showSessionSendAction = annotationCount > 0 || sendStatus.kind !== 'idle';
+              : isReview
+                ? annotationCount > 0 ? `Review ${annotationCount}` : 'Review'
+                : `Send ${annotationCount}`;
+  const showSessionSendAction = annotationCount > 0 || isReview || sendStatus.kind !== 'idle';
   const sendButtonTitle = sendHasProblem
     ? (sendStatusMessage ?? undefined)
     : isSeed
@@ -253,7 +281,9 @@ function annotationSendPresentation(
         ? `Send annotations to the tending session (${formatShortcut('markdown.sendAnnotations')})`
         : `Leave annotations as a note on the seed (${formatShortcut('markdown.sendAnnotations')})`
       : targetSessionId
-        ? `Send annotations to ${targetSessionLabel} (${formatShortcut('markdown.sendAnnotations')})`
+        ? isReview
+          ? `Send the review to ${targetSessionLabel} with a verdict (${formatShortcut('markdown.sendAnnotations')})`
+          : `Send annotations to ${targetSessionLabel} (${formatShortcut('markdown.sendAnnotations')})`
         : 'Choose a session before sending annotations';
 
   return {

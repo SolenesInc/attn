@@ -26,7 +26,7 @@ import {
   unsavedChanges,
   type SyncedMarks,
 } from './documentDraft';
-import { annotationFromWire, type Annotation } from './types';
+import { annotationFromWire, type Annotation, type FileAnchor } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 import type { ReviewChrome } from '../../ReviewReader/reviewChrome';
@@ -52,6 +52,9 @@ export interface UseAnnotationsOptions {
   transport?: MarkdownAnnotationsTransport | null;
   /** MUST be the chrome the reader body renders with. */
   reviewChrome?: ReviewChrome | null;
+  /** The draft generation the daemon says changed outside this app, as when an
+      agent answers a question. A higher one than this reader holds reads the draft again. */
+  draftGeneration?: number;
 }
 
 export interface UseAnnotationsApi {
@@ -67,6 +70,10 @@ export interface UseAnnotationsApi {
   addDeletion(): Annotation | null;
   submitComment(text: string): Annotation | null;
   applyQuickLabel(label: QuickLabel): Annotation | null;
+  /** A note or question on lines of a review's code. */
+  addFileMark(type: 'comment' | 'question', text: string, anchor: FileAnchor): Annotation | null;
+  /** A note or question on a whole prose block. */
+  addBlockMark(type: 'comment' | 'question', text: string, blockId: string): Annotation | null;
   addGlobalComment(text: string): Annotation | null;
   deleteAnnotation(id: string): void;
   clearAll(): void;
@@ -101,6 +108,7 @@ export function useAnnotations({
   enabled,
   transport,
   reviewChrome = null,
+  draftGeneration,
 }: UseAnnotationsOptions): UseAnnotationsApi {
   const [annotations, setAnnotations] = useState<Annotation[]>([]);
   const [orphans, setOrphans] = useState<Map<string, AnnotationOrphanReason>>(new Map());
@@ -506,6 +514,12 @@ export function useAnnotations({
   ]);
 
   useEffect(() => {
+    if (enabled && draftGeneration !== undefined && hasHydratedRef.current && draftGeneration > generationRef.current) {
+      void hydrate();
+    }
+  }, [draftGeneration, enabled, hydrate]);
+
+  useEffect(() => {
     if (!enabled) {
       return;
     }
@@ -767,6 +781,26 @@ export function useAnnotations({
     [addAnnotation],
   );
 
+  const addFileMark = useCallback(
+    (type: 'comment' | 'question', text: string, anchor: FileAnchor): Annotation | null => {
+      if (text.trim() === '') {
+        return null;
+      }
+      return addAnnotation({ id: crypto.randomUUID(), type, text, fileAnchor: anchor, createdAt: Date.now() });
+    },
+    [addAnnotation],
+  );
+
+  const addBlockMark = useCallback(
+    (type: 'comment' | 'question', text: string, blockId: string): Annotation | null => {
+      if (text.trim() === '' || !beginBlockSelection(blockId)) {
+        return null;
+      }
+      return createFromPending((p) => ({ type, text, anchor: p.anchor }));
+    },
+    [beginBlockSelection, createFromPending],
+  );
+
   const deleteAnnotation = useCallback(
     (id: string) => {
       const next = annotationsRef.current.filter((a) => a.id !== id);
@@ -928,6 +962,8 @@ export function useAnnotations({
       submitComment,
       applyQuickLabel,
       addGlobalComment,
+      addFileMark,
+      addBlockMark,
       deleteAnnotation,
       clearAll,
       flushPendingSave,
@@ -952,6 +988,8 @@ export function useAnnotations({
       submitComment,
       applyQuickLabel,
       addGlobalComment,
+      addFileMark,
+      addBlockMark,
       deleteAnnotation,
       clearAll,
       flushPendingSave,

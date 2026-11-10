@@ -6,15 +6,29 @@ import type { AnchorRecord } from '../anchoring';
 
 export type { WireAnnotation, WireAnchor };
 
-export type AnnotationType = 'comment' | 'deletion' | 'global';
+export type AnnotationType = 'comment' | 'deletion' | 'global' | 'question';
+
+/** A mark on a review's code: lines of a file now, quoted as the reader saw them. */
+export interface FileAnchor {
+  /** Relative to the review's repository. */
+  path: string;
+  from: number;
+  to: number;
+  /** The document line the mark reads at, for reading order. */
+  docLine: number;
+  quote: string;
+}
 
 export interface Annotation {
   id: string; // crypto.randomUUID()
   type: AnnotationType;
   /** Comment body (comment/global). Absent for deletion and pure quick-labels. */
   text?: string;
-  /** Anchor into the document. Absent ONLY for type 'global'. */
+  /** Anchor into the document. A mark has this, a fileAnchor, or neither for type 'global'. */
   anchor?: AnchorRecord;
+  fileAnchor?: FileAnchor;
+  /** The agent's answer to a question. */
+  answer?: string;
   /** Structured quick-label reference (NOT baked into text). */
   quickLabelId?: string;
   /** Tip text snapshotted at creation so the payload survives label-set edits. */
@@ -53,21 +67,55 @@ export function anchorFromWire(wire: WireAnchor): AnchorRecord {
   };
 }
 
+export function fileAnchorPlace(anchor: FileAnchor): string {
+  return anchor.to > anchor.from ? `${anchor.path}:${anchor.from}–${anchor.to}` : `${anchor.path}:${anchor.from}`;
+}
+
+function fileAnchorToWire(anchor: FileAnchor): WireAnchor {
+  return {
+    block_id: '',
+    start_line: anchor.docLine,
+    end_line: anchor.docLine,
+    exact: anchor.quote,
+    prefix: '',
+    suffix: '',
+    start: 0,
+    end: 0,
+    content_hash: '',
+    file: anchor.path,
+    file_start_line: anchor.from,
+    file_end_line: anchor.to,
+  };
+}
+
+function fileAnchorFromWire(wire: WireAnchor): FileAnchor | null {
+  if (!wire.file || wire.file_start_line === undefined) return null;
+  return {
+    path: wire.file,
+    from: wire.file_start_line,
+    to: wire.file_end_line ?? wire.file_start_line,
+    docLine: wire.start_line,
+    quote: wire.exact,
+  };
+}
+
 export function annotationToWire(annotation: Annotation): WireAnnotation {
+  const anchor = annotation.anchor ? anchorToWire(annotation.anchor) : annotation.fileAnchor ? fileAnchorToWire(annotation.fileAnchor) : null;
   return {
     id: annotation.id,
     type: annotation.type,
     ...(annotation.text !== undefined ? { text: annotation.text } : {}),
-    ...(annotation.anchor ? { anchor: anchorToWire(annotation.anchor) } : {}),
+    ...(anchor ? { anchor } : {}),
     ...(annotation.quickLabelId !== undefined ? { quick_label_id: annotation.quickLabelId } : {}),
     ...(annotation.quickLabelTip !== undefined ? { quick_label_tip: annotation.quickLabelTip } : {}),
     ...(annotation.quickLabelText !== undefined ? { quick_label_text: annotation.quickLabelText } : {}),
+    ...(annotation.answer !== undefined ? { answer: annotation.answer } : {}),
     created_at: annotation.createdAt,
   };
 }
 
 function isAnnotationType(value: string): value is AnnotationType {
-  return value === 'comment' || value === 'deletion' || value === 'global';
+  return value === 'comment' || value === 'deletion' || value === 'global' || value === 'question';
 }
 
 /** Wire → frontend. Returns null for records this build cannot represent, so
@@ -79,14 +127,19 @@ export function annotationFromWire(wire: WireAnnotation): Annotation | null {
   if (wire.type !== 'global' && !wire.anchor) {
     return null;
   }
+  const fileAnchor = wire.anchor?.file ? fileAnchorFromWire(wire.anchor) : null;
+  if (wire.anchor?.file && !fileAnchor) {
+    return null;
+  }
   return {
     id: wire.id,
     type: wire.type,
     ...(typeof wire.text === 'string' ? { text: wire.text } : {}),
-    ...(wire.anchor ? { anchor: anchorFromWire(wire.anchor) } : {}),
+    ...(fileAnchor ? { fileAnchor } : wire.anchor ? { anchor: anchorFromWire(wire.anchor) } : {}),
     ...(typeof wire.quick_label_id === 'string' ? { quickLabelId: wire.quick_label_id } : {}),
     ...(typeof wire.quick_label_tip === 'string' ? { quickLabelTip: wire.quick_label_tip } : {}),
     ...(typeof wire.quick_label_text === 'string' ? { quickLabelText: wire.quick_label_text } : {}),
+    ...(typeof wire.answer === 'string' ? { answer: wire.answer } : {}),
     createdAt: wire.created_at,
   };
 }

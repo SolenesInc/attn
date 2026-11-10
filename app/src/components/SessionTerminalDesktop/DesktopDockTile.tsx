@@ -18,7 +18,7 @@ import {
 } from '../../types/desktop';
 import { deriveTileTitle, tileParamsPath } from '../../utils/tilePresentation';
 import { GardenIcon } from '../GardenIcon';
-import type { MarkdownAnnotationsSendHandle, RemoteMarkdownDocument } from '../MarkdownReader';
+import type { MarkdownAnnotationsSendHandle, RemoteMarkdownDocument, ReviewSend } from '../MarkdownReader';
 import { MarkdownReader } from '../MarkdownReader';
 import {
   fileMarkdownSource,
@@ -155,6 +155,7 @@ export function DesktopDockTile({
     desktopSessions,
     boundSessionIdInput: tile.tileSessionId,
     onRetargetTile,
+    reviewHead: content?.review?.head,
   });
   const {
     annotationsSendRef,
@@ -163,6 +164,7 @@ export function DesktopDockTile({
     handleTileFocus,
     handleTileBlur,
     clearSendOutcome,
+    reviewSend,
   } = annotations;
 
   const isNotebook = tile.tileKind === 'notebook';
@@ -284,6 +286,7 @@ export function DesktopDockTile({
           notebookSurfaceRef={notebookSurfaceRef}
           documentSource={documentSource}
           documentHost={documentHost}
+          reviewSend={reviewSend}
         />
       </div>
     </div>
@@ -312,6 +315,7 @@ function MarkdownBody({
   sessionId,
   onAnnotationsCountChange,
   annotationsSendRef,
+  reviewSend,
 }: {
   content?: TileContentState;
   source: MarkdownDocumentSource;
@@ -319,6 +323,7 @@ function MarkdownBody({
   sessionId?: string;
   onAnnotationsCountChange: (count: number) => void;
   annotationsSendRef: RefObject<MarkdownAnnotationsSendHandle | null>;
+  reviewSend?: ReviewSend;
 }) {
   const daemon = useOptionalDaemonApi();
   const sendTileAssetRead = daemon?.sendTileAssetRead;
@@ -363,6 +368,8 @@ function MarkdownBody({
       remoteDocument={remoteDocument}
       review={content.review}
       reviewHost={host}
+      reviewSend={reviewSend}
+      annotationsGeneration={content.annotationsGeneration}
     />
   );
 }
@@ -447,6 +454,7 @@ interface ContentProps {
   notebookSurfaceRef: RefObject<NotebookSurfaceHandle | null>;
   documentSource: MarkdownDocumentSource;
   documentHost?: string;
+  reviewSend?: ReviewSend;
 }
 function DesktopTileContent({
   tile,
@@ -467,6 +475,7 @@ function DesktopTileContent({
   notebookSurfaceRef,
   documentSource,
   documentHost,
+  reviewSend,
 }: ContentProps) {
   if (tile.tileKind === 'markdown')
     return (
@@ -477,6 +486,7 @@ function DesktopTileContent({
         sessionId={tile.tileSessionId}
         onAnnotationsCountChange={setAnnotationCount}
         annotationsSendRef={annotationsSendRef}
+        reviewSend={reviewSend}
       />
     );
   if (tile.tileKind === 'seed')

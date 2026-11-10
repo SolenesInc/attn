@@ -887,6 +887,16 @@
   overflow-wrap: anywhere;
 }
 
+.md-card-answer {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #bbb);
+  padding-left: 8px;
+  border-left: 2px solid var(--color-text-muted, #888);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* ---- Selection toolbar (body portal) ---- */
 
 .md-selection-toolbar {

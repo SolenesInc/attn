@@ -2,6 +2,7 @@ import { Fragment, useMemo } from 'react';
 import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import { useReviewReader, type FileTarget } from './reviewContext';
+import { MarkRow, markKey } from './ReviewMarks';
 import { useTokens } from './tokenize';
 
 function splitPath(path: string): { dir: string; name: string } {
@@ -126,6 +127,9 @@ function CodeStop({ stop }: { stop: ReviewStop }) {
               cursorKey={`stop:${stop.path}:${rowKey(row)}`}
             />
             {row.now !== undefined ? notesAfter.get(row.now)?.map((note) => <NoteRow key={note.line} note={note} />) : null}
+            {row.now !== undefined ? reader?.marksByLine.get(markKey(stop.path, row.now))?.map((mark) => (
+              <MarkRow key={mark.id} mark={mark} asking={reader.asking.get(mark.id)} onRemove={reader.removeMark ? () => reader.removeMark?.(mark.id) : undefined} />
+            )) : null}
           </Fragment>
         ))}
         {rows.length === 0 ? <div className="review-stop-empty">The file is gone or empty now.</div> : null}

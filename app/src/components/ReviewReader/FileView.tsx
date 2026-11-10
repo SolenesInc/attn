@@ -5,6 +5,8 @@ import type { FileTarget } from './reviewContext';
 import { PathLabel } from './StopBlock';
 import { useResizeWatch } from '../../tileWindow';
 import { tokenizeLines, type TokenLine } from './tokenize';
+import { useReviewReader } from './reviewContext';
+import { MarkRow, markKey } from './ReviewMarks';
 
 export const FILE_ROW_HEIGHT = 20;
 const OVERSCAN_ROWS = 30;
@@ -16,6 +18,8 @@ export interface OpenFile {
   error?: string;
   problem?: string;
   cursor: number;
+  /** The other end of a selection that ends at the cursor. */
+  selectFrom?: number;
 }
 
 export function rowIndexOf(rows: readonly ReviewRow[], line: number | undefined): number {
@@ -86,6 +90,13 @@ export function FileView({
   const notes = file.target.notes;
   const noted = useMemo(() => notedLines(notes), [notes]);
   const resizeWatch = useResizeWatch();
+  const reader = useReviewReader();
+  const path = file.target.path;
+  const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
+  const cursorLine = rows?.[file.cursor]?.now;
+  const cursorMarks = cursorLine !== undefined ? reader?.marksByLine.get(markKey(path, cursorLine)) ?? [] : [];
+  const selectFrom = Math.min(file.selectFrom ?? file.cursor, file.cursor);
+  const selectTo = Math.max(file.selectFrom ?? file.cursor, file.cursor);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -136,7 +147,7 @@ export function FileView({
               return (
                 <div
                   key={rowKey(row)}
-                  className={`review-file-view-row${mark}${index === file.cursor ? ' review-cursor' : ''}`}
+                  className={`review-file-view-row${mark}${index === file.cursor ? ' review-cursor' : ''}${file.selectFrom !== undefined && index >= selectFrom && index <= selectTo ? ' review-selected' : ''}${marked(row) ? ' review-file-view-row--marked' : ''}`}
                   style={{ top: index * FILE_ROW_HEIGHT, height: FILE_ROW_HEIGHT }}
                   data-row-index={index}
                   onClick={() => onPick(index)}
@@ -153,6 +164,13 @@ export function FileView({
           </div>
         ) : null}
       </div>
+      {cursorMarks.length > 0 ? (
+        <div className="review-file-view-marks" aria-label="Marks on this line">
+          {cursorMarks.map((mark) => (
+            <MarkRow key={mark.id} mark={mark} asking={reader?.asking.get(mark.id)} onRemove={reader?.removeMark ? () => reader.removeMark?.(mark.id) : undefined} />
+          ))}
+        </div>
+      ) : null}
     </aside>
   );
 }

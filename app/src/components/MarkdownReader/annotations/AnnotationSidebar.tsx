@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { AnnotationOrphanReason } from './useAnnotations';
 import { LABEL_COLOR_MAP, quickLabelById } from './quickLabels';
 import { sortAnnotations } from './sortAnnotations';
+import { fileAnchorPlace } from './types';
 import type { Annotation } from './types';
 
 export interface AnnotationSidebarProps {
@@ -163,7 +164,13 @@ export function AnnotationSidebar({
                 {orphaned && annotation.anchor && (
                   <div className="md-card-orphan-line">~line {annotation.anchor.startLine} (moved)</div>
                 )}
+                {annotation.fileAnchor && (
+                  <div className="md-card-quote">{fileAnchorPlace(annotation.fileAnchor)}</div>
+                )}
                 {annotation.text && <div className="md-card-text">{annotation.text}</div>}
+                {annotation.type === 'question' && (
+                  <div className="md-card-answer">{annotation.answer ?? 'Waiting for the answer'}</div>
+                )}
               </div>
             );
           })

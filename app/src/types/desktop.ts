@@ -35,6 +35,15 @@ export interface TileContentState {
   content: string;
   error?: string;
   review?: ReviewBundle;
+  /** Rises when the document's annotation draft changed outside the app. */
+  annotationsGeneration?: number;
+}
+
+/** The next content, holding on to the review the tile already has when only
+ * the draft generation moved, so the reader keeps its expanded stops. */
+export function keepUnchangedReview(previous: TileContentState | undefined, next: TileContentState): TileContentState {
+  if (!previous?.review || !next.review || previous.content !== next.content) return next;
+  return JSON.stringify(previous.review) === JSON.stringify(next.review) ? { ...next, review: previous.review } : next;
 }
 
 export function tileContentKey(desktopId: string, tileId: string): string {

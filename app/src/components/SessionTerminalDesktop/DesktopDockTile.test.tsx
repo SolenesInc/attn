@@ -683,6 +683,7 @@ describe('DesktopDockTile markdown send flow', () => {
         fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-b' },
         [],
+        undefined,
       );
     });
 
@@ -749,6 +750,7 @@ describe('DesktopDockTile markdown send flow', () => {
         fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-a' },
         [],
+        undefined,
       );
     });
 
@@ -813,6 +815,7 @@ describe('DesktopDockTile markdown send flow', () => {
         fileMarkdownSource(SEND_PATH),
         { kind: 'session', sessionId: 'sess-a' },
         [],
+        undefined,
       );
     });
   });
@@ -1074,6 +1077,7 @@ describe('DesktopDockTile seed reader', () => {
         seedMarkdownSource('s-plan11'),
         { kind: 'seed', seedId: 's-plan11' },
         [],
+        undefined,
       );
     });
     expect(await screen.findByRole('status')).toHaveTextContent('Noted ✓');

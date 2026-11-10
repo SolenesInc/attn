@@ -38,7 +38,8 @@ import { SeedMentionButton } from '../SeedMentionText';
 import type { ReviewBundle, SeedArtifact, SeedArtifactTargetResult } from '../../types/generated';
 import type { MarkdownAnnotationsDraft } from './annotations/transport';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
-import { ReviewReader } from '../ReviewReader/ReviewReader';
+import { ReviewReader, type ReviewReaderHandle } from '../ReviewReader/ReviewReader';
+import type { ReviewMarks } from '../ReviewReader/ReviewMarks';
 import { NotShownSlot, StopSlot, SummarySlot } from '../ReviewReader/ReviewLists';
 import rehypeReviewChrome, { reviewChromeKey, reviewChromeOf, type ReviewChrome } from '../ReviewReader/reviewChrome';
 import './MarkdownReader.css';
@@ -528,7 +529,12 @@ export interface MarkdownAnnotationsSendHandle {
   getOrphanedIds(): string[];
   openInspector(): void;
   openGlobalComment(anchorEl: HTMLElement): void;
+  /** On a review document, shows what a send carries and takes the verdict. False elsewhere. */
+  openReviewSend(): boolean;
 }
+
+/** What a review reader's marks send through: the tile's destination. */
+export type ReviewSend = Pick<ReviewMarks, 'ask' | 'send' | 'destination'>;
 
 export interface MarkdownReaderProps {
   content: string;
@@ -544,6 +550,9 @@ export interface MarkdownReaderProps {
   remoteDocument?: RemoteMarkdownDocument;
   review?: ReviewBundle;
   reviewHost?: string;
+  reviewSend?: ReviewSend;
+  /** The annotation draft generation the daemon announced for this document. */
+  annotationsGeneration?: number;
 }
 
 interface MarkdownReaderBodyProps {
@@ -600,6 +609,8 @@ export const MarkdownReader = memo(function MarkdownReader({
   remoteDocument,
   review,
   reviewHost,
+  reviewSend,
+  annotationsGeneration,
 }: MarkdownReaderProps) {
   const daemon = useOptionalDaemonApi();
   const path = markdownDocumentPath(source);
@@ -636,7 +647,13 @@ export const MarkdownReader = memo(function MarkdownReader({
     source,
     enabled: annotationsEnabled,
     reviewChrome,
+    draftGeneration: annotationsGeneration,
   });
+  const reviewHandleRef = useRef<ReviewReaderHandle | null>(null);
+  const { annotations, addFileMark, addBlockMark, deleteAnnotation } = annotationsApi;
+  const reviewMarks = useMemo<ReviewMarks | undefined>(() => (annotationsEnabled && reviewSend
+    ? { annotations, addFileMark, addBlockMark, deleteAnnotation, ...reviewSend }
+    : undefined), [addBlockMark, addFileMark, annotations, annotationsEnabled, deleteAnnotation, reviewSend]);
 
   // The send handle must read call-time state, not a captured api identity.
   const annotationsApiRef = useRef(annotationsApi);
@@ -660,6 +677,11 @@ export const MarkdownReader = memo(function MarkdownReader({
     getOrphanedIds: () => Array.from(annotationsApiRef.current.orphans.keys()),
     openInspector: () => annotationLayerRef.current?.openInspector(),
     openGlobalComment: (anchorEl: HTMLElement) => annotationLayerRef.current?.openGlobalComment(anchorEl),
+    openReviewSend: () => {
+      if (!reviewHandleRef.current) return false;
+      reviewHandleRef.current.openSend();
+      return true;
+    },
   }), []);
 
   const documentView = (
@@ -695,7 +717,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       tabIndex={annotationsEnabled ? -1 : undefined}
     >
       {review ? (
-        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef}>
+        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef}>
           {documentView}
         </ReviewReader>
       ) : documentView}

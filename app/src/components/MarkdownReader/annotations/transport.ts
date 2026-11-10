@@ -17,6 +17,14 @@ export interface MarkdownAnnotationsSubmitResult {
   error?: string;
 }
 
+/** A send from a review document: a question asked alone, or the review with its verdict. */
+export interface MarkdownAnnotationsSubmitOptions {
+  onlyIds?: string[];
+  verdict?: string;
+  /** The review snapshot the user read. */
+  head?: string;
+}
+
 export type MarkdownAnnotationsDestination =
   | { kind: 'session'; sessionId: string }
   | { kind: 'seed'; seedId: string };
@@ -34,6 +42,7 @@ export interface MarkdownAnnotationsTransport {
     source: MarkdownDocumentSource,
     destination: MarkdownAnnotationsDestination,
     orphanedIds: string[],
+    options?: MarkdownAnnotationsSubmitOptions,
   ): Promise<MarkdownAnnotationsSubmitResult>;
 }
 

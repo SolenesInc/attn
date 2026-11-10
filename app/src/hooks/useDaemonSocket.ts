@@ -109,7 +109,7 @@ import {
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
-import { tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
+import { keepUnchangedReview, tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/desktop';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import { crewRef } from '../utils/crewName';
 import type { CrewRenameResult } from '../types/generated';
@@ -151,7 +151,7 @@ import {
   handleMarkdownAnnotationDaemonEvent,
 } from './daemonMarkdownAnnotationEvents';
 import type { MarkdownDocumentSource } from '../components/MarkdownReader/documentSource';
-import type { MarkdownAnnotationsDestination, MarkdownAnnotationsDraft, MarkdownAnnotationsSubmitResult } from '../components/MarkdownReader/annotations/transport';
+import type { MarkdownAnnotationsDestination, MarkdownAnnotationsDraft, MarkdownAnnotationsSubmitOptions, MarkdownAnnotationsSubmitResult } from '../components/MarkdownReader/annotations/transport';
 import {
   pendingRequestKey,
   sendKeyedRequest as sendLastWriterWinsRequest,
@@ -1341,15 +1341,16 @@ export function useDaemonSocket({
           case 'desktop_tile_content': {
             if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
               const key = tileContentKey(data.desktop_id, data.tile_id);
-              const content = {
+              const content: TileContentState = {
                 ...(typeof data.host === 'string' && data.host ? { host: data.host } : {}),
                 path: typeof data.path === 'string' ? data.path : '',
                 content: typeof data.content === 'string' ? data.content : '',
                 error: typeof data.error === 'string' ? data.error : undefined,
                 ...(data.review ? { review: data.review as ReviewBundle } : {}),
+                ...(typeof data.annotations_generation === 'number' ? { annotationsGeneration: data.annotations_generation } : {}),
               };
               const { desktops, currentDesktopId } = useProfilesStore.getState();
-              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: content }, desktops, currentDesktopId));
+              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: keepUnchangedReview(prev[key], content) }, desktops, currentDesktopId));
             }
             break;
           }
@@ -3044,13 +3045,19 @@ export function useDaemonSocket({
     source: MarkdownDocumentSource,
     destination: MarkdownAnnotationsDestination,
     orphanedIds: string[],
+    options: MarkdownAnnotationsSubmitOptions = {},
   ) => {
     const destinationFields = destination.kind === 'session'
       ? { target_session_id: destination.sessionId }
       : { target_seed_id: destination.seedId };
+    const reviewFields = {
+      ...(options.onlyIds ? { only_ids: options.onlyIds } : {}),
+      ...(options.verdict ? { verdict: options.verdict } : {}),
+      ...(options.head ? { head: options.head } : {}),
+    };
     return (
     sendMarkdownAnnotationsCommand<MarkdownAnnotationsSubmitResult>(
-      'submit', source, { ...destinationFields, orphaned_ids: orphanedIds },
+      'submit', source, { ...destinationFields, ...reviewFields, orphaned_ids: orphanedIds },
     ));
   }, [sendMarkdownAnnotationsCommand]);
 

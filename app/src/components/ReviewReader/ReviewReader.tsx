@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode, RefObject } from 'react';
+import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode, Ref, RefObject } from 'react';
 import type { ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
@@ -13,9 +13,17 @@ import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
+import { MarkComposer, marksByLastLine, SendSheet, verdictForKey, type MarkKind, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
+const SELECTED_CLASS = 'review-selected';
+const NO_MARKS: ReviewMarks['annotations'] = [];
+
+export interface ReviewReaderHandle {
+  /** Shows what a send carries and takes the verdict. */
+  openSend(): void;
+}
 const PAGE_ROWS = 20;
 
 function isEditable(node: EventTarget | null): boolean {
@@ -97,6 +105,20 @@ function findTarget(doc: HTMLElement | null, key: string | null): HTMLElement | 
   return doc.querySelector<HTMLElement>(`[data-cursor-key="${CSS.escape(key)}"]`);
 }
 
+function rowText(element: Element): string {
+  const text = element.querySelector('.review-row-text')?.textContent ?? '';
+  return text === ' ' ? '' : text;
+}
+
+/** The targets from one cursor key to another, both included, in document order. */
+function targetsBetween(doc: HTMLElement | null, fromKey: string, toKey: string): HTMLElement[] {
+  const targets = documentTargets(doc);
+  const from = targets.findIndex((element) => cursorKeyOf(element) === fromKey);
+  const to = targets.findIndex((element) => cursorKeyOf(element) === toKey);
+  if (from < 0 || to < 0) return [];
+  return targets.slice(Math.min(from, to), Math.max(from, to) + 1);
+}
+
 /** The rows a stop shows, widened by a number of lines on each side, taken from the whole file. */
 function widen(shown: readonly ReviewRow[], file: readonly ReviewRow[], lines: number): ReviewRow[] | null {
   if (shown.length === 0) return null;
@@ -113,6 +135,8 @@ export function ReviewReader({
   document,
   content,
   rootRef,
+  marks,
+  handleRef,
   children,
 }: {
   bundle: ReviewBundle;
@@ -120,6 +144,8 @@ export function ReviewReader({
   document: string;
   content: string;
   rootRef: RefObject<HTMLDivElement | null>;
+  marks?: ReviewMarks;
+  handleRef?: Ref<ReviewReaderHandle>;
   children: ReactNode;
 }) {
   const daemon = useOptionalDaemonApi();
@@ -145,6 +171,13 @@ export function ReviewReader({
   const [filled, setFilled] = useState(false);
   const [search, setSearch] = useState<{ query: string } | null>(null);
   const [help, setHelp] = useState(false);
+  const [selectFrom, setSelectFrom] = useState<string | null>(null);
+  const [composer, setComposer] = useState<{ kind: MarkKind; target: MarkTarget } | null>(null);
+  const [sending, setSending] = useState<{ verdict: ReviewVerdict } | null>(null);
+  const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
+  const selectedRef = useRef<HTMLElement[]>([]);
+  const annotations = marks?.annotations ?? NO_MARKS;
+  const marksByLine = useMemo(() => marksByLastLine(annotations), [annotations]);
   const cursorElementRef = useRef<HTMLElement | null>(null);
   const cursorIndexRef = useRef(0);
   const scrolledKeyRef = useRef<string | null>(null);
@@ -236,12 +269,13 @@ export function ReviewReader({
 
   const backToStage = useCallback(() => setFiles((stack) => stack.slice(0, 1)), []);
 
-  const moveFileCursor = useCallback((to: (file: OpenFile) => number) => {
+  const moveFileCursor = useCallback((to: (file: OpenFile) => number, select = false) => {
     setFiles((stack) => {
       const top = stack[stack.length - 1];
       if (!top?.rows || top.rows.length === 0) return stack;
       const cursor = Math.max(0, Math.min(top.rows.length - 1, to(top)));
-      return [...stack.slice(0, -1), { ...top, cursor }];
+      const selectFrom = select ? (top.selectFrom ?? top.cursor) : undefined;
+      return [...stack.slice(0, -1), { ...top, cursor, selectFrom }];
     });
   }, []);
 
@@ -273,14 +307,32 @@ export function ReviewReader({
     scrollModeRef.current = 'nearest';
   }, [cursorKey, content, bundle, expansions, scope, mapIndex, side]);
 
+  const selectedRows = useCallback((cursor: HTMLElement): HTMLElement[] => {
+    if (cursor.getAttribute('data-review-cursor') !== 'row') return [];
+    if (selectFrom === null) return [cursor];
+    const path = cursor.getAttribute('data-path');
+    return targetsBetween(scope(), selectFrom, cursorKeyOf(cursor))
+      .filter((element) => element.getAttribute('data-review-cursor') === 'row' && element.getAttribute('data-path') === path);
+  }, [scope, selectFrom]);
+
+  useLayoutEffect(() => {
+    for (const element of selectedRef.current) element.classList.remove(SELECTED_CLASS);
+    const cursor = findTarget(scope(), cursorKey);
+    const selected = selectFrom !== null && cursor ? selectedRows(cursor) : [];
+    for (const element of selected) element.classList.add(SELECTED_CLASS);
+    selectedRef.current = selected;
+  }, [cursorKey, content, bundle, expansions, scope, mapIndex, side, selectFrom, selectedRows]);
+
   const currentTarget = useCallback(() => findTarget(scope(), cursorKey), [cursorKey, scope]);
 
-  const moveLine = useCallback((delta: number) => {
+  const moveLine = useCallback((delta: number, select = false) => {
     const targets = documentTargets(scope());
     if (targets.length === 0) return;
     const at = targets.findIndex((element) => cursorKeyOf(element) === cursorKey);
+    if (select && selectFrom === null && cursorKey !== null) setSelectFrom(cursorKey);
+    if (!select) setSelectFrom(null);
     setCursor(targets[at < 0 ? 0 : Math.max(0, Math.min(targets.length - 1, at + delta))]);
-  }, [cursorKey, scope, setCursor]);
+  }, [cursorKey, scope, selectFrom, setCursor]);
 
   const moveStop = useCallback((delta: number) => {
     const doc = docRef.current;
@@ -437,6 +489,81 @@ export function ReviewReader({
     docRef.current?.querySelector(`[data-review-stop-head="${stageStop.heading_line}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [stageStop]);
 
+  const docLineFor = useCallback((path: string, line: number): number => {
+    const stops = bundle.stops.filter((stop) => stop.path === path);
+    const holding = stops.find((stop) => stop.now_from && line >= stop.now_from && line <= stop.now_to);
+    return (holding ?? stops[0])?.heading_line ?? content.split('\n').length + 1;
+  }, [bundle, content]);
+
+  const markTarget = useCallback((): MarkTarget | null => {
+    if (openFileView) {
+      const rows = openFileView.rows;
+      if (!rows || rows.length === 0) return null;
+      const from = Math.min(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
+      const to = Math.max(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
+      const picked = rows.slice(from, to + 1);
+      const lines = picked.map((row) => row.now).filter((line): line is number => line !== undefined);
+      const line = lines[0] ?? rows.slice(to + 1).find((row) => row.now !== undefined)?.now ?? rows[rows.length - 1].now ?? 1;
+      const path = openFileView.target.path;
+      return { kind: 'file', anchor: { path, from: line, to: lines[lines.length - 1] ?? line, docLine: docLineFor(path, line), quote: picked.map((row) => row.text).join('\n') } };
+    }
+    const element = currentTarget();
+    if (!element) return null;
+    if (!element.hasAttribute('data-review-cursor')) {
+      const blockId = element.getAttribute('data-block-id');
+      return blockId ? { kind: 'block', blockId, quote: element.textContent ?? '' } : null;
+    }
+    const rows = selectedRows(element);
+    const path = element.getAttribute('data-path');
+    const stop = stopOf(element);
+    if (rows.length === 0 || !path || !stop) return null;
+    const lines = rows.map((row) => Number(row.getAttribute('data-line'))).filter((line) => line > 0);
+    const line = lines[0] ?? stop.now_from;
+    if (!line) return null;
+    return { kind: 'file', anchor: { path, from: line, to: lines[lines.length - 1] ?? line, docLine: stop.heading_line, quote: rows.map(rowText).join('\n') } };
+  }, [currentTarget, docLineFor, openFileView, selectedRows, stopOf]);
+
+  const openComposer = useCallback((kind: MarkKind) => {
+    const target = markTarget();
+    if (target && marks) setComposer({ kind, target });
+  }, [markTarget, marks]);
+
+  const saveMark = useCallback((text: string) => {
+    if (!composer || !marks) return;
+    const { kind, target } = composer;
+    const mark = target.kind === 'file'
+      ? marks.addFileMark(kind, text, target.anchor)
+      : marks.addBlockMark(kind, text, target.blockId);
+    setComposer(null);
+    setSelectFrom(null);
+    if (openFileView?.selectFrom !== undefined) moveFileCursor((file) => file.cursor);
+    rootRef.current?.focus({ preventScroll: true });
+    if (!mark || kind !== 'question') return;
+    setAsking((current) => new Map(current).set(mark.id, 'Asking…'));
+    void marks.ask(mark.id).then((problem) => {
+      setAsking((current) => new Map(current).set(mark.id, problem ? `Not asked: ${problem}` : 'Asked — waiting for the answer'));
+    });
+  }, [composer, marks, moveFileCursor, openFileView, rootRef]);
+
+  const cancelComposer = useCallback(() => {
+    setComposer(null);
+    rootRef.current?.focus({ preventScroll: true });
+  }, [rootRef]);
+
+  const openSend = useCallback(() => {
+    if (!marks) return;
+    setComposer(null);
+    setSending({ verdict: annotations.length > 0 ? 'request_changes' : 'approve' });
+  }, [annotations.length, marks]);
+
+  useImperativeHandle(handleRef, () => ({ openSend }), [openSend]);
+
+  const sendReview = useCallback(() => {
+    if (!sending || !marks || marks.destination === null) return;
+    marks.send(sending.verdict);
+    setSending(null);
+  }, [marks, sending]);
+
   const searchOpen = search !== null;
   const searchWasOpenRef = useRef(false);
   useEffect(() => {
@@ -447,8 +574,14 @@ export function ReviewReader({
   const focused = useFocusAround(rootRef, tileWindow);
   useEscapeStack(() => setSearch(null), focused && searchOpen);
   useEscapeStack(() => setHelp(false), focused && help);
-  useEscapeStack(closeFileView, focused && frame !== 'walkthrough' && openFileView !== null && !searchOpen && !help);
-  useEscapeStack(backToStage, focused && frame === 'walkthrough' && files.length > 1 && !searchOpen && !help);
+  useEscapeStack(() => setSending(null), focused && sending !== null);
+  const selecting = selectFrom !== null || openFileView?.selectFrom !== undefined;
+  useEscapeStack(closeFileView, focused && frame !== 'walkthrough' && openFileView !== null && !searchOpen && !help && !sending && !selecting);
+  useEscapeStack(backToStage, focused && frame === 'walkthrough' && files.length > 1 && !searchOpen && !help && !sending && !selecting);
+  useEscapeStack(() => {
+    setSelectFrom(null);
+    if (openFileView?.selectFrom !== undefined) moveFileCursor((file) => file.cursor);
+  }, focused && !sending && !help && !searchOpen && selecting);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -474,17 +607,27 @@ export function ReviewReader({
         if (event.key === '?') setHelp(false);
         return event.key === '?';
       }
+      if (sending) {
+        const verdict = verdictForKey(event.key);
+        if (verdict) setSending({ verdict });
+        if (event.key === 'Enter') sendReview();
+        return true;
+      }
       const frameKey = FRAME_KEYS.find(([key]) => key === event.key);
       if (frameKey) {
         switchFrame(frameKey[1]);
+        return true;
+      }
+      if (marks && (event.key === 'c' || event.key === 'a')) {
+        openComposer(event.key === 'a' ? 'question' : 'comment');
         return true;
       }
       const fileRows = openFileView?.rows;
       if (frame === 'walkthrough' || openFileView) {
         const stage = frame === 'walkthrough';
         switch (event.key) {
-          case 'ArrowDown': moveFileCursor((file) => file.cursor + 1); return true;
-          case 'ArrowUp': moveFileCursor((file) => file.cursor - 1); return true;
+          case 'ArrowDown': moveFileCursor((file) => file.cursor + 1, event.shiftKey); return true;
+          case 'ArrowUp': moveFileCursor((file) => file.cursor - 1, event.shiftKey); return true;
           case 'PageDown': moveFileCursor((file) => file.cursor + PAGE_ROWS); return true;
           case 'PageUp': moveFileCursor((file) => file.cursor - PAGE_ROWS); return true;
           case 'ArrowRight':
@@ -499,8 +642,8 @@ export function ReviewReader({
         }
       } else {
         switch (event.key) {
-          case 'ArrowDown': moveLine(1); return true;
-          case 'ArrowUp': moveLine(-1); return true;
+          case 'ArrowDown': moveLine(1, event.shiftKey); return true;
+          case 'ArrowUp': moveLine(-1, event.shiftKey); return true;
           case 'ArrowRight': if (frame === 'map') selectMessage(Math.min(messageStops.length - 1, mapIndex + 1)); else moveStop(1); return true;
           case 'ArrowLeft': if (frame === 'map') selectMessage(Math.max(0, mapIndex - 1)); else moveStop(-1); return true;
           case 'b': if (frame !== 'map' || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
@@ -517,7 +660,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, expandAtCursor, files.length, frame, help, mapIndex, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openFileView, openSearch, rootRef, selectMessage, side, sides, stepStage, switchFrame, switchSide, tileWindow]);
+  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, stepStage, switchFrame, switchSide, tileWindow]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -534,9 +677,10 @@ export function ReviewReader({
     () => (stageStop ? { stopLine: stageStop.heading_line, line: stageCursorLine } : null),
     [stageCursorLine, stageStop],
   );
+  const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch }),
-    [bundle, expansions, frame, stage, showStage, openFile, openSearch],
+    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark }),
+    [asking, bundle, expansions, frame, marksByLine, stage, showStage, openFile, openSearch, removeMark],
   );
 
   return (
@@ -582,7 +726,13 @@ export function ReviewReader({
       ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet /> : null}
-      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} onFrame={switchFrame} />
+      {composer && marks ? (
+        <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} onCancel={cancelComposer} />
+      ) : null}
+      {sending && marks ? (
+        <SendSheet marks={annotations} verdict={sending.verdict} destination={marks.destination} onPick={(verdict) => setSending({ verdict })} onSend={sendReview} />
+      ) : null}
+      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined} onFrame={switchFrame} />
     </ReviewReaderContext.Provider>
   );
 }

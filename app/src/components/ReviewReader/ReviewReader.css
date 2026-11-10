@@ -640,3 +640,206 @@
   text-align: center;
   color: var(--color-text-secondary);
 }
+
+.md-reader--review .review-selected {
+  background: var(--review-cursor);
+}
+
+.review-mark {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  margin: 2px 0 4px 8.25em;
+  padding: 0.25rem 0.625rem;
+  border-left: 2px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  color: var(--color-text-primary);
+}
+
+.review-mark-who {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.6875rem;
+  color: var(--color-accent);
+}
+
+.review-mark-text {
+  overflow-wrap: anywhere;
+}
+
+.review-mark-remove {
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.review-mark-answer {
+  grid-column: 3 / 5;
+  padding-left: 0.625rem;
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.review-mark-answer--waiting {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+
+.review-file-view-row--marked .review-row-sign::after {
+  content: '●';
+  color: var(--color-accent);
+  font-size: 0.5rem;
+  vertical-align: middle;
+}
+
+.review-file-view-marks {
+  flex: none;
+  max-height: 40%;
+  overflow: auto;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+  padding: 0.25rem 0;
+}
+
+.review-file-view-marks .review-mark {
+  margin-left: 0.5rem;
+}
+
+.review-composer,
+.review-send-sheet {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(640px, 92%);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.32);
+  z-index: 8;
+  font-size: 0.8125rem;
+}
+
+.review-composer {
+  bottom: 40px;
+  padding: 0.625rem 0.75rem;
+}
+
+.review-composer-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.375rem;
+}
+
+.review-composer-place {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-composer-hint,
+.review-composer-keys {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.review-composer-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  background: var(--color-bg-app);
+  color: var(--color-text-primary);
+  font: inherit;
+}
+
+.review-composer-keys {
+  margin-top: 0.25rem;
+}
+
+.review-send-sheet {
+  top: 10%;
+  max-height: 76%;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.25rem;
+}
+
+.review-send-sheet h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+.review-send-problem {
+  margin: 0 0 0.5rem;
+  color: var(--color-warning);
+}
+
+.review-send-empty {
+  margin: 0 0 0.75rem;
+  color: var(--color-text-secondary);
+}
+
+.review-send-marks {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 0 0.75rem;
+  padding-left: 1.25rem;
+}
+
+.review-send-marks li {
+  padding: 0.125rem 0;
+}
+
+.review-send-place {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
+}
+
+.review-send-kind {
+  color: var(--color-text-muted);
+  margin-right: 0.5rem;
+}
+
+.review-send-verdicts,
+.review-send-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.review-send-actions {
+  margin-top: 0.75rem;
+}
+
+.review-send-verdicts button,
+.review-send-actions button {
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  background: none;
+  color: var(--color-text-secondary);
+  padding: 0.25rem 0.625rem;
+  cursor: pointer;
+  font: inherit;
+}
+
+.review-send-verdicts .review-send-verdict--picked {
+  border-color: var(--color-accent);
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}

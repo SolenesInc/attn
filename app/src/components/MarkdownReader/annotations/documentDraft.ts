@@ -30,7 +30,7 @@ export function unsavedChanges(
 }
 
 function sameFeedback(a: Annotation, b: Annotation): boolean {
-  return a.type === b.type && a.text === b.text && a.quickLabelId === b.quickLabelId;
+  return a.type === b.type && a.text === b.text && a.quickLabelId === b.quickLabelId && a.answer === b.answer;
 }
 
 /** The daemon's marks, with this reader's unsaved changes applied on top. A mark the
