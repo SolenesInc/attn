@@ -174,11 +174,11 @@ func (s *server) initialize() {
 		"initializationOptions": s.def.Settings,
 	}
 	if err := s.conn.call(context.Background(), "initialize", params, nil); err != nil {
-		s.set(StateFailed, fmt.Sprintf("initialize: %v", err))
+		s.abandon(fmt.Sprintf("initialize: %v", err))
 		return
 	}
 	if err := s.conn.notify("initialized", map[string]any{}); err != nil {
-		s.set(StateFailed, fmt.Sprintf("initialized: %v", err))
+		s.abandon(fmt.Sprintf("initialized: %v", err))
 		return
 	}
 	close(s.ready)
@@ -272,6 +272,11 @@ func (s *server) set(state, detail string) {
 	s.state, s.detail = state, detail
 	s.mu.Unlock()
 	s.changed()
+}
+
+func (s *server) abandon(reason string) {
+	s.set(StateFailed, reason)
+	_ = syscall.Kill(-s.cmd.Process.Pid, syscall.SIGKILL)
 }
 
 func (s *server) status() (string, string) {

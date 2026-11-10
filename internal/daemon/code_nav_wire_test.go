@@ -322,3 +322,37 @@ func TestAPrepareRunsBeforeTheServerStartsAndAgainOnlyOnceItsInputsChange(t *tes
 		t.Errorf("a start after go.mod changed ran the prepare %d times in all, want twice", got)
 	}
 }
+
+func TestAServerThatRejectsInitializeFailsAtOnceWithItsReasonAndLeavesNoProcess(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	linkFakeLanguageServer(t, w, cli)
+	if _, err := cli.CodeNavDefine(repo, "go", `{"command": ["gopls"], "extensions": [".go"], "settings": {"reject": "unknown option: staticcheck"}}`); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if err := os.MkdirAll(filepath.Dir(document), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(document, []byte("---\nattn: review\nrepository: "+repo+"\nbase: HEAD~1\nhead: HEAD\n---\n# Calc\n\n### calc.go:3-6\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var pids []int
+	for press := 1; press <= 3; press++ {
+		asked := requestCodeNav(app, document, "use.go", 4, 9, "definition")
+		if asked.Success || !strings.Contains(protocol.Deref(asked.Error), "unknown option: staticcheck") {
+			t.Fatalf("question %d answered %+v, want the server's initialize error", press, asked)
+		}
+		for _, server := range runningServers(t, cli) {
+			pids = append(pids, int(server.Pid))
+		}
+	}
+	for _, pid := range pids {
+		if !processGone(pid) {
+			t.Errorf("the server %d that rejected initialize still runs; a failed server must have exited (servers seen: %v)", pid, pids)
+		}
+	}
+}

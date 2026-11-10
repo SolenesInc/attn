@@ -44,8 +44,10 @@ func InstallLanguageServer(t testing.TB, binary, dir string) string {
 // runLanguageServer speaks LSP over stdio for Go-like files: a definition is
 // the `func Name` or `type Name` line under the workspace or a folder its
 // settings name in "search", uses are the other lines naming it, and the type
-// is the definition's line. Like a server stuck in its own work, it keeps
-// running when its stdin closes, until it is asked to exit or is signalled.
+// is the definition's line. Settings with a "reject" message answer initialize
+// with that error, as a server given options it does not take. Like a server
+// stuck in its own work, it keeps running when its stdin closes, until it is
+// asked to exit or is signalled.
 func runLanguageServer() int {
 	reader := bufio.NewReader(os.Stdin)
 	ls := &fakeLanguageServer{w: os.Stdout}
@@ -95,9 +97,13 @@ func (ls *fakeLanguageServer) handle(msg lspMessage) error {
 			RootURI  string `json:"rootUri"`
 			Settings struct {
 				Search []string `json:"search"`
+				Reject string   `json:"reject"`
 			} `json:"initializationOptions"`
 		}
 		_ = json.Unmarshal(msg.Params, &params)
+		if params.Settings.Reject != "" {
+			return ls.send(map[string]any{"jsonrpc": "2.0", "id": msg.ID, "error": map[string]any{"code": -32602, "message": params.Settings.Reject}})
+		}
 		ls.roots = append([]string{pathOfURI(params.RootURI)}, params.Settings.Search...)
 		return ls.reply(msg.ID, map[string]any{"capabilities": map[string]any{"definitionProvider": true, "referencesProvider": true, "hoverProvider": true}})
 	case "initialized":

@@ -172,10 +172,29 @@ func (d *Daemon) acceptOutpostBridge(run *outpostListener, conn *bridge.Conn) {
 				d.updateOutpostListenerState(run, conn, "bridged", nil)
 			case bridge.StateLost:
 				d.updateOutpostListenerState(run, conn, "off", conn.Err())
+				d.forgetHomeTileDocuments(run, conn)
 			}
 		}
 	}) {
 		_ = conn.Close()
+	}
+}
+
+func (d *Daemon) forgetHomeTileDocuments(run *outpostListener, conn *bridge.Conn) {
+	w, r := &d.tileDocuments, &d.outpost
+	w.mu.Lock()
+	r.mu.Lock()
+	current := r.listener == run && run.conn == conn
+	r.mu.Unlock()
+	if !current {
+		w.mu.Unlock()
+		return
+	}
+	forgotten := w.watched
+	w.watched = map[string]*watchedTileDocument{}
+	w.mu.Unlock()
+	for path := range forgotten {
+		d.releaseCodeNavigation(path)
 	}
 }
 
