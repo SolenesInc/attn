@@ -57,7 +57,10 @@ function ScriptStop({ stop }: { stop: ReviewStop }) {
       data-review-stop-head={stop.heading_line}
       data-path={stop.path}
       aria-current={current || undefined}
-      onClick={() => reader?.showStop(stop)}
+      onClick={(event) => {
+        if (current || event.currentTarget.ownerDocument.getSelection()?.isCollapsed === false) return;
+        reader?.showStop(stop);
+      }}
     >
       <header className="review-stop-header">
         <PathLabel path={stop.path} />

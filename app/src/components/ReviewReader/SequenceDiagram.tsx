@@ -3,8 +3,11 @@ import type { ReviewFlow, ReviewFlowMessage } from '../../types/generated';
 
 const CHAR_WIDTH = 6.6;
 const LABEL_LIMIT = 48;
+const LINE_LIMIT = 26;
+const LINE_HEIGHT = 14;
 const BOX_HEIGHT = 30;
-const ROW_GAP = 42;
+const ROW_GAP = 52;
+const SMALLEST_SCALE = 0.75;
 const MARGIN = 16;
 const SELF_LOOP = 28;
 
@@ -14,6 +17,35 @@ function clip(text: string): string {
 
 function textWidth(text: string): number {
   return clip(text).length * CHAR_WIDTH;
+}
+
+/** A message label in at most two lines of about LINE_LIMIT characters, so a
+ * long label widens the diagram less. */
+function labelLines(text: string): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  for (const word of words) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && last.length + 1 + word.length <= LINE_LIMIT) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(word);
+  }
+  if (lines.length <= 2) return lines.map(clip);
+  return [clip(lines[0]), clip(lines.slice(1).join(' '))].map((line, index) => (
+    index === 1 && line.length > LINE_LIMIT ? `${line.slice(0, LINE_LIMIT - 1)}…` : line
+  ));
+}
+
+function labelWidth(text: string): number {
+  return Math.max(0, ...labelLines(text).map((line) => line.length * CHAR_WIDTH));
+}
+
+function Label({ text, x, y, anchor }: { text: string; x: number; y: number; anchor?: 'middle' }) {
+  const lines = labelLines(text);
+  return (
+    <text className="review-seq-label" x={x} y={y - (lines.length - 1) * LINE_HEIGHT} textAnchor={anchor}>
+      {lines.map((line, index) => <tspan key={index} x={x} dy={index === 0 ? 0 : LINE_HEIGHT}>{line}</tspan>)}
+    </text>
+  );
 }
 
 interface Layout {
@@ -34,7 +66,7 @@ function layout(flow: ReviewFlow): Layout {
   for (const message of flow.messages) {
     const from = column.get(message.from) ?? 0;
     const to = column.get(message.to) ?? 0;
-    const needed = textWidth(message.text) + 36;
+    const needed = labelWidth(message.text) + 36;
     if (from === to) {
       if (from < gaps.length) gaps[from] = Math.max(gaps[from], needed + SELF_LOOP);
       else selfRoomAtEnd = Math.max(selfRoomAtEnd, needed + SELF_LOOP - boxWidth[from] / 2);
@@ -51,7 +83,7 @@ function layout(flow: ReviewFlow): Layout {
   });
   const last = ids.length - 1;
   const width = (x.get(ids[last]) ?? 0) + (boxWidth[last] ?? 0) / 2 + Math.max(0, selfRoomAtEnd) + MARGIN;
-  const top = MARGIN + BOX_HEIGHT + 34;
+  const top = MARGIN + BOX_HEIGHT + 34 + LINE_HEIGHT;
   const rowY = (index: number) => top + index * ROW_GAP;
   return { width, height: rowY(flow.messages.length) - 6, boxWidth, x, rowY };
 }
@@ -75,7 +107,6 @@ function Message({ message, index, current, geometry }: {
   const dashed = message.arrow.startsWith('--');
   const stop = message.stop_line !== undefined;
   const className = `review-seq-message${stop ? ' review-seq-message--stop' : ''}${current ? ' review-seq-message--current' : ''}`;
-  const label = clip(message.text);
   return (
     <g className={className} data-review-message={message.line} aria-current={current || undefined}>
       <title>{message.text}</title>
@@ -84,13 +115,13 @@ function Message({ message, index, current, geometry }: {
         <>
           <path className={`review-seq-line${dashed ? ' review-seq-line--dashed' : ''}`} d={`M${x1} ${y - 14} h${SELF_LOOP} v14 h${-SELF_LOOP + 2}`} />
           <ArrowHead arrow={message.arrow} x={x1} y={y} direction={-1} />
-          <text className="review-seq-label" x={x1 + SELF_LOOP + 6} y={y - 4}>{label}</text>
+          <Label text={message.text} x={x1 + SELF_LOOP + 6} y={y - 4} />
         </>
       ) : (
         <>
           <line className={`review-seq-line${dashed ? ' review-seq-line--dashed' : ''}`} x1={x1} y1={y} x2={x2 - Math.sign(x2 - x1) * 2} y2={y} />
           <ArrowHead arrow={message.arrow} x={x2} y={y} direction={Math.sign(x2 - x1)} />
-          <text className="review-seq-label" x={(x1 + x2) / 2} y={y - 7} textAnchor="middle">{label}</text>
+          <Label text={message.text} x={(x1 + x2) / 2} y={y - 7} anchor="middle" />
         </>
       )}
     </g>
@@ -112,8 +143,7 @@ export const SequenceDiagram = memo(function SequenceDiagram({
   return (
     <svg
       className="review-seq"
-      width={geometry.width}
-      height={geometry.height}
+      style={{ maxWidth: geometry.width, minWidth: geometry.width * SMALLEST_SCALE }}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
       role="group"
       aria-label="Sequence diagram"

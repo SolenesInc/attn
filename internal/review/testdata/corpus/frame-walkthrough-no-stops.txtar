@@ -1,0 +1,29 @@
+frame: walkthrough needs a stop; without one, the bundle keeps the pick and
+names the problem, and the reader opens Brief.
+-- base/a.go --
+package a
+-- review.md --
+---
+frame: walkthrough
+---
+# A tour with nothing to step through
+
+Only prose.
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [],
+  "flows": [],
+  "frame": "walkthrough",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [
+    {
+      "line": 2,
+      "message": "frame: walkthrough steps through the stops, and the document has none, so the review opens in brief. Add a `### path:from-to` stop, or pick brief."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": []
+}

@@ -61,7 +61,9 @@ export function MapFrame({
               {participantLabel(current.flow, current.message.from)} → {participantLabel(current.flow, current.message.to)}
             </span>
           </header>
-        ) : null}
+        ) : (
+          <p className="review-map-empty">No message in this diagram is tied to a stop.</p>
+        )}
         {stop ? <StopBlock stop={stop} /> : null}
       </section>
     </div>

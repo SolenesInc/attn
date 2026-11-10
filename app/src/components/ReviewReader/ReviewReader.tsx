@@ -197,14 +197,17 @@ export function ReviewReader({
     );
   }, [readFile]);
 
-  const showStage = useCallback((stop: ReviewStop, line?: number) => {
-    setSearch(null);
+  /** Puts a stop's file on the Walkthrough's stage. A refresh keeps the files
+   * opened on top of it; a move to another stop drops them. */
+  const showStage = useCallback((stop: ReviewStop, line?: number, refresh = false) => {
+    if (!refresh) setSearch(null);
     setStageKey(stageKeyOf(bundle, stop));
     const target = stopTarget(stop, line ?? stageLine(stop));
     const id = ++fileIdRef.current;
     setFiles((stack) => {
       const kept = stack[0]?.target.path === stop.path ? stack[0].rows : null;
-      return [{ id, target, rows: kept, cursor: kept ? rowIndexOf(kept, target.line) : 0 }];
+      const stage = { id, target, rows: kept, cursor: kept ? rowIndexOf(kept, target.line) : 0 };
+      return refresh ? [stage, ...stack.slice(1)] : [stage];
     });
     void readFile(stop.path).then(
       (answer) => {
@@ -423,19 +426,11 @@ export function ReviewReader({
     if (shownBundleRef.current === bundle) return;
     shownBundleRef.current = bundle;
     const stage = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
-    for (const open of filesRef.current) {
-      const isStage = stage !== undefined && open === filesRef.current[0];
-      void readFile(open.target.path).then((answer) => {
-        const rows = answer.rows ?? [];
-        setFiles((stack) => stack.map((entry) => {
-          if (entry.id !== open.id) return entry;
-          const line = entry.rows?.[entry.cursor]?.now ?? entry.target.line;
-          const target = isStage ? stopTarget(stage, entry.target.line) : entry.target;
-          return { ...entry, target, rows, problem: answer.problem, cursor: rowIndexOf(rows, line) };
-        }));
-      }, () => undefined);
-    }
-  }, [bundle, frame, readFile, stageKey]);
+    if (!stage) return;
+    const shown = filesRef.current[0];
+    const line = shown?.target.path === stage.path ? shown.rows?.[shown.cursor]?.now : undefined;
+    showStage(stage, line, true);
+  }, [bundle, frame, showStage, stageKey]);
 
   useEffect(() => {
     if (!stageStop) return;
@@ -485,24 +480,21 @@ export function ReviewReader({
         return true;
       }
       const fileRows = openFileView?.rows;
-      if (frame === 'walkthrough') {
+      if (frame === 'walkthrough' || openFileView) {
+        const stage = frame === 'walkthrough';
         switch (event.key) {
           case 'ArrowDown': moveFileCursor((file) => file.cursor + 1); return true;
           case 'ArrowUp': moveFileCursor((file) => file.cursor - 1); return true;
           case 'PageDown': moveFileCursor((file) => file.cursor + PAGE_ROWS); return true;
           case 'PageUp': moveFileCursor((file) => file.cursor - PAGE_ROWS); return true;
-          case 'ArrowRight': stepStage(1); return true;
-          case 'ArrowLeft': stepStage(-1); return true;
-          case 'z': setFilled((value) => !value); return true;
-        }
-      } else if (openFileView) {
-        switch (event.key) {
-          case 'ArrowDown': moveFileCursor((file) => file.cursor + 1); return true;
-          case 'ArrowUp': moveFileCursor((file) => file.cursor - 1); return true;
-          case 'PageDown': moveFileCursor((file) => file.cursor + PAGE_ROWS); return true;
-          case 'PageUp': moveFileCursor((file) => file.cursor - PAGE_ROWS); return true;
-          case 'ArrowRight': if (fileRows) moveFileCursor((file) => changeStarts(fileRows).find((start) => start > file.cursor) ?? file.cursor); return true;
-          case 'ArrowLeft': if (fileRows) moveFileCursor((file) => [...changeStarts(fileRows)].reverse().find((start) => start < file.cursor) ?? file.cursor); return true;
+          case 'ArrowRight':
+            if (stage) stepStage(1);
+            else if (fileRows) moveFileCursor((file) => changeStarts(fileRows).find((start) => start > file.cursor) ?? file.cursor);
+            return true;
+          case 'ArrowLeft':
+            if (stage) stepStage(-1);
+            else if (fileRows) moveFileCursor((file) => [...changeStarts(fileRows)].reverse().find((start) => start < file.cursor) ?? file.cursor);
+            return true;
           case 'z': setFilled((value) => !value); return true;
         }
       } else {

@@ -21,7 +21,8 @@ seed, else in your session's scratch folder.
 commands:
   start <document> [--base <commit>]
         snapshot the working tree as head, from the repository you run it in,
-        and write frame, repository, base and head into the document's
+        and write frame (brief unless the document already picks one),
+        repository, base and head into the document's
         frontmatter. Creates the document when it is missing; leaves the text
         below the frontmatter as written. Run it again before presenting a
         revision: it takes a fresh head and keeps the base. --base defaults to
@@ -43,16 +44,24 @@ The document, below the frontmatter:
   ## Not shown          `- path: why it is left out`, for each changed file
                         no stop shows
 
-Every changed file needs a stop or a Not shown entry. A mermaid
-sequenceDiagram ties a message to a stop with `%% stop: path:from-to` on the
-line after it. attn draws participants, actors and messages; a diagram with
-any other line shows as a mermaid figure. Open fences with ```mermaid before
-and ```mermaid after to give the change's two sides.
+Every changed file needs a stop or a Not shown entry.
 
-`frame:` in the frontmatter picks the frame the review opens in: brief reads
-top to bottom, walkthrough steps through the stops beside the file, and map
-walks a sequence diagram's messages beside their code. The user switches with
-1, 2 and 3.
+Frames: `frame:` in the frontmatter picks the frame the review opens in; the
+user switches with 1, 2 and 3.
+  brief         the document top to bottom
+  walkthrough   the stops one at a time, your prose beside the file
+  map           a sequence diagram's messages, each beside the code of its stop
+A pick the document cannot fill opens in brief, and check says what is
+missing: walkthrough needs a stop, map a drawn diagram with a message tied to
+a stop.
+
+Diagrams: a mermaid sequenceDiagram ties a message to a stop with
+`%% stop: path:from-to` on the line after it. attn draws participants, actors
+and messages. A diagram with any other line (loop, alt, Note, activate) shows
+as a mermaid figure and is not mapped, and check names the line. To show the
+flow before and after the change, open one fence with ```mermaid before and one
+with ```mermaid after; the user switches between them with b. A fence with no
+side shows with both.
 
 Needs the experimental setting code_review_enabled.
 ";

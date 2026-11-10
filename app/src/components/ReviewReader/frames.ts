@@ -16,8 +16,12 @@ export interface MapStop {
   stopLine: number;
 }
 
-function mapFlowsOf(bundle: ReviewBundle): ReviewFlow[] {
-  return bundle.flows.filter((flow) => flow.drawn && flow.messages.some((message) => message.stop_line !== undefined));
+function drawnFlows(bundle: ReviewBundle): ReviewFlow[] {
+  return bundle.flows.filter((flow) => flow.drawn);
+}
+
+function hasStop(flow: ReviewFlow): boolean {
+  return flow.messages.some((message) => message.stop_line !== undefined);
 }
 
 /** The frames a document can fill: Walkthrough needs a stop, Map a drawn
@@ -26,7 +30,7 @@ export function offeredFrames(bundle: ReviewBundle): Frame[] {
   return [
     'brief',
     ...(bundle.stops.length > 0 ? ['walkthrough' as const] : []),
-    ...(mapFlowsOf(bundle).length > 0 ? ['map' as const] : []),
+    ...(drawnFlows(bundle).some(hasStop) ? ['map' as const] : []),
   ];
 }
 
@@ -37,14 +41,14 @@ export function openingFrame(bundle: ReviewBundle): Frame {
 
 /** Whether the Map has both a before and an after diagram, so b switches. */
 export function hasSides(bundle: ReviewBundle): boolean {
-  const flows = mapFlowsOf(bundle);
+  const flows = drawnFlows(bundle);
   return flows.some((flow) => flow.side === 'before') && flows.some((flow) => flow.side === 'after');
 }
 
-/** The diagrams the Map shows for a side: every drawn diagram with a stop,
- * except the other side's when the document has both. */
+/** The diagrams the Map shows for a side: every drawn diagram, except the
+ * other side's when the document has both. */
 export function mapFlows(bundle: ReviewBundle, side: Side): ReviewFlow[] {
-  const flows = mapFlowsOf(bundle);
+  const flows = drawnFlows(bundle);
   if (!hasSides(bundle)) return flows;
   return flows.filter((flow) => flow.side === undefined || flow.side === side);
 }

@@ -52,9 +52,9 @@ function useFileTokens(rows: ReviewRow[] | null, path: string): readonly (TokenL
 }
 
 /** The lines agent notes point at, and whether any of them is the place to look. */
-function notedLines(file: OpenFile): ReadonlyMap<number, boolean> {
+function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
   const noted = new Map<number, boolean>();
-  for (const note of file.target.notes ?? []) {
+  for (const note of notes ?? []) {
     if (note.now_from === 0) continue;
     for (let line = note.now_from; line <= note.now_to; line += 1) noted.set(line, (noted.get(line) ?? false) || note.look);
   }
@@ -83,7 +83,8 @@ export function FileView({
   const rows = file.rows;
   const tokens = useFileTokens(rows, file.target.path);
   const range = file.target.range;
-  const noted = useMemo(() => notedLines(file), [file]);
+  const notes = file.target.notes;
+  const noted = useMemo(() => notedLines(notes), [notes]);
   const resizeWatch = useResizeWatch();
 
   useLayoutEffect(() => {

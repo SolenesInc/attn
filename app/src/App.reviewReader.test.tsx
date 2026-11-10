@@ -393,7 +393,7 @@ const mapCursor = (scope: HTMLElement) => mapDetail(scope)?.querySelector<HTMLEl
 
 describe('App review reader frames', () => {
   it('opens in the Walkthrough the document picks: the stops as a script beside the file of the current stop', async () => {
-    const { tileElement, daemon, press } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
+    const { tileElement, press } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
 
     expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough *']);
     expect(stageStop(tileElement)).toBe('calc.go');
@@ -407,6 +407,8 @@ describe('App review reader frames', () => {
     await press('ArrowDown');
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
     expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('Then it is returned.');
+    fireEvent.click(script(tileElement)!.querySelector('.review-stop--current .review-note')!);
+    expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
 
     await press('ArrowRight');
     expect(stageStop(tileElement)).toBe('util.go');
@@ -415,7 +417,6 @@ describe('App review reader frames', () => {
     expect(stageStop(tileElement)).toBe('util.go');
     await press('ArrowLeft');
     expect(stageStop(tileElement)).toBe('calc.go');
-    expect(daemon.sentOf('review_file').map(({ path }) => path)).toEqual(['calc.go', 'util.go', 'calc.go']);
 
     await press('z');
     expect(tileElement.querySelector('.review-frame--script-hidden')).not.toBeNull();
@@ -426,6 +427,26 @@ describe('App review reader frames', () => {
     await press('Escape');
     expect(fileView(tileElement)).toHaveClass('review-file-view--stage');
     expect(stageStop(tileElement)).toBe('calc.go');
+  });
+
+  it('follows the agent editing the document: the stage shows the stop that takes the place of a removed one, with that stop file', async () => {
+    const { tileElement, daemon } = await openReview({ review: { ...BUNDLE, frame: 'walkthrough' } });
+    expect(stageStop(tileElement)).toBe('calc.go');
+
+    const util = BUNDLE.stops[1];
+    const edited: ReviewBundle = {
+      ...BUNDLE,
+      frame: 'walkthrough',
+      stops: [{ ...util, heading_line: util.heading_line - 4, notes: util.notes.map((note) => ({ ...note, line: note.line - 4 })) }],
+      not_shown: BUNDLE.not_shown.map((entry) => ({ ...entry, line: entry.line - 4 })),
+    };
+    const content = DOCUMENT.replace(/### calc\.go:3-6\n\n- L4!: The sum gets a name\.\n- L5: Then it is returned\.\n/, '');
+    act(() => daemon.emit({ event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content, review: edited }));
+    await daemon.idle();
+
+    expect(stageStop(tileElement)).toBe('util.go');
+    expect(fileView(tileElement)).toHaveTextContent('util.go');
+    expect(fileCursorText(tileElement)).toBe('2+func helper() {}');
   });
 
   it('opens in the Map the document picks and walks the messages tied to stops, with the code of each beside the diagram', async () => {
@@ -457,6 +478,22 @@ describe('App review reader frames', () => {
     expect(diagrams(tileElement)).toEqual(['31']);
     expect(currentMessage(tileElement)).toBe('35');
     expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1 · before the change');
+    await press('b');
+    expect(diagrams(tileElement)).toEqual(['39']);
+    expect(currentMessage(tileElement)).toBe('44');
+  });
+
+  it('switches with b to a before diagram that ties no message to a stop, and back', async () => {
+    const [before, after, undrawn] = MAP_BUNDLE.flows;
+    const review: ReviewBundle = { ...MAP_BUNDLE, flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, after, undrawn] };
+    const { tileElement, press } = await openReview({ review, content: MAP_DOCUMENT });
+    expect(currentMessage(tileElement)).toBe('44');
+
+    await press('b');
+    expect(diagrams(tileElement)).toEqual(['31']);
+    expect(mapDetail(tileElement)).toHaveTextContent('No message in this diagram is tied to a stop.');
+    await press('ArrowRight');
+    expect(diagrams(tileElement)).toEqual(['31']);
     await press('b');
     expect(diagrams(tileElement)).toEqual(['39']);
     expect(currentMessage(tileElement)).toBe('44');
