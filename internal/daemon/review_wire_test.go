@@ -302,6 +302,9 @@ func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *test
 	if nav := requestCodeNav(app, document, "calc.go", 3, 5, "definition"); nav.Success || !strings.Contains(protocol.Deref(nav.Error), "code_review_enabled") {
 		t.Errorf("code_nav with code review off answered %+v, want a refusal naming code_review_enabled", nav)
 	}
+	if setup := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: "desktop_1", Document: document, Repository: repo, Language: "go", File: "calc.go", State: "missing"}); setup.Success || !strings.Contains(protocol.Deref(setup.Error), "code_review_enabled") {
+		t.Errorf("code_nav_setup with code review off answered %+v, want a refusal naming code_review_enabled", setup)
+	}
 	problems, err := cli.OpenMarkdown(document, "s1")
 	if err != nil || len(problems) != 0 {
 		t.Fatalf("opening the document answered problems %+v, error %v; want it opened with none", problems, err)

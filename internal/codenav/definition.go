@@ -63,8 +63,10 @@ var undefinedLanguages = map[string][]string{
 	"elixir": {".ex", ".exs"},
 }
 
-// DetailNoDefinition is the detail of a recognized language no definition serves.
-const DetailNoDefinition = "no definition"
+// NoDefinition is the detail of a recognized language no definition serves.
+func NoDefinition(language string) string {
+	return fmt.Sprintf("attn has no definition for %s. Set one with `attn nav set`.", language)
+}
 
 // UndefinedLanguageOf is the recognized programming language of a file no
 // definition serves, or "".

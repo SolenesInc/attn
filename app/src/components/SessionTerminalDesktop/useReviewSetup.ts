@@ -2,10 +2,24 @@ import { useContext, useMemo } from 'react';
 import { DesktopsContext } from '../../application/AppContexts';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { useSettings } from '../../contexts/SettingsContext';
-import { useSessionStore } from '../../store/sessions';
+import { useSessionStore, type Session } from '../../store/sessions';
 import type { ReviewBundle } from '../../types/generated';
 import { sessionDisplayName } from '../../utils/sessionDisplayName';
 import type { ReviewSetup } from '../ReviewReader/ReviewKeys';
+
+const SETUP_RUNNING = new Set<string>(['launching', 'working', 'pending_approval']);
+
+/** The labels of the review's setup sessions still at work, as one JSON string so the store's other changes leave it equal. */
+function runningSetupLabels(sessions: readonly Session[], setupSessions: string): string {
+  const labels: Record<string, string> = {};
+  if (setupSessions) {
+    for (const id of setupSessions.split('\n')) {
+      const session = sessions.find((candidate) => candidate.id === id);
+      if (session && SETUP_RUNNING.has(session.state)) labels[id] = sessionDisplayName(session);
+    }
+  }
+  return JSON.stringify(labels);
+}
 
 export function setupOfferSettingKey(repository: string, host?: string): string {
   return `code_review_setup_offer_${host || 'local'}_${repository}`;
@@ -15,7 +29,8 @@ export function setupOfferSettingKey(repository: string, host?: string): string 
 export function useReviewSetup(desktopId: string, document: string, host: string | undefined, review: ReviewBundle | undefined): ReviewSetup | undefined {
   const sendCodeNavSetup = useOptionalDaemonApi()?.sendCodeNavSetup;
   const { settings, setSetting } = useSettings();
-  const sessions = useSessionStore((state) => state.sessions);
+  const setupSessions = review?.navigation.flatMap((entry) => (entry.setup_session_id ? [entry.setup_session_id] : [])).join('\n') ?? '';
+  const runningLabels = useSessionStore((state) => runningSetupLabels(state.sessions, setupSessions));
   const selectSession = useContext(DesktopsContext)?.navigation.handleSelectSession;
   const repository = review?.repository ?? '';
   const offerKey = setupOfferSettingKey(repository, host);
@@ -35,13 +50,10 @@ export function useReviewSetup(desktopId: string, document: string, host: string
           (result) => (result.success ? null : result.error ?? 'the daemon gave no reason'),
           (error: unknown) => (error instanceof Error ? error.message : String(error)),
         ),
-        sessionLabel: (sessionId) => {
-          const session = sessions.find((candidate) => candidate.id === sessionId);
-          return session ? sessionDisplayName(session) : undefined;
-        },
+        runningSessionLabel: (sessionId) => (JSON.parse(runningLabels) as Record<string, string>)[sessionId],
         openSession: (sessionId) => selectSession?.(sessionId),
         offered,
         setOffered: (next) => setSetting(offerKey, next ? '' : 'off'),
       }
-    : undefined), [desktopId, document, host, offerKey, offered, repository, selectSession, sendCodeNavSetup, sessions, setSetting]);
+    : undefined), [desktopId, document, host, offerKey, offered, repository, runningLabels, selectSession, sendCodeNavSetup, setSetting]);
 }

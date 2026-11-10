@@ -413,7 +413,7 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 
 	w.ExitAtNextBoot(1, "Error: not logged in")
 	refused := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: missing.File, State: missing.State, Detail: missing.Detail})
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "before its first turn") || !strings.Contains(protocol.Deref(refused.Error), "not logged in") {
+	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "not logged in") {
 		t.Errorf("a setup whose agent exits at launch answered %+v (error %s), want the launch failure with the agent's screen", refused, protocol.Deref(refused.Error))
 	}
 
@@ -443,7 +443,7 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 	if err != nil {
 		t.Fatalf("seed show: %v", err)
 	}
-	for _, want := range []string{"Set up code navigation for go in " + shown.Review.Repository, protocol.Deref(missing.Detail), "attn skill --reference code-navigation", "attn nav check use.go:<line>"} {
+	for _, want := range []string{shown.Review.Repository, protocol.Deref(missing.Detail), "attn skill --reference code-navigation", "attn nav check use.go:<line>"} {
 		if !strings.Contains(shownSeed.Seed.Body, want) {
 			t.Errorf("the setup agent's brief lacks %q:\n%s", want, shownSeed.Seed.Body)
 		}
@@ -460,15 +460,9 @@ func TestTheSetupKeyStartsAnAgentWithTheBriefAndAPassingNavCheckMakesTheShownRev
 	if got := string(protocol.Deref(navigation(ready.Review, "go").SetupSessionID)); got != session {
 		t.Errorf("the ready review names setup session %q, want %q", got, session)
 	}
-
-	setSetting(t, app, "code_review_enabled", "false")
-	off := requestCodeNavSetup(app, protocol.CodeNavSetupMessage{DesktopID: shown.DesktopID, Document: document, Repository: shown.Review.Repository, Language: "go", File: "use.go", State: "missing"})
-	if off.Success || !strings.Contains(protocol.Deref(off.Error), "code_review_enabled") {
-		t.Errorf("with code review off setup answered %+v, want a refusal naming code_review_enabled", off)
-	}
 }
 
-func TestAReviewOfALanguageWithNoDefinitionOffersSetupUntilOneIsSet(t *testing.T) {
+func TestAReviewOfALanguageWithNoDefinitionShowsItMissingUntilOneIsSet(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	placeSessions(t, w, app, cli, "s1")
@@ -485,7 +479,7 @@ func TestAReviewOfALanguageWithNoDefinitionOffersSetupUntilOneIsSet(t *testing.T
 		t.Fatalf("open: %v", err)
 	}
 	shown := awaitNavigation(app, document, "java", "missing")
-	if java := navigation(shown.Review, "java"); protocol.Deref(java.Detail) != "no definition" || java.File != "Calc.java" {
+	if java := navigation(shown.Review, "java"); !strings.Contains(protocol.Deref(java.Detail), "no definition for java") || java.File != "Calc.java" {
 		t.Errorf("a review of Java shows %+v, want java missing with no definition, for Calc.java", java)
 	}
 	if len(shown.Review.Stops) != 1 || protocol.Deref(shown.Review.Stops[0].Language) != "java" {

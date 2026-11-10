@@ -10,6 +10,6 @@
     "document": "/Users/me/projects/ledger/reviews/rounding.md",
     "file": "src/main/java/ledger/Rounding.java",
     "failed": "false",
-    "reason": "no definition"
+    "reason": "attn has no definition for java. Set one with `attn nav set`."
   }
 }

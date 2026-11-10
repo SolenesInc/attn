@@ -187,7 +187,7 @@ func (d *Daemon) needCodeNavigation(document string, bundle *protocol.ReviewBund
 		if _, seen := languages[language]; language == "" || seen {
 			continue
 		}
-		languages[language] = protocol.ReviewNavigation{Language: language, State: codenav.StateMissing, Detail: protocol.Ptr(codenav.DetailNoDefinition), File: file}
+		languages[language] = protocol.ReviewNavigation{Language: language, State: codenav.StateMissing, Detail: protocol.Ptr(codenav.NoDefinition(language)), File: file}
 	}
 	bundle.Navigation = make([]protocol.ReviewNavigation, 0, len(languages))
 	for _, navigation := range languages {

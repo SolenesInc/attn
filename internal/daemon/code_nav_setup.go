@@ -23,15 +23,34 @@ type codeNavSetupKey struct {
 }
 
 // codeNavSetups are the sessions setting up a language server, so every review
-// of the repository links to the one running.
+// of the repository links to the one running, and the setups still launching,
+// so a second request does not start a second agent.
 type codeNavSetups struct {
-	mu       sync.Mutex
-	sessions map[codeNavSetupKey]protocol.SessionID
+	mu        sync.Mutex
+	sessions  map[codeNavSetupKey]protocol.SessionID
+	launching map[codeNavSetupKey]bool
 }
 
-func (s *codeNavSetups) record(key codeNavSetupKey, session protocol.SessionID) {
+func (s *codeNavSetups) begin(key codeNavSetupKey) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.launching[key] {
+		return false
+	}
+	if s.launching == nil {
+		s.launching = map[codeNavSetupKey]bool{}
+	}
+	s.launching[key] = true
+	return true
+}
+
+func (s *codeNavSetups) end(key codeNavSetupKey, session protocol.SessionID) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.launching, key)
+	if session == "" {
+		return
+	}
 	if s.sessions == nil {
 		s.sessions = map[codeNavSetupKey]protocol.SessionID{}
 	}
@@ -96,6 +115,21 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 		return "", fmt.Errorf("desktop %s: %w", msg.DesktopID, err)
 	}
 	host := protocol.Deref(msg.Host)
+	key := codeNavSetupKey{host: host, repository: msg.Repository, language: msg.Language}
+	if !d.codeNavSetups.begin(key) {
+		return "", fmt.Errorf("a setup of %s in %s is already starting", msg.Language, msg.Repository)
+	}
+	session, err := d.launchCodeNavSetup(ctx, msg, desktop.ProfileID, callerGone)
+	d.codeNavSetups.end(key, session)
+	if err != nil {
+		return "", err
+	}
+	d.reviewsOfRepositoryChanged(host, msg.Repository)
+	return session, nil
+}
+
+func (d *Daemon) launchCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSetupMessage, profileID string, callerGone <-chan struct{}) (protocol.SessionID, error) {
+	host := protocol.Deref(msg.Host)
 	brief := prompts.RenderText("code-navigation", "setup", prompts.Values{
 		"language":   msg.Language,
 		"repository": msg.Repository,
@@ -107,7 +141,7 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 	delegate := &protocol.DelegateMessage{
 		Cmd:        protocol.CmdDelegate,
 		RequestID:  protocol.Deref(msg.RequestID),
-		ProfileID:  protocol.Ptr(desktop.ProfileID),
+		ProfileID:  protocol.Ptr(profileID),
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)},
 		Cwd:        msg.Repository,
 	}
@@ -141,8 +175,6 @@ func (d *Daemon) startCodeNavSetup(ctx context.Context, msg *protocol.CodeNavSet
 		}
 		return "", errors.New(operation.Progress)
 	}
-	d.codeNavSetups.record(codeNavSetupKey{host: host, repository: msg.Repository, language: msg.Language}, operation.SessionID)
-	d.reviewsOfRepositoryChanged(host, msg.Repository)
 	return operation.SessionID, nil
 }
 
@@ -158,7 +190,7 @@ func validateCodeNavSetupOffer(value string) error {
 // delegation role fits; without one a delegation runs the default agent.
 func (d *Daemon) delegationFallbackReady() bool {
 	cfg, err := d.store.GetDelegationPreferences()
-	return err == nil && cfg.Enabled && delegationprefs.ValidateSelection(cfg.Fallback.Selection, true) == nil
+	return err == nil && delegationprefs.Active(prompts.ExpandDelegationPreferences(cfg)).Fallback != nil
 }
 
 // newSessionAgent is the harness the user picked for new sessions.

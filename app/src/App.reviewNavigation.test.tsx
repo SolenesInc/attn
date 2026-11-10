@@ -302,11 +302,16 @@ describe('App review navigation', () => {
       await daemon.idle();
     };
     const keyLine = (reader: ReturnType<typeof within>) => reader.getByLabelText('Review keys');
+    const expectOffer = (reader: ReturnType<typeof within>) => {
+      expect(within(reader.getByLabelText('Language servers')).getByText('go no server')).toBeInTheDocument();
+      expect(keyLine(reader)).toHaveTextContent('set up');
+      expect(keyLine(reader)).toHaveTextContent('x not here');
+    };
 
     it('offers setup for a language with no server, starts it with s, links the agent while it runs, and shows ready once it works', async () => {
-      const { daemon, press, reader } = await openReview(missingGo(), [daemonSession('s1', { state: 'idle' }), daemonSession('setup-1', { label: 'Set up go navigation' })]);
+      const { daemon, press, reader } = await openReview(missingGo(), [daemonSession('s1', { state: 'idle' }), daemonSession('setup-1', { label: 'Set up go navigation', state: 'working' })]);
       daemon.on('code_nav_setup', () => ({ event: 'code_nav_setup_result' as const, success: true, session_id: 'setup-1' }));
-      expect(keyLine(reader)).toHaveTextContent('go no servers set upx not here');
+      expectOffer(reader);
 
       await press('s');
       expect(daemon.sentOf('code_nav_setup')).toEqual([expect.objectContaining({
@@ -317,7 +322,6 @@ describe('App review navigation', () => {
 
       await show(daemon, missingGo({ setup_session_id: 'setup-1' }));
       const link = reader.getByRole('button', { name: 'go setting up in Set up go navigation' });
-      expect(keyLine(reader)).not.toHaveTextContent('set up·');
       expect(keyLine(reader)).not.toHaveTextContent('x not here');
       await press('s');
       expect(daemon.sentOf('code_nav_setup')).toHaveLength(1);
@@ -332,7 +336,12 @@ describe('App review navigation', () => {
 
     it('offers setup again once the setup agent is gone', async () => {
       const { reader } = await openReview(missingGo({ setup_session_id: 'closed-agent' }));
-      expect(keyLine(reader)).toHaveTextContent('go no servers set up');
+      expectOffer(reader);
+    });
+
+    it('offers setup again once the setup agent has finished its turn without a server', async () => {
+      const { reader } = await openReview(missingGo({ setup_session_id: 'setup-1' }), [daemonSession('s1', { state: 'idle' }), daemonSession('setup-1', { label: 'Set up go navigation', state: 'waiting_input' })]);
+      expectOffer(reader);
     });
 
     it('shows a failed server’s reason and sends it with the setup', async () => {

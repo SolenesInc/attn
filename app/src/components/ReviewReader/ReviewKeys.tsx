@@ -60,8 +60,8 @@ const STATE_TEXT: Record<string, string> = {
 export interface ReviewSetup {
   /** Starts an agent that sets up the language's server; resolves to why it could not, or null. */
   start(navigation: ReviewNavigation): Promise<string | null>;
-  /** The session's label while it exists. */
-  sessionLabel(sessionId: string): string | undefined;
+  /** The session's label while it works on the setup; undefined once it is gone or waits. */
+  runningSessionLabel(sessionId: string): string | undefined;
   openSession(sessionId: string): void;
   /** False once the user said not to offer setup in this repository. */
   offered: boolean;
@@ -74,7 +74,7 @@ function hasNoServer(navigation: ReviewNavigation): boolean {
 
 function runningSetup(navigation: ReviewNavigation, setup: ReviewSetup | undefined): string | undefined {
   const session = navigation.setup_session_id;
-  return session && hasNoServer(navigation) ? setup?.sessionLabel(session) : undefined;
+  return session && hasNoServer(navigation) ? setup?.runningSessionLabel(session) : undefined;
 }
 
 /** The first language with no working server and no setup running: the one s sets up. */

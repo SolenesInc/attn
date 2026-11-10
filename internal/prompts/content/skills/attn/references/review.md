@@ -107,4 +107,4 @@ The user sends the review as one message: their notes in reading order, then the
 
 ## Code navigation
 
-In the review, the user can go from a name to its definition, its uses and its type. A language server on the machine that holds the files answers, and attn starts it when the review opens. A language with no working server still reads, and the tile's key line says `no server` for it. Its `s` key starts an agent that sets one up; `attn skill --reference code-navigation` is that agent's guide.
+In the review, the user can go from a name to its definition, its uses and its type. A language server on the machine that holds the files answers, and attn starts it when the review opens. A language with no working server still reads, and the tile's key line says `no server` for it. When the user presses `s` on that line, an agent sets up a server. `attn skill --reference code-navigation` is that agent's guide.
