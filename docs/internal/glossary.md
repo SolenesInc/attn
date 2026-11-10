@@ -27,6 +27,27 @@ desktop                 one arrangement of tiles; like a macOS Space or a
 ```
 
 ```text
+review document         a markdown file in which an agent presents a change
+│                       to the user; like a pull request's description and
+│                       diff in one. A markdown tile shows it
+├─ frame (1)            how the tile lays it out: brief (top to bottom),
+│                       walkthrough (stop by stop beside the file) or map
+│                       (a sequence diagram as the contents)
+├─ snapshot (1)         the files at base (where the change starts), head
+│                       (when the agent presented) and now
+├─ stop (0..n)          lines of one file at head, shown as they are now
+│  │                    with the change from base; like a hunk
+│  └─ agent note (0..n) the agent's note on a line; one can mark the place
+│                       to look
+└─ review (0..n)        what the user sends: notes, questions, edits and 1
+                        verdict (approve, request changes or comment); like a
+                        pull request review
+file view               a whole file opened from a review, with its change
+code navigation         definition, uses and type of a name, answered by a
+                        language server on the machine that holds the file
+```
+
+```text
 terminal                one PTY process in a terminal tile
 ├─ runs 1 harness or 1 shell
 ├─ host (at most 1)    the outpost it runs on; no host means the home's machine
