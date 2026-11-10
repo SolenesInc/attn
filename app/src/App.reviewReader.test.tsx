@@ -483,6 +483,29 @@ describe('App review reader frames', () => {
     expect(currentMessage(tileElement)).toBe('44');
   });
 
+  it('keeps the Map on its message when the agent adds or removes a message before it', async () => {
+    const { tileElement, daemon, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
+    await press('ArrowRight');
+    expect(mapDetail(tileElement)).toHaveTextContent('Message 2 of 2');
+    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+
+    const [before, after, undrawn] = MAP_BUNDLE.flows;
+    const show = (messages: typeof after.messages) => act(() => daemon.emit({
+      event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC,
+      content: MAP_DOCUMENT, review: { ...MAP_BUNDLE, flows: [before, { ...after, messages }, undrawn] },
+    }));
+    show([message(42, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
+    await daemon.idle();
+    expect(mapDetail(tileElement)).toHaveTextContent('Message 3 of 3');
+    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
+    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+
+    show(after.messages.slice(1));
+    await daemon.idle();
+    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1');
+    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
+  });
+
   it('switches with b to a before diagram that ties no message to a stop, and back', async () => {
     const [before, after, undrawn] = MAP_BUNDLE.flows;
     const review: ReviewBundle = { ...MAP_BUNDLE, flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, after, undrawn] };

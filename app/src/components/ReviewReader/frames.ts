@@ -58,3 +58,31 @@ export function mapStops(flows: readonly ReviewFlow[]): MapStop[] {
     message.stop_line === undefined ? [] : [{ flow, message, stopLine: message.stop_line }]
   )));
 }
+
+/** Where the Map stands, held by what the message says and the stop it
+ * shows, so an edit of the diagram or the document above it keeps it. */
+export interface MapPlace {
+  text: string;
+  path?: string;
+  from?: number;
+  index: number;
+}
+
+export function mapPlaceOf(bundle: ReviewBundle, list: readonly MapStop[], index: number): MapPlace {
+  const at = list[index];
+  const stop = at ? bundle.stops.find((candidate) => candidate.heading_line === at.stopLine) : undefined;
+  return { text: at?.message.text ?? '', path: stop?.path, from: stop?.from, index };
+}
+
+export function mapIndexOf(bundle: ReviewBundle, list: readonly MapStop[], place: MapPlace): number {
+  const showsStop = (at: MapStop) => {
+    const stop = bundle.stops.find((candidate) => candidate.heading_line === at.stopLine);
+    return stop !== undefined && stop.path === place.path && stop.from === place.from;
+  };
+  const found = [
+    list.findIndex((at) => at.message.text === place.text && showsStop(at)),
+    list.findIndex(showsStop),
+    list.findIndex((at) => at.message.text === place.text),
+  ].find((index) => index >= 0);
+  return found ?? Math.min(place.index, Math.max(0, list.length - 1));
+}

@@ -7,7 +7,7 @@ import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexOf, type OpenFile } from './FileView';
-import { FRAME_KEYS, hasSides, mapFlows, mapStops, offeredFrames, openingFrame, type Frame, type Side } from './frames';
+import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MapFrame } from './MapFrame';
 import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
@@ -135,8 +135,8 @@ export function ReviewReader({
   const [side, setSide] = useState<Side>('after');
   const flows = useMemo(() => mapFlows(bundle, side), [bundle, side]);
   const messageStops = useMemo(() => mapStops(flows), [flows]);
-  const [mapAt, setMapAt] = useState(0);
-  const mapIndex = Math.min(mapAt, Math.max(0, messageStops.length - 1));
+  const [mapPlace, setMapPlace] = useState<MapPlace>({ text: '', index: 0 });
+  const mapIndex = useMemo(() => mapIndexOf(bundle, messageStops, mapPlace), [bundle, mapPlace, messageStops]);
   const [stageKey, setStageKey] = useState<StageKey | null>(null);
   const stageStop = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
   const [cursorKey, setCursorKey] = useState<string | null>(null);
@@ -346,7 +346,7 @@ export function ReviewReader({
 
   const selectMessage = useCallback((index: number, list = messageStops, line?: number) => {
     const at = list[index];
-    setMapAt(index);
+    setMapPlace(mapPlaceOf(bundle, list, index));
     const stop = at ? bundle.stops.find((candidate) => candidate.heading_line === at.stopLine) : undefined;
     if (stop) showCursorAt(stop, line);
   }, [bundle, messageStops, showCursorAt]);

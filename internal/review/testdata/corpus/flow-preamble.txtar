@@ -1,0 +1,102 @@
+Mermaid reads blank lines, %% comments and directives, and a --- frontmatter
+block before sequenceDiagram; the fence is still a flow and its ties hold.
+-- base/a.go --
+package a
+
+func A() {}
+-- head/a.go --
+package a
+
+func A() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid
+---
+title: A calls out
+---
+%%{init: {"theme": "dark"}}%%
+%% the call
+sequenceDiagram
+  a->>b: calls
+  %% stop: a.go:3-3
+```
+
+## A
+
+### a.go:3-3
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 1,
+      "binary": false,
+      "path": "a.go",
+      "removed": 1,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 17,
+          "stop_line": 23,
+          "text": "calls",
+          "to": "b"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "a"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "b"
+        }
+      ]
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "e15c6a730b0c8bab5f1a47eb2a3811e807c97b54f46ce94d86802f604124d0f0",
+      "from": 3,
+      "heading_line": 23,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { println() }"
+        }
+      ],
+      "to": 3
+    }
+  ]
+}

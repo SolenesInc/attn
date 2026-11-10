@@ -85,8 +85,12 @@ sequenceDiagram
   "not_shown": [],
   "problems": [
     {
+      "line": 17,
+      "message": "`%% stop: a.go:5-5` names lines no stop shows. Add a stop `### a.go:5-5`, or name a range inside an existing stop of a.go."
+    },
+    {
       "line": 18,
-      "message": "`%% stop: a.go:40-41` names lines no stop shows. Add a stop `### a.go:40-41`, or name a range inside an existing stop of a.go."
+      "message": "the message on line 16 is already tied to a stop by `%% stop:` on line 17, and a message ties to one stop. Tie these lines to a message of their own, or widen that stop."
     }
   ],
   "repository": "\u003crepository\u003e",

@@ -63,6 +63,7 @@ type note struct {
 
 type flow struct {
 	line         int
+	start        int
 	side         string
 	undrawable   int
 	participants []flowParticipant
@@ -158,19 +159,19 @@ func parse(text string) document {
 				fenceMark, openFlow = "", nil
 				continue
 			}
-			if openFlow != nil {
+			if openFlow != nil && number > openFlow.start {
 				doc.flowLine(openFlow, line, number)
 			}
 			continue
 		}
 		if match := fence().FindStringSubmatch(line); match != nil {
 			fenceMark = match[1]
-			if match[2] == "mermaid" && sequenceDiagramFollows(lines[i+1:]) {
+			if start, ok := sequenceDiagramAt(lines[i+1:], match[1]); match[2] == "mermaid" && ok {
 				side := ""
 				if match[3] == "before" || match[3] == "after" {
 					side = match[3]
 				}
-				doc.flows = append(doc.flows, flow{line: number, side: side})
+				doc.flows = append(doc.flows, flow{line: number, start: number + 1 + start, side: side})
 				openFlow = &doc.flows[len(doc.flows)-1]
 			}
 			lastNote = nil
@@ -227,13 +228,24 @@ func parse(text string) document {
 	return doc
 }
 
-func sequenceDiagramFollows(lines []string) bool {
-	for _, line := range lines {
-		if trimmed := strings.TrimSpace(line); trimmed != "" {
-			return strings.HasPrefix(trimmed, "sequenceDiagram")
+// sequenceDiagramAt finds the sequenceDiagram line that opens a mermaid
+// fence, past what mermaid reads before it: blank lines, %% comments and
+// directives, and a --- frontmatter block.
+func sequenceDiagramAt(lines []string, fenceMark string) (int, bool) {
+	inFrontmatter := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, fenceMark):
+			return 0, false
+		case trimmed == "---":
+			inFrontmatter = !inFrontmatter
+		case inFrontmatter, trimmed == "", strings.HasPrefix(trimmed, "%%"):
+		default:
+			return i, strings.HasPrefix(trimmed, "sequenceDiagram")
 		}
 	}
-	return false
+	return 0, false
 }
 
 func (d *document) flowLine(open *flow, line string, number int) {
@@ -249,6 +261,10 @@ func (d *document) flowLine(open *flow, line string, number int) {
 			return
 		}
 		ref.line = number
+		if last.ref != nil {
+			d.problem(number, "the message on line %d is already tied to a stop by `%%%% stop:` on line %d, and a message ties to one stop. Tie these lines to a message of their own, or widen that stop.", last.line, last.ref.line)
+			return
+		}
 		last.ref = &ref
 		return
 	}
