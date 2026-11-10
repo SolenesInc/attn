@@ -15,6 +15,8 @@ import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
 import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
+import { findEditUnit } from './editUnit';
+import { EditBox, editText, locateEdit, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -162,6 +164,7 @@ export function ReviewReader({
   const daemon = useOptionalDaemonApi();
   const sendReviewFile = daemon?.sendReviewFile;
   const sendReviewSearch = daemon?.sendReviewSearch;
+  const sendReviewEdit = daemon?.sendReviewEdit;
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -187,6 +190,8 @@ export function ReviewReader({
   const [composer, setComposer] = useState<{ kind: MarkKind; target: MarkTarget } | null>(null);
   const [sending, setSending] = useState<{ verdict: ReviewVerdict } | null>(null);
   const [asking, setAsking] = useState<ReadonlyMap<string, string>>(new Map());
+  const [editing, setEditing] = useState<OpenEdit | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const selectedRef = useRef<HTMLElement[]>([]);
   const annotations = marks?.annotations ?? NO_MARKS;
   const cursorElementRef = useRef<HTMLElement | null>(null);
@@ -579,6 +584,99 @@ export function ReviewReader({
     return anchor ? { kind: 'file', anchor } : null;
   }, [currentTarget, docLineFor, openFileView, scope, selectedRows, stopOf]);
 
+  /** The file, line and selected lines the cursor stands on, for an edit. */
+  const editPlace = useCallback((): { path: string; line: number; selection?: [number, number]; docLine: number } | null => {
+    const span = (lines: number[]): [number, number] | undefined => (lines.length > 1 ? [Math.min(...lines), Math.max(...lines)] : undefined);
+    if (openFileView) {
+      const rows = openFileView.rows;
+      const line = rows?.[openFileView.cursor]?.now;
+      if (!rows || line === undefined) return null;
+      const from = Math.min(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
+      const to = Math.max(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
+      const lines = rows.slice(from, to + 1).map((row) => row.now).filter((now): now is number => now !== undefined);
+      const path = openFileView.target.path;
+      return { path, line, selection: span(lines), docLine: docLineFor(path, line) };
+    }
+    const element = currentTarget();
+    const path = element?.getAttribute('data-path');
+    const line = Number(element?.getAttribute('data-line')) || undefined;
+    if (!element || !path || line === undefined || element.getAttribute('data-review-cursor') !== 'row') return null;
+    const lines = selectedRows(element).map((row) => Number(row.getAttribute('data-line'))).filter((now) => now > 0);
+    return { path, line, selection: span(lines), docLine: stopOf(element)?.heading_line ?? docLineFor(path, line) };
+  }, [currentTarget, docLineFor, openFileView, selectedRows, stopOf]);
+
+  const startEdit = useCallback(() => {
+    const place = editPlace();
+    if (!place || !marks) return;
+    setNotice(null);
+    void readFile(place.path).then(async (answer) => {
+      const lines = (answer.rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text);
+      const selection = place.selection ? [place.selection[0] - 1, place.selection[1] - 1] as const : undefined;
+      const unit = await findEditUnit(lines, place.path, place.line - 1, selection);
+      setEditing({ path: place.path, hash: answer.hash ?? '', lines, kind: unit.kind, from: unit.from, to: unit.to, docLine: place.docLine });
+    }, (error: unknown) => setNotice(`Could not open the edit: ${error instanceof Error ? error.message : String(error)}`));
+  }, [editPlace, marks, readFile]);
+
+  const takeLine = useCallback((direction: -1 | 1) => {
+    setEditing((edit) => {
+      if (!edit) return edit;
+      const from = direction < 0 ? Math.max(0, edit.from - 1) : edit.from;
+      const to = direction > 0 ? Math.min(edit.lines.length - 1, edit.to + 1) : edit.to;
+      return { ...edit, from, to, kind: edit.kind === 'block' ? 'block' : 'selection' };
+    });
+  }, []);
+
+  const closeEdit = useCallback(() => {
+    setEditing(null);
+    setSelectFrom(null);
+    if (openFileView?.selectFrom !== undefined) moveFileCursor((file) => file.cursor);
+    rootRef.current?.focus({ preventScroll: true });
+  }, [moveFileCursor, openFileView, rootRef]);
+
+  const saveEdit = useCallback((text: string) => {
+    if (!editing || !marks || !sendReviewEdit) return;
+    const was = editText(editing);
+    if (text === was) {
+      closeEdit();
+      return;
+    }
+    setEditing({ ...editing, saving: true, problem: undefined });
+    void sendReviewEdit(host, document, { path: editing.path, baseHash: editing.hash, from: editing.from + 1, to: editing.to + 1, text }).then((result) => {
+      if (result.conflict) {
+        setEditing({ ...editing, saving: false, problem: `${editing.path} changed since this edit opened, so nothing was written. Press esc, then i to edit it as it is now.` });
+        return;
+      }
+      const to = editing.from + text.split('\n').length;
+      marks.addEditMark({ path: editing.path, from: editing.from + 1, to, docLine: editing.docLine, quote: text }, was, text);
+      closeEdit();
+    }, (error: unknown) => setEditing({ ...editing, saving: false, problem: error instanceof Error ? error.message : String(error) }));
+  }, [closeEdit, document, editing, host, marks, sendReviewEdit]);
+
+  const undoEdit = useCallback((): boolean => {
+    const place = editPlace();
+    const mark = place && annotations.find((annotation) => annotation.type === 'edit' && annotation.fileAnchor?.path === place.path
+      && place.line >= annotation.fileAnchor.from && place.line <= annotation.fileAnchor.to);
+    if (!mark?.edit || !mark.fileAnchor || !marks || !sendReviewEdit) return false;
+    const { path } = mark.fileAnchor;
+    const was = mark.edit.was;
+    setNotice(null);
+    void readFile(path).then(async (answer) => {
+      const lines = (answer.rows ?? []).filter((row) => row.now !== undefined).map((row) => row.text);
+      const at = locateEdit(lines, mark);
+      if (at === null) {
+        setNotice(`Your edit is no longer in ${path} as you saved it, so nothing was undone.`);
+        return;
+      }
+      const result = await sendReviewEdit(host, document, { path, baseHash: answer.hash ?? '', from: at + 1, to: at + mark.edit!.now.split('\n').length, text: was });
+      if (result.conflict) {
+        setNotice(`${path} changed while undoing, so nothing was written. Press u again.`);
+        return;
+      }
+      marks.deleteAnnotation(mark.id);
+    }).catch((error: unknown) => setNotice(`Could not undo the edit: ${error instanceof Error ? error.message : String(error)}`));
+    return true;
+  }, [annotations, document, editPlace, host, marks, readFile, sendReviewEdit]);
+
   const openComposer = useCallback((kind: MarkKind) => {
     const target = markTarget();
     if (target && marks) setComposer({ kind, target });
@@ -630,6 +728,7 @@ export function ReviewReader({
   const focused = useFocusAround(rootRef, tileWindow);
   const selecting = selectFrom !== null || openFileView?.selectFrom !== undefined;
   const escapes = !focused ? null
+    : editing ? 'editor'
     : composer ? 'composer'
       : sending ? 'send'
         : searchOpen ? 'search'
@@ -637,6 +736,7 @@ export function ReviewReader({
             : selecting ? 'selection'
               : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
                 : openFileView ? 'file' : null;
+  useEscapeStack(closeEdit, escapes === 'editor');
   useEscapeStack(cancelComposer, escapes === 'composer');
   useEscapeStack(() => setSending(null), escapes === 'send');
   useEscapeStack(() => setSearch(null), escapes === 'search');
@@ -658,6 +758,7 @@ export function ReviewReader({
       if (isEditable(event.target) || isEditable(active)) return;
       const selection = tileWindow.getSelection();
       if (selection && !selection.isCollapsed && root.contains(selection.anchorNode) && isPrintable(event)) return;
+      setNotice(null);
       const handled = handleKey(event);
       if (handled) event.preventDefault();
     };
@@ -683,6 +784,11 @@ export function ReviewReader({
         switchFrame(frameKey[1]);
         return true;
       }
+      if (marks && event.key === 'i') {
+        startEdit();
+        return true;
+      }
+      if (marks && event.key === 'u') return undoEdit();
       if (marks && (event.key === 'c' || event.key === 'a')) {
         openComposer(event.key === 'a' ? 'question' : 'comment');
         return true;
@@ -725,7 +831,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, stepStage, switchFrame, switchSide, tileWindow]);
+  }, [back, expandAtCursor, files.length, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, moveStop, openAtCursor, openComposer, openFileView, openSearch, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, stepStage, switchFrame, switchSide, tileWindow, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -803,6 +909,8 @@ export function ReviewReader({
       ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet /> : null}
+      {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
+      {notice ? <div className="review-notice" role="status">{notice}</div> : null}
       {composer && marks ? (
         <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
       ) : null}

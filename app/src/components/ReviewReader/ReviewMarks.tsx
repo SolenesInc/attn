@@ -12,6 +12,7 @@ export interface ReviewMarks {
   annotations: Annotation[];
   addFileMark(type: MarkKind, text: string, anchor: FileAnchor): Annotation | null;
   addBlockMark(type: MarkKind, text: string, blockId: string): Annotation | null;
+  addEditMark(anchor: FileAnchor, was: string, now: string): Annotation | null;
   deleteAnnotation(id: string): void;
   /** Delivers a question at once. Resolves to the reason it was not delivered, or null. */
   ask(id: string): Promise<string | null>;
@@ -84,10 +85,24 @@ function targetPlace(target: MarkTarget): string {
   return target.kind === 'file' ? fileAnchorPlace(target.anchor) : `“${target.quote.length > 80 ? `${target.quote.slice(0, 80)}…` : target.quote}”`;
 }
 
+function EditRow({ mark, range }: { mark: Annotation; range: string }) {
+  return (
+    <div className="review-mark review-mark--edit" data-review-mark={mark.id}>
+      <span className="review-mark-who">you edited</span>
+      <span className="review-note-range">{range}</span>
+      <span className="review-mark-text">
+        Saved to the file. It was: <code className="review-mark-was">{mark.edit?.was}</code>
+      </span>
+      <span className="review-composer-keys"><kbd>u</kbd> undo</span>
+    </div>
+  );
+}
+
 export function MarkRow({ mark, asking, onRemove }: { mark: Annotation; asking?: string; onRemove?: () => void }) {
   const question = mark.type === 'question';
   const anchor = mark.fileAnchor;
   const range = anchor ? (anchor.to > anchor.from ? `L${anchor.from}–${anchor.to}` : `L${anchor.from}`) : '';
+  if (mark.type === 'edit') return <EditRow mark={mark} range={range} />;
   return (
     <div className={`review-mark${question ? ' review-mark--question' : ''}`} data-review-mark={mark.id}>
       <span className="review-mark-who">{question ? 'you asked' : 'you'}</span>
@@ -178,13 +193,16 @@ export function SendSheet({
   onPick: (verdict: ReviewVerdict) => void;
   onSend: () => void;
 }) {
-  const sorted = sortAnnotations([...marks]);
+  const sorted = sortAnnotations(marks.filter((mark) => mark.type !== 'edit'));
+  const edits = sortAnnotations(marks.filter((mark) => mark.type === 'edit'));
   return (
     <div className="review-send-sheet" role="dialog" aria-label="Send the review">
       <h3>Send the review{destination ? ` to ${destination}` : ''}</h3>
       {destination === null ? <p className="review-send-problem">Bind a session to this tile to send the review.</p> : null}
-      {sorted.length === 0 ? (
+      {sorted.length === 0 && edits.length === 0 ? (
         <p className="review-send-empty">No notes: the verdict goes alone.</p>
+      ) : sorted.length === 0 ? (
+        null
       ) : (
         <ol className="review-send-marks">
           {sorted.map((mark) => (
@@ -198,6 +216,23 @@ export function SendSheet({
           ))}
         </ol>
       )}
+      {edits.length > 0 ? (
+        <>
+          <h4 className="review-send-heading">Your edits, saved to the files</h4>
+          <ol className="review-send-marks review-send-edits">
+            {edits.map((mark) => (
+              <li key={mark.id}>
+                <span className="review-send-place">{mark.fileAnchor ? fileAnchorPlace(mark.fileAnchor) : ''}</span>
+                <span className="review-send-kind">edit</span>
+                <span className="review-send-text">
+                  <del>{mark.edit?.was}</del>
+                  <ins>{mark.edit?.now}</ins>
+                </span>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : null}
       <div className="review-send-verdicts" role="radiogroup" aria-label="Verdict">
         {VERDICTS.map((entry) => (
           <button

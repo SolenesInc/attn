@@ -40,6 +40,7 @@ import type {
   AskImageResultMessage,
   TileAssetReadResultMessage,
   ReviewBundle,
+  ReviewEditResultMessage,
   ReviewFileResultMessage,
   ReviewSearchResultMessage,
   AskSeedMention,
@@ -198,6 +199,14 @@ export interface SeedSendToChiefOptions {
   review?: SeedReviewActionContext;
 }
 export type SeedSendToChiefResult = GeneratedSeedSendToChiefResult;
+/** Lines from..to of a review's file now, replaced by text, while the file has baseHash. */
+export interface ReviewEdit {
+  path: string;
+  baseHash: string;
+  from: number;
+  to: number;
+  text: string;
+}
 export type SeedCheckVerb = 'confirm' | 'reject' | 'uncheck' | 'reopen';
 export interface SeedReviewActionContext {
   reviewId: string;
@@ -2370,6 +2379,10 @@ export function useDaemonSocket({
               settlePendingRequest(pending, 'review_file', data as ReviewFileResultMessage, (result) => result, 'Could not read the file');
               break;
             }
+            if (data.event === 'review_edit_result') {
+              settlePendingRequest(pending, 'review_edit', data as ReviewEditResultMessage, (result) => result, 'Could not save the edit');
+              break;
+            }
             if (data.event === 'review_search_result') {
               settlePendingRequest(pending, 'review_search', data as ReviewSearchResultMessage, (result) => result, 'Could not search');
               break;
@@ -2832,6 +2845,9 @@ export function useDaemonSocket({
     sendRequest('tile_asset_read', { path, ...(host ? { host } : {}) }, 'Loading the image timed out'), [sendRequest]);
   const sendReviewFile = useCallback((host: string | undefined, document: string, path: string): Promise<ReviewFileResultMessage> =>
     sendRequest('review_file', { document, path, ...(host ? { host } : {}) }, 'Reading the file timed out'), [sendRequest]);
+
+  const sendReviewEdit = useCallback((host: string | undefined, document: string, edit: ReviewEdit): Promise<ReviewEditResultMessage> =>
+    sendRequest('review_edit', { document, path: edit.path, base_hash: edit.baseHash, from: edit.from, to: edit.to, text: edit.text, ...(host ? { host } : {}) }, 'Saving the edit timed out'), [sendRequest]);
   const sendReviewSearch = useCallback((host: string | undefined, document: string, query: string): Promise<ReviewSearchResultMessage> =>
     sendRequest('review_search', { document, query, ...(host ? { host } : {}) }, 'Searching timed out'), [sendRequest]);
 
@@ -4436,6 +4452,7 @@ export function useDaemonSocket({
     sendAskImage,
     sendTileAssetRead,
     sendReviewFile,
+    sendReviewEdit,
     sendReviewSearch,
     sendAskSeedMentions,
     sendRestartSharedCodex,

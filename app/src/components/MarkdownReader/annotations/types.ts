@@ -6,7 +6,7 @@ import type { AnchorRecord } from '../anchoring';
 
 export type { WireAnnotation, WireAnchor };
 
-export type AnnotationType = 'comment' | 'deletion' | 'global' | 'question';
+export type AnnotationType = 'comment' | 'deletion' | 'global' | 'question' | 'edit';
 
 /** A mark on a review's code: lines of a file now, quoted as the reader saw them. */
 export interface FileAnchor {
@@ -29,6 +29,8 @@ export interface Annotation {
   fileAnchor?: FileAnchor;
   /** The agent's answer to a question. */
   answer?: string;
+  /** An edit saved to a review's file: its lines before and after. */
+  edit?: { was: string; now: string };
   /** Structured quick-label reference (NOT baked into text). */
   quickLabelId?: string;
   /** Tip text snapshotted at creation so the payload survives label-set edits. */
@@ -110,12 +112,13 @@ export function annotationToWire(annotation: Annotation): WireAnnotation {
     ...(annotation.quickLabelTip !== undefined ? { quick_label_tip: annotation.quickLabelTip } : {}),
     ...(annotation.quickLabelText !== undefined ? { quick_label_text: annotation.quickLabelText } : {}),
     ...(annotation.answer !== undefined ? { answer: annotation.answer } : {}),
+    ...(annotation.edit ? { edit_was: annotation.edit.was, edit_now: annotation.edit.now } : {}),
     created_at: annotation.createdAt,
   };
 }
 
 function isAnnotationType(value: string): value is AnnotationType {
-  return value === 'comment' || value === 'deletion' || value === 'global' || value === 'question';
+  return value === 'comment' || value === 'deletion' || value === 'global' || value === 'question' || value === 'edit';
 }
 
 /** Wire → frontend. Returns null for records this build cannot represent, so
@@ -140,6 +143,7 @@ export function annotationFromWire(wire: WireAnnotation): Annotation | null {
     ...(typeof wire.quick_label_tip === 'string' ? { quickLabelTip: wire.quick_label_tip } : {}),
     ...(typeof wire.quick_label_text === 'string' ? { quickLabelText: wire.quick_label_text } : {}),
     ...(typeof wire.answer === 'string' ? { answer: wire.answer } : {}),
+    ...(typeof wire.edit_was === 'string' && typeof wire.edit_now === 'string' ? { edit: { was: wire.edit_was, now: wire.edit_now } } : {}),
     createdAt: wire.created_at,
   };
 }

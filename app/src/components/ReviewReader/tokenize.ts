@@ -13,15 +13,15 @@ export type TokenLine = CodeToken[];
  * frame; the next chunk waits for the next task. */
 export const TOKENIZE_CHUNK_LINES = 100;
 
-const THEMES = { light: 'github-light-default', dark: 'github-dark-default' } as const;
+export const THEMES = { light: 'github-light-default', dark: 'github-dark-default' } as const;
 
 const NAMED_LANGUAGES: Record<string, string> = { makefile: 'make', dockerfile: 'docker' };
 
-type Shiki = NonNullable<Awaited<ReturnType<typeof loadShiki>>>;
+export type Shiki = NonNullable<Awaited<ReturnType<typeof loadShiki>>>;
 
-type Language = keyof Shiki['bundledLanguages'];
+export type Language = keyof Shiki['bundledLanguages'];
 
-function languageOf(shiki: Shiki, path: string): Language | undefined {
+export function languageOf(shiki: Shiki, path: string): Language | undefined {
   const name = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
   const extension = name.includes('.') ? name.slice(name.lastIndexOf('.') + 1) : '';
   const candidate = NAMED_LANGUAGES[name] ?? extension;

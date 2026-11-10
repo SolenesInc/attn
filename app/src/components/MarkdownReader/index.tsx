@@ -650,10 +650,10 @@ export const MarkdownReader = memo(function MarkdownReader({
     draftGeneration: annotationsGeneration,
   });
   const reviewHandleRef = useRef<ReviewReaderHandle | null>(null);
-  const { annotations, addFileMark, addBlockMark, deleteAnnotation } = annotationsApi;
+  const { annotations, addFileMark, addBlockMark, addEditMark, deleteAnnotation } = annotationsApi;
   const reviewMarks = useMemo<ReviewMarks | undefined>(() => (annotationsEnabled && reviewSend
-    ? { annotations, addFileMark, addBlockMark, deleteAnnotation, ...reviewSend }
-    : undefined), [addBlockMark, addFileMark, annotations, annotationsEnabled, deleteAnnotation, reviewSend]);
+    ? { annotations, addFileMark, addBlockMark, addEditMark, deleteAnnotation, ...reviewSend }
+    : undefined), [addBlockMark, addEditMark, addFileMark, annotations, annotationsEnabled, deleteAnnotation, reviewSend]);
 
   // The send handle must read call-time state, not a captured api identity.
   const annotationsApiRef = useRef(annotationsApi);

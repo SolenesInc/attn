@@ -74,6 +74,8 @@ export interface UseAnnotationsApi {
   addFileMark(type: 'comment' | 'question', text: string, anchor: FileAnchor): Annotation | null;
   /** A note or question on a whole prose block. */
   addBlockMark(type: 'comment' | 'question', text: string, blockId: string): Annotation | null;
+  /** An edit the user saved to lines of a review's file. */
+  addEditMark(anchor: FileAnchor, was: string, now: string): Annotation | null;
   addGlobalComment(text: string): Annotation | null;
   deleteAnnotation(id: string): void;
   clearAll(): void;
@@ -791,6 +793,12 @@ export function useAnnotations({
     [addAnnotation],
   );
 
+  const addEditMark = useCallback(
+    (anchor: FileAnchor, was: string, now: string): Annotation | null =>
+      addAnnotation({ id: crypto.randomUUID(), type: 'edit', fileAnchor: anchor, edit: { was, now }, createdAt: Date.now() }),
+    [addAnnotation],
+  );
+
   const addBlockMark = useCallback(
     (type: 'comment' | 'question', text: string, blockId: string): Annotation | null => {
       if (text.trim() === '' || !beginBlockSelection(blockId)) {
@@ -964,6 +972,7 @@ export function useAnnotations({
       addGlobalComment,
       addFileMark,
       addBlockMark,
+      addEditMark,
       deleteAnnotation,
       clearAll,
       flushPendingSave,
@@ -990,6 +999,7 @@ export function useAnnotations({
       addGlobalComment,
       addFileMark,
       addBlockMark,
+      addEditMark,
       deleteAnnotation,
       clearAll,
       flushPendingSave,

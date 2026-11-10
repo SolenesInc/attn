@@ -168,6 +168,7 @@ export function AnnotationSidebar({
                   <div className="md-card-quote">{fileAnchorPlace(annotation.fileAnchor)}</div>
                 )}
                 {annotation.text && <div className="md-card-text">{annotation.text}</div>}
+                {annotation.edit && <div className="md-card-text">Saved to the file: {annotation.edit.now}</div>}
                 {annotation.type === 'question' && (
                   <div className="md-card-answer">{annotation.answer ?? 'Waiting for the answer'}</div>
                 )}

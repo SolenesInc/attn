@@ -865,3 +865,68 @@
 .review-marks-moved .review-mark {
   margin-left: 0;
 }
+
+.review-mark--edit {
+  border-left-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+}
+
+.review-mark--edit .review-mark-who {
+  color: var(--color-warning);
+}
+
+.review-mark-was {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  color: var(--color-text-secondary);
+  text-decoration: line-through;
+}
+
+.review-editor-input {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  tab-size: 4;
+  white-space: pre;
+}
+
+.review-editor-problem,
+.review-notice {
+  margin-top: 0.375rem;
+  color: var(--color-warning);
+}
+
+.review-notice {
+  position: absolute;
+  left: 50%;
+  bottom: 40px;
+  transform: translateX(-50%);
+  max-width: 92%;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.375rem;
+  background: var(--color-bg-elevated);
+  font-size: 0.8125rem;
+  z-index: 8;
+}
+
+.review-send-heading {
+  margin: 0 0 0.375rem;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.review-send-edits del,
+.review-send-edits ins {
+  display: block;
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+
+.review-send-edits del {
+  color: var(--color-text-muted);
+}
+
+.review-send-edits ins {
+  text-decoration: none;
+}

@@ -40,6 +40,7 @@ const FILE_KEYS: Array<[string[], string]> = [
 const MARK_KEYS: Array<[string[], string]> = [
   [['c'], 'note'],
   [['a'], 'ask'],
+  [['i'], 'edit'],
   [['⌘↵'], 'send'],
 ];
 
@@ -94,7 +95,9 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['⇧↑', '⇧↓'], 'Select several lines of code, so a note or question covers them.'],
   [['c'], 'Write a note on the line, the selected lines or the paragraph. It waits for the send.'],
   [['a'], 'Ask the agent about the line, the selected lines or the paragraph. The question goes at once; the answer shows under the line.'],
-  [['⌘↵'], 'Send the review: see the notes it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
+  [['i'], 'Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line; in a document, the paragraph or block as markdown. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.'],
+  [['u'], 'Undo your edit where the cursor is: the file gets its old text back and the edit leaves the review.'],
+  [['⌘↵'], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
   [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked.'],
@@ -102,7 +105,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],
   [['/'], 'Search the repository: files by name, lines by text.'],
   [['⌃o'], 'Go back to the file you came from; from the first file, close the file view. The Walkthrough keeps its stop.'],
-  [['esc'], 'Close the send, the search, this sheet, a selection, or the file view. In the Walkthrough, return to the stop.'],
+  [['esc'], 'Close the edit box, the send, the search, this sheet, a selection, or the file view. In the Walkthrough, return to the stop.'],
   [['?'], 'Show or hide this sheet.'],
 ];
 
