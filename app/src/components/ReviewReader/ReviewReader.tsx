@@ -746,7 +746,13 @@ export function ReviewReader({
       const to = Number(element.getAttribute('data-line-to'));
       const stop = stopOf(element);
       if (!path || !stop || !(from > 0)) return null;
-      return { kind: 'file', anchor: { path, from, to: Math.max(from, to), docLine: stop.heading_line, quote: element.textContent ?? '' } };
+      const rows = expansions.get(expansionKey(stop))?.rows ?? stop.rows;
+      const first = rows.findIndex((row) => row.now === from);
+      const last = rows.findIndex((row) => row.now === Math.max(from, to));
+      if (first < 0 || last < first) return null;
+      const picked = rows.slice(first, last + 1).filter((row) => row.now !== undefined);
+      const anchor = fileRowsAnchor(path, picked, rows.slice(last + 1), () => stop.heading_line);
+      return anchor ? { kind: 'file', anchor } : null;
     }
     const picked = selectedRows(element);
     const path = element.getAttribute('data-path');
@@ -757,7 +763,7 @@ export function ReviewReader({
       .filter((target) => target.getAttribute('data-review-cursor') === 'row' && stopOf(target) === stop);
     const anchor = fileRowsAnchor(path, picked.map(rowOf), following.map(rowOf), () => stop.heading_line);
     return anchor ? { kind: 'file', anchor } : null;
-  }, [currentTarget, docLineFor, openFileView, scope, selectedRows, stopOf]);
+  }, [currentTarget, docLineFor, expansions, openFileView, scope, selectedRows, stopOf]);
 
   /** The file, line and selected lines the cursor stands on, for an edit, or why there is none. */
   const editPlace = useCallback((): EditPlace | string => {

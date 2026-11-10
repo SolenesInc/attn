@@ -28,9 +28,23 @@ The guide says how a review reads.
 const row = (kind: string, old: number | undefined, now: number | undefined, text: string): ReviewRow => ({
   kind,
   ...(old !== undefined ? { old } : {}),
-  ...(now !== undefined ? { now } : {}),
+  ...(now !== undefined ? { now, head: now } : {}),
   text,
 });
+
+/** The rows after lines were added to the working file below its first line, past the review's head. */
+const addedSinceHead = (rows: readonly ReviewRow[], added: readonly string[]): ReviewRow[] => [
+  rows[0],
+  ...added.map((text, index): ReviewRow => ({ kind: '+', now: 2 + index, text })),
+  ...rows.slice(1).map((shifted) => (shifted.now !== undefined ? { ...shifted, now: shifted.now + added.length } : shifted)),
+];
+
+const LINK_ROWS: ReviewRow[] = [
+  row(' ', 1, 1, '# Links'),
+  row(' ', 2, 2, ''),
+  row('-', 3, undefined, 'Read the [guide](old.md) first.'),
+  row('+', undefined, 3, 'Read the [guide](new.md) first.'),
+];
 
 /** docs/guide.md now: a heading, a reworded paragraph, a rewritten one, a tight list with a reworded item, an added paragraph, a hard-wrapped paragraph with one word changed, and a paragraph deleted before one kept as it was. */
 const GUIDE_NOW = [
@@ -74,15 +88,15 @@ function guideRows(now: readonly string[]): ReviewRow[] {
   ];
 }
 
-function bundleOf(now: readonly string[], linesAbove = 0): ReviewBundle {
+function bundleOf(rows: readonly ReviewRow[], linesAbove = 0): ReviewBundle {
   return {
     frame: 'brief',
     repository: '/repo',
     base: '4be1c0d',
     head: '9f3a7e2',
     stops: [{
-      heading_line: 13 + linesAbove, path: 'docs/guide.md', from: 1, to: 9, now_from: 1, now_to: now.length, changed_since_presented: false, file_hash: 'h1',
-      rows: guideRows(now),
+      heading_line: 13 + linesAbove, path: 'docs/guide.md', from: 1, to: 9, now_from: 1, now_to: rows.reduce((last, shown) => Math.max(last, shown.now ?? 0), 0), changed_since_presented: false, file_hash: 'h1',
+      rows: [...rows],
       notes: [{ line: 15 + linesAbove, from: 3, to: 3, now_from: 3, now_to: 3, look: false, text: 'Reworded.' }],
     }],
     files: [{ path: 'docs/guide.md', status: 'modified', added: 2, removed: 2, binary: false }],
@@ -93,7 +107,7 @@ function bundleOf(now: readonly string[], linesAbove = 0): ReviewBundle {
   };
 }
 
-async function openReview({ host }: { host?: string } = {}) {
+async function openReview({ host, rowsOf = guideRows }: { host?: string; rowsOf?: (guide: readonly string[]) => ReviewRow[] } = {}) {
   let annotations: WireAnnotation[] = [];
   let generation = 1;
   let guide = [...GUIDE_NOW];
@@ -111,7 +125,7 @@ async function openReview({ host }: { host?: string } = {}) {
         generation += 1;
         return { event: 'markdown_annotations_save_result', document_uri: save.document_uri, source_kind: save.source_kind, success: true, annotations, generation };
       });
-      daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: guideRows(guide), hash: `h${version}` }));
+      daemon.on('review_file', ({ path }) => ({ event: 'review_file_result', success: true, path, rows: rowsOf(guide), hash: `h${version}` }));
       daemon.on('review_edit', ({ from, to, text }: CommandMessage<'review_edit'>) => {
         guide = [...guide.slice(0, from - 1), ...text.split('\n'), ...guide.slice(to)];
         version += 1;
@@ -123,7 +137,7 @@ async function openReview({ host }: { host?: string } = {}) {
   const show = async (content = DOCUMENT) => {
     view.daemon.emit({
       event: 'desktop_tile_content', desktop_id: desktopId, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content,
-      review: bundleOf(guide, content.split('\n').length - DOCUMENT.split('\n').length), ...(host ? { host } : {}),
+      review: bundleOf(rowsOf(guide), content.split('\n').length - DOCUMENT.split('\n').length), ...(host ? { host } : {}),
     });
     await view.daemon.idle();
   };
@@ -216,6 +230,29 @@ describe('App review document stops', () => {
     expect(annotations()).toEqual([expect.objectContaining({
       type: 'comment', text: 'Say when.', anchor: expect.objectContaining({ file: 'docs/guide.md', file_start_line: 5, file_end_line: 5, start_line: 13 }),
     })]);
+  });
+
+  it('anchors a note on a block at its lines at head when the file gained lines above it since', async () => {
+    const { tile, press, toBlock, annotations } = await openReview({ rowsOf: (guide) => addedSinceHead(guideRows(guide), ['', 'Added since the head.']) });
+    await toBlock(5);
+    expect(tile.querySelector('.review-doc .review-cursor')).toHaveTextContent('Press c to');
+    await press('c');
+    const input = within(within(tile).getByRole('dialog', { name: 'Write a note' })).getByRole('textbox');
+    fireEvent.change(input, { target: { value: 'Say which line.' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await press('Shift');
+    expect(annotations()).toEqual([expect.objectContaining({
+      type: 'comment', text: 'Say which line.', anchor: expect.objectContaining({ file: 'docs/guide.md', file_start_line: 3, file_end_line: 3 }),
+    })]);
+    const block = tile.querySelector('.review-stop--doc [data-review-cursor="block"][data-line="5"]');
+    expect(block?.nextElementSibling).toHaveTextContent('Say which line.');
+  });
+
+  it('shows a changed link destination: the old link struck, the new one added', async () => {
+    const { tile } = await openReview({ rowsOf: () => LINK_ROWS });
+    const block = tile.querySelector('.review-stop--doc [data-review-cursor="block"][data-line="3"]');
+    expect(block?.querySelector('del a')).toHaveAttribute('href', 'old.md');
+    expect(block?.querySelector('ins a')).toHaveAttribute('href', 'new.md');
   });
 
   it('opens a document on this machine in the editor tile, rooted at the repository', async () => {

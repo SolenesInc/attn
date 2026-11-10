@@ -142,7 +142,7 @@ export type WordOp = { op: '=' | '+' | '-'; word: Word };
  * 332 markdown files is 588 words, about 345,000 cells against itself. */
 export const MAX_WORD_DIFF_CELLS = 4_000_000;
 
-const keyOf = (word: Word) => `${word.marks.join('+')}\u0000${word.text}`;
+const keyOf = (word: Word) => `${word.marks.join('+')}\u0000${word.href ?? ''}\u0000${word.text}`;
 
 /** The word changes from was to now, or null when the table would pass MAX_WORD_DIFF_CELLS. */
 export function diffWords(was: readonly Word[], now: readonly Word[]): WordOp[] | null {
