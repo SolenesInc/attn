@@ -1,11 +1,16 @@
 package daemon_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/review"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -136,6 +141,86 @@ func TestAReviewDocumentsProblemsReachWhoeverOpensOrChecksIt(t *testing.T) {
 	}
 }
 
+func requestReviewFile(app *testworld.Peer, document, path string) protocol.ReviewFileResultMessage {
+	app.T.Helper()
+	id := uuid.NewString()
+	return testworld.Request(app, protocol.ReviewFileMessage{Cmd: protocol.CmdReviewFile, Document: document, Path: path, RequestID: protocol.Ptr(id)},
+		protocol.EventReviewFileResult, func(r protocol.ReviewFileResultMessage) bool { return protocol.Deref(r.RequestID) == id })
+}
+
+func requestReviewSearch(app *testworld.Peer, document, query string) protocol.ReviewSearchResultMessage {
+	app.T.Helper()
+	id := uuid.NewString()
+	return testworld.Request(app, protocol.ReviewSearchMessage{Cmd: protocol.CmdReviewSearch, Document: document, Query: query, RequestID: protocol.Ptr(id)},
+		protocol.EventReviewSearchResult, func(r protocol.ReviewSearchResultMessage) bool { return protocol.Deref(r.RequestID) == id })
+}
+
+func TestTheFileViewReadsAWholeFileOfTheReviewAndSearchFindsItsFilesAndLines(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := reviewRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, "notes.txt"), []byte("the sum of two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+
+	file := requestReviewFile(app, document, "calc.go")
+	if !file.Success {
+		t.Fatalf("review_file failed: %s", protocol.Deref(file.Error))
+	}
+	var rows []string
+	for _, row := range file.Rows {
+		rows = append(rows, fmt.Sprintf("%s%d|%d %s", row.Kind, protocol.Deref(row.Old), protocol.Deref(row.Now), row.Text))
+	}
+	want := []string{" 1|1 package calc", " 2|2 ", " 3|3 func Add(a, b int) int {", "-4|0 \treturn a + b", "+0|4 \tsum := a + b", "+0|5 \treturn sum", " 5|6 }"}
+	if strings.Join(rows, "\n") != strings.Join(want, "\n") {
+		t.Errorf("review_file rows are\n%s\nwant the whole file now with the change from base\n%s", strings.Join(rows, "\n"), strings.Join(want, "\n"))
+	}
+	if protocol.Deref(file.Hash) == "" {
+		t.Error("review_file answered no hash for a file that exists")
+	}
+
+	outside := requestReviewFile(app, document, "../elsewhere.go")
+	if outside.Success || !strings.Contains(protocol.Deref(outside.Error), repo) {
+		t.Errorf("review_file of a path outside the repository answered %+v, want a refusal naming the repository %s", outside, repo)
+	}
+
+	byName := requestReviewSearch(app, document, "CALC")
+	if !byName.Success || strings.Join(byName.Files, ",") != "calc.go" {
+		t.Errorf("searching CALC found files %v (error %s), want calc.go by name", byName.Files, protocol.Deref(byName.Error))
+	}
+	byText := requestReviewSearch(app, document, "sum")
+	var hits []string
+	for _, hit := range byText.Hits {
+		hits = append(hits, fmt.Sprintf("%s:%d:%s", hit.Path, hit.Line, hit.Text))
+	}
+	if want := []string{"calc.go:4:\tsum := a + b", "calc.go:5:\treturn sum", "notes.txt:1:the sum of two"}; strings.Join(hits, "\n") != strings.Join(want, "\n") {
+		t.Errorf("searching sum found %q, want the lines now, untracked files included: %q", hits, want)
+	}
+
+	if err := os.WriteFile(filepath.Join(repo, "crowded.txt"), []byte(strings.Repeat("crowd\n", review.MaxSearchHitsInFile+5)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	crowded := requestReviewSearch(app, document, "crowd")
+	if len(crowded.Hits) != review.MaxSearchHitsInFile || !strings.Contains(protocol.Deref(crowded.Problem), "crowded.txt match on more than") {
+		t.Errorf("searching a word on %d lines of one file found %d hits with problem %q, want %d and the file named", review.MaxSearchHitsInFile+5, len(crowded.Hits), protocol.Deref(crowded.Problem), review.MaxSearchHitsInFile)
+	}
+
+	for i := range review.MaxSearchHits/review.MaxSearchHitsInFile + 2 {
+		if err := os.WriteFile(filepath.Join(repo, fmt.Sprintf("common%02d.txt", i)), []byte(strings.Repeat("common\n", review.MaxSearchHitsInFile)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	common := requestReviewSearch(app, document, "common")
+	if len(common.Hits) != review.MaxSearchHits || !strings.Contains(protocol.Deref(common.Problem), fmt.Sprintf("over %d lines match", review.MaxSearchHits)) {
+		t.Errorf("searching a word on more than %d lines found %d hits with problem %q, want %d and the limit named", review.MaxSearchHits, len(common.Hits), protocol.Deref(common.Problem), review.MaxSearchHits)
+	}
+}
+
 func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
@@ -157,6 +242,12 @@ func TestWithCodeReviewOffAReviewDocumentIsPlainMarkdownAndReviewRefuses(t *test
 		if err := refused(); err == nil || !strings.Contains(err.Error(), "code_review_enabled") {
 			t.Errorf("%s with code review off answered %v, want a refusal naming code_review_enabled", name, err)
 		}
+	}
+	if file := requestReviewFile(app, document, "calc.go"); file.Success || !strings.Contains(protocol.Deref(file.Error), "code_review_enabled") {
+		t.Errorf("review_file with code review off answered %+v, want a refusal naming code_review_enabled", file)
+	}
+	if search := requestReviewSearch(app, document, "sum"); search.Success || !strings.Contains(protocol.Deref(search.Error), "code_review_enabled") {
+		t.Errorf("review_search with code review off answered %+v, want a refusal naming code_review_enabled", search)
 	}
 	problems, err := cli.OpenMarkdown(document, "s1")
 	if err != nil || len(problems) != 0 {

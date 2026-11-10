@@ -166,6 +166,8 @@ var Placements = map[string][]Placement{
 	"reopen_worktree":                  {Placement{LocatorMachine, "host"}},
 	"restart_shared_codex":             {Placement{LocatorHere, ""}},
 	"review_check":                     {Placement{LocatorHere, ""}},
+	"review_file":                      {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
+	"review_search":                    {Placement{LocatorMachine, "host"}, Placement{LocatorHere, ""}},
 	"review_start":                     {Placement{LocatorHere, ""}},
 	"seed_artifact_transfer":           {Placement{LocatorHome, ""}},
 	"seed_artifact_transfer_here":      {Placement{LocatorMachine, "host"}},
@@ -1985,6 +1987,42 @@ func (m ReviewCheckMessage) Placement() Placement {
 }
 
 func (m ReviewCheckMessage) Locate() string {
+	return ""
+}
+
+func (ReviewFileMessage) CommandName() string {
+	return "review_file"
+}
+
+func (m ReviewFileMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ReviewFileMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
+	return ""
+}
+
+func (ReviewSearchMessage) CommandName() string {
+	return "review_search"
+}
+
+func (m ReviewSearchMessage) Placement() Placement {
+	if m.Host != nil {
+		return Placement{LocatorMachine, "host"}
+	}
+	return Placement{LocatorHere, ""}
+}
+
+func (m ReviewSearchMessage) Locate() string {
+	if m.Host != nil {
+		return string(*m.Host)
+	}
 	return ""
 }
 

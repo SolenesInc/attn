@@ -1215,6 +1215,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleGetRepoInfoWS(client, msg.(*protocol.GetRepoInfoMessage))
 	case protocol.CmdTileAssetRead:
 		d.handleTileAssetReadWS(client, msg.(*protocol.TileAssetReadMessage))
+	case protocol.CmdReviewFile:
+		d.handleReviewFileWS(client, msg.(*protocol.ReviewFileMessage))
+	case protocol.CmdReviewSearch:
+		d.handleReviewSearchWS(client, msg.(*protocol.ReviewSearchMessage))
 	case protocol.CmdAgentCatalog:
 		d.handleAgentCatalogWS(client, msg.(*protocol.AgentCatalogMessage))
 	case protocol.CmdAskImage:

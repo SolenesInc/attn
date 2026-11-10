@@ -208,7 +208,15 @@ func (r *resolver) resolveStop(s stop) (protocol.ReviewStop, bool) {
 		base = texts[1]
 	}
 	now, nowHash, gone, err := readNow(filepath.Join(r.root, filepath.FromSlash(s.path)))
-	if err != nil {
+	var tooLarge fileTooLargeError
+	switch {
+	case errors.As(err, &tooLarge):
+		r.doc.problem(s.line, "%s: the file is %d bytes; a stop shows files up to %d bytes. Leave it out and list it under `## Not shown`", s.path, tooLarge.size, MaxStopFileBytes)
+		return protocol.ReviewStop{}, false
+	case errors.Is(err, errBinaryFile):
+		r.doc.problem(s.line, "%s: binary file; a stop shows text. List it under `## Not shown`", s.path)
+		return protocol.ReviewStop{}, false
+	case err != nil:
 		r.doc.problem(s.line, "%s: %v", s.path, err)
 		return protocol.ReviewStop{}, false
 	}
@@ -330,6 +338,14 @@ func equalLines(a, b []string) bool {
 	return true
 }
 
+type fileTooLargeError struct{ size int64 }
+
+func (e fileTooLargeError) Error() string {
+	return fmt.Sprintf("the file is %d bytes; attn shows files up to %d bytes", e.size, MaxStopFileBytes)
+}
+
+var errBinaryFile = errors.New("binary file; attn shows text")
+
 func readNow(path string) (lines []string, hash string, gone bool, err error) {
 	info, err := os.Stat(path)
 	if errors.Is(err, fs.ErrNotExist) {
@@ -342,14 +358,14 @@ func readNow(path string) (lines []string, hash string, gone bool, err error) {
 		return nil, "", false, fmt.Errorf("not a regular file")
 	}
 	if info.Size() > MaxStopFileBytes {
-		return nil, "", false, fmt.Errorf("the file is %d bytes; a stop shows files up to %d bytes. Leave it out and list it under `## Not shown`", info.Size(), MaxStopFileBytes)
+		return nil, "", false, fileTooLargeError{size: info.Size()}
 	}
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, "", false, err
 	}
 	if bytes.IndexByte(content, 0) >= 0 {
-		return nil, "", false, fmt.Errorf("binary file; a stop shows text. List it under `## Not shown`")
+		return nil, "", false, errBinaryFile
 	}
 	sum := sha256.Sum256(content)
 	lines = splitLines(string(content))

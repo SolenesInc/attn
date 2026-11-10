@@ -9618,6 +9618,49 @@ type ReviewFile struct {
 	Status string `json:"status"`
 }
 
+type ReviewFileMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type ReviewFileResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Hash corresponds to the JSON schema field "hash".
+	Hash *string `json:"hash,omitempty,omitzero"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path *string `json:"path,omitempty,omitzero"`
+
+	// Problem corresponds to the JSON schema field "problem".
+	Problem *string `json:"problem,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Rows corresponds to the JSON schema field "rows".
+	Rows []ReviewRow `json:"rows,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
 type ReviewFlow struct {
 	// Line corresponds to the JSON schema field "line".
 	Line int `json:"line"`
@@ -9710,6 +9753,57 @@ type ReviewRow struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+}
+
+type ReviewSearchHit struct {
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// Text corresponds to the JSON schema field "text".
+	Text string `json:"text"`
+}
+
+type ReviewSearchMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Document corresponds to the JSON schema field "document".
+	Document string `json:"document"`
+
+	// Host corresponds to the JSON schema field "host".
+	Host *string `json:"host,omitempty,omitzero"`
+
+	// Query corresponds to the JSON schema field "query".
+	Query string `json:"query"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+}
+
+type ReviewSearchResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Files corresponds to the JSON schema field "files".
+	Files []string `json:"files,omitempty,omitzero"`
+
+	// Hits corresponds to the JSON schema field "hits".
+	Hits []ReviewSearchHit `json:"hits,omitempty,omitzero"`
+
+	// Problem corresponds to the JSON schema field "problem".
+	Problem *string `json:"problem,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type ReviewStartMessage struct {

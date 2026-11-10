@@ -3923,6 +3923,55 @@ model ReviewCheckResult {
   problems: ReviewProblem[];
 }
 
+// One whole file of a review's repository, now, with the change from base,
+// read on the machine that holds it.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ReviewFileMessage {
+  cmd: "review_file";
+  host?: string;
+  document: string;
+  path: string;                  // relative to the review's repository
+  request_id?: string;
+}
+
+model ReviewFileResultMessage {
+  event: "review_file_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  path?: string;
+  rows?: ReviewRow[];            // every line now, and the lines removed since base
+  hash?: string;                 // sha256 of the file now; empty when it is gone
+  problem?: string;              // a limit the rows hit, and what it left out
+}
+
+// Files of a review's repository by name, and lines by text, found with git
+// on the machine that holds them.
+@extension("x-on", #[#{ machine: "host" }, #{ here: true }])
+model ReviewSearchMessage {
+  cmd: "review_search";
+  host?: string;
+  document: string;
+  query: string;
+  request_id?: string;
+}
+
+model ReviewSearchHit {
+  path: string;
+  line: int32;
+  text: string;
+}
+
+model ReviewSearchResultMessage {
+  event: "review_search_result";
+  request_id?: string;
+  success: boolean;
+  error?: string;
+  files?: string[];
+  hits?: ReviewSearchHit[];
+  problem?: string;              // a limit the results hit
+}
+
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model TileAssetReadMessage {
   cmd: "tile_asset_read";

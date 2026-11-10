@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"path/filepath"
@@ -58,4 +59,60 @@ func (d *Daemon) handleReviewCheck(ctx context.Context, conn net.Conn, msg *prot
 		return
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, ReviewCheckResult: &protocol.ReviewCheckResult{Problems: bundle.Problems}})
+}
+
+func (d *Daemon) reviewDocumentHere(document string) (string, error) {
+	if !d.on(setting.CodeReviewEnabled) {
+		return "", errors.New(reviewOff())
+	}
+	content, err := readMarkdownFile(filepath.Clean(document))
+	if err != nil {
+		return "", err
+	}
+	if !review.IsReview(content) {
+		return "", fmt.Errorf("%s is not a review document: its frontmatter has no `attn: review`", document)
+	}
+	return content, nil
+}
+
+func (d *Daemon) readReviewFile(ctx context.Context, msg protocol.ReviewFileMessage) (protocol.ReviewFileResultMessage, error) {
+	content, err := d.reviewDocumentHere(msg.Document)
+	if err != nil {
+		return protocol.ReviewFileResultMessage{}, err
+	}
+	return gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewFileResultMessage, error) {
+		return review.File(ctx, client, content, msg.Path)
+	})
+}
+
+func (d *Daemon) searchReview(ctx context.Context, msg protocol.ReviewSearchMessage) (protocol.ReviewSearchResultMessage, error) {
+	content, err := d.reviewDocumentHere(msg.Document)
+	if err != nil {
+		return protocol.ReviewSearchResultMessage{}, err
+	}
+	return gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (protocol.ReviewSearchResultMessage, error) {
+		return review.Search(ctx, client, content, msg.Query)
+	})
+}
+
+func (d *Daemon) handleReviewFileWS(client *wsClient, msg *protocol.ReviewFileMessage) {
+	d.life.Go("handleReviewFileWS", func() {
+		result, err := Call[protocol.ReviewFileResultMessage](d.life.Context(), d.router(), *msg)
+		if err != nil {
+			result = protocol.ReviewFileResultMessage{Event: protocol.EventReviewFileResult, Error: protocol.Ptr(d.tileDocumentError(protocol.Deref(msg.Host), err).Error())}
+		}
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
+	})
+}
+
+func (d *Daemon) handleReviewSearchWS(client *wsClient, msg *protocol.ReviewSearchMessage) {
+	d.life.Go("handleReviewSearchWS", func() {
+		result, err := Call[protocol.ReviewSearchResultMessage](d.life.Context(), d.router(), *msg)
+		if err != nil {
+			result = protocol.ReviewSearchResultMessage{Event: protocol.EventReviewSearchResult, Error: protocol.Ptr(d.tileDocumentError(protocol.Deref(msg.Host), err).Error())}
+		}
+		result.RequestID = msg.RequestID
+		d.sendToClient(client, &result)
+	})
 }

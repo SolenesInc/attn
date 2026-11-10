@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -97,6 +98,34 @@ type gitProcess struct {
 	combined            bool
 	env                 []string
 	resolveGitOnEnvPATH bool
+	read                func(io.Reader) (enough bool)
+}
+
+func readGit(cmd *exec.Cmd, stop context.CancelFunc, read func(io.Reader) bool) error {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	enough := read(stdout)
+	if enough {
+		stop()
+	} else {
+		_, _ = io.Copy(io.Discard, stdout)
+	}
+	err = cmd.Wait()
+	if enough {
+		return nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		exitErr.Stderr = stderr.Bytes()
+	}
+	return err
 }
 
 func launchGit(parent context.Context, op Operation, timeout time.Duration, process gitProcess, args ...string) ([]byte, error) {
@@ -118,9 +147,12 @@ func launchGit(parent context.Context, op Operation, timeout time.Duration, proc
 	started := time.Now()
 	var out []byte
 	var err error
-	if process.combined {
+	switch {
+	case process.read != nil:
+		err = readGit(cmd, cancel, process.read)
+	case process.combined:
 		out, err = cmd.CombinedOutput()
-	} else {
+	default:
 		out, err = cmd.Output()
 	}
 	logGitCommand(op, process.dir, args, time.Since(started), ctx.Err())

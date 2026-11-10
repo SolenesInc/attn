@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cd279d3d74f6";
+pub const PROTOCOL_VERSION: &str = "e89bbbca24c6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9086,6 +9086,53 @@ pub struct ReviewFile {
     pub status: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFileMessage {
+    pub cmd: String,
+    pub document: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl ReviewFileMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_file".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewFileResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows: Option<Vec<ReviewRow>>,
+    pub success: bool,
+}
+
+impl ReviewFileResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "review_file_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewFlow {
     pub line: i64,
     #[serde(deserialize_with = "null_as_default")]
@@ -9139,6 +9186,57 @@ pub struct ReviewRow {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub old: Option<i64>,
     pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewSearchHit {
+    pub line: i64,
+    pub path: String,
+    pub text: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewSearchMessage {
+    pub cmd: String,
+    pub document: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    pub query: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+}
+
+impl ReviewSearchMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "review_search".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ReviewSearchResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hits: Option<Vec<ReviewSearchHit>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    pub success: bool,
+}
+
+impl ReviewSearchResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "review_search_result".to_string(),
+            ..Self::default()
+        }
+    }
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ReviewStartMessage {

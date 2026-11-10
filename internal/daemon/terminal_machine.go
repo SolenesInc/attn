@@ -32,6 +32,8 @@ func (d *Daemon) machineParts() map[string]machinePart {
 	runs(parts, false, d.tileDocumentChanged)
 	runs(parts, true, d.readTileDocument)
 	runs(parts, true, d.readTileAsset)
+	runs(parts, true, d.readReviewFile)
+	runs(parts, true, d.searchReview)
 	runs(parts, false, d.transferSeedArtifactHere)
 	runs(parts, false, d.startTerminal)
 	runs(parts, false, d.restartTerminal)
