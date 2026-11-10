@@ -115,3 +115,29 @@ func TestCrewLaunchesWithQuickCaptureGuidance(t *testing.T) {
 		})
 	}
 }
+
+func TestAnAgentIsTaughtToPresentAReviewOnlyWhenItLaunchedWithCodeReviewOn(t *testing.T) {
+	const reviewRow = "`attn review` | `review` |"
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
+			app := w.App()
+			if direct {
+				setSetting(t, app, "direct_agent_launch_enabled", "true")
+			}
+			for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				off := w.Spawn(app, harness, w.Path(string(harness)+"-off"))
+				if guidance := launchGuidance(t, w, w.Launched(off)); strings.Contains(guidance, reviewRow) || !strings.Contains(guidance, "| `attn open` | `markdown` |") {
+					t.Fatalf("%s launched with code_review_enabled off: want the map without the review row:\n%s", harness, guidance)
+				}
+			}
+			setSetting(t, app, "code_review_enabled", "true")
+			for _, harness := range []fakeagent.Harness{fakeagent.Claude, fakeagent.Codex} {
+				on := w.Spawn(app, harness, w.Path(string(harness)+"-on"))
+				if guidance := launchGuidance(t, w, w.Launched(on)); !strings.Contains(guidance, reviewRow) {
+					t.Fatalf("%s launched with code_review_enabled on: want the review row in the map:\n%s", harness, guidance)
+				}
+			}
+		})
+	}
+}

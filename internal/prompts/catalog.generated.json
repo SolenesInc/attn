@@ -53,9 +53,38 @@
                 ]
               },
               {
-                "kind": "text",
-                "id": "session.attn-map",
-                "source": "content/session/attn-map.md"
+                "kind": "trim",
+                "children": [
+                  {
+                    "kind": "join",
+                    "separator": "\n",
+                    "children": [
+                      {
+                        "kind": "text",
+                        "id": "session.attn-map",
+                        "source": "content/session/attn-map.md"
+                      },
+                      {
+                        "kind": "when",
+                        "condition": {
+                          "field": {
+                            "name": "code_review_enabled",
+                            "kind": "flag",
+                            "description": "List presenting a change for review when the session launched with code_review_enabled on."
+                          },
+                          "test": "enabled"
+                        },
+                        "children": [
+                          {
+                            "kind": "text",
+                            "id": "session.attn-map-review",
+                            "source": "content/session/attn-map-review.md"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
               },
               {
                 "kind": "text",
@@ -3460,6 +3489,18 @@
           }
         },
         {
+          "id": "review",
+          "delivery": "reference",
+          "description": "Printed on demand by attn skill --reference.",
+          "body": {
+            "kind": "text",
+            "id": "attn-skill.review",
+            "source": "content/skills/attn/references/review.md",
+            "verbatim": true,
+            "keep_final_newline": true
+          }
+        },
+        {
           "id": "showing",
           "delivery": "reference",
           "description": "Printed on demand by attn skill --reference.",
@@ -6634,5 +6675,5 @@
       ]
     }
   ],
-  "definitions_hash": "9a9f5b153504836f412344ce8907dbed83f627374720e7f60bde31d00cf3e182"
+  "definitions_hash": "45dfa39dd8b770441f752396ffcb94e1a865d6d01e9afc4de47c58e45a96b3a1"
 }

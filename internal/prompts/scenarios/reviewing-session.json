@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "id": "reviewing-session",
+  "description": "Ordinary session that launched with code_review_enabled on, so its map lists presenting a change for review.",
+  "recipient": "session",
+  "event": "launch",
+  "values": {
+    "garden_available": "true",
+    "asks_enabled": "true",
+    "vent_enabled": "false",
+    "crew_priming": "",
+    "self_report_pull_requests": "false",
+    "tool_vents_enabled": "false",
+    "code_review_enabled": "true"
+  }
+}

@@ -12,12 +12,13 @@ adds lives with that feature: the garden's in [garden.md](garden.md), asks in
 [asks.md](asks.md), vents in [vents.md](vents.md), crew priming and the chief
 in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 [delegation.md](delegation.md), the shared Codex note in
-[shared-codex.md](shared-codex.md).
+[shared-codex.md](shared-codex.md), presenting a change for review in
+[markdown.md](markdown.md).
 
 ## Sub-features
 
 - `launch-instructions`: what every session reads at launch: the rule to treat delegated reports and fetched output as context, the delegation boundary, the attn map and the garden, plus asks, vents, pull request self-reports, a crew member's identity and Quick Capture when they apply. The chief gets chief guidance instead.
-- `attn-map`: one list of what attn can do, printed at launch, by `attn skill` with no flags and by `attn --help`.
+- `attn-map`: one list of what attn can do, printed at launch, by `attn skill` with no flags and by `attn --help`. A session launched with `code_review_enabled` on also gets a row for `attn review` and the `review` reference at the end of the table; `attn skill` and `attn --help` never print that row.
 - `references`: the rules for each capability, bundled with the build and printed by `attn skill --reference <name>`.
 - `wrap-up`: when the user asks an agent to wrap up, close itself, or whether it can be closed, the map points at `attn skill --reference wrap-up`. The agent hands over context, settles its work, raises decisions through `attn ask`, and closes itself when nothing needs the user. Live delegates keep working.
 - `retired-skill-pointer`: earlier versions installed an `attn` skill into the skills folders of Claude Code and Codex. At startup, on production and `dev`, when every file in such a folder is one an earlier version installed, the daemon replaces its `SKILL.md` with a pointer to `attn --help` and `attn skill --reference`, keeping the name and description so agents started before the upgrade still find it, and removes the other files. A folder holding any other file stays whole, and the daemon logs it as kept.
@@ -39,7 +40,7 @@ in [crew.md](crew.md), delegation openings and the attn-workflow skill in
 - `attn prompts` (`cmd/attnd/prompts.go`): `list`, `show <recipient>`, `render <recipient> <event>` and `explain <recipient> <event>`, with `--set name=value` and `--json`.
 - `attn presence` (`cmd/attnd/main.go`), which tells a shell whether it runs inside attn.
 - `attn --help` and each verb's help, which the attn map names as the authority for syntax.
-- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md`, then `internal/prompts/content/session/attn-map.md`, then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/session/queue.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The references are in `internal/prompts/content/skills/attn/references/`.
+- Prompts: the launch instructions, composed in `internal/prompts/session.go` from `internal/prompts/content/agent.md` with `internal/prompts/content/delegation-boundary.md`, then `internal/prompts/content/session/attn-map.md` with `internal/prompts/content/session/attn-map-review.md` when `code_review_enabled` is on, then, as they apply, `internal/prompts/content/garden.md`, `internal/prompts/content/session/queue.md`, `internal/prompts/content/ask/guidance.md`, `internal/prompts/content/session/vent-guidance.md`, then `vent-tools.md` or `vent-attn-only.md`, then `vent-rules.md`, all in the same folder, `internal/prompts/content/session/pull-request-guidance.md`, a crew member's priming and `internal/prompts/content/session/quick-capture.md`. The references are in `internal/prompts/content/skills/attn/references/`.
 
 ### Triggers
 
@@ -63,7 +64,7 @@ Preconditions:
 
 `<terminal>` below is the agent's terminal id from `wsctl list`.
 
-- **Read the map and references.** Run `./attn skill | head -1`: it prints `## What attn can do`. `./attn --help` prints the same map. `./attn skill --list` prints `browser`, `callouts`, `charter`, `converse-and-observe`, `delegated-agent`, `delegation-roles`, `delegation`, `garden`, `markdown`, `notebook`, `onboarding`, `showing`, `terminal` and `wrap-up`, one per line. `./attn skill --reference garden` prints the garden reference. `./attn skill --reference nope` exits 1 with `skill: no bundled reference "nope"; bundled references:` and the list.
+- **Read the map and references.** Run `./attn skill | head -1`: it prints `## What attn can do`. `./attn --help` prints the same map. `./attn skill --list` prints `browser`, `callouts`, `charter`, `converse-and-observe`, `delegated-agent`, `delegation-roles`, `delegation`, `garden`, `markdown`, `notebook`, `onboarding`, `review`, `showing`, `terminal` and `wrap-up`, one per line. `./attn skill --reference garden` prints the garden reference. `./attn skill --reference nope` exits 1 with `skill: no bundled reference "nope"; bundled references:` and the list.
 - **Wrap up with real harnesses.** This checks model judgment, so the baseline mock cannot prove it.
   - On a named instance set `ATTN_AUTOMATION=1`, `ATTN_HARNESS_SKILL_SYNC=1` and `ATTN_TOOL_HOME` to an isolated home, with Claude and Codex configured to keep their transcripts in that home.
   - Use authorized authentication and real harness executables.

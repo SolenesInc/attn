@@ -16,6 +16,7 @@ var (
 	asksEnabled            = FlagField("asks_enabled", "Include ask guidance when the session launched with asks.")
 	ventEnabled            = FlagField("vent_enabled", "Include vent guidance when the session launched with usage analytics on.")
 	toolVentsEnabled       = FlagField("tool_vents_enabled", "Offer tool vents when the session launched with analytics.tool_vents on.")
+	codeReviewEnabled      = FlagField("code_review_enabled", "List presenting a change for review when the session launched with code_review_enabled on.")
 	crewPriming            = ProducedBy(Trimmed(TextField("crew_priming", "Rendered crew identity and predecessor letter, supplied by internal/crew.")), "crew/priming")
 )
 
@@ -28,8 +29,10 @@ var (
 	gardenGuidance       = Use("session.garden", "content/garden.md")
 	queueGuidance        = Use("session.queue", "content/session/queue.md")
 	attnMap              = Use("session.attn-map", "content/session/attn-map.md")
-	pullRequestGuidance  = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
-	ventGuidance         = Compose(
+	launchAttnMap        = Trim(Join("\n", attnMap,
+		When(Enabled(codeReviewEnabled), Use("session.attn-map-review", "content/session/attn-map-review.md"))))
+	pullRequestGuidance = Use("session.pull-request-guidance", "content/session/pull-request-guidance.md")
+	ventGuidance        = Compose(
 		Use("session.vent-guidance", "content/session/vent-guidance.md"),
 		Choose(Enabled(toolVentsEnabled),
 			Use("session.vent-tools", "content/session/vent-tools.md"),
@@ -45,7 +48,7 @@ var session = Recipient{
 			"hooks.Launch.Instructions: Claude appends system instructions; Codex sets developer instructions; capable plugins receive launch instructions. Triggering and delivery remain with the existing adapters.",
 			Compose(
 				When(Present(crewPriming), Compose(crewCleared, Input(crewPriming), quickCaptureGuidance)),
-				attnMap,
+				launchAttnMap,
 				agentGuidance,
 				When(Enabled(gardenAvailable), gardenGuidance),
 				queueGuidance,
@@ -83,6 +86,7 @@ type Launch struct {
 	Asks                   bool
 	Vent                   bool
 	ToolVents              bool
+	CodeReview             bool
 	Crew                   string
 }
 
@@ -93,6 +97,7 @@ func (l Launch) Values() Values {
 		asksEnabled.Name:            strconv.FormatBool(l.Asks),
 		ventEnabled.Name:            strconv.FormatBool(l.Vent),
 		toolVentsEnabled.Name:       strconv.FormatBool(l.ToolVents),
+		codeReviewEnabled.Name:      strconv.FormatBool(l.CodeReview),
 		crewPriming.Name:            l.Crew,
 	}
 }

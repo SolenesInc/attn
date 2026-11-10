@@ -9,6 +9,7 @@ const { values: options } = parseArgs({
   options: {
     attn: { type: 'string' },
     harness: { type: 'string', default: 'claude' },
+    instance: { type: 'string' },
     model: { type: 'string' },
     only: { type: 'string' },
     scenario: { type: 'string' },
@@ -18,16 +19,22 @@ const { values: options } = parseArgs({
   },
 });
 if (!options.attn) {
-  console.error(`usage: node scripts/agent-eval.mjs --attn <binary> [--harness claude|codex] [--model <id>] [--only <probe,...>] [--scenario plain|chief] [--runs <n>] [--tool-home <dir>]
+  console.error(`usage: node scripts/agent-eval.mjs --attn <binary> [--harness claude|codex] [--model <id>] [--only <probe,...>] [--scenario plain|chief|review] [--runs <n>] [--tool-home <dir>] [--instance <name>]
 
 Start real headless agents with attn's launch instructions and a plain request,
 and check that each reaches the right attn command. Actions are recorded, not
-run, so this proves what agents find, not that the commands work.`);
+run, so this proves what agents find, not that the commands work.
+
+The review scenario runs its commands for real on the daemon of --instance,
+which it starts with code_review_enabled on, and judges the review document
+the agent opened with attn review check.`);
   process.exit(2);
 }
 const attn = path.resolve(options.attn);
 
 const plain = ['garden_available=true', 'asks_enabled=true'];
+const repository = path.resolve(new URL('..', import.meta.url).pathname);
+const presentedChange = '3982a161b';
 
 const probes = [
   { id: 'message-chief', ask: 'Tell the Chief that the deploy finished.', want: /^agent msg chief\b/ },
@@ -58,11 +65,24 @@ const probes = [
   { id: 'chief-roles', scenario: 'chief', ask: 'Change the model that my Builder role uses.', want: /^delegate roles\b/ },
   { id: 'chief-settings', scenario: 'chief', ask: 'What attn settings do I have?', want: /^settings list\b/ },
   { id: 'chief-automation', scenario: 'chief', ask: 'Every morning at nine, have an agent summarize my pull requests for this folder. Set it up now without asking me anything.', want: /^automation (apply|validate)\b/ },
+  { id: 'present-change', scenario: 'review', ask: 'Present the change.', want: /^open\b/, reads: 'review', stage: stageChange, judge: judgeReview, timeout: 900_000 },
 ].filter(probe => !options.only || options.only.split(',').includes(probe.id))
   .filter(probe => !options.scenario || (probe.scenario ?? 'plain') === options.scenario);
 
+if (!options.instance && probes.some(probe => probe.scenario === 'review')) {
+  if (options.only || options.scenario) {
+    console.error('the review scenario runs attn review on a daemon: pass --instance <name>, an instance this run may start and change');
+    process.exit(2);
+  }
+  console.log('Skipping the review scenario: it needs --instance <name>.\n');
+  probes.splice(0, probes.length, ...probes.filter(probe => probe.scenario !== 'review'));
+}
 const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'attn-agent-eval-'));
 const launches = { plain: launchText(plain), chief: chiefLaunchText() };
+if (probes.some(probe => probe.scenario === 'review')) {
+  launches.review = launchText([...plain, 'code_review_enabled=true']);
+  startReviewDaemon();
+}
 
 function isolatedEnv(extra) {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(ATTN_|CLAUDE|CODEX_)/.test(key)));
@@ -71,6 +91,41 @@ function isolatedEnv(extra) {
 
 function render(recipient, event, values) {
   return execFileSync(attn, ['prompts', 'render', recipient, event, ...values.flatMap(value => ['--set', value])], { env: isolatedEnv({}), encoding: 'utf8' });
+}
+
+function instanceEnv() {
+  const { ATTN_DATA_DIR, ...env } = isolatedEnv({ ATTN_INSTANCE: options.instance });
+  return env;
+}
+
+function startReviewDaemon() {
+  execFileSync(attn, ['daemon', 'ensure'], { env: instanceEnv(), stdio: 'inherit' });
+  execFileSync(attn, ['settings', 'set', 'code_review_enabled', 'true'], { env: instanceEnv(), stdio: 'inherit' });
+}
+
+function stageChange(dir) {
+  const repo = path.join(dir, 'attn');
+  execFileSync('git', ['clone', '--quiet', '--shared', '--no-checkout', repository, repo]);
+  execFileSync('git', ['-C', repo, 'checkout', '--quiet', '--detach', `${presentedChange}~1`]);
+  const diff = execFileSync('git', ['-C', repository, 'diff', `${presentedChange}~1`, presentedChange]);
+  execFileSync('git', ['-C', repo, 'apply'], { input: diff });
+  return repo;
+}
+
+function judgeReview(dir, cwd, commands) {
+  const opened = commands.filter(line => /^open\b/.test(line)).at(-1);
+  if (!opened) return 'never opened a review document';
+  const document = path.resolve(cwd, opened.replace(/^open\s+/, '').split(/\s+--/)[0].replace(/^['"]|['"]$/g, ''));
+  if (!fs.existsSync(document)) return `opened ${document}, which does not exist`;
+  fs.copyFileSync(document, path.join(dir, 'review.md'));
+  const presented = fs.readFileSync(document, 'utf8').match(/^repository:\s*(.+)$/m)?.[1].trim();
+  if (presented !== cwd) return `the document presents ${presented ?? 'no repository'}, not this run's ${cwd}; another run may have written it, so pass --parallel 1`;
+  try {
+    execFileSync(attn, ['review', 'check', document], { cwd, env: instanceEnv(), encoding: 'utf8' });
+    return '';
+  } catch (error) {
+    return `attn review check: ${String(error.stdout ?? error.message).trim().split('\n').slice(0, 3).join('; ')}`;
+  }
 }
 
 function launchText(values) {
@@ -85,30 +140,36 @@ function chiefLaunchText() {
   return launchText([...plain, `crew_priming=${priming}`]);
 }
 
-function installRecorder(dir) {
+function installRecorder(dir, scenario) {
   const bin = path.join(dir, 'bin');
   fs.mkdirSync(bin, { recursive: true });
   const recorder = path.join(bin, 'attn');
+  const live = scenario === 'review' ? `  review*|open*) exec env -u ATTN_DATA_DIR ATTN_INSTANCE='${options.instance}' "${attn}" "$@" ;;\n` : '';
   fs.writeFileSync(recorder, `#!/bin/sh
 printf '%s\\n' "$*" >> "${path.join(dir, 'commands.log')}"
 case "$1 $*" in
   skill*|guide*|prompts*|*--help*|*" -h"*) exec "${attn}" "$@" ;;
-esac
+${live}esac
 echo ok
 `, { mode: 0o755 });
   return bin;
 }
 
-function runAgent(dir, bin, instructions, ask) {
+function runAgent(cwd, bin, instructions, probe) {
   const home = options['tool-home'];
   const path_ = `${bin}:${process.env.PATH}`;
+  const reads = probe.scenario === 'review' ? ',Read,Grep,Glob,Bash(git *)' : '';
   const [command, args, env] = options.harness === 'codex'
-    ? ['codex', ['exec', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-c', `developer_instructions=${JSON.stringify(instructions)}`,
-        ...(options.model ? ['--model', options.model] : []), ask], { CODEX_HOME: path.join(home, '.codex') }]
-    : ['claude', ['-p', ask, '--append-system-prompt', instructions, '--setting-sources', '', '--strict-mcp-config', '--tools', 'Bash,Write', '--allowedTools', 'Bash(attn *),Write',
+    ? ['codex', ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', '-c', `developer_instructions=${JSON.stringify(instructions)}`,
+        ...(probe.scenario === 'review' ? ['-c', 'sandbox_workspace_write.network_access=true'] : []),
+        ...(options.model ? ['--model', options.model] : []), probe.ask], { CODEX_HOME: path.join(home, '.codex') }]
+    : ['claude', ['-p', probe.ask, '--output-format', 'stream-json', '--verbose', '--append-system-prompt', instructions, '--setting-sources', '', '--strict-mcp-config',
+        '--tools', `Bash,Write${reads.replace(',Bash(git *)', '')}`, '--allowedTools', `Bash(attn *),Write${reads}`,
         '--model', options.model ?? 'sonnet'], { CLAUDE_CONFIG_DIR: path.join(home, '.claude') }];
+  const tmp = path.join(path.dirname(bin), 'tmp');
+  fs.mkdirSync(tmp, { recursive: true });
   return new Promise(resolve => {
-    const child = execFile(command, args, { cwd: dir, env: isolatedEnv({ ...env, PATH: path_, ATTN_WRAPPER_PATH: path.join(bin, 'attn') }), timeout: 300_000, maxBuffer: 16 * 1024 * 1024 },
+    const child = execFile(command, args, { cwd, env: isolatedEnv({ ...env, PATH: path_, TMPDIR: tmp, ATTN_WRAPPER_PATH: path.join(bin, 'attn') }), timeout: probe.timeout ?? 300_000, maxBuffer: 64 * 1024 * 1024 },
       (error, stdout, stderr) => resolve({ failure: error ? `${command} failed: ${stderr.slice(-300)}` : '', stdout }));
     child.stdin.end();
   });
@@ -118,13 +179,15 @@ async function runProbe(probe, run) {
   const dir = path.join(root, probe.id, String(run));
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'plan.md'), '# Plan\n');
-  const bin = installRecorder(dir);
-  const { failure, stdout } = await runAgent(dir, bin, launches[probe.scenario ?? 'plain'], probe.ask);
+  const cwd = probe.stage ? probe.stage(dir) : dir;
+  const bin = installRecorder(dir, probe.scenario);
+  const { failure: ran, stdout } = await runAgent(cwd, bin, launches[probe.scenario ?? 'plain'], probe);
   const log = path.join(dir, 'commands.log');
   const commands = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : [];
   const reached = commands.some(line => probe.want.test(line));
   const read = !probe.reads || commands.some(line => line.startsWith(`skill --reference ${probe.reads}`));
-  fs.writeFileSync(path.join(dir, 'answer.txt'), stdout);
+  fs.writeFileSync(path.join(dir, 'transcript.jsonl'), stdout);
+  const failure = ran || (reached && probe.judge ? probe.judge(dir, cwd, commands) : '');
   return { id: probe.id, run, pass: reached && read && !failure, reached, read, commands, failure };
 }
 

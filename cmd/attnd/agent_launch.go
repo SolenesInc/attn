@@ -146,6 +146,7 @@ func runAgentDirectly(requestedAgent string) {
 		CodexRemote:     consumeOneShotEnv("ATTN_CODEX_REMOTE"),
 		Vent:            consumeOneShotEnv("ATTN_VENT_ENABLED") == "true",
 		ToolVents:       consumeOneShotEnv("ATTN_TOOL_VENTS_ENABLED") == "true",
+		CodeReview:      consumeOneShotEnv("ATTN_CODE_REVIEW_ENABLED") == "true",
 		ClaudeMod:       agentdriver.ClaudeMod{Dir: consumeOneShotEnv(agentdriver.ClaudeModDirEnv), Socket: consumeOneShotEnv(agentdriver.ClaudeModSocketEnv)},
 	}
 
