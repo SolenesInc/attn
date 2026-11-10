@@ -91,8 +91,8 @@ export function SeedAuthorization({
     const text = (inputRef.current?.value ?? '').trim();
     if (!text) {
       setFailure(words
-        ? 'Write the new words, or press Clear to remove the authorization.'
-        : 'Write the words that authorize this task.');
+        ? 'Write the new instructions, or press Clear to remove the authorization.'
+        : 'Write the steps agents take on this task beyond the project\'s guidance, and where they stop.');
       inputRef.current?.focus();
       return;
     }
@@ -145,8 +145,8 @@ export function SeedAuthorization({
             rows={3}
             spellCheck={false}
             disabled={busy}
-            placeholder="what the user allows for this task"
-            aria-label={`Authorize ${seed.id}: what the user allows for this task`}
+            placeholder="Land on main once the checks pass. Ask me before releasing."
+            aria-label={`Authorize ${seed.id}: the steps agents take beyond the project's guidance, and where they stop`}
             onKeyDown={(event) => {
               event.stopPropagation();
               if (event.nativeEvent.isComposing || event.keyCode === 229) return;

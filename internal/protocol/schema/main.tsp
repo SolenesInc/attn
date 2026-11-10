@@ -1453,8 +1453,9 @@ model DelegateMessage {
   provider?: string;
   review?: SeedReviewActionContext;
   desktop?: string; // Desktop of the caller's profile for the delegate: shortcut digit, name or id; empty = beside the caller
-  // The user's words for this task. Saved on the seed before the opening
-  // renders; absent keeps the seed's current authorization.
+  // The user's instructions for this task beyond the project's guidance.
+  // Saved on the seed before the opening renders; absent keeps the seed's
+  // current authorization.
   authorization?: string;
 }
 
@@ -5644,8 +5645,9 @@ model Seed {
   "reminder"?: SeedReminder;
   // Present while the seed is on standby: its tender waits for seed mail.
   "standby"?: SeedStandbyView;
-  // The user's words for this task: what agents may do without asking and
-  // where they stop. Delegation openings deliver it.
+  // The user's instructions for this task: the steps agents take beyond the
+  // project's guidance without asking, and the steps they stop before.
+  // Delegation openings deliver it.
   "authorization"?: SeedAuthorization;
   // The document's own revision and stamps. `rev` is what a conditional write
   // hands back; the stamps are the store's, not a copy kept in the body.
