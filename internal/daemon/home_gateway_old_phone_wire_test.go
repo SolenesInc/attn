@@ -292,14 +292,14 @@ func recordedOldPhones(t *testing.T) map[int]string {
 	return recorded
 }
 
-func TestAPhoneOfEveryServedHomeGatewayAPIKeepsWorkingAgainstThisHomeAndOlderOnesAreToldToUpdate(t *testing.T) {
+func TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome(t *testing.T) {
 	if *recordOldPhone != 0 {
 		recordOldPhoneConversation(t, *recordOldPhone)
 		return
 	}
 	recorded := recordedOldPhones(t)
 	if recorded[homegateway.APIVersion] == "" {
-		t.Fatalf("the Home Gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryServed -record-old-phone=%d", homegateway.APIVersion, oldPhonesDir, homegateway.APIVersion, homegateway.APIVersion)
+		t.Fatalf("the Home Gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryHomeGatewayAPI -record-old-phone=%d", homegateway.APIVersion, oldPhonesDir, homegateway.APIVersion, homegateway.APIVersion)
 	}
 	for api := 1; api <= homegateway.APIVersion; api++ {
 		path := recorded[api]
