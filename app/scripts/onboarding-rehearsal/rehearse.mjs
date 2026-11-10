@@ -16,7 +16,8 @@ const INSTANCE = 'onboarding';
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const ROOT = path.join(os.homedir(), 'attn-onboarding-rehearsal');
 const WORLDS = path.join(ROOT, 'worlds');
-const NOTEBOOK = '/Users/Shared/attn-onboarding-notebook';
+const NOTEBOOK = path.join(os.homedir(), `attn-notebook-${INSTANCE}`);
+const CAPTURE_SHORTCUT = 'Control+Alt+Super+O';
 const WORK_NOTEBOOK = `${NOTEBOOK}-work`;
 const TOOL_HOME = path.join(ROOT, 'tool-home');
 const CLAUDE_HOME = path.join(TOOL_HOME, '.claude');
@@ -266,7 +267,7 @@ async function runScenario(scenario, { rebuild, rebuildApp, freshWorld }) {
   const env = cleanEnv(hiddenHarnessEnv(scenario.hide));
   const { attn, wsctl } = runner(env);
   attn('daemon', 'ensure');
-  attn('settings', 'set', 'notebook.root', NOTEBOOK);
+  attn('settings', 'set', 'capture.shortcut', CAPTURE_SHORTCUT);
   await scenario.prepare?.(attn, wsctl);
 
   const launchEnv = Object.entries(env).filter(([key]) => HARNESS_ENV.test(key)).flatMap(([key, value]) => ['--env', `${key}=${value}`]);

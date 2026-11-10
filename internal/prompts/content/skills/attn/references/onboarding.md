@@ -113,8 +113,9 @@ names doesn't fit the user, ask whether they've used attn before and switch.
    finishes, so wait for the user to say they're done. Then, on macOS, show two
    things by having the user do them:
    - Quick Capture sends you a message from any app without switching to attn.
-     Ask the user to press ⌃⌥⌘Space now, write you anything and press Enter. Answer
-     what arrives, then say they can change that shortcut the same way.
+     Its shortcut is ⌃⌥⌘Space unless `attn settings get capture.shortcut` names
+     another. Ask the user to press it now, write you anything and press Enter.
+     Answer what arrives, then say they can change that shortcut the same way.
    - Asks let any agent bring the user a decision that can wait, and the user
      answers them all in one place. Read the asks guidance in your launch
      instructions, then ask the user which of the items still ahead they want
