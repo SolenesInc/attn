@@ -182,8 +182,25 @@ function widen(shown: readonly ReviewRow[], file: readonly ReviewRow[], lines: n
   return file.slice(Math.max(0, first - lines), Math.min(file.length, last + lines + 1));
 }
 
+/** What a review shows, apart from the language servers' states, which change on their own. */
+function reviewContentKey(bundle: ReviewBundle): string {
+  return JSON.stringify({ ...bundle, navigation: undefined });
+}
+
+/** The delivered bundle, kept as the same object while only navigation changes. */
+function useReviewContent(delivered: ReviewBundle): ReviewBundle {
+  const key = useMemo(() => reviewContentKey(delivered), [delivered]);
+  const shownRef = useRef({ key, bundle: delivered });
+  if (shownRef.current.key !== key) shownRef.current = { key, bundle: delivered };
+  return shownRef.current.bundle;
+}
+
+function sameStop(a: ReviewStop | undefined, b: ReviewStop | undefined): boolean {
+  return a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b);
+}
+
 export function ReviewReader({
-  bundle,
+  bundle: delivered,
   host,
   document,
   content,
@@ -203,6 +220,7 @@ export function ReviewReader({
   openInEditor?: (root: string, path: string) => void;
   children: ReactNode;
 }) {
+  const bundle = useReviewContent(delivered);
   const daemon = useOptionalDaemonApi();
   const sendReviewFile = daemon?.sendReviewFile;
   const sendReviewSearch = daemon?.sendReviewSearch;
@@ -242,6 +260,9 @@ export function ReviewReader({
   const [picking, setPicking] = useState<Picking | null>(null);
   const [navPanel, setNavPanel] = useState<NavAnswer | null>(null);
   const [navNote, setNavNote] = useState<NavNote | null>(null);
+  const overlay = editing ? 'edit' : composer ? 'composer' : sending ? 'send' : search ? 'search' : help ? 'help' : '';
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
   const questionRef = useRef(0);
   const positionRef = useRef('');
   const selectedRef = useRef<HTMLElement[]>([]);
@@ -258,7 +279,7 @@ export function ReviewReader({
   filesRef.current = files;
   const onStage = frame === 'walkthrough' && files.length === 1 && openFileView !== null;
   const stageCursorLine = onStage ? openFileView.rows?.[openFileView.cursor]?.now : undefined;
-  positionRef.current = `${frame}|${cursorKey ?? ''}|${files.length}|${openFileView ? `${openFileView.target.path}:${openFileView.cursor}` : ''}`;
+  positionRef.current = `${overlay}|${frame}|${cursorKey ?? ''}|${files.length}|${openFileView ? `${openFileView.target.path}:${openFileView.cursor}` : ''}`;
 
   const docLineFor = useCallback((path: string, line: number): number => {
     const stops = bundle.stops.filter((stop) => stop.path === path);
@@ -294,10 +315,17 @@ export function ReviewReader({
     return frame === 'brief' ? docRef.current : null;
   }, [frame]);
 
+  const readBundleRef = useRef(bundle);
   useEffect(() => {
+    const was = readBundleRef.current;
+    if (was === bundle) return;
+    readBundleRef.current = bundle;
     fileRowsRef.current.clear();
-    setExpansions(new Map());
     setMarkFiles(new Map());
+    setExpansions((current) => new Map([...current].filter(([line]) => sameStop(
+      was.stops.find((stop) => stop.heading_line === line),
+      bundle.stops.find((stop) => stop.heading_line === line),
+    ))));
   }, [bundle]);
 
   const readFile = useCallback((path: string): Promise<ReviewFileResultMessage> => {
@@ -842,7 +870,7 @@ export function ReviewReader({
           return;
         }
         setNavNote(null);
-        const late = Date.now() - askedAt > LATE_ANSWER_MS && positionRef.current !== askedFrom;
+        const late = overlayRef.current !== '' || (Date.now() - askedAt > LATE_ANSWER_MS && positionRef.current !== askedFrom);
         if (kind === 'definition' && locations.length === 1 && !late) {
           follow(locations[0]);
           return;
@@ -1002,6 +1030,11 @@ export function ReviewReader({
         switchFrame(frameKey[1]);
         return true;
       }
+      const readOnly = openFileView?.target.outside === true;
+      if (marks && readOnly && (event.key === 'i' || event.key === 'c' || event.key === 'a')) {
+        setNotice(`${openFileView.target.path} is outside the repository, so it takes no edits or notes.`);
+        return true;
+      }
       if (marks && event.key === 'i') {
         startEdit();
         return true;
@@ -1132,7 +1165,7 @@ export function ReviewReader({
         />
       ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
-      {help ? <ReviewKeySheet /> : null}
+      {help ? <ReviewKeySheet readOnly={openFileView?.target.outside === true} /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
       {notice ? <div className="review-notice" role="status">{notice}</div> : null}
       {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}
@@ -1147,7 +1180,7 @@ export function ReviewReader({
       ) : navNote ? (
         <div className={`review-nav-note${navNote.tone === 'alert' ? ' review-nav-note--alert' : ''}`} role={navNote.tone === 'alert' ? 'alert' : 'status'}>{navNote.text}</div>
       ) : null}
-      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined} navigation={bundle.navigation} onFrame={switchFrame} />
+      <ReviewKeyLine frame={frame} offered={offered} fileOpen={frame !== 'walkthrough' && openFileView !== null} sides={sides} marking={marks !== undefined && openFileView?.target.outside !== true} navigation={delivered.navigation} onFrame={switchFrame} />
     </ReviewReaderContext.Provider>
   );
 }

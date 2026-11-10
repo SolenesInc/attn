@@ -720,7 +720,7 @@ export const MarkdownReader = memo(function MarkdownReader({
       tabIndex={annotationsEnabled ? -1 : undefined}
     >
       {review ? (
-        <ReviewReader bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef} openInEditor={openInEditor}>
+        <ReviewReader key={`${reviewHost ?? ''}:${path}`} bundle={review} host={reviewHost} document={path} content={content} rootRef={rootRef} marks={reviewMarks} handleRef={reviewHandleRef} openInEditor={openInEditor}>
           {documentView}
         </ReviewReader>
       ) : documentView}

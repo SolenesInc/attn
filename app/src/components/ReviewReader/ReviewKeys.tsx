@@ -139,11 +139,12 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['?'], 'Show or hide this sheet.'],
 ];
 
-export function ReviewKeySheet() {
+export function ReviewKeySheet({ readOnly }: { readOnly: boolean }) {
   return (
     <div className="review-key-sheet" role="dialog" aria-label="Review keys">
       <h3>Keys</h3>
       <p>Selecting text and typing still writes a comment, as in any markdown tile.</p>
+      {readOnly ? <p>This file is outside the repository and read-only: c, a and i do nothing here.</p> : null}
       <dl>
         {ALL_KEYS.map(([keys, what]) => (
           <div key={what} className="review-key-sheet-row">

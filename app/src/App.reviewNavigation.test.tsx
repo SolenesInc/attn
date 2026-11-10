@@ -23,7 +23,7 @@ head: 9f3a7e2
 const row = (kind: string, old: number | undefined, now: number | undefined, text: string): ReviewRow => ({
   kind,
   ...(old !== undefined ? { old } : {}),
-  ...(now !== undefined ? { now } : {}),
+  ...(now !== undefined ? { now, head: now } : {}),
   text,
 });
 
@@ -56,15 +56,24 @@ const at = (path: string, line: number, character: number, text: string, outside
 });
 
 function serveFiles(daemon: ScriptedDaemon) {
+  daemon.on('markdown_annotations_get', ({ document_uri, source_kind }) => ({
+    event: 'markdown_annotations_get_result', document_uri, source_kind, success: true, annotations: [], generation: 1,
+  }));
+  daemon.on('markdown_annotations_save', ({ document_uri, source_kind, upserts }) => ({
+    event: 'markdown_annotations_save_result', document_uri, source_kind, success: true, annotations: upserts, generation: 2,
+  }));
   daemon.on('review_file', ({ path }) => ({
     event: 'review_file_result', success: true, path, rows: Array.from({ length: 12 }, (_, index) => row(' ', index + 1, index + 1, `// ${path} line ${index + 1}`)), hash: 'h',
   }));
 }
 
 async function openReview(review = bundleWith()) {
-  const view = await openMarkdownTiles('', { path: DOC, script: serveFiles });
-  view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review });
-  await view.daemon.idle();
+  const view = await openMarkdownTiles('', { path: DOC, session: { state: 'idle' }, script: serveFiles });
+  const show = async (shown: ReviewBundle) => {
+    view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown });
+    await view.daemon.idle();
+  };
+  await show(review);
   const tile = view.tile();
   const body = tile.querySelector<HTMLElement>('.desktop-dock-tile-body')!;
   body.focus();
@@ -73,7 +82,7 @@ async function openReview(review = bundleWith()) {
     await act(() => vi.advanceTimersByTimeAsync(0));
     await view.daemon.idle();
   };
-  return { ...view, reader: within(tile), tileElement: tile, press };
+  return { ...view, reader: within(tile), tileElement: tile, press, show };
 }
 
 const answering = (locations: CodeNavLocation[], text?: string) => ({ event: 'code_nav_result' as const, success: true, language: 'go', locations, ...(text ? { text } : {}) });
@@ -165,6 +174,69 @@ describe('App review navigation', () => {
     await daemon.idle();
     expect(reader.queryByRole('dialog', { name: 'Definition of sum' })).toBeNull();
     expect(fileCursorText(tileElement)).toContain('calc.go line 4');
+  });
+
+  it.each([
+    ['the search', '/', 'Search the repository'],
+    ['the edit box', 'i', 'Edit the file'],
+    ['the composer', 'c', 'Write a note'],
+  ])('offers a definition that arrives while %s is open, and leaves the view as it is', async (_what, key, dialog) => {
+    const { tileElement, daemon, press, reader } = await openReview();
+    daemon.on('code_nav', () => undefined);
+    await press('ArrowRight');
+    await press('f');
+    await press('s');
+    await press(key);
+    const open = reader.getByRole('dialog', { name: new RegExp(dialog) });
+
+    act(() => daemon.replyTo(daemon.sentOf('code_nav')[0], answering([at('util.go', 7, 5, 'func helper() {}')])));
+    await daemon.idle();
+    expect(fileView(tileElement)).toBeNull();
+    expect(daemon.sentOf('review_file').map(({ path }) => path)).not.toContain('util.go');
+    expect(open).toBeInTheDocument();
+    expect(reader.getByRole('dialog', { name: 'Definition of Add' })).toHaveTextContent('arrived after you moved on');
+  });
+
+  it('opens nothing for i, c or a in a file outside the repository, and says why', async () => {
+    const { tileElement, daemon, press, reader } = await openReview();
+    daemon.on('code_nav', () => answering([at('/usr/lib/go/src/builtin/builtin.go', 90, 5, 'type int int', true)]));
+    await press('ArrowRight');
+    await press('f');
+    await press('g');
+    expect(fileView(tileElement)).toHaveTextContent('outside the repository · read-only');
+    expect(reader.getByLabelText('Review keys')).not.toHaveTextContent('edit');
+
+    for (const key of ['i', 'c', 'a']) {
+      await press(key);
+      expect(reader.queryByRole('dialog')).toBeNull();
+      expect(reader.getByRole('status')).toHaveTextContent('/usr/lib/go/src/builtin/builtin.go is outside the repository, so it takes no edits or notes.');
+    }
+    await press('?');
+    expect(reader.getByRole('dialog', { name: 'Review keys' })).toHaveTextContent('This file is outside the repository and read-only');
+  });
+
+  it('keeps expanded lines and reads no file when only a language server’s state changes', async () => {
+    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting' }]));
+    daemon.on('review_file', ({ path }) => ({
+      event: 'review_file_result', success: true, path, hash: 'h1',
+      rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
+    }));
+    const rows = () => tileElement.querySelectorAll('.review-stop[data-path="calc.go"] [data-review-cursor="row"]').length;
+    await press('ArrowRight');
+    await press('e');
+    expect(rows()).toBe(9);
+    const reads = daemon.sentOf('review_file').length;
+
+    await show(bundleWith([{ language: 'go', state: 'ready' }]));
+    expect(reader.getByLabelText('Language servers')).toHaveTextContent('go ready');
+    expect(rows()).toBe(9);
+    expect(daemon.sentOf('review_file')).toHaveLength(reads);
+
+    await show({ ...bundleWith(), head: 'a1b2c3d' });
+    expect(rows()).toBe(9);
+    const changed = bundleWith();
+    await show({ ...changed, stops: [{ ...changed.stops[0], file_hash: 'h2' }] });
+    expect(rows()).toBe(5);
   });
 
   it('shows the type with h, lists uses with r, and opens a definition outside the repository read-only', async () => {
