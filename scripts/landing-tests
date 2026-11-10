@@ -94,6 +94,10 @@ go ./internal/daemon TestTheDaemonAnswersWhileTheLoginShellRuns
 go ./internal/daemon TestAClientWhoseInitialStateRacesTheCaptureEndsUpWithTheAnswer
 go ./internal/daemon TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture
 go ./internal/daemon TestAReloadWaitingForItsPluginHarnessLeavesTheSessionFreeToClose
+go ./internal/daemon TestCodexsHooksNamingTheDefaultModeDoNotRetireTheReviewerItWasSpawnedWith
+go ./internal/daemon TestACompactingCloseAskedAgainAfterTheUserClosedTheSessionDuringItsCompactCompactsAndCloses
+go ./internal/daemon TestAReportedPullRequestLandsOnItsSessionOnceUntilItIsForgotten
+go ./internal/daemon TestAResumeThatCannotReachItsConversationIsRefusedAndCreatesNothing
 
 group pty-host ^pty-host/|^internal/ptyhost/
 go ./internal/ptybackend TestSharedHost_ReapingAHostDuringASpawnStopsTheHostAndItsTerminal
