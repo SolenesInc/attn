@@ -7,6 +7,7 @@ import { EMPTY_ASK_DRAFT, useAskLists, useAsksStore, useRepliedAskList } from '.
 import type { UISessionState } from '../../types/sessionState';
 import { askQuestions, draftAnswers, draftSendable, recommendedAnswers, type AskHolderSession, type AskListItem } from '../../utils/asks';
 import { formatTurnAge } from '../../utils/queueBands';
+import { isSnoozed } from '../../utils/snoozeDurations';
 import { fileMarkdownSource } from '../MarkdownReader/documentSource';
 import { MarkdownReader } from '../MarkdownReader';
 import { SeedMentionText } from '../SeedMentionText';
@@ -144,9 +145,10 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onSnoozeAgent, onWake
 
   const { holder, from, snoozedUntil } = items[index];
   const snoozable = holder && !holder.offline ? holder : undefined;
+  const holderSnoozed = isSnoozed(snoozable?.turnSnoozedUntil, Date.now());
   const toggleSnooze = () => {
     if (!snoozable) return;
-    if (snoozedUntil) onWakeAgent(snoozable.id);
+    if (holderSnoozed) onWakeAgent(snoozable.id);
     else if (snoozeRef.current) onSnoozeAgent(snoozable, snoozeRef.current);
   };
   const seedId = ask.seed_id;
@@ -215,9 +217,9 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onSnoozeAgent, onWake
               type="button"
               className="asks-ask-open"
               onClick={toggleSnooze}
-              title={snoozedUntil ? `Wake ${from} (s)` : `Snooze ${from} and its asks (s)`}
+              title={holderSnoozed ? `Wake ${from} (s)` : `Snooze ${from} and its asks (s)`}
             >
-              {snoozedUntil ? 'Wake' : 'Snooze'}
+              {holderSnoozed ? 'Wake' : 'Snooze'}
             </button>
           )}
         </div>
@@ -252,7 +254,7 @@ export function AsksDrawer({ sessions, onTop, onOpenAgent, onSnoozeAgent, onWake
         {error && <div className="asks-error" role="alert">{error}</div>}
       </article>
       <div className="asks-footer">
-        <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} snooze={snoozable ? (snoozedUntil ? 'wake' : 'snooze') : undefined} hasSeed={Boolean(seedId)} />
+        <AsksHints several={items.length > 1} hasHolder={Boolean(holder)} snooze={snoozable ? (holderSnoozed ? 'wake' : 'snooze') : undefined} hasSeed={Boolean(seedId)} />
         {canAcceptRecommended && (
           <button type="button" className="asks-accept-recommended" title="Select every recommended answer (a)" onClick={acceptRecommended}>
             Accept all recommended <kbd>a</kbd>

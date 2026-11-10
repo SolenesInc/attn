@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { create } from 'zustand';
 import type { Ask, AskAnswer } from '../types/generated';
 import { askBelongsTo, askLists, isAsksEnabled, repliedAskList, type AskHolderSession, type AskListItem, type AskLists } from '../utils/asks';
-import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { useDaemonStore } from './daemonSessions';
 
 export interface AskDraft {
@@ -53,8 +52,7 @@ export function useAsksAvailable(settings: Record<string, string>): boolean {
 export function useAskLists<S extends AskHolderSession & { label: string }>(sessions: readonly S[]): AskLists<S> {
   const asks = useAsksStore((state) => state.asks);
   const seeds = useDaemonStore((state) => state.seeds);
-  const now = useNow(TURN_AGE_TICK_MS);
-  return useMemo(() => askLists(asks, sessions, seeds, now), [asks, sessions, seeds, now]);
+  return useMemo(() => askLists(asks, sessions, seeds, Date.now()), [asks, sessions, seeds]);
 }
 
 export function useRepliedAskList<S extends AskHolderSession & { label: string }>(sessions: readonly S[]): AskListItem<S>[] {
