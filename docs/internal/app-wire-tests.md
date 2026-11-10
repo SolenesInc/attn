@@ -56,6 +56,12 @@ time.
 - `await act(() => vi.advanceTimersByTimeAsync(ms))` moves time for the
   app's own timers.
 
+These waits see the daemon and the fake clock, not a module the app loads from
+disk on first use. The code highlighter loads shiki, its engine and each
+language's grammar that way. A file whose gestures wait on a grammar, as `i`
+in a review does to find what it edits, loads the grammar in `beforeAll` with
+shiki's `codeToTokens`. `App.reviewEdits.test.tsx` loads Go.
+
 ## Shared modules
 
 `app/vite.config.ts` puts each test file in one of two Vitest projects by

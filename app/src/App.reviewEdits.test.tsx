@@ -1,5 +1,6 @@
 import { act, fireEvent, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { codeToTokens } from 'shiki';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { openMarkdownTiles } from './test/appFixtures';
 import type { CommandMessage, EventMessage } from './test/protocol';
 import type { ReviewBundle, ReviewRow, ReviewStop } from './types/generated';
@@ -204,6 +205,10 @@ async function openReview({ withBundle = true, trailer = '', notShown = [] as Re
 }
 
 describe('App review edits', () => {
+  beforeAll(async () => {
+    await codeToTokens('', { lang: 'go', themes: { light: 'github-light-default', dark: 'github-dark-default' } });
+  });
+
   it('edits the line at the cursor, saves it to the file against the hash it read, and lists it under the line', async () => {
     const { tile, press, type, editBox, toRow, daemon, draft, show } = await openReview();
     await toRow(4);
