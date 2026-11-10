@@ -230,17 +230,6 @@ type HomeGatewayAsks struct {
 	Ids []string `json:"ids"`
 }
 
-type HomeGatewayAsleepCrewMember struct {
-	// Chief corresponds to the JSON schema field "chief".
-	Chief *bool `json:"chief,omitempty,omitzero"`
-
-	// CrewMember corresponds to the JSON schema field "crew_member".
-	CrewMember string `json:"crew_member"`
-
-	// CrewMemberName corresponds to the JSON schema field "crew_member_name".
-	CrewMemberName string `json:"crew_member_name"`
-}
-
 type HomeGatewayCheckState string
 
 const HomeGatewayCheckStateConfirmed HomeGatewayCheckState = "confirmed"
@@ -257,7 +246,18 @@ type HomeGatewayCheckTally struct {
 	Total int `json:"total"`
 }
 
-type HomeGatewayCrewWake struct {
+type HomeGatewayCrewMemberBetweenSessions struct {
+	// Chief corresponds to the JSON schema field "chief".
+	Chief *bool `json:"chief,omitempty,omitzero"`
+
+	// CrewMember corresponds to the JSON schema field "crew_member".
+	CrewMember string `json:"crew_member"`
+
+	// CrewMemberName corresponds to the JSON schema field "crew_member_name".
+	CrewMemberName string `json:"crew_member_name"`
+}
+
+type HomeGatewayCrewStart struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
@@ -268,7 +268,7 @@ type HomeGatewayCrewWake struct {
 	RequestID string `json:"request_id"`
 }
 
-type HomeGatewayCrewWakeResult struct {
+type HomeGatewayCrewStartResult struct {
 	// CrewMember corresponds to the JSON schema field "crew_member".
 	CrewMember string `json:"crew_member"`
 
@@ -609,8 +609,9 @@ const HomeGatewaySessionStateWaiting HomeGatewaySessionState = "waiting"
 const HomeGatewaySessionStateWorking HomeGatewaySessionState = "working"
 
 type HomeGatewaySessions struct {
-	// AsleepCrew corresponds to the JSON schema field "asleep_crew".
-	AsleepCrew []HomeGatewayAsleepCrewMember `json:"asleep_crew,omitempty,omitzero"`
+	// CrewBetweenSessions corresponds to the JSON schema field
+	// "crew_between_sessions".
+	CrewBetweenSessions []HomeGatewayCrewMemberBetweenSessions `json:"crew_between_sessions,omitempty,omitzero"`
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`

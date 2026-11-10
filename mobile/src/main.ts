@@ -43,13 +43,13 @@ import { readPushTap, registerForPush, watchPushTokens } from './push'
 import {
   Home,
   QueueSession,
-  AsleepCrewMember,
+  CrewMemberBetweenSessions,
   buildQueue,
   crewRowKey,
-  fromHomeGatewayAsleepCrewMember,
+  fromHomeGatewayCrewMemberBetweenSessions,
   fromHomeGatewaySession,
   waitingAgents,
-  type AsleepRow,
+  type BetweenSessionsRow,
   type HomeRow,
   type SessionRow,
 } from './queue'
@@ -116,11 +116,11 @@ const PushToken = Schema.Struct({
   environment: Schema.Literals(['sandbox', 'production']),
 })
 
-export const CrewWake = Schema.Union([
-  Schema.Struct({ status: Schema.Literal('waking') }),
+export const CrewStart = Schema.Union([
+  Schema.Struct({ status: Schema.Literal('starting') }),
   Schema.Struct({ status: Schema.Literal('refused'), message: Schema.String }),
 ])
-export type CrewWake = typeof CrewWake.Type
+export type CrewStart = typeof CrewStart.Type
 
 export const Model = Schema.Struct({
   screen: Schema.Literals(['queue', 'pairings', 'ask', 'session', 'garden', 'seed']),
@@ -139,7 +139,7 @@ export const Model = Schema.Struct({
   openAsk: Schema.NullOr(OpenAskId),
   drafts: Schema.Record(Schema.String, Draft),
   answering: Schema.Record(Schema.String, AnswerState),
-  crewWakes: Schema.Record(Schema.String, CrewWake),
+  crewStarts: Schema.Record(Schema.String, CrewStart),
   images: Schema.Record(Schema.String, ImageState),
   diagrams: Schema.Record(Schema.String, DiagramState),
   zoom: Schema.NullOr(Zoom),
@@ -171,7 +171,7 @@ export const Message = defineMessageUnion({
   ReceivedSessions: {
     pairingId: Schema.String,
     sessions: Schema.Array(QueueSession),
-    asleepCrew: Schema.optionalKey(Schema.Array(AsleepCrewMember)),
+    crewBetweenSessions: Schema.optionalKey(Schema.Array(CrewMemberBetweenSessions)),
   },
   ReceivedAsks: { pairingId: Schema.String, asks: Schema.Array(PhoneAsk) },
   ReceivedGarden: { pairingId: Schema.String, seeds: Schema.Array(GardenSeed) },
@@ -240,9 +240,9 @@ export const Message = defineMessageUnion({
   ClickedSession: { pairingId: Schema.String, sessionId: Schema.String },
   ChangedComposer: { value: Schema.String },
   SubmittedComposer: {},
-  ClickedAsleepMember: { pairingId: Schema.String, crewMember: Schema.String },
-  AcceptedWake: { key: Schema.String },
-  RefusedWake: { key: Schema.String, message: Schema.String },
+  ClickedMemberBetweenSessions: { pairingId: Schema.String, crewMember: Schema.String },
+  AcceptedStart: { key: Schema.String },
+  RefusedStart: { key: Schema.String, message: Schema.String },
   DeliveredPrompt: { key: Schema.String, text: Schema.String },
   FailedPrompt: { key: Schema.String, message: Schema.String },
   StartedLink: { pairingId: Schema.String, link: Schema.Finite },
@@ -460,17 +460,17 @@ export const SendPrompt = Command.define('SendPrompt', {
     ),
 })
 
-export const WakeCrewMember = Command.define('WakeCrewMember', {
+export const StartCrewMember = Command.define('StartCrewMember', {
   args: { key: Schema.String, pairingId: Schema.String, crewMember: Schema.String },
-  messages: [Message.AcceptedWake, Message.RefusedWake],
+  messages: [Message.AcceptedStart, Message.RefusedStart],
   execute: ({ key, pairingId, crewMember }) =>
     Effect.tryPromise(async () => {
-      const reply = await linkTo(pairingId).request({ cmd: 'crew_wake', crew_member: crewMember })
-      if (reply.event !== 'crew_wake_result') throw new Error(`the home answered ${reply.event}`)
+      const reply = await linkTo(pairingId).request({ cmd: 'crew_start', crew_member: crewMember })
+      if (reply.event !== 'crew_start_result') throw new Error(`the home answered ${reply.event}`)
       if (reply.error) throw new Error(reply.error)
     }).pipe(
-      Effect.map(() => Message.AcceptedWake({ key })),
-      Effect.catch(({ cause }) => Effect.succeed(Message.RefusedWake({ key, message: errorText(cause) }))),
+      Effect.map(() => Message.AcceptedStart({ key })),
+      Effect.catch(({ cause }) => Effect.succeed(Message.RefusedStart({ key, message: errorText(cause) }))),
     ),
 })
 
@@ -575,15 +575,17 @@ export const PinchZoom = Mount.define('PinchZoom', {
 
 // UPDATE
 
-const wakesStillAsleep = (
-  wakes: Model['crewWakes'],
+const startsStillBetweenSessions = (
+  starts: Model['crewStarts'],
   pairingId: string,
-  asleep: ReadonlyArray<AsleepCrewMember>,
-): Model['crewWakes'] => {
+  betweenSessions: ReadonlyArray<CrewMemberBetweenSessions>,
+): Model['crewStarts'] => {
   const prefix = crewRowKey(pairingId, '')
-  const stillAsleep = new Set(asleep.map((member) => crewRowKey(pairingId, member.crewMember)))
+  const stillBetweenSessions = new Set(
+    betweenSessions.map((member) => crewRowKey(pairingId, member.crewMember)),
+  )
   return Object.fromEntries(
-    Object.entries(wakes).filter(([key]) => !key.startsWith(prefix) || stillAsleep.has(key)),
+    Object.entries(starts).filter(([key]) => !key.startsWith(prefix) || stillBetweenSessions.has(key)),
   )
 }
 
@@ -614,7 +616,7 @@ const newHome = (pairing: Pairing): Home => ({
   status: 'connecting',
   reason: '',
   sessions: [],
-  asleepCrew: [],
+  crewBetweenSessions: [],
   listed: false,
   asks: [],
   garden: null,
@@ -878,17 +880,17 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
         ],
       }
     },
-    ReceivedSessions: ({ pairingId, sessions, asleepCrew = [] }) => ({
+    ReceivedSessions: ({ pairingId, sessions, crewBetweenSessions = [] }) => ({
       model: modifyFields(
         updateHome(model, pairingId, (home) => ({
           ...home,
           status: 'online',
           reason: '',
           sessions,
-          asleepCrew,
+          crewBetweenSessions,
           listed: true,
         })),
-        { crewWakes: (wakes) => wakesStillAsleep(wakes, pairingId, asleepCrew) },
+        { crewStarts: (starts) => startsStillBetweenSessions(starts, pairingId, crewBetweenSessions) },
       ),
     }),
     ReceivedAsks: ({ pairingId, asks }) => receiveAsks(model, pairingId, asks),
@@ -1187,25 +1189,25 @@ export const update = (model: Model, message: Message): Update.Return<Model, Mes
     },
     SavedPairings: () => ({ model }),
     Ticked: ({ now }) => ({ model: modifyFields(model, { now: () => now }) }),
-    ClickedAsleepMember: ({ pairingId, crewMember }) => {
+    ClickedMemberBetweenSessions: ({ pairingId, crewMember }) => {
       const key = crewRowKey(pairingId, crewMember)
-      return model.crewWakes[key]?.status === 'waking'
+      return model.crewStarts[key]?.status === 'starting'
         ? { model }
         : {
             model: modifyFields(model, {
-              crewWakes: (wakes) => ({ ...wakes, [key]: { status: 'waking' as const } }),
+              crewStarts: (starts) => ({ ...starts, [key]: { status: 'starting' as const } }),
             }),
-            commands: [WakeCrewMember({ key, pairingId, crewMember })],
+            commands: [StartCrewMember({ key, pairingId, crewMember })],
           }
     },
-    AcceptedWake: ({ key }) => ({
+    AcceptedStart: ({ key }) => ({
       model: modifyFields(model, {
-        crewWakes: (wakes) => Object.fromEntries(Object.entries(wakes).filter(([wake]) => wake !== key)),
+        crewStarts: (starts) => Object.fromEntries(Object.entries(starts).filter(([start]) => start !== key)),
       }),
     }),
-    RefusedWake: ({ key, message }) => ({
+    RefusedStart: ({ key, message }) => ({
       model: modifyFields(model, {
-        crewWakes: (wakes) => ({ ...wakes, [key]: { status: 'refused' as const, message } }),
+        crewStarts: (starts) => ({ ...starts, [key]: { status: 'refused' as const, message } }),
       }),
     }),
     ClickedSession: ({ pairingId, sessionId }) => ({
@@ -1293,7 +1295,7 @@ export const init: Runtime.ApplicationInit<Model, Message> = () => ({
     openAsk: null,
     drafts: {},
     answering: {},
-    crewWakes: {},
+    crewStarts: {},
     images: {},
     diagrams: {},
     zoom: null,
@@ -1326,7 +1328,7 @@ const linkMessage = (pairingId: string, event: LinkEvent): Message => {
       return Message.ReceivedSessions({
         pairingId,
         sessions: event.sessions.map(fromHomeGatewaySession),
-        asleepCrew: event.asleepCrew.map(fromHomeGatewayAsleepCrewMember),
+        crewBetweenSessions: event.crewBetweenSessions.map(fromHomeGatewayCrewMemberBetweenSessions),
       })
     case 'Asks':
       return Message.ReceivedAsks({ pairingId, asks: event.asks.map(fromHomeGatewayAsk) })
@@ -1573,20 +1575,27 @@ const crewSessionRow = (row: SessionRow, now: number, h: HtmlBuilder<Message>): 
     crewTitle(row.session.crewMemberName ?? row.session.title ?? row.session.id, row.session.chief, h),
   )
 
-const asleepRow = (row: AsleepRow, wake: CrewWake | undefined, h: HtmlBuilder<Message>): Html => {
-  const tappable = row.live && wake?.status !== 'waking'
-  const badge = !row.live ? 'offline' : wake?.status === 'waking' ? 'waking…' : 'asleep'
+const betweenSessionsRow = (
+  row: BetweenSessionsRow,
+  start: CrewStart | undefined,
+  h: HtmlBuilder<Message>,
+): Html => {
+  const tappable = row.live && start?.status !== 'starting'
+  const badge = !row.live ? 'offline' : start?.status === 'starting' ? 'starting…' : 'between sessions'
   return h.li(
     [
       h.Key(row.key),
       h.Class(
-        `row session crew-asleep${row.live ? '' : ' offline'}${wake?.status === 'waking' ? ' waking' : ''}`,
+        `row session crew-between-sessions${row.live ? '' : ' offline'}${start?.status === 'starting' ? ' starting' : ''}`,
       ),
       h.DataAttribute('testid', 'queue-entry'),
       ...(tappable
         ? [
             h.OnClick(
-              Message.ClickedAsleepMember({ pairingId: row.pairing.id, crewMember: row.member.crewMember }),
+              Message.ClickedMemberBetweenSessions({
+                pairingId: row.pairing.id,
+                crewMember: row.member.crewMember,
+              }),
             ),
           ]
         : []),
@@ -1597,8 +1606,8 @@ const asleepRow = (row: AsleepRow, wake: CrewWake | undefined, h: HtmlBuilder<Me
         [
           crewTitle(row.member.name, row.member.chief, h),
           h.div([h.Class('row-where')], [where(row.pairing, null)]),
-          row.live && wake?.status === 'refused'
-            ? h.div([h.Class('row-where error')], [wake.message])
+          row.live && start?.status === 'refused'
+            ? h.div([h.Class('row-where error')], [start.message])
             : h.empty,
         ],
       ),
@@ -1764,8 +1773,8 @@ const queueView = (model: Model, h: HtmlBuilder<Message>): Html => {
       section(
         'Crew',
         queue.crew.map((row) =>
-          row.kind === 'asleep'
-            ? asleepRow(row, model.crewWakes[row.key], h)
+          row.kind === 'betweenSessions'
+            ? betweenSessionsRow(row, model.crewStarts[row.key], h)
             : crewSessionRow(row, model.now, h),
         ),
         h,

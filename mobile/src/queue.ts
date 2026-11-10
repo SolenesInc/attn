@@ -1,4 +1,7 @@
-import type { HomeGatewayAsleepCrewMember, HomeGatewaySession } from '@attn/types/homeGatewayGenerated'
+import type {
+  HomeGatewayCrewMemberBetweenSessions,
+  HomeGatewaySession,
+} from '@attn/types/homeGatewayGenerated'
 import { Schema } from 'effect'
 import { PhoneAsk } from './asks/ask'
 import { GardenSeed } from './garden/seed'
@@ -31,12 +34,12 @@ export const QueueSession = Schema.Struct({
 })
 export type QueueSession = typeof QueueSession.Type
 
-export const AsleepCrewMember = Schema.Struct({
+export const CrewMemberBetweenSessions = Schema.Struct({
   crewMember: Schema.String,
   name: Schema.String,
   chief: Schema.Boolean,
 })
-export type AsleepCrewMember = typeof AsleepCrewMember.Type
+export type CrewMemberBetweenSessions = typeof CrewMemberBetweenSessions.Type
 
 export const LinkStatus = Schema.Literals(['connecting', 'online', 'home_offline', 'unreachable', 'closed'])
 export type LinkStatus = typeof LinkStatus.Type
@@ -48,7 +51,7 @@ export const Home = Schema.Struct({
   status: LinkStatus,
   reason: Schema.String,
   sessions: Schema.Array(QueueSession),
-  asleepCrew: Schema.Array(AsleepCrewMember),
+  crewBetweenSessions: Schema.Array(CrewMemberBetweenSessions),
   listed: Schema.Boolean,
   asks: Schema.Array(PhoneAsk),
   garden: Schema.NullOr(Schema.Array(GardenSeed)),
@@ -69,7 +72,9 @@ export const fromHomeGatewaySession = (session: HomeGatewaySession): QueueSessio
   chief: session.chief ?? false,
 })
 
-export const fromHomeGatewayAsleepCrewMember = (member: HomeGatewayAsleepCrewMember): AsleepCrewMember => ({
+export const fromHomeGatewayCrewMemberBetweenSessions = (
+  member: HomeGatewayCrewMemberBetweenSessions,
+): CrewMemberBetweenSessions => ({
   crewMember: member.crew_member,
   name: member.crew_member_name,
   chief: member.chief ?? false,
@@ -85,15 +90,15 @@ export type SessionRow = {
   readonly live: boolean
 }
 
-export type AsleepRow = {
-  readonly kind: 'asleep'
+export type BetweenSessionsRow = {
+  readonly kind: 'betweenSessions'
   readonly key: string
-  readonly member: AsleepCrewMember
+  readonly member: CrewMemberBetweenSessions
   readonly pairing: Pairing
   readonly live: boolean
 }
 
-export type CrewRow = SessionRow | AsleepRow
+export type CrewRow = SessionRow | BetweenSessionsRow
 
 export type HomeRow = {
   readonly kind: 'home'
@@ -122,9 +127,9 @@ const longestWaitingFirst = (a: SessionRow, b: SessionRow) =>
   (a.session.waitingSince ?? Infinity) - (b.session.waitingSince ?? Infinity) || byTitle(a, b)
 
 const crewOrderKey = (row: CrewRow) =>
-  row.kind === 'asleep' ? row.member.crewMember : (row.session.crewMember ?? row.session.id)
+  row.kind === 'betweenSessions' ? row.member.crewMember : (row.session.crewMember ?? row.session.id)
 
-const crewChief = (row: CrewRow) => (row.kind === 'asleep' ? row.member.chief : row.session.chief)
+const crewChief = (row: CrewRow) => (row.kind === 'betweenSessions' ? row.member.chief : row.session.chief)
 
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
@@ -163,8 +168,8 @@ export const buildQueue = (homes: ReadonlyArray<Home>): QueueSections => {
     }
     crew.push(
       ...rows.filter((row) => isCrew(row.session)),
-      ...home.asleepCrew.map((member): AsleepRow => ({
-        kind: 'asleep',
+      ...home.crewBetweenSessions.map((member): BetweenSessionsRow => ({
+        kind: 'betweenSessions',
         key: crewRowKey(home.pairing.id, member.crewMember),
         member,
         pairing: home.pairing,

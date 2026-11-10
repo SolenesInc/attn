@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"fmt"
-	"html"
 	"slices"
 	"strings"
 	"time"
@@ -19,14 +18,7 @@ import (
 // homeGatewayImageChunkBytes keeps a chunk's base64 (54,616 bytes) and its fields inside one Home Gateway message.
 const homeGatewayImageChunkBytes = 40 << 10
 
-const homeGatewayAsksAPI = 3
-
-const homeGatewayDecodedImageSourcesAPI = 5
-
 func (d *Daemon) homeGatewaySendAsks(conn *homeGatewayConn) error {
-	if conn.api < homeGatewayAsksAPI {
-		return nil
-	}
 	ids := []string{}
 	frames := map[string][]byte{}
 	for _, shown := range d.asks() {
@@ -209,38 +201,7 @@ func (d *Daemon) homeGatewayAskImageBytes(conn *homeGatewayConn, askID, src stri
 	if err != nil {
 		return "", nil, err
 	}
-	if conn.api < homeGatewayDecodedImageSourcesAPI {
-		if src, err = partlyDecodedImageSource(stored, src); err != nil {
-			return "", nil, err
-		}
-	}
 	return storedAskImage(stored, src)
-}
-
-func partlyDecodedImageSource(stored store.Ask, src string) (string, error) {
-	decoded := html.UnescapeString(src)
-	if decoded == src {
-		return src, nil
-	}
-	parts, err := ask.Parse(stored.Markdown)
-	if err != nil {
-		return "", err
-	}
-	shown := ask.ImagePaths(parts, stored.BaseDir)
-	asSent, sentShown := shownImage(shown, stored.BaseDir, src)
-	asDecoded, decodedShown := shownImage(shown, stored.BaseDir, decoded)
-	switch {
-	case sentShown && decodedShown:
-		return "", fmt.Errorf("ask %s shows both %s and %s, and this phone's attn sends %s for either; update attn on the phone to tell them apart", stored.ID, asSent, asDecoded, src)
-	case decodedShown:
-		return decoded, nil
-	}
-	return src, nil
-}
-
-func shownImage(shown []string, baseDir, src string) (string, bool) {
-	imagePath, ok := ask.ResolveImage(baseDir, src)
-	return imagePath, ok && slices.Contains(shown, imagePath)
 }
 
 func storedAskImage(stored store.Ask, src string) (string, []byte, error) {

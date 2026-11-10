@@ -3,7 +3,7 @@ import { decodeHomeGatewayEvent, type HomeGatewayEvent } from '@attn/homeGateway
 import type {
   HomeGatewayAsk,
   HomeGatewaySeed,
-  HomeGatewayAsleepCrewMember,
+  HomeGatewayCrewMemberBetweenSessions,
   HomeGatewaySession,
   TerminalScreen,
 } from '@attn/types/homeGatewayGenerated'
@@ -66,7 +66,7 @@ export type LinkEvent =
   | {
       readonly _tag: 'Sessions'
       readonly sessions: ReadonlyArray<HomeGatewaySession>
-      readonly asleepCrew: ReadonlyArray<HomeGatewayAsleepCrewMember>
+      readonly crewBetweenSessions: ReadonlyArray<HomeGatewayCrewMemberBetweenSessions>
     }
   | { readonly _tag: 'Asks'; readonly asks: ReadonlyArray<HomeGatewayAsk> }
   | { readonly _tag: 'Garden'; readonly seeds: ReadonlyArray<HomeGatewaySeed> }
@@ -291,7 +291,11 @@ const openSocket = (
       case 'terminal_error':
         return onTerminal({ _tag: 'Failed', terminalId: event.terminal_id, message: event.message })
       case 'sessions':
-        return onEvent({ _tag: 'Sessions', sessions: event.sessions, asleepCrew: event.asleep_crew ?? [] })
+        return onEvent({
+          _tag: 'Sessions',
+          sessions: event.sessions,
+          crewBetweenSessions: event.crew_between_sessions ?? [],
+        })
       case 'refused':
         refusal = `${home.homeName} refused this phone: ${event.message}`
         return
@@ -321,7 +325,7 @@ const openSocket = (
       case 'ask_seed_mentions_result':
       case 'ask_image_chunk':
       case 'ask_image_error':
-      case 'crew_wake_result': {
+      case 'crew_start_result': {
         const request = pending.get(event.request_id)
         pending.delete(event.request_id)
         return request?.resolve(event)

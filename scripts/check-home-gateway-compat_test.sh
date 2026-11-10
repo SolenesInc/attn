@@ -17,14 +17,14 @@ edit() {
 
 refuses() {
   local name="$1" want="$2" status=0
-  "$check" "$base" "$work/$name.json" >"$work/out.txt" 2>"$work/err.txt" || status=$?
+  "$check" "$base" "$work/$name.json" 9 "${api:-9}" >"$work/out.txt" 2>"$work/err.txt" || status=$?
   [ "$status" = 1 ] || fail "$name: exit $status, want 1; stderr: $(cat "$work/err.txt")"
   grep -qF -- "$want" "$work/err.txt" || fail "$name: stderr does not name '$want': $(cat "$work/err.txt")"
 }
 
 accepts() {
   local name="$1" want="$2"
-  "$check" "$base" "$work/$name.json" >"$work/out.txt" 2>"$work/err.txt" || fail "$name: refused: $(cat "$work/err.txt")"
+  "$check" "$base" "$work/$name.json" 9 "${api:-9}" >"$work/out.txt" 2>"$work/err.txt" || fail "$name: refused: $(cat "$work/err.txt")"
   grep -qF -- "$want" "$work/out.txt" || fail "$name: stdout does not name '$want': $(cat "$work/out.txt")"
 }
 
@@ -57,5 +57,9 @@ refuses removed-message "HomeGatewayRefused: removed"
 
 edit added-optional 's.HomeGatewaySession.properties.pinned = {type: "boolean"}; s.HomeGatewaySessionState.enum.push("paused"); s.HomeGatewayHeadsUp = {type: "object", properties: {}}'
 accepts added-optional "HomeGatewaySession.pinned, HomeGatewaySessionState: member paused, HomeGatewayHeadsUp"
+
+edit raised-version 'delete s.HomeGatewaySession.properties.title; s.HomeGatewaySession.required = s.HomeGatewaySession.required.filter(f => f !== "title")'
+api=10 accepts raised-version "HOME_GATEWAY_API_VERSION rose from 9 to 10"
+api=10 accepts raised-version "HomeGatewaySession.title: removed or renamed"
 
 echo "check-home-gateway-compat: all cases passed"

@@ -3,12 +3,17 @@ import "@typespec/json-schema";
 using TypeSpec.JsonSchema;
 
 // The phone's API. It only grows: scripts/check-home-gateway-compat refuses any
-// change that is not a new message, a new optional field or a new enum member.
+// change that is not a new message, a new optional field or a new enum member,
+// unless the change raises HOME_GATEWAY_API_VERSION and
+// HOME_GATEWAY_OLDEST_API_VERSION to the new version.
 // Clients decode an enum member they do not know as unknown.
 @jsonSchema
 namespace HomeGateway;
 
-const HOME_GATEWAY_API_VERSION = 9;
+const HOME_GATEWAY_API_VERSION = 10;
+
+// The home refuses a hello below it, with a message the phone shows.
+const HOME_GATEWAY_OLDEST_API_VERSION = 10;
 
 // The phone opens with hello; the home answers with welcome, then sessions.
 model HomeGatewayHello {
@@ -78,35 +83,35 @@ model HomeGatewaySession {
   chief?: boolean;
 }
 
-// Since api 8: a crew member of the pairing's profile that has no session.
-model HomeGatewayAsleepCrewMember {
+// Since api 10: a crew member of the pairing's profile that has no session.
+model HomeGatewayCrewMemberBetweenSessions {
   crew_member: string;
   crew_member_name: string;
   chief?: boolean;
 }
 
 // Every session of the pairing's profile: after welcome, then on each change.
-// Since api 8, asleep_crew holds the profile's crew members with no session.
+// Since api 10, crew_between_sessions holds the profile's crew members with no session.
 model HomeGatewaySessions {
   event: "sessions";
   sessions: HomeGatewaySession[];
-  asleep_crew?: HomeGatewayAsleepCrewMember[];
+  crew_between_sessions?: HomeGatewayCrewMemberBetweenSessions[];
 }
 
-// Since api 8: starts a session for a crew member of the pairing's profile,
-// through the same wake as attn crew wake. crew_member is the name a session or
-// an asleep_crew entry gives it. Waking a member that is awake or waking starts
-// no second session. The home answers crew_wake_result.
-model HomeGatewayCrewWake {
-  cmd: "crew_wake";
+// Since api 10: starts a session for a crew member of the pairing's profile,
+// through the same start as attn crew start. crew_member is the name a session or
+// a crew_between_sessions entry gives it. Starting a member that is in a session
+// or starting starts no second session. The home answers crew_start_result.
+model HomeGatewayCrewStart {
+  cmd: "crew_start";
   request_id: string;
   crew_member: string;
 }
 
 // error is the home's reason and is absent on success; the member's session
 // reaches the phone as sessions frames.
-model HomeGatewayCrewWakeResult {
-  event: "crew_wake_result";
+model HomeGatewayCrewStartResult {
+  event: "crew_start_result";
   request_id: string;
   crew_member: string;
   error?: string;

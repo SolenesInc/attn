@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -25,12 +26,12 @@ func (p *testPhone) sessionsFrameUntil(match func(homegateway.HomeGatewaySession
 
 func (p *testPhone) startCrew(requestID, member string) {
 	p.t.Helper()
-	p.send(homegateway.HomeGatewayCrewWake{Cmd: "crew_wake", RequestID: requestID, CrewMember: member})
+	p.send(homegateway.HomeGatewayCrewStart{Cmd: "crew_start", RequestID: requestID, CrewMember: member})
 }
 
 func betweenSessionsNames(frame homegateway.HomeGatewaySessions) []string {
 	names := []string{}
-	for _, member := range frame.AsleepCrew {
+	for _, member := range frame.CrewBetweenSessions {
 		names = append(names, member.CrewMemberName)
 	}
 	slices.Sort(names)
@@ -82,11 +83,11 @@ func TestHomeGatewayNamesACrewSessionAndTheChiefAndNoOrdinarySession(t *testing.
 		t.Errorf("Keel's session = %+v, want crew member %s named %s and not chief", got, keel.Member, keel.Name)
 	}
 	if got := betweenSessionsNames(frame); !slices.Equal(got, []string{"Alder", "Trellis"}) {
-		t.Errorf("asleep crew = %v, want Alder and Trellis, the members with no session", got)
+		t.Errorf("crew between sessions = %v, want Alder and Trellis, the members with no session", got)
 	}
 }
 
-func TestHomeGatewayListsAnAsleepChiefAndKeepsTheOtherProfilesCrewOut(t *testing.T) {
+func TestHomeGatewayListsAChiefBetweenSessionsAndKeepsTheOtherProfilesCrewOut(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app := w.App()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -96,7 +97,7 @@ func TestHomeGatewayListsAnAsleepChiefAndKeepsTheOtherProfilesCrewOut(t *testing
 	workPhone := connectPhone(t, w, "work-phone", work.ID)
 	workPhone.hello(homegateway.APIVersion)
 	workFrame := workPhone.sessionsFrameUntil(func(homegateway.HomeGatewaySessions) bool { return true })
-	for _, member := range workFrame.AsleepCrew {
+	for _, member := range workFrame.CrewBetweenSessions {
 		if member.CrewMember == chiefMember.ID || member.CrewMember == "keel" {
 			t.Errorf("a phone of profile Work was shown %+v from the other profile", member)
 		}
@@ -105,73 +106,73 @@ func TestHomeGatewayListsAnAsleepChiefAndKeepsTheOtherProfilesCrewOut(t *testing
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
 	phone.hello(homegateway.APIVersion)
 	frame := phone.sessionsFrameUntil(func(homegateway.HomeGatewaySessions) bool { return true })
-	if !slices.ContainsFunc(frame.AsleepCrew, func(member homegateway.HomeGatewayAsleepCrewMember) bool {
+	if !slices.ContainsFunc(frame.CrewBetweenSessions, func(member homegateway.HomeGatewayCrewMemberBetweenSessions) bool {
 		return member.CrewMember == chiefMember.ID && protocol.Deref(member.Chief)
 	}) {
-		t.Errorf("asleep crew = %+v, want the asleep Chief %s marked chief", frame.AsleepCrew, chiefMember.ID)
+		t.Errorf("crew between sessions = %+v, want the Chief between sessions %s marked chief", frame.CrewBetweenSessions, chiefMember.ID)
 	}
 }
 
-func TestAPhoneWakesAnAsleepMemberOnceAndHearsARefusalWithTheHomesReason(t *testing.T) {
+func TestAPhoneStartsAMemberBetweenSessionsOnceAndHearsARefusalWithTheHomesReason(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
 	phone.hello(homegateway.APIVersion)
-	asleep := phone.sessionsFrameUntil(func(homegateway.HomeGatewaySessions) bool { return true })
-	if got := betweenSessionsNames(asleep); !slices.Contains(got, "Keel") {
-		t.Fatalf("asleep crew = %v, want Keel", got)
+	between := phone.sessionsFrameUntil(func(homegateway.HomeGatewaySessions) bool { return true })
+	if got := betweenSessionsNames(between); !slices.Contains(got, "Keel") {
+		t.Fatalf("crew between sessions = %v, want Keel", got)
 	}
 
 	phone.startCrew("first", "keel")
-	phone.startCrew("while-waking", "keel")
-	woken := phone.sessionsFrameUntil(func(frame homegateway.HomeGatewaySessions) bool {
-		_, awake := sessionOfMember(frame, "keel")
-		return awake
+	phone.startCrew("while-starting", "keel")
+	started := phone.sessionsFrameUntil(func(frame homegateway.HomeGatewaySessions) bool {
+		_, started := sessionOfMember(frame, "keel")
+		return started
 	})
-	session, _ := sessionOfMember(woken, "keel")
+	session, _ := sessionOfMember(started, "keel")
 	if protocol.Deref(session.CrewMemberName) != "Keel" {
-		t.Errorf("the woken session = %+v, want it named for Keel", session)
+		t.Errorf("the started session = %+v, want it named for Keel", session)
 	}
-	if slices.Contains(betweenSessionsNames(woken), "Keel") {
-		t.Errorf("asleep crew = %v after Keel woke, want Keel gone from it", betweenSessionsNames(woken))
+	if slices.Contains(betweenSessionsNames(started), "Keel") {
+		t.Errorf("crew between sessions = %v after Keel started, want Keel gone from it", betweenSessionsNames(started))
 	}
 	w.Launched(session.ID)
 
-	answered := map[string]homegateway.HomeGatewayCrewWakeResult{}
+	answered := map[string]homegateway.HomeGatewayCrewStartResult{}
 	for len(answered) < 2 {
-		var result homegateway.HomeGatewayCrewWakeResult
-		phone.next("crew_wake_result", &result)
+		var result homegateway.HomeGatewayCrewStartResult
+		phone.next("crew_start_result", &result)
 		answered[result.RequestID] = result
 	}
 	for id, result := range answered {
 		if result.Error != nil {
-			t.Errorf("wake %s = %+v, want success", id, result)
+			t.Errorf("start %s = %+v, want success", id, result)
 		}
 	}
 
-	phone.startCrew("while-awake", "keel")
-	var awake homegateway.HomeGatewayCrewWakeResult
-	phone.next("crew_wake_result", &awake)
-	if awake.RequestID != "while-awake" || awake.Error != nil {
-		t.Errorf("a wake of the awake Keel = %+v, want success", awake)
+	phone.startCrew("while-in-session", "keel")
+	var inSession homegateway.HomeGatewayCrewStartResult
+	phone.next("crew_start_result", &inSession)
+	if inSession.RequestID != "while-in-session" || inSession.Error != nil {
+		t.Errorf("a start of Keel in session = %+v, want success", inSession)
 	}
 	if got := crewSessionCount(t, cli); got != 1 {
-		t.Errorf("three wakes of Keel left %d sessions, want its one", got)
+		t.Errorf("three starts of Keel left %d sessions, want its one", got)
 	}
 
 	phone.startCrew("refused", "stranger")
-	var refused homegateway.HomeGatewayCrewWakeResult
-	phone.next("crew_wake_result", &refused)
+	var refused homegateway.HomeGatewayCrewStartResult
+	phone.next("crew_start_result", &refused)
 	if refused.RequestID != "refused" || refused.CrewMember != "stranger" || !strings.Contains(protocol.Deref(refused.Error), "stranger") {
-		t.Errorf("a wake of an unknown member = %+v, want the home's reason naming stranger", refused)
+		t.Errorf("a start of an unknown member = %+v, want the home's reason naming stranger", refused)
 	}
 	if got := crewSessionCount(t, cli); got != 1 {
-		t.Errorf("a refused wake left %d sessions, want 1", got)
+		t.Errorf("a refused start left %d sessions, want 1", got)
 	}
 }
 
-func TestAHomeRefusesAWakeOfAMemberOfAnotherProfile(t *testing.T) {
+func TestAHomeRefusesAStartOfAMemberOfAnotherProfile(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
@@ -180,32 +181,29 @@ func TestAHomeRefusesAWakeOfAMemberOfAnotherProfile(t *testing.T) {
 	phone := connectPhone(t, w, "phone", work.ID)
 	phone.hello(homegateway.APIVersion)
 	phone.startCrew("other-profile", "keel")
-	var refused homegateway.HomeGatewayCrewWakeResult
-	phone.next("crew_wake_result", &refused)
+	var refused homegateway.HomeGatewayCrewStartResult
+	phone.next("crew_start_result", &refused)
 	if refused.Error == nil {
-		t.Errorf("a phone of profile Work woke Keel of the other profile: %+v", refused)
+		t.Errorf("a phone of profile Work started Keel of the other profile: %+v", refused)
 	}
 	if got := crewSessionCount(t, cli); got != 0 {
-		t.Errorf("a refused wake left %d sessions, want none", got)
+		t.Errorf("a refused start left %d sessions, want none", got)
 	}
 }
 
-func TestAHomeServesNoWakeToAPhoneOfAnOlderAPI(t *testing.T) {
+func TestAHomeRefusesAPhoneOfAnOlderAPIWithAMessageThePhoneShows(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	setSetting(t, app, "phone_access_enabled", "true")
 	phone := connectPhone(t, w, "phone", app.SelectedProfile())
-	phone.hello(7)
-	phone.startCrew("too-old", "keel")
-	phone.send(homegateway.HomeGatewayPing{Cmd: "ping"})
-	var pong homegateway.HomeGatewayPong
-	phone.next("pong", &pong)
+	phone.hello(homegateway.OldestAPIVersion - 1)
+	phone.refusedWith(fmt.Sprintf("this phone speaks api %d and this home serves api %d to %d; update the attn phone app", homegateway.OldestAPIVersion-1, homegateway.OldestAPIVersion, homegateway.APIVersion))
 	if got := crewSessionCount(t, cli); got != 0 {
-		t.Errorf("a wake from an api 7 phone left %d sessions, want none", got)
+		t.Errorf("a refused phone left %d sessions, want none", got)
 	}
 }
 
-func TestTheDesktopHearsThatAPhoneWokeTheMemberAndWhichPhone(t *testing.T) {
+func TestTheDesktopHearsThatAPhoneStartedTheMemberAndWhichPhone(t *testing.T) {
 	cloud := testworld.StartCloud(t)
 	w := &world{World: prepareWorld(t, fakeagent.Claude)}
 	writeCrewHomes(t, w)
@@ -229,10 +227,10 @@ func TestTheDesktopHearsThatAPhoneWokeTheMemberAndWhichPhone(t *testing.T) {
 	}
 	socket.Hello()
 
-	socket.Send(homegateway.HomeGatewayCrewWake{Cmd: "crew_wake", RequestID: "wake", CrewMember: "keel"})
+	socket.Send(homegateway.HomeGatewayCrewStart{Cmd: "crew_start", RequestID: "start", CrewMember: "keel"})
 	arrival := testworld.Await(app, protocol.EventBackgroundLaunch, func(m protocol.BackgroundLaunchMessage) bool { return m.Name == "Keel" })
 	w.Launched(string(arrival.SessionID))
 	if arrival.RequestedBy != "Victor's iPhone" {
-		t.Errorf("the desktop heard Keel's wake was requested by %q, want the phone that asked, Victor's iPhone", arrival.RequestedBy)
+		t.Errorf("the desktop heard Keel's start was requested by %q, want the phone that asked, Victor's iPhone", arrival.RequestedBy)
 	}
 }

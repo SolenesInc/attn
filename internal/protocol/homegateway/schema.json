@@ -387,24 +387,6 @@
     ],
     "type": "object"
   },
-  "HomeGatewayAsleepCrewMember": {
-    "properties": {
-      "chief": {
-        "type": "boolean"
-      },
-      "crew_member": {
-        "type": "string"
-      },
-      "crew_member_name": {
-        "type": "string"
-      }
-    },
-    "required": [
-      "crew_member",
-      "crew_member_name"
-    ],
-    "type": "object"
-  },
   "HomeGatewayCheckState": {
     "enum": [
       "open",
@@ -434,10 +416,28 @@
     ],
     "type": "object"
   },
-  "HomeGatewayCrewWake": {
+  "HomeGatewayCrewMemberBetweenSessions": {
+    "properties": {
+      "chief": {
+        "type": "boolean"
+      },
+      "crew_member": {
+        "type": "string"
+      },
+      "crew_member_name": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "crew_member",
+      "crew_member_name"
+    ],
+    "type": "object"
+  },
+  "HomeGatewayCrewStart": {
     "properties": {
       "cmd": {
-        "const": "crew_wake",
+        "const": "crew_start",
         "type": "string"
       },
       "crew_member": {
@@ -454,7 +454,7 @@
     ],
     "type": "object"
   },
-  "HomeGatewayCrewWakeResult": {
+  "HomeGatewayCrewStartResult": {
     "properties": {
       "crew_member": {
         "type": "string"
@@ -463,7 +463,7 @@
         "type": "string"
       },
       "event": {
-        "const": "crew_wake_result",
+        "const": "crew_start_result",
         "type": "string"
       },
       "request_id": {
@@ -1038,9 +1038,9 @@
   },
   "HomeGatewaySessions": {
     "properties": {
-      "asleep_crew": {
+      "crew_between_sessions": {
         "items": {
-          "$ref": "HomeGatewayAsleepCrewMember.json"
+          "$ref": "HomeGatewayCrewMemberBetweenSessions.json"
         },
         "type": "array"
       },

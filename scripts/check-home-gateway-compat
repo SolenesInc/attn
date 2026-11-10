@@ -3,15 +3,20 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 const snapshot = 'internal/protocol/homegateway/schema.json';
-const usage = 'usage: scripts/check-home-gateway-compat [<base-schema.json> <head-schema.json>]';
+const usage = 'usage: scripts/check-home-gateway-compat [<base-schema.json> <head-schema.json> <base-api> <head-api>]';
+const versionFile = 'app/src/types/homeGatewayVersion.ts';
 const args = process.argv.slice(2);
 
 function git(...gitArgs) {
   return execFileSync('git', gitArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 }
 
+function apiVersion(text) {
+  return Number(/HOME_GATEWAY_API_VERSION = (\d+);/.exec(text)[1]);
+}
+
 function readBase() {
-  if (args.length === 2) return { label: args[0], text: readFileSync(args[0], 'utf8') };
+  if (args.length === 4) return { label: args[0], text: readFileSync(args[0], 'utf8'), api: Number(args[2]) };
   const label = `origin/main:${snapshot}`;
   try {
     git('rev-parse', '--verify', '--quiet', 'origin/main^{commit}');
@@ -20,18 +25,19 @@ function readBase() {
     process.exit(2);
   }
   try {
-    return { label, text: git('show', label) };
+    return { label, text: git('show', label), api: apiVersion(git('show', `origin/main:${versionFile}`)) };
   } catch {
     return { label, text: null };
   }
 }
 
-if (args.length !== 0 && args.length !== 2) {
+if (args.length !== 0 && args.length !== 4) {
   console.error(usage);
   process.exit(2);
 }
 const base = readBase();
-const headPath = args.length === 2 ? args[1] : snapshot;
+const headPath = args.length === 4 ? args[1] : snapshot;
+const headApi = args.length === 4 ? Number(args[3]) : apiVersion(readFileSync(versionFile, 'utf8'));
 if (base.text === null) {
   console.log(`check-home-gateway-compat: ${base.label} does not exist yet; nothing to compare`);
   process.exit(0);
@@ -91,10 +97,15 @@ for (const name of Object.keys(after)) {
   if (!(name in before)) added.push(name);
 }
 
+if (refused.length > 0 && headApi > base.api) {
+  console.log(`check-home-gateway-compat: HOME_GATEWAY_API_VERSION rose from ${base.api} to ${headApi}, so ${headPath} may break ${base.label}; HOME_GATEWAY_OLDEST_API_VERSION must rise with it, so the home refuses older phones:`);
+  for (const line of refused) console.log(`  ${line}`);
+  refused.length = 0;
+}
 if (refused.length > 0) {
   console.error(`check-home-gateway-compat: the Home Gateway API only grows, and ${headPath} breaks ${base.label}:`);
   for (const line of refused) console.error(`  ${line}`);
-  console.error('Phones already installed decode the old shape. Add a message, an optional field or an enum member instead, in internal/protocol/schema/home_gateway.tsp.');
+  console.error('Phones already installed decode the old shape. Add a message, an optional field or an enum member instead, in internal/protocol/schema/home_gateway.tsp, or raise HOME_GATEWAY_API_VERSION to break on purpose.');
   process.exit(1);
 }
 console.log(added.length === 0

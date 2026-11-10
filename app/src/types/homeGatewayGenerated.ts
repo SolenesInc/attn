@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayAsleepCrewMember, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewWake, HomeGatewayCrewWakeResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./homeGatewayGenerated";
+//   import { Convert, HomeGatewayAsk, HomeGatewayAskAnswer, HomeGatewayAskAnswerCommand, HomeGatewayAskAnswerResult, HomeGatewayAskChoice, HomeGatewayAskEvent, HomeGatewayAskImage, HomeGatewayAskImageChunk, HomeGatewayAskImageError, HomeGatewayAskPart, HomeGatewayAskQuestion, HomeGatewayAskQuestionKind, HomeGatewayAskReply, HomeGatewayAskSeedMentions, HomeGatewayAskSeedMentionsResult, HomeGatewayAsks, HomeGatewayCheckState, HomeGatewayCheckTally, HomeGatewayCrewMemberBetweenSessions, HomeGatewayCrewStart, HomeGatewayCrewStartResult, HomeGatewayGarden, HomeGatewayGardenSeeds, HomeGatewayHello, HomeGatewayPing, HomeGatewayPlotProgress, HomeGatewayPong, HomeGatewayProfile, HomeGatewayRefused, HomeGatewaySeed, HomeGatewaySeedChanged, HomeGatewaySeedCheck, HomeGatewaySeedDetail, HomeGatewaySeedError, HomeGatewaySeedGet, HomeGatewaySeedLogEntry, HomeGatewaySeedMention, HomeGatewaySeedMove, HomeGatewaySeedNoteCommand, HomeGatewaySeedResult, HomeGatewaySeedStatus, HomeGatewaySeedVerb, HomeGatewaySession, HomeGatewaySessionState, HomeGatewaySessions, HomeGatewayWelcome, SubmitPrompt, SubmitResult, TerminalAttach, TerminalCredit, TerminalDetach, TerminalEnded, TerminalError, TerminalFocus, TerminalInput, TerminalResize, TerminalResized, TerminalScreen } from "./homeGatewayGenerated";
 //
 //   const homeGatewayAsk = Convert.toHomeGatewayAsk(json);
 //   const homeGatewayAskAnswer = Convert.toHomeGatewayAskAnswer(json);
@@ -18,11 +18,11 @@
 //   const homeGatewayAskSeedMentions = Convert.toHomeGatewayAskSeedMentions(json);
 //   const homeGatewayAskSeedMentionsResult = Convert.toHomeGatewayAskSeedMentionsResult(json);
 //   const homeGatewayAsks = Convert.toHomeGatewayAsks(json);
-//   const homeGatewayAsleepCrewMember = Convert.toHomeGatewayAsleepCrewMember(json);
 //   const homeGatewayCheckState = Convert.toHomeGatewayCheckState(json);
 //   const homeGatewayCheckTally = Convert.toHomeGatewayCheckTally(json);
-//   const homeGatewayCrewWake = Convert.toHomeGatewayCrewWake(json);
-//   const homeGatewayCrewWakeResult = Convert.toHomeGatewayCrewWakeResult(json);
+//   const homeGatewayCrewMemberBetweenSessions = Convert.toHomeGatewayCrewMemberBetweenSessions(json);
+//   const homeGatewayCrewStart = Convert.toHomeGatewayCrewStart(json);
+//   const homeGatewayCrewStartResult = Convert.toHomeGatewayCrewStartResult(json);
 //   const homeGatewayGarden = Convert.toHomeGatewayGarden(json);
 //   const homeGatewayGardenSeeds = Convert.toHomeGatewayGardenSeeds(json);
 //   const homeGatewayHello = Convert.toHomeGatewayHello(json);
@@ -289,40 +289,40 @@ export enum HomeGatewayAsksEvent {
     Asks = "asks",
 }
 
-export interface HomeGatewayAsleepCrewMember {
-    chief?:           boolean;
-    crew_member:      string;
-    crew_member_name: string;
-    [property: string]: any;
-}
-
 export interface HomeGatewayCheckTally {
     confirmed: number;
     total:     number;
     [property: string]: any;
 }
 
-export interface HomeGatewayCrewWake {
-    cmd:         HomeGatewayCrewWakeCmd;
+export interface HomeGatewayCrewMemberBetweenSessions {
+    chief?:           boolean;
+    crew_member:      string;
+    crew_member_name: string;
+    [property: string]: any;
+}
+
+export interface HomeGatewayCrewStart {
+    cmd:         HomeGatewayCrewStartCmd;
     crew_member: string;
     request_id:  string;
     [property: string]: any;
 }
 
-export enum HomeGatewayCrewWakeCmd {
-    CrewWake = "crew_wake",
+export enum HomeGatewayCrewStartCmd {
+    CrewStart = "crew_start",
 }
 
-export interface HomeGatewayCrewWakeResult {
+export interface HomeGatewayCrewStartResult {
     crew_member: string;
     error?:      string;
-    event:       HomeGatewayCrewWakeResultEvent;
+    event:       HomeGatewayCrewStartResultEvent;
     request_id:  string;
     [property: string]: any;
 }
 
-export enum HomeGatewayCrewWakeResultEvent {
-    CrewWakeResult = "crew_wake_result",
+export enum HomeGatewayCrewStartResultEvent {
+    CrewStartResult = "crew_start_result",
 }
 
 export interface HomeGatewayGarden {
@@ -631,13 +631,13 @@ export enum HomeGatewaySessionState {
 }
 
 export interface HomeGatewaySessions {
-    asleep_crew?: AsleepCrewElement[];
-    event:        HomeGatewaySessionsEvent;
-    sessions:     SessionElement[];
+    crew_between_sessions?: CrewBetweenSessionElement[];
+    event:                  HomeGatewaySessionsEvent;
+    sessions:               SessionElement[];
     [property: string]: any;
 }
 
-export interface AsleepCrewElement {
+export interface CrewBetweenSessionElement {
     chief?:           boolean;
     crew_member:      string;
     crew_member_name: string;
@@ -950,14 +950,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayAsks")), null, 2);
     }
 
-    public static toHomeGatewayAsleepCrewMember(json: string): HomeGatewayAsleepCrewMember {
-        return cast(JSON.parse(json), r("HomeGatewayAsleepCrewMember"));
-    }
-
-    public static homeGatewayAsleepCrewMemberToJson(value: HomeGatewayAsleepCrewMember): string {
-        return JSON.stringify(uncast(value, r("HomeGatewayAsleepCrewMember")), null, 2);
-    }
-
     public static toHomeGatewayCheckState(json: string): HomeGatewayCheckState {
         return cast(JSON.parse(json), r("HomeGatewayCheckState"));
     }
@@ -974,20 +966,28 @@ export class Convert {
         return JSON.stringify(uncast(value, r("HomeGatewayCheckTally")), null, 2);
     }
 
-    public static toHomeGatewayCrewWake(json: string): HomeGatewayCrewWake {
-        return cast(JSON.parse(json), r("HomeGatewayCrewWake"));
+    public static toHomeGatewayCrewMemberBetweenSessions(json: string): HomeGatewayCrewMemberBetweenSessions {
+        return cast(JSON.parse(json), r("HomeGatewayCrewMemberBetweenSessions"));
     }
 
-    public static homeGatewayCrewWakeToJson(value: HomeGatewayCrewWake): string {
-        return JSON.stringify(uncast(value, r("HomeGatewayCrewWake")), null, 2);
+    public static homeGatewayCrewMemberBetweenSessionsToJson(value: HomeGatewayCrewMemberBetweenSessions): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayCrewMemberBetweenSessions")), null, 2);
     }
 
-    public static toHomeGatewayCrewWakeResult(json: string): HomeGatewayCrewWakeResult {
-        return cast(JSON.parse(json), r("HomeGatewayCrewWakeResult"));
+    public static toHomeGatewayCrewStart(json: string): HomeGatewayCrewStart {
+        return cast(JSON.parse(json), r("HomeGatewayCrewStart"));
     }
 
-    public static homeGatewayCrewWakeResultToJson(value: HomeGatewayCrewWakeResult): string {
-        return JSON.stringify(uncast(value, r("HomeGatewayCrewWakeResult")), null, 2);
+    public static homeGatewayCrewStartToJson(value: HomeGatewayCrewStart): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayCrewStart")), null, 2);
+    }
+
+    public static toHomeGatewayCrewStartResult(json: string): HomeGatewayCrewStartResult {
+        return cast(JSON.parse(json), r("HomeGatewayCrewStartResult"));
+    }
+
+    public static homeGatewayCrewStartResultToJson(value: HomeGatewayCrewStartResult): string {
+        return JSON.stringify(uncast(value, r("HomeGatewayCrewStartResult")), null, 2);
     }
 
     public static toHomeGatewayGarden(json: string): HomeGatewayGarden {
@@ -1574,24 +1574,24 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("HomeGatewayAsksEvent") },
         { json: "ids", js: "ids", typ: a("") },
     ], "any"),
-    "HomeGatewayAsleepCrewMember": o([
-        { json: "chief", js: "chief", typ: u(undefined, true) },
-        { json: "crew_member", js: "crew_member", typ: "" },
-        { json: "crew_member_name", js: "crew_member_name", typ: "" },
-    ], "any"),
     "HomeGatewayCheckTally": o([
         { json: "confirmed", js: "confirmed", typ: 0 },
         { json: "total", js: "total", typ: 0 },
     ], "any"),
-    "HomeGatewayCrewWake": o([
-        { json: "cmd", js: "cmd", typ: r("HomeGatewayCrewWakeCmd") },
+    "HomeGatewayCrewMemberBetweenSessions": o([
+        { json: "chief", js: "chief", typ: u(undefined, true) },
+        { json: "crew_member", js: "crew_member", typ: "" },
+        { json: "crew_member_name", js: "crew_member_name", typ: "" },
+    ], "any"),
+    "HomeGatewayCrewStart": o([
+        { json: "cmd", js: "cmd", typ: r("HomeGatewayCrewStartCmd") },
         { json: "crew_member", js: "crew_member", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "HomeGatewayCrewWakeResult": o([
+    "HomeGatewayCrewStartResult": o([
         { json: "crew_member", js: "crew_member", typ: "" },
         { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("HomeGatewayCrewWakeResultEvent") },
+        { json: "event", js: "event", typ: r("HomeGatewayCrewStartResultEvent") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "HomeGatewayGarden": o([
@@ -1762,11 +1762,11 @@ const typeMap: any = {
         { json: "waiting_since", js: "waiting_since", typ: u(undefined, Date) },
     ], "any"),
     "HomeGatewaySessions": o([
-        { json: "asleep_crew", js: "asleep_crew", typ: u(undefined, a(r("AsleepCrewElement"))) },
+        { json: "crew_between_sessions", js: "crew_between_sessions", typ: u(undefined, a(r("CrewBetweenSessionElement"))) },
         { json: "event", js: "event", typ: r("HomeGatewaySessionsEvent") },
         { json: "sessions", js: "sessions", typ: a(r("SessionElement")) },
     ], "any"),
-    "AsleepCrewElement": o([
+    "CrewBetweenSessionElement": o([
         { json: "chief", js: "chief", typ: u(undefined, true) },
         { json: "crew_member", js: "crew_member", typ: "" },
         { json: "crew_member_name", js: "crew_member_name", typ: "" },
@@ -1893,11 +1893,11 @@ const typeMap: any = {
     "HomeGatewayAsksEvent": [
         "asks",
     ],
-    "HomeGatewayCrewWakeCmd": [
-        "crew_wake",
+    "HomeGatewayCrewStartCmd": [
+        "crew_start",
     ],
-    "HomeGatewayCrewWakeResultEvent": [
-        "crew_wake_result",
+    "HomeGatewayCrewStartResultEvent": [
+        "crew_start_result",
     ],
     "HomeGatewayGardenEvent": [
         "garden",

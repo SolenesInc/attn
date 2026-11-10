@@ -178,7 +178,7 @@ ul {
   letter-spacing: 0.02em;
 }
 
-.row.crew-asleep .row-title {
+.row.crew-between-sessions .row-title {
   color: var(--muted);
 }
 

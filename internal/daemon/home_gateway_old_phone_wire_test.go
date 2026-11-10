@@ -60,7 +60,7 @@ var oldPhoneSteps = []oldPhoneStep{
 	{6, `{"cmd":"seed_note","seed_id":"$seed","body":"from the phone","request_id":"note"}`, []string{"seed_result"}},
 	{7, ``, []string{"seed_changed"}},
 	{6, `{"cmd":"seed_move","seed_id":"$seed","verb":"park","text":"later","request_id":"move"}`, []string{"seed_result"}},
-	{8, `{"cmd":"crew_wake","crew_member":"keel","request_id":"wake"}`, []string{"crew_wake_result"}},
+	{10, `{"cmd":"crew_start","crew_member":"keel","request_id":"start"}`, []string{"crew_start_result"}},
 }
 
 type oldPhoneConversation struct {
@@ -292,14 +292,14 @@ func recordedOldPhones(t *testing.T) map[int]string {
 	return recorded
 }
 
-func TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome(t *testing.T) {
+func TestAPhoneOfEveryServedHomeGatewayAPIKeepsWorkingAgainstThisHomeAndOlderOnesAreToldToUpdate(t *testing.T) {
 	if *recordOldPhone != 0 {
 		recordOldPhoneConversation(t, *recordOldPhone)
 		return
 	}
 	recorded := recordedOldPhones(t)
 	if recorded[homegateway.APIVersion] == "" {
-		t.Fatalf("the Home Gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryHomeGatewayAPI -record-old-phone=%d", homegateway.APIVersion, oldPhonesDir, homegateway.APIVersion, homegateway.APIVersion)
+		t.Fatalf("the Home Gateway api is %d and %s has no api-%d.jsonl. Add the new commands to oldPhoneSteps, then run: go test ./internal/daemon -run TestAPhoneOfEveryServed -record-old-phone=%d", homegateway.APIVersion, oldPhonesDir, homegateway.APIVersion, homegateway.APIVersion)
 	}
 	for api := 1; api <= homegateway.APIVersion; api++ {
 		path := recorded[api]
@@ -309,7 +309,18 @@ func TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome(t *testing.T) {
 		}
 		t.Run(fmt.Sprintf("api %d", api), func(t *testing.T) {
 			conversation := startOldPhoneConversation(t)
-			for _, line := range readOldPhone(t, path) {
+			lines := readOldPhone(t, path)
+			if api < homegateway.OldestAPIVersion {
+				conversation.send(string(lines[0].Phone))
+				conversation.await("a refusal", func(frame []byte) string {
+					if eventOf(frame) != "refused" {
+						return "another kind"
+					}
+					return ""
+				})
+				return
+			}
+			for _, line := range lines {
 				switch {
 				case line.Phone != nil:
 					conversation.send(string(line.Phone))

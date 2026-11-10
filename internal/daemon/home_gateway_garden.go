@@ -16,16 +16,9 @@ import (
 	"github.com/victorarias/attn/internal/who"
 )
 
-const homeGatewayGardenAPI = 6
-
-const homeGatewaySeedChangedAPI = 7
-
 const homeGatewayClosedSeedShownFor = 24 * time.Hour
 
 func (d *Daemon) homeGatewaySendGarden(conn *homeGatewayConn) error {
-	if conn.api < homeGatewayGardenAPI {
-		return nil
-	}
 	read, err := d.readGarden(conn.phone.ProfileID)
 	if err != nil {
 		if docstore.IsUndeclaredCollection(err) {
@@ -51,9 +44,6 @@ func (d *Daemon) homeGatewaySendSeedChanges(conn *homeGatewayConn) error {
 	changed := conn.changedSeeds
 	conn.changedSeeds = nil
 	conn.changedSeedsMu.Unlock()
-	if conn.api < homeGatewaySeedChangedAPI {
-		return nil
-	}
 	for _, id := range slices.Sorted(maps.Keys(changed)) {
 		seed, _, err := d.readSeed(id)
 		if err != nil {

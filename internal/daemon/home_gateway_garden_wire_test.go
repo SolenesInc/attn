@@ -266,28 +266,6 @@ func TestHomeGatewayShowsThePairedProfilesGardenAndTendsItAsTheDesktopDoes(t *te
 	}
 }
 
-func TestHomeGatewayKeepsTheGardenFromPhonesThatDoNotKnowIt(t *testing.T) {
-	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	setSetting(t, app, "phone_access_enabled", "true")
-	if err := w.InjectSession("mine", "mine", w.Path("mine"), protocol.SessionAgentClaude, app.SelectedProfile()); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cli.SeedPlant("mine", "Hidden from api 5", "", "", ""); err != nil {
-		t.Fatal(err)
-	}
-	phone := connectPhone(t, w, "installed", app.SelectedProfile())
-	phone.hello(5)
-	var welcome homegateway.HomeGatewayWelcome
-	phone.next("welcome", &welcome)
-	phone.send(homegateway.HomeGatewayPing{Cmd: "ping"})
-	var pong homegateway.HomeGatewayPong
-	phone.next("pong", &pong)
-	if phone.seedIDs != nil || len(phone.seeds) != 0 {
-		t.Fatalf("a phone on api 5 received the garden %v", phone.seedIDs)
-	}
-}
-
 func TestHomeGatewaySendsASeedsNewestLogThatFitsAFrameAndSaysWhenItsBodyCannot(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

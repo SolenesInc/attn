@@ -10,7 +10,7 @@ import {
   type HomeGatewayAskImageError,
   type HomeGatewayAskSeedMentionsResult,
   type HomeGatewayAsks,
-  type HomeGatewayCrewWakeResult,
+  type HomeGatewayCrewStartResult,
   type HomeGatewayGarden,
   type HomeGatewayGardenSeeds,
   type HomeGatewayPong,
@@ -50,7 +50,7 @@ export type HomeGatewayEvent =
   | HomeGatewaySeedChanged
   | HomeGatewaySeedError
   | HomeGatewaySeedResult
-  | HomeGatewayCrewWakeResult;
+  | HomeGatewayCrewStartResult;
 
 const sessionStates = new Set<string>(Object.values(HomeGatewaySessionState));
 
@@ -149,8 +149,8 @@ export function decodeHomeGatewayEvent(frame: string): HomeGatewayEvent | null {
       return Convert.toHomeGatewaySeedError(frame);
     case 'seed_result':
       return Convert.toHomeGatewaySeedResult(frame);
-    case 'crew_wake_result':
-      return Convert.toHomeGatewayCrewWakeResult(frame);
+    case 'crew_start_result':
+      return Convert.toHomeGatewayCrewStartResult(frame);
     default:
       return null;
   }

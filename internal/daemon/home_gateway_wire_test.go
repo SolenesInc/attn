@@ -97,7 +97,7 @@ func (p *testPhone) send(message any) {
 // next skips events until one of kind event arrives, keeping the asks it passes as a phone does.
 func (p *testPhone) next(event string, out any) {
 	p.t.Helper()
-	if event == "crew_wake_result" && len(p.heldStartResults) > 0 {
+	if event == "crew_start_result" && len(p.heldStartResults) > 0 {
 		frame := p.heldStartResults[0]
 		p.heldStartResults = p.heldStartResults[1:]
 		if err := json.Unmarshal(frame, out); err != nil {
@@ -114,7 +114,7 @@ func (p *testPhone) next(event string, out any) {
 		}
 		_ = json.Unmarshal(frame, &head)
 		if head.Event != event {
-			if head.Event == "crew_wake_result" {
+			if head.Event == "crew_start_result" {
 				p.heldStartResults = append(p.heldStartResults, frame)
 			}
 			continue
@@ -275,7 +275,7 @@ func TestHomeGatewayRefusesAHelloItCannotServe(t *testing.T) {
 	setSetting(t, app, "phone_access_enabled", "true")
 	tooOld := connectPhone(t, w, "phone", profile)
 	tooOld.hello(0)
-	tooOld.refusedWith(fmt.Sprintf("hello asked for api 0; this home serves api 1 to %d", homegateway.APIVersion))
+	tooOld.refusedWith(fmt.Sprintf("this phone speaks api 0 and this home serves api %d to %d; update the attn phone app", homegateway.OldestAPIVersion, homegateway.APIVersion))
 
 	gone := connectPhone(t, w, "phone", "deleted-profile")
 	gone.hello(homegateway.APIVersion)
@@ -658,19 +658,6 @@ func TestHomeGatewayReadsTheHTMLImageAPhoneNames(t *testing.T) {
 			{named, "a&copy;.png", "escaped copy", ""},
 			{colliding, "a&copy;.png", "", "holds no copy of " + shop + "/a&copy;.png"},
 			{colliding, "a©.png", "copyright sign", ""},
-		})
-	})
-
-	t.Run("an installed phone that leaves named references other than amp, lt, gt, quot and apos", func(t *testing.T) {
-		phone := connectPhone(t, w, "installed", app.SelectedProfile())
-		phone.hello(4)
-		var welcome homegateway.HomeGatewayWelcome
-		phone.next("welcome", &welcome)
-		phone.askList()
-		reads(phone, []read{
-			{named, "caf&eacute;.png", "cafe", ""},
-			{named, "a&copy;.png", "escaped copy", ""},
-			{colliding, "a&copy;.png", "", "shows both " + shop + "/a&copy;.png and " + shop + "/a©.png"},
 		})
 	})
 }
