@@ -21,7 +21,7 @@ func formatMarkdownAnnotationPayload(source annotationDocumentSource, machine st
 func formatReviewPayload(source annotationDocumentSource, machine, verdict string, anns []protocol.MarkdownAnnotation, orphaned map[string]bool) string {
 	entries, _ := formatMarkdownEntries(inReadingOrder(anns), orphaned)
 	return prompts.RenderText("annotation-markdown", "review", prompts.Values{
-		"path": source.path, "machine": machine, "document": source.path,
+		"path": source.path, "machine": machine, "document": shellQuote(source.path),
 		"has_marks": fmt.Sprint(len(anns) > 0), "count": fmt.Sprint(len(anns)), "singular": fmt.Sprint(len(anns) == 1), "entries": entries,
 		"approve": fmt.Sprint(verdict == protocol.ReviewVerdictApprove), "request_changes": fmt.Sprint(verdict == protocol.ReviewVerdictRequestChanges),
 	})
@@ -29,7 +29,7 @@ func formatReviewPayload(source annotationDocumentSource, machine, verdict strin
 
 func formatQuestionPayload(source annotationDocumentSource, machine string, question protocol.MarkdownAnnotation) string {
 	mark := markValues(question)
-	values := prompts.Values{"path": source.path, "machine": machine, "document": source.path, "id": question.ID}
+	values := prompts.Values{"path": source.path, "machine": machine, "document": shellQuote(source.path), "id": question.ID}
 	for _, name := range []string{"has_file", "place", "fence", "quote", "comment"} {
 		values[name] = mark[name]
 	}

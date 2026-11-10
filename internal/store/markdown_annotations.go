@@ -142,8 +142,10 @@ func withoutIDs(marks []protocol.MarkdownAnnotation, ids []string) []protocol.Ma
 
 func withUpserts(marks, upserts []protocol.MarkdownAnnotation) []protocol.MarkdownAnnotation {
 	for _, upsert := range upserts {
+		upsert.Answer = nil
 		at := slices.IndexFunc(marks, func(mark protocol.MarkdownAnnotation) bool { return mark.ID == upsert.ID })
 		if at >= 0 {
+			upsert.Answer = marks[at].Answer
 			marks[at] = upsert
 		} else {
 			marks = append(marks, upsert)

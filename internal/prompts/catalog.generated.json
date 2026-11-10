@@ -5892,12 +5892,36 @@
                                     {
                                       "name": "place",
                                       "node": {
-                                        "kind": "input",
-                                        "field": {
-                                          "name": "place",
-                                          "kind": "text",
-                                          "description": "place"
-                                        }
+                                        "kind": "join",
+                                        "children": [
+                                          {
+                                            "kind": "input",
+                                            "field": {
+                                              "name": "place",
+                                              "kind": "text",
+                                              "description": "place"
+                                            }
+                                          },
+                                          {
+                                            "kind": "when",
+                                            "condition": {
+                                              "field": {
+                                                "name": "orphaned",
+                                                "kind": "flag",
+                                                "description": "orphaned"
+                                              },
+                                              "test": "enabled"
+                                            },
+                                            "children": [
+                                              {
+                                                "kind": "text",
+                                                "id": "annotation-markdown.code-moved",
+                                                "source": "content/annotations/markdown-code-moved.md",
+                                                "keep_final_newline": true
+                                              }
+                                            ]
+                                          }
+                                        ]
                                       }
                                     },
                                     {
@@ -6146,12 +6170,36 @@
                                         {
                                           "name": "place",
                                           "node": {
-                                            "kind": "input",
-                                            "field": {
-                                              "name": "place",
-                                              "kind": "text",
-                                              "description": "place"
-                                            }
+                                            "kind": "join",
+                                            "children": [
+                                              {
+                                                "kind": "input",
+                                                "field": {
+                                                  "name": "place",
+                                                  "kind": "text",
+                                                  "description": "place"
+                                                }
+                                              },
+                                              {
+                                                "kind": "when",
+                                                "condition": {
+                                                  "field": {
+                                                    "name": "orphaned",
+                                                    "kind": "flag",
+                                                    "description": "orphaned"
+                                                  },
+                                                  "test": "enabled"
+                                                },
+                                                "children": [
+                                                  {
+                                                    "kind": "text",
+                                                    "id": "annotation-markdown.code-moved",
+                                                    "source": "content/annotations/markdown-code-moved.md",
+                                                    "keep_final_newline": true
+                                                  }
+                                                ]
+                                              }
+                                            ]
                                           }
                                         },
                                         {
@@ -6436,5 +6484,5 @@
       ]
     }
   ],
-  "definitions_hash": "6806c439efa28759bf86dc657af9a51e93a5a7d20d9e1e924a0716ead5ed36e5"
+  "definitions_hash": "11cb9b1b767b923b86707e4067eaefaa1726da6329c402c03a960b8597748866"
 }

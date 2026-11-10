@@ -54,15 +54,16 @@ func codeMark(id, kind, text string, docLine, from, to int, quote string) protoc
 }
 
 type reviewSend struct {
-	onlyIDs []string
-	verdict string
+	onlyIDs  []string
+	verdict  string
+	orphaned []string
 }
 
 func submitReview(app *testworld.Peer, doc annotatedDocument, session string, send reviewSend) protocol.MarkdownAnnotationsSubmitResultMessage {
 	app.T.Helper()
 	msg := protocol.MarkdownAnnotationsSubmitMessage{
 		Cmd: protocol.CmdMarkdownAnnotationsSubmit, RequestID: uuid.NewString(), DocumentUri: doc.uri, SourceKind: doc.kind,
-		Path: doc.path, TargetSessionID: protocol.Ptr(session), OnlyIds: send.onlyIDs,
+		Path: doc.path, TargetSessionID: protocol.Ptr(session), OnlyIds: send.onlyIDs, OrphanedIds: send.orphaned,
 	}
 	if send.verdict != "" {
 		msg.Verdict = protocol.Ptr(send.verdict)
@@ -101,6 +102,17 @@ func TestAReviewQuestionReachesTheAgentAtOnceAndItsAnswerReachesTheOpenTile(t *t
 		t.Errorf("the draft after the answer = %+v, want the question with its answer", draft.Annotations)
 	}
 
+	saveDocumentAnnotations(r.app, r.doc, []protocol.MarkdownAnnotation{question})
+	if kept := getDocumentAnnotations(r.app, r.doc); len(kept.Annotations) != 1 || protocol.Deref(kept.Annotations[0].Answer) != "So the return reads as a value." {
+		t.Errorf("the draft after the app saved the question without its answer = %+v, want the answer kept", kept.Annotations)
+	}
+	forged := question
+	forged.ID, forged.Answer = "q2", protocol.Ptr("written by the app")
+	saveDocumentAnnotations(r.app, r.doc, []protocol.MarkdownAnnotation{forged})
+	if draft := getDocumentAnnotations(r.app, r.doc); len(draft.Annotations) != 2 || draft.Annotations[1].Answer != nil {
+		t.Errorf("the draft after the app saved a question with an answer = %+v, want the answer left to the agent", draft.Annotations)
+	}
+
 	if err := r.w.Client().ReviewAnswer(r.document, "gone", "x"); err == nil || !strings.Contains(err.Error(), "no open question gone") {
 		t.Errorf("answering a question the draft does not hold = %v, want an error naming it", err)
 	}
@@ -111,11 +123,13 @@ func TestASentReviewDeliversItsMarksInReadingOrderThenTheVerdictAndBasesTheNextS
 	prose := protocol.MarkdownAnnotation{ID: "p1", Type: "comment", Text: protocol.Ptr("Say why."), CreatedAt: 1,
 		Anchor: &protocol.MarkdownAnnotationAnchor{BlockID: "b1", StartLine: 3, EndLine: 3, Exact: "keeps its result"}}
 	asked := codeMark("q1", "question", "Why name it?", 7, 4, 4, "    sum := a + b")
-	asked.Answer = protocol.Ptr("So the return reads as a value.")
 	noted := codeMark("n1", "comment", "Return a + b directly.", 7, 5, 6, "    return sum\n}")
 	saveDocumentAnnotations(r.app, r.doc, []protocol.MarkdownAnnotation{noted, asked, prose})
+	if err := r.w.Client().ReviewAnswer(r.document, "q1", "So the return reads as a value."); err != nil {
+		t.Fatalf("review answer: %v", err)
+	}
 
-	sent := submitReview(r.app, r.doc, r.session, reviewSend{verdict: "request_changes"})
+	sent := submitReview(r.app, r.doc, r.session, reviewSend{verdict: "request_changes", orphaned: []string{"n1"}})
 	if sent.Status != "delivered" || len(sent.Annotations) != 0 || sent.Error != nil {
 		t.Fatalf("the send = %+v, want delivered leaving an empty draft", sent)
 	}
@@ -123,7 +137,7 @@ func TestASentReviewDeliversItsMarksInReadingOrderThenTheVerdictAndBasesTheNextS
 		"I've reviewed the change and have 3 pieces of feedback:\n\n" +
 		"## 1. (line 3) Feedback on: \"keeps its result\"\n> Say why.\n\n" +
 		"## 2. Question on calc.go:4\n```\n    sum := a + b\n```\n> Why name it?\n\nYou answered: So the return reads as a value.\n\n" +
-		"## 3. Note on calc.go:5–6\n```\n    return sum\n}\n```\n> Return a + b directly.\n\n" +
+		"## 3. Note on calc.go:5–6 (moved: these lines changed after the note was written)\n```\n    return sum\n}\n```\n> Return a + b directly.\n\n" +
 		"---\nVerdict: request changes. Address each note above, then run `attn review start " + r.document + "` and present the change again with `attn open " + r.document + "`."
 	if got := r.agent.Prompted(); got != want {
 		t.Errorf("the agent got\n%q\nwant\n%q", got, want)

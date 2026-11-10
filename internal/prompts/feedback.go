@@ -42,16 +42,17 @@ func markdownAnnotationRecipient() Recipient {
 	quickLabel := Join("", fragment("quick-label", text("label"), text("quote")),
 		When(flag("has_tip"), fragment("comment-line", text("tip"))))
 	answer := Choose(flag("has_answer"), fragment("answer", text("answer")), fragment("unanswered"))
-	code := func(name string, fields ...Field) Node {
-		return fragment(name, append([]Field{text("place"), text("fence"), text("quote"), text("comment")}, fields...)...)
-	}
+	place := Join("", Input(text("place")), When(flag("orphaned"), fragment("code-moved")))
 	question := Choose(flag("has_file"),
 		Use("annotation-markdown.code-question", "content/annotations/markdown-code-question.md",
-			Bind("place", Input(text("place"))), Bind("fence", Input(text("fence"))), Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))), Bind("answer", answer)),
+			Bind("place", place), Bind("fence", Input(text("fence"))), Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))), Bind("answer", answer)),
 		Use("annotation-markdown.question", "content/annotations/markdown-question.md",
 			Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))), Bind("answer", answer)))
 	comment := Choose(flag("quick_label"), quickLabel,
-		Choose(flag("has_file"), code("code-comment"), fragment("comment", text("quote"), text("comment"))))
+		Choose(flag("has_file"),
+			Exact(Use("annotation-markdown.code-comment", "content/annotations/markdown-code-comment.md",
+				Bind("place", place), Bind("fence", Input(text("fence"))), Bind("quote", Input(text("quote"))), Bind("comment", Input(text("comment"))))),
+			fragment("comment", text("quote"), text("comment"))))
 	body := Choose(flag("deletion"), fragment("deletion", text("quote")),
 		Choose(flag("global"), fragment("global", text("comment")),
 			Choose(flag("question"), question, comment)))
