@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/layouttree"
 )
 
-func TestDesktopFocusHistoryUpgradePreservesSelectionAndClosesByPosition(t *testing.T) {
+func TestDesktopFocusHistoryUpgradePreservesSelectionAndClosesToTheLastUsedTile(t *testing.T) {
 	tile := func(id string) layouttree.Node {
 		return layouttree.Node{Type: "tile", TileID: id, TileKind: "browser", TileParams: "https://example.com"}
 	}

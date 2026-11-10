@@ -41,7 +41,7 @@ func TestAStackRemembersItsMostRecentlyUsedTileAcrossARestart(t *testing.T) {
 	}
 }
 
-func TestClosingAUtilityTileFocusesByPositionLikeAnAgentTile(t *testing.T) {
+func TestClosingAUtilityTileFocusesTheMostRecentlyUsedTileLikeAnAgentTile(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app := w.App()
 		profileID := app.SelectedProfile()

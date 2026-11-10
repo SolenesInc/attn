@@ -116,7 +116,7 @@ func (r rowDesktop) requireActive(session string) {
 	}
 }
 
-func TestClosingATileFocusesByItsPositionInTheRow(t *testing.T) {
+func TestClosingATileFocusesTheMostRecentlyUsedTile(t *testing.T) {
 	for _, row := range []struct {
 		name   string
 		stacks [][2]string
@@ -125,13 +125,11 @@ func TestClosingATileFocusesByItsPositionInTheRow(t *testing.T) {
 		close  string
 		active string
 	}{
-		{name: "middle of the row takes the next column", want: "a b c", visits: []string{"c", "a", "b"}, close: "b", active: "c"},
-		{name: "end of the row takes the previous column", want: "a b c", visits: []string{"a", "c"}, close: "c", active: "b"},
-		{name: "a single tile between stacks takes the next column", stacks: [][2]string{{"d", "c"}}, want: "a b c/d", visits: []string{"d", "a", "b"}, close: "b", active: "d"},
-		{name: "middle of a stack takes the next tile", stacks: [][2]string{{"b", "a"}, {"c", "b"}}, want: "a/b/c", visits: []string{"a", "c", "b"}, close: "b", active: "c"},
-		{name: "end of a stack takes the previous tile", stacks: [][2]string{{"b", "a"}, {"c", "b"}}, want: "a/b/c d", visits: []string{"a", "d", "c"}, close: "c", active: "b"},
-		{name: "entering a stack lands on its most recently used tile", stacks: [][2]string{{"c", "b"}, {"d", "c"}}, want: "a b/c/d", visits: []string{"d", "c", "a"}, close: "a", active: "c"},
-		{name: "entering a stack leftward lands on its most recently used tile", stacks: [][2]string{{"b", "a"}, {"c", "b"}}, want: "a/b/c d", visits: []string{"c", "a", "b", "d"}, close: "d", active: "b"},
+		{name: "the last used column beats the next one", want: "a b c", visits: []string{"c", "a", "b"}, close: "b", active: "a"},
+		{name: "the last used column beats the previous one", want: "a b c", visits: []string{"b", "a", "c"}, close: "c", active: "a"},
+		{name: "the last used tile outside the stack beats a tile inside it", stacks: [][2]string{{"c", "b"}}, want: "a b/c", visits: []string{"c", "a", "b"}, close: "b", active: "a"},
+		{name: "the last used tile of a stack", stacks: [][2]string{{"b", "a"}, {"c", "b"}}, want: "a/b/c", visits: []string{"a", "c", "b"}, close: "b", active: "c"},
+		{name: "the last used tile of another stack", stacks: [][2]string{{"c", "b"}, {"d", "c"}}, want: "a b/c/d", visits: []string{"d", "c", "a"}, close: "a", active: "c"},
 	} {
 		t.Run(row.name, func(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
@@ -158,7 +156,28 @@ func TestClosingATileFocusesByItsPositionInTheRow(t *testing.T) {
 	}
 }
 
-func TestAnAgentExitFocusesByPositionLikeClosingItsTile(t *testing.T) {
+func TestClosingATileOpenedBesideTheActiveOneReturnsToIt(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		desktop := injectedRow(t, w, "a", "b", "c")
+		desktop.requireRow("a b c")
+		if result := requestShowSession(desktop.app, "a"); !result.Success {
+			t.Fatalf("show a: %s", protocol.Deref(result.Error))
+		}
+		view := viewProfile(t, w, desktop.app.SelectedProfile()).desktops[desktop.desktopID]
+		opened := dockOnDesktop(desktop.app, view, protocol.DesktopDockTileMessage{
+			TileID: "opened", TileKind: "browser", TileParams: protocol.Ptr("https://example.com"), AnchorID: protocol.Ptr(desktop.pane("a")), Edge: protocol.LayoutDockEdgeRight,
+		})
+		if !opened.Success {
+			t.Fatal(protocol.Deref(opened.Error))
+		}
+		shownIn(t, requestShowLeaf(desktop.app, desktop.desktopID, "opened"), desktop.desktopID, "opened")
+		id := uuid.NewString()
+		mustProfileRequest(desktop.app, protocol.DesktopRemoveLeafMessage{Cmd: protocol.CmdDesktopRemoveLeaf, RequestID: id, DesktopID: desktop.desktopID, LeafID: "opened"}, id)
+		desktop.requireActive("a")
+	})
+}
+
+func TestAnAgentExitFocusesTheMostRecentlyUsedTileLikeClosingItsTile(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	var sessions []string
@@ -169,15 +188,15 @@ func TestAnAgentExitFocusesByPositionLikeClosingItsTile(t *testing.T) {
 		requestShowSession(app, id)
 	}
 	profileID := app.SelectedProfile()
-	desktop, paneC := viewProfile(t, w, profileID).paneOf(t, sessions[2])
+	desktop, paneA := viewProfile(t, w, profileID).paneOf(t, sessions[0])
 	watcher := w.AppOn(profileID)
 	w.Launched(sessions[1]).Exit(0)
 	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.SessionID == protocol.SessionID(sessions[1]) })
 	if result := closeFromApp(app, sessions[1]); result.Error != nil {
 		t.Fatal(*result.Error)
 	}
-	if got := viewProfile(t, w, profileID).desktops[desktop.ID].ActivePaneID; got != paneC {
-		t.Fatalf("closing the exited middle agent selected %s, want the next column %s", got, paneC)
+	if got := viewProfile(t, w, profileID).desktops[desktop.ID].ActivePaneID; got != paneA {
+		t.Fatalf("closing the exited middle agent selected %s, want the most recently used %s", got, paneA)
 	}
 }
 

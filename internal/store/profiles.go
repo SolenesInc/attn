@@ -1132,7 +1132,7 @@ func newSplitID() string {
 }
 
 func settleDesktop(desktop profiles.Desktop, previousTree layouttree.Node) profiles.Desktop {
-	desktop = profiles.SettleAfter(desktop, previousTree, layouttree.NextInPosition)
+	desktop = profiles.SettleAfter(desktop, previousTree, profiles.RecentThenPosition)
 	for i := range desktop.Panes {
 		desktop.Panes[i].DesktopID = desktop.ID
 		if desktop.Panes[i].Status == "" {

@@ -245,6 +245,13 @@ func RecentThenLeft(previousTree layouttree.Node, closedLeafID string, live map[
 	return layouttree.LeftNeighbour(previousTree, closedLeafID, live)
 }
 
+func RecentThenPosition(previousTree layouttree.Node, closedLeafID string, live map[string]bool, history []string) string {
+	if len(history) > 0 {
+		return history[0]
+	}
+	return layouttree.NextInPosition(previousTree, closedLeafID, live, history)
+}
+
 func SettleAfter(desktop Desktop, previousTree layouttree.Node, closeFocus CloseFocus) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
 	leaves := layouttree.LeafIDs(desktop.Tree)
