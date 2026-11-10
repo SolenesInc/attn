@@ -127,6 +127,9 @@ func (d *Daemon) sampleProcessMemory(ctx context.Context, apps connectedApps) []
 		}
 		roles.AddWebKitProcesses(pid)
 	}
+	if err := roles.SplitWebContent(ctx); err != nil {
+		d.logf("analytics: splitting WebContent memory: %v", err)
+	}
 	return roles.Sorted()
 }
 

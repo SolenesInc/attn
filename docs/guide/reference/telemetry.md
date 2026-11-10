@@ -60,7 +60,8 @@ batch names.
 
 ```json
 {"workload":{"sessions":9,"agents":7,"terminals":9,"panes_drawn":4,"desktops":3,"seeds":812},
- "processes":[{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000}]}
+ "processes":[{"role":"webkit_content","count":2,"resident_bytes":614000000,"footprint_bytes":1137000000,
+   "split":{"webkit_malloc_bytes":602000000,"owned_graphics_bytes":398000000,"gigacage_bytes":41000000}}]}
 ```
 
 | Field | Holds |
@@ -73,13 +74,16 @@ batch names.
 | `processes[].count` | How many processes hold the role |
 | `processes[].resident_bytes` | Their total resident memory |
 | `processes[].footprint_bytes` | Their total physical footprint, as Activity Monitor's Memory column shows it. macOS only |
+| `processes[].split` | For `webkit_content` on macOS, the part of that footprint in three of `footprint`'s categories, summed over the processes: `webkit_malloc_bytes` (WebKit malloc), `owned_graphics_bytes` (owned physical footprint, graphics) and `gigacage_bytes` (JS VM Gigacage). Each counts the category's dirty and compressed memory. It is absent when `footprint` could not measure every WebContent process |
 
 The app tells the daemon its process id when it connects, and the daemon finds
 the app's WebKit processes from it. WebKit processes of other apps, and of other
 attn instances, are not counted. On macOS, the kernel ties the WebKit processes of
 an app started from a terminal to that terminal, so that app's sample has an
-`app` entry and no `webkit_*` entries. The sample reads the kernel's process tables
-and starts no process. With `analytics.enabled` off, it reads nothing.
+`app` entry and no `webkit_*` entries. The sample reads the kernel's process tables.
+On macOS it also runs `/usr/bin/footprint` once for the WebContent processes,
+which took 20-40 ms for a WebContent of 0.4 to 1.9 GB. With
+`analytics.enabled` off, it reads nothing.
 
 Attn redacts records on the `bus`, `app`, `cli`, `sample` and `run` streams before
 it stores them:

@@ -2,6 +2,7 @@ package diag
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,3 +72,5 @@ func parseProcStat(path string) (pid, parent int, ok bool) {
 	parent, err = strconv.Atoi(string(fields[1]))
 	return pid, parent, err == nil
 }
+
+func (RoleMemories) SplitWebContent(context.Context) error { return nil }

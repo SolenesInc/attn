@@ -23,14 +23,23 @@ type Process struct {
 }
 
 type RoleMemory struct {
-	Role           string `json:"role"`
-	Count          int    `json:"count"`
-	ResidentBytes  uint64 `json:"resident_bytes"`
-	FootprintBytes uint64 `json:"footprint_bytes,omitempty"`
+	Role           string           `json:"role"`
+	Count          int              `json:"count"`
+	ResidentBytes  uint64           `json:"resident_bytes"`
+	FootprintBytes uint64           `json:"footprint_bytes,omitempty"`
+	Split          *WebContentSplit `json:"split,omitempty"`
+	pids           []int
+}
+
+type WebContentSplit struct {
+	WebKitMallocBytes  uint64 `json:"webkit_malloc_bytes"`
+	OwnedGraphicsBytes uint64 `json:"owned_graphics_bytes"`
+	GigacageBytes      uint64 `json:"gigacage_bytes"`
 }
 
 func (m *RoleMemory) add(process Process) {
 	m.Count++
+	m.pids = append(m.pids, process.PID)
 	m.ResidentBytes += process.ResidentBytes
 	m.FootprintBytes += process.FootprintBytes
 }
