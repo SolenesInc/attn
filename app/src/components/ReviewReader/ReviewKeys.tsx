@@ -8,7 +8,6 @@ const DOCUMENT_KEYS: Array<[string[], string]> = [
   [['e'], 'more lines'],
   [['z'], 'fill the tile'],
   [['/'], 'search'],
-  [['?'], 'all keys'],
 ];
 
 const WALKTHROUGH_KEYS: Array<[string[], string]> = [
@@ -16,7 +15,6 @@ const WALKTHROUGH_KEYS: Array<[string[], string]> = [
   [['←', '→'], 'stop'],
   [['z'], 'hide the script'],
   [['/'], 'search'],
-  [['?'], 'all keys'],
 ];
 
 const MAP_KEYS: Array<[string[], string]> = [
@@ -25,7 +23,6 @@ const MAP_KEYS: Array<[string[], string]> = [
   [['↵'], 'open the file'],
   [['e'], 'more lines'],
   [['/'], 'search'],
-  [['?'], 'all keys'],
 ];
 
 const FILE_KEYS: Array<[string[], string]> = [
@@ -35,7 +32,6 @@ const FILE_KEYS: Array<[string[], string]> = [
   [['/'], 'search'],
   [['⌃o'], 'back'],
   [['esc'], 'close'],
-  [['?'], 'all keys'],
 ];
 
 const NAV_KEYS: Array<[string[], string]> = [
@@ -100,19 +96,22 @@ export function ReviewKeyLine({
   const keys = [...keysFor(frame, fileOpen, sides).slice(0, 2), ...NAV_KEYS, ...keysFor(frame, fileOpen, sides).slice(2)];
   return (
     <div className="review-key-line" aria-label="Review keys">
-      {offered.length > 1 ? (
-        <span className="review-frames" role="tablist" aria-label="Frames">
-          {FRAME_KEYS.filter(([, value]) => offered.includes(value)).map(([key, value, name]) => (
-            <button key={value} type="button" role="tab" tabIndex={-1} aria-selected={frame === value} onClick={() => onFrame(value)}>
-              <kbd>{key}</kbd>{name}
-            </button>
-          ))}
-        </span>
-      ) : null}
-      {navigation.length > 0 ? <NavigationStates navigation={navigation} /> : null}
-      {(marking ? [...keys.slice(0, 2), ...MARK_KEYS, ...keys.slice(2)] : keys).map(([keys, what]) => (
-        <span key={what}><Keys keys={keys} /> {what}</span>
-      ))}
+      <span className="review-key-line-entries">
+        {offered.length > 1 ? (
+          <span className="review-frames" role="tablist" aria-label="Frames">
+            {FRAME_KEYS.filter(([, value]) => offered.includes(value)).map(([key, value, name]) => (
+              <button key={value} type="button" role="tab" tabIndex={-1} aria-selected={frame === value} onClick={() => onFrame(value)}>
+                <kbd>{key}</kbd>{name}
+              </button>
+            ))}
+          </span>
+        ) : null}
+        {navigation.length > 0 ? <NavigationStates navigation={navigation} /> : null}
+        {(marking ? [...keys.slice(0, 2), ...MARK_KEYS, ...keys.slice(2)] : keys).map(([keys, what]) => (
+          <span key={what}><Keys keys={keys} /> {what}</span>
+        ))}
+      </span>
+      <span className="review-key-line-all"><Keys keys={['?']} /> all keys</span>
     </div>
   );
 }

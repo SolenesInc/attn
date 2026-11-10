@@ -24,6 +24,7 @@ import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
 import { DelegationChainHarness } from './DelegationChainHarness';
 import { AgentHeaderHarness } from './AgentHeaderHarness';
 import { SidebarRailHarness } from './SidebarRailHarness';
+import { ReviewKeyLineHarness } from './ReviewKeyLineHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   QuickCaptureHistory: QuickCaptureHistoryHarness,
@@ -50,5 +51,6 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   QueueBar: QueueBarHarness,
   QueueSidebarFit: QueueSidebarFitHarness,
   SidebarRail: SidebarRailHarness,
+  ReviewKeyLine: ReviewKeyLineHarness,
   SidebarTree: SidebarTreeHarness,
 };
