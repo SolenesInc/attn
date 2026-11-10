@@ -127,7 +127,7 @@ func (d *Daemon) markReviewSent(ctx context.Context, msg protocol.ReviewSentMess
 	}
 	document := filepath.Clean(msg.Document)
 	return gitValue(ctx, d.gitExecution(), reviewTask, func(ctx context.Context, client *attngit.Client) (struct{}, error) {
-		return struct{}{}, review.MarkSent(ctx, client, document, content, msg.Head)
+		return struct{}{}, review.MarkSent(ctx, client, document, content)
 	})
 }
 

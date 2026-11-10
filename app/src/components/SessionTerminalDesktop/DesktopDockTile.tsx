@@ -155,7 +155,7 @@ export function DesktopDockTile({
     desktopSessions,
     boundSessionIdInput: tile.tileSessionId,
     onRetargetTile,
-    reviewHead: content?.review?.head,
+    isReview: Boolean(content?.review),
   });
   const {
     annotationsSendRef,

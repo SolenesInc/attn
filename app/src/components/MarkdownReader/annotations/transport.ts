@@ -22,7 +22,6 @@ export interface MarkdownAnnotationsSubmitOptions {
   onlyIds?: string[];
   verdict?: string;
   /** The review snapshot the user read. */
-  head?: string;
 }
 
 export type MarkdownAnnotationsDestination =

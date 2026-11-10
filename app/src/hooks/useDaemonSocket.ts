@@ -3053,7 +3053,6 @@ export function useDaemonSocket({
     const reviewFields = {
       ...(options.onlyIds ? { only_ids: options.onlyIds } : {}),
       ...(options.verdict ? { verdict: options.verdict } : {}),
-      ...(options.head ? { head: options.head } : {}),
     };
     return (
     sendMarkdownAnnotationsCommand<MarkdownAnnotationsSubmitResult>(

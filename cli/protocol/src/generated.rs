@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "c714b1a7aa8c";
+pub const PROTOCOL_VERSION: &str = "f757a73d437d";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -6430,8 +6430,6 @@ pub struct MarkdownAnnotationsSubmitMessage {
     pub cmd: String,
     pub document_uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub head: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub only_ids: Option<Vec<String>>,
@@ -9289,7 +9287,6 @@ impl ReviewSearchResultMessage {
 pub struct ReviewSentMessage {
     pub cmd: String,
     pub document: String,
-    pub head: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
 }

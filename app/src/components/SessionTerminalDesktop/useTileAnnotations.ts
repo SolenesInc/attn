@@ -32,8 +32,8 @@ interface Options {
   desktopSessions: DesktopTileSessionOption[];
   boundSessionIdInput?: string;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
-  /** The head of the review the tile shows; absent for any other document. */
-  reviewHead?: string;
+  /** Whether the tile shows a review document. */
+  isReview?: boolean;
 }
 export function useTileAnnotations({
   desktopId,
@@ -47,9 +47,8 @@ export function useTileAnnotations({
   desktopSessions,
   boundSessionIdInput,
   onRetargetTile,
-  reviewHead,
+  isReview = false,
 }: Options) {
-  const isReview = reviewHead !== undefined;
   const seedTenderSessionId = seedDocument?.seed.claimed
     ? seedDocument.seed.tender?.session_id ?? ''
     : '';
@@ -100,11 +99,9 @@ export function useTileAnnotations({
           handle.getOrphanedIds(),
           options,
         );
-        if ((result.status === 'delivered' || result.status === 'noted') && result.error) {
-          return { kind: 'warning', message: result.error };
-        }
         if (result.status === 'delivered' || result.status === 'noted') {
           const kept = result.draft ? handle.adoptSentDraft(documentSource.uri, result.draft) : 0;
+          if (result.error) return { kind: 'warning', message: result.error };
           return { kind: 'sent', destination: result.status === 'noted' ? 'seed' : 'session', kept };
         }
         if (result.status === 'skipped_pending_approval') {
@@ -145,9 +142,9 @@ export function useTileAnnotations({
           if (result.kind === 'sent') return null;
           return result.kind === 'skipped' ? SKIPPED_APPROVAL_MESSAGE : result.message;
         },
-        send: (verdict: string) => sendAlternative(() => performAnnotationSend(primaryDestination, { verdict, head: reviewHead })),
+        send: (verdict: string) => sendAlternative(() => performAnnotationSend(primaryDestination, { verdict })),
       }
-    : undefined), [isReview, performAnnotationSend, primaryDestination, reviewDestination, reviewHead, sendAlternative]);
+    : undefined), [isReview, performAnnotationSend, primaryDestination, reviewDestination, sendAlternative]);
 
   const handleTileFocus = useCallback(() => {
     setHasFocusWithin(true);

@@ -56,7 +56,6 @@ func codeMark(id, kind, text string, docLine, from, to int, quote string) protoc
 type reviewSend struct {
 	onlyIDs []string
 	verdict string
-	head    string
 }
 
 func submitReview(app *testworld.Peer, doc annotatedDocument, session string, send reviewSend) protocol.MarkdownAnnotationsSubmitResultMessage {
@@ -67,9 +66,6 @@ func submitReview(app *testworld.Peer, doc annotatedDocument, session string, se
 	}
 	if send.verdict != "" {
 		msg.Verdict = protocol.Ptr(send.verdict)
-	}
-	if send.head != "" {
-		msg.Head = protocol.Ptr(send.head)
 	}
 	return testworld.Request(app, msg, protocol.EventMarkdownAnnotationsSubmitResult,
 		func(r protocol.MarkdownAnnotationsSubmitResultMessage) bool { return r.RequestID == msg.RequestID })
@@ -119,7 +115,7 @@ func TestASentReviewDeliversItsMarksInReadingOrderThenTheVerdictAndBasesTheNextS
 	noted := codeMark("n1", "comment", "Return a + b directly.", 7, 5, 6, "    return sum\n}")
 	saveDocumentAnnotations(r.app, r.doc, []protocol.MarkdownAnnotation{noted, asked, prose})
 
-	sent := submitReview(r.app, r.doc, r.session, reviewSend{verdict: "request_changes", head: r.head})
+	sent := submitReview(r.app, r.doc, r.session, reviewSend{verdict: "request_changes"})
 	if sent.Status != "delivered" || len(sent.Annotations) != 0 || sent.Error != nil {
 		t.Fatalf("the send = %+v, want delivered leaving an empty draft", sent)
 	}
@@ -163,7 +159,7 @@ func TestAReviewThatCannotBeDeliveredTypesNothingAndKeepsTheDraft(t *testing.T) 
 	}
 	testworld.AwaitSession(r.app, r.session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
 
-	for _, send := range []reviewSend{{onlyIDs: []string{"q1"}}, {verdict: "approve", head: r.head}} {
+	for _, send := range []reviewSend{{onlyIDs: []string{"q1"}}, {verdict: "approve"}} {
 		if got := submitReview(r.app, r.doc, r.session, send); got.Status != "skipped_pending_approval" {
 			t.Errorf("%+v to a session waiting on approval = %+v, want skipped", send, got)
 		}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Annotation, FileAnchor } from '../MarkdownReader/annotations/types';
 import { fileAnchorPlace } from '../MarkdownReader/annotations/types';
 import { sortAnnotations } from '../MarkdownReader/annotations/sortAnnotations';
+import type { ReviewRow } from '../../types/generated';
 
 export type MarkKind = 'comment' | 'question';
 export type ReviewVerdict = 'approve' | 'request_changes' | 'comment';
@@ -37,6 +38,20 @@ export function marksByLastLine(annotations: readonly Annotation[]): ReadonlyMap
     byLine.set(key, [...(byLine.get(key) ?? []), annotation]);
   }
   return byLine;
+}
+
+/**
+ * The anchor for a mark on rows of a file. It covers the head lines the rows show; rows
+ * that only show removed code sit before the next head line. With removed code in it,
+ * the quote keeps each row's diff sign so it cannot pass for the code at those lines.
+ */
+export function fileRowsAnchor(path: string, picked: readonly ReviewRow[], following: readonly ReviewRow[], docLine: (line: number) => number): FileAnchor | null {
+  const lines = picked.map((row) => row.now).filter((line): line is number => line !== undefined);
+  const line = lines[0] ?? following.find((row) => row.now !== undefined)?.now ?? [...picked].reverse().find((row) => row.old !== undefined)?.old;
+  if (line === undefined) return null;
+  const diff = picked.some((row) => row.kind === '-');
+  const quote = picked.map((row) => (diff ? `${row.kind}${row.text}` : row.text)).join('\n');
+  return { path, from: line, to: lines[lines.length - 1] ?? line, docLine: docLine(line), quote };
 }
 
 function targetPlace(target: MarkTarget): string {

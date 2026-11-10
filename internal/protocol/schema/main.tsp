@@ -3073,9 +3073,6 @@ model MarkdownAnnotationsSubmitMessage {
   // approve | request_changes | comment. A review send: the marks, then the
   // verdict, which may come with no marks.
   verdict?: string;
-  // The review snapshot the user read. A delivered review send records it as
-  // sent, so the next review start shows what changed since.
-  head?: string;
   request_id: string;
 }
 
@@ -4007,14 +4004,13 @@ model ReviewSearchResultMessage {
   problem?: string;              // a limit the results hit
 }
 
-// Records a review the user sent: the sent ref of the document names head,
-// on the machine that holds the repository.
+// Records a review the user sent: the sent ref of the document names the head
+// in its frontmatter, on the machine that holds the repository.
 @extension("x-on", #[#{ machine: "host" }, #{ here: true }])
 model ReviewSentMessage {
   cmd: "review_sent";
   host?: string;
   document: string;
-  head: string;
 }
 
 // An agent's answer to the user's question on a review, stored on the

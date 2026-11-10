@@ -7308,7 +7308,6 @@ export enum MarkdownAnnotationsSaveResultMessageEvent {
 export interface MarkdownAnnotationsSubmitMessage {
     cmd:                MarkdownAnnotationsSubmitMessageCmd;
     document_uri:       string;
-    head?:              string;
     host?:              string;
     only_ids?:          string[];
     orphaned_ids?:      string[];
@@ -10531,7 +10530,6 @@ export interface HitObject {
 export interface ReviewSentMessage {
     cmd:      ReviewSentMessageCmd;
     document: string;
-    head:     string;
     host?:    string;
     [property: string]: any;
 }
@@ -25746,7 +25744,6 @@ const typeMap: any = {
     "MarkdownAnnotationsSubmitMessage": o([
         { json: "cmd", js: "cmd", typ: r("MarkdownAnnotationsSubmitMessageCmd") },
         { json: "document_uri", js: "document_uri", typ: "" },
-        { json: "head", js: "head", typ: u(undefined, "") },
         { json: "host", js: "host", typ: u(undefined, "") },
         { json: "only_ids", js: "only_ids", typ: u(undefined, a("")) },
         { json: "orphaned_ids", js: "orphaned_ids", typ: u(undefined, a("")) },
@@ -27829,7 +27826,6 @@ const typeMap: any = {
     "ReviewSentMessage": o([
         { json: "cmd", js: "cmd", typ: r("ReviewSentMessageCmd") },
         { json: "document", js: "document", typ: "" },
-        { json: "head", js: "head", typ: "" },
         { json: "host", js: "host", typ: u(undefined, "") },
     ], "any"),
     "ReviewStartMessage": o([

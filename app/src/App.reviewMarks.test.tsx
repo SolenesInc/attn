@@ -167,6 +167,17 @@ describe('App review marks', () => {
     expect(tile.querySelector('.review-selected')).toBeNull();
   });
 
+  it('quotes a removed line with its diff sign and places it at the head line it sat before', async () => {
+    const { tile, press, write, toRow, daemon } = await openReview();
+    await toRow(3);
+    await press('ArrowDown');
+    await press('c');
+    expect(within(tile).getByRole('dialog', { name: 'Write a note' })).toHaveTextContent('calc.go:4');
+    await write('Keep this line.');
+    const [save] = daemon.sentOf('markdown_annotations_save');
+    expect(save.upserts[0].anchor).toMatchObject({ exact: '-\treturn a + b', file: 'calc.go', file_start_line: 4, file_end_line: 4 });
+  });
+
   it('asks a question at once, keeps it, and shows the answer when the daemon says the draft moved', async () => {
     const { tile, press, write, toRow, daemon, draft, show } = await openReview();
     await toRow(5);
@@ -190,7 +201,7 @@ describe('App review marks', () => {
     expect(tile.querySelector('.review-mark .review-mark-answer')).toHaveTextContent('So the return reads as a value.');
   });
 
-  it('sends the review on Cmd+Enter with the verdict picked in the sheet and the head the user read', async () => {
+  it('sends the review on Cmd+Enter with the verdict picked in the sheet', async () => {
     const { tile, press, write, toRow, daemon, draft } = await openReview();
     await toRow(4);
     await press('c');
@@ -205,11 +216,30 @@ describe('App review marks', () => {
     await press('Enter');
 
     const [submit] = daemon.sentOf('markdown_annotations_submit');
-    expect(submit).toMatchObject({ document_uri: DOC_URI, target_session_id: 's1', verdict: 'approve', head: '9f3a7e2' });
+    expect(submit).toMatchObject({ document_uri: DOC_URI, target_session_id: 's1', verdict: 'approve' });
     expect(within(tile).queryByRole('dialog', { name: 'Send the review' })).toBeNull();
     answerSubmit(daemon, submit, draft, true);
     await daemon.idle();
     expect(tile.querySelector('.review-mark')).toBeNull();
+  });
+
+  it('clears the sent marks when the review was delivered but its sent ref could not be written', async () => {
+    const { tile, press, write, toRow, daemon, draft } = await openReview();
+    await toRow(4);
+    await press('c');
+    await write('Return a + b directly.');
+    await press('Enter', { metaKey: true });
+    await press('Enter');
+    const [submit] = daemon.sentOf('markdown_annotations_submit');
+    draft.annotations = [];
+    draft.generation += 1;
+    daemon.replyTo(submit, {
+      event: 'markdown_annotations_submit_result', request_id: submit.request_id, document_uri: submit.document_uri, source_kind: submit.source_kind,
+      success: true, status: 'delivered', error: 'delivered; the next review start cannot show what changed since: no repository', ...draft.reply(),
+    });
+    await daemon.idle();
+    expect(tile.querySelector('.review-mark')).toBeNull();
+    expect(tile).toHaveTextContent('the next review start cannot show what changed since');
   });
 
   it('sends a verdict with no notes', async () => {
@@ -217,7 +247,7 @@ describe('App review marks', () => {
     await press('Enter', { metaKey: true });
     expect(within(tile).getByRole('dialog', { name: 'Send the review' })).toHaveTextContent('No notes: the verdict goes alone.');
     await press('Enter');
-    expect(daemon.sentOf('markdown_annotations_submit')).toEqual([expect.objectContaining({ verdict: 'approve', head: '9f3a7e2' })]);
+    expect(daemon.sentOf('markdown_annotations_submit')).toEqual([expect.objectContaining({ verdict: 'approve' })]);
   });
 
   it('offers no marks, questions or verdicts on a document without a review bundle', async () => {

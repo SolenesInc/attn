@@ -42,6 +42,8 @@ export function CodeRow({
       data-cursor-key={cursorKey}
       data-path={path}
       data-line={row.now ?? undefined}
+      data-old={row.old ?? undefined}
+      data-kind={row.kind}
     >
       <span className="review-row-number">{row.old ?? ''}</span>
       <span className="review-row-number">{row.now ?? ''}</span>

@@ -13,7 +13,7 @@ import { ReviewKeyLine, ReviewKeySheet } from './ReviewKeys';
 import { CURSOR_CLASS, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
 import { stopTarget } from './StopBlock';
-import { MarkComposer, marksByLastLine, SendSheet, verdictForKey, type MarkKind, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
+import { fileRowsAnchor, MarkComposer, marksByLastLine, SendSheet, verdictForKey, type MarkKind, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import './ReviewReader.css';
 
 const MORE_LINES = 10;
@@ -108,6 +108,14 @@ function findTarget(doc: HTMLElement | null, key: string | null): HTMLElement | 
 function rowText(element: Element): string {
   const text = element.querySelector('.review-row-text')?.textContent ?? '';
   return text === ' ' ? '' : text;
+}
+
+function rowOf(element: Element): ReviewRow {
+  const number = (name: string) => {
+    const value = Number(element.getAttribute(name));
+    return value > 0 ? value : undefined;
+  };
+  return { kind: element.getAttribute('data-kind') ?? ' ', old: number('data-old'), now: number('data-line'), text: rowText(element) };
 }
 
 /** The targets from one cursor key to another, both included, in document order. */
@@ -501,11 +509,9 @@ export function ReviewReader({
       if (!rows || rows.length === 0) return null;
       const from = Math.min(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
       const to = Math.max(openFileView.selectFrom ?? openFileView.cursor, openFileView.cursor);
-      const picked = rows.slice(from, to + 1);
-      const lines = picked.map((row) => row.now).filter((line): line is number => line !== undefined);
-      const line = lines[0] ?? rows.slice(to + 1).find((row) => row.now !== undefined)?.now ?? rows[rows.length - 1].now ?? 1;
       const path = openFileView.target.path;
-      return { kind: 'file', anchor: { path, from: line, to: lines[lines.length - 1] ?? line, docLine: docLineFor(path, line), quote: picked.map((row) => row.text).join('\n') } };
+      const anchor = fileRowsAnchor(path, rows.slice(from, to + 1), rows.slice(to + 1), (line) => docLineFor(path, line));
+      return anchor ? { kind: 'file', anchor } : null;
     }
     const element = currentTarget();
     if (!element) return null;
@@ -513,15 +519,16 @@ export function ReviewReader({
       const blockId = element.getAttribute('data-block-id');
       return blockId ? { kind: 'block', blockId, quote: element.textContent ?? '' } : null;
     }
-    const rows = selectedRows(element);
+    const picked = selectedRows(element);
     const path = element.getAttribute('data-path');
     const stop = stopOf(element);
-    if (rows.length === 0 || !path || !stop) return null;
-    const lines = rows.map((row) => Number(row.getAttribute('data-line'))).filter((line) => line > 0);
-    const line = lines[0] ?? stop.now_from;
-    if (!line) return null;
-    return { kind: 'file', anchor: { path, from: line, to: lines[lines.length - 1] ?? line, docLine: stop.heading_line, quote: rows.map(rowText).join('\n') } };
-  }, [currentTarget, docLineFor, openFileView, selectedRows, stopOf]);
+    if (picked.length === 0 || !path || !stop) return null;
+    const targets = documentTargets(scope());
+    const following = targets.slice(targets.indexOf(picked[picked.length - 1]) + 1)
+      .filter((target) => target.getAttribute('data-review-cursor') === 'row' && stopOf(target) === stop);
+    const anchor = fileRowsAnchor(path, picked.map(rowOf), following.map(rowOf), () => stop.heading_line);
+    return anchor ? { kind: 'file', anchor } : null;
+  }, [currentTarget, docLineFor, openFileView, scope, selectedRows, stopOf]);
 
   const openComposer = useCallback((kind: MarkKind) => {
     const target = markTarget();

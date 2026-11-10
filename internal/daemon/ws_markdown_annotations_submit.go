@@ -162,8 +162,8 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 	}
 	result.Annotations = remaining
 	result.Generation = protocol.Ptr(generation)
-	if head := protocol.Deref(msg.Head); verdict != "" && head != "" {
-		sent := protocol.ReviewSentMessage{Cmd: protocol.CmdReviewSent, Document: source.path, Head: head}
+	if verdict != "" {
+		sent := protocol.ReviewSentMessage{Cmd: protocol.CmdReviewSent, Document: source.path}
 		if source.host != "" {
 			sent.Host = protocol.Ptr(source.host)
 		}

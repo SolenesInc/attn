@@ -6763,9 +6763,6 @@ type MarkdownAnnotationsSubmitMessage struct {
 	// DocumentUri corresponds to the JSON schema field "document_uri".
 	DocumentUri string `json:"document_uri"`
 
-	// Head corresponds to the JSON schema field "head".
-	Head *string `json:"head,omitempty,omitzero"`
-
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
 
@@ -9880,9 +9877,6 @@ type ReviewSentMessage struct {
 
 	// Document corresponds to the JSON schema field "document".
 	Document string `json:"document"`
-
-	// Head corresponds to the JSON schema field "head".
-	Head string `json:"head"`
 
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`
