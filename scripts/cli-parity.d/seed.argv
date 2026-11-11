@@ -162,8 +162,8 @@ read seed remind s-000000 --in nope -m x
 read seed standby
 read seed standby s-000000
 read seed standby s-000000 --clear -m x
-read seed standby s-000000 --clear --close
-read seed standby s-000000 -m x --compact
+read seed standby s-000000 --clear --stay
+read seed standby s-000000 -m x --in 5m --at 2099-01-01T00:00:00Z
 read seed standby s-000000 -m x
 read seed send-to-chief
 read seed send-to-chief a b

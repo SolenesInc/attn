@@ -43,6 +43,7 @@ const probes = [
   { id: 'close-self', ask: 'Close yourself. There is nothing left to do.', want: /^agent close --self\b/, reads: 'wrap-up' },
   { id: 'park-seed', ask: 'Stop working on seed s-abc123 for now and let someone else pick it up later.', want: /^seed park s-abc123\b/ },
   { id: 'remind-seed', ask: 'Leave a note that whoever tends seed s-abc123 in two hours should check the deploy.', want: /^seed remind s-abc123\b/ },
+  { id: 'standby-until', ask: 'You tend seed s-abc123. Stay on standby till Friday, then rerun the backfill.', want: /^seed standby s-abc123\b(?=.*\s--at\s)(?=.*\s-m\s)/, judge: judgeStandbyUntil },
   { id: 'can-close', ask: 'Can I close you?', want: /^skill --reference wrap-up\b/ },
   { id: 'open-shell', ask: 'Open me a shell in /tmp.', want: /^terminal open\b.*\/tmp/ },
   { id: 'move-terminal', ask: 'Move this terminal to desktop 3.', want: /^terminal move\b.*\b3\b/ },
@@ -110,6 +111,13 @@ function stageChange(dir) {
   const diff = execFileSync('git', ['-C', repository, 'diff', `${presentedChange}~1`, presentedChange]);
   execFileSync('git', ['-C', repo, 'apply'], { input: diff });
   return repo;
+}
+
+function judgeStandbyUntil(_dir, _cwd, commands) {
+  const waits = commands.filter(line => /^seed (standby|remind)\b/.test(line) && !/\s--help\b/.test(line));
+  if (waits.length !== 1) return `ran ${waits.length} standby and reminder commands, want one: ${waits.join(' | ')}`;
+  if (/\s--stay\b/.test(waits[0])) return 'kept the session open with --stay';
+  return '';
 }
 
 function judgeReview(dir, cwd, commands) {
