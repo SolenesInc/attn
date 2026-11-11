@@ -6,6 +6,165 @@ Format: `[YYYY-MM-DD]` entries with categories: Added, Changed, Fixed, Removed.
 
 ---
 
+## [2026-11-11]
+
+### Added
+- **Experimental: agents can present a change for you to review inside attn.**
+  With Code review on (`code_review_enabled`), tell an agent "present the
+  change" and it opens a review in a tile beside it. You can read the change
+  in the order that explains it, as a brief, a walkthrough or a sequence
+  diagram, and open any file whole or search the repository. You can jump to
+  definitions and uses, ask questions the agent answers under the line, edit
+  lines directly, and send one review with a verdict. All of it works by
+  keyboard, and it works on outposts too. If a language has no code
+  navigation, one key starts an agent that sets it up. `attn guide
+  code-review` covers the keys and setup.
+- **Accept all recommended in asks.** An ask with several recommended
+  choices now has a button, and the `a` key on the desktop, that selects
+  every recommendation at once. Questions with no recommendation stay
+  unanswered, so you can review everything before you send. The phone has
+  the button too.
+- **Seeds mentioned in an ask open with a click.** Seed ids and slugs in an
+  ask's subject, questions and text become links that open the seed in the
+  Garden. Only mentions of real seeds are linked, and code is left alone.
+- **Snooze an agent from the Asks drawer, and its asks snooze with it.**
+  When an agent is snoozed, its asks no longer count in the asks badge,
+  Home or the sidebar. They wait under "Snoozed" at the end of the drawer
+  with the time the snooze ends, and they come back when it ends. The
+  drawer's Snooze button and its `s` key open the queue's snooze menu. On a
+  snoozed ask they read Wake. The phone gets no push for a snoozed agent's
+  ask, and it gets one when the snooze ends.
+- **The pane header shows the session's short id.** These are the same 8
+  characters agents use to name sessions, and clicking them copies the full
+  id. They hide first when the pane is narrow, so the title is never
+  crowded.
+- **Markdown files on outposts open in tiles.** `attn open` and files sent
+  by an agent on an outpost now open that outpost's file, kept up to date
+  as it changes. Annotations work on these tiles, and recent files (⌘P)
+  list them with the outpost's name. If the outpost goes unreachable, the
+  tile says so instead of showing old content as if it were current. It
+  updates again once the outpost reconnects. A link that cannot open shows
+  why.
+- **`attn` commands work inside a Codex `/side` conversation.** They act as
+  the session the terminal shows, instead of failing with "is not showing a
+  session".
+- **`attn daemon stop --terminals` ends an instance's terminals too.** A
+  plain stop still leaves terminals running so they come back with the
+  daemon, and it now tells you which processes keep running.
+- **Session cost knows Claude Fable 5.2.** Before, a Fable 5.2 session
+  showed no price at all. It is now billed at $8 input and $40 output per
+  million tokens, with cache reads at $0.20.
+- **The Chief's onboarding teaches Quick Capture, asks and shortcut
+  rebinding.** The tour has you send the Chief a Quick Capture and answer a
+  real ask from the asks drawer. It also shows how to rebind any shortcut
+  and links a new queue flow video. It uses your own Quick Capture shortcut
+  and skips anything you have turned off.
+- **A queue flow video on attn.codes.** attn.codes/queue-flow/ has a short
+  narrated video of queue flow, and the queue guide links to it.
+
+### Changed
+- **Every Claude session loads attn's Claude Code mod.** Messages reach
+  Claude without being typed into the terminal, and standby and compacting
+  closes work without turning anything on. A Claude session already running
+  when you upgrade is still typed into until you reload it. If a Claude Code
+  update breaks the mod, attn names the version in the daemon log and in
+  the blocked wake.
+- **Every new Codex session runs on the profile's shared app-server.** A
+  Codex session already running when you upgrade stays as it is until it
+  closes. Resuming a closed conversation now works from every path, and
+  `/resume` is one of them. Codex automations can no longer name their own
+  executable, so set `codex_executable` instead. The upgrade clears it from
+  saved automations, and automations no longer write trust entries into
+  Codex's config.toml.
+- **Quick Capture and tile windows are always on.** They are no longer
+  experimental.
+- **Crew members start and close instead of waking and sleeping.** `attn
+  crew start` and `attn crew close` replace `wake` and `sleep`, and the old
+  verbs name the new command. The app's crew controls now read Start, Close,
+  In session and Between sessions, and the snooze commands read Unsnooze.
+  Four settings were renamed, and stored values carry over:
+  - `crew.autosleep_enabled` is now `crew.away_close_enabled`
+  - `crew.wake_limit` is now `crew.mail_start_limit`
+  - `crew.wake_limit_window_seconds` is now `crew.mail_start_window_seconds`
+  - `garden.tender_wake` is now `garden.tender_resume`
+
+  The phone app needs this release's update. An older phone is refused with
+  a message asking you to update it.
+- **Closing a tile returns focus to the tile you used last.** Closing used
+  to pick the next tile by position. It now focuses the most recently used
+  tile still on the desktop. Closing a document an agent opened follows the
+  same rule.
+- **Delegated agents act on what a seed's authorization allows.** A step
+  the authorization grants, such as landing on main, is now taken without
+  asking again. Before, an agent often stopped short where the project's own
+  guidance stopped. Dispatching agents also write authorizations as
+  instructions the delegate can act on.
+
+### Fixed
+- **Claude fast mode is priced at fast-mode rates.** Claude sessions using
+  `/fast` showed about half of what fast mode costs. Fast responses are now
+  priced at $16 / $80 per million input and output tokens on Fable 5.2,
+  $8 / $40 on Opus 5.5, $10 / $50 on Opus 5 and Opus 4.8, and $30 / $150 on
+  Opus 4.6. Cache reads and writes scale the same way.
+- **Claude Sonnet 5.5 cache reads cost $0.10 per million tokens.** They
+  were billed at $0.20, so long Sonnet 5.5 sessions showed up to nearly
+  double their cost.
+- **Closed browser tiles free their memory.** Each closed browser tile used
+  to keep a web process alive until the app quit. Ten open-and-close cycles
+  grew memory from about 120 MB to 330 MB, and it now stays flat.
+- **Shortcuts work in popped-out tile windows.** Ctrl+Return, Escape and the
+  other app shortcuts now act in the window you press them in. Rebinding the
+  pop-out key also clears its old key from the menu.
+- **The asks drawer stays readable under a long ask.** The note box no
+  longer shrinks to a sliver. Choice text is no longer tiny next to the
+  questions.
+- **Background task failures notify once and clear when the task
+  recovers.** A task that kept failing used to pile up one notification per
+  attempt. Now you get one per task and subject, and it is marked read once
+  the task later succeeds.
+- **A waiting agent stays waiting across a restart.** After a daemon
+  restart, an agent that was waiting for you could show as working and
+  start a new turn. A restarted watcher could also replay an old interrupt
+  that closed an open question and held back a message for the agent.
+- **A failed automation says why its relaunch failed.** A Codex automation
+  that could not relaunch sometimes reported "codex exited with code 1"
+  for a Codex that never started.
+- **Reloading an outpost agent no longer moves it to the wrong
+  conversation.** A `/clear` pending during a reload could commit a stale
+  conversation and lose your next prompt. Input refused on any route now
+  shows in the app instead of only in the daemon log.
+- **Terminals on a freshly restarted outpost open.** A terminal opened
+  right after its outpost restarted used to fail with "session not found",
+  and keystrokes sent then were lost. It now opens a moment later.
+- **Files an outpost agent sends are never lost.** A file sent right after
+  a reconnect now opens its tile. Files sent while an outpost was away reach
+  your recent files, even if the outpost restarted in the meantime.
+- **The outpost update row skips only its own outpost.** In Settings, the
+  skip action on one outpost's row used to skip every failed outpost.
+- **A crashed terminal host takes its Codex app-server with it.** When the
+  host process died abruptly, a busy shared Codex app-server could keep
+  running in the background forever.
+- **`attn daemon ensure` no longer reports a healthy daemon as
+  unresponsive.** It gave a daemon only one second to answer, so on a busy
+  machine it failed while the daemon was fine. Now only 15 seconds of
+  silence fails it.
+- **Updates no longer hang on a stalled fetch or install.** An update run
+  stuck in `git fetch` or the install step used to stay open until the
+  daemon restarted. Each step now fails after `ATTN_UPDATE_STEP_TIMEOUT`
+  (5 minutes by default), and the error names the limit.
+- **New tiles fade in smoothly on a busy machine.** Under load, a tile
+  opening on a desktop could pop in at full opacity instead of fading in.
+
+### Removed
+- **The switches for features that are now always on.** The
+  `claude_mod_enabled`, `codex_shared_enabled`, `quick_capture_enabled` and
+  `tile_popout_enabled` settings are gone, along with their rows in
+  Settings → Experimental.
+
+<!-- changelog-commits: a25889600325b677d7dcc27c9e916a13dbb76aa5..462d90e157e09283c10c98c0305f57c6d1abdbbe -->
+
+---
+
 ## [2026-11-09]
 
 ### Added
