@@ -250,30 +250,20 @@ reminder. There is no --force."#,
     },
     Verb {
         name: r"standby",
-        synopsis: r#"standby <id> -m "<what to do next>" [--close [--compact]] | standby <id> --clear [--json]"#,
-        about: r#"put a seed you tend on standby with a note saying what to do next. While
-it is on standby, mail to the seed (attn agent msg <id>, a reminder, an ask
-answer) reaches you: when your session is closed, attn resumes it as itself and
-delivers the mail with the note. The setting garden.tender_resume chooses which
-mail resumes a session: any (the default), watches or off. Standby ends once
-you have read all of the seed's mail with attn agent inbox, and when the seed
-is parked, harvested, withered or gets a new tender. An ask answer attn types
-into your session counts as read. If your session closes before you read the
-mail, the mail resumes it again at once. --close then closes this session as
-attn agent close --self does; it refuses while the seed's mailbox holds mail
-you have not read.
---close --compact first waits for your turn to end and compacts your
-conversation, as attn agent close --self --compact does, so the session that
-resumes picks up a shorter conversation. End your turn right after the command.
-Mail you read before the compact ends the standby, and you stay open. Mail you
-leave unread does not cancel the close: the session closes and the mail resumes it
-again. Mail that arrives during the compact waits until the session has closed.
-Only a Claude session with the Claude mod and a Codex session on the shared Codex
-app server compact, on the home machine or an outpost: attn refuses --compact for
-any other session and leaves standby unset. The refusal says why.
-Only the seed's tender sets standby. --clear ends standby.
-Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy." --close"#,
-        flags: &["m", "close", "compact", "clear", "json"],
+        synopsis: r#"standby <id> -m "<what to do next>" [--in <duration> | --at <time>] [--stay] | standby <id> --clear [--json]"#,
+        about: r#"put a seed you tend on standby with a note saying what to do next, and
+close this session. When mail reaches the seed (a reminder, attn agent msg <id>,
+an ask answer, a PR watch update), attn resumes the session and delivers the
+note. --in and --at also set the seed's reminder to that time, with the note as
+its message, as attn seed remind does. When the session can compact, attn
+compacts it before closing; end your turn right after the command. --stay keeps
+this session open. attn refuses while the seed has mail you have not read.
+Standby ends once you have read all of the seed's mail, and when the seed is
+parked, harvested, withered or gets a new tender. Only the seed's tender sets
+standby. --clear ends standby and leaves the reminder.
+Example: attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "Pick this up Friday: rerun the backfill."
+Example: attn seed standby s-7k3f9m -m "Waiting for review on #123. On approval: merge, then follow the deploy.""#,
+        flags: &["m", "in", "at", "stay", "clear", "json"],
         read_only: false,
     },
     Verb {
@@ -552,15 +542,9 @@ pub const FLAGS: &[FlagDef] = &[
         kind: FlagKind::Str,
     },
     FlagDef {
-        name: r"close",
+        name: r"stay",
         argument: r"",
-        about: r"close this session once the seed is on standby",
-        kind: FlagKind::Bool,
-    },
-    FlagDef {
-        name: r"compact",
-        argument: r"",
-        about: r"with --close: compact the conversation after this turn, then close",
+        about: r"keep this session open on standby",
         kind: FlagKind::Bool,
     },
     FlagDef {

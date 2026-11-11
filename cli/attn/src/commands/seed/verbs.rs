@@ -767,29 +767,29 @@ fn standby(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     let note = session.text()?.trim().to_string();
     let clear = session.flags.on("clear");
-    let close_self = session.flags.on("close");
-    let compact = session.flags.on("compact");
-    if clear && (!note.is_empty() || close_self) {
-        return Err(session.usage("--clear takes no note and no --close"));
+    let stay = session.flags.on("stay");
+    let standby_in = session.flags.string("in").to_string();
+    let standby_at = session.flags.string("at").to_string();
+    if clear && (!note.is_empty() || stay || !standby_in.is_empty() || !standby_at.is_empty()) {
+        return Err(session.usage("--clear takes no note, time or --stay"));
     }
-    if compact && !close_self {
-        return Err(session.usage(
-            "--compact compacts the conversation before the session closes, so it only goes with --close",
-        ));
+    if !standby_in.is_empty() && !standby_at.is_empty() {
+        return Err(session.usage("pass --in or --at, not both"));
     }
     if !clear && note.is_empty() {
         return Err(session.usage("-m says what to do when mail resumes you"));
     }
     let id = seed_id_of(&mut session, &positionals[0])?;
-    if close_self {
+    if !clear && !stay {
         outlive_close_of_own_session();
     }
     let mut message = SeedStandbyMessage::new();
     message.seed_id = id;
     message.note = non_empty(&note);
+    message.r#in = non_empty(&standby_in);
+    message.at = non_empty(&standby_at);
+    message.stay = stay.then_some(true);
     message.clear = clear.then_some(true);
-    message.close = close_self.then_some(true);
-    message.compact = compact.then_some(true);
     let reply = session.call(
         &message,
         "seed_standby_result",
@@ -818,6 +818,19 @@ fn standby(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
         let _ = writeln!(out, "{} is off standby.", raw.seed.id);
     } else {
         let _ = writeln!(out, "{} was not on standby.", raw.seed.id);
+    }
+    if let Some(reminder) = raw
+        .seed
+        .reminder
+        .as_ref()
+        .filter(|_| !standby_in.is_empty() || !standby_at.is_empty())
+    {
+        let _ = writeln!(
+            out,
+            "{} reminder {}",
+            raw.seed.id,
+            render::reminder_line(reminder)
+        );
     }
     if let Some(close) = &raw.close {
         render::agent_close(&mut out, close);

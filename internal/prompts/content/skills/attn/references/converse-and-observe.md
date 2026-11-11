@@ -148,8 +148,9 @@ decides what the compact keeps, so put what your next turn needs in a seed note
 or the standby note. `--compact` goes only with `--self`. Only a Claude Code
 session with the Claude mod and a Codex session on the shared Codex app server
 compact, on the home machine or an outpost. attn refuses any other session, and
-the refusal says why. Compact when you will resume as yourself, as a
-seed's tender does when its standby resumes it (Standby (`attn skill --reference garden`)). A
+the refusal says why. Compact when you will resume as yourself.
+`attn seed standby` already compacts when it closes you (Standby
+(`attn skill --reference garden`)). A
 crew member cannot close itself, and its next session starts fresh from
 its letter, so a compact before a member's letter carries nothing over.
 

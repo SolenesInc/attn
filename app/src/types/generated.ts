@@ -11973,14 +11973,15 @@ export interface SeedSinceExpired {
 }
 
 export interface SeedStandbyMessage {
+    at?:                string;
     clear?:             boolean;
-    close?:             boolean;
     cmd:                SeedStandbyMessageCmd;
-    compact?:           boolean;
+    in?:                string;
     note?:              string;
     profile_id?:        string;
     seed_id:            string;
     source_session_id?: string;
+    stay?:              boolean;
     [property: string]: any;
 }
 
@@ -29298,14 +29299,15 @@ const typeMap: any = {
         { json: "retention_seconds", js: "retention_seconds", typ: 0 },
     ], "any"),
     "SeedStandbyMessage": o([
+        { json: "at", js: "at", typ: u(undefined, "") },
         { json: "clear", js: "clear", typ: u(undefined, true) },
-        { json: "close", js: "close", typ: u(undefined, true) },
         { json: "cmd", js: "cmd", typ: r("SeedStandbyMessageCmd") },
-        { json: "compact", js: "compact", typ: u(undefined, true) },
+        { json: "in", js: "in", typ: u(undefined, "") },
         { json: "note", js: "note", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
+        { json: "stay", js: "stay", typ: u(undefined, true) },
     ], "any"),
     "SeedStandbyResult": o([
         { json: "changed", js: "changed", typ: true },

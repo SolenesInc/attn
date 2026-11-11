@@ -294,11 +294,17 @@ An agent that waits on someone else can put its seed on standby, instead of
 keeping a session open for the wait:
 
 ```sh
-attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (approved by the user up front), then follow the deploy." --close
+attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (approved by the user up front), then follow the deploy."
+attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "Pick this up Friday: rerun the backfill."
 ```
 
-The note says what to do next, and `--close` closes the agent's session in the
-same move. When mail reaches the seed, Attn resumes the closed session as
+The note says what to do next, and standby closes the agent's session. `--stay`
+keeps it open, and agents pass it only when you asked them to stay. `--in` and
+`--at` also set the seed's reminder to that time, with the note as its message,
+so the agent resumes then if no other mail arrives first.
+`attn seed standby --clear` ends standby and leaves the reminder.
+
+When mail reaches the seed, Attn resumes the closed session as
 itself, or starts a session for the crew member that tends the seed, and hands over the mail
 with the note. Mail for a seed is a reminder, an update from a pull request
 watch that addresses the seed, a message to the seed's id, and your answer to an
@@ -332,8 +338,8 @@ Attn delivers a resumed Claude Code session's mail through the
 resumed session loads the mod, even if the session that went on standby ran
 without it.
 
-To shrink its conversation before the session closes, an agent can add
-`--compact` to `--close`, or to `attn agent close --self`. Attn waits for the
+Standby shrinks the conversation before it closes the session when the session
+can compact, as `attn agent close --self --compact` does. Attn waits for the
 agent's turn to end, has the harness compact the conversation, then closes the
 session, so the next run resumes the compacted conversation. Work the agent
 leaves running in the background, such as a shell or a monitor, does not hold
@@ -354,10 +360,10 @@ returns.
 Only a Claude Code session with the
 [Claude mod](using-claude-mod.md) connected and a Codex session on
 [shared Codex](using-shared-codex.md) compact, on your home machine and on an
-outpost. Attn refuses `--compact` for any other session, and the refusal says
-why. Compacting does not help a crew member: mail
-starts a new session from its latest letter, and Attn refuses to close a crew
-member's session.
+outpost. Standby closes any other session without a compact, and
+`attn agent close --self --compact` refuses it, saying why. Compacting does not
+help a crew member: mail starts a new session from its latest letter, and Attn
+refuses to close a crew member's session, so standby leaves it open.
 
 Attn resumes the tender of one seed at most 48 times in 24 hours, and the count
 restarts when the daemon restarts. Sessions started for a crew member's seed mail count

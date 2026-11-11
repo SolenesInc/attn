@@ -25,7 +25,7 @@ The loop:
     attn seed search <words>         find seeds across your profile's garden, closed ones included
     attn seed plant "<title>" -m "…" [--part-of <plot>] [--discovered-from <seed>]    create a seed and print its id
 
-Other verbs: `park` (pause and release your claim), `wither` (abandon), `replant` (reopen), `link` (order or group seeds), `plot -f` (create a whole plot at once), `watch`, `remind` (message a seed's future tender), `standby` (wait for mail, optionally closing yourself) and `harvest --when-merged` (close on merge).
+Other verbs: `park` (pause and release your claim), `wither` (abandon), `replant` (reopen), `link` (order or group seeds), `plot -f` (create a whole plot at once), `watch`, `remind` (message a seed's future tender), `standby` (close until the seed gets mail) and `harvest --when-merged` (close on merge).
 
 `show` prints a bookmark under the header. Keep the bookmark from your last read, and read the entries since that bookmark instead of reading the whole seed again.
 

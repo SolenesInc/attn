@@ -494,8 +494,8 @@ func TestSeedMailResumesAnOutpostClaudeTenderThroughTheMod(t *testing.T) {
 		t.Fatalf("seed tend exited %d: %s", tend.Code, tend.Stderr)
 	}
 	const note = "On approval: merge the pull request."
-	if standby := m.outpost.Run(testworld.Invocation{Args: []string{"seed", "standby", seed.ID, "-m", note, "--close"}, Terminal: string(m.terminal)}); standby.Code != 0 {
-		t.Fatalf("seed standby --close on the outpost exited %d: %s", standby.Code, standby.Stderr)
+	if standby := m.outpost.Run(testworld.Invocation{Args: []string{"seed", "standby", seed.ID, "-m", note}, Terminal: string(m.terminal)}); standby.Code != 0 {
+		t.Fatalf("seed standby on the outpost exited %d: %s", standby.Code, standby.Stderr)
 	}
 	testworld.Await(app, protocol.EventSessionClosed, func(e protocol.WebSocketEvent) bool {
 		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == m.session
@@ -515,7 +515,7 @@ func TestAHeldAnswerKeepsAnOutpostTendersSeedOnStandbyUntilClaudeTakesIt(t *test
 	app := m.pair.App
 	var seed protocol.Seed
 	m.outpost.Run(testworld.Invocation{Args: []string{"seed", "plant", "Merge the discount field", "--json"}, Terminal: string(m.terminal)}).JSON(t, &seed)
-	for _, args := range [][]string{{"seed", "tend", seed.ID}, {"seed", "standby", seed.ID, "-m", "On approval: merge the pull request."}} {
+	for _, args := range [][]string{{"seed", "tend", seed.ID}, {"seed", "standby", seed.ID, "-m", "On approval: merge the pull request.", "--stay"}} {
 		if done := m.outpost.Run(testworld.Invocation{Args: args, Terminal: string(m.terminal)}); done.Code != 0 {
 			t.Fatalf("%v on the outpost exited %d: %s", args, done.Code, done.Stderr)
 		}

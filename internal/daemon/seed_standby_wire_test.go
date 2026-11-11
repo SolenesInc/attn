@@ -27,10 +27,10 @@ import (
 
 const standbyNote = "On approval: merge the pull request."
 
-func standbyAs(t *testing.T, cli *client.Client, delegated *protocol.DelegateResult, close bool) (*protocol.SeedStandbyResult, error) {
+func standbyAs(t *testing.T, cli *client.Client, delegated *protocol.DelegateResult, closes bool) (*protocol.SeedStandbyResult, error) {
 	t.Helper()
 	return cli.WithGardenProfile(protocol.Deref(delegated.ProfileID), delegated.SessionID).
-		SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Note: standbyNote, Close: close})
+		SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Note: standbyNote, Stay: !closes})
 }
 
 func awaitStandbyEnded(t *testing.T, app *testworld.Peer, mark int, seed string) {
@@ -56,14 +56,12 @@ func TestSeedMailReopensACodexTenderOnStandbyAsItselfWithItsNote(t *testing.T) {
 	first.Prompted()
 	set, err := standbyAs(t, cli, delegated, true)
 	if err != nil {
-		t.Fatalf("seed standby --close: %v", err)
+		t.Fatalf("seed standby: %v", err)
 	}
-	if set.Close == nil || set.Seed.Standby == nil || set.Seed.Standby.Note != standbyNote {
-		t.Fatalf("seed standby --close = %+v, want the seed on standby with its note and the session closed", set)
+	if set.Seed.Standby == nil || set.Seed.Standby.Note != standbyNote {
+		t.Fatalf("seed standby = %+v, want the seed on standby with its note", set)
 	}
-	if closed := showSession(t, cli, string(session)); protocol.Deref(closed.ClosedAt) == "" {
-		t.Fatalf("after seed standby --close the ledger shows %+v, want %s closed", closed, session)
-	}
+	endsTurnAndCloses(t, w, set, first)
 
 	mark := len(app.Log())
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
@@ -93,7 +91,7 @@ func TestATenderClosedBeforeReadingItsSeedMailIsResumedAgainForIt(t *testing.T) 
 	session, seed := delegated.SessionID, delegated.SeedID
 	first := w.Launched(string(session))
 	first.Prompted()
-	onStandbyAndClosed(t, w, cli, delegated)
+	onStandbyAndClosed(t, w, cli, delegated, first)
 
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
 	woken := w.Launched(string(session))
@@ -133,7 +131,7 @@ func TestAResumedCodexTenderGetsItsMailOnlyOnceItHasBooted(t *testing.T) {
 	first.Reply("Opened the pull request. Should I wait for its review? <!-- attn:state=waiting_input -->")
 	closing := testworld.AwaitSession(app, string(session), func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby --close: %v", err)
+		t.Fatalf("seed standby: %v", err)
 	}
 
 	boot := w.HoldNextBoot()
@@ -217,7 +215,7 @@ func TestSeedMailReachesAResumedClaudeTenderThroughItsModAfterTheFirstPoll(t *te
 	first.Prompted()
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
 	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby --close: %v", err)
+		t.Fatalf("seed standby: %v", err)
 	}
 
 	boot := w.HoldNextBoot()
@@ -251,7 +249,7 @@ func TestAResumedClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testin
 	w.Launched(string(session)).Prompted()
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
 	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby --close: %v", err)
+		t.Fatalf("seed standby: %v", err)
 	}
 
 	boot := w.HoldNextBoot()
@@ -369,9 +367,14 @@ func TestAClaudeTenderWhoseModIsGoneGoesOnStandbyAndItsResumeLoadsTheMod(t *test
 	run.Prompted()
 	typedClaude(w, run)
 
-	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby --close from a Claude session whose mod is gone: %v", err)
+	set, err := standbyAs(t, cli, delegated, true)
+	if err != nil {
+		t.Fatalf("seed standby from a Claude session whose mod is gone: %v", err)
 	}
+	if set.Close == nil || protocol.Deref(set.Close.PendingCompact) {
+		t.Fatalf("seed standby from a Claude session that cannot compact = %+v, want it closed without a compact", set.Close)
+	}
+	stillClosed(t, cli, delegated, "seed standby without a compact")
 	mark := len(app.Log())
 	sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
 	relaunched := w.Launched(string(delegated.SessionID))
@@ -388,12 +391,13 @@ func TestStandbyCloseWaitsUntilTheTenderHasReadItsSeedMail(t *testing.T) {
 	registerSessions(t, w, cli, "sender")
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
 	session, seed := delegated.SessionID, delegated.SeedID
-	w.Launched(string(session)).Prompted()
+	tender := w.Launched(string(session))
+	tender.Prompted()
 	sendAgentMessage(t, cli, "sender", seed, "read me before you close")
 
 	_, err := standbyAs(t, cli, delegated, true)
 	if err == nil || !strings.Contains(err.Error(), "attn agent inbox") {
-		t.Fatalf("seed standby --close with unread seed mail = %v, want a refusal naming attn agent inbox", err)
+		t.Fatalf("seed standby with unread seed mail = %v, want a refusal naming attn agent inbox", err)
 	}
 	if shown := lifeShow(t, cli, seed); shown.Seed.Standby != nil {
 		t.Fatalf("the refused standby left %+v on the seed", shown.Seed.Standby)
@@ -406,11 +410,77 @@ func TestStandbyCloseWaitsUntilTheTenderHasReadItsSeedMail(t *testing.T) {
 		t.Fatalf("the tender's seed mailbox holds %+v, want the message", mail)
 	}
 	set, err := standbyAs(t, cli, delegated, true)
-	if err != nil || set.Close == nil || set.Seed.Standby == nil {
-		t.Fatalf("seed standby --close after reading = %+v, %v, want the seed on standby and the session closed", set, err)
+	if err != nil || set.Seed.Standby == nil {
+		t.Fatalf("seed standby after reading = %+v, %v, want the seed on standby", set, err)
 	}
-	if closed := showSession(t, cli, string(session)); protocol.Deref(closed.ClosedAt) == "" {
-		t.Fatalf("after reading, seed standby --close left %s open", session)
+	endsTurnAndCloses(t, w, set, tender)
+}
+
+func TestStandbyForATimeSetsTheSeedsReminderAndItsFiringResumesTheClosedTenderWithTheNote(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	app, cli := w.App(), w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	session, seed := string(delegated.SessionID), delegated.SeedID
+	tender := w.Launched(session)
+	tender.Prompted()
+
+	mark := len(app.Log())
+	set, err := cli.WithGardenProfile(protocol.Deref(delegated.ProfileID), delegated.SessionID).
+		SeedStandby(seed, client.SeedStandbyOptions{Note: standbyNote, In: "5m"})
+	if err != nil {
+		t.Fatalf("seed standby --in 5m: %v", err)
+	}
+	if set.Seed.Reminder == nil || set.Seed.Reminder.Message != standbyNote {
+		t.Fatalf("seed standby --in 5m left reminder %+v, want one with the standby note", set.Seed.Reminder)
+	}
+	shown := testworld.AwaitSince(app, mark, protocol.EventGardenSeedsChanged, func(m protocol.GardenSeedsChangedMessage) bool {
+		return slices.ContainsFunc(m.Seeds, func(s protocol.Seed) bool { return s.ID == seed && (s.Standby != nil || s.Reminder != nil) })
+	})
+	for _, s := range shown.Seeds {
+		if s.ID == seed && (s.Standby == nil || s.Reminder == nil) {
+			t.Fatalf("the garden first showed %s with standby %+v and reminder %+v, want both from one change", seed, s.Standby, s.Reminder)
+		}
+	}
+	endsTurnAndCloses(t, w, set, tender)
+
+	w.tickSchedulesUntil("the reminder fires", func() bool { return lifeShow(t, cli, seed).Seed.Reminder == nil })
+	resumed := w.Launched(session)
+	if !resumed.Resumed || resumed.ConversationID != tender.ConversationID {
+		t.Fatalf("the reminder ran %s %q, want it resuming conversation %s", resumed.Harness, resumed.Argv, tender.ConversationID)
+	}
+	if got := resumed.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
+		t.Fatalf("the tender resumed by the reminder received %q, want its standby note", got)
+	}
+	if mail := seedMail(t, cli, session, seed); len(mail) != 1 || !strings.Contains(mail[0].Content, standbyNote) {
+		t.Fatalf("the resumed tender's seed mailbox holds %+v, want the reminder carrying the note", mail)
+	}
+}
+
+func TestStandbyWithStayKeepsTheSessionOpenAndItsClearLeavesTheReminder(t *testing.T) {
+	w := newWorld(t, fakeagent.Codex)
+	cli := w.Client()
+	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
+	w.Launched(string(delegated.SessionID)).Prompted()
+	asTender := cli.WithGardenProfile(protocol.Deref(delegated.ProfileID), delegated.SessionID)
+	const at = "2099-01-02T09:00:00Z"
+
+	set, err := asTender.SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Note: standbyNote, At: at, Stay: true})
+	if err != nil {
+		t.Fatalf("seed standby --at --stay: %v", err)
+	}
+	if set.Close != nil || set.Seed.Standby == nil || set.Seed.Reminder == nil || set.Seed.Reminder.At != at {
+		t.Fatalf("seed standby --at --stay = %+v, want the seed on standby with its reminder at %s and no close", set, at)
+	}
+	if open := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(open.ClosedAt) != "" {
+		t.Fatalf("seed standby --stay closed %s", delegated.SessionID)
+	}
+
+	cleared, err := asTender.SeedStandby(delegated.SeedID, client.SeedStandbyOptions{Clear: true})
+	if err != nil {
+		t.Fatalf("seed standby --clear: %v", err)
+	}
+	if cleared.Seed.Standby != nil || cleared.Seed.Reminder == nil || cleared.Seed.Reminder.At != at {
+		t.Fatalf("seed standby --clear = %+v, want standby ended and the reminder at %s kept", cleared.Seed, at)
 	}
 }
 
@@ -422,13 +492,28 @@ func remindAs(t *testing.T, cli *client.Client, delegated *protocol.DelegateResu
 	}
 }
 
-func onStandbyAndClosed(t *testing.T, w *world, cli *client.Client, delegated *protocol.DelegateResult) {
+func onStandbyAndClosed(t *testing.T, w *world, cli *client.Client, delegated *protocol.DelegateResult, tender *fakeagent.Run) {
 	t.Helper()
-	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby --close %s: %v", delegated.SeedID, err)
+	set, err := standbyAs(t, cli, delegated, true)
+	if err != nil {
+		t.Fatalf("seed standby %s: %v", delegated.SeedID, err)
 	}
-	if closed := showSession(t, cli, string(delegated.SessionID)); protocol.Deref(closed.ClosedAt) == "" {
-		t.Fatalf("seed standby --close left %s open", delegated.SessionID)
+	endsTurnAndCloses(t, w, set, tender)
+}
+
+func endsTurnAndCloses(t *testing.T, w *world, set *protocol.SeedStandbyResult, tender *fakeagent.Run) {
+	t.Helper()
+	if set.Close == nil {
+		t.Fatalf("seed standby = %+v, want the session closing", set)
+	}
+	session := string(set.Close.TargetSessionID)
+	if protocol.Deref(set.Close.PendingCompact) {
+		app := w.App()
+		tender.Reply("On standby. <!-- attn:state=idle -->")
+		awaitClosed(app, session)
+	}
+	if closed := showSession(t, w.Client(), session); protocol.Deref(closed.ClosedAt) == "" {
+		t.Fatalf("seed standby left %s open", session)
 	}
 }
 
@@ -457,7 +542,7 @@ func TestTheTenderResumeSettingDecidesWhichSeedMailResumesATenderOnStandby(t *te
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
 	recordPullRequest(t, cli, "sender", watchedPullRequestURL)
-	runs := map[string]*fakeagent.Run{}
+	runs, resumed := map[string]*fakeagent.Run{}, map[string]*fakeagent.Run{}
 	launch := func(dir string) *protocol.DelegateResult {
 		delegated := seedResumeDelegate(t, w, fakeagent.Codex, dir)
 		run := w.Launched(string(delegated.SessionID))
@@ -474,7 +559,7 @@ func TestTheTenderResumeSettingDecidesWhichSeedMailResumesATenderOnStandby(t *te
 	remindAs(t, cli, underOff, "5m", "Check the rollout")
 	remindAs(t, cli, reminderUnderWatches, "12m", "Check the canary")
 	for _, delegated := range []*protocol.DelegateResult{peerUnderWatches, underOff, reminderUnderWatches, pullRequestUnderOff, pullRequestUnderWatches, pullRequestUnderAny} {
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, runs[delegated.SeedID])
 	}
 	pullRequestReadyFor := func(delegated *protocol.DelegateResult) func() bool {
 		if err := cli.WatchSessionPullRequest("sender", delegated.SeedID, watchedPullRequestURL, protocol.PullRequestWatchModeGreen, ""); err != nil {
@@ -491,6 +576,7 @@ func TestTheTenderResumeSettingDecidesWhichSeedMailResumesATenderOnStandby(t *te
 		if got := run.DeliveredPrompt(); !strings.Contains(got, standbyNote) {
 			t.Fatalf("the tender woken by %s received %q, want its standby note", by, got)
 		}
+		resumed[delegated.SeedID] = run
 		return seedMail(t, cli, string(delegated.SessionID), delegated.SeedID)
 	}
 	pullRequestNotice := func(m protocol.AgentInboxItem) bool {
@@ -530,9 +616,7 @@ func TestTheTenderResumeSettingDecidesWhichSeedMailResumesATenderOnStandby(t *te
 	if mail := woken(pullRequestUnderAny, "the pull request update under any"); len(mail) != 1 || !pullRequestNotice(mail[0]) {
 		t.Fatalf("the tender woken under any holds %+v, want the pull request update", mail)
 	}
-	if _, err := standbyAs(t, cli, reminderUnderWatches, true); err != nil {
-		t.Fatalf("seed standby --close again: %v", err)
-	}
+	onStandbyAndClosed(t, w, cli, reminderUnderWatches, resumed[reminderUnderWatches.SeedID])
 	sendAgentMessage(t, cli, "sender", reminderUnderWatches.SeedID, "a peer message under any")
 	if mail := woken(reminderUnderWatches, "a peer message under any"); len(mail) != 1 || mail[0].Content != "a peer message under any" {
 		t.Fatalf("the tender woken under any holds %+v, want the peer message", mail)
@@ -659,8 +743,9 @@ func TestATenderResumeRefusedForARemovedWorktreeNotesAndNotifiesTheReason(t *tes
 	app, cli := w.App(), w.Client()
 	registerSessions(t, w, cli, "sender")
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
-	w.Launched(string(delegated.SessionID)).Prompted()
-	onStandbyAndClosed(t, w, cli, delegated)
+	tender := w.Launched(string(delegated.SessionID))
+	tender.Prompted()
+	onStandbyAndClosed(t, w, cli, delegated, tender)
 	if err := os.RemoveAll(delegated.Directory); err != nil {
 		t.Fatal(err)
 	}
@@ -759,7 +844,8 @@ func TestAClosedTenderHoldsOnlyItsSeedOnStandby(t *testing.T) {
 	cli := w.Client()
 	registerSessions(t, w, cli, "sender")
 	delegated := seedResumeDelegate(t, w, fakeagent.Codex, "api")
-	w.Launched(string(delegated.SessionID)).Prompted()
+	tenderRun := w.Launched(string(delegated.SessionID))
+	tenderRun.Prompted()
 	seed, tender := delegated.SeedID, string(delegated.SessionID)
 	planted, err := cli.SeedPlant(delegated.SessionID, "Follow-up the tender also tends", "", "", "")
 	if err != nil {
@@ -767,7 +853,7 @@ func TestAClosedTenderHoldsOnlyItsSeedOnStandby(t *testing.T) {
 	}
 	other := planted.Seed.ID
 	lifeMove(t, cli, tender, other, "tend", "", "")
-	onStandbyAndClosed(t, w, cli, delegated)
+	onStandbyAndClosed(t, w, cli, delegated, tenderRun)
 
 	ready, err := cli.SeedReady("sender", "", true)
 	if err != nil {
@@ -825,8 +911,9 @@ func TestTheSessionAboveAClosedTenderOnStandbyMovesItsSeedWithoutForce(t *testin
 	if err != nil {
 		t.Fatalf("parent delegates: %v", err)
 	}
-	w.Launched(string(delegated.SessionID)).Prompted()
-	onStandbyAndClosed(t, w, cli, delegated)
+	tender := w.Launched(string(delegated.SessionID))
+	tender.Prompted()
+	onStandbyAndClosed(t, w, cli, delegated, tender)
 
 	parked := lifeMove(t, cli, "parent", delegated.SeedID, "park", "", "")
 	if parked.Status != garden.StatusParked {
@@ -858,8 +945,8 @@ func TestSeedsOnStandbyListWithTheirPullRequestWatchesAndTheGardenFollowsTheWatc
 		if _, err := asTender.SeedReminder(onStandby, client.SeedReminderOptions{In: "20m", Message: "Check the canary"}); err != nil {
 			t.Fatalf("seed remind %s: %v", onStandby, err)
 		}
-		if _, err := asTender.SeedStandby(onStandby, client.SeedStandbyOptions{Note: standbyNote, Close: true}); err != nil {
-			t.Fatalf("seed standby --close %s: %v", onStandby, err)
+		if _, err := asTender.SeedStandby(onStandby, client.SeedStandbyOptions{Note: standbyNote}); err != nil {
+			t.Fatalf("seed standby %s: %v", onStandby, err)
 		}
 		watchPullRequestAs(t, cli, watcher, growing, protocol.PullRequestWatchModeGreen, "")
 		readiness := func() string { return protocol.Deref(onlySeedPullRequest(t, cli, watcher, onStandby).ReadinessState) }
@@ -1023,7 +1110,7 @@ func TestATenderResumeThatFailsToLaunchRetriesAndDeliversTheOriginalMail(t *test
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, nil)
 
 		w.terms.RefuseNextSpawn(errors.New("PTY temporarily unavailable"))
 		sent := sendAgentMessage(t, cli, "sender", delegated.SeedID, "the pull request is approved")
@@ -1045,7 +1132,7 @@ func TestATenderResumeWhoseInspectionFailsRetriesAndDeliversTheOriginalMail(t *t
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
 		storage := serveResumeStorage(t, driver)
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, nil)
 
 		storage.stalled.Store(true)
 		sending := make(chan *protocol.AgentMsgResult, 1)
@@ -1072,7 +1159,7 @@ func TestATenderResumeForAConversationThePluginReportsGoneStaysBlockedWithoutRet
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "resume_availability": true, "initial_prompt": true, "state_reporting": true})
 		storage := serveResumeStorage(t, driver)
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, nil)
 
 		storage.available.Store(false)
 		reason := "the plugin's storage lost it"
@@ -1104,7 +1191,7 @@ func TestAnAnswerWaitsForTheRetryOfATenderResumeThatFailedToLaunch(t *testing.T)
 		if err != nil {
 			t.Fatalf("ask: %v", err)
 		}
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, nil)
 
 		w.terms.RefuseNextSpawn(errors.New("PTY temporarily unavailable"))
 		requestID := uuid.NewString()
@@ -1140,7 +1227,7 @@ func TestATenderResumeThatFailsOnItsLastAttemptIsBlockedUntilNewMailResumesIt(t 
 	inBubbleWithAgents(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
 		driver, delegated := pluginTenderOnStandby(t, w, map[string]bool{"resume": true, "initial_prompt": true, "state_reporting": true})
-		onStandbyAndClosed(t, w, cli, delegated)
+		onStandbyAndClosed(t, w, cli, delegated, nil)
 
 		reason := "PTY temporarily unavailable"
 		w.terms.RefuseNextSpawn(errors.New(reason))

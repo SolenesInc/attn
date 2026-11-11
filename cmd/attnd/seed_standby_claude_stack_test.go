@@ -56,7 +56,7 @@ func TestSeedMailResumesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 
 	const note = "On approval: merge the pull request."
 	const ring = "attn agent inbox"
-	model.RunBashAfter(ring, `attn seed standby `+seed.ID+` -m "`+note+`" --close`)
+	model.RunBashAfter(ring, `attn seed standby `+seed.ID+` -m "`+note+`"`)
 	if sent := s.Run(testworld.Invocation{Args: []string{"agent", "msg", tender, "wait for the review"}, Session: reviewer}); sent.Code != 0 {
 		t.Fatalf("attn agent msg exited %d: %s%s", sent.Code, sent.Stdout, sent.Stderr)
 	}
@@ -64,7 +64,7 @@ func TestSeedMailResumesARealClaudeTenderOnStandbyThroughTheMod(t *testing.T) {
 		return e.SessionLedgerEntry != nil && string(e.SessionLedgerEntry.ID) == tender
 	})
 	if shown := showSeed(t, s, reviewer, seed.ID); shown.Seed.Standby == nil || shown.Seed.Standby.Note != note {
-		t.Fatalf("after Claude ran seed standby --close the seed shows %+v, want it on standby with its note", shown.Seed.Standby)
+		t.Fatalf("after Claude ran seed standby the seed shows %+v, want it on standby with its note", shown.Seed.Standby)
 	}
 
 	const approved = "the pull request is approved"

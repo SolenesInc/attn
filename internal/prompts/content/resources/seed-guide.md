@@ -224,10 +224,9 @@ HANDOFFS AND STEERING
                                             and waits when none is reachable
     attn seed show <id> --since <N>         only what was saved after bookmark N.
                                             show and notes print the bookmark to use next
-    attn seed standby <id> -m "…"           wait on mail for the seed. The note goes to whoever
-                                            takes the mail. --close closes your session in the
-                                            same move, and --close --compact compacts its
-                                            conversation first
+    attn seed standby <id> -m "…"           close your session until the seed gets mail.
+                                            The note goes to whoever takes the mail.
+                                            --at sets a reminder too; --stay keeps you open
 
 Leave a handoff whenever you park a seed, or stop partway through the work and
 do not intend to continue. State the outcome, the evidence, and the next action.

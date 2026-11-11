@@ -418,12 +418,14 @@ restarts, and, unless the resume is blocked, when the bridge to the tender's
 outpost connects. So a seed on standby with unread mail resumes its tender right
 after any of them.
 
-`attn seed standby --close` and `attn agent close --self` refuse while a seed
-the session tends is on standby and has unread seed mail. The refusal names
+`attn seed standby` without `--stay` and `attn agent close --self` refuse while
+a seed the session tends is on standby and has unread seed mail. The refusal names
 `attn agent inbox`.
 
-With `--compact`, the close places the compact in the session's input lane,
-through the Claude mod or the shared Codex app server, as soon as it is asked.
+A compacting close, which `attn agent close --self --compact` asks for and
+`attn seed standby` makes when the session can compact, places the compact in
+the session's input lane, through the Claude mod or the shared Codex app server,
+as soon as it is asked.
 The harness alone decides whether the conversation is between turns: Claude
 refuses the compact while a turn runs and the mod answers `busy`, and shared
 Codex reports its thread active. A refused compact opens the lane again and is
@@ -576,9 +578,9 @@ no update for the earlier event. A message sent to the seed's id goes to the
 new tender.
 
 **A reminder on standby.** An agent runs
-`attn seed remind s-x --in 20m -m "Check the rollout"`, then
-`attn seed standby s-x -m "Read the rollout dashboard and report" --close`. The
-session closes. When the reminder comes due, the seed is on standby and
+`attn seed standby s-x --in 20m -m "Read the rollout dashboard and report"`,
+which also sets the seed's reminder to that time with the note as its message.
+The session closes. When the reminder comes due, the seed is on standby and
 `garden.tender_resume` is `any`, so attn resumes the closed session. For a Claude
 session, attn waits for the mod's first poll. The session gets the note and
 reads the reminder with `attn agent inbox`, and standby ends. The agent

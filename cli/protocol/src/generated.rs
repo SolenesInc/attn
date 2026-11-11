@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "cb8187842130";
+pub const PROTOCOL_VERSION: &str = "061f4b9b1fbc";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -11064,12 +11064,12 @@ pub struct SeedSinceExpired {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SeedStandbyMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub clear: Option<bool>,
+    pub at: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub close: Option<bool>,
+    pub clear: Option<bool>,
     pub cmd: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub compact: Option<bool>,
+    pub r#in: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -11077,6 +11077,8 @@ pub struct SeedStandbyMessage {
     pub seed_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_session_id: Option<SessionID>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stay: Option<bool>,
 }
 
 impl SeedStandbyMessage {

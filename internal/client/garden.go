@@ -287,10 +287,11 @@ func (c *Client) SeedReminder(seedID string, opts SeedReminderOptions) (*protoco
 }
 
 type SeedStandbyOptions struct {
-	Note    string
-	Clear   bool
-	Close   bool
-	Compact bool
+	Note  string
+	In    string
+	At    string
+	Stay  bool
+	Clear bool
 }
 
 func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.SeedStandbyResult, error) {
@@ -301,11 +302,14 @@ func (c *Client) SeedStandby(seedID string, opts SeedStandbyOptions) (*protocol.
 	if opts.Clear {
 		msg.Clear = protocol.Ptr(true)
 	}
-	if opts.Close {
-		msg.Close = protocol.Ptr(true)
+	if opts.In != "" {
+		msg.In = protocol.Ptr(opts.In)
 	}
-	if opts.Compact {
-		msg.Compact = protocol.Ptr(true)
+	if opts.At != "" {
+		msg.At = protocol.Ptr(opts.At)
+	}
+	if opts.Stay {
+		msg.Stay = protocol.Ptr(true)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

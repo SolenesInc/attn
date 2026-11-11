@@ -12034,17 +12034,17 @@ type SeedSinceExpired struct {
 }
 
 type SeedStandbyMessage struct {
+	// At corresponds to the JSON schema field "at".
+	At *string `json:"at,omitempty,omitzero"`
+
 	// Clear corresponds to the JSON schema field "clear".
 	Clear *bool `json:"clear,omitempty,omitzero"`
-
-	// Close corresponds to the JSON schema field "close".
-	Close *bool `json:"close,omitempty,omitzero"`
 
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// Compact corresponds to the JSON schema field "compact".
-	Compact *bool `json:"compact,omitempty,omitzero"`
+	// In corresponds to the JSON schema field "in".
+	In *string `json:"in,omitempty,omitzero"`
 
 	// Note corresponds to the JSON schema field "note".
 	Note *string `json:"note,omitempty,omitzero"`
@@ -12057,6 +12057,9 @@ type SeedStandbyMessage struct {
 
 	// SourceSessionID corresponds to the JSON schema field "source_session_id".
 	SourceSessionID *SessionID `json:"source_session_id,omitempty,omitzero"`
+
+	// Stay corresponds to the JSON schema field "stay".
+	Stay *bool `json:"stay,omitempty,omitzero"`
 }
 
 type SeedStandbyResult struct {

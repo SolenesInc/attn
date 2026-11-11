@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -39,21 +40,30 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 	callerID := protocol.TrimID(protocol.Deref(msg.SourceSessionID))
 	setter := d.actorOfSession(callerID)
 	note := strings.TrimSpace(protocol.Deref(msg.Note))
-	closeSelf := protocol.Deref(msg.Close)
-	compact := protocol.Deref(msg.Compact)
-	if compact && !closeSelf {
-		return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--compact compacts the conversation before the session closes, so it only goes with --close: attn seed standby %s -m \"<note>\" --close --compact", seedID)
-	}
+	stay := protocol.Deref(msg.Stay)
+	at, in := protocol.Deref(msg.At), protocol.Deref(msg.In)
 	if protocol.Deref(msg.Clear) {
-		if note != "" || closeSelf {
-			return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no note and no --close: attn seed standby %s --clear", seedID)
+		if note != "" || stay || at != "" || in != "" {
+			return nil, nil, protocol.Refuse(protocol.RefusalInvalidInput, "--clear takes no note, time or --stay, and leaves the reminder: attn seed standby %s --clear", seedID)
 		}
-		result, err := d.writeSeedStandby(seedID, nil, setter)
+		result, err := d.writeSeedStandby(seedID, nil, nil, setter)
 		return result, nil, err
 	}
-	standby := garden.Standby{Note: note, SetAt: d.clock.Now().UTC(), SetBy: setter}
+	now := d.clock.Now()
+	standby := garden.Standby{Note: note, SetAt: now.UTC(), SetBy: setter}
 	if err := garden.ValidateStandby(standby, seedID); err != nil {
 		return nil, nil, err
+	}
+	var reminder *garden.Reminder
+	if at != "" || in != "" {
+		when, err := reminderTime(seedID, at, in, now)
+		if err != nil {
+			return nil, nil, err
+		}
+		reminder = &garden.Reminder{At: when, Message: note, SetAt: now.UTC(), SetBy: setter}
+		if err := garden.ValidateReminder(*reminder, seedID); err != nil {
+			return nil, nil, err
+		}
 	}
 	seed, _, err := d.readSeed(seedID)
 	if err != nil {
@@ -63,17 +73,13 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 	if caller == nil || seed.Tender.IsZero() || seed.Tender != d.partyOfSession(caller.ID) {
 		return nil, nil, protocol.Refuse(protocol.RefusalNotTender, "only %s's tender can put it on standby, from its own session; tend it first: attn seed tend %s", seedID, seedID)
 	}
+	closeSelf := !stay && d.sessionCloseError(caller.ID) == nil
 	if closeSelf {
 		if err := d.unreadStandbyMailRefusal(caller, seed.ID); err != nil {
 			return nil, nil, err
 		}
 	}
-	if compact {
-		if refusal := d.compactPathRefusal(caller); refusal != nil {
-			return nil, nil, protocol.Refuse(protocol.RefusalWrongState, "%s", refusal.message)
-		}
-	}
-	result, err := d.writeSeedStandby(seedID, &standby, setter)
+	result, err := d.writeSeedStandby(seedID, &standby, reminder, setter)
 	if err != nil || !closeSelf {
 		return result, nil, err
 	}
@@ -82,11 +88,11 @@ func (d *Daemon) seedStandbyRequest(msg *protocol.SeedStandbyMessage) (*protocol
 		SourceSessionID: caller.ID,
 		TargetSessionID: string(caller.ID),
 		Reason:          garden.TrimReason(fmt.Sprintf("On standby for %s: %s", seed.ID, note)),
-		Compact:         protocol.Ptr(compact),
+		Compact:         protocol.Ptr(d.compactPathRefusal(caller) == nil),
 	}, nil
 }
 
-func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter who.Actor) (*protocol.SeedStandbyResult, error) {
+func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, reminder *garden.Reminder, setter who.Actor) (*protocol.SeedStandbyResult, error) {
 	schema, err := d.seedsCollection()
 	if err != nil {
 		return nil, err
@@ -114,7 +120,10 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 			}
 		}
 		body := "Cleared standby."
-		if standby != nil {
+		switch {
+		case reminder != nil:
+			body = fmt.Sprintf("On standby, with a reminder for %s. Seed mail resumes the tender with this note:\n%s", reminder.At.Format(time.RFC3339), standby.Note)
+		case standby != nil:
 			body = "On standby. Seed mail resumes the tender with this note:\n" + standby.Note
 		}
 		cause, _ := d.sessionOfActor(setter)
@@ -123,7 +132,7 @@ func (d *Daemon) writeSeedStandby(seedID string, standby *garden.Standby, setter
 			CausedBySessionID: cause,
 		}
 		d.lockGardenRoles()
-		written, _, err := d.writeSeedChange(*schema, seed, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, standby: standby, endStandby: standby == nil})
+		written, _, err := d.writeSeedChange(*schema, seed, doc.Rev, seedChange{author: setter, cause: cause, entries: []seedMoveNote{entry}, standby: standby, endStandby: standby == nil, arm: reminder})
 		d.unlockGardenRoles()
 		if docstore.IsConflict(err) {
 			continue

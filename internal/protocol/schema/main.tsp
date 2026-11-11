@@ -6790,8 +6790,9 @@ model SeedReminderMessage {
 }
 
 // Put a seed on standby with a note, or clear its standby. Only the seed's
-// tender sets it. With close, the calling session then closes itself as
-// `attn agent close --self` does.
+// tender sets it. Unless stay is set, the calling session then closes itself,
+// compacting first when it can. in or at also set the seed's reminder to that
+// time with the note as its message.
 @extension("x-on", #{ home: true })
 model SeedStandbyMessage {
   "profile_id"?: string;
@@ -6799,16 +6800,17 @@ model SeedStandbyMessage {
   "cmd": "seed_standby";
   "seed_id": string;
   "note"?: string;
+  "at"?: string;
+  "in"?: string;
+  "stay"?: boolean;
   "clear"?: boolean;
-  "close"?: boolean;
-  "compact"?: boolean;
 }
 
 model SeedStandbyResult {
   "seed": Seed;
   // False when --clear found no standby.
   "changed": boolean;
-  // Present when close closed the calling session.
+  // Present when the standby closed the calling session.
   "close"?: AgentCloseResult;
 }
 

@@ -162,102 +162,59 @@ an agent.
 
 ## Reminders
 
-A reminder is a time and a message on a seed. At that time attn posts the
-message to the seed's mailbox, which delivers it to whoever tends the seed
-then. The tender reads it in `attn agent inbox`, where it arrives as a notice
-and not as a seed update. When nobody tends the seed, the message waits for the
-next tender.
+A reminder posts a message to the seed's mailbox at a set time. Whoever tends
+the seed then gets it in `attn agent inbox`. When nobody tends it, the message
+waits for the next tender.
 
     attn seed remind s-7k3f9m --in 20m -m "Check the rollout of the new build"
     attn seed remind s-7k3f9m --at 2026-11-05T09:00:00+01:00 -m "Ask for the review"
     attn seed remind s-7k3f9m --clear
 
-`--in` counts from now, and `--at` takes an RFC3339 time. attn checks once a
-minute, so a message can arrive up to a minute late.
-
-A seed holds one reminder, and a new one replaces it. The reminder ends when
-attn posts the message, when `--clear` removes it, and when the seed is
-harvested or withered. Until then, `attn seed show` and `attn seed ls` print
-it. Setting or clearing a reminder adds a quiet note to the seed's log, and
-posting the message adds no entry.
-
-Setting or clearing a reminder needs the same standing as a move: the tender, a
-session above the tender in the delegation chain, the chief, or the user. When
-nobody holds the claim, anyone can. There is no `--force`. You can offer a
-reminder to the user.
+`--in` counts from now. `--at` takes an RFC3339 time. A message can arrive up to
+a minute late. A seed holds one reminder: a new one replaces it, and it ends when
+it is posted, cleared, or the seed closes. Setting one needs the same standing
+as a move: the tender, a session above it in the delegation chain, the chief or
+the user, or anyone when nobody holds the claim.
 
 ## Standby
 
-A seed on standby waits for mail without a session held open for it. The seed's
-tender puts it on standby with a note that says what to do next. When mail
-reaches the seed, attn resumes the tender's session, or starts one for a crew member, and hands over the note.
+When your work waits on something outside your session, such as a time, a pull
+request, another seed or the user, put its seed on standby with a note that says
+what to do next. attn closes your session and resumes it when mail reaches the
+seed, or starts a session for a crew member, handing it the note. If you tend no
+seed for the work, plant one first.
 
+    attn seed standby s-7k3f9m --at 2026-11-13T09:00:00+01:00 -m "The user asked to pick this up Friday: rerun the backfill, then report the counts."
     attn seed standby s-7k3f9m -m "Review is pending on #123. When it is approved, merge (the user approved this up front), then follow the deploy."
-    attn seed standby s-7k3f9m -m "Check the rollout of the new build" --close
+    attn seed standby s-7k3f9m -m "Waiting for the user to try the build." --stay
     attn seed standby s-7k3f9m --clear
 
-Standby keeps your claim, so only the tender of a growing seed can put it on
-standby, from its own session. Clearing it needs the same standing as a move.
-Seed mail is an item addressed to the seed's mailbox: a reminder, a message sent
-with `attn agent msg <seed-id>`, the answer to an ask about the seed, and an
-update from a PR watch that addresses the seed.
+`--at` and `--in` also set the seed's reminder, with the note as its message, so
+the session resumes at that time if nothing else arrives first. Seed mail is a
+reminder, a message sent with `attn agent msg <seed-id>`, an answer to an ask
+about the seed, or an update from a PR watch on the seed.
 
-When seed mail arrives for a seed on standby and the tender's session is closed,
-attn resumes that session as itself, or starts a session for the crew member that tends the
-seed. A session the user closed resumes the same way. A closed session whose seed
-is not on standby stays closed, and its mail waits for the next tender.
+Only the seed's tender can put a growing seed on standby, from its own session,
+and the seed stays claimed while the session is closed. When the session can
+compact, attn compacts it before closing, so end your turn right after the
+command. attn refuses while the seed has unread mail; read it with
+`attn agent inbox` first. Pass `--stay` only when the user asked you to stay.
 
-The resumed session reads the mail and your standby note. The user may not be
-watching, so it ends its turn one of four ways: it puts the seed on standby
-again, harvests it, asks the user with `attn ask`, or reports.
+The note is the first thing the resumed session reads, so write down anything
+the user approved up front, such as "merge once approved". The resumed session
+should act without waiting for the user: go on standby again, harvest, ask with
+`attn ask`, or report on the seed. A new standby replaces the note.
 
-Standby ends once the tender has read all of the seed's mail with
-`attn agent inbox`, whether the session was open or resumed. Input that attn types
-into the session, such as the user's answer to an ask, counts as read. Standby
-also ends when the seed is parked, harvested or withered, and when the seed gets
-a new tender. If the session closes before you read the mail, the seed stays on
-standby and the mail resumes it again at once. A new standby replaces the note.
-Write down anything the user approved up front, such as "merge once approved".
-The session that resumes may have compacted its conversation, and the note is what
-it reads first.
+Standby ends once the tender has read all of the seed's mail, or when the seed
+is parked, harvested, withered or gets a new tender. If the session closes
+before reading the mail, the mail resumes it again.
 
-`attn seed ls --standby` lists the seeds on standby. Each row names the pull
-requests the seed's mailbox watches with their readiness, the seed's reminder,
-and why attn cannot resume the tender when it is blocked:
-
-    s-7k3f9m  origin-check  growing  …  Enforce delivery origin  [standby: owner/repo#123 ready, reminder 2026-11-05 14:20]
-    s-2b8n4q  zip-retry     growing  …  Retry zip unpack         [standby: owner/repo#118 open · resume blocked: worktree removed]
-
-`--close` closes your session in the same move, as `attn agent close --self`
-does. attn refuses it while the seed has unread mail and names
-`attn agent inbox`. Read the mail, then run the command again.
-
-`--close --compact` compacts your conversation before the close, as
-`attn agent close --self --compact` does, so the next run resumes a
-shorter conversation. Closing a session (`attn skill --reference converse-and-observe`)
-says how it works and which sessions can compact. Seed mail you read before the
-compact ends the standby, and you stay open. Seed mail you leave unread does not
-cancel the close: the session compacts and closes, and the unread mail resumes it
-again. Seed mail that arrives during the compact waits until the session has
-closed, then resumes it as above. When attn refuses `--compact`, it leaves standby
-unset, so run the command again without it.
-
-attn delivers a resumed Claude session's mail through the Claude mod and never
-types it.
-
-The profile setting `garden.tender_resume` decides which mail resumes a closed
-session. `any` (the default) resumes for all seed mail. `watches` resumes for PR
-watch updates and reminders only. `off` resumes no session, and the mail waits in
-the inbox. A crew member that tends the seed gets a session under every value.
-`attn settings set garden.tender_resume watches` changes it, and the user can
-change it in Settings.
-
-attn allows 48 tender resumes per seed in 24 hours. When it cannot resume the tender, it
-adds a note to the seed that names the reason and the item, and it sends the
-user a critical notification that opens the seed. The reasons are a removed
-worktree, a missing conversation, a Claude session whose mod does not poll
-after the resume, and the limit of 48. The mail stays unread. You can offer
-standby to the user when a seed waits on someone else.
+`attn seed ls --standby` lists seeds on standby, with the pull requests each
+watches, its reminder, and a blocked resume. The setting `garden.tender_resume`
+chooses which mail resumes a session: `any` (the default), `watches` (PR watches
+and reminders) or `off`. attn resumes a tender at most 48 times per seed in 24
+hours. When it cannot resume one, it notes the reason on the seed and notifies
+the user, and the mail stays unread.
 
 ## Artifacts
 
