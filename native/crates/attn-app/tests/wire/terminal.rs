@@ -1261,7 +1261,7 @@ fn an_automation_scroll_over_a_terminal_turns_the_wheel_its_program_hears() {
     world
         .automate(
             "scroll",
-            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": -100.0}),
+            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": 100.0}),
         )
         .unwrap();
 
@@ -1279,7 +1279,7 @@ fn an_automation_scroll_right_after_another_goes_to_its_own_target() {
     world
         .automate(
             "scroll",
-            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": -100.0}),
+            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": 100.0}),
         )
         .unwrap();
     let before = inputs(&world).len();
@@ -1287,7 +1287,7 @@ fn an_automation_scroll_right_after_another_goes_to_its_own_target() {
     world
         .automate(
             "scroll",
-            serde_json::json!({"target": {"key": "sidebar"}, "dy": -100.0}),
+            serde_json::json!({"target": {"key": "sidebar"}, "dy": 100.0}),
         )
         .unwrap();
 

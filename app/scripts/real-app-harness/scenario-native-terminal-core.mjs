@@ -75,7 +75,7 @@ try {
     await driver.click(terminal());
     const pressed = await screen('ESC[<3;');
     runner.assert(pressed.some((row) => /ESC\[<0;\d+;\d+MESC\[<3;\d+;\d+m/.test(row)), 'the program reads a primary press and its release in SGR', pressed);
-    await driver.scroll(terminal(), -60);
+    await driver.scroll(terminal(), 60);
     const wheeled = await screen('ESC[<65;');
     runner.assert(wheeled.some((row) => row.includes('ESC[<65;')), 'the program reads the wheel turning down as button 65', wheeled);
     await driver.typeInto(null, 'q');

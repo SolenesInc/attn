@@ -77,7 +77,7 @@ receipt that says which element the press landed on.
 | `find`, `wait` | `target`, and `gone` for `wait` | the element now, or once it shows and stops moving, or goes |
 | `press`, `hover` | `target`, `at` | a click or a pointer move at `at`, fractions of the box (center by default) |
 | `drag` | `target`, `at`, then `to` (a target) or `by` (points) | press, move, release |
-| `scroll` | `target`, `dy` | turns the wheel over the element by `dy` points, as a mouse wheel does; negative `dy` turns it down. The element's own wheel handler hears it before a scroll view does |
+| `scroll` | `target`, `dy` | turns the wheel over the element by `dy` points, as a mouse wheel does; positive `dy` turns it down, as a DOM wheel's `deltaY` does. The element's own wheel handler hears it before a scroll view does |
 | `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
 | `type` | `text`, `target` | focuses the target first, then types |
 | `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |

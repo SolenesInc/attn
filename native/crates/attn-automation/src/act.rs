@@ -179,7 +179,7 @@ pub fn act<S: 'static>(
             let scroll: Scroll = args!(action, payload);
             pointer(rt, &scroll.over, |rt, (x, y)| {
                 rt.wheel_event(
-                    WheelEvent::new(0.0, scroll.dy)
+                    WheelEvent::new(0.0, -scroll.dy)
                         .at(x, y)
                         .phase(GesturePhase::Ended),
                 );
