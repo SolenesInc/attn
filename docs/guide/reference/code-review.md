@@ -55,7 +55,7 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 | Enter | Open the whole file at the cursor, with the stop's lines marked |
 | `e` | Show 10 more lines around the stop |
 | `z` | Fill the tile with the file |
-| `/` | Search the repository: files by name, lines by text |
+| `/` | Search the repository: files by name, lines by text. The empty box lists the changed files |
 | ⌃O | Go back to the file you came from |
 | Escape | Close the file view, the search or the key sheet |
 

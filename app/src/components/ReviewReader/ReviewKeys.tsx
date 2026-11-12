@@ -208,7 +208,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked. On the change’s facts under the title, show or hide the changed files.'],
   [['e'], 'Show 10 more lines on each side of the stop.'],
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],
-  [['/'], 'Search the repository: files by name, lines by text.'],
+  [['/'], 'Search the repository: files by name, lines by text. The empty box lists the changed files with their added and removed lines.'],
   [['⌃o'], 'Go back to the file you came from; from the first file, close the file view. The Walkthrough keeps its stop.'],
   [['esc'], 'Close the edit box, the send, the search, this sheet, an answer or an offered one, a selection, or the file view. In the Walkthrough, return to the stop.'],
   [['?'], 'Show or hide this sheet.'],

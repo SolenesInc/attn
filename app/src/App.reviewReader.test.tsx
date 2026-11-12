@@ -354,10 +354,14 @@ describe('App review reader', () => {
     expect(fileView(tileElement)).toBeNull();
   });
 
-  it('searches the repository by name and text, and opens what it finds', async () => {
+  it('lists the changed files in an empty search, searches the repository by name and text, and opens what it finds', async () => {
     const { tileElement, daemon, press, reader } = await openReview();
 
     await press('/');
+    const changed = ['calc.go+3 −2', 'util.go+1 −0', 'go.sum+1 −1'];
+    expect(reader.getAllByRole('option').map((option) => option.textContent)).toEqual(changed);
+    expect(daemon.sentOf('review_search')).toEqual([]);
+
     const input = reader.getByRole('textbox', { name: 'Search' });
     fireEvent.change(input, { target: { value: 'calc' } });
     await act(() => vi.advanceTimersByTimeAsync(0));
@@ -365,6 +369,13 @@ describe('App review reader', () => {
     expect(daemon.sentOf('review_search').map(({ document, query }) => [document, query])).toEqual([[DOC, 'calc']]);
     const options = reader.getAllByRole('option').map((option) => option.textContent);
     expect(options).toEqual(['calc.gofile', '\treturn b - acalc.go:9'.trim()]);
+
+    fireEvent.change(input, { target: { value: '' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(reader.getAllByRole('option').map((option) => option.textContent)).toEqual(changed);
+    fireEvent.change(input, { target: { value: 'calc' } });
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await daemon.idle();
 
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });

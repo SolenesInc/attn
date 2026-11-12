@@ -1397,7 +1397,7 @@ export function ReviewReader({
           <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
         ) : null}
       </div>
-      {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
+      {search ? <SearchPanel initialQuery={search.query} files={bundle.files} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet readOnly={openFileView?.target.outside === true} /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
       {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}
