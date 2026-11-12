@@ -98,6 +98,21 @@ pub(crate) fn settle_on_screen(state: &mut State, tx: &mut Tx) {
     }
 }
 
+/// The snooze key: the snooze menu for the agent on screen, in the middle of the window.
+pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
+    let Some(id) = state.window.on_screen(&state.facts) else {
+        return;
+    };
+    let now_ms = state.window.now_ms;
+    let Some(agent) = session(state, &id) else {
+        return;
+    };
+    if queue::actions(&state.facts, agent, now_ms).snooze {
+        let name = super::model::display_name(agent);
+        super::snooze::open(state, &id, name, None, tx);
+    }
+}
+
 /// The priority key: puts the agent on screen ahead of the other turns, or back among them.
 pub(crate) fn toggle_priority_on_screen(state: &mut State) {
     let Some(id) = state.window.on_screen(&state.facts) else {

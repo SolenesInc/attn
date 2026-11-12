@@ -329,22 +329,9 @@ pub fn wake_time_short(until: Option<&str>, now_ms: i64) -> String {
     if date == day(now_ms + 86_400_000) {
         return format!("tmrw {time}");
     }
-    let days = (at.div_euclid(1000) + i64::from(local_offset(at))).div_euclid(86_400);
+    let days = (at.div_euclid(1000) + i64::from(local.offset)).div_euclid(86_400);
     let weekday = WEEKDAYS[(days + 4).rem_euclid(7) as usize];
     format!("{weekday} {time}")
-}
-
-fn local_offset(at: i64) -> i32 {
-    let local = rune::time::LocalTime::at(at);
-    let utc = rune::time::LocalTime::at_offset(at, 0);
-    let minutes = |l: rune::time::LocalTime| i64::from(l.hour) * 60 + i64::from(l.minute);
-    let mut diff = minutes(local) - minutes(utc);
-    if (local.year, local.month, local.day) > (utc.year, utc.month, utc.day) {
-        diff += 24 * 60;
-    } else if (local.year, local.month, local.day) < (utc.year, utc.month, utc.day) {
-        diff -= 24 * 60;
-    }
-    (diff * 60) as i32
 }
 
 #[cfg(test)]

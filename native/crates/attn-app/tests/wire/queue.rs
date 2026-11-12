@@ -449,6 +449,12 @@ fn a_row_settles_its_turn_and_unsnoozes_its_agent_without_opening_it() {
             .find(Target::key("queue-settled.w1.settle"))
             .is_none()
     );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-chief.chief.settle"))
+            .is_none()
+    );
 }
 
 #[test]
@@ -501,12 +507,15 @@ fn a_turn_the_agent_closes_itself_keeps_the_window_where_it_is() {
 }
 
 #[test]
-fn going_home_by_hand_does_not_follow_the_next_turn() {
+fn going_home_by_hand_ends_following_the_next_turn() {
+    let a = turn("a", 30);
     let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
-        turn("a", 30),
+        a.clone(),
         session("w1", "working"),
     ]))));
     world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    changes(&mut world, settled("a"));
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
     world.gesture(|app| app.click(Target::key("sidebar.home")));
 
     changes(&mut world, turn("w1", 0));
@@ -598,4 +607,127 @@ fn a_closed_turn_in_the_middle_of_the_queue_moves_on_to_a_priority_head() {
     changes(&mut world, settled("b"));
 
     assert_eq!(shown(&world), ["a", "c"]);
+}
+
+fn untils(world: &World, cmd: &str) -> Vec<(String, String)> {
+    world
+        .daemon
+        .sent_of(cmd)
+        .iter()
+        .map(|m| {
+            (
+                m["session_id"].as_str().unwrap_or_default().to_owned(),
+                m["until"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn a_row_snoozes_its_agent_for_the_time_the_menu_shows() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+    let menu = world
+        .screen()
+        .get(Target::role("menu").name("Snooze t-old"));
+    assert_eq!(menu.key.as_deref(), Some("snooze.menu.snooze"));
+    let choices: Vec<_> = world
+        .screen()
+        .all(Target::role("menu-item"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(
+        choices,
+        [
+            "For 30 minutes",
+            "For an hour",
+            "For 2 hours",
+            "For 4 hours",
+            "For 8 hours",
+            "Until tomorrow",
+            "Until Saturday",
+            "Until Monday",
+            "Standby until…",
+        ]
+    );
+
+    world.gesture(|app| app.click(Target::role("menu-item").name("For an hour")));
+
+    assert_eq!(
+        untils(&world, "snooze_turn"),
+        [("t-old".to_owned(), "2026-11-12T10:00:00.000Z".to_owned())]
+    );
+    assert!(world.screen().find(Target::role("menu")).is_none());
+    assert!(shown(&world).is_empty());
+}
+
+#[test]
+fn standby_from_the_snooze_menu_puts_the_agent_on_standby_until_the_choice() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-new")));
+    world.gesture(|app| app.click(Target::role("menu-item").name("Standby until…")));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Standby t-new until"))
+            .is_some()
+    );
+    world.gesture(|app| app.click(Target::role("menu-item").name("For 30 minutes")));
+
+    assert_eq!(
+        untils(&world, "standby_session"),
+        [("t-new".to_owned(), "2026-11-12T09:30:00.000Z".to_owned())]
+    );
+    assert!(untils(&world, "snooze_turn").is_empty());
+}
+
+#[test]
+fn escape_closes_the_snooze_menu_and_snoozes_nothing() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+
+    assert!(world.screen().find(Target::role("menu")).is_none());
+    assert!(untils(&world, "snooze_turn").is_empty());
+}
+
+#[test]
+fn the_snooze_key_opens_the_menu_for_the_agent_on_screen_and_the_arrows_choose() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("t-old", 120),
+        turn("t-new", 5),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.t-old")));
+
+    world.gesture(|app| app.key(chord(Action::SessionSnooze)));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Snooze chief"))
+            .is_none()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Snooze t-old"))
+            .is_some()
+    );
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(plain(rune::Key::Enter)));
+
+    assert_eq!(
+        untils(&world, "snooze_turn"),
+        [("t-old".to_owned(), "2026-11-12T10:00:00.000Z".to_owned())]
+    );
+}
+
+fn plain(key: rune::Key) -> rune::KeyEvent {
+    rune::KeyEvent {
+        key,
+        mods: rune::Mods::default(),
+    }
 }

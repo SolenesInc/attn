@@ -41,6 +41,7 @@ pub struct Window {
     pub(crate) queue_turns: Vec<String>,
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
+    pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -356,6 +357,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         ));
     }
     layers.extend(crate::desktop::cap_menu(state, t));
+    layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
     if let Some(notice) = &window.notice {
         layers.push(floating_status("notice", notice.text.clone(), t));

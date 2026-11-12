@@ -3,6 +3,7 @@ mod chrome;
 mod model;
 mod queue;
 mod queue_view;
+pub(crate) mod snooze;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -67,6 +68,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         ),
         Action::SessionSettle => actions::settle_on_screen(state, tx),
         Action::SessionPriority => actions::toggle_priority_on_screen(state),
+        Action::SessionSnooze => actions::snooze_on_screen(state, tx),
         Action::SessionPrev if queue => actions::step(state, -1, tx),
         Action::SessionNext if queue => actions::step(state, 1, tx),
         _ => return false,

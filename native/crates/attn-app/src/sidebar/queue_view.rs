@@ -44,6 +44,7 @@ pub struct QueueAgent {
     pub age: String,
     pub snoozed_until: String,
     pub settle: bool,
+    pub snooze: bool,
     pub unsnooze: bool,
 }
 
@@ -87,6 +88,7 @@ fn slot_of(state: &State, desktop: Option<&str>) -> String {
 
 fn agent(state: &State, band: Band, row: &QueueRow<'_>, now_ms: i64) -> QueueAgent {
     let session = row.session;
+    let actions = queue::actions(&state.facts, session, now_ms);
     QueueAgent {
         band,
         agent: AgentRow::of(
@@ -105,7 +107,8 @@ fn agent(state: &State, band: Band, row: &QueueRow<'_>, now_ms: i64) -> QueueAge
         } else {
             String::new()
         },
-        settle: band == Band::Turn && queue::actions(&state.facts, session, now_ms).settle,
+        settle: band == Band::Turn && actions.settle,
+        snooze: matches!(band, Band::Turn | Band::Working) && actions.snooze,
         unsnooze: band == Band::Snoozed,
     }
 }
@@ -435,12 +438,21 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
         control(key, "unsnooze", format!("Unsnooze {name}"), "↩", t)
             .on_press(move |state: &mut State| super::actions::wake(state, &id))
     });
-    (a.settle || a.unsnooze).then(|| {
+    let snooze = a.snooze.then(|| {
+        let (id, name, under) = (id.clone(), name.clone(), format!("{key}.snooze"));
+        control(key, "snooze", format!("Snooze {name}"), "☾", t).on_press_tx(
+            move |state: &mut State, tx: &mut Tx| {
+                super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx)
+            },
+        )
+    });
+    (a.settle || a.snooze || a.unsnooze).then(|| {
         row()
             .key(format!("{key}.controls"))
             .gap(2.0)
             .group_opacity(0.0, 1.0)
             .children(unsnooze)
+            .children(snooze)
             .children(settle)
     })
 }
@@ -455,7 +467,6 @@ fn control(row_key: &str, name: &str, label: String, glyph: &str, t: &Tokens) ->
         .center()
         .radius(4.0)
         .hover(t.bg_button)
-        .hover_alone()
         .child(
             text(glyph.to_owned())
                 .font(type_::LABEL)
