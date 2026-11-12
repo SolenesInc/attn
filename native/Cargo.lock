@@ -70,7 +70,7 @@ dependencies = [
 [[package]]
 name = "accesskit_windows"
 version = "0.35.2"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "accesskit",
  "accesskit_consumer",
@@ -2365,7 +2365,7 @@ checksum = "9c4482d912d7671a7cd2089794f90ef3bb5f5f8c738230fb0fcd50fa020f0ed3"
 [[package]]
 name = "parley_engine"
 version = "0.12.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "fontique",
  "harfrust",
@@ -2775,7 +2775,7 @@ dependencies = [
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -2857,7 +2857,7 @@ dependencies = [
 [[package]]
 name = "rune-highlights"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "unicode-ident",
  "wasmparser",
@@ -2866,7 +2866,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "icu_normalizer",
  "rune",
@@ -2878,7 +2878,7 @@ dependencies = [
 [[package]]
 name = "rune-mac"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "objc2 0.5.3",
  "rune-notify",
@@ -2887,12 +2887,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 
 [[package]]
 name = "rune-notify"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "block2 0.5.1",
  "objc2 0.5.3",
@@ -2904,7 +2904,7 @@ dependencies = [
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "wgpu",
 ]
@@ -2912,7 +2912,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "taffy",
 ]
@@ -4056,7 +4056,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.1"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "android_system_properties",
  "arrayvec",
@@ -4349,7 +4349,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "git+https://github.com/SolenesInc/rune?rev=a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2#a2ff63d966b7f02f7b93cf5d14c02c235ceb30e2"
+source = "git+https://github.com/SolenesInc/rune?rev=c50eb72d27aafb2e8f8f171052d1292594687bec#c50eb72d27aafb2e8f8f171052d1292594687bec"
 dependencies = [
  "ahash",
  "android-activity",
