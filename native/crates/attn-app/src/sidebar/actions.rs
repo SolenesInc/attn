@@ -27,7 +27,7 @@ pub(crate) fn toggle_flow(state: &mut State, _: &mut Tx) {
 /// Shows the oldest document that arrived unseen on the current desktop, else opens the turn
 /// at the head of the queue, as ⌘J and the "N waiting" head do.
 pub(crate) fn jump_to_waiting(state: &mut State, tx: &mut Tx) {
-    if crate::desktop::show_unseen(state) {
+    if crate::desktop::show_unseen(state, tx) {
         return;
     }
     let head = queue::bands(&state.facts, state.window.now_ms)

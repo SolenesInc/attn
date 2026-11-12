@@ -283,6 +283,24 @@ fn arrows_show_the_neighbouring_tile_and_leave_the_desktop_past_the_row_end() {
 }
 
 #[test]
+fn an_arrow_gives_the_keyboard_to_the_tile_it_shows_before_the_daemon_answers() {
+    let tree = row([pane("a"), pane("b")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    world.gesture(|app| app.click(Target::role("group").name("Agent a")));
+
+    press(&mut world, Action::TerminalFocusRight);
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-b"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_tile_column_takes_its_most_recently_used_tile_when_arrows_reach_it() {
     let tree = row([below(pane("a"), pane("b")), pane("c")]);
     let mut world = start(vec![desktop(1, "b", Some(tree.clone()))]);

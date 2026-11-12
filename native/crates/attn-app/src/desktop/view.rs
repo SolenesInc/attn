@@ -956,10 +956,7 @@ fn press_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
 }
 
 pub(crate) fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
-    state.window.take_keyboard(&tile.desktop, &tile.pane, tx);
-    let keyboard = state.window.keyboard_terminal(&state.facts);
-    state.terminals.focus(keyboard, &state.daemon);
-    super::actions::activate(state, &tile.desktop, &tile.pane);
+    super::actions::activate(state, &tile.desktop, &tile.pane, tx);
 }
 
 fn report_mods(mods: Mods) -> u8 {

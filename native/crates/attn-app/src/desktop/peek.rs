@@ -453,7 +453,7 @@ fn submit(state: &mut State, tx: &mut Tx) {
     let draft = peeks.field.text.clone();
     let line = draft.trim().to_owned();
     if line.is_empty() {
-        open_tile(state);
+        open_tile(state, tx);
         return;
     }
     if blocked {
@@ -596,7 +596,7 @@ fn write(
 }
 
 /// Opens the peek's tile on its desktop. A drafted reply stays, unsent, in the tile.
-fn open_tile(state: &mut State) {
+fn open_tile(state: &mut State, tx: &mut Tx) {
     let Some(open) = state.window.desk.peeks.open.as_ref() else {
         return;
     };
@@ -616,7 +616,7 @@ fn open_tile(state: &mut State) {
         }
     }
     dismiss(state);
-    super::actions::show_leaf(state, &desktop, &leaf);
+    super::actions::show_leaf(state, &desktop, &leaf, tx);
 }
 
 impl Peeks {
@@ -877,7 +877,7 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .child(text("❯").font(type_::LABEL).color(t.text_secondary))
         .child(field)
-        .child(button("shelf.peek.open", "Open", "↵").on_press(open_tile))
+        .child(button("shelf.peek.open", "Open", "↵").on_press_tx(open_tile))
         .child(
             button("shelf.peek.close", "Close", "esc").on_press(|state: &mut State| {
                 close(state);

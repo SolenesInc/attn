@@ -16,7 +16,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
     use Action::*;
     match action {
         GoToDesktop { desktop } => set_current(state, desktop),
-        OpenTile { desktop, tile } => show_leaf(state, desktop, tile),
+        OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop),
         DesktopSelect1 | DesktopSelect2 | DesktopSelect3 | DesktopSelect4 | DesktopSelect5
         | DesktopSelect6 | DesktopSelect7 | DesktopSelect8 | DesktopSelect9 => {
@@ -29,17 +29,17 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         | DesktopSendStay9 => send_to_slot(state, slot_of(action), false),
         SessionPrev => step_desktop(state, -1),
         SessionNext => step_desktop(state, 1),
-        TerminalFocusLeft => focus_toward(state, Toward::Left),
-        TerminalFocusRight => focus_toward(state, Toward::Right),
-        TerminalFocusUp => focus_toward(state, Toward::Up),
-        TerminalFocusDown => focus_toward(state, Toward::Down),
+        TerminalFocusLeft => focus_toward(state, Toward::Left, tx),
+        TerminalFocusRight => focus_toward(state, Toward::Right, tx),
+        TerminalFocusUp => focus_toward(state, Toward::Up, tx),
+        TerminalFocusDown => focus_toward(state, Toward::Down, tx),
         TerminalSplitVertical => split(state, Direction::Vertical, tx),
         TerminalSplitHorizontal => split(state, Direction::Horizontal, tx),
         TerminalToggleZoom => toggle_view(state, false),
         TerminalToggleMaximize => toggle_view(state, true),
         SessionClose | TerminalClose => close(state),
-        SessionHistoryBack => walk_history(state, -1),
-        SessionHistoryForward => walk_history(state, 1),
+        SessionHistoryBack => walk_history(state, -1, tx),
+        SessionHistoryForward => walk_history(state, 1, tx),
         ShelfCarryLeft => super::shelf::carry(state, -1, tx),
         ShelfCarryRight => super::shelf::carry(state, 1, tx),
         ShelfSendToShelf => super::shelf::send_to_shelf(state, tx),
@@ -218,7 +218,7 @@ fn step_desktop(state: &mut State, step: i32) {
 
 /// Shows the oldest document that arrived unseen on the current desktop. Returns whether
 /// there was one.
-pub(crate) fn show_unseen(state: &mut State) -> bool {
+pub(crate) fn show_unseen(state: &mut State, tx: &mut Tx) -> bool {
     let Some(desktop) = state.facts.current_desktop().map(|d| d.id.clone()) else {
         return false;
     };
@@ -227,12 +227,14 @@ pub(crate) fn show_unseen(state: &mut State) -> bool {
     };
     state.window.view = crate::shell::View::Desktop;
     state.window.follow_next_turn = false;
-    show_leaf(state, &desktop, &leaf);
+    show_leaf(state, &desktop, &leaf, tx);
     true
 }
 
-/// Shows `leaf` on `desktop` as the active tile, as the person picked it.
-pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str) {
+/// Shows `leaf` on `desktop` as the active tile, as the person picked it, and gives it the
+/// keyboard.
+pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    give_keyboard(state, desktop, leaf, tx);
     state.window.desk.pick(desktop, leaf);
     let _ = state.daemon.send(&DesktopShowLeafMessage {
         request_id: super::request_id(),
@@ -242,19 +244,28 @@ pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str) {
     });
 }
 
-/// A tile the window took: it becomes the active tile of the current desktop.
-pub(crate) fn activate(state: &mut State, desktop: &str, leaf: &str) {
+/// A tile the window took: it holds the keyboard and becomes the active tile of the current
+/// desktop.
+pub(crate) fn activate(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     let current = state.facts.current_desktop();
     let already = current.is_some_and(|d| d.id == desktop && d.active_pane_id == leaf);
-    if !already {
-        show_leaf(state, desktop, leaf);
+    if already {
+        give_keyboard(state, desktop, leaf, tx);
+    } else {
+        show_leaf(state, desktop, leaf, tx);
     }
+}
+
+pub(crate) fn give_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    state.window.take_keyboard(desktop, leaf, tx);
+    let keyboard = state.window.keyboard_terminal(&state.facts);
+    state.terminals.focus(keyboard, &state.daemon);
 }
 
 /// Moves the active tile to its neighbour on screen: along the row by columns for left and
 /// right, by geometry within a column and for up and down. Past the edge it leaves for the
 /// neighbouring desktop.
-fn focus_toward(state: &mut State, toward: Toward) {
+fn focus_toward(state: &mut State, toward: Toward, tx: &mut Tx) {
     let edge = match toward {
         Toward::Left | Toward::Up => -1,
         Toward::Right | Toward::Down => 1,
@@ -290,7 +301,7 @@ fn focus_toward(state: &mut State, toward: Toward) {
     };
     let desktop = desktop.id.clone();
     match next {
-        Some(leaf) => show_leaf(state, &desktop, &leaf),
+        Some(leaf) => show_leaf(state, &desktop, &leaf, tx),
         None => step_desktop(state, edge),
     }
 }
@@ -367,11 +378,7 @@ pub(super) fn split_at(
 /// The person asked to see `leaf` alone: it takes the keyboard and becomes the active tile,
 /// shown alone, with zoom off.
 pub(super) fn focus_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
-    let tile = crate::shell::Holder {
-        desktop: desktop.to_owned(),
-        pane: leaf.to_owned(),
-    };
-    super::view::take_tile(state, &tile, tx);
+    activate(state, desktop, leaf, tx);
     state.window.desk.row_mut(desktop).view = View::Focused(leaf.to_owned());
 }
 
@@ -459,7 +466,7 @@ fn close(state: &mut State) {
 
 /// Walks back or forward through the tiles this window showed, skipping ones that are gone,
 /// and following a tile to the desktop it moved to.
-fn walk_history(state: &mut State, step: i32) {
+fn walk_history(state: &mut State, step: i32, tx: &mut Tx) {
     let facts = &state.facts;
     let history = &mut state.window.desk.history;
     let mut kept: Vec<Visit> = Vec::new();
@@ -483,7 +490,7 @@ fn walk_history(state: &mut State, step: i32) {
     };
     history.at = at;
     let Visit { desktop, leaf } = history.entries[at].clone();
-    show_leaf(state, &desktop, &leaf);
+    show_leaf(state, &desktop, &leaf, tx);
 }
 
 /// Keeps a visit whose tile is still on its desktop, follows one that moved to one other

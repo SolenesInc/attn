@@ -265,6 +265,13 @@ impl World {
         world
     }
 
+    /// The person resizes the window to `size` points wide and tall, then settles.
+    pub fn resize(&mut self, size: (f32, f32)) {
+        let scale = self.runtime.env.scale;
+        self.runtime.set_viewport(size, scale);
+        self.settle();
+    }
+
     /// Runs a user action, then returns once the app and the daemon have stopped exchanging
     /// messages.
     pub fn gesture(&mut self, f: impl FnOnce(&mut Driver)) {

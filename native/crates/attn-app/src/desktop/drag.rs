@@ -694,8 +694,10 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             if let Some(note) = beside_limit(state) {
                 state.window.notify(note, tx);
             }
-            if active != leaf {
-                actions::show_leaf(state, &source, &leaf);
+            if active == leaf {
+                actions::give_keyboard(state, &source, &leaf, tx);
+            } else {
+                actions::show_leaf(state, &source, &leaf, tx);
             }
             super::shelf::send_move(
                 state,

@@ -512,7 +512,9 @@ fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
         .w(LIVE_DOT_PX - space::S1)
         .h(LIVE_DOT_PX - space::S1)
         .center()
-        .on_press(move |state: &mut State| actions::show_leaf(state, &desktop, &leaf))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            actions::show_leaf(state, &desktop, &leaf, tx)
+        })
         .child(rune::el().w(8.0).h(8.0).radius(4.0).fill(if current {
             t.accent
         } else {
@@ -797,12 +799,13 @@ pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) 
 }
 
 /// Brings `leaf`'s column beside the active tile, or jumps to it where it is when it is on
-/// screen already or the two cannot show side by side.
-pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, _tx: &mut Tx) {
+/// screen already or the two cannot show side by side. Either way it takes the keyboard.
+pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, tx: &mut Tx) {
     let Some((active, edge, sent_on)) = beside_active(state, desktop_id, leaf) else {
-        return actions::show_leaf(state, desktop_id, leaf);
+        return actions::show_leaf(state, desktop_id, leaf, tx);
     };
     let active_then = active.clone();
+    actions::give_keyboard(state, desktop_id, leaf, tx);
     move_leaf(state, desktop_id, leaf, &active, edge, true, true);
     state.window.desk.row_mut(desktop_id).drop = Some(PendingDrop {
         drop: ShelfDrop {
@@ -916,11 +919,11 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
             .window
             .notify("This is the only tile on screen.".into(), tx),
         ShelfSend::Unstack { leaf, anchor, next } => {
-            actions::show_leaf(state, &id, &next);
+            actions::show_leaf(state, &id, &next, tx);
             move_leaf(state, &id, &leaf, &anchor, Edge::Right, false, false);
         }
         ShelfSend::Hold { leaf, next } => {
-            actions::show_leaf(state, &id, &next);
+            actions::show_leaf(state, &id, &next, tx);
             state.window.desk.row_mut(&id).held.push(leaf.clone());
             flash_leaves(state, &id, vec![leaf], tx);
         }
@@ -930,7 +933,7 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
             edge,
             next,
         } => {
-            actions::show_leaf(state, &id, &next);
+            actions::show_leaf(state, &id, &next, tx);
             move_leaf(state, &id, &leaf, &anchor, edge, true, false);
         }
     }
