@@ -173,14 +173,30 @@ fn column_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
                 .area
                 .map_or(0, |a| (a.w / a.px_per_col).floor() as i64);
             for (leaf, cols) in wanted {
-                let _ = state.daemon.send(&DesktopSetWantedColsMessage {
-                    request_id: super::request_id(),
-                    desktop_id: drag.desktop.clone(),
-                    leaf_id: leaf,
-                    cols: cols as i64,
-                    area_cols: if cols > 0 { area_cols } else { 0 },
-                    ..DesktopSetWantedColsMessage::new()
-                });
+                let (desktop, before) = (drag.desktop.clone(), drag.pending.clone());
+                let refused = leaf.clone();
+                state.ask(
+                    |id| DesktopSetWantedColsMessage {
+                        request_id: id,
+                        desktop_id: drag.desktop.clone(),
+                        leaf_id: leaf,
+                        cols: cols as i64,
+                        area_cols: if cols > 0 { area_cols } else { 0 },
+                        ..DesktopSetWantedColsMessage::new()
+                    },
+                    move |state: &mut State, answer, tx: &mut Tx| {
+                        if let Some(error) = super::shelf::refusal(answer) {
+                            let row = state.window.desk.row_mut(&desktop);
+                            row.pending_widths.retain(|(l, _)| *l != refused);
+                            row.pending_widths
+                                .extend(before.into_iter().filter(|(l, _)| *l == refused));
+                            state
+                                .window
+                                .notify(format!("Could not save that width: {error}"), tx);
+                        }
+                    },
+                    tx,
+                );
             }
         }
     }

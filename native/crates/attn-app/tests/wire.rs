@@ -10,6 +10,7 @@ mod wire {
     mod picker;
     mod profile;
     mod queue;
+    mod shelf_drags;
     mod shelf_layout;
     mod shelf_peek;
     mod sidebar;

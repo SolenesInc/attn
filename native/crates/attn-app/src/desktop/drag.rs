@@ -663,6 +663,8 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 None,
                 true,
                 false,
+                "reorder the shelf",
+                tx,
             );
         }
         (Target::Shelf { column, edge }, None) => {
@@ -709,6 +711,8 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 None,
                 false,
                 true,
+                "move that tile",
+                tx,
             );
         }
         (Target::Tile(dock), Some(_)) if dock.replaces => {
@@ -741,35 +745,39 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 },
             };
             row.swap = Some(Swap {
+                chip: leaf.clone(),
                 slot: dock.anchor.clone(),
                 until,
                 tree: sent_on,
                 moves,
             });
-            super::shelf::send_move(
+            let (from, slot) = (source.clone(), dock.anchor.clone());
+            super::shelf::send_move_then(
                 state,
-                &source,
-                &source,
-                &leaf,
-                &dock.anchor,
-                chip_edge.as_str(),
+                (&source, &source, &leaf, &dock.anchor, chip_edge.as_str()),
                 None,
                 true,
                 true,
+                "put that tile in the slot",
+                move |state: &mut State, tx: &mut Tx| {
+                    if let Some((anchor, edge)) = back {
+                        super::shelf::send_move(
+                            state,
+                            &from,
+                            &from,
+                            &slot,
+                            &anchor,
+                            edge.as_str(),
+                            None,
+                            true,
+                            false,
+                            "put that tile in the slot",
+                            tx,
+                        );
+                    }
+                },
+                tx,
             );
-            if let Some((anchor, edge)) = back {
-                super::shelf::send_move(
-                    state,
-                    &source,
-                    &source,
-                    &dock.anchor,
-                    &anchor,
-                    edge.as_str(),
-                    None,
-                    true,
-                    false,
-                );
-            }
         }
         (Target::Tile(dock), chip) => {
             if let Some(limit) = &dock.limit {
@@ -788,6 +796,8 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 Some(dock.ratio),
                 chip.is_some(),
                 true,
+                "move that tile",
+                tx,
             );
         }
     }
@@ -896,6 +906,8 @@ pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
 /// A chip taking a tile's place: the tile stays held off screen until the last move lands.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Swap {
+    /// The chip's tile, which goes into the slot.
+    pub chip: String,
     pub slot: String,
     pub until: ShelfDrop,
     /// The row's tree when the moves were sent, and how many changes to it the moves make.

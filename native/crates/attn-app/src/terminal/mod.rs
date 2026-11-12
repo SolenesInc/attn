@@ -654,6 +654,13 @@ impl Terminals {
         }
     }
 
+    /// Drops the input typed for `id` while it attaches; whether there was any.
+    pub(crate) fn discard_held(&mut self, id: &str) -> bool {
+        self.panes
+            .get_mut(id)
+            .is_some_and(|term| !std::mem::take(&mut term.held).is_empty())
+    }
+
     /// Sends what the user typed or pasted to the terminal, held while it attaches.
     pub(crate) fn input(&mut self, id: &str, data: &[u8], daemon: &Commands) -> bool {
         let Some(term) = self.panes.get_mut(id) else {

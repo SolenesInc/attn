@@ -2,7 +2,8 @@
 //! chips in the title bar either side of a dot per column on screen.
 
 use attn_protocol::{
-    Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage,
+    Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, ProfileActionResultMessage,
+    SetSettingMessage,
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -733,10 +734,11 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
 }
 
 /// Moves `leaf` beside `anchor` on `target`, leaving out what the daemon takes as given: no
-/// share, a single leaf rather than its column, and the moved leaf becoming active.
+/// share, a single leaf rather than its column, and the moved leaf becoming active. A refusal
+/// is named as the failure to do `what`.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn send_move(
-    state: &State,
+    state: &mut State,
     source: &str,
     target: &str,
     leaf: &str,
@@ -745,29 +747,127 @@ pub(crate) fn send_move(
     share: Option<f32>,
     whole_column: bool,
     activate: bool,
+    what: &'static str,
+    tx: &mut Tx,
 ) {
-    let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: super::request_id(),
-        source_desktop_id: source.to_owned(),
-        target_desktop_id: Some(target.to_owned()),
-        leaf_id: leaf.to_owned(),
-        anchor_id: Some(anchor.to_owned()),
-        edge: Some(edge.to_owned()),
-        leaf_share: share.map(f64::from),
-        whole_column: whole_column.then_some(true),
-        activate: (!activate).then_some(false),
-        ..DesktopMoveLeafMessage::new()
-    });
+    send_move_then(
+        state,
+        (source, target, leaf, anchor, edge),
+        share,
+        whole_column,
+        activate,
+        what,
+        |_, _| {},
+        tx,
+    );
 }
 
+/// [`send_move`], running `then` once the daemon made the move.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn send_move_then(
+    state: &mut State,
+    (source, target, leaf, anchor, edge): (&str, &str, &str, &str, &str),
+    share: Option<f32>,
+    whole_column: bool,
+    activate: bool,
+    what: &'static str,
+    then: impl FnOnce(&mut State, &mut Tx) + 'static,
+    tx: &mut Tx,
+) {
+    let (desktop, moved) = (source.to_owned(), leaf.to_owned());
+    state.ask(
+        |id| DesktopMoveLeafMessage {
+            request_id: id,
+            source_desktop_id: source.to_owned(),
+            target_desktop_id: Some(target.to_owned()),
+            leaf_id: leaf.to_owned(),
+            anchor_id: Some(anchor.to_owned()),
+            edge: Some(edge.to_owned()),
+            leaf_share: share.map(f64::from),
+            whole_column: whole_column.then_some(true),
+            activate: (!activate).then_some(false),
+            ..DesktopMoveLeafMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| match refusal(answer) {
+            Some(error) => refused_move(state, &desktop, &moved, what, &error, tx),
+            None => then(state, tx),
+        },
+        tx,
+    );
+}
+
+/// Why the daemon did not do what it was asked, or `None` when it did.
+pub(crate) fn refusal(answer: crate::requests::Answer) -> Option<String> {
+    let result: Option<ProfileActionResultMessage> = answer.parse();
+    match result {
+        Some(r) if r.success => None,
+        failed => Some(
+            failed
+                .and_then(|r| r.error)
+                .filter(|e| !e.is_empty())
+                .unwrap_or_else(|| "the daemon did not answer".into()),
+        ),
+    }
+}
+
+/// The daemon refused to move `leaf`: the row shows what it showed before, and the keyboard
+/// goes back to the active tile when it went ahead to `leaf`, which never arrived.
+fn refused_move(
+    state: &mut State,
+    desktop: &str,
+    leaf: &str,
+    what: &str,
+    error: &str,
+    tx: &mut Tx,
+) {
+    let row = state.window.desk.row_mut(desktop);
+    if row.drop.as_ref().is_some_and(|p| p.drop.leaf == leaf) {
+        row.drop = None;
+    }
+    if let Some(swap) = row.swap.take_if(|s| s.chip == leaf || s.slot == leaf) {
+        row.held.retain(|id| *id != swap.slot);
+    }
+    let lost = take_back_keyboard(state, desktop, leaf, tx);
+    let text = if lost {
+        format!("Input typed while switching could not be delivered: {error}")
+    } else {
+        format!("Could not {what}: {error}")
+    };
+    state.window.notify(text, tx);
+}
+
+/// Gives the keyboard back to `desktop`'s active tile when `leaf` holds it without being
+/// active, dropping what was typed for `leaf`'s terminal; whether anything was dropped.
+fn take_back_keyboard(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) -> bool {
+    let holds = state
+        .window
+        .keyboard
+        .as_ref()
+        .is_some_and(|h| h.desktop == desktop && h.pane == leaf);
+    let Some(d) = state.facts.desktops.iter().find(|d| d.id == desktop) else {
+        return false;
+    };
+    if !holds || d.active_pane_id == leaf {
+        return false;
+    }
+    let active = d.active_pane_id.clone();
+    let runtime = super::view::pane_of(d, leaf).map(|p| p.runtime_id.clone());
+    let lost = runtime.is_some_and(|r| state.terminals.discard_held(&r));
+    actions::give_keyboard(state, desktop, &active, tx);
+    lost
+}
+
+#[allow(clippy::too_many_arguments)]
 fn move_leaf(
-    state: &State,
+    state: &mut State,
     desktop: &str,
     leaf: &str,
     anchor: &str,
     edge: Edge,
     whole_column: bool,
     activate: bool,
+    what: &'static str,
+    tx: &mut Tx,
 ) {
     send_move(
         state,
@@ -779,7 +879,34 @@ fn move_leaf(
         None,
         whole_column,
         activate,
+        what,
+        tx,
     );
+}
+
+/// Forgets every width dragged on `desktop`, or says there is none.
+pub(crate) fn clear_dragged_widths(state: &mut State, desktop: &str, tx: &mut Tx) {
+    let leaves: Vec<String> = state
+        .facts
+        .desktops
+        .iter()
+        .find(|d| d.id == desktop)
+        .and_then(|d| Node::parse(&d.tree_json))
+        .map(|tree| {
+            layout::read_row(&tree)
+                .iter()
+                .filter(|c| c.wanted_cols.is_some())
+                .map(|c| c.first().to_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    if leaves.is_empty() {
+        state
+            .window
+            .notify("This desktop has no dragged widths.".into(), tx);
+        return;
+    }
+    clear_widths(state, desktop, &leaves);
 }
 
 pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
@@ -806,7 +933,17 @@ pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, tx: &mut Tx
     };
     let active_then = active.clone();
     actions::give_keyboard(state, desktop_id, leaf, tx);
-    move_leaf(state, desktop_id, leaf, &active, edge, true, true);
+    move_leaf(
+        state,
+        desktop_id,
+        leaf,
+        &active,
+        edge,
+        true,
+        true,
+        "move that tile",
+        tx,
+    );
     state.window.desk.row_mut(desktop_id).drop = Some(PendingDrop {
         drop: ShelfDrop {
             leaf: leaf.to_owned(),
@@ -892,7 +1029,17 @@ pub(crate) fn carry(state: &mut State, step: i32, tx: &mut Tx) {
         });
     }
     let edge = if step < 0 { Edge::Left } else { Edge::Right };
-    move_leaf(state, &desktop_id, &active, &anchor, edge, true, true);
+    move_leaf(
+        state,
+        &desktop_id,
+        &active,
+        &anchor,
+        edge,
+        true,
+        true,
+        "carry that tile",
+        tx,
+    );
 }
 
 /// Sends the active tile off screen to the shelf, showing the tile that takes its place.
@@ -920,7 +1067,17 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
             .notify("This is the only tile on screen.".into(), tx),
         ShelfSend::Unstack { leaf, anchor, next } => {
             actions::show_leaf(state, &id, &next, tx);
-            move_leaf(state, &id, &leaf, &anchor, Edge::Right, false, false);
+            move_leaf(
+                state,
+                &id,
+                &leaf,
+                &anchor,
+                Edge::Right,
+                false,
+                false,
+                "send that tile to the shelf",
+                tx,
+            );
         }
         ShelfSend::Hold { leaf, next } => {
             actions::show_leaf(state, &id, &next, tx);
@@ -934,7 +1091,17 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
             next,
         } => {
             actions::show_leaf(state, &id, &next, tx);
-            move_leaf(state, &id, &leaf, &anchor, edge, true, false);
+            move_leaf(
+                state,
+                &id,
+                &leaf,
+                &anchor,
+                edge,
+                true,
+                false,
+                "send that tile to the shelf",
+                tx,
+            );
         }
     }
 }

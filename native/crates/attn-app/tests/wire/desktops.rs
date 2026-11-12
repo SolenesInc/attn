@@ -1437,6 +1437,14 @@ fn a_chip_dragged_onto_a_tiles_edge_brings_its_whole_column_and_lands_beside_a_t
 #[test]
 fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips_place() {
     let mut world = start(vec![four_in_a_row("a")]);
+    world.daemon.on("desktop_move_leaf", |r| {
+        attn_testkit::message(attn_protocol::ProfileActionResultMessage {
+            action: r["cmd"].as_str().unwrap().into(),
+            request_id: r["request_id"].as_str().unwrap().into(),
+            success: true,
+            ..attn_protocol::ProfileActionResultMessage::new()
+        })
+    });
 
     let to = in_tile(&world, "b", 0.5, 0.5);
     drag(&mut world, "shelf.chip.d", to);

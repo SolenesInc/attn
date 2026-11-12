@@ -214,6 +214,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             Action::ShelfSendToShelf,
         ),
     ]);
+    commands.extend(facts.current_desktop().map(|desktop| {
+        Command::new(
+            "shelf-clear-dragged-widths",
+            "Clear dragged widths",
+            &["shelf", "row", "width", "divider", "reset"],
+            Action::ClearDraggedWidths {
+                desktop: desktop.id.clone(),
+            },
+        )
+    }));
     let settings = &facts.settings;
     let queue_on = setting::on(settings, queue::QUEUE_MODE);
     let crew_on = setting::on(settings, queue::QUEUE_CREW);

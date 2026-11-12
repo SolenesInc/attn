@@ -47,6 +47,8 @@ macro_rules! actions {
             WakeSession { session: String },
             /// Store a daemon setting.
             SetSetting { key: String, value: String },
+            /// Forget every column width dragged on a desktop.
+            ClearDraggedWidths { desktop: String },
         }
 
         impl Action {
@@ -66,6 +68,7 @@ macro_rules! actions {
                     Action::ReloadSession { .. } => "session.reload",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
+                    Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
                 }
             }
 
@@ -82,6 +85,7 @@ macro_rules! actions {
                     Action::ReloadSession { .. } => "Reload an agent",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
+                    Action::ClearDraggedWidths { .. } => "Clear dragged widths",
                 }
             }
 

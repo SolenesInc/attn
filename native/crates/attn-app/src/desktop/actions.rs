@@ -17,6 +17,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
     match action {
         GoToDesktop { desktop } => set_current(state, desktop),
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
+        ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop),
         DesktopSelect1 | DesktopSelect2 | DesktopSelect3 | DesktopSelect4 | DesktopSelect5
         | DesktopSelect6 | DesktopSelect7 | DesktopSelect8 | DesktopSelect9 => {
