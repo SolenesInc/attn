@@ -71,6 +71,7 @@ fn numbered(from: u32, to: u32) -> Vec<u8> {
 #[test]
 fn the_wheel_scrolls_the_view_through_the_history_and_a_scrolled_view_keeps_its_rows() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, &numbered(1, 200));
     world.settle();
     let bottom = world.terminal_text("r1");
@@ -115,6 +116,7 @@ fn the_wheel_scrolls_the_view_through_the_history_and_a_scrolled_view_keeps_its_
 #[test]
 fn the_cursor_moves_with_its_row_as_the_view_scrolls() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, &numbered(1, 100));
     output(&world, 2, b"\x1b[6A");
     world.settle();
@@ -128,6 +130,7 @@ fn the_cursor_moves_with_its_row_as_the_view_scrolls() {
 #[test]
 fn output_that_clears_the_history_brings_a_scrolled_view_back_to_the_screen() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, &numbered(1, 100));
     world.settle();
     wheel(&mut world, 10.0);
@@ -153,6 +156,7 @@ fn a_restored_snapshot_keeps_its_history_and_keys_follow_the_modes_set_after_it(
         })
     });
     let mut world = World::start(daemon);
+    world.open_desktop();
     assert_eq!(inputs(&world), []);
     wheel(&mut world, 100_000.0);
     assert_eq!(world.terminal_text("r1")[0], "row-0001 tail");
@@ -172,6 +176,7 @@ fn a_restored_snapshot_keeps_its_history_and_keys_follow_the_modes_set_after_it(
 #[test]
 fn the_history_keeps_far_more_than_libghosttys_default() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, &numbered(1, 5000));
     world.settle();
     wheel(&mut world, 100_000.0);
@@ -182,6 +187,7 @@ fn the_history_keeps_far_more_than_libghosttys_default() {
 #[test]
 fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"alpha beta\r\n  gamma delta\r\n");
     world.settle();
     let (a, b) = (cell(&world, 0, 0), cell(&world, 6, 1));
@@ -212,6 +218,7 @@ fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() 
 #[test]
 fn copied_lines_lose_the_indent_they_share() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"    one\r\n      two\r\n    three\r\n");
     world.settle();
     drag(&mut world, (0, 0), (20, 2));
@@ -222,6 +229,7 @@ fn copied_lines_lose_the_indent_they_share() {
 #[test]
 fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"alpha beta\r\n");
     world.settle();
     drag(&mut world, (0, 0), (4, 0));
@@ -240,6 +248,7 @@ fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
 #[test]
 fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"git push --force-with-lease origin\r\n");
     world.settle();
     let a = cell(&world, 12, 0);
@@ -272,6 +281,7 @@ fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
 #[test]
 fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_selection() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"alpha beta\r\n\x1b[?1000h\x1b[?1006h");
     world.settle();
     drag(&mut world, (0, 0), (4, 0));
@@ -297,6 +307,7 @@ fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_sele
 #[test]
 fn a_selection_stays_on_its_rows_as_the_view_scrolls() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, &numbered(1, 100));
     world.settle();
     drag(&mut world, (0, 2), (6, 2));
@@ -322,6 +333,7 @@ fn a_selection_stays_on_its_rows_as_the_view_scrolls() {
 #[test]
 fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_program() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(
         &world,
         1,
@@ -353,6 +365,7 @@ fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_
 #[test]
 fn the_copy_key_with_nothing_selected_never_reaches_the_program() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"alpha\r\n\x1b[>1u");
     world.settle();
     world.clipboard.set_text("kept");
@@ -366,6 +379,7 @@ fn the_copy_key_with_nothing_selected_never_reaches_the_program() {
 #[test]
 fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     world.clipboard.set_text("echo pasted\nls");
     world.gesture(|app| app.press("mod+shift+v"));
     assert_eq!(inputs(&world), [typed("echo pasted\rls")]);
@@ -374,7 +388,8 @@ fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
 
 #[test]
 fn a_view_with_nothing_over_it_reports_no_overlays() {
-    let world = World::start(one_terminal());
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
     assert_eq!(
         view(&world),
         json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null})
@@ -385,6 +400,7 @@ fn a_view_with_nothing_over_it_reports_no_overlays() {
 #[test]
 fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"alpha beta\r\n");
     world.settle();
     let (slot, _) = world.runtime().presented("terminal.r1").unwrap();
@@ -403,6 +419,7 @@ fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
 #[test]
 fn a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"\x1b]52;c;Y29w");
     output(&world, 2, b"aWVk\x07after");
     world.settle();
@@ -424,6 +441,7 @@ fn a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing() {
 #[test]
 fn pasting_an_image_sends_the_ctrl_v_byte_for_the_agent_to_read_it_itself() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"\x1b[?2004h");
     world.settle();
     let png: Vec<u8> = [
