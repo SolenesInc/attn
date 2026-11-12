@@ -272,11 +272,7 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     let key = format!("home.session.{}", a.agent.id);
     memo(key.clone(), (a, *t), || {
         let id = a.agent.id.clone();
-        let name = if a.agent.priority {
-            format!("⚑{}", a.agent.name)
-        } else {
-            a.agent.name.clone()
-        };
+        let name = a.agent.shown_name();
         let unsnooze = (!a.snoozed_until.is_empty()).then(|| {
             let id = id.clone();
             button(

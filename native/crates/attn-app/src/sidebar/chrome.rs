@@ -246,7 +246,8 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
         .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t))
 }
 
-/// The title bar's own controls on the left: the flow switch and the sidebar toggle.
+/// The title bar's own controls on the left: New agent, Commands, the flow switch and the
+/// sidebar toggle.
 pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
     let queue = actions::queue_flow(state);
     let flow = if queue {
@@ -261,6 +262,16 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
         "Collapse sidebar"
     };
     vec![
+        tool("titlebar.new", "New agent", "New", t).on_press_tx(
+            |state: &mut State, tx: &mut Tx| {
+                crate::dispatch(state, crate::Action::SessionNew, tx);
+            },
+        ),
+        tool("titlebar.commands", "Commands", attn_ui::icon::BOLT, t).on_press_tx(
+            |state: &mut State, tx: &mut Tx| {
+                crate::dispatch(state, crate::Action::UiCommandPalette, tx);
+            },
+        ),
         tool(
             "titlebar.flow",
             flow,

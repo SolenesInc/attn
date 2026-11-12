@@ -22,10 +22,12 @@ uuid = { version = "1.29", features = ["v4"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 rusqlite = "0.42"
+skrifa = "0.44"
 tempfile = "3"
 
 [dev-dependencies]
 attn-testkit = { path = "../attn-testkit" }
+skrifa = "0.44"
 tempfile = "3"
 
 [lints]

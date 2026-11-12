@@ -244,6 +244,20 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-palette-order',
+    runnerId: 'NATIVE-PALETTE-ORDER',
+    label: 'The native palette finds and shows an agent, raises a picked command under the pinned ones, switches on >, and runs priority and rename',
+    command: ['node', 'scripts/real-app-harness/scenario-native-palette-order.mjs'],
+    app: 'native',
+  },
+  {
+    id: 'native-session-creation',
+    runnerId: 'NATIVE-SESSION-CREATION',
+    label: 'The native launcher on an empty desktop and the picker on both new-session keys start terminals in typed folders',
+    command: ['node', 'scripts/real-app-harness/scenario-native-session-creation.mjs'],
+    app: 'native',
+  },
+  {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
     label: 'Row keys walk onto and off an empty desktop',

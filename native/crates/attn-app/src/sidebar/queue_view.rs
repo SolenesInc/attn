@@ -434,11 +434,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
 
 fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
     let id = a.agent.id.clone();
-    let name = if a.agent.priority {
-        format!("⚑{}", a.agent.name)
-    } else {
-        a.agent.name.clone()
-    };
+    let name = a.agent.shown_name();
     let trailing = if !a.age.is_empty() {
         a.age.clone()
     } else {

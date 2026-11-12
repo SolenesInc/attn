@@ -225,11 +225,7 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
             age,
             tag,
         } => {
-            let shown = if agent.priority {
-                format!("⚑{}", agent.name)
-            } else {
-                agent.name.clone()
-            };
+            let shown = agent.shown_name();
             let name = row()
                 .gap(space::S1)
                 .grow(1.0)

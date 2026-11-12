@@ -323,7 +323,7 @@ fn new_desktop_drop(over: bool, t: &Tokens) -> El {
         .radius(8.0)
         .fill(t.accent.alpha(if over { 0.14 } else { 0.04 }))
         .border(1.5, t.accent.alpha(if over { 1.0 } else { 0.5 }))
-        .child(text("＋").font(type_::MONO_CAPTION).color(t.accent))
+        .child(text("+").font(type_::MONO_CAPTION).color(t.accent))
         .child(
             text("New desktop")
                 .font(type_::MONO_CAPTION)
@@ -387,11 +387,7 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
 
 fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
     let id = agent.id.clone();
-    let name = if agent.priority {
-        format!("⚑{}", agent.name)
-    } else {
-        agent.name.clone()
-    };
+    let name = agent.shown_name();
     row()
         .key(key.clone())
         .role("button")

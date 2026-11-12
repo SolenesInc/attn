@@ -327,6 +327,26 @@ fn a_command_picked_by_enter_or_by_pointer_counts_once_and_runs() {
 }
 
 #[test]
+fn the_title_bars_commands_and_new_agent_buttons_open_the_command_palette_and_the_picker() {
+    let mut state = initial(two_desktops(), vec![]);
+    state.settings = Some(BTreeMap::from([(
+        "analytics.enabled".to_owned(),
+        "true".to_owned(),
+    )]));
+    let mut world = World::start(daemon(state, vec![]));
+
+    world.gesture(|app| app.click(Target::key("titlebar.commands")));
+    assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
+    press(&mut world, Key::Escape);
+    assert!(world.screen().find(Target::key("palette")).is_none());
+
+    world.gesture(|app| app.click(Target::key("titlebar.new")));
+    assert!(world.screen().find(Target::key("new-session")).is_some());
+    assert!(shortcuts_used(&world).is_empty());
+    rest(&mut world);
+}
+
+#[test]
 fn a_desktop_command_shows_the_keys_of_its_slot() {
     let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
     press_action(&mut world, Action::UiCommandPalette);

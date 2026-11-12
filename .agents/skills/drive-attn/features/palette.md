@@ -54,6 +54,33 @@ Preconditions:
 - **Act on an agent without leaving the palette.** Run `./attn settings set queue_mode_enabled true`: settle and snooze reach only agents in the queue, so in desktop flow ⌘⇧E and ⌘⇧S do nothing for these agents and the footer does not list them. Press ⌘K and type `pal-a`. Wait for the count to read `1 of 3`. `[data-testid="palette-settle-hint"]` reads `⌘⇧E settle` and `[data-testid="palette-snooze-hint"]` `⌘⇧S snooze`. Run `bridge native_key '{"key":"i","modifiers":["command","shift"]}'`: `wsctl list` shows `"priority": true` on `pal-a`, and the palette stays open. Press ⌘⇧I again to clear it. Run `bridge native_key '{"key":"e","modifiers":["command","shift"]}'`: `./attn agent list` shows `-` for `pal-a`. Run `bridge native_key '{"key":"s","modifiers":["command","shift"]}'`: the combobox is now `[aria-label="Snooze pal-a"]`. Press Enter: `./attn session list --tree` shows `pal-a` with `snoozed until <instant>` half an hour ahead, and the palette is back on agents with `pal-a` highlighted, its row reading `snoozed`. Press Escape and run `./attn settings set queue_mode_enabled false`.
 - **Proof.** In `$P`, keep `bridge dom_text` of `.unified-palette-count` and `.unified-palette-list` after each search, `bridge get_state` after each jump, the list before and after the relaunch, and `wsctl list`, `./attn agent list` and `./attn session list --tree` after the palette's actions. Capture `bridge capture_screenshot '{"path":"<P>/agent-palette.png"}'` with the agent palette open and `<P>/command-palette.png` with the learned order, with `<P>` written out. Name each file for its way in, such as `palette-agents-key-count.json`.
 
+### In the native app
+
+The native app (`native/`) has the agent palette with its queue keys and snooze choices, the command palette with its order, pins and the daemon's history, `>` to switch, and the title bar's Commands button and the queue bar's pill. The commands a native feature lacks show only in the Tauri app: profile switching, Settings, drawers and the shared Codex commands among them. Crew members between sessions, the chief setup row and offline agents wait for the native crew and outpost units. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"sidebar"}}'`.
+- Make `P` and `A` and start `pal-a` and `pal-b` as above, and open the seed's tile with `./attn open <seed>`. A row's key is `palette.row.agent:<session>`, `palette.row.tile:<desktop>:<tile>` or `palette.row.command:<id>`. `bridge tree` marks the highlighted row `selected`, and `palette.dialog` is named `Agents`, `Commands` or `Snooze <name>`.
+- The chords below are macOS's. On Linux, press the ones **Linux** under Contexts names.
+
+Steps:
+
+- **Open the agent palette.** Run `bridge key '{"chord":"mod+k"}'`: `bridge find '{"target":{"key":"palette.dialog"}}'` is named `Agents`, `palette.count` reads `3 of 3`, and the tree holds `palette.row.agent:pal-a`, `palette.row.agent:pal-b` and one `palette.row.tile:` row.
+- **Search and go to an agent.** Run `bridge type '{"text":"pal-b"}'`: the count reads `1 of 3`. Press `enter`: `bridge wait '{"target":{"key":"palette"},"gone":true}'` answers and `bridge state '{"of":"window","includes":"pal-b"}'` shows `on_screen: "pal-b"`.
+- **Go to a tile.** Press `mod+k`, type `<seed>` and press `enter`; the native seed tile is named by the seed's id, not its title. `bridge state '{"of":"window"}'` shows the tile's desktop, and `wsctl list` shows the tile as that desktop's `active_pane_id`.
+- **Commands by typing `>`.** Press `mod+k` and type `>keyboard shortcuts`: `palette.dialog` is named `Commands` and the tree marks `palette.row.command:keyboard-shortcuts` `selected`. Press `enter`: `bridge wait '{"target":{"key":"shortcuts"}}'` answers. Press `escape`.
+- **The command palette from its key and the button.** Press `mod+shift+k`: `palette.dialog` is named `Commands`. Press `escape`. Run `bridge press '{"target":{"key":"titlebar.commands"}}'`: the same palette opens. Press `escape`.
+- **Switch faces, then close with the same key.** Press `mod+shift+k` and type `pal`. Press `mod+k`: `palette.dialog` is named `Agents` and the count reads `3 of 3`. Press `mod+k` again: `palette` is gone.
+- **Move, and leave command mode.** Press `mod+k`: the tree marks the first agent `selected`, and `down` then `up` move the mark and back. Type `>`: the palette is named `Commands`. Press `backspace`: it is named `Agents` again. Press `escape`.
+- **The queue bar's pill and the agent list key.** Run `./attn settings set queue_mode_enabled true` and press `mod+b`: `bridge find '{"target":{"key":"queue-bar.pill"}}'` is named `1 waiting · …`. Run `bridge press '{"target":{"key":"queue-bar.pill"}}'`: the agent palette opens. Press `escape`, then `mod+shift+a`: the agent palette opens again. Press `escape` and `mod+b`.
+- **What the palette learned.** Open `pal-b` from the palette, then press `mod+shift+k` and wait for `palette.row.command:new-agent`, since the list first reads "Loading command history…". The tree lists the commands pinned for the agent on screen first, `palette.row.command:reload-active-session` among them, then `palette.row.command:keyboard-shortcuts`, which an earlier step picked, before `palette.row.command:new-agent`. Press `escape`. Quit the app by its captured PID, launch it again and repeat: the order is the same, since the history is the daemon's.
+- **Rename, priority, reload and unsnooze for the agent on screen.** With `pal-b` on screen, press `mod+k` and type `>rename`, then `enter`: the tree shows `session.rename.field` holding `pal-b`. Type 49 `x` and press `enter`: `bridge find '{"target":{"key":"session.rename.refused"}}'` names the 48-character limit. Press `mod+a`, type `pal-b2` and press `enter`: `./attn agent list` shows `pal-b2`. Run `>priority` the same way: `wsctl list` shows `"priority": true` on it, and again clears it. `>reload` restarts it in place, as [agent-launch.md](agent-launch.md) checks.
+- **Act on an agent without leaving the palette.** With `queue_mode_enabled` true, press `mod+k` and type `pal-a`. `bridge tree` lists footer hints `palette.hint.<n>` ending in ` settle` and ` snooze`. Press `mod+shift+i`: `wsctl list` shows `"priority": true` on `pal-a`, and the palette stays open; press it again to clear it. Press `mod+shift+e`: `./attn agent list` shows `-` for `pal-a`. Get `pal-a` owed again, then press `mod+shift+s`: the palette is named `Snooze pal-a`. Press `enter`: `./attn session list --tree` shows `pal-a` snoozed half an hour ahead, and the palette is back on agents with `pal-a` marked `selected` and its `.status` reading `snoozed`. Open `pal-a`, press `mod+shift+k`, type `unsnooze` and press `enter`: the snooze clears. Press `escape` and run `./attn settings set queue_mode_enabled false`.
+- **Setting toggles.** Press `mod+shift+k` and type `auto-settle`, then `enter`: `./attn settings get auto_settle_enabled` flips; run it again to put it back. An experimental feature's toggle shows only for a search that names it.
+- **Proof.** In `$P`, keep `bridge tree` after each search, `bridge state '{"of":"window"}'` after each jump, the command order before and after the relaunch, and `wsctl list`, `./attn agent list` and `./attn session list --tree` after the palette's actions. Capture `bridge shot '{"path":"<P>/native-agent-palette.png"}'` with the agent palette open and `<P>/native-command-palette.png` with the learned order. The `native-palette-order` scenario runs the search, the learned order, `>`, priority and rename.
+
 ## Contexts
 
 - **Durability across restarts**: what the palette learned is the daemon's, per profile, and survives app and daemon restarts. Each pick's weight halves every 14 days.
@@ -67,9 +94,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/command_usage_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/palette.rs` (the native app), `internal/daemon/command_usage_wire_test.go`.
 - Stack: `cmd/attnd/command_usage_stack_test.go`.
-- Scenario: `palette-order`, `snooze-keyboard`.
+- Scenario: `native-palette-order` (the native app), `palette-order`, `snooze-keyboard`.
 - App: `app/src/App.actionMenu.test.tsx`, `app/src/App.commandUsage.test.tsx`, `app/src/App.paletteRename.test.tsx`, `app/src/components/palette/Palette.test.tsx`, `app/src/components/palette/UnifiedPalette.keyboard.test.tsx`, `app/src/components/palette/agentPaletteRows.ordering.test.tsx`.
 
 ## Gotchas

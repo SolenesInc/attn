@@ -96,6 +96,23 @@ Preconditions:
 
   Name each file for its way in, such as `worktrees-palette-state.json`.
 
+### In the native app
+
+The native app (`native/`) has the new session dialog's worktree chooser: the repository's worktrees, the new worktree form with its generated name, and deleting a worktree from the chooser. The Worktrees list, the ledger and Settings drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Make `W` with its repository and `P` as above. The chooser's keys start `new-session.repo.`: `row.<n>` for each destination, `form` for the new worktree form, `name.field` for its branch name, `reroll` for "Pick another name" and `start.default` and `start.current` for where it starts.
+- The chords below are macOS's. On Linux, press the ones **Linux** under Contexts names.
+
+Steps:
+
+- **A new worktree from the new session dialog.** Press `bridge key '{"chord":"mod+n"}'`, type `$W/repo` written out with `bridge type` and press `enter`. `bridge wait '{"target":{"key":"new-session.repo.form"}}'` answers, and `bridge tree` shows `new-session.repo.name.field` holding an adjective-animal name. Run `bridge press '{"target":{"key":"new-session.repo.reroll"}}'`, then press `ctrl+r`: each gives a new name. The tree marks `new-session.repo.start.default` `checked`. Press `enter`: a session starts in a new worktree on that branch, `./attn worktree list --repo $W/repo` lists it, and `wsctl list` shows the session in it.
+- **Open an existing worktree.** Press `mod+n`, type `$W/repo` and press `enter`, then `down` until the tree marks the new worktree's `new-session.repo.row.<n>` `selected`, and press `enter`: a session starts in that worktree, and `./attn worktree list --repo $W/repo` lists no new one.
+- **Proof.** In `$P`, keep `bridge tree` with the form open and after each new name, and `./attn worktree list --repo $W/repo --json` after each start. Capture `bridge shot '{"path":"<P>/native-worktree-form.png"}'` with the form open.
+
 ## Contexts
 
 - **Durability across restarts**: tracked repositories, pins, verdicts and the removal log are daemon records and come back after any restart. A repository stays tracked after its last worktree is gone, and until its folder is gone.

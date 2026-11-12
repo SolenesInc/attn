@@ -1,4 +1,4 @@
-use attn_ui::Tokens;
+use attn_ui::{Tokens, icon};
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text, text_input};
 
@@ -425,7 +425,7 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Toke
         .child(
             row()
                 .gap(space::S1)
-                .child(text(if r.recent { "🕐" } else { "📁" }).font(type_::BODY))
+                .child(text(if r.recent { icon::CLOCK } else { icon::FOLDER }).font(type_::BODY))
                 .child(text(r.name.clone()).font(type_::BODY).color(t.text_primary)),
         );
     if let Some(shown) = &r.shown_path {
@@ -476,7 +476,14 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                 Some(prompt) => prompt,
                 None => row()
                     .gap(space::S1)
-                    .child(text(if d.main { "●" } else { "◎" }).font(type_::BODY))
+                    .child(
+                        text(if d.main {
+                            icon::CIRCLE
+                        } else {
+                            icon::CIRCLE_DOT
+                        })
+                        .font(type_::BODY),
+                    )
                     .child(text(name).font(type_::BODY).color(t.text_primary).grow(1.0))
                     .child(
                         text((i + 1).to_string())
@@ -508,7 +515,14 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                     chooser.start = kind;
                 }
             })
-            .child(text(if chosen { "◉" } else { "○" }).font(type_::BODY))
+            .child(
+                text(if chosen {
+                    icon::CIRCLE_DOT
+                } else {
+                    icon::CIRCLE_OPEN
+                })
+                .font(type_::BODY),
+            )
             .child(text(label).font(type_::LABEL).color(t.text_secondary))
     };
     let form = col()
@@ -538,7 +552,7 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                         .color(t.text_primary),
                 )
                 .child(
-                    text("⟳")
+                    text(icon::REFRESH)
                         .key(format!("{w}.repo.reroll"))
                         .role("button")
                         .label("Pick another name")

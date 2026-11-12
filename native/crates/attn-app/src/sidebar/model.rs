@@ -92,6 +92,15 @@ impl Settling {
 }
 
 impl AgentRow {
+    /// The name as rows show it, behind the priority flag when the agent has priority.
+    pub fn shown_name(&self) -> String {
+        if self.priority {
+            format!("{} {}", attn_ui::icon::FLAG, self.name)
+        } else {
+            self.name.clone()
+        }
+    }
+
     pub fn of(session: &Session, selected: bool) -> AgentRow {
         AgentRow {
             id: session.id.clone(),
