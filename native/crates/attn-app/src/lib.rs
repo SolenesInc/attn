@@ -140,10 +140,12 @@ pub fn bind(
             sidebar::width::follow(state);
             palette::follow(state);
             sidebar::advance(state, tx);
-            let keyboard = state.window.keyboard_terminal(&state.facts);
-            state
-                .terminals
-                .follow(&state.facts, keyboard, tx.clock(), &state.daemon);
+            if state.window.tile.is_none() {
+                let keyboard = state.window.keyboard_terminal(&state.facts);
+                state
+                    .terminals
+                    .follow(&state.facts, keyboard, tx.clock(), &state.daemon);
+            }
         }));
     })
 }
@@ -238,7 +240,7 @@ pub fn tile_window_app() -> rune::App<State> {
     })
     .on_ime(keys::on_ime)
     .on_focus(desktop::window_focus)
-    .on_quit(desktop::window_quit)
+    .on_quit(desktop::tile_window_quits)
     .on_close(desktop::tile_window_closed)
 }
 

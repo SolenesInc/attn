@@ -132,6 +132,17 @@ impl crate::desktop::Opener for NativeOpener {
     ) -> Box<dyn crate::desktop::Opened> {
         let app = crate::tile_window_app();
         let handle = app.handle();
+        let created = *frame;
+        let spec = rune::WindowSpec::from_app(key, app)
+            .options(rune::WindowOptions {
+                visible: false,
+                min_size: Some((320.0, 200.0)),
+                ..rune::WindowOptions::default()
+            })
+            .on_created(move |window| place(&window, &created));
+        let window = rune::open_window(spec);
+        let placed = window.clone();
+        handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
         let bound = crate::bind(
             &self.store,
             self.daemon.clone(),
@@ -143,34 +154,17 @@ impl crate::desktop::Opener for NativeOpener {
                 move |update| handle.update(update)
             },
         );
-        let window = rune::open_window(rune::WindowSpec::from_app(key, app));
-        let placed = window.clone();
-        handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
-        let opened = NativeWindow {
+        Box::new(NativeWindow {
             window,
             handle,
             _bound: bound,
-        };
-        crate::desktop::Opened::place(&opened, frame);
-        Box::new(opened)
+        })
     }
 }
 
 impl crate::desktop::Opened for NativeWindow {
     fn place(&self, frame: &Frame) {
-        let placement = self.window.placement();
-        let scale = placement.map_or(crate::frame::main_scale(), |p| p.scale);
-        let (dx, dy) = placement.map_or((0, 0), |p| {
-            (
-                p.content_position.0 - p.position.0,
-                p.content_position.1 - p.position.1,
-            )
-        });
-        self.window
-            .set_position(((frame.x * scale) as i32 - dx, (frame.y * scale) as i32 - dy));
-        self.window
-            .resize_instant((frame.width as f32, frame.height as f32));
-        self.window.show();
+        place(&self.window, frame);
     }
 
     fn hide(&self) {
@@ -180,6 +174,24 @@ impl crate::desktop::Opened for NativeWindow {
     fn update(&self, update: crate::Update) {
         self.handle.update(update);
     }
+}
+
+/// Moves `window`'s content to `frame` and shows it. Before the native window exists, the
+/// window's `on_created` places it.
+fn place(window: &rune::WindowHandle, frame: &Frame) {
+    let Some(p) = window.placement() else {
+        return;
+    };
+    let (dx, dy) = (
+        p.content_position.0 - p.position.0,
+        p.content_position.1 - p.position.1,
+    );
+    window.set_position((
+        (frame.x * p.scale) as i32 - dx,
+        (frame.y * p.scale) as i32 - dy,
+    ));
+    window.resize_instant((frame.width as f32, frame.height as f32));
+    window.show();
 }
 
 /// Where `window`'s content is on the desktop, in points.

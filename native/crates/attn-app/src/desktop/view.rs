@@ -486,12 +486,10 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
             .children(settling_track(&leaf.id, settle, drain)),
         _ => header,
     };
-    header.child(pop_out_button(
-        &cx.desktop.id,
-        &leaf.id,
-        leaf.window.is_some(),
-        cx,
-    ))
+    let pops_out = matches!(leaf.kind, LeafKind::Tile { .. });
+    header.children(
+        pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, leaf.window.is_some(), cx)),
+    )
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.

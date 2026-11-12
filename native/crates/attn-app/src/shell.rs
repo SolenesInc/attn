@@ -185,6 +185,9 @@ impl Window {
     /// active tile changes.
     pub(crate) fn follow(&mut self, facts: &Facts) {
         self.desk.follow(facts);
+        if self.tile.is_some() {
+            return;
+        }
         let Some(desktop) = facts.current_desktop() else {
             self.keyboard = None;
             return;

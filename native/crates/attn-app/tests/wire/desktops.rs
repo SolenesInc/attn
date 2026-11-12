@@ -2447,7 +2447,18 @@ fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_opens_a_new_o
         sent(&world, "desktop_bring_back_leaf"),
         [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})]
     );
-    assert!(world.tile_windows().is_empty());
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            label: "renamed before the tile came back".into(),
+            ..session("a")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+    assert!(
+        world.tile_windows().is_empty(),
+        "the closed window does not come back"
+    );
 
     arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
     arrange(&mut world, "work/desktop_1", vec![with_document(Some(OUT))]);
@@ -2511,10 +2522,59 @@ fn row_shortcuts_in_a_tile_window_leave_the_desktop_and_a_split_opens_beside_its
         "{:?}",
         world.daemon.sent()
     );
+    assert!(
+        shows(&world, "Agent b"),
+        "the main window still shows its tile"
+    );
+
+    world.tile_gesture(&key, |w| w.key(chord(&Action::UiShowShortcuts)));
+    assert!(
+        world
+            .screen()
+            .find(Target::role("dialog").name("Keyboard shortcuts"))
+            .is_some(),
+        "other keys run in the main window"
+    );
+    world.gesture(|app| app.key(chord(&Action::UiShowShortcuts)));
 
     world.tile_gesture(&key, |w| w.key(chord(&Action::TerminalSplitVertical)));
     let spawned = &sent(&world, "spawn_session")[0];
     assert_eq!(spawned["spawned_from"], "s-a");
     assert_eq!(spawned["placement"]["desktop_id"], "work/desktop_1");
     assert_eq!(spawned["placement"]["anchor_pane_id"], "a");
+}
+
+#[test]
+fn quitting_leaves_popped_tiles_out_for_the_next_launch() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+
+    world.quit_tile_windows();
+
+    assert!(sent(&world, "desktop_bring_back_leaf").is_empty());
+}
+
+#[test]
+fn a_tile_window_leaves_the_main_windows_terminals_alone() {
+    let attached = |out: bool| {
+        let mut world = start(vec![with_document(out.then_some(OUT))]);
+        world.advance(Duration::from_secs(1));
+        (
+            world.daemon.sent_of("attach_session").len(),
+            world.daemon.sent_of("pty_resize").len(),
+            world.daemon.sent_of("terminal_focus").len(),
+        )
+    };
+    assert_eq!(attached(true), attached(false));
+}
+
+#[test]
+fn a_terminal_tile_stays_on_its_desktop() {
+    let tree = row([pane("a"), document("m", "a")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+
+    press(&mut world, Action::TilePopOut);
+
+    assert!(sent(&world, "desktop_pop_out_leaf").is_empty());
+    assert!(world.screen().find(Target::key("tile.a.popout")).is_none());
+    assert!(world.screen().find(Target::key("tile.m.popout")).is_some());
 }

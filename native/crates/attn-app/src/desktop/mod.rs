@@ -28,11 +28,11 @@ pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,
-    tile_window_leaf,
+    on_quit as tile_window_quits, tile_window_leaf,
 };
 pub(crate) use windows::{
     follow as follow_windows, follow_title as follow_window_title, forward as forward_to_main,
-    on_focus as window_focus, on_quit as window_quit, view as windows_view,
+    on_focus as window_focus, view as windows_view,
 };
 
 use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowPlan, View};

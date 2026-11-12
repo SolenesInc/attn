@@ -125,6 +125,12 @@ impl TileRuntime {
             .headless_runtime((frame.width as f32, frame.height as f32), env);
         runtime.use_clipboard(&rune::clipboard::memory());
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
+        let placed = Arc::new(Mutex::new(frame));
+        let read = placed.clone();
+        inbox
+            .lock()
+            .unwrap()
+            .push(setup.into_update(Box::new(move || Some(*read.lock().unwrap()))));
         let bound = {
             let (inbox, pulse) = (inbox.clone(), pulse.clone());
             attn_app::bind(
@@ -139,12 +145,6 @@ impl TileRuntime {
                 },
             )
         };
-        let placed = Arc::new(Mutex::new(frame));
-        let read = placed.clone();
-        inbox
-            .lock()
-            .unwrap()
-            .push(setup.into_update(Box::new(move || Some(*read.lock().unwrap()))));
         TileRuntime {
             key,
             runtime,

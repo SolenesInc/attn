@@ -426,6 +426,15 @@ impl World {
         self.settle();
     }
 
+    /// The app quits with its tile windows open: each runs its quit, then closes.
+    pub fn quit_tile_windows(&mut self) {
+        for mut tile in std::mem::take(&mut self.tiles) {
+            tile.runtime.update(attn_app::desktop::tile_window_quits);
+            tile.runtime.update(attn_app::desktop::tile_window_closed);
+        }
+        self.settle();
+    }
+
     /// Whether every tile window is idle: no frame requested and no wake deadline.
     pub fn tile_windows_are_at_rest(&self) -> bool {
         self.tiles

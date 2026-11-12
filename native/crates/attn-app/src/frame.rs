@@ -61,15 +61,6 @@ pub(crate) fn main_content_origin() -> (f64, f64) {
     })
 }
 
-/// Physical pixels per point on the main window's display: 1 without one.
-pub(crate) fn main_scale() -> f64 {
-    MAIN.with_borrow(|main| {
-        main.as_ref()
-            .and_then(|(_, window)| window.placement())
-            .map_or(1.0, |p| p.scale)
-    })
-}
-
 /// Brings the main window to the front.
 pub(crate) fn raise_main() {
     MAIN.with_borrow(|main| {

@@ -26,9 +26,25 @@ pub(crate) fn toggle(state: &mut State) {
 pub(crate) fn toggle_leaf(state: &mut State, desktop: &str, leaf: &str) {
     if is_popped(state, desktop, leaf) {
         bring_back(state, desktop, leaf);
-    } else {
+    } else if pops_out(state, desktop, leaf) {
         pop_out(state, desktop, leaf);
     }
+}
+
+/// Whether `leaf` can show in a window of its own. A tile window draws no terminal yet, so
+/// terminal tiles stay on their desktop.
+pub(crate) fn pops_out(state: &State, desktop: &str, leaf: &str) -> bool {
+    state
+        .facts
+        .desktops
+        .iter()
+        .find(|d| d.id == desktop)
+        .and_then(|d| Node::parse(&d.tree_json))
+        .and_then(|tree| match tree.find_leaf(leaf)? {
+            Node::Leaf(l) => Some(matches!(l.kind, super::layout::LeafKind::Tile { .. })),
+            Node::Split(_) => None,
+        })
+        .unwrap_or(false)
 }
 
 fn is_popped(state: &State, desktop: &str, leaf: &str) -> bool {
@@ -156,6 +172,8 @@ struct Pooled {
     key: String,
     held: Option<Held>,
     window: Box<dyn Opened>,
+    /// The person closed the window; it holds its leaf until the daemon brings it back.
+    closed: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -200,11 +218,14 @@ pub(crate) fn follow(state: &mut State) {
                 .iter()
                 .any(|w| w.desktop == held.desktop && w.leaf == held.leaf)
         });
-        if gone {
-            pooled.held = None;
+        if gone && !pooled.closed {
             pooled.window.hide();
         }
+        if gone {
+            pooled.held = None;
+        }
     }
+    pool.windows.retain(|p| !(p.closed && p.held.is_none()));
     for want in wanted {
         let held = pool.windows.iter_mut().find(|p| {
             p.held
@@ -212,14 +233,18 @@ pub(crate) fn follow(state: &mut State) {
                 .is_some_and(|h| h.desktop == want.desktop && h.leaf == want.leaf)
         });
         if let Some(pooled) = held {
-            if pooled.held.as_ref().map(|h| h.frame) != Some(want.frame) {
+            if !pooled.closed && pooled.held.as_ref().map(|h| h.frame) != Some(want.frame) {
                 pooled.window.place(&want.frame);
                 pooled.held = Some(want);
             }
             continue;
         }
         let (desktop, leaf) = (want.desktop.clone(), want.leaf.clone());
-        match pool.windows.iter_mut().find(|p| p.held.is_none()) {
+        match pool
+            .windows
+            .iter_mut()
+            .find(|p| p.held.is_none() && !p.closed)
+        {
             Some(pooled) => {
                 pooled.window.update(Box::new(move |state, tx| {
                     if let Some(tile) = &mut state.window.tile {
@@ -248,15 +273,20 @@ pub(crate) fn follow(state: &mut State) {
                     key,
                     held: Some(want),
                     window,
+                    closed: false,
                 });
             }
         }
     }
 }
 
-/// The tile window `key` closed: it leaves the pool.
+/// The tile window `key` closed: it leaves the pool once the daemon brings its leaf back.
 fn forget(state: &mut State, key: &str) {
-    state.window.desk.windows.windows.retain(|p| p.key != key);
+    let pool = &mut state.window.desk.windows;
+    if let Some(pooled) = pool.windows.iter_mut().find(|p| p.key == key) {
+        pooled.closed = true;
+    }
+    follow(state);
 }
 
 /// Runs `action`, pressed in a tile window, in the main window: the tile's own actions act on
@@ -387,7 +417,7 @@ fn report_frame(state: &State) {
 }
 
 /// The app quits: the tile stays out for the next launch.
-pub(crate) fn on_quit(state: &mut State, _: &mut Tx) {
+pub fn on_quit(state: &mut State, _: &mut Tx) {
     report_frame(state);
     if let Some(tile) = &mut state.window.tile {
         tile.quitting = true;
