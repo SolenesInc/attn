@@ -7,37 +7,79 @@ import (
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionmonitor"
 )
 
-// pluginLink delivers through a plugin driver's message_delivery capability.
 type pluginLink struct {
-	daemon      *Daemon
-	terminal    harness.TerminalID
-	plugin, run string
+	daemon             *Daemon
+	terminal           harness.TerminalID
+	session            protocol.SessionID
+	plugin, run, route string
+	conversation       sessionmonitor.ConversationObservation
+	registration       pluginDriverRegistration
+	connection         *pluginConnection
 }
+
+type questionSafePluginLink struct{ pluginLink }
+
+func (questionSafePluginLink) SafeDuringQuestion() {}
 
 func (pluginLink) Voices() []harness.Voice {
 	return []harness.Voice{harness.VoiceUser, harness.VoiceAttn}
 }
 
-// Deliver runs the plugin call on its own deadline and ignores ctx, so daemon
-// shutdown does not cut a delivery short.
-func (l pluginLink) Deliver(_ context.Context, in harness.Input) harness.Custody {
+func (l pluginLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
+	return l.request(ctx, "driver.deliver_message", in)
+}
+
+func (l pluginLink) Compact(ctx context.Context, in harness.Input) harness.Custody {
+	return l.request(ctx, "driver.compact", in)
+}
+
+func (l pluginLink) compactTarget() pluginCompactTarget {
+	return pluginCompactTarget{Plugin: l.plugin, Run: l.run, Conversation: l.conversation.NativeID}
+}
+
+func (l pluginLink) request(_ context.Context, method string, in harness.Input) harness.Custody {
+	if l.route != "direct" || l.connection == nil || !l.registration.Capabilities["message_delivery"] {
+		return harness.Custody{Reason: fmt.Sprintf("plugin %q is unavailable for direct input to run %s", l.plugin, l.run)}
+	}
+	params := pluginDeliverMessageParams{TerminalID: l.terminal, RunID: l.run, InputID: in.ID, Text: in.Text}
+	if l.registration.Capabilities["attributed_input"] {
+		if l.conversation.NativeID == "" {
+			return harness.Custody{Reason: "the driver has not reported its native conversation"}
+		}
+		params.ConversationID = l.conversation.NativeID
+		params.Voice = "user"
+		if in.Voice == harness.VoiceAttn {
+			params.Voice = "attn"
+		}
+	}
+	if method == "driver.compact" {
+		if !l.registration.Capabilities["compaction"] {
+			return harness.Custody{Reason: "the plugin compaction handler is unavailable"}
+		}
+		params.ConversationID = l.conversation.NativeID
+		if !l.daemon.compactions.bindPlugin(l.session, in.ID, l.compactTarget()) {
+			return harness.Custody{Reason: "the compact request is no longer pending"}
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), pluginDeliverMessageTimeout)
 	defer cancel()
 	var result pluginDeliverMessageResult
-	params := pluginDeliverMessageParams{TerminalID: l.terminal, RunID: l.run, InputID: in.ID, Text: in.Text}
-	if err := l.daemon.callPlugin(ctx, l.plugin, "driver.deliver_message", params, &result); err != nil {
+	if err := l.connection.request(ctx, method, params, &result); err != nil {
 		return harness.Custody{Reason: fmt.Sprintf("deliver message via plugin %q: %v", l.plugin, err)}
 	}
 	if !result.OK {
-		return harness.Custody{Reason: fmt.Sprintf("plugin %q declined message delivery for session %s", l.plugin, in.Session)}
+		reason := result.Reason
+		if reason == "" {
+			reason = fmt.Sprintf("plugin %q declined message delivery for session %s", l.plugin, l.session)
+		}
+		return harness.Custody{Reason: reason, Rejected: result.Status == "rejected" || result.Status == "target_ended"}
 	}
 	return harness.Custody{Taken: true, At: time.Now()}
 }
 
-// linkOwnsState is core rule 4 for a link whose turn events carry every state: while the
-// session has a driver run whose plugin reports state, the resolver and terminal stand aside.
 func (d *Daemon) linkOwnsState(sessionID protocol.SessionID) bool {
 	if d.store.GetAgentDriverRun(sessionID).RunID == "" {
 		return false

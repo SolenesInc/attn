@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+./scripts/test-go.sh --packages -v -run '^Test(AnArbitraryPlugHarnessTakesDirectInputWithoutTerminalBytes|ADirectRunKeepsItsRouteWhenItsPluginDisappearsOrChangesCapabilities|ATerminalRunKeepsTerminalDeliveryAfterItsDriverAddsDirectInput|AnArbitraryDriverReceivesBothVoicesAndOnlyOptedInInputDuringApproval|APluginCompactingCloseUsesCorrelatedOutcomes|OldDriverMessagesKeepTheirAPI7ShapeAndRejectionsNeverReachPTY|AReplacementDriverRunRejectsTheRetiredRunsReports|ADirectDriverRunSurvivesADaemonRestartWithoutPTYFallback|PluginRunRouteMigrationKeepsLegacyOwnershipWithoutGuessingTheRoute)$' ./internal/daemon ./internal/store

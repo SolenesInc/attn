@@ -100,16 +100,16 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 	}
 	result, err := s.db.Exec(`INSERT INTO session_runtime (session_id, state, state_since, state_updated_at,
 		turn_opened_at, turn_settled_at, turn_snoozed_until, turn_agent_at, turn_requested_at, last_model_request_at,
-		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path,
+		agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_metadata, agent_driver_transcript_path, agent_driver_route,
 		branch, is_worktree, main_repo, repository, repository_origin, harness_title, last_seen, pull_requests, conversation_native_id, conversation_transcript_path, home_daemon_id, agent, live, server_completion)
-		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, copied_from, agent, ?, ?
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, copied_from, agent, ?, ?
 		FROM sessions
 		WHERE id = ? AND closed_at = ''
 		ON CONFLICT (session_id) DO UPDATE SET state = excluded.state, state_since = excluded.state_since, state_updated_at = excluded.state_updated_at,
 		turn_opened_at = excluded.turn_opened_at, turn_settled_at = excluded.turn_settled_at, turn_snoozed_until = excluded.turn_snoozed_until,
 		turn_agent_at = excluded.turn_agent_at, turn_requested_at = excluded.turn_requested_at, last_model_request_at = excluded.last_model_request_at,
 		agent_driver_plugin_name = excluded.agent_driver_plugin_name, agent_driver_run_id = excluded.agent_driver_run_id,
-		agent_driver_report_seq = excluded.agent_driver_report_seq, agent_metadata = excluded.agent_metadata,
+		agent_driver_report_seq = excluded.agent_driver_report_seq, agent_metadata = excluded.agent_metadata, agent_driver_route = excluded.agent_driver_route,
 		agent_driver_transcript_path = excluded.agent_driver_transcript_path, branch = excluded.branch, is_worktree = excluded.is_worktree,
 		main_repo = excluded.main_repo, repository = excluded.repository, repository_origin = excluded.repository_origin, harness_title = excluded.harness_title,
 		last_seen = CASE WHEN excluded.last_seen = '' THEN session_runtime.last_seen ELSE excluded.last_seen END,
@@ -118,7 +118,7 @@ func (s *Store) SaveSessionRuntime(id protocol.SessionID, state SessionRuntimeSt
 		server_completion = excluded.server_completion`,
 		id, string(state.State), string(protocol.NewTimestamp(state.Since)), string(protocol.NewTimestamp(state.Updated)),
 		turnStamp(state.Turn.OpenedAt), turnStamp(state.Turn.SettledAt), turnStamp(state.Turn.SnoozedUntil), turnStamp(state.Turn.AgentAt), turnStamp(state.Turn.RequestedAt), request,
-		state.Driver.PluginName, state.Driver.RunID, state.Driver.Seq, state.DriverMetadata, state.DriverTranscript,
+		state.Driver.PluginName, state.Driver.RunID, state.Driver.Seq, state.DriverMetadata, state.DriverTranscript, state.Driver.Route,
 		state.Branch.Branch, boolToInt(state.Branch.IsWorktree), state.Branch.MainRepo, state.Branch.Repository, state.Branch.Origin, state.HarnessTitle, lastSeen, state.PullRequests, state.ConversationNativeID, state.ConversationTranscriptPath, boolToInt(state.Live), state.ServerCompletion, id)
 	if err != nil {
 		log.Printf("[store] save session runtime: session=%s: %v", id, err)

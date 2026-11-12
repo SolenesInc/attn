@@ -6,13 +6,13 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func (m *Monitor) BeginDriverRun(plugin, run string) bool {
+func (m *Monitor) BeginDriverRun(plugin, run, route string) bool {
 	if m == nil {
 		return false
 	}
 	m.mu.Lock()
 	previous := m.driver
-	m.driver = DriverMetadata{Plugin: plugin, Run: run, Metadata: previous.Metadata}
+	m.driver = DriverMetadata{Plugin: plugin, Run: run, Route: route, Metadata: previous.Metadata}
 	view := m.viewLocked()
 	m.mu.Unlock()
 	if m.publish(view) {
@@ -25,6 +25,29 @@ func (m *Monitor) BeginDriverRun(plugin, run string) bool {
 	view = m.viewLocked()
 	m.mu.Unlock()
 	m.publish(view)
+	return false
+}
+
+func (m *Monitor) ResolveDriverRoute(plugin, run, route string) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	if m.driver.Plugin != plugin || m.driver.Run != run || m.driver.Route != "" {
+		m.mu.Unlock()
+		return false
+	}
+	m.driver.Route = route
+	view := m.viewLocked()
+	m.mu.Unlock()
+	if m.publish(view) {
+		return true
+	}
+	m.mu.Lock()
+	if m.driver.Plugin == plugin && m.driver.Run == run && m.driver.Route == route {
+		m.driver.Route = ""
+	}
+	m.mu.Unlock()
 	return false
 }
 

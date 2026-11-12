@@ -357,11 +357,12 @@ still waits for its compact, and the session stays open. If the home is offline 
 unreachable when the compact ends on an outpost, the session closes when the link
 returns.
 
-Only a Claude Code session with the
-[Claude mod](using-claude-mod.md) connected and a Codex session on
-[shared Codex](using-shared-codex.md) compact, on your home machine and on an
-outpost. Standby closes any other session without a compact, and
-`attn agent close --self --compact` refuses it, saying why. Compacting does not
+Claude Code sessions with the [Claude mod](using-claude-mod.md) connected and
+Codex sessions on [shared Codex](using-shared-codex.md) compact on your home
+machine and on an outpost. Plugin sessions compact on your home machine when
+their driver supports native compaction. Standby closes a session without a
+compaction path without compacting, and `attn agent close --self --compact`
+refuses it, saying why. Compacting does not
 help a crew member: mail starts a new session from its latest letter, and Attn
 refuses to close a crew member's session, so standby leaves it open.
 

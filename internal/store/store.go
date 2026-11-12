@@ -56,6 +56,7 @@ type Store struct {
 }
 
 type AgentDriverReportCursor struct {
+	Route      string
 	TerminalID protocol.TerminalID
 	PluginName string
 	RunID      string
@@ -987,10 +988,10 @@ func (s *Store) prepareSessionTeardown(id protocol.SessionID, terminalID protoco
 		return AgentDriverReportCursor{}, false, nil
 	}
 	if run.RunID == "" && current != nil {
-		run.PluginName, run.RunID, run.Seq = current.PluginName, current.RunID, current.Seq
+		run.PluginName, run.RunID, run.Seq, run.Route = current.PluginName, current.RunID, current.Seq, current.Route
 	} else if run.RunID == "" {
-		err = tx.QueryRow(`SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq
-			FROM sessions_with_runtime WHERE id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq)
+		err = tx.QueryRow(`SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_route
+			FROM sessions_with_runtime WHERE id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq, &run.Route)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return AgentDriverReportCursor{}, false, fmt.Errorf("read session %s driver owner: %w", id, err)
 		}
@@ -1078,19 +1079,6 @@ func (s *Store) CancelSessionTeardown(id protocol.SessionID) error {
 	}
 	_, err := s.db.Exec("DELETE FROM session_teardown_tombstones WHERE session_id = ?", id)
 	return err
-}
-
-func (s *Store) SessionTeardownDriverRun(id protocol.SessionID) AgentDriverReportCursor {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.db == nil {
-		return s.teardownIntents[id].DriverRun
-	}
-	var run AgentDriverReportCursor
-	if err := s.db.QueryRow(`SELECT driver_plugin_name, driver_run_id, driver_report_seq FROM session_teardown_tombstones WHERE session_id = ?`, id).Scan(&run.PluginName, &run.RunID, &run.Seq); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		log.Printf("[store] session %s teardown driver run: %v", id, err)
-	}
-	return run
 }
 
 func (s *Store) ClearSessionIntentionalClose(id protocol.SessionID) {
@@ -1246,9 +1234,9 @@ func (s *Store) GetAgentDriverRun(id protocol.SessionID) AgentDriverReportCursor
 	}
 	var cursor AgentDriverReportCursor
 	if err := s.db.QueryRow(
-		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq FROM sessions_with_runtime WHERE id = ?",
+		"SELECT agent_driver_plugin_name, agent_driver_run_id, agent_driver_report_seq, agent_driver_route FROM sessions_with_runtime WHERE id = ?",
 		id,
-	).Scan(&cursor.PluginName, &cursor.RunID, &cursor.Seq); err != nil {
+	).Scan(&cursor.PluginName, &cursor.RunID, &cursor.Seq, &cursor.Route); err != nil {
 		return AgentDriverReportCursor{}
 	}
 	cursor.PluginName = strings.TrimSpace(cursor.PluginName)

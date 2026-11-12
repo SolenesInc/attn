@@ -32,6 +32,9 @@ var plugFlags = flagSpec{
 }
 
 type plugTerminal struct {
+	agent        *agent
+	inputMu      sync.Mutex
+	inputs       map[string]bool
 	cfg          config
 	term         *terminal
 	relay        *rpcPeer
@@ -87,11 +90,38 @@ func (p *plugTerminal) connectRelay() error {
 	if p.relay != nil {
 		p.relay.close()
 	}
-	p.relay = newRPCPeer(conn, nil).start()
+	p.relay = newRPCPeer(conn, p.handleInput).start()
 	if err := p.relay.call(context.Background(), "hello", relayHello{Token: token, PlugSessionID: p.conversation, TranscriptPath: p.transcript}, nil); err != nil {
 		return fmt.Errorf("plug relay hello: %w", err)
 	}
 	return nil
+}
+
+func (p *plugTerminal) handleInput(_ *rpcPeer, method string, raw json.RawMessage) (any, error) {
+	if method != "deliver_message" {
+		return nil, fmt.Errorf("unknown method %q", method)
+	}
+	var in struct {
+		InputID        string `json:"input_id"`
+		Text           string `json:"text"`
+		ConversationID string `json:"conversation_id"`
+	}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return nil, err
+	}
+	p.inputMu.Lock()
+	defer p.inputMu.Unlock()
+	if in.ConversationID != "" && in.ConversationID != p.conversation {
+		return map[string]any{"ok": false, "status": "target_ended"}, nil
+	}
+	if p.inputs == nil {
+		p.inputs = map[string]bool{}
+	}
+	if !p.inputs[in.InputID] {
+		p.agent.place(in.Text, false)
+		p.inputs[in.InputID] = true
+	}
+	return okResult{OK: true}, nil
 }
 
 func (p *plugTerminal) openSession() error {
@@ -344,6 +374,24 @@ func (p *plugDriver) handleDaemon(_ *rpcPeer, method string, params json.RawMess
 			availability = append(availability, map[string]any{"agent": conversation.Agent, "cwd": conversation.CWD, "resume_session_id": conversation.ResumeSessionID, "available": stored[conversation.ResumeSessionID] != "", "reason": fmt.Sprintf("conversation %s is no longer in plug's storage (%s)", conversation.ResumeSessionID, plugSessionDir(p.cfg.ToolHome, conversation.CWD))})
 		}
 		return map[string]any{"availability": availability}, nil
+	case "driver.deliver_message":
+		var in plugRunParams
+		if err := json.Unmarshal(params, &in); err != nil {
+			return nil, err
+		}
+		p.mu.Lock()
+		run := p.runs[in.SessionID]
+		var relay *rpcPeer
+		if run != nil && run.runID == in.RunID {
+			relay = run.relay
+		}
+		p.mu.Unlock()
+		if relay == nil {
+			return okResult{}, nil
+		}
+		var result json.RawMessage
+		err := relay.call(context.Background(), "deliver_message", params, &result)
+		return result, err
 	case "driver.models":
 		if catalog := os.Getenv(PlugModelsEnv); catalog != "" {
 			return json.RawMessage(catalog), nil

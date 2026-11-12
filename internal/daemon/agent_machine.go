@@ -98,7 +98,7 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 			return nil, fmt.Errorf("agent %q is not available on this machine", opts.Agent)
 		}
 		d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
-		prepared := &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID}
+		prepared := &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
 		result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
 		if err != nil {
 			prepared.abort()

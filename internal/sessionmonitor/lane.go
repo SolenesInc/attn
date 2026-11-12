@@ -372,7 +372,6 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 	var link harness.Link
 	var custody harness.Custody
 	l.unlockedWhilePlacing(func() {
-		// Resolve again after unlocking: a link gone meanwhile hands the input to the PTY.
 		link = l.monitor.registry.host.Link(l.monitor, voice)
 		if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
 			link = nil
@@ -394,6 +393,9 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
+	}
+	if custody.Rejected {
+		return Attempt{Stage: Failed, Err: errors.New(custody.Reason)}, true
 	}
 	if !custody.Taken {
 		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true

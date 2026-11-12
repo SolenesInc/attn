@@ -545,6 +545,7 @@ type preparedPluginReload struct {
 	sessionID  protocol.SessionID
 	pluginName string
 	runID      string
+	route      string
 	completed  bool
 	launch     *AgentLaunch
 }
@@ -562,7 +563,7 @@ func (p *preparedPluginReload) commit() error {
 		return nil
 	}
 	oldRun := p.d.store.GetAgentDriverRun(p.sessionID)
-	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID) {
+	if !p.d.beginAgentDriverRun(p.sessionID, p.pluginName, p.runID, p.route) {
 		return fmt.Errorf("initialize plugin driver run cursor")
 	}
 	p.completed = true

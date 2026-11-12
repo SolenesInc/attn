@@ -13,10 +13,12 @@ import (
 )
 
 type deliveredMessage struct {
-	SessionID string `json:"session_id"`
-	RunID     string `json:"run_id"`
-	InputID   string `json:"input_id"`
-	Text      string `json:"text"`
+	Voice          string `json:"voice"`
+	ConversationID string `json:"conversation_id"`
+	SessionID      string `json:"session_id"`
+	RunID          string `json:"run_id"`
+	InputID        string `json:"input_id"`
+	Text           string `json:"text"`
 }
 
 func sendFeedback(app *testworld.Peer, session, text string) string {

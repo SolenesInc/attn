@@ -253,6 +253,9 @@ func serve(cfg config, style composer, conv conversation) int {
 		return 1
 	}
 	a := &agent{term: term, conv: conv, prompts: make(chan promptSubmission, 16)}
+	if plug, ok := conv.(*plugTerminal); ok {
+		plug.agent = a
+	}
 	if a.control, err = dialControl(cfg, a.handle); err != nil {
 		fmt.Fprintf(os.Stderr, "fake agent: %v\n", err)
 		return 1

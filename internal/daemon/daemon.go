@@ -2054,7 +2054,7 @@ func (d *Daemon) prepareSessionTeardown(sessionID protocol.SessionID) (*sessionT
 			return nil, err
 		}
 	}
-	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence}, time.Now())
+	driverRun, err := d.store.PrepareSessionTeardown(sessionID, d.primaryTerminal(sessionID), store.AgentDriverReportCursor{PluginName: retired.Plugin, RunID: retired.Run, Seq: retired.Sequence, Route: retired.Route}, time.Now())
 	if err != nil {
 		_, _ = d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: prepared.Driver})
 		lifecycleLock.Unlock()
@@ -2073,8 +2073,8 @@ func (d *Daemon) cancelSessionTeardown(sessionID protocol.SessionID, teardown *s
 	if session := d.store.Get(sessionID); session != nil && session.Agent == protocol.AgentShellValue {
 		d.sessionMonitor(sessionID).ClearForcedStop()
 	} else {
-		run := d.store.SessionTeardownDriverRun(sessionID)
-		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+		run := teardown.driverRun
+		raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
 		if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "cancel", Driver: protocol.Ptr(string(raw))}); err != nil {
 			d.logf("cancel machine teardown: %v", err)
 		}
@@ -2124,7 +2124,7 @@ func (d *Daemon) notifyPreparedPluginDriverSessionClosed(sessionID protocol.Sess
 	}
 	if claimed {
 		if run.TerminalID != "" {
-			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq})
+			raw, _ := json.Marshal(sessionmonitor.DriverMetadata{Plugin: run.PluginName, Run: run.RunID, Sequence: run.Seq, Route: run.Route})
 			if _, err := d.agentCloseCall(protocol.AgentLaunchCloseMessage{SessionID: sessionID, Phase: "notify", TerminalID: protocol.Ptr(run.TerminalID), Driver: protocol.Ptr(string(raw)), Signal: protocol.Ptr(signalName(sig))}); err != nil {
 				d.logf("notify machine teardown: %v", err)
 				return false

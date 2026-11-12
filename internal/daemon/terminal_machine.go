@@ -141,7 +141,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	if err != nil {
 		return struct{}{}, err
 	}
-	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID) {
+	if plugin != nil && !d.beginAgentDriverRun(session.ID, plugin.pluginName, plugin.runID, plugin.route) {
 		plugin.abort()
 		return struct{}{}, fmt.Errorf("initialize plugin driver run cursor")
 	}

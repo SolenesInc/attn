@@ -66,6 +66,7 @@ type AutoSettleView struct {
 }
 
 type DriverMetadata struct {
+	Route          string
 	Plugin         string
 	Run            string
 	Sequence       uint64
