@@ -1,9 +1,12 @@
 mod action;
 mod connection;
+pub mod daemon;
 mod dispatch;
 mod frame;
+pub mod instance;
 mod keymap;
 mod keys;
+pub mod launch;
 mod shell;
 
 use std::sync::Arc;

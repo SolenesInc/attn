@@ -8,8 +8,12 @@
 # `tauri.<appName>.gen.conf.json` overlay (from `attn instance tauri-config`) so
 # no per-instance bundle metadata is ever hand-maintained.
 #
+# APP=native builds the native app (native/crates/attn-app) instead, into
+# native/target/staged, with the same identity baked in and the same sidecars.
+#
 # Inputs (env):
 #   INSTANCE                  instance name ("" = default/prod)
+#   APP                       tauri (default) or native
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
 #   ATTND_BIN                path to the freshly built attnd binary (sidecar)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
@@ -56,7 +60,99 @@ if [ -n "$harness_default" ] && [ -z "$instance" ]; then
   exit 1
 fi
 
-echo ">>> Building $label app: $app_name (id=$bundle_id, port=$ws_port)"
+app_shell="${APP:-tauri}"
+case "$app_shell" in
+  tauri | native) ;;
+  *)
+    echo "APP must be tauri or native, got: $app_shell" >&2
+    exit 1
+    ;;
+esac
+if [ "$app_shell" = native ] && { [ -n "$demo" ] || [ -n "$harness_default" ]; }; then
+  echo "APP=native does not build DEMO=1 or default-instance harness apps yet" >&2
+  exit 1
+fi
+
+echo ">>> Building $label $app_shell app: $app_name (id=$bundle_id, port=$ws_port)"
+
+write_build_identity() {
+  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "demo": %s\n}\n' \
+    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" "$([ -n "$demo" ] && echo true || echo false)" > "$1"
+}
+
+codesign_identity() {
+  local identity="${MACOS_CODESIGN_IDENTITY:-}"
+  if [ -z "$identity" ]; then identity="$(bash ./scripts/macos-codesign-identity.sh find)"; fi
+  if [ -z "$identity" ]; then identity="-"; fi
+  printf '%s' "$identity"
+}
+
+if [ "$app_shell" = native ]; then
+  if [ -n "$instance" ]; then
+    native_profile="${ATTN_APP_CARGO_PROFILE:-fast}"
+  else
+    native_profile="release"
+  fi
+  echo ">>> Cargo profile: $native_profile"
+  (
+    cd native
+    ATTN_BUILD_INSTANCE="$instance" \
+    ATTN_BUILD_WS_PORT="$ws_port" \
+    ATTN_BUILD_BUNDLE_ID="$bundle_id" \
+      cargo build --locked --profile "$native_profile" -p attn-app
+  )
+  native_profile_dir="$native_profile"
+  [ "$native_profile" = dev ] && native_profile_dir=debug
+  native_bin="${CARGO_TARGET_DIR:-native/target}/${native_profile_dir}/attn-app"
+  staged_dir="native/target/staged"
+  if [ "$(uname -s)" != "Darwin" ]; then
+    tree_dir="${staged_dir}/linux-tree/${app_name}"
+    rm -rf "$tree_dir"
+    mkdir -p "${tree_dir}/bin" "${tree_dir}/resources"
+    cp "$native_bin" "${tree_dir}/bin/attn-app"
+    cp "$attnd" "${tree_dir}/bin/attnd"
+    cp "$attn" "${tree_dir}/bin/attn"
+    cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
+    write_build_identity "${tree_dir}/resources/build-identity.json"
+    echo ">>> Built $tree_dir"
+    exit 0
+  fi
+  bundle_dir="${staged_dir}/${app_name}.app"
+  rm -rf "$bundle_dir"
+  mkdir -p "${bundle_dir}/Contents/MacOS" "${bundle_dir}/Contents/Resources"
+  cp "$native_bin" "${bundle_dir}/Contents/MacOS/attn-app"
+  cp "$attnd" "${bundle_dir}/Contents/MacOS/attnd"
+  cp "$attn" "${bundle_dir}/Contents/MacOS/attn"
+  cp "$pty_host" "${bundle_dir}/Contents/MacOS/attn-pty-host"
+  cp app/src-tauri/icons/icon.icns "${bundle_dir}/Contents/Resources/icon.icns"
+  write_build_identity "${bundle_dir}/Contents/Resources/build-identity.json"
+  cat > "${bundle_dir}/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>attn-app</string>
+  <key>CFBundleIdentifier</key><string>${bundle_id}</string>
+  <key>CFBundleName</key><string>${app_name}</string>
+  <key>CFBundleDisplayName</key><string>${app_name}</string>
+  <key>CFBundleIconFile</key><string>icon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSMicrophoneUsageDescription</key><string>Microphone access lets hosted coding agents receive voice input.</string>
+</dict>
+</plist>
+PLIST
+  identity="$(codesign_identity)"
+  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attnd"
+  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn"
+  codesign --force --sign "$identity" "${bundle_dir}/Contents/MacOS/attn-pty-host"
+  codesign --force --sign "$identity" --entitlements app/src-tauri/Entitlements.plist "${bundle_dir}"
+  echo ">>> Built $bundle_dir"
+  exit 0
+fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
   bundle_args="--bundles app"
@@ -139,11 +235,6 @@ target_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}"
 staged_dir="app/src-tauri/target/staged"
 bundle_dir="${staged_dir}/${app_name}.app"
 
-write_build_identity() {
-  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "demo": %s\n}\n' \
-    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" "$([ -n "$demo" ] && echo true || echo false)" > "$1"
-}
-
 if [ "$(uname -s)" != "Darwin" ]; then
   tree_dir="${staged_dir}/linux-tree/${app_name}"
   rm -rf "$tree_dir"
@@ -168,9 +259,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
   # grants attach to a stable signed identity across source rebuilds. One
   # machine-wide identity signs every instance's bundle (grants are keyed by
   # bundle id, so each instance grants once on first launch).
-  identity="${MACOS_CODESIGN_IDENTITY:-}"
-  if [ -z "$identity" ]; then identity="$(bash ./scripts/macos-codesign-identity.sh find)"; fi
-  if [ -z "$identity" ]; then identity="-"; fi
+  identity="$(codesign_identity)"
   while IFS= read -r executable; do
     codesign --force --sign "$identity" "$executable"
   done < <(find "${bundle_dir}/Contents/Resources/plugins" -type f -perm -111 2>/dev/null | sort)

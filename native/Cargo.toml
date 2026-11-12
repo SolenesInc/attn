@@ -8,6 +8,7 @@ edition = "2024"
 [workspace.dependencies]
 rune = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+rune-mac = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 
 # Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
 # Keep this list equal to Rune's at the pinned rev.
@@ -16,6 +17,14 @@ wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e2
 winit = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+
+# Named instances' app: release, with the app's own crate unoptimized, so an
+# edit to it rebuilds fast. What ships is always release.
+[profile.fast]
+inherits = "release"
+
+[profile.fast.package.attn-app]
+opt-level = 0
 
 [profile.dev]
 debug = "line-tables-only"

@@ -144,6 +144,7 @@ impl World {
             LinkConfig {
                 daemon: daemon.address().to_string(),
                 client_token: CLIENT_TOKEN.into(),
+                host_token: None,
                 instance: INSTANCE.into(),
                 profile_id: None,
                 client_id: "wire-client".into(),

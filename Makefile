@@ -299,8 +299,12 @@ endif
 endif
 endif
 
-# LaunchServices only forwards shell overrides named with `open --env`.
-MACOS_OPEN := open$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
+# The app an instance installs: tauri, or native (native/crates/attn-app).
+APP ?= tauri
+
+# LaunchServices only forwards shell overrides named with `open --env`. The
+# native app opens in the background and keeps itself from activating.
+MACOS_OPEN := open$(if $(filter native,$(APP)), -g --env MAC_APP_QUIET=1,)$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
 
 # Build + install + open the INSTANCE's app (bare `make` = prod). Every path is
 # derived from the single authority so a named instance opens its own bundle.
@@ -318,7 +322,7 @@ run: install
 	fi; \
 	echo "Launched $$app_path"
 
-INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
 	INSTANCE_DAEMON_UNSET="$(INSTANCE_DAEMON_UNSET)" INSTANCE_ROUTING_VARS="$(INSTANCE_ROUTING_VARS)" \
 	bash ./scripts/install-app-tree.sh
 
@@ -525,7 +529,7 @@ check-schema:
 # enables automation for any named instance (dev, ticketqa, agent7, …); prod (the
 # empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
 build-app: ensure-codesign-identity build build-pty-host
-	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+	@INSTANCE="$(INSTANCE)" APP="$(APP)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 	ATTND_BIN="$(abspath $(DAEMON_OUTPUT))" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \

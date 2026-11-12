@@ -13,14 +13,22 @@ label="$("${attn}" instance resolve --instance "${instance}" --field label)"
 app_bundle="$("${attn}" instance resolve --instance "${instance}" --field appPath)"
 app_binary="$("${attn}" instance resolve --instance "${instance}" --field appDaemon)"
 
+case "${APP:-tauri}" in
+  tauri) staged_root="app/src-tauri/target/staged" ;;
+  native) staged_root="native/target/staged" ;;
+  *)
+    echo "APP must be tauri or native, got: ${APP}" >&2
+    exit 1
+    ;;
+esac
 if [[ "$(uname -s)" == "Darwin" ]]; then
-  staged="app/src-tauri/target/staged/${app_name}.app"
+  staged="${staged_root}/${app_name}.app"
 else
-  staged="app/src-tauri/target/staged/linux-tree/${app_name}"
+  staged="${staged_root}/linux-tree/${app_name}"
 fi
 
 if [[ ! -d "${staged}" ]]; then
-  echo "No staged app tree at ${staged}; run \`make install${instance:+ INSTANCE=${instance}}\` to build one, or download the one a build job uploaded" >&2
+  echo "No staged app tree at ${staged}; run \`make install${instance:+ INSTANCE=${instance}}${APP:+ APP=${APP}}\` to build one, or download the one a build job uploaded" >&2
   exit 1
 fi
 

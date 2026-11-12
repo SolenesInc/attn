@@ -76,6 +76,12 @@ fall back to an ad-hoc signature, so macOS privacy grants such as Screen
 Recording stay attached to the app across rebuilds. For a Linux VM, see [Local Linux runner](linux-runner.md);
 for a macOS VM, see [macOS VM](macos-vm.md).
 
+An instance has one app. `APP=native` on `make install` and `make run` builds
+and installs the native app from `native/` instead of the Tauri app, with the
+same `attnd`, `attn` and `attn-pty-host` beside it; installing again without it
+switches the instance back. `make run` opens the native app in the background,
+and it does not take focus.
+
 ## GitHub polling
 
 Named instances do not poll GitHub with your `gh` credentials, so they cannot

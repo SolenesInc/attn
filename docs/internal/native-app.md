@@ -24,14 +24,13 @@ so rustup picks the workspace's toolchain:
 ```sh
 cd native
 cargo test
-cargo run -p attn-app -- --instance <name> \
-  --port "$(ATTN_INSTANCE=<name> attn instance resolve --field wsPort)" \
-  --data-dir "$(ATTN_INSTANCE=<name> attn instance resolve --field dataDir)"
 ```
 
-The app connects to the daemon of the named instance, whose daemon must be
-running. It refuses the production instance until it carries its instance's
-identity from the build.
+To run the app, install it on a named instance with
+`make install INSTANCE=<name> APP=native`, as [Instances](instances.md) says.
+The build bakes the instance's name, port and bundle id into `attn-app`, and the
+app starts the `attnd` bundled beside it. A build without them, such as a bare
+`cargo run`, refuses to start.
 
 `native/Cargo.toml` pins one revision of the `attn` branch of attn's Rune fork
 and repeats Rune's `[patch.crates-io]` entries.

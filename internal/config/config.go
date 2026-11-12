@@ -149,10 +149,14 @@ func AppExecutableForInstance(instance string) string {
 }
 
 func AppExecutableInTree(appPath string) string {
-	if runtime.GOOS == "darwin" {
-		return filepath.Join(appPath, "Contents", "MacOS", "app")
+	if runtime.GOOS != "darwin" {
+		return filepath.Join(appPath, "bin", "attn-app")
 	}
-	return filepath.Join(appPath, "bin", "attn-app")
+	native := filepath.Join(appPath, "Contents", "MacOS", "attn-app")
+	if _, err := os.Stat(native); err == nil {
+		return native
+	}
+	return filepath.Join(appPath, "Contents", "MacOS", "app")
 }
 
 func AppDaemonBinaryForInstance(instance string) string {

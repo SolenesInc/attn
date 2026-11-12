@@ -24,6 +24,9 @@ pub struct LinkConfig {
     /// The daemon's `host:port`; the link speaks WebSocket on `/ws` and reads `/health`.
     pub daemon: String,
     pub client_token: String,
+    /// The app's own credential, `<data-dir>/browser-host-token`: with it, and no web origin,
+    /// the daemon trusts this client as the attn app.
+    pub host_token: Option<String>,
     /// The instance this app was built for, `default` for production.
     pub instance: String,
     /// The profile to ask for until the daemon has said which one this client is scoped to.
@@ -317,6 +320,7 @@ impl Task {
             version: format!("protocol-{PROTOCOL_VERSION}"),
             capabilities: CAPABILITIES.map(String::from).to_vec(),
             client_token: Some(self.config.client_token.clone()),
+            browser_host_token: self.config.host_token.clone(),
             client_id: Some(self.config.client_id.clone()),
             profile_id: if selected.is_empty() {
                 self.config.profile_id.clone()
