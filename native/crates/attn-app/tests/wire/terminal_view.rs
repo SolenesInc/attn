@@ -7,13 +7,13 @@ use serde_json::{Value, json};
 use super::terminal::{attached, cell, inputs, one_terminal, output, pointed, snapshot_of, typed};
 
 /// The terminal's copy key: ⌘C on macOS, Ctrl+Shift+C elsewhere, where Ctrl+C is the shell's.
-const COPY: &str = if cfg!(target_os = "macos") {
+pub(crate) const COPY: &str = if cfg!(target_os = "macos") {
     "mod+c"
 } else {
     "mod+shift+c"
 };
 
-fn view(world: &World) -> Value {
+pub(crate) fn view(world: &World) -> Value {
     world
         .runtime()
         .state
@@ -38,7 +38,7 @@ fn washes(world: &World) -> Vec<(u64, [u64; 2])> {
         .collect()
 }
 
-fn copied(world: &World) -> Option<String> {
+pub(crate) fn copied(world: &World) -> Option<String> {
     world.clipboard.text().map(|t| t.to_string())
 }
 
@@ -392,7 +392,7 @@ fn a_view_with_nothing_over_it_reports_no_overlays() {
     world.open_desktop();
     assert_eq!(
         view(&world),
-        json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null})
+        json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null, "block": null})
     );
     assert!(world.runtime_is_at_rest());
 }

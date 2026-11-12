@@ -20,7 +20,18 @@ typedef struct {
   uint8_t *clipboard;
   size_t clipboard_len;
   size_t clipboard_cap;
+  uint8_t *prompts;
+  size_t prompts_len;
+  size_t prompts_cap;
 } AttnTerm;
+
+typedef struct {
+  GhosttyTrackedGridRef at;
+  uint8_t kind;
+  bool has_exit_code;
+  int32_t exit_code;
+  uint32_t command_len;
+} AttnPromptEvent;
 
 typedef struct {
   uint8_t dirty;
@@ -102,6 +113,29 @@ static void attn_clipboard_write(GhosttyTerminal terminal, void *userdata,
   write->reply(write, &reply);
 }
 
+static void attn_semantic_prompt(GhosttyTerminal terminal, void *userdata,
+                                 const GhosttyTerminalSemanticPrompt *event) {
+  AttnTerm *t = userdata;
+  if (t == NULL) return;
+  uint16_t col = 0, row = 0;
+  ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_X, &col);
+  ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_CURSOR_Y, &row);
+  GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_ACTIVE,
+                        .value = {.coordinate = {.x = col, .y = row}}};
+  AttnPromptEvent e = {0};
+  if (ghostty_terminal_grid_ref_track(terminal, point, &e.at) != GHOSTTY_SUCCESS) return;
+  e.kind = (uint8_t)event->kind;
+  e.has_exit_code = event->has_exit_code;
+  e.exit_code = event->exit_code;
+  e.command_len = (uint32_t)event->command.len;
+  size_t before = t->prompts_len;
+  if (!attn_append(&t->prompts, &t->prompts_len, &t->prompts_cap, (const uint8_t *)&e, sizeof(e)) ||
+      !attn_append(&t->prompts, &t->prompts_len, &t->prompts_cap, event->command.ptr, e.command_len)) {
+    t->prompts_len = before;
+    ghostty_tracked_grid_ref_free(e.at);
+  }
+}
+
 static AttnTerm *attn_wrap(GhosttyTerminal terminal, size_t scrollback_bytes) {
   AttnTerm *t = calloc(1, sizeof(*t));
   if (t == NULL) goto fail;
@@ -113,6 +147,8 @@ static AttnTerm *attn_wrap(GhosttyTerminal terminal, size_t scrollback_bytes) {
                            (const void *)attn_write_pty) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
                            (const void *)attn_clipboard_write) != GHOSTTY_SUCCESS) goto fail;
+  if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SEMANTIC_PROMPT,
+                           (const void *)attn_semantic_prompt) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_new(NULL, &t->state) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_row_iterator_new(NULL, &t->rows) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_row_cells_new(NULL, &t->cells) != GHOSTTY_SUCCESS) goto fail;
@@ -183,6 +219,13 @@ void attn_term_free(AttnTerm *t) {
   ghostty_terminal_free(t->terminal);
   free(t->responses);
   free(t->clipboard);
+  for (size_t at = 0; at + sizeof(AttnPromptEvent) <= t->prompts_len;) {
+    AttnPromptEvent e;
+    memcpy(&e, t->prompts + at, sizeof(e));
+    ghostty_tracked_grid_ref_free(e.at);
+    at += sizeof(e) + e.command_len;
+  }
+  free(t->prompts);
   free(t);
 }
 
@@ -260,18 +303,19 @@ static bool attn_term_ref(AttnTerm *t, uint32_t row, uint16_t col, GhosttyGridRe
   return ghostty_terminal_grid_ref(t->terminal, point, ref) == GHOSTTY_SUCCESS;
 }
 
-GhosttyTrackedGridRef attn_term_mark(AttnTerm *t, uint32_t row) {
+GhosttyTrackedGridRef attn_term_mark(AttnTerm *t, uint32_t row, uint16_t col) {
   GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
-                        .value = {.coordinate = {.x = 0, .y = row}}};
+                        .value = {.coordinate = {.x = col, .y = row}}};
   GhosttyTrackedGridRef mark = NULL;
   if (ghostty_terminal_grid_ref_track(t->terminal, point, &mark) != GHOSTTY_SUCCESS) return NULL;
   return mark;
 }
 
-bool attn_term_mark_row(GhosttyTrackedGridRef mark, uint32_t *row) {
+bool attn_term_mark_point(GhosttyTrackedGridRef mark, uint32_t *row, uint16_t *col) {
   GhosttyPointCoordinate at;
   if (ghostty_tracked_grid_ref_point(mark, GHOSTTY_POINT_TAG_SCREEN, &at) != GHOSTTY_SUCCESS) return false;
   *row = at.y;
+  *col = at.x;
   return true;
 }
 
@@ -338,6 +382,13 @@ const uint8_t *attn_term_clipboard(AttnTerm *t, size_t *len) {
 }
 
 void attn_term_clear_clipboard(AttnTerm *t) { t->clipboard_len = 0; }
+
+const uint8_t *attn_term_prompts(AttnTerm *t, size_t *len) {
+  *len = t->prompts_len;
+  return t->prompts;
+}
+
+void attn_term_clear_prompts(AttnTerm *t) { t->prompts_len = 0; }
 
 static void attn_rgb(GhosttyColorRgb c, uint8_t out[3]) {
   out[0] = c.r;

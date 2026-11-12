@@ -59,16 +59,45 @@ struct TrackedRef {
     _private: [u8; 0],
 }
 
-/// A screen row the terminal keeps up to date as its history drops old rows and it reflows,
-/// so what the user marked there stays on its text.
+/// A screen cell the terminal keeps up to date as its history drops old rows and it reflows,
+/// so what was marked there stays on its text.
 pub struct Mark(NonNull<TrackedRef>);
 
 impl Mark {
     /// The screen row the mark is on now, or None once its row left the history.
     pub fn row(&self) -> Option<u32> {
-        let mut row = 0;
-        unsafe { attn_term_mark_row(self.0.as_ptr(), &mut row) }.then_some(row)
+        self.point().map(|(row, _)| row)
     }
+
+    /// The screen row and column the mark is on now, or None once its row left the history.
+    pub fn point(&self) -> Option<(u32, u16)> {
+        let (mut row, mut col) = (0, 0);
+        unsafe { attn_term_mark_point(self.0.as_ptr(), &mut row, &mut col) }.then_some((row, col))
+    }
+}
+
+/// One step of a command the shell reported with OSC 133, at the cell the cursor was on.
+pub struct PromptEvent {
+    pub step: PromptStep,
+    pub at: Mark,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PromptStep {
+    PromptStart,
+    InputStart,
+    /// The command is about to run, with its command line when the shell sent one.
+    OutputStart(Option<String>),
+    CommandEnd(Option<i32>),
+}
+
+#[repr(C)]
+struct RawPromptEvent {
+    at: *mut TrackedRef,
+    kind: u8,
+    has_exit_code: bool,
+    exit_code: i32,
+    command_len: u32,
 }
 
 impl Drop for Mark {
@@ -105,8 +134,10 @@ unsafe extern "C" {
     fn attn_term_alternate_screen(t: *mut AttnTerm) -> bool;
     fn attn_term_responses(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_responses(t: *mut AttnTerm);
-    fn attn_term_mark(t: *mut AttnTerm, row: u32) -> *mut TrackedRef;
-    fn attn_term_mark_row(mark: *mut TrackedRef, row: *mut u32) -> bool;
+    fn attn_term_mark(t: *mut AttnTerm, row: u32, col: u16) -> *mut TrackedRef;
+    fn attn_term_mark_point(mark: *mut TrackedRef, row: *mut u32, col: *mut u16) -> bool;
+    fn attn_term_prompts(t: *mut AttnTerm, len: *mut usize) -> *const u8;
+    fn attn_term_clear_prompts(t: *mut AttnTerm);
     fn attn_term_mark_free(mark: *mut TrackedRef);
     fn attn_term_clipboard(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_clipboard(t: *mut AttnTerm);
@@ -324,9 +355,45 @@ impl Vt {
         }
     }
 
-    /// A mark on screen row `row`, which stays on that row's text.
-    pub fn mark(&mut self, row: u32) -> Option<Mark> {
-        NonNull::new(unsafe { attn_term_mark(self.raw.as_ptr(), row) }).map(Mark)
+    /// A mark on screen row `row` at column `col`, which stays on that cell's text.
+    pub fn mark(&mut self, row: u32, col: u16) -> Option<Mark> {
+        NonNull::new(unsafe { attn_term_mark(self.raw.as_ptr(), row, col) }).map(Mark)
+    }
+
+    /// The command steps the shell reported since the last call, in order.
+    pub fn take_prompt_events(&mut self) -> Vec<PromptEvent> {
+        let mut len = 0;
+        let mut events = Vec::new();
+        unsafe {
+            let raw = attn_term_prompts(self.raw.as_ptr(), &mut len);
+            let mut bytes = if len == 0 {
+                &[][..]
+            } else {
+                std::slice::from_raw_parts(raw, len)
+            };
+            let head = std::mem::size_of::<RawPromptEvent>();
+            while bytes.len() >= head {
+                let event: RawPromptEvent = std::ptr::read_unaligned(bytes.as_ptr().cast());
+                let (command, rest) = bytes[head..].split_at(event.command_len as usize);
+                bytes = rest;
+                let Some(at) = NonNull::new(event.at).map(Mark) else {
+                    continue;
+                };
+                let step = match event.kind {
+                    1 => PromptStep::PromptStart,
+                    2 => PromptStep::InputStart,
+                    3 => PromptStep::OutputStart(
+                        (!command.is_empty())
+                            .then(|| String::from_utf8_lossy(command).into_owned()),
+                    ),
+                    4 => PromptStep::CommandEnd(event.has_exit_code.then_some(event.exit_code)),
+                    _ => continue,
+                };
+                events.push(PromptEvent { step, at });
+            }
+            attn_term_clear_prompts(self.raw.as_ptr());
+        }
+        events
     }
 
     /// The text each clipboard write the program asked for since the last call puts on the

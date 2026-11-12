@@ -8,6 +8,7 @@ pub mod layout;
 mod overview;
 mod peek;
 mod shelf;
+mod terminal_menu;
 mod view;
 mod windows;
 

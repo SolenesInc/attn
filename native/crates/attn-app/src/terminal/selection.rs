@@ -14,10 +14,12 @@ pub(super) struct View {
     /// The selection's first row, which keeps it on its text as the history drops old rows.
     mark: Option<Mark>,
     /// The text the last finished selection copied, which ⌘C copies again.
-    selected: Option<String>,
+    pub(super) selected: Option<String>,
     /// The selection the program's own scrolling carries along, kept by its text.
     anchor: Option<Anchor>,
     pub(super) selecting: Option<Selecting>,
+    /// The command block the user clicked, which copying takes when no text is selected.
+    pub(super) block: Option<u64>,
     /// The cell under the pointer and the link over it, until output or a scroll moves the
     /// text under it.
     pub(super) hover: Option<super::links::Hover>,
@@ -26,8 +28,19 @@ pub(super) struct View {
 impl View {
     /// Selects `selection`, marking its first row so it stays on its text.
     fn select(&mut self, selection: Option<Selection>, vt: &mut Vt) {
-        self.mark = selection.and_then(|s| vt.mark(s.start.row));
+        self.mark = selection.and_then(|s| vt.mark(s.start.row, 0));
         self.selection = selection;
+    }
+
+    /// Selects a block's command, whose text is the command line the shell sent.
+    pub(super) fn select_command(
+        &mut self,
+        selection: Selection,
+        command: Option<String>,
+        vt: &mut Vt,
+    ) {
+        self.select(Some(selection), vt);
+        self.selected = command;
     }
 
     /// The selection on the rows its text is on now. It goes once its first row left the
@@ -186,12 +199,33 @@ impl Terminals {
             "overlays": overlays,
             "scrolled_back": term.scrolled_back,
             "copies": term.view.selected,
+            "block": term.view.block,
         }))
     }
 
-    /// What ⌘C copies from terminal `id`: the text of its last selection.
-    pub(crate) fn copy_text(&self, id: &str) -> Option<String> {
-        self.panes.get(id)?.view.selected.clone()
+    /// What ⌘C copies from terminal `id`: the text of its last selection, or else the whole
+    /// selected block.
+    pub(crate) fn copy_text(&mut self, id: &str) -> Option<String> {
+        if let Some(text) = self.panes.get(id)?.view.selected.clone() {
+            return Some(text);
+        }
+        let block = self.block_id(id)?;
+        self.block_text(id, block, super::blocks::Part::Whole)
+    }
+
+    /// A click ended at `at` in terminal `id` with nothing selected: it selects the block there.
+    pub(crate) fn click(&mut self, id: &str, at: (f32, f32)) {
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(id) else {
+            return;
+        };
+        let Some((_, row)) = selection_cell(term, &metrics, at) else {
+            return;
+        };
+        let row = term.vt.view_top() + u32::from(row);
+        let before = term.view.block;
+        Terminals::select_block_at(term, row);
+        self.undrawn |= before != term.view.block || term.view.selection.is_some();
     }
 
     /// Scrolls terminal `id`'s view by `lines`, positive toward the screen: true when it moved.
@@ -231,10 +265,11 @@ impl Terminals {
         });
     }
 
-    /// Output moved the text: the hover reads it again, and a selection that follows its
-    /// text finds it again on the screen.
+    /// Output moved the text: the hover reads it again, the shell's command steps make
+    /// blocks, and a selection that follows its text finds it again on the screen.
     pub(super) fn wrote(term: &mut Term) {
         Terminals::hover_moved(term);
+        Terminals::read_prompts(term);
         let Some(anchor) = &term.view.anchor else {
             return;
         };
@@ -247,14 +282,17 @@ impl Terminals {
         term.view.select(found, &mut term.vt);
     }
 
-    /// The screen was replaced: what the user selected on the old one goes with it.
+    /// The screen was replaced: what the user selected on the old one goes with it, and so
+    /// do its blocks.
     pub(super) fn forget_screen(term: &mut Term) {
         term.view = View::default();
+        term.blocks = Default::default();
     }
 
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.
     pub(super) fn overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
-        let mut overlays = Terminals::selection_overlays(term, theme);
+        let mut overlays = Terminals::block_overlays(term);
+        overlays.extend(Terminals::selection_overlays(term, theme));
         overlays.extend(Terminals::link_overlays(term, theme));
         overlays
     }
@@ -284,7 +322,7 @@ impl Terminals {
     }
 }
 
-fn selection_cell(
+pub(super) fn selection_cell(
     term: &mut Term,
     metrics: &attn_term::Metrics,
     at: (f32, f32),

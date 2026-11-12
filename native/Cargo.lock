@@ -424,6 +424,7 @@ dependencies = [
  "cc",
  "parley",
  "rune",
+ "serde_json",
  "swash",
  "wgpu",
 ]

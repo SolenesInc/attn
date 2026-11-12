@@ -52,7 +52,8 @@ pub struct Cursor {
 }
 
 /// A color laid over part of one row of the view, as the Tauri renderer's overlays: a wash
-/// over the cells' backgrounds and under their text, or a line at the underline's place.
+/// over the cells' backgrounds and under their text, a line at the underline's place, or a
+/// box's edges.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Overlay {
     pub row: u16,
@@ -66,6 +67,12 @@ pub struct Overlay {
 pub enum OverlayKind {
     Wash,
     Underline,
+    /// The row's part of a box drawn around several rows: its sides, and its top or bottom
+    /// edge where the box starts or ends on this row.
+    Outline {
+        top: bool,
+        bottom: bool,
+    },
 }
 
 /// The visible screen of one terminal, read out of libghostty-vt by dirty row. `dirty` marks

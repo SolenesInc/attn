@@ -84,11 +84,13 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Clipboard {
     Copy,
+    CopyCommand,
     Paste,
 }
 
-/// The terminal's clipboard keys, as the Tauri terminal reads them: ⌘C and ⌘V on macOS, and
-/// Ctrl+Shift+C and Ctrl+Shift+V elsewhere, where plain Ctrl+C belongs to the shell.
+/// The terminal's clipboard keys, as the Tauri terminal reads them: ⌘C, ⇧⌘C and ⌘V on macOS,
+/// and Ctrl+Shift+C, Ctrl+Alt+C and Ctrl+Shift+V elsewhere, where plain Ctrl+C belongs to the
+/// shell.
 fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
     let Key::Command(letter) = ev.key else {
         return None;
@@ -97,20 +99,31 @@ fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
     if !matches!(letter, 'c' | 'v') {
         return None;
     }
-    let held = if KeyPlatform::current() == KeyPlatform::Mac {
-        ev.mods.cmd && !ev.mods.shift
-    } else {
-        ev.mods.ctrl && ev.mods.shift && !ev.mods.alt
-    };
-    held.then_some(if letter == 'v' {
-        Clipboard::Paste
-    } else {
-        Clipboard::Copy
-    })
+    let m = ev.mods;
+    let mac = KeyPlatform::current() == KeyPlatform::Mac;
+    if mac {
+        return match (letter, m.cmd, m.shift) {
+            ('v', true, false) => Some(Clipboard::Paste),
+            ('c', true, false) => Some(Clipboard::Copy),
+            ('c', true, true) => Some(Clipboard::CopyCommand),
+            _ => None,
+        };
+    }
+    if !m.ctrl {
+        return None;
+    }
+    match (letter, m.shift, m.alt) {
+        ('v', true, false) => Some(Clipboard::Paste),
+        ('c', true, false) => Some(Clipboard::Copy),
+        ('c', false, true) => Some(Clipboard::CopyCommand),
+        _ => None,
+    }
 }
 
-/// Copies the terminal's selection, or pastes into it where the window does not already: true
-/// when the key is the terminal's, so it never reaches the program, even with nothing to copy.
+/// Copies the terminal's selection or selected block, or pastes into it where the window does
+/// not already: true when the key is the terminal's, so it never reaches the program. Copy is
+/// always the terminal's, even with nothing to copy; copying a command is only with a block
+/// selected.
 fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool {
     match chord {
         Clipboard::Copy => {
@@ -118,6 +131,14 @@ fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool
                 tx.copy(text);
             }
             true
+        }
+        Clipboard::CopyCommand => {
+            let command = state.terminals.block_id(id).and_then(|block| {
+                state
+                    .terminals
+                    .block_text(id, block, crate::terminal::Part::Command)
+            });
+            command.map(|text| tx.copy(text)).is_some()
         }
         Clipboard::Paste if KeyPlatform::current() == KeyPlatform::Mac => false,
         Clipboard::Paste => {

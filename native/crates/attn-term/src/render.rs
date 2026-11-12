@@ -26,6 +26,10 @@ const COLOR_GLYPH: u32 = 1;
 const UNDERLINED: u32 = 2;
 const STRUCK: u32 = 4;
 const OVERLAID: u32 = 8;
+const EDGE_TOP: u32 = 16;
+const EDGE_BOTTOM: u32 = 32;
+const EDGE_LEFT: u32 = 64;
+const EDGE_RIGHT: u32 = 128;
 const BIAS: u16 = 32768;
 
 /// The Tauri renderer's rule (`terminalGlyphFont.ts`): VS16, a keycap, or an emoji base with
@@ -386,6 +390,7 @@ struct Pipelines {
     fg: wgpu::RenderPipeline,
     underline: wgpu::RenderPipeline,
     strike: wgpu::RenderPipeline,
+    over: wgpu::RenderPipeline,
 }
 
 struct Gpu {
@@ -483,6 +488,20 @@ fn line(vi: u32, i: I, on: bool, y: f32) -> V {
 }
 @vertex fn vs_strike(@builtin(vertex_index) vi: u32, i: I) -> V {
   return line(vi, i, (i.flags & 4u) != 0u, floor(u.cell.y / u.line * 0.5) * u.line);
+}
+@vertex fn vs_over(@builtin(vertex_index) vi: u32, i: I) -> V {
+  if ((i.flags & 240u) == 0u) { return line(vi, i, true, u.underline); }
+  var o: V;
+  let width = f32(i.span.x) * u.cell.x;
+  var at = vec2f(0.0, 0.0);
+  var size = vec2f(width, u.line);
+  if ((i.flags & 32u) != 0u) { at.y = u.cell.y - u.line; }
+  if ((i.flags & 64u) != 0u) { size = vec2f(u.line, u.cell.y); }
+  if ((i.flags & 128u) != 0u) { at.x = width - u.line; size = vec2f(u.line, u.cell.y); }
+  o.pos = place(vec2f(i.cell) * u.cell + at + corner(vi) * size);
+  let c = unpack(i.fg);
+  o.color = vec4f(c.rgb * c.a, c.a);
+  return o;
 }
 @fragment fn fs_lines(v: V) -> @location(0) vec4f { return v.color; }
 "#;
@@ -615,6 +634,7 @@ impl Cells {
             fg: make("vs_fg", "fs_fg"),
             underline: make("vs_underline", "fs_lines"),
             strike: make("vs_strike", "fs_lines"),
+            over: make("vs_over", "fs_lines"),
         });
         gpu.pipelines.last().expect("just pushed")
     }
@@ -960,7 +980,7 @@ impl Cells {
         }
         if lines > 0 {
             pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
-            pass.set_pipeline(&pipelines.underline);
+            pass.set_pipeline(&pipelines.over);
             pass.draw(0..6, washes..washes + lines);
         }
     }
@@ -990,6 +1010,23 @@ fn overlay_insts(grid: &Grid, theme: Theme) -> (Vec<Inst>, Vec<Inst>) {
                 flags: UNDERLINED | OVERLAID,
                 ..inst
             }),
+            OverlayKind::Outline { top, bottom } => {
+                let edge = |flags: u32, cell: [u16; 2], span: [u16; 2]| Inst {
+                    fg: pack(o.color, o.alpha),
+                    flags,
+                    cell,
+                    span,
+                    ..Default::default()
+                };
+                lines.push(edge(EDGE_LEFT, [start, o.row], [1, 1]));
+                lines.push(edge(EDGE_RIGHT, [end - 1, o.row], [1, 1]));
+                if top {
+                    lines.push(edge(EDGE_TOP, [start, o.row], [end - start, 1]));
+                }
+                if bottom {
+                    lines.push(edge(EDGE_BOTTOM, [start, o.row], [end - start, 1]));
+                }
+            }
         }
     }
     if let Some(c) = grid.cursor.filter(|_| !washes.is_empty()) {

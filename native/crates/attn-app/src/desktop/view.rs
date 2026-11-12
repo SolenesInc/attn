@@ -740,7 +740,19 @@ fn terminal_slot(
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
                             state.terminals.open_link_at(&pressing, (d.x, d.y), tx);
                         }
+                        Release::Click if !d.cancelled() => {
+                            state.terminals.click(&pressing, (d.x, d.y));
+                        }
                         _ => {}
+                    }
+                    if !d.cancelled() && tx.button() == PointerButton::Secondary {
+                        super::terminal_menu::open(
+                            state,
+                            &pressing,
+                            (d.x, d.y),
+                            d.window_point(),
+                            tx,
+                        );
                     }
                     tx.live_only();
                 }

@@ -13,9 +13,11 @@ use attn_term::mouse::{self, Action, WheelRows};
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::{Live, Tx};
 
+mod blocks;
 mod links;
 mod selection;
 
+pub(crate) use blocks::Part;
 pub(crate) use links::accelerator;
 pub(crate) use selection::Release;
 
@@ -113,6 +115,7 @@ struct Term {
     resize_due: Option<f64>,
     pointer: Pointer,
     view: selection::View,
+    blocks: blocks::TermBlocks,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
 }
@@ -192,6 +195,7 @@ impl Term {
             resize_due: None,
             pointer: Pointer::default(),
             view: selection::View::default(),
+            blocks: Default::default(),
             scrolled_back: 0,
         }
     }
@@ -598,6 +602,8 @@ impl Terminals {
         if let Some(vt) = restored {
             term.vt = themed(vt, &self.theme);
             Terminals::forget_screen(term);
+            let seeded = result.snapshot.as_ref().and_then(|s| s.blocks.as_deref());
+            Terminals::seed_blocks(term, seeded.unwrap_or_default());
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
