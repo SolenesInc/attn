@@ -106,8 +106,8 @@ discovery. The plugin prepares native terminal views with the host's
 `server_binding`; an older daemon refuses that capability clearly. This addition
 does not change API 7 for existing plugins.
 
-See [Writing a harness plugin](../../docs/guide/reference/writing-harness-plugins.md#bind-a-shared-app-server)
-for the declaration, RPC contract and install recipe.
+`attn guide writing-harness-plugins` describes the declaration, RPC contract
+and install recipe.
 `examples/plugins/sample-server` prepares views speaking the fake server's
 Sigma-compatible protocol and runs
 against the repository's fake app-server in the stack verification.

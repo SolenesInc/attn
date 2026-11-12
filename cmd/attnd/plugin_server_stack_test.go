@@ -278,6 +278,12 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			t.Log("repeated daemon recovery kept the already handled completion settled")
 
 			direct("hidden followup")
+			if _, err := control.Write([]byte("exit\n")); err != nil {
+				t.Fatal(err)
+			}
+			control = accept()
+			direct("hidden while plugin restarts")
+			register(control)
 			if n := s.AppServers(fakeagent.Sigma); n != 1 {
 				t.Fatalf("recovery started %d servers", n)
 			}

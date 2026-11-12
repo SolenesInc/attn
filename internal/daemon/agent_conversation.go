@@ -44,6 +44,14 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		}
 		terminal = view
 	}
+	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
+		if l, server := d.linkOf(session.ID).(*serverLink); server {
+			if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
+				d.sendError(conn, err.Error())
+				return
+			}
+		}
+	}
 	if observation.TranscriptPath == "" && d.linkOf(d.sessionInTerminal(terminal)) == nil {
 		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
 		d.sendOK(conn)
@@ -108,6 +116,12 @@ func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, propo
 	if shown, _ := d.terminals().Showing(t); shown != cur || session == nil || !d.terminalLive(t) {
 		d.logf("agent conversation: dropped %s from terminal %s, which no longer runs session %s", observation.NativeID, t, cur)
 		return false
+	}
+	if l, server := d.linkOf(session.ID).(*serverLink); server {
+		if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
+			d.logf("agent conversation refused: terminal=%s: %v", t, err)
+			return false
+		}
 	}
 	if d.monitors().runReplaced(session.ID, proposed.Run) {
 		d.logf("agent conversation: dropped %s from terminal %s, reported by run %s that a reload replaced", observation.NativeID, t, proposed.Run)

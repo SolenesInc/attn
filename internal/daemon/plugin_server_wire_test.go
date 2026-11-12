@@ -176,7 +176,7 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 	w := newWorld(t, fakeagent.Sigma)
 	app := w.App()
 	session, view, _ := appServerSession(t, w, app, fakeagent.Sigma)
-	registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
+	alias := registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
 	awaitDriverAvailable(app, serverPluginAgent)
 	side := createProfile(app, "Side")
 	for _, p := range []*testworld.Peer{app, w.AppOn(side.ID)} {
@@ -191,4 +191,14 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 	if got := queriedSession(t, w.Client(), session); got.Agent != "sigma" || got.ProfileID != app.SelectedProfile() {
 		t.Fatalf("alias changed original owner: %+v", got)
 	}
+	sideApp := w.AppOn(side.ID)
+	other, _ := spawnPluginServerView(w, sideApp, alias)
+	terminal := protocol.TerminalID(sideApp.Terminal(other))
+	if err := w.Client().ObserveAgentConversation(terminal, view.ConversationID, ""); err == nil {
+		t.Fatal("a native view switched to another profile's owned conversation")
+	}
+	if owner, err := w.Client().CallerSession(terminal); err != nil || string(owner) != other {
+		t.Fatalf("refused native switch changed the view owner: %s %v", owner, err)
+	}
+
 }
