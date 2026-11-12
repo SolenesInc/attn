@@ -206,6 +206,15 @@ pub enum Line {
 }
 
 impl Line {
+    /// The desktop the line shows or belongs to.
+    pub fn desktop(&self) -> &str {
+        match self {
+            Line::Desktop(d) => &d.id,
+            Line::Agent { desktop, .. } => desktop,
+            Line::Tile(t) => &t.desktop,
+        }
+    }
+
     pub fn key(&self) -> String {
         match self {
             Line::Desktop(d) => format!("sidebar.desktop.{}", d.id),

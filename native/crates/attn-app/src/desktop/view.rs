@@ -112,8 +112,6 @@ fn screen(
                     desktop,
                     ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
-                    facts,
-                    tree: &tree,
                     dragging,
                     holder,
                     terminals,
@@ -155,8 +153,6 @@ struct TileCx<'a> {
     ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
     /// Dividers drag only in the normal view.
     dividers: bool,
-    facts: &'a attn_client::Facts,
-    tree: &'a Node,
     dragging: Option<&'a str>,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
@@ -274,8 +270,8 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .flatten();
             terminal_slot(&pane.runtime_id, holder.clone(), caret, t.dark, cx.scale)
         }
-        (LeafKind::Pane, _) => empty(t, "Starting…"),
-        (LeafKind::Tile { kind, .. }, _) => empty(t, tile_kind_label(kind)),
+        (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
+        (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
     col()
         .key(format!("tile.{}", leaf.id))
@@ -295,10 +291,6 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 t.border
             },
         )
-        .on_press_tx({
-            let holder = holder.clone();
-            move |state: &mut State, tx: &mut Tx| take_tile(state, &holder, tx)
-        })
         .role("group")
         .label(title.clone())
         .opacity(if cx.dragging == Some(leaf.id.as_str()) {
@@ -310,21 +302,32 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .child(body)
 }
 
-/// A tile's header, which drags the tile.
+/// `el`, where a press takes the tile into `holder`.
+fn takes(el: El, holder: &Holder) -> El {
+    let holder = holder.clone();
+    el.on_press_tx(move |state: &mut State, tx: &mut Tx| take_tile(state, &holder, tx))
+}
+
+/// What dragging the header of the current desktop's tile `leaf` picks up. An agent alone on
+/// its desktop has nowhere to go.
+pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::Source> {
+    let facts = &state.facts;
+    let desktop = facts.current_desktop()?;
+    let (tree, _) = state.window.desk.plan(facts, desktop)?;
+    let kind = &tree.leaves().into_iter().find(|l| l.id == leaf)?.kind;
+    Some(super::drag::Source::Header {
+        desktop: desktop.id.clone(),
+        leaf: leaf.to_owned(),
+        label: super::shelf::title(desktop, facts, &tree, leaf),
+        movable: matches!(kind, LeafKind::Tile { .. }) || tree.leaves().len() > 1,
+    })
+}
+
+/// A tile's header, which the tile area drags the tile by.
 fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
     let t = cx.t;
-    let source = super::drag::Source::Header {
-        desktop: cx.desktop.id.clone(),
-        leaf: leaf.id.clone(),
-        label: super::shelf::title(cx.desktop, cx.facts, cx.tree, &leaf.id),
-        movable: matches!(leaf.kind, LeafKind::Tile { .. }) || cx.tree.leaves().len() > 1,
-    };
-    let header = row().key(format!("tile.{}.header", leaf.id)).on_drag(
-        move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
-            super::drag::gesture(state, d, tx, &source)
-        },
-    );
-    header
+    row()
+        .key(format!("tile.{}.header", leaf.id))
         .w_full()
         .items_center()
         .px(space::S2)

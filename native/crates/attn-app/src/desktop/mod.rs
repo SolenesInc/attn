@@ -14,7 +14,7 @@ use attn_client::Facts;
 use attn_protocol::Desktop;
 
 pub(crate) use actions::{escape, run};
-pub(crate) use drag::overlay as drag_overlay;
+pub(crate) use drag::{DesktopMark, expire as expire_drag, overlay as drag_overlay};
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
 

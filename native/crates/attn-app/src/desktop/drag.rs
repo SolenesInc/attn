@@ -1,6 +1,7 @@
 //! Dragging a tile by its header, or a shelf column by its chip, onto a tile's edge, into a
-//! tile's place, or beside a column on the shelf.
+//! tile's place, beside a column on the shelf, or onto a desktop in the sidebar.
 
+use attn_protocol::{DesktopMoveLeafMessage, ProfileActionResultMessage};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{Drag, El, Phase, Tx, row, text};
@@ -19,6 +20,10 @@ const SNAPS: [f32; 3] = [0.25, 1.0 / 3.0, 0.5];
 const SNAP_TOLERANCE: f32 = 0.045;
 /// How far from every edge a chip has to be over a tile to take its place.
 const CENTRE: f32 = 0.25;
+/// How long a drag rests on a sidebar desktop before the window switches to it.
+const HOVER_SWITCH: f64 = 0.32;
+/// The share of the desktop a tile dropped on a sidebar desktop takes, at its left.
+const SIDEBAR_SHARE: f64 = 0.32;
 
 /// What a drag picks up.
 #[derive(Clone, Debug)]
@@ -73,14 +78,52 @@ impl Source {
     }
 }
 
+/// The element that runs a drag. It stays on screen for as long as the drag lasts, even when
+/// the drag switches desktops, so it hears the drag to its end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Owner {
+    /// The tile area: headers.
+    Tiles,
+    /// The shelf in the title bar: its chips.
+    Shelf,
+    /// An open cap's menu: the chips it holds.
+    Menu,
+}
+
+impl Owner {
+    fn element(self) -> &'static str {
+        match self {
+            Owner::Tiles => "tiles",
+            Owner::Shelf => "shelf",
+            Owner::Menu => "shelf.menu.layer",
+        }
+    }
+
+    /// What a press at `path` in this owner picks up.
+    fn source_at(self, state: &State, path: &str) -> Option<Source> {
+        path.split('/').rev().find_map(|segment| match self {
+            Owner::Tiles => segment
+                .strip_prefix("tile.")
+                .and_then(|s| s.strip_suffix(".header"))
+                .and_then(|leaf| super::view::header_source(state, leaf)),
+            Owner::Shelf | Owner::Menu => segment
+                .strip_prefix("shelf.chip.")
+                .and_then(|column| Shelf::of(state)?.chip_source(column)),
+        })
+    }
+}
+
 /// A drag in flight.
 #[derive(Clone, Debug)]
 pub(crate) struct LeafDrag {
+    pub owner: Owner,
     pub source: Source,
     start: [f32; 2],
     at: [f32; 2],
     active: bool,
     target: Option<Target>,
+    /// The sidebar desktop the drag rests on, and when the window switches to it.
+    entering: Option<(String, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,6 +134,20 @@ enum Target {
         edge: Edge,
     },
     Tile(Dock),
+    /// Another desktop, in the sidebar.
+    Desktop(String),
+    /// The sidebar's drop for a new desktop.
+    NewDesktop,
+}
+
+/// How a sidebar desktop shows while a tile is dragged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum DesktopMark {
+    /// The desktop the drag started on, which takes no drop.
+    Source,
+    Accepts,
+    /// The drag rests on it, and the window switches to it soon.
+    Entering,
 }
 
 /// A side of a tile the dragged tile docks against, taking `ratio` of the split it makes.
@@ -135,6 +192,24 @@ impl LeafDrag {
         }
     }
 
+    /// How sidebar desktop `desktop` shows, while the press has become a drag.
+    pub(crate) fn desktop_mark(&self, desktop: &str) -> Option<DesktopMark> {
+        if !self.active {
+            None
+        } else if desktop == self.source.desktop() {
+            Some(DesktopMark::Source)
+        } else if self.entering.as_ref().is_some_and(|(on, _)| on == desktop) {
+            Some(DesktopMark::Entering)
+        } else {
+            Some(DesktopMark::Accepts)
+        }
+    }
+
+    /// Whether the sidebar shows its drop for a new desktop, and whether the drag is over it.
+    pub(crate) fn new_desktop(&self) -> Option<bool> {
+        self.active.then(|| self.target == Some(Target::NewDesktop))
+    }
+
     /// The tile being dragged, while the press has become a drag.
     pub(crate) fn dragging(&self) -> Option<&str> {
         self.active.then(|| self.source.leaf())
@@ -145,20 +220,31 @@ fn distance(a: [f32; 2], b: [f32; 2]) -> f32 {
     (a[0] - b[0]).hypot(a[1] - b[1])
 }
 
-/// Runs a press on a header or chip: a press that travels becomes a drag and drops where it
-/// is let go; one that does not is a click.
-pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, source: &Source) {
+/// Runs a press on `owner`: on a header or chip, a press that travels becomes a drag and
+/// drops where it is let go, and one that does not is a click.
+pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner) {
     let at = d.window_point();
     match d.phase {
         Phase::Down => {
-            state.window.desk.drag = Some(LeafDrag {
-                source: source.clone(),
-                start: at,
-                at,
-                active: false,
-                target: None,
-            });
+            state.window.desk.drag = None;
             tx.live_only();
+            tx.element_at_in(
+                owner.element(),
+                at[0],
+                at[1],
+                move |state: &mut State, picked, _: &mut Tx| {
+                    let source = picked.and_then(|p| owner.source_at(state, p.path()));
+                    state.window.desk.drag = source.map(|source| LeafDrag {
+                        owner,
+                        source,
+                        start: at,
+                        at,
+                        active: false,
+                        target: None,
+                        entering: None,
+                    });
+                },
+            );
         }
         Phase::Move => {
             let Some(mut drag) = state.window.desk.drag.take() else {
@@ -168,6 +254,7 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, source: &Sou
             drag.active |= drag.source.movable() && distance(drag.start, at) >= ACTIVATION;
             if drag.active {
                 drag.target = target(state, &drag);
+                tx.element_at_in("sidebar", at[0], at[1], over_sidebar);
             } else {
                 tx.live_only();
             }
@@ -182,17 +269,87 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, source: &Sou
             }
             let travelled = distance(drag.start, at) >= ACTIVATION;
             if drag.active || (travelled && drag.source.movable()) {
-                let drag = LeafDrag {
-                    at,
-                    target: target(state, &LeafDrag { at, ..drag.clone() }),
-                    ..drag
-                };
-                drop(state, &drag, tx);
+                let target = target(state, &LeafDrag { at, ..drag.clone() });
+                let drag = LeafDrag { at, target, ..drag };
+                let with_delegates = tx.mods().alt;
+                tx.element_at_in(
+                    "sidebar",
+                    at[0],
+                    at[1],
+                    move |state: &mut State, picked, tx: &mut Tx| {
+                        let drag = match picked.and_then(|p| sidebar_target(state, &drag, p.path()))
+                        {
+                            Some(target) => LeafDrag {
+                                target: Some(target),
+                                ..drag
+                            },
+                            None => drag,
+                        };
+                        drop(state, &drag, with_delegates, tx);
+                    },
+                );
             } else if !travelled {
-                click(state, source, tx);
+                click(state, &drag.source, tx);
             }
         }
     }
+}
+
+/// The sidebar target at `path`: a desktop other than the one the drag started on, or the
+/// drop for a new desktop.
+fn sidebar_target(state: &State, drag: &LeafDrag, path: &str) -> Option<Target> {
+    if path.split('/').any(|s| s == "sidebar.new_desktop") {
+        return Some(Target::NewDesktop);
+    }
+    let lines = crate::sidebar::lines(state);
+    let path = format!("/{path}/");
+    let desktop = lines
+        .iter()
+        .find(|l| path.contains(&format!("/{}/", l.key())))?
+        .desktop();
+    (desktop != drag.source.desktop()).then(|| Target::Desktop(desktop.to_owned()))
+}
+
+/// Takes the sidebar's part of a drag's move: what the pointer is over there, and the switch
+/// to a desktop the drag rests on.
+fn over_sidebar(state: &mut State, picked: Option<rune::Picked>, tx: &mut Tx) {
+    let Some(drag) = &state.window.desk.drag else {
+        return;
+    };
+    let target = picked.and_then(|p| sidebar_target(state, drag, p.path()));
+    let current = state.facts.current_desktop().map(|d| d.id.as_str());
+    let entering = match &target {
+        Some(Target::Desktop(id)) if current == Some(id.as_str()) => None,
+        Some(Target::Desktop(id)) => match &drag.entering {
+            Some((on, until)) if on == id => Some((on.clone(), *until)),
+            _ => {
+                let until = tx.clock() + HOVER_SWITCH;
+                tx.wake_at(until);
+                Some((id.clone(), until))
+            }
+        },
+        _ => None,
+    };
+    let Some(drag) = &mut state.window.desk.drag else {
+        return;
+    };
+    if target.is_some() {
+        drag.target = target;
+    }
+    drag.entering = entering;
+}
+
+/// Switches to the sidebar desktop a drag rested on long enough. Returns whether it did.
+pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
+    let now = tx.clock();
+    let Some(drag) = &mut state.window.desk.drag else {
+        return false;
+    };
+    let Some((desktop, _)) = drag.entering.take_if(|(_, until)| now >= *until) else {
+        return false;
+    };
+    crate::sidebar::open_desktop(state, &desktop, tx);
+    true
 }
 
 fn click(state: &mut State, source: &Source, tx: &mut Tx) {
@@ -452,13 +609,39 @@ fn beside_limit(state: &State) -> Option<String> {
     ))
 }
 
-fn drop(state: &mut State, drag: &LeafDrag, tx: &mut Tx) {
+/// Drops `drag` on its target. Onto a desktop in the sidebar, `with_delegates` takes the
+/// agent's delegates along.
+fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
     let Some(target) = &drag.target else {
         return;
     };
     let source = drag.source.desktop().to_owned();
     let leaf = drag.source.leaf().to_owned();
     match (target, drag.source.chip()) {
+        (Target::Desktop(desktop), chip) => {
+            crate::sidebar::open_desktop(state, desktop, tx);
+            let to = Some(desktop.clone());
+            to_desktop(
+                state,
+                &source,
+                to,
+                &leaf,
+                chip.is_some(),
+                with_delegates,
+                tx,
+            );
+        }
+        (Target::NewDesktop, chip) => {
+            to_desktop(
+                state,
+                &source,
+                None,
+                &leaf,
+                chip.is_some(),
+                with_delegates,
+                tx,
+            );
+        }
         (Target::Shelf { column, edge }, Some(_)) => {
             super::shelf::send_move(
                 state,
@@ -598,6 +781,58 @@ fn drop(state: &mut State, drag: &LeafDrag, tx: &mut Tx) {
     }
 }
 
+/// Moves `leaf` to the left of desktop `target`, or of a new desktop, as a drop on the
+/// sidebar does, then shows a new desktop.
+fn to_desktop(
+    state: &mut State,
+    source: &str,
+    target: Option<String>,
+    leaf: &str,
+    whole_column: bool,
+    with_delegates: bool,
+    tx: &mut Tx,
+) {
+    let new = target.is_none();
+    let from = source.to_owned();
+    state.ask(
+        |id| DesktopMoveLeafMessage {
+            request_id: id,
+            source_desktop_id: source.to_owned(),
+            target_desktop_id: target,
+            leaf_id: leaf.to_owned(),
+            edge: Some(Edge::Left.as_str().to_owned()),
+            leaf_share: Some(SIDEBAR_SHARE),
+            whole_column: whole_column.then_some(true),
+            with_delegates: with_delegates.then_some(true),
+            ..DesktopMoveLeafMessage::new()
+        },
+        move |state: &mut State, answer, tx: &mut Tx| {
+            let result: Option<ProfileActionResultMessage> = answer.parse();
+            match result {
+                Some(r) if r.success => {
+                    let made = r.desktops.iter().flatten().find(|d| d.id != from);
+                    if let Some(desktop) = made.filter(|_| new) {
+                        crate::sidebar::open_desktop(state, &desktop.id.clone(), tx);
+                    }
+                }
+                failed => {
+                    let error = failed
+                        .and_then(|r| r.error)
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or_else(|| "the daemon did not answer".into());
+                    let what = if new {
+                        "Could not move that pane to a new desktop"
+                    } else {
+                        "Could not move that pane"
+                    };
+                    state.window.notify(format!("{what}: {error}"), tx);
+                }
+            }
+        },
+        tx,
+    );
+}
+
 /// What a drag shows over the window: the dragged tile's name by the pointer, and where it
 /// would land on a tile.
 pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
@@ -675,34 +910,21 @@ pub(crate) fn settle_swap(row: &mut super::RowState, columns: &[layout::Column],
     }
 }
 
-/// Ends a drag whose source is gone after the daemon's row changed: its tile left its
-/// desktop, its chip left the shelf, or the window moved to another desktop. Its element no
-/// longer hears the release.
+/// Ends a drag whose tile left the desktop it was dragged from, or whose window left the
+/// desktops for Home.
 pub(crate) fn settle_drag(state: &mut State) {
     let Some(drag) = &state.window.desk.drag else {
         return;
     };
-    let facts = &state.facts;
     let source = &drag.source;
-    let current = facts.current_desktop().filter(|d| d.id == source.desktop());
-    let shown = current.is_some_and(|desktop| match source.chip() {
-        Some(column) => Shelf::of(state).is_some_and(|shelf| {
-            shelf
-                .anchors()
-                .iter()
-                .any(|a| a.element == format!("shelf.chip.{column}"))
-        }),
-        None => state
-            .window
-            .desk
-            .plan(facts, desktop)
-            .is_some_and(|(tree, plan)| {
-                let view = state.window.desk.row(&desktop.id).view;
-                plan.rendered(&tree, &view, &desktop.active_pane_id)
-                    .has_leaf(source.leaf())
-            }),
-    });
-    if !shown {
+    let there = state
+        .facts
+        .desktops
+        .iter()
+        .find(|d| d.id == source.desktop())
+        .and_then(|d| Node::parse(&d.tree_json))
+        .is_some_and(|tree| tree.has_leaf(source.leaf()));
+    if !there || state.window.view != crate::shell::View::Desktop {
         state.window.desk.drag = None;
     }
 }

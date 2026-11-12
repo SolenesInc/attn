@@ -90,12 +90,12 @@ fn hit(state: &State, [x, y]: [f32; 2]) -> Option<(String, String, Direction)> {
     })
 }
 
-/// Runs a press in the tile area. A press on a divider drags it; the area, which stays put
+/// Runs a press in the tile area: a divider's or a header's. The area, which stays put
 /// whatever the screen shows, follows the drag to its end.
 pub(crate) fn area_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
     if d.phase == Phase::Down {
         let Some((desktop, split, direction)) = hit(state, d.window_point()) else {
-            tx.live_only();
+            super::drag::gesture(state, d, tx, super::drag::Owner::Tiles);
             return;
         };
         match column_divider(state, &desktop, &split) {
@@ -131,6 +131,8 @@ pub(crate) fn area_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
         if d.phase == Phase::Up {
             state.window.desk.ratio_drag = None;
         }
+    } else {
+        super::drag::gesture(state, d, tx, super::drag::Owner::Tiles);
     }
 }
 

@@ -6,9 +6,9 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{Drag, El, Tx, col, row, text};
+use rune::{Drag, El, Phase, Tx, col, row, text};
 
-use super::drag::Source;
+use super::drag::{Owner, Source};
 
 use super::layout::{
     self, Column, Edge, LeafKind, NarrowestStep, Node, RowInput, ShelfDrop, ShelfSend, View,
@@ -212,6 +212,21 @@ impl Shelf {
     }
 
     /// Where a dragged tile can land on the shelf, in the order the shelf shows them.
+    /// What dragging the chip of `column` picks up.
+    pub(crate) fn chip_source(&self, column: &str) -> Option<Source> {
+        let chip = self
+            .before
+            .iter()
+            .chain(&self.after)
+            .find(|c| c.key == column)?;
+        Some(Source::Chip {
+            desktop: self.desktop.clone(),
+            column: chip.key.clone(),
+            leaf: chip.go.clone(),
+            label: chip.label.clone(),
+        })
+    }
+
     pub(crate) fn anchors(&self) -> Vec<Anchor> {
         let chip = |c: &Chip| Anchor {
             element: format!("shelf.chip.{}", c.key),
@@ -235,7 +250,9 @@ impl Shelf {
 }
 
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    let shelf = Shelf::of(state)?;
+    let Some(shelf) = Shelf::of(state) else {
+        return holding(state, Owner::Shelf).then(owner);
+    };
     let desk = &state.window.desk;
     let id = &shelf.desktop;
     let dots = row()
@@ -266,8 +283,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .map(|(_, e)| *e)
     };
     Some(
-        row()
-            .key("shelf")
+        owner()
             .role("toolbar")
             .label("Shelf")
             .items_center()
@@ -278,17 +294,36 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 shelf
                     .before_chips()
                     .iter()
-                    .map(|c| chip_button(c, id, mark(c), t)),
+                    .map(|c| chip_button(c, mark(c), t)),
             )
             .child(dots)
             .children(
                 shelf
                     .after_chips()
                     .iter()
-                    .map(|c| chip_button(c, id, mark(c), t)),
+                    .map(|c| chip_button(c, mark(c), t)),
             )
             .children(menu(Edge::Right, shelf.after_cap())),
     )
+}
+
+/// The shelf's row, which runs its chips' drags.
+fn owner() -> El {
+    row()
+        .key("shelf")
+        .on_drag(|state: &mut State, d: &mut Drag, tx: &mut Tx| {
+            super::drag::gesture(state, d, tx, Owner::Shelf)
+        })
+}
+
+/// Whether a drag `owner` runs is in flight, so `owner` stays on screen with nothing in it.
+fn holding(state: &State, owner: Owner) -> bool {
+    state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .is_some_and(|d| d.owner == owner)
 }
 
 /// Keeps where a shelf element is in the window, for drops.
@@ -319,13 +354,7 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .children(view(state, t))
 }
 
-fn chip_button(chip: &Chip, desktop: &str, drop: Option<Edge>, t: &Tokens) -> El {
-    let source = Source::Chip {
-        desktop: desktop.to_owned(),
-        column: chip.key.clone(),
-        leaf: chip.go.clone(),
-        label: chip.label.clone(),
-    };
+fn chip_button(chip: &Chip, drop: Option<Edge>, t: &Tokens) -> El {
     let key = format!("shelf.chip.{}", chip.key);
     let recorded = key.clone();
     let chip = row()
@@ -342,9 +371,6 @@ fn chip_button(chip: &Chip, desktop: &str, drop: Option<Edge>, t: &Tokens) -> El
         .border(1.0, if chip.needs { t.accent } else { t.border })
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
             record(state, &recorded, rect, tx)
-        })
-        .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
-            super::drag::gesture(state, d, tx, &source)
         })
         .child(
             text(chip.label.clone())
@@ -422,14 +448,22 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
 
 /// The open cap's menu of the chips it holds, under the title bar on its side.
 pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
-    let side = state.window.desk.cap_open?;
-    let shelf = Shelf::of(state)?;
+    let layer = rune::el()
+        .key("shelf.menu.layer")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .on_drag(menu_gesture);
+    let open = state.window.desk.cap_open.zip(Shelf::of(state));
+    let Some((side, shelf)) = open else {
+        return holding(state, Owner::Menu).then_some(layer);
+    };
     let (name, held) = match side {
         Edge::Left => ("before", shelf.before_cap()),
         Edge::Right => ("after", shelf.after_cap()),
     };
     if held.is_empty() {
-        return None;
+        return holding(state, Owner::Menu).then_some(layer);
     }
     let menu = col()
         .key(format!("shelf.menu.{name}"))
@@ -440,25 +474,29 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         .radius(6.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
-        .children(held.iter().map(|c| chip_button(c, &shelf.desktop, None, t)));
+        .children(held.iter().map(|c| chip_button(c, None, t)));
     let place = row().w_full().padding(space::S2);
     let place = match side {
         Edge::Left => place,
         Edge::Right => place.justify_end(),
     };
     Some(
-        rune::el()
-            .key("shelf.menu.layer")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .on_press(|state: &mut State| state.window.desk.cap_open = None)
-            .child(
-                place
-                    .absolute(0.0, crate::shell::TITLE_BAR_HEIGHT)
-                    .child(menu),
-            ),
+        layer.child(
+            place
+                .absolute(0.0, crate::shell::TITLE_BAR_HEIGHT)
+                .child(menu),
+        ),
     )
+}
+
+/// A press on an open cap's menu drags the chip under it; one beside the menu closes it.
+fn menu_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
+    let ours = holding(state, Owner::Menu);
+    if d.phase == Phase::Up && !ours {
+        state.window.desk.cap_open = None;
+        return;
+    }
+    super::drag::gesture(state, d, tx, Owner::Menu);
 }
 
 fn width_control(shown: usize, cols: u32, t: &Tokens) -> El {

@@ -115,6 +115,12 @@ impl Driver<'_> {
         self.runtime.frame(0.0);
     }
 
+    /// Holds down `mods`, or lets go of the modifiers with `Mods::default()`.
+    pub fn hold(&mut self, mods: rune::Mods) {
+        self.runtime
+            .physical_input(rune::PhysicalInput::Modifiers(mods));
+    }
+
     /// Lets go of the pointer at `at`.
     pub fn release(&mut self, at: (f32, f32)) {
         self.runtime.pointer_up(at.0, at.1);

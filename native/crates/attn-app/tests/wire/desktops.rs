@@ -1250,6 +1250,161 @@ fn an_agent_alone_on_its_desktop_does_not_drag() {
     assert!(sent(&world, "desktop_move_leaf").is_empty());
 }
 
+fn two_desktops() -> Vec<Desktop> {
+    vec![
+        four_in_a_row("a"),
+        desktop(2, "x", Some(row([pane("x"), pane("y")]))),
+    ]
+}
+
+/// The middle of desktop `slot`'s row in the sidebar.
+fn in_sidebar(world: &World, slot: u32) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .runtime()
+        .presented(&format!("sidebar.desktop.work/desktop_{slot}"))
+        .unwrap_or_else(|| panic!("desktop {slot} is in the sidebar"))
+        .0;
+    (x + w / 2.0, y + h / 2.0)
+}
+
+#[test]
+fn a_tile_dropped_on_another_desktop_in_the_sidebar_moves_to_its_left_with_delegates_on_option() {
+    let mut world = start(two_desktops());
+
+    let own = in_sidebar(&world, 1);
+    drag(&mut world, "tile.a.header", own);
+    assert!(
+        sent(&world, "desktop_move_leaf").is_empty(),
+        "the desktop a tile comes from takes no drop"
+    );
+
+    let other = in_sidebar(&world, 2);
+    drag(&mut world, "tile.a.header", other);
+    world.gesture(|app| {
+        app.hold(rune::Mods {
+            alt: true,
+            ..rune::Mods::default()
+        });
+        app.drag(Target::key("tile.b.header"), other);
+    });
+    world.gesture(|app| app.hold(rune::Mods::default()));
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [
+            json(
+                r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2","leaf_id":"a",
+                    "edge":"left","leaf_share":0.32}"#
+            ),
+            json(
+                r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2","leaf_id":"b",
+                    "edge":"left","leaf_share":0.32,"with_delegates":true}"#
+            ),
+        ],
+        "Option at the drop takes the agent's delegates along"
+    );
+    assert_eq!(
+        sent(&world, "desktop_set_current")[0],
+        json(r#"{"profile_id":"work","desktop_id":"work/desktop_2"}"#)
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_drag_resting_on_a_sidebar_desktop_switches_to_it_and_lands_on_its_tiles() {
+    let mut world = start(two_desktops());
+
+    let over = in_sidebar(&world, 2);
+    world.gesture(|app| app.drag_over(Target::key("tile.a.header"), over));
+    world.advance(Duration::from_millis(200));
+    assert!(sent(&world, "desktop_set_current").is_empty());
+    world.advance(Duration::from_millis(200));
+    assert_eq!(
+        sent(&world, "desktop_set_current"),
+        [json(
+            r#"{"profile_id":"work","desktop_id":"work/desktop_2"}"#
+        )]
+    );
+
+    arrange(&mut world, "work/desktop_2", two_desktops());
+    assert!(shows(&world, "Agent x"));
+    assert!(
+        world.screen().find(Target::key("drag.ghost")).is_some(),
+        "the drag carries on over the desktop it switched to"
+    );
+    let over = in_sidebar(&world, 2);
+    world.gesture(|app| app.move_to((over.0 + 5.0, over.1)));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        sent(&world, "desktop_set_current").len(),
+        1,
+        "resting on the desktop the window shows switches nothing"
+    );
+    let to = in_tile(&world, "y", 0.9, 0.5);
+    world.gesture(|app| {
+        app.move_to(to);
+        app.release(to);
+    });
+
+    let moved = sent(&world, "desktop_move_leaf");
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0]["source_desktop_id"], "work/desktop_1");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
+    assert_eq!(moved[0]["leaf_id"], "a");
+    assert_eq!(moved[0]["anchor_id"], "y");
+    assert_eq!(moved[0]["edge"], "right");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_tile_dropped_on_new_desktop_moves_to_a_desktop_made_for_it_and_the_window_shows_it() {
+    let mut world = start(two_desktops());
+    world.daemon.on("desktop_move_leaf", |_| {
+        let mut made = desktop(3, "a", Some(pane("a")));
+        made.panes = vec![agent("work/desktop_3", "a")];
+        serde_json::json!({
+            "event": "profile_action_result",
+            "action": "desktop_move_leaf",
+            "success": true,
+            "desktops": [desktop(1, "b", Some(row([pane("b"), pane("c"), pane("d")]))), made],
+            "pane_id": "a",
+        })
+    });
+    let new_desktop = Target::key("sidebar.new_desktop");
+    assert!(world.screen().find(new_desktop.clone()).is_none());
+
+    let near = in_tile(&world, "b", 0.5, 0.5);
+    world.gesture(|app| app.drag_over(Target::key("tile.a.header"), near));
+    let [x, y, w, h] = world
+        .runtime()
+        .presented("sidebar.new_desktop")
+        .expect("a drag shows the sidebar's drop for a new desktop")
+        .0;
+    let to = (x + w / 2.0, y + h / 2.0);
+    world.gesture(|app| {
+        app.move_to(to);
+        app.release(to);
+    });
+    world.settle();
+
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","leaf_id":"a","edge":"left","leaf_share":0.32}"#
+        )]
+    );
+    assert_eq!(
+        sent(&world, "desktop_set_current"),
+        [json(
+            r#"{"profile_id":"work","desktop_id":"work/desktop_3"}"#
+        )]
+    );
+    assert!(world.screen().find(new_desktop).is_none());
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn a_swapped_out_tile_comes_back_when_the_row_changes_without_the_swap() {
     let mut world = start(vec![four_in_a_row("a")]);

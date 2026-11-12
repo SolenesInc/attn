@@ -18,10 +18,11 @@ use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
 
 pub use model::AgentState;
-use model::{AgentRow, DesktopHeader, Line, TileRow};
-pub(crate) use model::{display_name, tile_title};
+use model::{AgentRow, DesktopHeader, TileRow};
+pub(crate) use model::{Line, display_name, tile_title};
 
 use crate::State;
+use crate::desktop::DesktopMark;
 use crate::shell::View;
 
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
@@ -111,10 +112,23 @@ fn request_id(cmd: &str) -> String {
     format!("{cmd}-native-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
+/// The desktop sidebar's lines, in the order it shows them.
+pub(crate) fn lines(state: &State) -> Vec<Line> {
+    let home = state.window.view == View::Home;
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    model::desktop_lines(&state.facts, home, &on_screen)
+}
+
 fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let home = state.window.view == View::Home;
     let on_screen = crate::desktop::on_screen_sessions(state);
+    let new_desktop = state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .and_then(|d| d.new_desktop());
     let reads = (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
@@ -123,6 +137,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         on_screen.clone(),
         width::of(state).to_bits(),
         state.window.reorder.clone(),
+        new_desktop,
         *t,
     );
     memo("sidebar", reads, || {
@@ -162,7 +177,8 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 move |_: &State, i| keys[i].key().into(),
                                 move |state: &State, i| line(state, &lines, i, &t),
                             ),
-                    ),
+                    )
+                    .children(new_desktop.map(|over| new_desktop_drop(over, &t))),
             )
     })
 }
@@ -198,7 +214,13 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
         _ => false,
     };
     let seam = reorder::seam_on(state, lines, index);
-    memo(key.clone(), (line, draining, seam, *t), || {
+    let mark = state
+        .window
+        .desk
+        .drag
+        .as_ref()
+        .and_then(|d| d.desktop_mark(line.desktop()));
+    memo(key.clone(), (line, draining, seam, mark, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         let row = match line {
             Line::Desktop(desktop) => desktop_row(key.clone(), desktop, t),
@@ -215,7 +237,7 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
             }
             Line::Tile(tile) => tile_row(key.clone(), tile, t),
         };
-        row.children(seam.map(|seam| {
+        drop_mark(row, mark, t).children(seam.map(|seam| {
             rune::el()
                 .key(format!("{key}.seam"))
                 .absolute(
@@ -231,6 +253,45 @@ fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
                 .fill(t.accent)
         }))
     })
+}
+
+/// A line as its desktop shows to a dragged tile: muted on the desktop the tile comes from,
+/// and tinted on the others, more so on the one it rests on.
+fn drop_mark(line: El, mark: Option<DesktopMark>, t: &Tokens) -> El {
+    match mark {
+        None => line,
+        Some(DesktopMark::Source) => line.opacity(0.45),
+        Some(DesktopMark::Accepts) => line
+            .fill(t.accent.alpha(0.07))
+            .border(1.0, t.accent.alpha(0.32)),
+        Some(DesktopMark::Entering) => line
+            .fill(t.accent.alpha(0.12))
+            .border_sides([3.0, 1.0, 1.0, 1.0], t.accent.alpha(0.6)),
+    }
+}
+
+/// Where a dragged tile drops to make a new desktop for it, shown only while a tile is
+/// dragged.
+fn new_desktop_drop(over: bool, t: &Tokens) -> El {
+    row()
+        .key("sidebar.new_desktop")
+        .role("button")
+        .label("New desktop")
+        .a11y_value(if over { "drop here" } else { "" })
+        .w_full()
+        .center()
+        .gap(6.0)
+        .px(10.0)
+        .py(12.0)
+        .radius(8.0)
+        .fill(t.accent.alpha(if over { 0.14 } else { 0.04 }))
+        .border(1.5, t.accent.alpha(if over { 1.0 } else { 0.5 }))
+        .child(text("＋").font(type_::MONO_CAPTION).color(t.accent))
+        .child(
+            text("New desktop")
+                .font(type_::MONO_CAPTION)
+                .color(t.accent),
+        )
 }
 
 fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {

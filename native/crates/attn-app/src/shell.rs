@@ -210,8 +210,10 @@ impl Window {
     }
 }
 
-/// Lets a notice or a sequence's leader lapse when its time is up.
+/// Lets a notice or a sequence's leader lapse when its time is up, and switches to the
+/// sidebar desktop a drag rests on.
 pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
+    let switched = crate::desktop::expire_drag(state, tx);
     let now = tx.clock();
     let window = &mut state.window;
     let notice = window.notice.take_if(|n| now >= n.until).is_some();
@@ -226,7 +228,7 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
         .label_until
         .take_if(|until| now >= *until)
         .is_some();
-    notice || leader || label || sidebar_label
+    switched || notice || leader || label || sidebar_label
 }
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
