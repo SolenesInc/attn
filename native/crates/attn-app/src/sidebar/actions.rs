@@ -78,6 +78,7 @@ pub(crate) fn settle_on_screen(state: &mut State, tx: &mut Tx) {
     let Some(id) = state.window.on_screen(&state.facts) else {
         return;
     };
+    state.tick(tx);
     let now_ms = state.window.now_ms;
     let Some(agent) = session(state, &id) else {
         return;
@@ -103,6 +104,7 @@ pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
     let Some(id) = state.window.on_screen(&state.facts) else {
         return;
     };
+    state.tick(tx);
     let now_ms = state.window.now_ms;
     let Some(agent) = session(state, &id) else {
         return;

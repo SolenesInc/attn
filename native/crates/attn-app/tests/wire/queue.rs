@@ -5,7 +5,7 @@ use std::time::Duration;
 use attn_app::Action;
 use attn_protocol::{
     Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
-    SessionStateChangedMessage,
+    SessionStateChangedMessage, SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 
@@ -723,6 +723,37 @@ fn the_snooze_key_opens_the_menu_for_the_agent_on_screen_and_the_arrows_choose()
         untils(&world, "snooze_turn"),
         [("t-old".to_owned(), "2026-11-12T10:00:00.000Z".to_owned())]
     );
+}
+
+#[test]
+fn the_snooze_menu_reads_the_time_it_opens_at_after_a_quiet_daemon() {
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![session("w1", "working")]))));
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+    world.advance(Duration::from_secs(2 * 3600));
+
+    world.gesture(|app| app.key(chord(Action::SessionSnooze)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(plain(rune::Key::Enter)));
+
+    assert_eq!(
+        untils(&world, "snooze_turn"),
+        [("w1".to_owned(), "2026-11-12T12:00:00.000Z".to_owned())]
+    );
+}
+
+#[test]
+fn the_snooze_menu_closes_when_its_agent_goes_away() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.click(Target::role("button").name("Snooze t-old")));
+
+    world.daemon.emit(SessionUnregisteredMessage {
+        session: turn("t-old", 120),
+        ..SessionUnregisteredMessage::new()
+    });
+    world.settle();
+
+    assert!(world.screen().find(Target::role("menu")).is_none());
 }
 
 fn plain(key: rune::Key) -> rune::KeyEvent {

@@ -168,6 +168,7 @@ pub(crate) fn open(
     tx: &mut Tx,
 ) {
     tx.focus(format!("{MENU}.snooze.{}", CHOICES[0].id()), true);
+    state.tick(tx);
     state.window.snooze = Some(Menu {
         session: session.to_owned(),
         name,
@@ -175,6 +176,18 @@ pub(crate) fn open(
         standby: false,
         opened_ms: state.window.now_ms,
     });
+}
+
+/// Closes the menu once its agent is gone.
+pub(crate) fn follow(state: &mut State) {
+    let gone = state
+        .window
+        .snooze
+        .as_ref()
+        .is_some_and(|menu| !state.facts.sessions.iter().any(|s| s.id == menu.session));
+    if gone {
+        state.window.snooze = None;
+    }
 }
 
 fn choose(state: &mut State, choice: Choice) {
