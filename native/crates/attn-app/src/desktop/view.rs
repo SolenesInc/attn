@@ -92,6 +92,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         keys.clone(),
         names,
         state.terminals.find_bars(),
+        state.terminals.filter_panels(),
     );
     let launcher = desktop
         .filter(|d| d.panes.is_empty())
@@ -411,6 +412,15 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             );
             let slot = match cx.terminals.finding(&pane.runtime_id) {
                 Some(finding) => slot.child(super::find_bar::bar(&pane.runtime_id, finding, t)),
+                None => slot,
+            };
+            let slot = match cx.terminals.filtering(&pane.runtime_id) {
+                Some(filtering) => slot.child(super::filter_panel::panel(
+                    &pane.runtime_id,
+                    filtering,
+                    cx.terminals.filter_results_height(&pane.runtime_id),
+                    t,
+                )),
                 None => slot,
             };
             match cx.unsent.iter().find(|(r, _)| *r == pane.runtime_id) {

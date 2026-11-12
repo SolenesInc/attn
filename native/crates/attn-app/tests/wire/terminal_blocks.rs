@@ -10,7 +10,7 @@ use super::terminal_view::{COPY, COPY_COMMAND, copied, view};
 
 /// A shell's prompt, its command line and its output, marked with OSC 133 as an integrated
 /// shell marks them, ending on the next prompt.
-fn ran(command: &str, output: &str) -> Vec<u8> {
+pub(crate) fn ran(command: &str, output: &str) -> Vec<u8> {
     let url = command.replace(' ', "%20");
     format!(
         "\x1b]133;A\x07$ \x1b]133;B\x07{command}\r\n\x1b]133;C;cmdline_url={url}\x07{output}\x1b]133;D;0\x07\x1b]133;A\x07$ "
@@ -38,7 +38,7 @@ fn click(world: &mut World, col: u16, row: u16) {
     world.gesture(|app| app.click_at(at));
 }
 
-fn right_click(world: &mut World, col: u16, row: u16) {
+pub(crate) fn right_click(world: &mut World, col: u16, row: u16) {
     let at = cell(world, col, row);
     world.gesture(|app| {
         app.runtime.pointer_move(at.0, at.1);
@@ -49,13 +49,14 @@ fn right_click(world: &mut World, col: u16, row: u16) {
 }
 
 /// The open context menu's items, as `(id, enabled)`.
-fn menu(world: &World) -> Vec<(String, bool)> {
+pub(crate) fn menu(world: &World) -> Vec<(String, bool)> {
     let menu = world.runtime().popup_menu().expect("a menu is open");
     [
         "copy",
         "copy-command",
         "copy-output",
         "paste",
+        "filter-block",
         "scroll-block-top",
         "scroll-block-bottom",
     ]
@@ -65,7 +66,7 @@ fn menu(world: &World) -> Vec<(String, bool)> {
     .collect()
 }
 
-fn pick(world: &mut World, id: &str) {
+pub(crate) fn pick(world: &mut World, id: &str) {
     world.gesture(|app| app.runtime.resolve_popup(Some(id)).unwrap());
 }
 
@@ -154,6 +155,7 @@ fn the_context_menu_selects_the_block_under_it_and_copies_or_scrolls_to_its_part
             ("copy-command".into(), true),
             ("copy-output".into(), true),
             ("paste".into(), true),
+            ("filter-block".into(), true),
             ("scroll-block-top".into(), true),
             ("scroll-block-bottom".into(), true),
         ]
@@ -255,6 +257,7 @@ fn the_context_menu_off_the_blocks_offers_only_paste_and_pastes() {
             ("copy-command".into(), false),
             ("copy-output".into(), false),
             ("paste".into(), true),
+            ("filter-block".into(), false),
             ("scroll-block-top".into(), false),
             ("scroll-block-bottom".into(), false),
         ]

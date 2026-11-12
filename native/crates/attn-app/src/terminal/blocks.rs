@@ -189,10 +189,15 @@ impl Terminals {
         } else {
             rows.prompt.max(rows.end.saturating_sub(screen))
         };
-        let history = term.vt.history();
-        term.vt.scroll_back_to(history.saturating_sub(first));
-        Terminals::hover_moved(term);
+        Terminals::scroll_to_row(term, first);
         self.undrawn = true;
+    }
+
+    /// Scrolls the view so screen row `row` is its top row, or as near as the history allows.
+    pub(super) fn scroll_to_row(term: &mut Term, row: u32) {
+        let history = term.vt.history();
+        term.vt.scroll_back_to(history.saturating_sub(row));
+        Terminals::hover_moved(term);
     }
 
     /// The selected block's wash and outline over the rows of it the view shows.

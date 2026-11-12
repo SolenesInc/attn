@@ -257,3 +257,16 @@ fn the_focused_match_stays_on_its_text_when_the_oldest_history_is_dropped() {
     assert_eq!(count(&world), "2/3", "the focus stays on 'needle two'");
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_click_on_the_terminal_gives_it_typing_with_the_bar_still_open() {
+    let mut world = started(b"alpha\r\n");
+    open(&mut world);
+    let at = cell(&world, 1, 3);
+    world.gesture(|app| app.click_at(at));
+    world.gesture(|app| app.type_text("x"));
+    assert_eq!(inputs(&world), [typed("x")]);
+    let field = world.screen().get(Target::key("terminal.r1.find.field"));
+    assert!(!field.is("focused"));
+    assert!(world.runtime_is_at_rest());
+}

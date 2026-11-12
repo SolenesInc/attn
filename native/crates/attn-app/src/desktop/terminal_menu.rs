@@ -39,6 +39,7 @@ pub(super) fn open(state: &mut State, id: &str, at: (f32, f32), window: [f32; 2]
         .separator()
         .item(item("paste", "Paste", true, hint("cmd+v", "ctrl+shift+v")))
         .separator()
+        .item(item("filter-block", "Filter block output", block, None))
         .item(item("find", "Find", true, hint("cmd+f", "ctrl+shift+f")))
         .separator()
         .item(item(
@@ -68,6 +69,10 @@ pub(super) fn open(state: &mut State, id: &str, at: (f32, f32), window: [f32; 2]
                 ("copy-output", Some(block)) => terminals.block_text(&id, block, Part::Output),
                 ("paste", _) => {
                     tx.read_clipboard(crate::keys::on_paste);
+                    None
+                }
+                ("filter-block", Some(block)) => {
+                    terminals.open_filter(&id, block, tx);
                     None
                 }
                 ("find", _) => {

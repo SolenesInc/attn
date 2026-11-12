@@ -11,6 +11,7 @@ item	statement	native_test	reason
 30	⌘C, from the keyboard or the native Edit menu, copies the terminal's selection	attn-app/tests/wire/terminal_view.rs::a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again	
 30	⌘C copies a selected command block's text	attn-app/tests/wire/terminal_blocks.rs::a_click_selects_the_command_block_under_it_and_the_copy_keys_copy_it_whole_or_its_command	
 30	⇧⌘C copies the terminal's selection as Markdown, keeping bold, italic, strikethrough, underline and colored inline code	attn-app/tests/wire/terminal_view.rs::the_copy_command_key_copies_a_selection_as_markdown_with_its_styles	
+30	Filter block output lists the block's output lines that hold the query, and a listed line scrolls the view to it	attn-app/tests/wire/terminal_filter.rs::the_menu_filters_a_blocks_output_and_a_listed_line_scrolls_the_view_to_it	
 47	A drag that starts outside the terminal, on its tile's header, paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal	
 54	A program's OSC 52 write reaches the clipboard without a gesture	attn-app/tests/wire/terminal_view.rs::a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing	
 54	The terminal's copy and paste reach the system clipboard from the packaged bundle		gap: s-9d54yh

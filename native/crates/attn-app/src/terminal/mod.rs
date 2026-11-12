@@ -14,11 +14,13 @@ use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Them
 use rune::{Live, Tx};
 
 mod blocks;
+mod filter;
 mod find;
 mod links;
 mod selection;
 
 pub(crate) use blocks::Part;
+pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
 pub(crate) use links::accelerator;
 pub(crate) use selection::Release;
@@ -92,6 +94,7 @@ pub struct Terminals {
     pointing: Option<String>,
     /// Each terminal's find bar, by runtime id, kept with its query once closed.
     finds: HashMap<String, Finding>,
+    filters: HashMap<String, Filtering>,
 }
 
 struct Term {
@@ -255,6 +258,7 @@ impl Terminals {
         for id in gone {
             let mut term = self.panes.remove(&id).expect("listed above");
             self.finds.remove(&id);
+            self.filters.remove(&id);
             release(&id, &mut term, None, 0, daemon);
             if self.connected
                 && matches!(

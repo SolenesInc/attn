@@ -39,6 +39,7 @@ pub(crate) struct Shown {
     id: String,
     query: String,
     caret: (usize, usize),
+    focused: bool,
     case: bool,
     count: String,
 }
@@ -58,6 +59,7 @@ impl Terminals {
         if !self.panes.contains_key(id) {
             return;
         }
+        self.filters.remove(id);
         let finding = self.finds.entry(id.to_owned()).or_default();
         finding.open = true;
         finding.query.anchor = 0;
@@ -82,6 +84,7 @@ impl Terminals {
                 id: id.clone(),
                 query: f.query.text.clone(),
                 caret: (f.query.anchor, f.query.focus),
+                focused: f.query.focused,
                 case: f.case,
                 count: f.count(),
             })
@@ -272,7 +275,5 @@ fn show(term: &mut Term, m: Found) {
     if (top..top + rows).contains(&m.start_row) {
         return;
     }
-    let history = term.vt.history();
-    term.vt.scroll_back_to(history.saturating_sub(m.start_row));
-    Terminals::hover_moved(term);
+    Terminals::scroll_to_row(term, m.start_row);
 }
