@@ -7,6 +7,10 @@ use crate::shell::{Drawer, Layer, Palette};
 
 /// The one path every intent takes, from a key, the native menu or the palette.
 pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
+    if crate::desktop::run(state, &action, tx) {
+        record(state, action);
+        return;
+    }
     let window = &mut state.window;
     match action {
         Action::SessionGoToDashboard => window.go_home(),

@@ -95,6 +95,11 @@ impl World {
     /// Starts the app against `daemon` and returns once both are quiet: after the handshake,
     /// or after the app gave up on the daemon.
     pub fn start(daemon: Daemon) -> World {
+        World::start_sized(daemon, VIEWPORT)
+    }
+
+    /// [`World::start`] with a window `size` points wide and tall.
+    pub fn start_sized(daemon: Daemon, size: (f32, f32)) -> World {
         let store = Store::default();
         let pulse = daemon.pulse();
         let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
@@ -137,7 +142,7 @@ impl World {
             system_dark: true,
             scale: 2.0,
         };
-        let runtime = attn_app::app().headless_runtime(VIEWPORT, env);
+        let runtime = attn_app::app().headless_runtime(size, env);
         let mut world = World {
             daemon,
             runtime,

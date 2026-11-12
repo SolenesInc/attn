@@ -1,5 +1,6 @@
 mod daemon;
 mod screen;
+pub mod tree;
 mod world;
 
 pub use daemon::{Answer, CLIENT_TOKEN, Daemon, INSTANCE, IntoReplies, Request, Traffic, message};

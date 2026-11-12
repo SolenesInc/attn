@@ -5,7 +5,7 @@ use attn_app::{Action, Binding, Category, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
 };
-use attn_testkit::{Daemon, Target, World, key_event};
+use attn_testkit::{Daemon, Target, World, key_event, tree};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 
 fn pane(id: &str, runtime: &str) -> DesktopPane {
@@ -24,6 +24,9 @@ fn desktop(id: &str, active: &str, panes: Vec<DesktopPane>) -> Desktop {
         id: id.into(),
         name: id.into(),
         active_pane_id: active.into(),
+        tree_json: tree::panes_in_a_row(
+            &panes.iter().map(|p| p.pane_id.as_str()).collect::<Vec<_>>(),
+        ),
         panes,
         profile_id: "work".into(),
         ..Desktop::default()
@@ -283,21 +286,26 @@ fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
 }
 
 #[test]
-fn close_closes_the_pane_while_a_terminal_holds_the_keyboard_and_the_session_otherwise() {
+fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
-    press(&mut world, &Action::SessionClose);
+    press(&mut world, &Action::TerminalClose);
+    let closed = world.daemon.sent_of("desktop_close_tile");
+    assert_eq!(closed.len(), 1);
     assert_eq!(
-        notice(&world).as_deref(),
-        Some("Not in the native app yet: Close focused pane")
+        (&closed[0]["desktop_id"], &closed[0]["tile_id"]),
+        (&"d1".into(), &"t1".into())
     );
+    assert_eq!(notice(&world), None);
     rest(&mut world);
 
-    let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
+    let mut empty = desktop("d1", "", vec![]);
+    empty.revision = 7;
+    let mut world = World::start(Daemon::scripted().state(state(vec![empty], &[])));
     press(&mut world, &Action::SessionClose);
-    assert_eq!(
-        notice(&world).as_deref(),
-        Some("Not in the native app yet: Close session, focused pane or empty desktop")
-    );
+    let closed = world.daemon.sent_of("desktop_close");
+    assert_eq!(closed.len(), 1);
+    assert_eq!(closed[0]["desktop_id"], "d1");
+    assert_eq!(closed[0]["expected_revision"], 7);
     rest(&mut world);
 }
 

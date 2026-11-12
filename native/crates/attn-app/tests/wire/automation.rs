@@ -1,6 +1,9 @@
 use attn_protocol::{Desktop, DesktopPane, InitialStateMessage, Profile};
-use attn_testkit::{Daemon, Target, World};
+use attn_testkit::{Daemon, Target, World, tree};
 use serde_json::json;
+
+/// Wide enough for two tiles at the narrowest width.
+const TWO_TILES_FIT: (f32, f32) = (1600.0, 900.0);
 
 fn pane(id: &str) -> DesktopPane {
     DesktopPane {
@@ -14,24 +17,28 @@ fn pane(id: &str) -> DesktopPane {
 }
 
 fn two_tiles() -> World {
-    World::start(Daemon::scripted().state(InitialStateMessage {
-        selected_profile_id: Some("work".into()),
-        profiles: Some(vec![Profile {
-            id: "work".into(),
-            name: "Work".into(),
-            current_desktop_id: "d1".into(),
-            ..Profile::default()
-        }]),
-        desktops: Some(vec![Desktop {
-            id: "d1".into(),
-            name: "d1".into(),
-            active_pane_id: "t1".into(),
-            panes: vec![pane("t1"), pane("t2")],
-            profile_id: "work".into(),
-            ..Desktop::default()
-        }]),
-        ..InitialStateMessage::new()
-    }))
+    World::start_sized(
+        Daemon::scripted().state(InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "d1".into(),
+                ..Profile::default()
+            }]),
+            desktops: Some(vec![Desktop {
+                id: "d1".into(),
+                name: "d1".into(),
+                active_pane_id: "t1".into(),
+                tree_json: tree::panes_in_a_row(&["t1", "t2"]),
+                panes: vec![pane("t1"), pane("t2")],
+                profile_id: "work".into(),
+                ..Desktop::default()
+            }]),
+            ..InitialStateMessage::new()
+        }),
+        TWO_TILES_FIT,
+    )
 }
 
 fn keyboard(world: &mut World) -> serde_json::Value {

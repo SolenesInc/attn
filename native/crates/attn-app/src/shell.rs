@@ -1,10 +1,7 @@
-use std::sync::Arc;
-
 use attn_client::{Connection, Facts};
-use attn_term::mouse;
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
-use rune::{Chord, Cx, Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text, text_input};
+use rune::{Chord, Cx, El, Tx, col, el, row, text, text_input};
 
 use crate::action::{Action, Category};
 use crate::keymap::Keymap;
@@ -32,6 +29,7 @@ pub struct Window {
     /// the active tile: another window, or the daemon, can change the active tile without
     /// taking this window's keyboard.
     pub keyboard: Option<Holder>,
+    pub(crate) desk: crate::desktop::Desk,
     palette_query: rune::TextEdit,
 }
 
@@ -138,6 +136,7 @@ impl Window {
     /// and when its tile goes, to that desktop's active tile, and stays put when only the
     /// active tile changes.
     pub(crate) fn follow(&mut self, facts: &Facts) {
+        self.desk.follow(facts);
         let Some(desktop) = facts.current_desktop() else {
             self.keyboard = None;
             return;
@@ -233,236 +232,13 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
         .children((!window.sidebar_hidden).then(|| crate::sidebar::view(state, t)))
         .child(match window.view {
             View::Home => crate::home::view(state, t),
-            View::Desktop => tiles(state, t, scale),
+            View::Desktop => crate::desktop::area(state, t, scale),
         })
         .children(window.drawer.map(|drawer| self::drawer(drawer, t)))
 }
 
-fn version<T>(arc: &Arc<T>) -> usize {
-    Arc::as_ptr(arc) as usize
-}
-
-fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
-    let facts = &state.facts;
-    let desktop = facts.current_desktop();
-    let holder = state.window.keyboard.clone();
-    let composing = state.window.keyboard_terminal(facts).and_then(|id| {
-        let terminals = &state.terminals;
-        let font = terminals
-            .cell_font(&id)
-            .map(|(size, h)| [size, h].map(f32::to_bits));
-        Some((terminals.preedit(&id)?.to_owned(), font))
-    });
-    let reads = (
-        version(&facts.desktops),
-        version(&facts.profiles),
-        holder.clone(),
-        composing,
-        *t,
-        scale.to_bits(),
-    );
-    let area = memo("tiles.area", reads, || {
-        let Some(desktop) = desktop else {
-            return col()
-                .w_full()
-                .h_full()
-                .center()
-                .child(text("No desktop").font(type_::BODY).color(t.text_tertiary));
-        };
-        let panes = desktop.panes.iter().map(|pane| {
-            let active = pane.pane_id == desktop.active_pane_id;
-            let held = holder.as_ref().is_some_and(|h| h.pane == pane.pane_id);
-            let tile = Holder {
-                desktop: desktop.id.clone(),
-                pane: pane.pane_id.clone(),
-            };
-            col()
-                .key(format!("tile.{}", pane.pane_id))
-                .grow(1.0)
-                .h_full()
-                .radius(6.0)
-                .fill(t.bg_tile)
-                .border(
-                    1.0,
-                    if held {
-                        t.accent
-                    } else if active {
-                        t.border_focus
-                    } else {
-                        t.border
-                    },
-                )
-                .padding(space::S3)
-                .on_press_tx({
-                    let tile = tile.clone();
-                    move |state: &mut State, tx: &mut Tx| take_tile(state, &tile, tx)
-                })
-                .role("group")
-                .label(tile_name(&pane.title))
-                .child(
-                    text(tile_name(&pane.title))
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .children((!pane.runtime_id.is_empty()).then(|| {
-                    let caret = held
-                        .then(|| ime_caret(&state.terminals, &pane.runtime_id, t.dark))
-                        .flatten();
-                    terminal_slot(&pane.runtime_id, tile, caret, t.dark, scale)
-                }))
-        });
-        row()
-            .w_full()
-            .h_full()
-            .gap(space::S2)
-            .padding(space::S2)
-            .children(panes)
-    });
-    col()
-        .key("tiles")
-        .role("main")
-        .label("Tiles")
-        .grow(1.0)
-        .h_full()
-        .child(area)
-}
-
-/// The input method's caret in the terminal holding the keyboard: the cell text goes to
-/// next, where the candidate window opens, showing what the input method composes so far.
-fn ime_caret(terminals: &crate::terminal::Terminals, runtime_id: &str, dark: bool) -> Option<El> {
-    let caret = el()
-        .key(format!("terminal.{runtime_id}.caret"))
-        .absolute(0.0, 0.0)
-        .live_rect(terminals.caret(runtime_id)?)
-        .ime_cursor();
-    let (Some(preedit), Some((size, h))) = (
-        terminals.preedit(runtime_id),
-        terminals.cell_font(runtime_id),
-    ) else {
-        return Some(caret);
-    };
-    let theme = attn_term::Theme::of(dark);
-    let color =
-        |rgb| rune::color::hex(&attn_term::Theme::hex(rgb)).expect("a theme color is #rrggbb");
-    let font = rune::TextStyle {
-        size,
-        line_height: h,
-        family: rune::Family::Mono,
-        ..type_::BODY
-    };
-    Some(
-        caret.child(
-            text(preedit)
-                .key(format!("terminal.{runtime_id}.preedit"))
-                .absolute(0.0, 0.0)
-                .fill(color(theme.bg))
-                .font(font)
-                .color(color(theme.fg))
-                .single_line()
-                .decorations(vec![rune::Span {
-                    start: 0,
-                    end: preedit.len() as u32,
-                    underline: Some(color(theme.fg)),
-                    ..rune::Span::default()
-                }]),
-        ),
-    )
-}
-
-/// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
-/// size the terminal asks its PTY for. While it holds the keyboard it holds the input method's
-/// `caret`.
-fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, scale: f32) -> El {
-    let id = runtime_id.to_owned();
-    let (pointing, pressing, wheeling) = (id.clone(), id.clone(), id.clone());
-    let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
-    let slot = el()
-        .key(format!("terminal.{runtime_id}"))
-        .w_full()
-        .grow(1.0)
-        .fill(rune::color::hex(&bg).expect("a theme color is #rrggbb"))
-        .effect(crate::terminal::mark(runtime_id))
-        .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
-            state
-                .terminals
-                .laid_out(&id, (w, h), scale, tx, &state.daemon);
-            tx.live_only();
-        })
-        .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
-            let mods = report_mods(tx.mods());
-            let now = tx.clock();
-            let held = tx.pointer_held();
-            state
-                .terminals
-                .pointer_moved(&pointing, (p.x, p.y), held, mods, now, &state.daemon);
-            tx.live_only();
-        })
-        .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
-        .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
-            let mods = report_mods(tx.mods());
-            match d.phase {
-                rune::Phase::Down => {
-                    take_tile(state, &tile, tx);
-                    let button = match tx.button() {
-                        PointerButton::Middle => mouse::MIDDLE,
-                        PointerButton::Secondary => mouse::SECONDARY,
-                        _ => mouse::PRIMARY,
-                    };
-                    state.terminals.pointer_pressed(
-                        &pressing,
-                        button,
-                        (d.x, d.y),
-                        mods,
-                        &state.daemon,
-                    );
-                }
-                rune::Phase::Move => tx.live_only(),
-                rune::Phase::Up if d.cancelled() => {
-                    state
-                        .terminals
-                        .pointer_released(&pressing, None, 0, &state.daemon);
-                    tx.live_only();
-                }
-                rune::Phase::Up => {
-                    state.terminals.pointer_released(
-                        &pressing,
-                        Some((d.x, d.y)),
-                        mods,
-                        &state.daemon,
-                    );
-                    tx.live_only();
-                }
-            }
-        })
-        .on_wheel(move |state: &mut State, e, tx: &mut Tx| {
-            tx.live_only();
-            state
-                .terminals
-                .wheel(&wheeling, e.dy, (e.x, e.y), &state.daemon)
-        });
-    slot.children(caret)
-}
-
-fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
-    state.window.take_keyboard(&tile.desktop, &tile.pane, tx);
-    let keyboard = state.window.keyboard_terminal(&state.facts);
-    state.terminals.focus(keyboard, &state.daemon);
-}
-
-fn report_mods(mods: Mods) -> u8 {
-    mouse::modifiers(mods.shift, mods.alt, mods.ctrl)
-}
-
-fn tile_name(title: &str) -> String {
-    if title.is_empty() {
-        "Terminal".into()
-    } else {
-        title.into()
-    }
-}
-
 impl Window {
-    fn take_keyboard(&mut self, desktop: &str, pane: &str, tx: &mut Tx) {
+    pub(crate) fn take_keyboard(&mut self, desktop: &str, pane: &str, tx: &mut Tx) {
         self.keyboard = Some(Holder {
             desktop: desktop.into(),
             pane: pane.into(),

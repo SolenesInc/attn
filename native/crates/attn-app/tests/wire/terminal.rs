@@ -6,7 +6,7 @@ use attn_protocol::{
     SessionExitedMessage,
 };
 use attn_term::{FONT_SIZE, Fonts, SNAPSHOT_FORMAT, Vt};
-use attn_testkit::{Answer, Daemon, World, message};
+use attn_testkit::{Answer, Daemon, World, message, tree};
 use base64::Engine;
 use rune::{Ime, Key, KeyEvent, Mods, PhysicalInput, PointerButton, WheelEvent};
 
@@ -26,6 +26,9 @@ fn desktop(panes: Vec<DesktopPane>) -> Desktop {
         id: "d1".into(),
         name: "d1".into(),
         active_pane_id: panes.first().map(|p| p.pane_id.clone()).unwrap_or_default(),
+        tree_json: tree::panes_in_a_row(
+            &panes.iter().map(|p| p.pane_id.as_str()).collect::<Vec<_>>(),
+        ),
         panes,
         profile_id: "work".into(),
         ..Desktop::default()
@@ -696,10 +699,13 @@ fn a_tile_laid_out_to_nothing_leaves_the_pty_its_size() {
 
 #[test]
 fn taking_the_keyboard_claims_the_ptys_size_for_this_tile() {
-    let mut world = World::start(Daemon::scripted().state(showing(
-        vec![pane("t1", "r1"), pane("t2", "r2")],
-        "daemon-1",
-    )));
+    let mut world = World::start_sized(
+        Daemon::scripted().state(showing(
+            vec![pane("t1", "r1"), pane("t2", "r2")],
+            "daemon-1",
+        )),
+        (1600.0, 900.0),
+    );
     world.daemon.emit(PtyResizedMessage {
         id: "r2".into(),
         cols: 200,

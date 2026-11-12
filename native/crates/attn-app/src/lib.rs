@@ -2,6 +2,7 @@ mod action;
 pub mod automation;
 mod connection;
 pub mod daemon;
+pub mod desktop;
 mod dispatch;
 mod frame;
 pub mod headless;
