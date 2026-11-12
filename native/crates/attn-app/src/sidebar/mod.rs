@@ -74,15 +74,15 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
             actions::toggle_agent_list(state, tx)
         }
         Action::SidebarAgentList => crate::palette::open(state, crate::palette::Face::Agents, tx),
-        Action::SessionSettle => actions::settle_on_screen(state, tx),
+        Action::SessionSettle => actions::settle_key(state, tx),
         Action::RenameSession { session } => {
             let under = tile_header_of(state, session);
             session_menu::rename_session(state, session, under, tx)
         }
         Action::ReloadSession { session } => session_menu::reload_session(state, session),
         Action::WakeSession { session } => actions::wake(state, session),
-        Action::SessionPriority => actions::toggle_priority_on_screen(state),
-        Action::SessionSnooze => actions::snooze_on_screen(state, tx),
+        Action::SessionPriority => actions::priority_key(state, tx),
+        Action::SessionSnooze => actions::snooze_key(state, tx),
         Action::SessionCancelCountdown => actions::cancel_countdown(state),
         Action::SidebarWider => width::step_by_key(state, true, tx),
         Action::SidebarNarrower => width::step_by_key(state, false, tx),

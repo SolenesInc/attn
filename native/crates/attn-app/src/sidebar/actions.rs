@@ -48,17 +48,115 @@ pub(crate) fn toggle_agent_list(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// Escape in the agent filter steps back one layer: it clears the filter, then closes the list.
+/// The agent filter's keys: Down and Up walk into the rows from the top or the bottom, and
+/// Escape steps back one layer.
 pub(crate) fn filter_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
-    if ev.key != rune::Key::Escape {
+    match ev.key {
+        rune::Key::Down | rune::Key::Up if plain(ev) => {
+            walk(state, None, ev.key == rune::Key::Down, tx)
+        }
+        rune::Key::Escape => step_back(state, tx),
+        _ => false,
+    }
+}
+
+/// A queue row's keys: Down and Up walk the rows and wrap at both ends, Return opens the row's
+/// agent, a letter or digit types into the open list's filter, and Escape steps back one layer.
+pub(crate) fn row_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+    if !plain(ev) {
         return false;
     }
+    match &ev.key {
+        rune::Key::Down | rune::Key::Up => {
+            let from = tx.focused().map(str::to_owned);
+            walk(state, from.as_deref(), ev.key == rune::Key::Down, tx)
+        }
+        rune::Key::Enter => {
+            let from = tx.focused().map(str::to_owned);
+            let row = super::queue_view::agent_rows(state)
+                .into_iter()
+                .find(|row| Some(&row.key) == from.as_ref());
+            row.is_some_and(|row| {
+                open_agent(state, &row.session, tx);
+                true
+            })
+        }
+        rune::Key::Escape if state.window.agent_list_open => step_back(state, tx),
+        rune::Key::Text(typed) if state.window.agent_list_open && is_word_char(typed) => {
+            let filter = format!("{}{typed}", state.window.agent_filter.text);
+            state.window.agent_filter = rune::TextEdit::new(filter);
+            tx.focus(super::queue_view::FILTER_FIELD, false);
+            true
+        }
+        _ => false,
+    }
+}
+
+fn plain(ev: &rune::KeyEvent) -> bool {
+    !(ev.mods.cmd || ev.mods.ctrl || ev.mods.alt)
+}
+
+fn is_word_char(typed: &str) -> bool {
+    let mut chars = typed.chars();
+    chars.next().is_some_and(char::is_alphanumeric) && chars.next().is_none()
+}
+
+fn step_back(state: &mut State, tx: &mut Tx) -> bool {
     if state.window.agent_filter.text.is_empty() {
         toggle_agent_list(state, tx);
     } else {
         state.window.agent_filter.clear();
+        tx.focus(super::queue_view::FILTER_FIELD, false);
     }
     true
+}
+
+fn walk(state: &State, from: Option<&str>, down: bool, tx: &mut Tx) -> bool {
+    let rows = super::queue_view::agent_rows(state);
+    if rows.is_empty() {
+        return false;
+    }
+    let last = rows.len() - 1;
+    let at = from.and_then(|from| rows.iter().position(|row| row.key == from));
+    let next = match (at, down) {
+        (None, true) => 0,
+        (None, false) => last,
+        (Some(at), true) if at == last => 0,
+        (Some(at), true) => at + 1,
+        (Some(0), false) => last,
+        (Some(at), false) => at - 1,
+    };
+    tx.focus(rows[next].key.clone(), true);
+    true
+}
+
+/// The agent the settle, priority and snooze keys act on: the queue row holding focus, or the
+/// agent on screen when no row does.
+struct Target {
+    session: String,
+    row: Option<String>,
+}
+
+fn target(state: &State, tx: &Tx) -> Option<Target> {
+    let focused = tx.focused().unwrap_or_default();
+    let row = super::queue_view::agent_rows(state)
+        .into_iter()
+        .find(|row| {
+            focused == row.key
+                || focused
+                    .strip_prefix(row.key.as_str())
+                    .is_some_and(|rest| rest.starts_with('.'))
+        });
+    match row {
+        Some(row) => Some(Target {
+            session: row.session,
+            row: Some(row.key),
+        }),
+        None => state
+            .window
+            .on_screen(&state.facts)
+            .map(|session| Target { session, row: None }),
+    }
 }
 
 /// ⌘↑ and ⌘↓ in queue flow: the previous or next agent of the queue, wrapping.
@@ -90,10 +188,10 @@ pub(crate) fn wake(state: &State, session: &str) {
     });
 }
 
-/// The settle key: settles the turn of the agent on screen. On an agent with no turn to
-/// settle, queue flow moves on to the head of the queue, or home when nothing is owed.
-pub(crate) fn settle_on_screen(state: &mut State, tx: &mut Tx) {
-    let Some(id) = state.window.on_screen(&state.facts) else {
+/// The settle key: settles the turn of its target. On an agent with no turn to settle, queue
+/// flow moves on to the head of the queue, or home when nothing is owed.
+pub(crate) fn settle_key(state: &mut State, tx: &mut Tx) {
+    let Some(Target { session: id, .. }) = target(state, tx) else {
         return;
     };
     state.tick(tx);
@@ -117,9 +215,10 @@ pub(crate) fn settle_on_screen(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// The snooze key: the snooze menu for the agent on screen, in the middle of the window.
-pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
-    let Some(id) = state.window.on_screen(&state.facts) else {
+/// The snooze key: the snooze menu for its target, under the focused row or in the middle of
+/// the window.
+pub(crate) fn snooze_key(state: &mut State, tx: &mut Tx) {
+    let Some(Target { session: id, row }) = target(state, tx) else {
         return;
     };
     state.tick(tx);
@@ -129,7 +228,8 @@ pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
     };
     if queue::actions(&state.facts, agent, now_ms).snooze {
         let name = super::model::display_name(agent);
-        super::snooze::open(state, &id, name, None, tx);
+        let under = row.map(|row| format!("{row}.snooze"));
+        super::snooze::open(state, &id, name, under, tx);
     }
 }
 
@@ -164,10 +264,10 @@ pub(crate) fn cancel_countdown(state: &State) {
     }
 }
 
-/// The priority key: puts the agent on screen ahead of the other turns, or back among them.
-pub(crate) fn toggle_priority_on_screen(state: &mut State) {
-    if let Some(id) = state.window.on_screen(&state.facts) {
-        toggle_priority(state, &id);
+/// The priority key: puts its target ahead of the other turns, or back among them.
+pub(crate) fn priority_key(state: &mut State, tx: &Tx) {
+    if let Some(target) = target(state, tx) {
+        toggle_priority(state, &target.session);
     }
 }
 

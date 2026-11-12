@@ -1141,3 +1141,128 @@ fn an_agents_header_shows_its_turn_settling_and_pressing_it_keeps_the_turn_or_un
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+fn focused(world: &World) -> Option<String> {
+    world.screen().focused().and_then(|n| n.key)
+}
+
+#[test]
+fn the_arrows_walk_every_row_from_the_filter_and_wrap_and_return_opens_the_row() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    let mut walk = |key| {
+        world.gesture(|app| app.key(plain(key)));
+        focused(&world).unwrap_or_default()
+    };
+
+    let down: Vec<String> = (0..6).map(|_| walk(rune::Key::Down)).collect();
+    assert_eq!(
+        down,
+        [
+            "queue-chief.chief",
+            "queue-turn.t-old",
+            "queue-turn.t-new",
+            "queue-settled.w1",
+            "queue-snoozed.s1",
+            "queue-chief.chief",
+        ]
+    );
+    assert_eq!(walk(rune::Key::Up), "queue-snoozed.s1");
+
+    world.gesture(|app| app.key(plain(rune::Key::Enter)));
+    assert_eq!(shown(&world), ["s1"]);
+}
+
+#[test]
+fn up_from_the_filter_reaches_the_last_row_and_a_letter_on_a_row_types_into_the_filter() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+
+    world.gesture(|app| app.key(plain(rune::Key::Up)));
+    assert_eq!(focused(&world).as_deref(), Some("queue-snoozed.s1"));
+    world.gesture(|app| app.type_text("w"));
+
+    assert_eq!(focused(&world).as_deref(), Some("queue.filter.field"));
+    assert!(lines(&world).contains(&"queue-settled.w1".to_owned()));
+    assert!(!lines(&world).contains(&"queue-snoozed.s1".to_owned()));
+}
+
+#[test]
+fn tab_reaches_the_queue_rows() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+
+    world.gesture(|app| app.key(plain(rune::Key::Tab)));
+    assert_eq!(focused(&world).as_deref(), Some("queue-settled.w1"));
+}
+
+#[test]
+fn the_settle_priority_and_snooze_keys_act_on_the_focused_row_and_not_the_agent_on_screen() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("a", 60),
+        turn("b", 30),
+        turn("c", 5),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.c")));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    assert_eq!(focused(&world).as_deref(), Some("queue-turn.b"));
+
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    world.gesture(|app| app.key(chord(Action::SessionSnooze)));
+
+    assert_eq!(sent_ids(&world, "settle_turn"), ["b"]);
+    assert_eq!(sent_ids(&world, "set_session_priority"), ["b"]);
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Snooze b"))
+            .is_some()
+    );
+    assert_eq!(shown(&world), ["c"]);
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+    assert_eq!(focused(&world).as_deref(), Some("queue-turn.b"));
+    world.advance(Duration::from_secs(1));
+    assert!(
+        !world.runtime().animating,
+        "the closed menu has faded and nothing else moves"
+    );
+}
+
+#[test]
+fn opening_an_agent_from_its_row_hands_the_keyboard_to_its_terminal() {
+    let with_terminals = |active: &str| {
+        let mut message = queue(one_desktop(vec![turn("a", 60), turn("b", 30)]));
+        let desktops = message.desktops.as_mut().expect("one desktop");
+        for pane in desktops.iter_mut().flat_map(|d| &mut d.panes) {
+            pane.runtime_id = format!("r-{}", pane.session_id);
+        }
+        desktops[0].active_pane_id = active.into();
+        message
+    };
+    let mut world = World::start(Daemon::scripted().state(with_terminals("p0")));
+
+    world.gesture(|app| app.click(Target::key("queue-turn.b")));
+    let shown = with_terminals("p1");
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: shown.profiles.expect("a profile").remove(0),
+        desktops: shown.desktops.expect("one desktop"),
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    world.gesture(|app| app.type_text("x"));
+
+    let typed: Vec<(String, String)> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|m| {
+            let field = |name: &str| m[name].as_str().unwrap_or_default().to_owned();
+            (field("id"), field("data"))
+        })
+        .collect();
+    assert_eq!(typed, [("r-b".to_owned(), "x".to_owned())]);
+    assert_eq!(focused(&world), None, "the row lets go of the keyboard");
+}

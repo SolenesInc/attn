@@ -73,6 +73,27 @@ impl QLine {
     }
 }
 
+/// A queue row's key and the agent it shows.
+pub(crate) struct AgentLine {
+    pub key: String,
+    pub session: String,
+}
+
+/// The agent rows of the queue sidebar, top to bottom, as the keyboard walks them.
+pub(crate) fn agent_rows(state: &State) -> Vec<AgentLine> {
+    let bands = queue::bands(&state.facts, state.window.now_ms);
+    lines(state, &bands)
+        .into_iter()
+        .filter_map(|line| match &line {
+            QLine::Agent(a) => Some(AgentLine {
+                key: line.key(),
+                session: a.agent.id.clone(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The slot badge a queue row carries for its desktop: its number among the slotted
 /// desktops, or `·` for a desktop without a shortcut.
 fn slot_of(state: &State, desktop: Option<&str>) -> String {
@@ -458,6 +479,8 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
+        .focusable(true)
+        .on_key(super::actions::row_key)
         .child(state_mark(&key, &a.agent, t))
         .child(
             text(name)
