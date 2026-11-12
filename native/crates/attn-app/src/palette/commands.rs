@@ -1,6 +1,6 @@
 use attn_protocol::CommandUsage;
 
-use super::Row;
+use super::{Look, Pick, Row};
 use crate::sidebar::{model, queue};
 use crate::{Action, State};
 
@@ -228,14 +228,15 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
         .into_iter()
         .map(|(_, c)| Row {
             key: format!("command:{}", c.id),
-            shortcut: state
-                .keymap
-                .binding(c.shortcut.as_ref().unwrap_or(&c.action))
-                .map(|b| state.keymap.label(b)),
-            title: c.title,
-            description: c.description,
-            command: Some(c.id),
-            action: c.action,
+            look: Look::Command {
+                description: c.description,
+                shortcut: super::label_of(state, c.shortcut.as_ref().unwrap_or(&c.action)),
+            },
+            label: c.title,
+            pick: Some(Pick::Command {
+                id: c.id,
+                action: c.action,
+            }),
         })
         .collect()
 }

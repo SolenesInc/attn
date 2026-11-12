@@ -4,12 +4,16 @@ use std::time::Duration;
 
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
-    CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage, InitialStateMessage, Profile,
-    ProfileArrangementChangedMessage, RecordCommandUsageResultMessage, Session,
+    AutomationProvenance, CommandUsage, Desktop, DesktopPane, GetCommandUsageResultMessage,
+    InitialStateMessage, Profile, ProfileArrangementChangedMessage,
+    RecordCommandUsageResultMessage, Session, SessionStateChangedMessage,
+    SessionUnregisteredMessage,
 };
 use attn_testkit::{Daemon, Request, Target, World, key_event, message};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
+
+use super::queue::ago;
 
 fn profile(id: &str, name: &str, current: &str) -> Profile {
     Profile {
@@ -601,4 +605,371 @@ fn every_command_the_palette_offers_runs_in_the_native_app() {
         }
     }
     rest(&mut world);
+}
+
+fn crew_and_queue() -> InitialStateMessage {
+    let member = |id: &str, chief: bool| Session {
+        crew_member: Some(if chief { "chief" } else { id }.into()),
+        chief_of_staff: chief.then_some(true),
+        ..session(id)
+    };
+    let turn = |id: &str, minutes: i64| Session {
+        turn_owed: Some(true),
+        turn_opened_at: Some(ago(minutes)),
+        state: "waiting_input".into(),
+        ..session(id)
+    };
+    let run = Session {
+        automation: Some(AutomationProvenance {
+            definition_name: "nightly".into(),
+            run_id: "r1".into(),
+            trigger_type: "schedule".into(),
+            ..AutomationProvenance::default()
+        }),
+        ..session("run-1")
+    };
+    let snoozed = Session {
+        turn_owed: Some(true),
+        turn_snoozed_until: Some("2099-01-01T00:00:00Z".into()),
+        ..session("snoozed-agent")
+    };
+    let sessions = vec![
+        member("chief-1", true),
+        member("gardener", false),
+        turn("newer-turn", 10),
+        settled_working("settled-agent"),
+        run,
+        turn("older-turn", 120),
+        snoozed,
+    ];
+    let on = |desktop: &str, ids: &[&str]| -> Vec<DesktopPane> {
+        ids.iter()
+            .map(|id| DesktopPane {
+                desktop_id: desktop.into(),
+                ..agent_pane(id)
+            })
+            .collect()
+    };
+    let mut d1 = desktop(
+        "d1",
+        "work",
+        1,
+        on(
+            "d1",
+            &[
+                "chief-1",
+                "gardener",
+                "older-turn",
+                "settled-agent",
+                "run-1",
+            ],
+        ),
+    );
+    d1.tree_json = r#"{"type":"tile","tile_id":"tile-docs","tile_kind":"browser","tile_params":"https://docs.test"}"#.into();
+    let mut d2 = desktop("d2", "work", 0, on("d2", &["newer-turn", "snoozed-agent"]));
+    d2.shortcut_slot = None;
+    let mut state = initial(vec![d1, d2], sessions);
+    state.settings = Some(BTreeMap::from([(
+        "queue_mode_enabled".to_owned(),
+        "true".to_owned(),
+    )]));
+    state
+}
+
+fn settled_working(id: &str) -> Session {
+    Session {
+        state: "working".into(),
+        ..session(id)
+    }
+}
+
+/// At rest but for the next minute a turn's age reads differently, as the queue sidebar
+/// beside the palette wakes for it.
+fn rest_but_for_ages(world: &mut World) {
+    world.advance(Duration::from_secs(6));
+    let now = world.now().as_secs_f64();
+    let wake = world.runtime().wake_deadline();
+    assert!(wake.is_some_and(|at| at - now >= 20.0), "{wake:?} at {now}");
+}
+
+fn open_agents(world: &mut World) {
+    press_action(world, Action::UiActionMenu);
+}
+
+fn row_text(world: &World, row: &str, part: &str) -> Option<String> {
+    text_of(world, &format!("palette.row.{row}.{part}"))
+}
+
+fn hints(world: &World) -> Vec<String> {
+    (0..)
+        .map_while(|i| text_of(world, &format!("palette.hint.{i}")))
+        .collect()
+}
+
+#[test]
+fn the_agents_face_lists_the_crew_then_turns_agents_runs_snoozed_agents_and_tiles() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+
+    assert_eq!(
+        titles(&world),
+        [
+            "chief-1",
+            "gardener",
+            "older-turn",
+            "newer-turn",
+            "settled-agent",
+            "run-1",
+            "snoozed-agent",
+            "docs.test"
+        ]
+    );
+    assert_eq!(text_of(&world, "palette.count").as_deref(), Some("8 of 8"));
+    assert_eq!(highlighted(&world).as_deref(), Some("chief-1"));
+
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let label = |action: Action| keymap.binding(&action).map(|b| keymap.label(b));
+    assert_eq!(
+        row_text(&world, "agent:older-turn", "tag"),
+        label(Action::SessionJumpToWaiting)
+    );
+    assert_eq!(row_text(&world, "agent:newer-turn", "tag"), None);
+    assert_eq!(
+        row_text(&world, "agent:older-turn", "age").as_deref(),
+        Some("2h")
+    );
+    assert_eq!(
+        row_text(&world, "agent:older-turn", "slot"),
+        label(Action::DesktopSelect1)
+    );
+    assert_eq!(
+        row_text(&world, "agent:newer-turn", "slot").as_deref(),
+        Some("·")
+    );
+    let statuses: Vec<_> = [
+        "chief-1",
+        "older-turn",
+        "settled-agent",
+        "run-1",
+        "snoozed-agent",
+    ]
+    .iter()
+    .map(|id| row_text(&world, &format!("agent:{id}"), "status").unwrap())
+    .collect();
+    assert_eq!(statuses, ["chief", "waiting", "working", "idle", "snoozed"]);
+    assert_eq!(
+        row_text(&world, "agent:gardener", "crew").as_deref(),
+        Some("· crew")
+    );
+    assert_eq!(row_text(&world, "agent:chief-1", "crew"), None);
+    assert_eq!(
+        row_text(&world, "tile:d1:tile-docs", "kind").as_deref(),
+        Some("WEB")
+    );
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn a_query_filters_every_kind_of_row_and_drops_the_queue_tag() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+
+    world.gesture(|app| app.type_text("nightly"));
+    assert_eq!(titles(&world), ["run-1"]);
+    assert_eq!(text_of(&world, "palette.count").as_deref(), Some("1 of 8"));
+
+    retype(&mut world, "web");
+    assert_eq!(titles(&world), ["docs.test"]);
+
+    retype(&mut world, "gardener");
+    assert_eq!(titles(&world), ["gardener"]);
+
+    retype(&mut world, "turn");
+    assert_eq!(titles(&world), ["older-turn", "newer-turn"]);
+    assert_eq!(row_text(&world, "agent:older-turn", "tag"), None);
+
+    retype(&mut world, "nobody");
+    assert_eq!(
+        text_of(&world, "palette.empty").as_deref(),
+        Some("No match")
+    );
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn arrows_step_over_the_divider_and_a_pick_shows_the_agent_or_tile_and_records_nothing() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Down);
+    assert_eq!(highlighted(&world).as_deref(), Some("older-turn"));
+    press(&mut world, Key::Up);
+    assert_eq!(highlighted(&world).as_deref(), Some("gardener"));
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+
+    assert!(world.screen().find(Target::key("palette")).is_none());
+    let shown = world.daemon.sent_of("desktop_show_session");
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0]["session_id"], "older-turn");
+
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("docs"));
+    world.gesture(|app| app.click(Target::key("palette.row.tile:d1:tile-docs")));
+    let leaves = world.daemon.sent_of("desktop_show_leaf");
+    assert_eq!(leaves.len(), 1);
+    assert_eq!(leaves[0]["leaf_id"], "tile-docs");
+    assert!(records(&world).is_empty());
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn the_queue_keys_act_on_the_highlighted_agent_and_leave_the_palette_open() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("older"));
+
+    let footer = hints(&world);
+    assert!(footer.iter().any(|h| h.ends_with(" settle")), "{footer:?}");
+    assert!(footer.iter().any(|h| h.ends_with(" snooze")), "{footer:?}");
+
+    press_action(&mut world, Action::SessionSettle);
+    press_action(&mut world, Action::SessionPriority);
+
+    let settled = world.daemon.sent_of("settle_turn");
+    assert_eq!(settled.len(), 1);
+    assert_eq!(settled[0]["session_id"], "older-turn");
+    let priority = world.daemon.sent_of("set_session_priority");
+    assert_eq!(priority.len(), 1);
+    assert_eq!(priority[0]["session_id"], "older-turn");
+    assert_eq!(priority[0]["priority"], true);
+    assert_eq!(palette_named(&world).as_deref(), Some("Agents"));
+
+    retype(&mut world, "run");
+    let footer = hints(&world);
+    assert!(!footer.iter().any(|h| h.contains("settle")), "{footer:?}");
+    press_action(&mut world, Action::SessionSettle);
+    assert_eq!(world.daemon.sent_of("settle_turn").len(), 1);
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn snoozing_from_the_palette_offers_the_choices_and_comes_back_to_the_agent() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("older"));
+
+    press_action(&mut world, Action::SessionSnooze);
+    assert_eq!(palette_named(&world).as_deref(), Some("Snooze older-turn"));
+    assert_eq!(query(&world), "");
+    assert_eq!(
+        titles(&world),
+        [
+            "For 30 minutes",
+            "For an hour",
+            "For 2 hours",
+            "For 4 hours",
+            "For 8 hours",
+            "Until tomorrow",
+            "Until Saturday",
+            "Until Monday"
+        ]
+    );
+    press(&mut world, Key::Down);
+    press(&mut world, Key::Enter);
+
+    let snoozed = world.daemon.sent_of("snooze_turn");
+    assert_eq!(snoozed.len(), 1);
+    assert_eq!(snoozed[0]["session_id"], "older-turn");
+    assert_eq!(palette_named(&world).as_deref(), Some("Agents"));
+    assert_eq!(query(&world), "older");
+    assert_eq!(highlighted(&world).as_deref(), Some("older-turn"));
+
+    press_action(&mut world, Action::SessionSnooze);
+    press(&mut world, Key::Escape);
+    assert_eq!(palette_named(&world).as_deref(), Some("Agents"));
+    assert_eq!(query(&world), "older");
+
+    press_action(&mut world, Action::SessionSnooze);
+    world.daemon.emit(SessionUnregisteredMessage {
+        session: session("older-turn"),
+        ..SessionUnregisteredMessage::new()
+    });
+    world.settle();
+    assert_eq!(palette_named(&world).as_deref(), Some("Agents"));
+    assert_eq!(query(&world), "older");
+    assert_eq!(world.daemon.sent_of("snooze_turn").len(), 1);
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn the_highlight_stays_on_its_agent_when_the_queue_reorders() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("turn"));
+    press(&mut world, Key::Down);
+    assert_eq!(highlighted(&world).as_deref(), Some("newer-turn"));
+
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            priority: Some(true),
+            turn_owed: Some(true),
+            turn_opened_at: Some(ago(10)),
+            state: "waiting_input".into(),
+            ..session("newer-turn")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(titles(&world), ["newer-turn", "older-turn"]);
+    assert_eq!(highlighted(&world).as_deref(), Some("newer-turn"));
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn either_palette_key_leaves_the_snooze_choices_for_its_face() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("older"));
+
+    press_action(&mut world, Action::SessionSnooze);
+    press_action(&mut world, Action::UiCommandPalette);
+    assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
+    assert_eq!(query(&world), ">older");
+
+    press_action(&mut world, Action::UiActionMenu);
+    press_action(&mut world, Action::SessionSnooze);
+    assert_eq!(palette_named(&world).as_deref(), Some("Snooze older-turn"));
+    press_action(&mut world, Action::UiActionMenu);
+    assert_eq!(palette_named(&world).as_deref(), Some("Agents"));
+    assert_eq!(query(&world), "older");
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn a_settle_bound_to_a_sequence_says_it_has_no_keys_here_and_does_nothing() {
+    let settle = chord(Action::SessionSettle);
+    let mut state = crew_and_queue();
+    state.settings.get_or_insert_default().insert(
+        "keybindings_config".into(),
+        r#"{"version":1,"overrides":{"session.settle":{"leader":{"key":"g","meta":true},"then":{"key":"e"}}},"dock":{"collapsed":false,"items":[]}}"#.into(),
+    );
+    let mut world = World::start(daemon(state, vec![]));
+    open_agents(&mut world);
+    world.gesture(|app| app.type_text("older"));
+
+    let footer = hints(&world);
+    assert!(
+        footer.contains(&"settle needs a single-key shortcut (chords don't work here)".to_owned()),
+        "{footer:?}"
+    );
+    assert!(
+        footer
+            .iter()
+            .any(|h| h.ends_with(" snooze") && !h.contains("single-key"))
+    );
+    world.gesture(|app| app.key(settle));
+    assert!(world.daemon.sent_of("settle_turn").is_empty());
+    rest_but_for_ages(&mut world);
 }

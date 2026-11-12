@@ -194,20 +194,24 @@ fn choose(state: &mut State, choice: Choice) {
     let Some(menu) = state.window.snooze.take() else {
         return;
     };
-    let until = iso(choice.until(menu.opened_ms));
-    let _ = if menu.standby {
-        state.daemon.send(&StandbySessionMessage {
+    if menu.standby {
+        let _ = state.daemon.send(&StandbySessionMessage {
             session_id: menu.session,
-            until,
+            until: iso(choice.until(menu.opened_ms)),
             ..StandbySessionMessage::new()
-        })
+        });
     } else {
-        state.daemon.send(&SnoozeTurnMessage {
-            session_id: menu.session,
-            until,
-            ..SnoozeTurnMessage::new()
-        })
-    };
+        snooze_turn(state, &menu.session, choice, menu.opened_ms);
+    }
+}
+
+/// Snoozes the agent's turn until `choice` ends, counted from `opened_ms`.
+pub(crate) fn snooze_turn(state: &State, session: &str, choice: Choice, opened_ms: i64) {
+    let _ = state.daemon.send(&SnoozeTurnMessage {
+        session_id: session.into(),
+        until: iso(choice.until(opened_ms)),
+        ..SnoozeTurnMessage::new()
+    });
 }
 
 pub const MENU: &str = "snooze.menu";

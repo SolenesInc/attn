@@ -135,6 +135,7 @@ pub fn bind(
             sidebar::snooze::follow(state);
             sidebar::session_menu::follow(state);
             sidebar::width::follow(state);
+            palette::follow(state);
             sidebar::advance(state, tx);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state

@@ -151,13 +151,16 @@ pub(crate) fn cancel_countdown(state: &State) {
 
 /// The priority key: puts the agent on screen ahead of the other turns, or back among them.
 pub(crate) fn toggle_priority_on_screen(state: &mut State) {
-    let Some(id) = state.window.on_screen(&state.facts) else {
+    if let Some(id) = state.window.on_screen(&state.facts) {
+        toggle_priority(state, &id);
+    }
+}
+
+pub(crate) fn toggle_priority(state: &State, id: &str) {
+    let Some(priority) = session(state, id).map(|s| s.priority == Some(true)) else {
         return;
     };
-    let Some(priority) = session(state, &id).map(|s| s.priority == Some(true)) else {
-        return;
-    };
-    set_priority(state, &id, !priority);
+    set_priority(state, id, !priority);
 }
 
 pub(crate) fn set_priority(state: &State, session: &str, priority: bool) {
