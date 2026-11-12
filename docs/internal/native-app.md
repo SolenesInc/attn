@@ -55,27 +55,25 @@ Only the final binaries stay in `native/target`. One build directory per
 checkout keeps parallel builds in different worktrees from waiting on each
 other's cargo lock.
 
-Measured on ai-sandbox (16 cores, load 20 to 48) on 2026-11-12, for the
-workspace's first crates on Rune `f3ab74c1`:
+Measured on 2026-11-12 for the workspace's first crates, each build after the
+one before it in one checkout, as build directory plus `native/target`:
 
-| After | Build directory | `native/target` | Time |
-| --- | --- | --- | --- |
-| `cargo build` | 1.7 GiB | 124 MiB | 139 s cold |
-| then `cargo test --no-run` | 1.9 GiB | 124 MiB | 6 s |
-| then `cargo build --release` | 3.2 GiB | 165 MiB | 180 s cold |
+| After | ai-sandbox (16 cores, load 20 to 48) | Mac (10 cores, load 27 to 43) |
+| --- | --- | --- |
+| `cargo build` | 1.7 GiB + 124 MiB, 139 s cold | 1.3 GiB + 100 MiB, 174 s cold |
+| then `cargo test --no-run` | 1.9 GiB + 124 MiB, 6 s | 1.4 GiB + 100 MiB, 7 s |
+| then `cargo build --release` | 3.2 GiB + 165 MiB, 180 s cold | 2.3 GiB + 129 MiB, 458 s cold |
 
 Almost all of the build directory is Rune and its dependencies. Sharing them
 between checkouts would need one build directory, and cargo locks a build
 directory for the whole build, so every worktree's build would wait for every
-other's. Rune's
-source is already shared: cargo keeps one checkout of each pinned revision in
-`~/.cargo/git`.
+other's. Rune's source is already shared: cargo keeps one checkout of each
+pinned revision in `~/.cargo/git`.
 
-A 400-line Rune app's `target/` held 4.9 GiB after a debug and a release build
-on the Mac. Six Builders and an Orchestrator building at once therefore hold
-about 35 GiB, under the cleanup's budget of 64 GiB below. A build removed
-after 3 unused days costs one cold rebuild, 85 to 139 s for a debug build on
-ai-sandbox.
+A checkout that has built all three holds at most 3.4 GiB. Six Builders and an
+Orchestrator building at once therefore hold about 24 GiB, and the cleanup's
+budget of 64 GiB below leaves room for the workspace to grow. A build removed
+after 3 unused days costs one cold rebuild, 85 to 174 s for a debug build.
 
 `scripts/native-build-clean` removes, from the build root:
 
@@ -93,5 +91,7 @@ machine.
 
 ## Edit-to-test loop
 
-The budget for an edit to a view, rebuilt and with its wire test rerun, is
-15 s on the Mac. It is not measured yet.
+An edit to `attn-app`'s view, rebuilt and with its wire test rerun
+(`cargo test -p attn-app --test wire`), takes 3.7 to 7.0 s on the Mac at load
+33 to 35 on 10 cores, and 1.4 s on ai-sandbox at load 11 to 12 (2026-11-12). The
+budget is 15 s on the Mac.

@@ -7,12 +7,12 @@ usage="usage: scripts/native-build-clean"
 # native/.cargo/config.toml puts each checkout's intermediate build output here,
 # under the checkout's own path.
 root="${ATTN_NATIVE_BUILD_ROOT:-${CARGO_HOME:-$HOME/.cargo}/attn-native-build}"
-# One checkout's debug, test and release builds of native/ measured 3.3 GiB on
-# ai-sandbox and a 400-line Rune app 4.9 GiB on the Mac (2026-11-12). Six
-# Builders and an Orchestrator building at once hold about 35 GiB.
+# One checkout's debug, test and release builds of native/ measured at most
+# 3.4 GiB, on ai-sandbox and on the Mac (2026-11-12). Six Builders and an
+# Orchestrator building at once hold about 24 GiB.
 budget_mib="${ATTN_NATIVE_BUILD_BUDGET_MIB:-65536}"
-# A build left alone this long costs a cold rebuild, 85 to 139 s for a debug
-# build on a loaded ai-sandbox (2026-11-12), when its checkout builds again.
+# A build left alone this long costs a cold rebuild, 85 to 174 s for a debug
+# build on a loaded ai-sandbox or Mac (2026-11-12), when its checkout builds again.
 stale_days=3
 
 [ -d "$root" ] || exit 0
