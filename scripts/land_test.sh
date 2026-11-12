@@ -15,7 +15,7 @@ mkdir -p "$work/bin" "$work/repo"
 cat >"$work/bin/make" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[ "${2:-}" != compile-go ] || exit 0
+[ "${2:-}" != compile-go ] || exit "${LAND_COMPILE_EXIT:-0}"
 printf '%s\n' "$*" >>"$LAND_CHECK_LOG"
 echo "make ran: $*"
 if [ -e "$LAND_MOVE_MAIN" ]; then
@@ -396,6 +396,7 @@ grep -qF 'make ran: check-go' "$work/failure" || { echo 'the Go checks left no o
 refuses 'a changed scenario that fails on CI' LAND_SOAK_EXIT=1 app/scripts/real-app-harness/scenario-shelf-moves.mjs
 grep -qF 'gh run view 7 --log-failed' "$work/failure" || { echo 'the failed scenario did not say how to read it' >&2; cat "$work/failure" >&2; exit 1; }
 no_land_scenario_refs
+refuses 'a failed Go compile' LAND_COMPILE_EXIT=1 internal/example/example.go
 
 hold="$work/hold" second="$work/second"
 mkdir "$hold"

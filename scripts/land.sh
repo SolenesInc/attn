@@ -323,20 +323,30 @@ sync_history() {
   go tool test-history sync || echo "land: $1" >&2
 }
 
-lock_land_queue() {
-  perl -MFcntl=:flock -e 'open(my $queue, ">&=9") or die "land: $!\n"; flock($queue, LOCK_EX | ($ARGV[0] ? LOCK_NB : 0)) or exit 1' "$1"
-}
-
 take_land_queue() {
-  local queue holder
+  local queue status holder
   queue="$(git rev-parse --git-common-dir)/attn-land-queue"
-  exec 9>>"$queue"
-  if ! lock_land_queue nonblocking; then
+  exec 9< <(perl -MFcntl=:flock -e '
+    my ($queue, $land) = @ARGV;
+    $| = 1;
+    open(my $lock, ">>", $queue) or die "land: $queue: $!\n";
+    unless (flock($lock, LOCK_EX | LOCK_NB)) {
+      print "busy\n";
+      flock($lock, LOCK_EX) or die "land: $!\n";
+    }
+    print "took\n";
+    close(STDOUT);
+    select(undef, undef, undef, 0.05) while kill(0, $land);
+  ' "$queue" "$$" &)
+  read -r status <&9 || true
+  if [ "$status" = busy ]; then
     holder="$(cat "$queue")"
     echo "land: waiting for the land queue: held by ${holder:-a land that is starting}" >&2
-    lock_land_queue ""
-    echo "land: took the land queue" >&2
+    read -r status <&9 || true
+    [ "$status" != took ] || echo "land: took the land queue" >&2
   fi
+  exec 9<&-
+  [ "$status" = took ] || fail "could not take the land queue at $queue"
   echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
 }
 
@@ -436,4 +446,4 @@ refuse_commits_by_another_author
 refuse_frozen_changes
 run_landing_scenarios
 take_land_queue
-land 9>&-
+land
