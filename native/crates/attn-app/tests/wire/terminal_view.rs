@@ -459,3 +459,42 @@ fn pasting_an_image_sends_the_ctrl_v_byte_for_the_agent_to_read_it_itself() {
     assert_eq!(inputs(&world), [typed("\x16")]);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_selection_stays_on_its_text_when_the_oldest_history_is_dropped() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    let line = |n: u32| format!("line-{n:07}-{}\r\n", "x".repeat(60));
+    let fill = |from: u32, to: u32| (from..to).map(line).collect::<String>().into_bytes();
+    let full = 8 * 1024 * 1024 / 70 + 10_000;
+    for (seq, from) in (0..full).step_by(10_000).enumerate() {
+        output(
+            &world,
+            seq as u32 + 1,
+            &fill(from, (from + 10_000).min(full)),
+        );
+    }
+    world.settle();
+    drag(&mut world, (0, 10), (11, 10));
+    assert_eq!(washes(&world), [(10, [0, 12])]);
+    let selected = copied(&world).expect("the drag copies");
+    output(&world, 10_000, &fill(full, full + 600));
+    world.settle();
+    wheel(&mut world, 600.0);
+    let rows = world.terminal_text("r1");
+    assert!(
+        rows[10].starts_with(&selected),
+        "the view is back on the selected row: {:?}",
+        &rows[8..12]
+    );
+    let washed: Vec<&str> = washes(&world)
+        .iter()
+        .map(|(row, cols)| &rows[*row as usize][cols[0] as usize..cols[1] as usize])
+        .collect();
+    assert_eq!(
+        washed,
+        [selected.as_str()],
+        "the wash stays on the text it selected"
+    );
+    assert!(world.runtime_is_at_rest());
+}

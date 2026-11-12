@@ -90,10 +90,14 @@ static void attn_clipboard_write(GhosttyTerminal terminal, void *userdata,
     }
   }
   uint32_t n = (uint32_t)text.len;
-  if (t != NULL && found &&
-      attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, (const uint8_t *)&n, sizeof(n)) &&
-      attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, text.ptr, n)) {
-    reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+  if (t != NULL && found) {
+    size_t before = t->clipboard_len;
+    if (attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, (const uint8_t *)&n, sizeof(n)) &&
+        attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, text.ptr, n)) {
+      reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+    } else {
+      t->clipboard_len = before;
+    }
   }
   write->reply(write, &reply);
 }
@@ -255,6 +259,23 @@ static bool attn_term_ref(AttnTerm *t, uint32_t row, uint16_t col, GhosttyGridRe
   *ref = (GhosttyGridRef){0};
   return ghostty_terminal_grid_ref(t->terminal, point, ref) == GHOSTTY_SUCCESS;
 }
+
+GhosttyTrackedGridRef attn_term_mark(AttnTerm *t, uint32_t row) {
+  GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
+                        .value = {.coordinate = {.x = 0, .y = row}}};
+  GhosttyTrackedGridRef mark = NULL;
+  if (ghostty_terminal_grid_ref_track(t->terminal, point, &mark) != GHOSTTY_SUCCESS) return NULL;
+  return mark;
+}
+
+bool attn_term_mark_row(GhosttyTrackedGridRef mark, uint32_t *row) {
+  GhosttyPointCoordinate at;
+  if (ghostty_tracked_grid_ref_point(mark, GHOSTTY_POINT_TAG_SCREEN, &at) != GHOSTTY_SUCCESS) return false;
+  *row = at.y;
+  return true;
+}
+
+void attn_term_mark_free(GhosttyTrackedGridRef mark) { ghostty_tracked_grid_ref_free(mark); }
 
 static bool attn_term_row_data(AttnTerm *t, uint32_t row, GhosttyRowData data) {
   GhosttyGridRef ref;

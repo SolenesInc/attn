@@ -15,4 +15,4 @@ pub use font::{FONT_SIZE, Fonts, Metrics};
 pub use grid::{Cell, Cursor, CursorStyle, Grapheme, Grid, Overlay, OverlayKind, Rgb, Width};
 pub use render::Cells;
 pub use theme::Theme;
-pub use vt::{KeyInput, LinkRow, OptionAsAlt, SNAPSHOT_FORMAT, Vt, mods};
+pub use vt::{KeyInput, LinkRow, Mark, OptionAsAlt, SNAPSHOT_FORMAT, Vt, mods};

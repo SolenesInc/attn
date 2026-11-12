@@ -54,6 +54,29 @@ pub struct LinkRow {
     pub uris: Vec<Option<String>>,
 }
 
+#[repr(C)]
+struct TrackedRef {
+    _private: [u8; 0],
+}
+
+/// A screen row the terminal keeps up to date as its history drops old rows and it reflows,
+/// so what the user marked there stays on its text.
+pub struct Mark(NonNull<TrackedRef>);
+
+impl Mark {
+    /// The screen row the mark is on now, or None once its row left the history.
+    pub fn row(&self) -> Option<u32> {
+        let mut row = 0;
+        unsafe { attn_term_mark_row(self.0.as_ptr(), &mut row) }.then_some(row)
+    }
+}
+
+impl Drop for Mark {
+    fn drop(&mut self) {
+        unsafe { attn_term_mark_free(self.0.as_ptr()) }
+    }
+}
+
 unsafe extern "C" {
     fn attn_term_new(cols: u16, rows: u16, scrollback_bytes: usize) -> *mut AttnTerm;
     fn attn_term_restore(data: *const u8, len: usize, scrollback_bytes: usize) -> *mut AttnTerm;
@@ -82,6 +105,9 @@ unsafe extern "C" {
     fn attn_term_alternate_screen(t: *mut AttnTerm) -> bool;
     fn attn_term_responses(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_responses(t: *mut AttnTerm);
+    fn attn_term_mark(t: *mut AttnTerm, row: u32) -> *mut TrackedRef;
+    fn attn_term_mark_row(mark: *mut TrackedRef, row: *mut u32) -> bool;
+    fn attn_term_mark_free(mark: *mut TrackedRef);
     fn attn_term_clipboard(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_clipboard(t: *mut AttnTerm);
     fn attn_term_frame(t: *mut AttnTerm, frame: *mut Frame) -> c_int;
@@ -170,8 +196,10 @@ const RESET_FINAL: u8 = b'c';
 const KEY_PRESS: u8 = 1;
 const KEY_REPEAT: u8 = 2;
 
-// The handle owns its allocations alone and is used from one thread at a time.
+// The handles own their allocations alone and are used from one thread at a time, a mark with
+// its terminal.
 unsafe impl Send for Vt {}
+unsafe impl Send for Mark {}
 
 impl Vt {
     pub fn new(cols: u16, rows: u16) -> Vt {
@@ -294,6 +322,11 @@ impl Vt {
             attn_term_clear_responses(self.raw.as_ptr());
             bytes
         }
+    }
+
+    /// A mark on screen row `row`, which stays on that row's text.
+    pub fn mark(&mut self, row: u32) -> Option<Mark> {
+        NonNull::new(unsafe { attn_term_mark(self.raw.as_ptr(), row) }).map(Mark)
     }
 
     /// The text each clipboard write the program asked for since the last call puts on the

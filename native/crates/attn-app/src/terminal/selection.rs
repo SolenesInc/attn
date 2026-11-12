@@ -1,5 +1,5 @@
 use attn_term::selection::{Anchor, Point, Selection, clean_lines, word_at};
-use attn_term::{Overlay, OverlayKind, Rgb, Theme};
+use attn_term::{Mark, Overlay, OverlayKind, Rgb, Theme, Vt};
 
 use super::{Term, Terminals};
 
@@ -11,6 +11,8 @@ const SELECTION_LIGHT: Rgb = [0xad, 0xd6, 0xff];
 #[derive(Default)]
 pub(super) struct View {
     selection: Option<Selection>,
+    /// The selection's first row, which keeps it on its text as the history drops old rows.
+    mark: Option<Mark>,
     /// The text the last finished selection copied, which ⌘C copies again.
     selected: Option<String>,
     /// The selection the program's own scrolling carries along, kept by its text.
@@ -19,6 +21,39 @@ pub(super) struct View {
     /// The cell under the pointer and the link over it, until output or a scroll moves the
     /// text under it.
     pub(super) hover: Option<super::links::Hover>,
+}
+
+impl View {
+    /// Selects `selection`, marking its first row so it stays on its text.
+    fn select(&mut self, selection: Option<Selection>, vt: &mut Vt) {
+        self.mark = selection.and_then(|s| vt.mark(s.start.row));
+        self.selection = selection;
+    }
+
+    /// The selection on the rows its text is on now. It goes once its first row left the
+    /// history.
+    fn selection(&mut self) -> Option<Selection> {
+        let selection = self.selection?;
+        let Some(row) = self
+            .mark
+            .as_ref()
+            .map_or(Some(selection.start.row), Mark::row)
+        else {
+            self.selection = None;
+            self.mark = None;
+            return None;
+        };
+        let moved = |p: Point| Point {
+            row: (i64::from(p.row) + i64::from(row) - i64::from(selection.start.row)).max(0) as u32,
+            ..p
+        };
+        let now = Selection {
+            start: moved(selection.start),
+            end: moved(selection.end),
+        };
+        self.selection = Some(now);
+        Some(now)
+    }
 }
 
 /// What letting go of a selecting button did.
@@ -43,8 +78,7 @@ impl Terminals {
         let term = self.panes.get_mut(id)?;
         let (col, row) = selection_cell(term, &metrics, at)?;
         let row = term.vt.view_top() + u32::from(row);
-        let view = &mut term.view;
-        view.anchor = None;
+        term.view.anchor = None;
         self.undrawn = true;
         let cols = term.vt.size().0;
         let selection = match clicks {
@@ -55,17 +89,18 @@ impl Terminals {
             }
             3 => Selection::at(row, 0, cols),
             _ => {
-                view.selected = None;
-                view.selecting = Some(Selecting {
+                term.view.selected = None;
+                term.view.selecting = Some(Selecting {
                     from: at,
                     dragged: false,
                 });
-                view.selection = Some(Selection::at(row, col, col));
+                term.view
+                    .select(Some(Selection::at(row, col, col)), &mut term.vt);
                 return None;
             }
         };
-        view.selecting = None;
-        view.selection = Some(selection);
+        term.view.selecting = None;
+        term.view.select(Some(selection), &mut term.vt);
         let text = text_of(term, selection);
         term.view.selected = (!text.is_empty()).then(|| text.clone());
         term.view.selected.clone()
@@ -93,8 +128,9 @@ impl Terminals {
             return;
         };
         let row = term.vt.view_top() + u32::from(row);
-        if let Some(selection) = &mut term.view.selection {
+        if let Some(mut selection) = term.view.selection() {
             selection.end = Point { row, col: col + 1 };
+            term.view.selection = Some(selection);
             self.undrawn = true;
         }
     }
@@ -110,11 +146,11 @@ impl Terminals {
             return Release::Nothing;
         };
         if !selecting.dragged {
-            term.view.selection = None;
+            term.view.select(None, &mut term.vt);
             self.undrawn = true;
             return Release::Click;
         }
-        let Some(selection) = term.view.selection else {
+        let Some(selection) = term.view.selection() else {
             return Release::Nothing;
         };
         let text = text_of(term, selection);
@@ -177,8 +213,10 @@ impl Terminals {
     /// The wheel is about to scroll the program's own screen: a selection on it follows its
     /// text from now on.
     pub(super) fn anchor_selection(term: &mut Term) {
-        let view = &term.view;
-        let (Some(selection), None) = (view.selection, &view.anchor) else {
+        if term.view.anchor.is_some() {
+            return;
+        }
+        let Some(selection) = term.view.selection() else {
             return;
         };
         let text = text_of(term, selection);
@@ -205,7 +243,8 @@ impl Terminals {
         let lines: Vec<String> = (0..u32::from(rows))
             .map(|row| term.vt.row_text(top + row, 0..cols).trim_end().to_owned())
             .collect();
-        term.view.selection = anchor.find(&lines, top, cols);
+        let found = anchor.find(&lines, top, cols);
+        term.view.select(found, &mut term.vt);
     }
 
     /// The screen was replaced: what the user selected on the old one goes with it.
@@ -221,7 +260,7 @@ impl Terminals {
     }
 
     fn selection_overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
-        let Some(selection) = term.view.selection else {
+        let Some(selection) = term.view.selection() else {
             return Vec::new();
         };
         let (cols, rows) = term.vt.size();

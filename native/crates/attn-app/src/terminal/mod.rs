@@ -113,7 +113,6 @@ struct Term {
     resize_due: Option<f64>,
     pointer: Pointer,
     view: selection::View,
-    /// The clipboard writes the program's output asks for.
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
 }
