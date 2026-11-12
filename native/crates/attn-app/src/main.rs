@@ -59,14 +59,30 @@ fn main() -> ExitCode {
             None
         });
     let waker = handle.clone();
-    let (_link, _window) = attn_app::connect(
+    let epoch_ms = attn_app::wall_clock_ms();
+    let main = handle.clone();
+    let (link, _window) = attn_app::connect(
         &store,
         |terminals, replies| launch.link_config(terminals, replies),
-        attn_app::wall_clock_ms(),
+        epoch_ms,
         frames,
         move || waker.wake(),
         move |update| handle.update(update),
     );
+    let opener = Arc::new(attn_app::window_host::NativeOpener {
+        store: store.clone(),
+        daemon: link.commands(),
+        epoch_ms,
+    });
+    let deliver: attn_app::desktop::Deliver = {
+        let main = main.clone();
+        Arc::new(move |update| main.update(update))
+    };
+    main.update(Box::new(
+        move |state: &mut attn_app::State, _: &mut rune::Tx| {
+            state.open_tile_windows(opener, deliver)
+        },
+    ));
     app.run();
     remove_app_pid();
     ExitCode::SUCCESS

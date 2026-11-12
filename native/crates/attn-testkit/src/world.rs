@@ -42,6 +42,9 @@ pub struct World {
     replies: attn_app::ReplyInbox,
     clock: ManualClock,
     pulse: Pulse,
+    store: Store,
+    orders: crate::tiles::Orders,
+    tiles: Vec<crate::tiles::TileRuntime>,
 }
 
 /// What a gesture can do to the app.
@@ -227,6 +230,19 @@ impl World {
         let mut runtime = attn_app::app().headless_runtime(size, env);
         let clipboard = rune::clipboard::memory();
         runtime.use_clipboard(&clipboard);
+        let orders = crate::tiles::Orders {
+            list: Arc::default(),
+            pulse: pulse.clone(),
+        };
+        {
+            let opener = Arc::new(crate::tiles::HeadlessOpener(orders.clone()));
+            let (inbox, pulse) = (inbox.clone(), pulse.clone());
+            let main: attn_app::desktop::Deliver = Arc::new(move |update| {
+                inbox.lock().unwrap().push(update);
+                pulse.beat();
+            });
+            runtime.update(move |state, _| state.open_tile_windows(opener, main));
+        }
         let mut world = World {
             daemon,
             clipboard,
@@ -241,6 +257,9 @@ impl World {
             replies,
             clock,
             pulse,
+            store,
+            orders,
+            tiles: Vec::new(),
         };
         world.settle();
         world
@@ -277,7 +296,13 @@ impl World {
                 self.screens.draw_without_gpu(&mut self.runtime);
                 self.terminal_frames += 1;
             }
+            self.follow_orders();
+            for tile in &mut self.tiles {
+                tile.settle();
+            }
             if self.quiet()
+                && self.orders.list.lock().unwrap().is_empty()
+                && self.tiles.iter().all(|t| t.idle())
                 && self.inbox.lock().unwrap().is_empty()
                 && self.terminals.is_empty()
                 && self.replies.is_empty()
@@ -320,6 +345,92 @@ impl World {
             };
             self.advance(at.saturating_sub(self.clock.now()));
         }
+    }
+
+    fn follow_orders(&mut self) {
+        let orders = std::mem::take(&mut *self.orders.list.lock().unwrap());
+        for order in orders {
+            match order {
+                crate::tiles::Order::Open { key, frame, setup } => {
+                    let daemon = self.link().commands();
+                    let tile = crate::tiles::TileRuntime::open(
+                        key,
+                        frame,
+                        setup,
+                        &self.store,
+                        daemon,
+                        &self.pulse,
+                    );
+                    self.tiles.push(tile);
+                }
+                crate::tiles::Order::Place { key, frame } => {
+                    let tile = self.tile_mut(&key);
+                    *tile.frame.lock().unwrap() = frame;
+                    tile.shown = true;
+                }
+                crate::tiles::Order::Hide { key } => self.tile_mut(&key).shown = false,
+                crate::tiles::Order::Update { key, update } => {
+                    self.tile_mut(&key).inbox.lock().unwrap().push(update);
+                }
+            }
+        }
+    }
+
+    fn tile_mut(&mut self, key: &str) -> &mut crate::tiles::TileRuntime {
+        self.tiles
+            .iter_mut()
+            .find(|t| t.key == key)
+            .unwrap_or_else(|| panic!("the app has no tile window {key}"))
+    }
+
+    /// The tile windows the app opened and has not closed, oldest first.
+    pub fn tile_windows(&self) -> Vec<crate::TileWindowView> {
+        self.tiles.iter().map(|t| t.view()).collect()
+    }
+
+    /// What tile window `key` shows to assistive tech.
+    pub fn tile_screen(&self, key: &str) -> Screen {
+        self.tiles
+            .iter()
+            .find(|t| t.key == key)
+            .unwrap_or_else(|| panic!("the app has no tile window {key}"))
+            .screen()
+    }
+
+    /// Runs a user action in tile window `key`, then settles.
+    pub fn tile_gesture(&mut self, key: &str, f: impl FnOnce(&mut Driver)) {
+        f(&mut Driver {
+            runtime: &mut self.tile_mut(key).runtime,
+        });
+        self.settle();
+    }
+
+    /// The person moves tile window `key` to `frame` and then works in another window.
+    pub fn move_tile_window(&mut self, key: &str, frame: attn_app::desktop::layout::Frame) {
+        let tile = self.tile_mut(key);
+        tile.runtime.window_focus(true);
+        *tile.frame.lock().unwrap() = frame;
+        tile.runtime.window_focus(false);
+        self.settle();
+    }
+
+    /// The person closes tile window `key` from its title bar.
+    pub fn close_tile_window(&mut self, key: &str) {
+        let at = self
+            .tiles
+            .iter()
+            .position(|t| t.key == key)
+            .unwrap_or_else(|| panic!("the app has no tile window {key}"));
+        let mut tile = self.tiles.remove(at);
+        tile.runtime.update(attn_app::desktop::tile_window_closed);
+        self.settle();
+    }
+
+    /// Whether every tile window is idle: no frame requested and no wake deadline.
+    pub fn tile_windows_are_at_rest(&self) -> bool {
+        self.tiles
+            .iter()
+            .all(|t| !t.runtime.animating && t.runtime.wake_deadline().is_none())
     }
 
     pub fn now(&self) -> Duration {

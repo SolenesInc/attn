@@ -9,6 +9,7 @@ use attn_client::{Clock, Pulse};
 use rune::{AppHandle, Runtime};
 
 use crate::State;
+use crate::desktop::layout::Frame;
 
 /// The automation host for the app's window: inspections run on the UI thread through
 /// `AppHandle::inspect`. `frames` beats from the app's `on_frame_encoded` and
@@ -106,4 +107,88 @@ fn capture(window: u64, path: &str) -> Command {
     let mut command = Command::new("import");
     command.args(["-window", &window.to_string(), path]);
     command
+}
+
+/// Opens tile windows as native windows beside the main one, each bound to the main window's
+/// store and sending on its link.
+pub struct NativeOpener {
+    pub store: attn_client::Store,
+    pub daemon: attn_client::Commands,
+    pub epoch_ms: i64,
+}
+
+struct NativeWindow {
+    window: rune::WindowHandle,
+    handle: AppHandle<State>,
+    _bound: attn_client::Subscription,
+}
+
+impl crate::desktop::Opener for NativeOpener {
+    fn open(
+        &self,
+        key: &str,
+        frame: &Frame,
+        setup: crate::desktop::Setup,
+    ) -> Box<dyn crate::desktop::Opened> {
+        let app = crate::tile_window_app();
+        let handle = app.handle();
+        let bound = crate::bind(
+            &self.store,
+            self.daemon.clone(),
+            crate::TerminalInbox::default(),
+            crate::ReplyInbox::default(),
+            self.epoch_ms,
+            {
+                let handle = handle.clone();
+                move |update| handle.update(update)
+            },
+        );
+        let window = rune::open_window(rune::WindowSpec::from_app(key, app));
+        let placed = window.clone();
+        handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
+        let opened = NativeWindow {
+            window,
+            handle,
+            _bound: bound,
+        };
+        crate::desktop::Opened::place(&opened, frame);
+        Box::new(opened)
+    }
+}
+
+impl crate::desktop::Opened for NativeWindow {
+    fn place(&self, frame: &Frame) {
+        let placement = self.window.placement();
+        let scale = placement.map_or(crate::frame::main_scale(), |p| p.scale);
+        let (dx, dy) = placement.map_or((0, 0), |p| {
+            (
+                p.content_position.0 - p.position.0,
+                p.content_position.1 - p.position.1,
+            )
+        });
+        self.window
+            .set_position(((frame.x * scale) as i32 - dx, (frame.y * scale) as i32 - dy));
+        self.window
+            .resize_instant((frame.width as f32, frame.height as f32));
+        self.window.show();
+    }
+
+    fn hide(&self) {
+        self.window.hide();
+    }
+
+    fn update(&self, update: crate::Update) {
+        self.handle.update(update);
+    }
+}
+
+/// Where `window`'s content is on the desktop, in points.
+fn content_frame(window: &rune::WindowHandle) -> Option<Frame> {
+    let p = window.placement()?;
+    Some(Frame {
+        x: f64::from(p.content_position.0) / p.scale,
+        y: f64::from(p.content_position.1) / p.scale,
+        width: f64::from(p.content_size.0) / p.scale,
+        height: f64::from(p.content_size.1) / p.scale,
+    })
 }

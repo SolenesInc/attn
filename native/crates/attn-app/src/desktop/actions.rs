@@ -291,7 +291,22 @@ fn split(state: &mut State, direction: Direction, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
-    let Some(pane) = super::view::pane_of(desktop, &desktop.active_pane_id) else {
+    let (desktop, leaf) = (desktop.id.clone(), desktop.active_pane_id.clone());
+    split_at(state, &desktop, &leaf, direction, tx);
+}
+
+/// Opens a shell beside the terminal `leaf` on `desktop`, in its directory.
+pub(super) fn split_at(
+    state: &mut State,
+    desktop: &str,
+    leaf: &str,
+    direction: Direction,
+    tx: &mut Tx,
+) {
+    let Some(desktop) = state.facts.desktops.iter().find(|d| d.id == desktop) else {
+        return;
+    };
+    let Some(pane) = super::view::pane_of(desktop, leaf) else {
         return;
     };
     let Some(base) = state

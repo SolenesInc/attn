@@ -130,6 +130,8 @@ pub fn bind(
             }
             state.window.follow(&state.facts);
             desktop::settle(state, tx);
+            desktop::follow_windows(state);
+            desktop::follow_window_title(state, tx);
             let _ = picker::follow(state, tx);
             deep_link::settle(state, tx);
             state.tick(tx);
@@ -216,6 +218,37 @@ pub fn app() -> rune::App<State> {
     .on_ime(keys::on_ime)
     .on_open_url(open_link)
     .on_modifiers(keys::on_modifiers)
+}
+
+/// The app of a window that shows one popped-out tile; `desktop::Setup` makes a bound
+/// window of it a tile window.
+pub fn tile_window_app() -> rune::App<State> {
+    rune::App::new(AppSpec {
+        on_key: Some(keys::on_key),
+        poll: Some(poll),
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        min_size: Some((320.0, 200.0)),
+        ..AppSpec::new(
+            "attn",
+            (640.0, 480.0),
+            State::default,
+            desktop::windows_view,
+        )
+    })
+    .on_ime(keys::on_ime)
+    .on_focus(desktop::window_focus)
+    .on_quit(desktop::window_quit)
+    .on_close(desktop::tile_window_closed)
+}
+
+impl State {
+    /// Lets this main window open tile windows through `opener`; `main` hands it their changes.
+    pub fn open_tile_windows(&mut self, opener: Arc<dyn desktop::Opener>, main: desktop::Deliver) {
+        self.window.desk.windows.opener = Some(opener);
+        self.window.desk.windows.main = Some(main);
+        desktop::follow_windows(self);
+    }
 }
 
 fn quit(state: &mut State, tx: &mut Tx) {

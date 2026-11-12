@@ -2314,3 +2314,198 @@ fn a_tiles_header_button_pops_it_out() {
     assert_eq!(leaves, ["m"]);
     assert!(world.runtime_is_at_rest());
 }
+
+const OUT: (f64, f64, f64, f64) = (10.0, 20.0, 500.0, 400.0);
+
+fn frame((x, y, width, height): (f64, f64, f64, f64)) -> attn_app::desktop::layout::Frame {
+    attn_app::desktop::layout::Frame {
+        x,
+        y,
+        width,
+        height,
+    }
+}
+
+/// Agent a beside document m, with m popped out at `out` or in its column without.
+fn with_document(out: Option<(f64, f64, f64, f64)>) -> Desktop {
+    let m = match out {
+        Some(at) => popped(document("m", "a"), at),
+        None => document("m", "a"),
+    };
+    desktop(1, "a", Some(row([pane("a"), m])))
+}
+
+fn only_window(world: &World) -> attn_testkit::TileWindowView {
+    let windows = world.tile_windows();
+    assert_eq!(windows.len(), 1, "{windows:?}");
+    windows[0].clone()
+}
+
+#[test]
+fn a_popped_tile_shows_alone_in_its_own_window_where_the_daemon_keeps_it() {
+    let world = start(vec![with_document(Some(OUT))]);
+
+    let window = only_window(&world);
+    assert!(window.shown);
+    assert_eq!(window.frame, frame(OUT));
+    assert_eq!(window.showing, Some(("work/desktop_1".into(), "m".into())));
+    let screen = world.tile_screen(&window.key);
+    assert!(screen.find(Target::role("group").name("m.md")).is_some());
+    assert_eq!(
+        screen.get(Target::key("tile.m.popout")).name.as_deref(),
+        Some("Bring back tile (Ctrl+Shift+O)")
+    );
+    assert!(!shows(&world, "m.md"));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_tile_brought_back_hides_its_window_and_the_next_pop_out_reuses_it() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+    let key = only_window(&world).key;
+
+    arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
+    assert!(!only_window(&world).shown);
+    assert!(shows(&world, "m.md"));
+
+    let moved = (40.0, 50.0, 600.0, 300.0);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![with_document(Some(moved))],
+    );
+    let window = only_window(&world);
+    assert_eq!(window.key, key);
+    assert!(window.shown);
+    assert_eq!(window.frame, frame(moved));
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());
+}
+
+#[test]
+fn a_reused_window_shows_the_tile_it_was_given() {
+    let tiles = |out_m: bool, out_n: bool| {
+        let leaf = |id: &str, out: bool| match out {
+            true => popped(document(id, "a"), OUT),
+            false => document(id, "a"),
+        };
+        desktop(
+            1,
+            "a",
+            Some(row([pane("a"), leaf("m", out_m), leaf("n", out_n)])),
+        )
+    };
+    let mut world = start(vec![tiles(true, false)]);
+    arrange(&mut world, "work/desktop_1", vec![tiles(false, false)]);
+    arrange(&mut world, "work/desktop_1", vec![tiles(false, true)]);
+
+    let window = only_window(&world);
+    assert_eq!(window.showing, Some(("work/desktop_1".into(), "n".into())));
+    let screen = world.tile_screen(&window.key);
+    assert!(screen.find(Target::role("group").name("n.md")).is_some());
+    assert!(screen.find(Target::role("group").name("m.md")).is_none());
+}
+
+#[test]
+fn the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+    let key = only_window(&world).key;
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let chord = |action: &Action| match keymap.binding(action) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("{} has no single chord: {other:?}", action.id()),
+    };
+
+    world.tile_gesture(&key, |w| w.key(chord(&Action::TilePopOut)));
+    world.tile_gesture(&key, |w| w.key(chord(&Action::SessionClose)));
+
+    let back = serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"});
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf"),
+        [back.clone(), back]
+    );
+    assert!(sent(&world, "desktop_pop_out_leaf").is_empty());
+    assert!(sent(&world, "desktop_remove_leaf").is_empty());
+}
+
+#[test]
+fn closing_a_tile_window_brings_its_tile_back_and_the_next_pop_out_opens_a_new_one() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+    let key = only_window(&world).key;
+
+    world.close_tile_window(&key);
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf"),
+        [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})]
+    );
+    assert!(world.tile_windows().is_empty());
+
+    arrange(&mut world, "work/desktop_1", vec![with_document(None)]);
+    arrange(&mut world, "work/desktop_1", vec![with_document(Some(OUT))]);
+    let window = only_window(&world);
+    assert_ne!(window.key, key);
+    assert!(window.shown);
+}
+
+#[test]
+fn a_tile_window_the_person_moved_tells_the_daemon_where_it_is_now() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+    let key = only_window(&world).key;
+
+    world.move_tile_window(&key, frame(OUT));
+    assert!(
+        sent(&world, "desktop_pop_out_leaf").is_empty(),
+        "it did not move"
+    );
+
+    world.move_tile_window(&key, frame((300.0, 200.0, 640.0, 480.0)));
+    assert_eq!(
+        sent(&world, "desktop_pop_out_leaf"),
+        [serde_json::json!({
+            "desktop_id": "work/desktop_1",
+            "leaf_id": "m",
+            "frame": {"x": 300.0, "y": 200.0, "width": 640.0, "height": 480.0},
+        })]
+    );
+}
+
+#[test]
+fn row_shortcuts_in_a_tile_window_leave_the_desktop_and_a_split_opens_beside_its_tile() {
+    let out = row([popped(pane("a"), OUT), pane("b")]);
+    let mut world = start(vec![
+        desktop(1, "b", Some(out)),
+        desktop(2, "c", Some(pane("c"))),
+    ]);
+    press(&mut world, Action::DesktopSelect2);
+    let key = only_window(&world).key;
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    let chord = |action: &Action| match keymap.binding(action) {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("{} has no single chord: {other:?}", action.id()),
+    };
+    let before = world.daemon.sent().len();
+
+    for action in [
+        Action::TerminalFocusLeft,
+        Action::TerminalFocusRight,
+        Action::TerminalToggleZoom,
+        Action::TerminalToggleMaximize,
+        Action::ShelfCarryLeft,
+        Action::ShelfSendToShelf,
+        Action::ShelfFewerTiles,
+    ] {
+        world.tile_gesture(&key, |w| w.key(chord(&action)));
+    }
+    assert_eq!(
+        world.daemon.sent().len(),
+        before,
+        "{:?}",
+        world.daemon.sent()
+    );
+
+    world.tile_gesture(&key, |w| w.key(chord(&Action::TerminalSplitVertical)));
+    let spawned = &sent(&world, "spawn_session")[0];
+    assert_eq!(spawned["spawned_from"], "s-a");
+    assert_eq!(spawned["placement"]["desktop_id"], "work/desktop_1");
+    assert_eq!(spawned["placement"]["anchor_pane_id"], "a");
+}

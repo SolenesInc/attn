@@ -10,6 +10,9 @@ use crate::shell::{Drawer, Layer, Palette};
 /// The one path every intent takes, from a key, the native menu or the palette. Whether the
 /// native app ran it.
 pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
+    if state.window.tile.is_some() {
+        return crate::desktop::forward_to_main(state, action);
+    }
     if crate::sidebar::dispatch(state, &action, tx) || crate::desktop::run(state, &action, tx) {
         return true;
     }

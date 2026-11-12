@@ -52,6 +52,8 @@ pub struct Window {
     pub(crate) width: crate::sidebar::width::Width,
     pub(crate) reorder: Option<crate::sidebar::reorder::Reorder>,
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
+    /// The popped-out leaf this window shows, when it is a tile window.
+    pub(crate) tile: Option<crate::desktop::TileWindow>,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.

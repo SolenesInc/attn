@@ -72,24 +72,8 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         *t,
         scale.to_bits(),
     );
-    let settles: Vec<(String, Settle)> = desktop
-        .map(|d| {
-            d.panes
-                .iter()
-                .filter_map(|p| {
-                    let session = facts.sessions.iter().find(|s| s.id == p.session_id)?;
-                    Some((p.pane_id.clone(), Settle::of(session)?))
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let key_of = |action: &crate::action::Action| {
-        state.keymap.binding(action).map(|b| state.keymap.label(b))
-    };
-    let keys = (
-        key_of(&crate::action::Action::SessionCancelCountdown),
-        key_of(&crate::action::Action::TilePopOut),
-    );
+    let settles = desktop.map_or_else(Vec::new, |d| settles(d, &facts.sessions));
+    let keys = header_keys(state);
     let names: Vec<String> = desktop
         .map(|d| {
             d.panes
@@ -142,6 +126,52 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             super::settle(state, tx);
         })
         .child(content)
+}
+
+fn settles(desktop: &Desktop, sessions: &[Session]) -> Vec<(String, Settle)> {
+    desktop
+        .panes
+        .iter()
+        .filter_map(|p| {
+            let session = sessions.iter().find(|s| s.id == p.session_id)?;
+            Some((p.pane_id.clone(), Settle::of(session)?))
+        })
+        .collect()
+}
+
+/// The keys a tile header names: the one that keeps a turn, and the one that pops a tile out.
+fn header_keys(state: &State) -> (Option<String>, Option<String>) {
+    let key_of = |action: &crate::action::Action| {
+        state.keymap.binding(action).map(|b| state.keymap.label(b))
+    };
+    (
+        key_of(&crate::action::Action::SessionCancelCountdown),
+        key_of(&crate::action::Action::TilePopOut),
+    )
+}
+
+/// `leaf` alone, filling a window of its own.
+pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, scale: f32) -> El {
+    let settles = settles(desktop, &state.facts.sessions);
+    let keys = header_keys(state);
+    let unsent = state.window.desk.peeks.unsent();
+    let cx = TileCx {
+        desktop,
+        sessions: &state.facts.sessions,
+        unsent: &unsent,
+        settles: &settles,
+        keep_key: keys.0.as_deref(),
+        pop_out_key: keys.1.as_deref(),
+        drains: &state.window.desk.settling,
+        ratios: &state.window.desk.ratios,
+        dividers: false,
+        dragging: None,
+        holder: state.window.keyboard.as_ref(),
+        terminals: &state.terminals,
+        t,
+        scale,
+    };
+    tile(leaf, &cx)
 }
 
 fn screen(
