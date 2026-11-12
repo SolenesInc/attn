@@ -210,6 +210,21 @@ fn step_desktop(state: &mut State, step: i32) {
     set_current(state, &to);
 }
 
+/// Shows the oldest document that arrived unseen on the current desktop. Returns whether
+/// there was one.
+pub(crate) fn show_unseen(state: &mut State) -> bool {
+    let Some(desktop) = state.facts.current_desktop().map(|d| d.id.clone()) else {
+        return false;
+    };
+    let Some(leaf) = state.window.desk.row(&desktop).unseen.first().cloned() else {
+        return false;
+    };
+    state.window.view = crate::shell::View::Desktop;
+    state.window.follow_next_turn = false;
+    show_leaf(state, &desktop, &leaf);
+    true
+}
+
 /// Shows `leaf` on `desktop` as the active tile.
 pub(crate) fn show_leaf(state: &State, desktop: &str, leaf: &str) {
     let _ = state.daemon.send(&DesktopShowLeafMessage {

@@ -37,6 +37,8 @@ pub enum LeafKind {
         kind: String,
         params: Option<String>,
         session: Option<String>,
+        /// How often something asked the daemon to show the tile, which shows it again.
+        show_requests: u64,
     },
 }
 
@@ -364,6 +366,7 @@ fn parse_node(v: &Value) -> Option<Node> {
                 session: s("tile_session_id")
                     .filter(|id| !id.is_empty())
                     .map(str::to_owned),
+                show_requests: v.get("show_requests").and_then(Value::as_u64).unwrap_or(0),
             };
             Some(Node::Leaf(parse_leaf(v, id, kind)))
         }

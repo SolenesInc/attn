@@ -129,7 +129,7 @@ pub fn bind(
                 state.keymap = keymap;
             }
             state.window.follow(&state.facts);
-            desktop::settle(state);
+            desktop::settle(state, tx);
             let _ = picker::follow(state, tx);
             deep_link::settle(state, tx);
             state.tick(tx);

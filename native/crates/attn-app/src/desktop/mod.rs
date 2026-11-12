@@ -12,9 +12,12 @@ use std::collections::HashMap;
 
 use attn_client::Facts;
 use attn_protocol::Desktop;
+use rune::Tx;
 
-pub(crate) use actions::{escape, run};
-pub(crate) use drag::{DesktopMark, expire as expire_drag, overlay as drag_overlay};
+use crate::State;
+
+pub(crate) use actions::{escape, run, show_unseen};
+pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
 
@@ -49,6 +52,8 @@ pub struct Desk {
     pub(crate) dividers: HashMap<String, ([f32; 4], layout::Direction)>,
     /// Split ratios this window shows ahead of the daemon, by split id.
     pub(crate) ratios: HashMap<String, divider::RatioOverride>,
+    /// Chips that flash for a moment: a tile that arrived or went off screen.
+    pub(crate) flashes: Vec<shelf::Flash>,
     /// A tile or shelf column being dragged.
     pub(crate) drag: Option<drag::LeafDrag>,
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
@@ -79,6 +84,12 @@ pub(crate) struct RowState {
     pub settled: Option<shelf::Settled>,
     /// A tile a chip took the place of, held off screen until the moves land.
     pub swap: Option<drag::Swap>,
+    /// Documents that arrived off screen, not yet seen.
+    pub unseen: Vec<String>,
+    /// Where the screen goes back to when a document that arrived leaves the row, by leaf.
+    pub returns: Vec<(String, shelf::Return)>,
+    /// Whether this window has shown the desktop, so its screen is one someone saw.
+    pub shown: bool,
 }
 
 /// A walk back and forward through the tiles a window showed, as a browser's history.
@@ -114,6 +125,18 @@ impl History {
         }
         self.at = self.entries.len() - 1;
     }
+}
+
+/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, and the
+/// rest a drag takes on a sidebar desktop before the window switches to it. Returns whether
+/// anything changed.
+pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
+    let switched = drag::expire(state, tx);
+    let now = tx.clock();
+    let flashes = &mut state.window.desk.flashes;
+    let before = flashes.len();
+    flashes.retain(|f| f.until > now);
+    switched || flashes.len() != before
 }
 
 impl Desk {

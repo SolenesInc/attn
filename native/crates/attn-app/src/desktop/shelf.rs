@@ -16,12 +16,39 @@ use super::layout::{
 use super::{Desk, actions};
 use crate::State;
 use crate::action::Action;
+use crate::sidebar::AgentState;
 
 const CHIP_PX: f32 = 112.0;
 const LIVE_DOT_PX: f32 = 28.0;
 const CAPS_PX: f32 = 104.0;
 /// How long the width label shows after fewer or more tiles.
 const WIDTH_LABEL_SECONDS: f64 = 1.5;
+/// How long a chip flashes when its tile arrives on the shelf.
+const FLASH_SECONDS: f64 = 0.9;
+
+/// A chip flashing for a moment because its tile arrived on the shelf or went off screen.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Flash {
+    pub desktop: String,
+    pub leaf: String,
+    pub until: f64,
+}
+
+/// Where a desktop's screen started before a document arrived, and the column it started at
+/// once the document showed: while the screen has not moved since, the document leaving the
+/// row puts the screen back.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Return {
+    first_column: layout::FirstColumn,
+    shown_at: String,
+}
+
+/// What a chip shows of each tile in its column: an agent's state, or a plain mark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Member {
+    Agent(AgentState),
+    Tile,
+}
 
 /// The width label fewer and more tiles show for a moment.
 #[derive(Clone, Debug, PartialEq)]
@@ -38,19 +65,18 @@ struct Chip {
     /// The leaf the chip brings: the one this window used last.
     go: String,
     label: String,
+    /// A tile in the column waits on the person, or arrived unseen.
     needs: bool,
+    /// A tile in the column just arrived on the shelf.
+    arrival: bool,
+    members: Vec<Member>,
     leaves: Vec<String>,
 }
 
-fn needs_you(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> bool {
-    let Some(pane) = super::view::pane_of(desktop, leaf) else {
-        return false;
-    };
-    facts
-        .sessions
-        .iter()
-        .find(|s| s.id == pane.session_id)
-        .is_some_and(|s| matches!(s.state.as_str(), "waiting_input" | "pending_approval"))
+fn member(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> Member {
+    super::view::pane_of(desktop, leaf)
+        .and_then(|pane| facts.sessions.iter().find(|s| s.id == pane.session_id))
+        .map_or(Member::Tile, |s| Member::Agent(AgentState::parse(&s.state)))
 }
 
 /// A tile's name on the shelf: an agent by its session's name, a tile by what it holds.
@@ -92,7 +118,8 @@ fn chip(
     desktop: &Desktop,
     facts: &attn_client::Facts,
     tree: &Node,
-    focus: &[String],
+    row: &super::RowState,
+    flashing: &[&str],
     column: &Column,
 ) -> Chip {
     let titles: Vec<String> = column
@@ -100,15 +127,28 @@ fn chip(
         .iter()
         .map(|leaf| title(desktop, facts, tree, leaf))
         .collect();
+    let members: Vec<Member> = column
+        .leaf_ids
+        .iter()
+        .map(|leaf| member(desktop, facts, leaf))
+        .collect();
+    let waits = members.iter().any(|m| {
+        matches!(
+            m,
+            Member::Agent(AgentState::WaitingInput | AgentState::PendingApproval)
+        )
+    });
     Chip {
         key: column.first().to_owned(),
-        go: column.last_used(focus).to_owned(),
+        go: column.last_used(&row.focus_order).to_owned(),
         label: label(&titles),
-        leaves: column.leaf_ids.clone(),
-        needs: column
+        needs: waits || column.leaf_ids.iter().any(|l| row.unseen.contains(l)),
+        arrival: column
             .leaf_ids
             .iter()
-            .any(|leaf| needs_you(desktop, facts, leaf)),
+            .any(|l| flashing.contains(&l.as_str())),
+        members,
+        leaves: column.leaf_ids.clone(),
     }
 }
 
@@ -173,11 +213,16 @@ impl Shelf {
         if plan.before.is_empty() && plan.after.is_empty() {
             return None;
         }
-        let focus = &row_state.focus_order;
+        let flashing: Vec<&str> = desk
+            .flashes
+            .iter()
+            .filter(|f| f.desktop == desktop.id)
+            .map(|f| f.leaf.as_str())
+            .collect();
         let chips = |columns: &[Column]| -> Vec<Chip> {
             columns
                 .iter()
-                .map(|c| chip(desktop, facts, &tree, focus, c))
+                .map(|c| chip(desktop, facts, &tree, &row_state, &flashing, c))
                 .collect()
         };
         let (before, screen, after) =
@@ -211,7 +256,6 @@ impl Shelf {
         &self.after[self.shown_after..]
     }
 
-    /// Where a dragged tile can land on the shelf, in the order the shelf shows them.
     /// What dragging the chip of `column` picks up.
     pub(crate) fn chip_source(&self, column: &str) -> Option<Source> {
         let chip = self
@@ -227,6 +271,7 @@ impl Shelf {
         })
     }
 
+    /// Where a dragged tile can land on the shelf, in the order the shelf shows them.
     pub(crate) fn anchors(&self) -> Vec<Anchor> {
         let chip = |c: &Chip| Anchor {
             element: format!("shelf.chip.{}", c.key),
@@ -357,28 +402,67 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
 fn chip_button(chip: &Chip, drop: Option<Edge>, t: &Tokens) -> El {
     let key = format!("shelf.chip.{}", chip.key);
     let recorded = key.clone();
+    let marks = chip
+        .members
+        .iter()
+        .enumerate()
+        .map(|(i, m)| member_mark(&key, i, *m, chip.needs, t));
+    let state = [(chip.needs, "needs you"), (chip.arrival, "arrived")]
+        .iter()
+        .filter(|(on, _)| *on)
+        .map(|(_, words)| *words)
+        .collect::<Vec<_>>()
+        .join(", ");
     let chip = row()
-        .key(key)
+        .key(key.clone())
         .role("button")
         .label(chip.label.clone())
-        .a11y_value(if chip.needs { "needs you" } else { "" })
+        .a11y_value(state)
         .w(CHIP_PX - space::S1)
         .min_w(0.0)
+        .items_center()
+        .gap(space::S1)
         .px(space::S2)
         .py(space::S1)
-        .radius(4.0)
-        .fill(t.bg_tile)
-        .border(1.0, if chip.needs { t.accent } else { t.border })
+        .radius(5.0)
+        .fill(t.bg_button)
+        .border(1.0, if chip.arrival { t.accent } else { t.border })
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
             record(state, &recorded, rect, tx)
         })
+        .children(marks)
         .child(
             text(chip.label.clone())
                 .font(type_::LABEL)
-                .color(t.text_secondary)
-                .single_line(),
+                .color(if chip.arrival {
+                    t.text_primary
+                } else {
+                    t.text_secondary
+                })
+                .single_line()
+                .truncate()
+                .grow(1.0),
         );
     drop_bar(chip, drop, t)
+}
+
+/// A tile's mark on its chip: an agent's state dot, or a square, in the warning colour while
+/// the chip needs the person.
+fn member_mark(chip: &str, index: usize, member: Member, needs: bool, t: &Tokens) -> El {
+    let mark = rune::el().key(format!("{chip}.member.{index}"));
+    match member {
+        Member::Agent(state) => mark
+            .w(7.0)
+            .h(7.0)
+            .radius(3.5)
+            .fill(crate::sidebar::state_color(state, t)),
+        Member::Tile => {
+            mark.w(7.0)
+                .h(7.0)
+                .radius(1.0)
+                .fill(if needs { t.warning } else { t.text_secondary })
+        }
+    }
 }
 
 fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
@@ -429,20 +513,21 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
         .px(space::S2)
         .py(space::S1)
         .radius(4.0)
-        .border(
-            1.0,
-            if chips.iter().any(|c| c.needs) {
-                t.accent
-            } else {
-                t.border
-            },
-        )
+        .border(1.0, t.border)
         .on_press(move |state: &mut State| {
             let desk = &mut state.window.desk;
             desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
         })
         .a11y_value(if open { "open" } else { "" })
-        .child(text(caption).font(type_::LABEL).color(t.text_secondary));
+        .child(
+            text(caption)
+                .font(type_::LABEL)
+                .color(if chips.iter().any(|c| c.needs) {
+                    t.warning
+                } else {
+                    t.text_secondary
+                }),
+        );
     Some(drop_bar(cap, drop.then_some(side), t))
 }
 
@@ -803,7 +888,8 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
         }
         ShelfSend::Hold { leaf, next } => {
             actions::show_leaf(state, &id, &next);
-            state.window.desk.row_mut(&id).held.push(leaf);
+            state.window.desk.row_mut(&id).held.push(leaf.clone());
+            flash_leaves(state, &id, vec![leaf], tx);
         }
         ShelfSend::Move {
             leaf,
@@ -859,16 +945,22 @@ pub(crate) fn step_width(state: &mut State, fewer: bool, tx: &mut Tx) {
 /// After the daemon's row changes: a brought column that landed sets where the screen starts
 /// so its anchor keeps its place, forgetting dragged widths that keep the two apart, and
 /// every other row keeps the start its screen settled on.
-pub(crate) fn settle(state: &mut State) {
+pub(crate) fn settle(state: &mut State, tx: &mut Tx) {
     let ids: Vec<String> = state.facts.desktops.iter().map(|d| d.id.clone()).collect();
     for id in ids {
-        settle_desktop(state, &id);
+        settle_desktop(state, &id, tx);
     }
+    let desktops = &state.facts.desktops;
+    state
+        .window
+        .desk
+        .flashes
+        .retain(|f| desktops.iter().any(|d| d.id == f.desktop));
     super::drag::settle_drag(state);
     super::divider::settle_ratios(state);
 }
 
-fn settle_desktop(state: &mut State, id: &str) {
+fn settle_desktop(state: &mut State, id: &str, tx: &mut Tx) {
     let facts = &state.facts;
     let desk = &state.window.desk;
     let Some(desktop) = facts.desktops.iter().find(|d| d.id == *id) else {
@@ -879,7 +971,16 @@ fn settle_desktop(state: &mut State, id: &str) {
         return;
     };
     let row_state = desk.row(id);
+    let leaves = tree.leaves();
+    let key = Settled {
+        active: desktop.active_pane_id.clone(),
+        order: leaves.iter().map(|l| l.id.clone()).collect(),
+        show_requests: leaves.iter().map(|l| show_requests(l)).collect(),
+        screen: vec![],
+    };
     let Some(input) = desk.row_input(facts, &tree, desktop, &row_state) else {
+        let row_mut = state.window.desk.row_mut(id);
+        row_mut.settled.get_or_insert(key);
         return;
     };
     let row = layout::read_row(&tree);
@@ -895,10 +996,8 @@ fn settle_desktop(state: &mut State, id: &str) {
         .cloned()
         .collect();
     let plan = layout::resolve_row(&input);
-    let settled = Settled {
-        active: desktop.active_pane_id.clone(),
-        order: tree.leaves().iter().map(|l| l.id.clone()).collect(),
-    };
+    let visible = state.window.view == crate::shell::View::Desktop
+        && facts.current_desktop().is_some_and(|d| d.id == *id);
     let landed = row_state
         .drop
         .as_ref()
@@ -910,28 +1009,178 @@ fn settle_desktop(state: &mut State, id: &str) {
             && pending.tree == desktop.tree_json
             && pending.active == desktop.active_pane_id
     });
-    let moved = row_state.settled.as_ref() != Some(&settled);
+    let previous = row_state.settled.clone();
+    let moved = previous.as_ref().is_none_or(|p| !p.same_row(&key));
+    let mut first = match &reveal {
+        Some((first, _)) => Some(first.clone()),
+        None if moved || landed.is_some() => Some(plan.first_column.clone()),
+        None => row_state.first_column.clone(),
+    };
+    let mut unseen = row_state.unseen.clone();
+    let mut returns = row_state.returns.clone();
+    let mut flash: Vec<String> = vec![];
+    if let Some(previous) = previous.as_ref().filter(|_| moved) {
+        let was_first = row_state
+            .first_column
+            .clone()
+            .unwrap_or_else(|| plan.first_column.clone());
+        let arrivals = previous.arrivals(&key, &plan.screen);
+        for (leaf, back) in &returns {
+            if !key.order.contains(leaf)
+                && previous.order.contains(leaf)
+                && was_first.leaf == back.shown_at
+                && layout::column_index(&row, &back.first_column.leaf).is_some()
+            {
+                first = Some(back.first_column.clone());
+            }
+        }
+        let on_screen = |leaf: &str| plan.screen.iter().any(|c| c.holds(leaf));
+        for leaf in arrivals.iter().filter(|l| **l != desktop.active_pane_id) {
+            let Some(owner) = leaves.iter().find_map(|l| match &l.kind {
+                LeafKind::Tile { session, .. } if l.id == *leaf => Some(session.clone()),
+                _ => None,
+            }) else {
+                continue;
+            };
+            let owner_shown = owner
+                .and_then(|s| desktop.panes.iter().find(|p| p.session_id == s))
+                .is_some_and(|p| previous.screen.contains(&p.pane_id));
+            let revealed = match (owner_shown, on_screen(leaf)) {
+                (false, _) => None,
+                (true, true) => Some(plan.first_column.clone()),
+                (true, false) => layout::reveal_first_column(&input, leaf, plan.first_column.index),
+            };
+            if let Some(revealed) = &revealed {
+                first = Some(revealed.clone());
+            } else if !on_screen(leaf) && !unseen.contains(leaf) {
+                unseen.push(leaf.clone());
+            }
+            let shown_at = revealed.unwrap_or_else(|| plan.first_column.clone()).leaf;
+            set_return(&mut returns, leaf, was_first.clone(), shown_at);
+        }
+        if desktop.active_pane_id != previous.active && unseen.contains(&desktop.active_pane_id) {
+            let shown_at = first
+                .clone()
+                .unwrap_or_else(|| plan.first_column.clone())
+                .leaf;
+            set_return(&mut returns, &desktop.active_pane_id, was_first, shown_at);
+        }
+        let reordered = previous.order != key.order;
+        flash = arrivals
+            .into_iter()
+            .chain(previous.screen.iter().filter(|_| reordered).cloned())
+            .collect();
+    }
+    let settled_input = RowInput {
+        first_column: first.as_ref(),
+        ..input
+    };
+    let screen: Vec<String> = layout::resolve_row(&settled_input)
+        .screen
+        .iter()
+        .flat_map(|c| c.leaf_ids.clone())
+        .collect();
+    let seen = visible || row_state.shown;
+    let settled = Settled {
+        screen: if seen { screen.clone() } else { vec![] },
+        ..key
+    };
+    unseen.retain(|l| settled.order.contains(l) && !screen.contains(l));
+    returns.retain(|(l, _)| settled.order.contains(l));
+    let flash: Vec<String> = flash
+        .into_iter()
+        .filter(|l| visible && settled.order.contains(l) && !screen.contains(l))
+        .collect();
     let row_mut = state.window.desk.row_mut(id);
     super::drag::settle_swap(row_mut, &row, &desktop_tree);
     row_mut.pending_widths = pending;
     row_mut.drop = waiting;
     row_mut.settled = Some(settled);
-    match reveal {
-        Some((first, clear)) => {
-            row_mut.first_column = Some(first);
-            clear_widths(state, id, &clear);
-        }
-        None if moved || landed.is_some() => row_mut.first_column = Some(plan.first_column),
-        None => {}
+    row_mut.first_column = first;
+    row_mut.unseen = unseen;
+    row_mut.returns = returns;
+    row_mut.shown = seen;
+    if let Some((_, clear)) = reveal {
+        clear_widths(state, id, &clear);
+    }
+    flash_leaves(state, id, flash, tx);
+}
+
+fn show_requests(leaf: &layout::Leaf) -> u64 {
+    match &leaf.kind {
+        LeafKind::Tile { show_requests, .. } => *show_requests,
+        LeafKind::Pane => 0,
     }
 }
 
-/// What a row's screen start settles on: it settles again only when the active tile or the
-/// order of the row's leaves changes, so a width or window change leaves it where it was.
+fn set_return(
+    returns: &mut Vec<(String, Return)>,
+    leaf: &str,
+    first_column: layout::FirstColumn,
+    shown_at: String,
+) {
+    returns.retain(|(l, _)| l != leaf);
+    returns.push((
+        leaf.to_owned(),
+        Return {
+            first_column,
+            shown_at,
+        },
+    ));
+}
+
+/// Flashes the chips of `leaves` on desktop `desktop` for a moment.
+fn flash_leaves(state: &mut State, desktop: &str, leaves: Vec<String>, tx: &mut Tx) {
+    if leaves.is_empty() {
+        return;
+    }
+    let until = tx.clock() + FLASH_SECONDS;
+    let flashes = &mut state.window.desk.flashes;
+    flashes.retain(|f| f.desktop != desktop || !leaves.contains(&f.leaf));
+    flashes.extend(leaves.into_iter().map(|leaf| Flash {
+        desktop: desktop.to_owned(),
+        leaf,
+        until,
+    }));
+    tx.wake_at(until);
+}
+
+/// What a row's screen start settles on: it settles again only when the active tile, the
+/// order of the row's leaves or a tile's show requests change, so a width or window change
+/// leaves it where it was. `screen` is the leaves the screen showed then, empty on a desktop
+/// this window never showed.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Settled {
     active: String,
     order: Vec<String>,
+    show_requests: Vec<u64>,
+    screen: Vec<String>,
+}
+
+impl Settled {
+    fn same_row(&self, other: &Settled) -> bool {
+        self.active == other.active
+            && self.order == other.order
+            && self.show_requests == other.show_requests
+    }
+
+    /// The leaves new to the row in `now`, and the tiles off `screen` asked to show again.
+    fn arrivals(&self, now: &Settled, screen: &[Column]) -> Vec<String> {
+        let asked = |at: usize, leaf: &str| {
+            let before = self
+                .order
+                .iter()
+                .position(|l| l == leaf)
+                .map_or(0, |i| self.show_requests[i]);
+            !screen.iter().any(|c| c.holds(leaf)) && now.show_requests[at] != before
+        };
+        now.order
+            .iter()
+            .enumerate()
+            .filter(|(at, leaf)| !self.order.contains(leaf) || asked(*at, leaf))
+            .map(|(_, leaf)| leaf.clone())
+            .collect()
+    }
 }
 
 /// A column brought beside the active tile, and the row and active tile as they were when the

@@ -87,6 +87,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 return;
             }
             state.window.desk.area = area;
+            super::settle(state, tx);
         })
         .child(content)
 }

@@ -653,6 +653,120 @@ fn a_chip_says_when_its_agent_needs_you() {
     assert_eq!(chip(&world, "c").unwrap().value.as_deref(), Some(""));
 }
 
+fn document(id: &str, owner: &str) -> Value {
+    let mut doc = tile(id, "markdown");
+    doc["tile_session_id"] = format!("s-{owner}").into();
+    doc["tile_params"] = format!("{{\"path\":\"/work/{id}.md\"}}").into();
+    doc
+}
+
+#[test]
+fn a_document_arriving_beside_an_agent_off_screen_waits_unseen_for_the_next_jump_on_a_chip_that_flashes()
+ {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let arrived = row([
+        pane("a"),
+        pane("b"),
+        pane("c"),
+        pane("d"),
+        document("doc", "d"),
+    ]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(arrived))],
+    );
+
+    assert_eq!(shown(&world), ["a", "b"], "the screen stays where it was");
+    assert_eq!(
+        chip(&world, "doc").unwrap().value.as_deref(),
+        Some("needs you, arrived")
+    );
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        chip(&world, "doc").unwrap().value.as_deref(),
+        Some("needs you"),
+        "the flash is over and the document is still unseen"
+    );
+
+    press(&mut world, Action::SessionGoToDashboard);
+    assert!(!shows(&world, "Agent a"));
+    press(&mut world, Action::SessionJumpToWaiting);
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"doc"}"#)],
+        "the next waiting thing is the unseen document"
+    );
+    assert!(
+        shows(&world, "Agent a"),
+        "the jump leaves Home for its desktop"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_document_arriving_before_its_desktop_first_shows_waits_unseen() {
+    let mut world = World::start_sized(daemon(vec![four_in_a_row("a")]), TWO_FIT);
+
+    let arrived = row([
+        pane("a"),
+        pane("b"),
+        pane("c"),
+        pane("d"),
+        document("doc", "d"),
+    ]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(arrived))],
+    );
+    world.open_desktop();
+
+    assert_eq!(
+        chip(&world, "doc").unwrap().value.as_deref(),
+        Some("needs you, arrived")
+    );
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        chip(&world, "doc").unwrap().value.as_deref(),
+        Some("needs you")
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_document_arriving_beside_its_agent_on_screen_shows_and_the_screen_goes_back_when_it_closes() {
+    let mut world = start(vec![four_in_a_row("a")]);
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("b")]);
+    assert_eq!(shown(&world), ["a", "b"]);
+
+    let arrived = row([
+        pane("a"),
+        pane("b"),
+        document("doc", "b"),
+        pane("c"),
+        pane("d"),
+    ]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "b", Some(arrived))],
+    );
+    assert_eq!(shown(&world), ["b"], "the screen slides to show it");
+    assert!(shows(&world, "Markdown"));
+    assert_eq!(chip(&world, "a").unwrap().value.as_deref(), Some("arrived"));
+
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("b")]);
+    assert_eq!(
+        shown(&world),
+        ["a", "b"],
+        "the screen goes back once it closes"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn a_chip_brings_its_column_beside_the_active_tile_and_the_anchor_keeps_its_place() {
     let mut world = start(vec![four_in_a_row("a")]);
@@ -680,6 +794,7 @@ fn a_chip_brings_its_column_beside_the_active_tile_and_the_anchor_keeps_its_plac
         "left",
         "beside the rightmost tile the column lands on its left"
     );
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -1182,6 +1297,7 @@ fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips
         chip(&world, "b").is_some(),
         "b is back on the shelf where d was"
     );
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
@@ -1501,6 +1617,7 @@ fn a_swapped_out_tile_comes_back_when_the_row_changes_without_the_swap() {
         shows(&world, "Agent b"),
         "b is no longer held once the row changed without c moving"
     );
+    world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
 
