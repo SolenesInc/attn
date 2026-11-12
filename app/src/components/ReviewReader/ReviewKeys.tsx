@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { ReviewNavigation } from '../../types/generated';
 import { FRAME_KEYS, type Frame } from './frames';
 
@@ -83,9 +84,28 @@ export function languageToSetUp(navigation: readonly ReviewNavigation[], setup: 
   return navigation.find((entry) => hasNoServer(entry) && runningSetup(entry, setup) === undefined);
 }
 
+/** Now, to the second, while any server is starting; nothing ticks otherwise. */
+function useNowWhileStarting(navigation: readonly ReviewNavigation[]): number {
+  const starting = navigation.some((entry) => entry.started_at !== undefined);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!starting) return undefined;
+    setNow(Date.now());
+    const tick = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(tick);
+  }, [starting]);
+  return now;
+}
+
+function startingFor(startedAt: string | undefined, now: number): string {
+  const began = startedAt === undefined ? NaN : Date.parse(startedAt);
+  return Number.isNaN(began) ? '' : ` ${Math.max(0, Math.floor((now - began) / 1000))}s`;
+}
+
 /** Each language's server, as the review's navigation reports it; the detail says what it is doing or why it is not there. */
 function NavigationStates({ navigation, setup }: { navigation: readonly ReviewNavigation[]; setup?: ReviewSetup }) {
   const offer = setup?.offered ? languageToSetUp(navigation, setup) : undefined;
+  const now = useNowWhileStarting(navigation);
   return (
     <span className="review-nav-states" aria-label="Language servers">
       {navigation.map((entry) => {
@@ -102,7 +122,7 @@ function NavigationStates({ navigation, setup }: { navigation: readonly ReviewNa
         return (
           <span key={language} className="review-nav-state-entry">
             <span className={`review-nav-state review-nav-state--${state}`} title={detail}>
-              {language} {STATE_TEXT[state] ?? state}{(state === 'starting' || state === 'failed') && detail ? `: ${detail}` : ''}
+              {language} {STATE_TEXT[state] ?? state}{state === 'starting' ? startingFor(entry.started_at, now) : ''}{(state === 'starting' || state === 'failed') && detail ? `: ${detail}` : ''}
             </span>
             {offer === entry ? (
               <>
@@ -177,7 +197,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['⌘↵'], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
-  [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on waits in a list instead of moving you.'],
+  [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.'],
   [['r'], 'List the uses of a name on the line; ↑↓ pick one, ↵ opens it.'],
   [['h'], 'Show the type of a name on the line.'],
   [['s'], 'When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.'],
@@ -187,7 +207,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],
   [['/'], 'Search the repository: files by name, lines by text.'],
   [['⌃o'], 'Go back to the file you came from; from the first file, close the file view. The Walkthrough keeps its stop.'],
-  [['esc'], 'Close the edit box, the send, the search, this sheet, a selection, or the file view. In the Walkthrough, return to the stop.'],
+  [['esc'], 'Close the edit box, the send, the search, this sheet, an answer or an offered one, a selection, or the file view. In the Walkthrough, return to the stop.'],
   [['?'], 'Show or hide this sheet.'],
 ];
 

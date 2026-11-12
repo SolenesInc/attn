@@ -2,6 +2,7 @@ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, 
 import type { ReactNode, Ref, RefObject } from 'react';
 import type { CodeNavLocation, ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
+import { DaemonUnreachable } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
@@ -9,7 +10,7 @@ import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
 import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MapFrame } from './MapFrame';
-import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
+import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, OFFER_MS, offerText, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
 import { CURSOR_CLASS, expansionKey, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
@@ -62,12 +63,23 @@ function emptyText(kind: NavKind, name: string): string {
   }
 }
 
+const UNREACHABLE = 'The daemon is not reachable, so nothing was asked. Ask again once it is back.';
+
 function pickingText(kind: NavKind): string {
   switch (kind) {
     case 'definition': return 'Go to the definition of which name? Type its label.';
     case 'references': return 'List the uses of which name? Type its label.';
     case 'hover': return 'Show the type of which name? Type its label.';
   }
+}
+
+function OfferLine({ answer }: { answer: NavAnswer }) {
+  const { text, take } = offerText(answer);
+  return (
+    <div className="review-nav-note review-nav-offer" role="status" aria-label="Offered answer">
+      {text} · <kbd>↵</kbd> {take} · <kbd>esc</kbd>
+    </div>
+  );
 }
 
 /** A line above the keys: a question on its way, or why one got no answer. */
@@ -283,9 +295,12 @@ export function ReviewReader({
   const [picking, setPicking] = useState<Picking | null>(null);
   const [navPanel, setNavPanel] = useState<NavAnswer | null>(null);
   const [navNote, setNavNote] = useState<NavNote | null>(null);
+  const [offer, setOffer] = useState<NavAnswer | null>(null);
+  const [asked, setAsked] = useState<NavLine['at'] | null>(null);
   const overlay = editing ? 'edit' : composer ? 'composer' : sending ? 'send' : search ? 'search' : help ? 'help' : '';
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
+  const shownOffer = overlay === '' ? offer : null;
   const questionRef = useRef(0);
   const positionRef = useRef('');
   const selectedRef = useRef<HTMLElement[]>([]);
@@ -947,21 +962,36 @@ export function ReviewReader({
     openFile({ path: location.path, line: location.line, ...(location.outside ? { outside: true } : {}) });
   }, [openFile]);
 
+  const takeOffer = useCallback((answer: NavAnswer) => {
+    setOffer(null);
+    if (answer.kind === 'definition' && answer.locations.length === 1) follow(answer.locations[0]);
+    else setNavPanel({ ...answer, cursor: 0 });
+  }, [follow]);
+
+  useEffect(() => {
+    if (!shownOffer) return undefined;
+    const expire = setTimeout(() => setOffer((current) => (current === shownOffer ? null : current)), OFFER_MS);
+    return () => clearTimeout(expire);
+  }, [shownOffer]);
+
   const askRef = useRef<(kind: NavKind, line: NavLine, name: LabeledName) => void>(() => undefined);
   const ask = useCallback((kind: NavKind, line: NavLine, name: LabeledName) => {
     setPicking(null);
     setNavPanel(null);
+    setOffer(null);
     if (!sendCodeNav) {
-      setNavNote({ text: 'Not connected to the daemon.', tone: 'alert' });
+      setNavNote({ text: UNREACHABLE, tone: 'alert' });
       return;
     }
     const question = ++questionRef.current;
     const askedAt = Date.now();
     const askedFrom = positionRef.current;
     setNavNote({ text: askingText(kind, name.name), tone: 'asking' });
+    setAsked(line.at);
     void sendCodeNav(host, document, { path: line.path, line: line.line, character: name.character, kind }).then(
       (answer) => {
         if (questionRef.current !== question) return;
+        setAsked(null);
         const locations = answer.locations ?? [];
         if (kind === 'definition' && locations.length === 1 && isOwnDefinition(locations[0], line.path, line.line, name.character)) {
           askRef.current('references', line, name);
@@ -977,11 +1007,15 @@ export function ReviewReader({
           follow(locations[0]);
           return;
         }
-        setNavPanel({ kind, name: name.name, locations, text: answer.text, offered: late, cursor: 0 });
+        const shown: NavAnswer = { kind, name: name.name, locations, text: answer.text, cursor: 0 };
+        if (late) setOffer(shown);
+        else setNavPanel(shown);
       },
       (error: unknown) => {
         if (questionRef.current !== question) return;
-        setNavNote({ text: error instanceof Error ? error.message : String(error), tone: 'alert' });
+        setAsked(null);
+        const text = error instanceof DaemonUnreachable ? UNREACHABLE : error instanceof Error ? error.message : String(error);
+        setNavNote({ text, tone: 'alert' });
       },
     );
   }, [document, follow, host, sendCodeNav]);
@@ -1005,6 +1039,7 @@ export function ReviewReader({
   }, [delivered.navigation, setup]);
 
   const startPicking = useCallback((kind: NavKind) => {
+    setOffer(null);
     const line = navLine();
     if (typeof line === 'string') {
       setNavNote({ text: line, tone: 'status' });
@@ -1039,6 +1074,7 @@ export function ReviewReader({
   const cancelQuestion = useCallback(() => {
     questionRef.current += 1;
     setNavNote(null);
+    setAsked(null);
   }, []);
 
   const movePanelCursor = useCallback((delta: number) => {
@@ -1067,6 +1103,7 @@ export function ReviewReader({
           : help ? 'help'
             : picking ? 'picking'
               : navPanel ? 'answer'
+                : shownOffer ? 'offer'
                 : navNote ? 'note'
                   : selecting ? 'selection'
                     : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
@@ -1078,6 +1115,7 @@ export function ReviewReader({
   useEscapeStack(() => setHelp(false), escapes === 'help');
   useEscapeStack(() => setPicking(null), escapes === 'picking');
   useEscapeStack(() => setNavPanel(null), escapes === 'answer');
+  useEscapeStack(() => setOffer(null), escapes === 'offer');
   useEscapeStack(cancelQuestion, escapes === 'note');
   useEscapeStack(() => {
     setSelectFrom(null);
@@ -1140,6 +1178,10 @@ export function ReviewReader({
           }
           case 'Escape': return false;
         }
+        return true;
+      }
+      if (shownOffer && event.key === 'Enter') {
+        takeOffer(shownOffer);
         return true;
       }
       if (navNote && navNote.tone !== 'asking') setNavNote(null);
@@ -1213,7 +1255,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, composer, currentTarget, editing, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, returnToOpenBox, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
+  }, [back, composer, currentTarget, editing, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, shownOffer, takeOffer, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, returnToOpenBox, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -1232,8 +1274,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels }),
-    [asking, bundle, expansions, frame, labels, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
+    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
   );
 
   return (
@@ -1302,6 +1344,8 @@ export function ReviewReader({
       ) : null}
       {picking ? (
         <div className="review-nav-note" role="status">{pickingText(picking.kind)} <kbd>esc</kbd> cancels.</div>
+      ) : shownOffer ? (
+        <OfferLine answer={shownOffer} />
       ) : navNote ? (
         <div className={`review-nav-note${navNote.tone === 'alert' ? ' review-nav-note--alert' : ''}`} role={navNote.tone === 'alert' ? 'alert' : 'status'}>{navNote.text}</div>
       ) : null}

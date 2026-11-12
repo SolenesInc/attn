@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/victorarias/attn/internal/procreap"
 )
@@ -52,6 +53,7 @@ type server struct {
 	def      Definition
 	program  string
 	worktree func(ctx context.Context, folder, since string) (Worktree, error)
+	now      func() time.Time
 	cmd      *exec.Cmd
 	conn     *conn
 	reaper   string
@@ -62,6 +64,7 @@ type server struct {
 	mu       sync.Mutex
 	state    string
 	detail   string
+	reloaded time.Time
 	progress map[string]string
 	opened   map[string]openFile
 	changed  func()
@@ -133,7 +136,7 @@ func uriPath(uri string) string {
 
 // startServer launches the program and begins the LSP handshake; the answer
 // comes later, through the state.
-func startServer(key Key, def Definition, program, reapDir string, worktree func(context.Context, string, string) (Worktree, error), changed func()) (*server, error) {
+func startServer(key Key, def Definition, program, reapDir string, worktree func(context.Context, string, string) (Worktree, error), now func() time.Time, changed func()) (*server, error) {
 	cmd := exec.Command(program, def.Command[1:]...)
 	cmd.Dir = key.Folder
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -146,7 +149,7 @@ func startServer(key Key, def Definition, program, reapDir string, worktree func
 		return nil, err
 	}
 	s := &server{
-		key: key, def: def, program: program, cmd: cmd, worktree: worktree,
+		key: key, def: def, program: program, cmd: cmd, worktree: worktree, now: now,
 		exited: make(chan struct{}), ready: make(chan struct{}),
 		stderr: &tail{}, state: StateStarting, progress: map[string]string{}, opened: map[string]openFile{}, changed: changed,
 	}
@@ -295,6 +298,9 @@ func (s *server) settleLocked() {
 		titles = append(titles, title)
 	}
 	sort.Strings(titles)
+	if s.state == StateReady {
+		s.reloaded = s.now()
+	}
 	s.state, s.detail = StateStarting, strings.Join(titles, "; ")
 }
 
@@ -318,6 +324,12 @@ func (s *server) status() (string, string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.state, s.detail
+}
+
+func (s *server) reloadedAt() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.reloaded
 }
 
 func (s *server) stop() {

@@ -123,6 +123,7 @@ export function FileView({
   const resizeWatch = useResizeWatch();
   const reader = useReviewReader();
   const labels = reader?.labels;
+  const asked = reader?.asked;
   const path = file.target.path;
   const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
   const cursorLine = rows?.[file.cursor]?.now;
@@ -191,6 +192,7 @@ export function FileView({
                     path={file.target.path}
                     inRange={range !== undefined && row.now !== undefined && row.now >= range[0] && row.now <= range[1]}
                     labels={labels && 'fileId' in labels.at && labels.at.fileId === file.id && labels.at.row === index ? labels.names : undefined}
+                    asked={asked !== null && asked !== undefined && 'fileId' in asked && asked.fileId === file.id && asked.row === index}
                   />
                 </div>
               );

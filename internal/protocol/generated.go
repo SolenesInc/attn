@@ -2326,6 +2326,9 @@ type CodeNavServer struct {
 	// RssBytes corresponds to the JSON schema field "rss_bytes".
 	RssBytes *int `json:"rss_bytes,omitempty,omitzero"`
 
+	// StartedAt corresponds to the JSON schema field "started_at".
+	StartedAt *string `json:"started_at,omitempty,omitzero"`
+
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
 }
@@ -10122,6 +10125,9 @@ type ReviewNavigation struct {
 
 	// SetupSessionID corresponds to the JSON schema field "setup_session_id".
 	SetupSessionID *SessionID `json:"setup_session_id,omitempty,omitzero"`
+
+	// StartedAt corresponds to the JSON schema field "started_at".
+	StartedAt *string `json:"started_at,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`

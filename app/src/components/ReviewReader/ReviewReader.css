@@ -1024,6 +1024,22 @@
   font-size: 0.75rem;
 }
 
+.review-nav-offer {
+  color: var(--color-text-primary);
+}
+
+.review-row--asked .review-row-number:nth-child(2) {
+  position: relative;
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.review-row--asked .review-row-number:nth-child(2)::after {
+  content: '…';
+  position: absolute;
+  right: -0.15em;
+}
+
 .review-nav-note--alert {
   color: var(--color-warning);
 }

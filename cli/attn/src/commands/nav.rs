@@ -3,6 +3,7 @@ use super::{Run, Stop, USAGE_UNKNOWN_COMMAND, absolute, print_stdout};
 use crate::paths::os_error_text;
 use attn::go::flag::FlagSet;
 use attn::go::quote::quote;
+use attn::go::time::Time;
 use attn_protocol::{
     CodeNavCheckMessage, CodeNavCheckResult, CodeNavDefineMessage, CodeNavDefineResult,
     CodeNavLinkMessage, CodeNavLinkResult, CodeNavStatusMessage, CodeNavStatusResult,
@@ -20,7 +21,8 @@ commands:
   status
         the server definitions for the repository you are in, where each
         program was found or why it was not, and the servers running on this
-        machine with their memory.
+        machine with their memory and, for one still starting, the seconds
+        since its start.
 
   check <path>:<line>
         ask for the definition of each name on the line, in order, and print
@@ -92,6 +94,11 @@ fn working_directory(verb: &str) -> Result<String, Stop> {
     })
 }
 
+fn seconds_since(stamp: &str) -> Option<i128> {
+    let at = Time::parse_rfc3339_nano(stamp).ok()?;
+    Some(((Time::now_utc().unix_nanos() - at.unix_nanos()) / 1_000_000_000).max(0))
+}
+
 fn megabytes(bytes: i64) -> String {
     format!("{} MB", bytes / (1 << 20))
 }
@@ -142,8 +149,17 @@ fn status(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
     for server in &result.servers {
         let mut line = format!(
-            "  {} in {}: {}, pid {}",
-            server.language, server.folder, server.state, server.pid
+            "  {} in {}: {}{}, pid {}",
+            server.language,
+            server.folder,
+            server.state,
+            server
+                .started_at
+                .as_deref()
+                .and_then(seconds_since)
+                .map(|seconds| format!(" {seconds}s"))
+                .unwrap_or_default(),
+            server.pid
         );
         if let Some(rss) = server.rss_bytes {
             let _ = write!(line, ", {}", megabytes(rss));

@@ -71,6 +71,7 @@ func (d *Daemon) newCodeNavigation() *codenav.Manager {
 				fn()
 			})
 		},
+		Now: d.clock.Now,
 		Changed: func(_ codenav.Key, documents []string) {
 			d.life.Go("codeNavChanged", func() { d.reportTileDocuments(d.tileDocuments.bump(documents)) })
 		},
@@ -174,13 +175,13 @@ func (d *Daemon) needCodeNavigation(document string, bundle *protocol.ReviewBund
 	d.releaseUnlessShown(document)
 	languages := map[string]protocol.ReviewNavigation{}
 	for _, need := range needed {
-		state, detail := nav.State(need.Key)
+		status := nav.State(need.Key)
 		current, seen := languages[need.Key.Language]
-		if seen && navigationRank[current.State] <= navigationRank[state] {
+		if seen && navigationRank[current.State] <= navigationRank[status.State] {
 			continue
 		}
 		file, _ := filepath.Rel(bundle.Repository, need.File)
-		languages[need.Key.Language] = protocol.ReviewNavigation{Language: need.Key.Language, State: state, Detail: optional(detail), File: filepath.ToSlash(file)}
+		languages[need.Key.Language] = protocol.ReviewNavigation{Language: need.Key.Language, State: status.State, Detail: optional(status.Detail), StartedAt: startedAt(status), File: filepath.ToSlash(file)}
 	}
 	defs := d.codeNavDefinitions(bundle.Repository)
 	for i, stop := range bundle.Stops {
@@ -200,6 +201,13 @@ func (d *Daemon) needCodeNavigation(document string, bundle *protocol.ReviewBund
 		bundle.Navigation = append(bundle.Navigation, navigation)
 	}
 	sort.Slice(bundle.Navigation, func(i, j int) bool { return bundle.Navigation[i].Language < bundle.Navigation[j].Language })
+}
+
+func startedAt(status codenav.Status) *string {
+	if status.StartedAt.IsZero() {
+		return nil
+	}
+	return protocol.Ptr(status.StartedAt.UTC().Format(time.RFC3339Nano))
 }
 
 // navigationRank orders the states of one language's servers in several
@@ -506,7 +514,7 @@ func (d *Daemon) handleCodeNavStatus(ctx context.Context, conn net.Conn, msg *pr
 		sort.Slice(result.Languages, func(i, j int) bool { return result.Languages[i].Language < result.Languages[j].Language })
 	}
 	for _, running := range d.codeNav.Running() {
-		server := protocol.CodeNavServer{Language: running.Key.Language, Folder: running.Key.Folder, Program: running.Program, Pid: running.PID, State: running.State, Detail: optional(running.Detail), NeededBy: running.Needers}
+		server := protocol.CodeNavServer{Language: running.Key.Language, Folder: running.Key.Folder, Program: running.Program, Pid: running.PID, State: running.State, Detail: optional(running.Detail), StartedAt: startedAt(running.Status), NeededBy: running.Needers}
 		if running.PID > 0 {
 			if process, ok := diag.ReadProcess(running.PID); ok {
 				server.RssBytes = protocol.Ptr(int(process.ResidentBytes))

@@ -3922,6 +3922,7 @@ model ReviewNavigation {
   language: string;
   state: string;                 // ready | starting | missing | failed
   detail?: string;
+  started_at?: string;           // RFC 3339, while state is starting: when this start of the server began
   file: string;                  // the review's first file in the language, relative to the repository
   setup_session_id?: SessionID;  // the session setting up a server for the language, set by the home
 }
@@ -4140,6 +4141,7 @@ model CodeNavServer {
   pid: safeint;
   state: string;                 // ready | starting | missing | failed
   detail?: string;
+  started_at?: string;           // RFC 3339, while state is starting: when this start of the server began
   needed_by: string[];           // the shown review documents that need it
   rss_bytes?: safeint;
 }

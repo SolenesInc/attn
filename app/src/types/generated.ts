@@ -2942,14 +2942,15 @@ export enum CodeNavResultMessageEvent {
 }
 
 export interface CodeNavServer {
-    detail?:    string;
-    folder:     string;
-    language:   string;
-    needed_by:  string[];
-    pid:        number;
-    program:    string;
-    rss_bytes?: number;
-    state:      string;
+    detail?:     string;
+    folder:      string;
+    language:    string;
+    needed_by:   string[];
+    pid:         number;
+    program:     string;
+    rss_bytes?:  number;
+    started_at?: string;
+    state:       string;
     [property: string]: any;
 }
 
@@ -3013,14 +3014,15 @@ export interface LanguageElement {
 }
 
 export interface ServerElement {
-    detail?:    string;
-    folder:     string;
-    language:   string;
-    needed_by:  string[];
-    pid:        number;
-    program:    string;
-    rss_bytes?: number;
-    state:      string;
+    detail?:     string;
+    folder:      string;
+    language:    string;
+    needed_by:   string[];
+    pid:         number;
+    program:     string;
+    rss_bytes?:  number;
+    started_at?: string;
+    state:       string;
     [property: string]: any;
 }
 
@@ -4784,6 +4786,7 @@ export interface NavigationElement {
     file:              string;
     language:          string;
     setup_session_id?: string;
+    started_at?:       string;
     state:             string;
     [property: string]: any;
 }
@@ -10763,6 +10766,7 @@ export interface ReviewNavigation {
     file:              string;
     language:          string;
     setup_session_id?: string;
+    started_at?:       string;
     state:             string;
     [property: string]: any;
 }
@@ -23487,6 +23491,7 @@ const typeMap: any = {
         { json: "pid", js: "pid", typ: 0 },
         { json: "program", js: "program", typ: "" },
         { json: "rss_bytes", js: "rss_bytes", typ: u(undefined, 0) },
+        { json: "started_at", js: "started_at", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
     ], "any"),
     "CodeNavSetupMessage": o([
@@ -23534,6 +23539,7 @@ const typeMap: any = {
         { json: "pid", js: "pid", typ: 0 },
         { json: "program", js: "program", typ: "" },
         { json: "rss_bytes", js: "rss_bytes", typ: u(undefined, 0) },
+        { json: "started_at", js: "started_at", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
     ], "any"),
     "CodeNavUnlinkMessage": o([
@@ -24611,6 +24617,7 @@ const typeMap: any = {
         { json: "file", js: "file", typ: "" },
         { json: "language", js: "language", typ: "" },
         { json: "setup_session_id", js: "setup_session_id", typ: u(undefined, "") },
+        { json: "started_at", js: "started_at", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
     ], "any"),
     "NotShownElement": o([
@@ -28432,6 +28439,7 @@ const typeMap: any = {
         { json: "file", js: "file", typ: "" },
         { json: "language", js: "language", typ: "" },
         { json: "setup_session_id", js: "setup_session_id", typ: u(undefined, "") },
+        { json: "started_at", js: "started_at", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
     ], "any"),
     "ReviewNotShown": o([

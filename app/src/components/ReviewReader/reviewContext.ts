@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react';
 import type { ReviewBundle, ReviewNote, ReviewRow, ReviewStop } from '../../types/generated';
 import type { Annotation } from '../MarkdownReader/annotations/types';
 import type { Frame } from './frames';
-import type { LabeledName } from './navigation';
+import type { LabeledName, NavLine } from './navigation';
 
 export interface FileTarget {
   path: string;
@@ -53,6 +53,8 @@ export interface ReviewReaderContextValue {
   /** Opens a file of the review in the editor tile, when the review is on this machine. */
   openInEditor?: (path: string) => void;
   labels: RowLabels | null;
+  /** The line a question waits on, until its answer, its error or Escape. */
+  asked: NavLine['at'] | null;
 }
 
 export const ReviewReaderContext = createContext<ReviewReaderContextValue | null>(null);

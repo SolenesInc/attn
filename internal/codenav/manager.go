@@ -38,6 +38,7 @@ type Config struct {
 	Worktree func(ctx context.Context, folder, since string) (Worktree, error)
 	// IdleStop arms the timer that stops a server no document needs.
 	IdleStop func(fn func()) stepclock.Timer
+	Now      func() time.Time
 	// Changed reports that a server's state changed, for the documents that need it.
 	Changed func(key Key, documents []string)
 	Logf    func(format string, args ...any)
@@ -60,6 +61,7 @@ type entry struct {
 	server  *server
 	state   string
 	detail  string
+	started time.Time
 	needers map[string]bool
 	idle    stepclock.Timer
 	// launched closes once a start has a server, or has failed or found the program missing.
@@ -166,7 +168,7 @@ func (m *Manager) startLocked(e *entry, def Definition) {
 		close(e.launched)
 		return
 	}
-	e.server, e.state, e.detail = nil, StateStarting, ""
+	e.server, e.state, e.detail, e.started = nil, StateStarting, "", m.cfg.Now()
 	if e.def.Prepare == nil {
 		m.launchLocked(e, program)
 		return
@@ -197,7 +199,7 @@ func (m *Manager) prepareThenLaunch(e *entry, program string) {
 
 func (m *Manager) launchLocked(e *entry, program string) {
 	var s *server
-	s, err := startServer(e.key, e.def, program, m.cfg.ReapDir, m.cfg.Worktree, func() {
+	s, err := startServer(e.key, e.def, program, m.cfg.ReapDir, m.cfg.Worktree, m.cfg.Now, func() {
 		m.mu.Lock()
 		current := m.entries[e.key] == e && e.server == s
 		needers := e.neededBy()
@@ -287,22 +289,36 @@ func (m *Manager) armIdleLocked(e *entry) {
 	e.idle = timer
 }
 
-// State is what the reader shows for a server: its state and the detail.
-func (m *Manager) State(key Key) (string, string) {
+// Status is what the reader shows for a server. StartedAt is set while it is
+// starting, to when this start began.
+type Status struct {
+	State     string
+	Detail    string
+	StartedAt time.Time
+}
+
+func (m *Manager) State(key Key) Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	e := m.entries[key]
 	if e == nil {
-		return StateStarting, ""
+		return Status{State: StateStarting}
 	}
 	return e.status()
 }
 
-func (e *entry) status() (string, string) {
+func (e *entry) status() Status {
+	status, started := Status{State: e.state, Detail: e.detail}, e.started
 	if e.server != nil {
-		return e.server.status()
+		status.State, status.Detail = e.server.status()
+		if reloaded := e.server.reloadedAt(); !reloaded.IsZero() {
+			started = reloaded
+		}
 	}
-	return e.state, e.detail
+	if status.State == StateStarting {
+		status.StartedAt = started
+	}
+	return status
 }
 
 // Kinds of question a reader asks about a name.
@@ -391,8 +407,7 @@ type Running struct {
 	Key     Key
 	Program string
 	PID     int
-	State   string
-	Detail  string
+	Status
 	Needers []string
 }
 
@@ -402,7 +417,7 @@ func (m *Manager) Running() []Running {
 	var running []Running
 	for _, e := range m.entries {
 		r := Running{Key: e.key, Program: e.def.Command[0], Needers: e.neededBy()}
-		r.State, r.Detail = e.status()
+		r.Status = e.status()
 		if e.server != nil {
 			r.Program, r.PID = e.server.program, e.server.cmd.Process.Pid
 		}

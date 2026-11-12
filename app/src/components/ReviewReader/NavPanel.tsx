@@ -29,7 +29,6 @@ export function NavPanel({ answer, onPick }: { answer: NavAnswer; onPick: (index
       <header className="review-nav-panel-header">
         <span>{title}</span>
         {answer.kind !== 'hover' ? <span className="review-nav-panel-count">{locations.length}</span> : null}
-        {answer.offered ? <span className="review-badge">arrived after you moved on</span> : null}
         <span className="review-grow" />
         {locations.length > 0 ? <span><kbd>↵</kbd> open</span> : null}
         <span><kbd>esc</kbd> close</span>

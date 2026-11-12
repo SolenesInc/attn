@@ -52,6 +52,7 @@ export function CodeRow({
   cursorKey,
   cursor,
   labels,
+  asked,
 }: {
   row: ReviewRow;
   tokens?: TokenLine;
@@ -60,10 +61,11 @@ export function CodeRow({
   cursorKey?: string;
   cursor?: boolean;
   labels?: readonly LabeledName[];
+  asked?: boolean;
 }) {
   return (
     <div
-      className={`review-row${KIND_CLASS[row.kind] ?? ''}${inRange ? ' review-row--in-range' : ''}${cursor ? ' review-cursor' : ''}`}
+      className={`review-row${KIND_CLASS[row.kind] ?? ''}${inRange ? ' review-row--in-range' : ''}${cursor ? ' review-cursor' : ''}${asked ? ' review-row--asked' : ''}`}
       data-review-cursor={cursorKey ? 'row' : undefined}
       data-cursor-key={cursorKey}
       data-path={path}

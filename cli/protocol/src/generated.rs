@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "6a594d8f237b";
+pub const PROTOCOL_VERSION: &str = "2769b91c804d";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -2131,6 +2131,8 @@ pub struct CodeNavServer {
     pub program: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rss_bytes: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
     pub state: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -9517,6 +9519,8 @@ pub struct ReviewNavigation {
     pub language: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setup_session_id: Option<SessionID>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
     pub state: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
