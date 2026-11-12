@@ -45,11 +45,13 @@ pub enum Parked {
     Stopped,
 }
 
-/// What the link has exchanged with the daemon. `sent` counts commands as they are handed to
-/// `send`, before they reach the socket; `received` counts messages once applied, and the end
-/// of a connection the daemon closed.
+/// What the link has exchanged with the daemon on its current connection. `connection`
+/// counts the WebSocket connections the link has opened, and the counts start over with each.
+/// `sent` counts commands as they are handed over, the hello included, before they reach the
+/// socket; `received` counts messages once applied, and the daemon's hang-up once seen.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Traffic {
+    pub connection: u64,
     pub sent: u64,
     pub received: u64,
     pub parked: Parked,
@@ -64,16 +66,46 @@ impl std::fmt::Display for NotConnected {
     }
 }
 
+struct State {
+    traffic: Traffic,
+    outbox: Option<mpsc::UnboundedSender<String>>,
+}
+
 struct Shared {
-    traffic: Mutex<Traffic>,
-    outbox: Mutex<Option<mpsc::UnboundedSender<String>>>,
+    state: Mutex<State>,
     pulse: Pulse,
 }
 
 impl Shared {
     fn count(&self, f: impl FnOnce(&mut Traffic)) {
-        f(&mut self.traffic.lock().unwrap());
+        f(&mut self.state.lock().unwrap().traffic);
         self.pulse.beat();
+    }
+
+    fn send(&self, text: String) -> Result<(), NotConnected> {
+        let mut state = self.state.lock().unwrap();
+        let outbox = state.outbox.as_ref().ok_or(NotConnected)?;
+        outbox.send(text).map_err(|_| NotConnected)?;
+        state.traffic.sent += 1;
+        drop(state);
+        self.pulse.beat();
+        Ok(())
+    }
+
+    fn open(&self, outbox: mpsc::UnboundedSender<String>) {
+        let mut state = self.state.lock().unwrap();
+        let connection = state.traffic.connection + 1;
+        state.traffic = Traffic {
+            connection,
+            sent: 0,
+            received: 0,
+            parked: Parked::Busy,
+        };
+        state.outbox = Some(outbox);
+    }
+
+    fn close(&self) {
+        self.state.lock().unwrap().outbox = None;
     }
 }
 
@@ -88,12 +120,15 @@ pub struct Link {
 impl Link {
     pub fn start(config: LinkConfig, store: Store) -> Link {
         let shared = Arc::new(Shared {
-            traffic: Mutex::new(Traffic {
-                sent: 0,
-                received: 0,
-                parked: Parked::Busy,
+            state: Mutex::new(State {
+                traffic: Traffic {
+                    connection: 0,
+                    sent: 0,
+                    received: 0,
+                    parked: Parked::Busy,
+                },
+                outbox: None,
             }),
-            outbox: Mutex::new(None),
             pulse: config.pulse.clone(),
         });
         let (stop, stopped) = watch::channel(false);
@@ -120,16 +155,15 @@ impl Link {
         }
     }
 
+    /// Hands a command to the open connection. A command handed over as the connection drops
+    /// is lost with it, as on any socket; the daemon's next `initial_state` says what holds.
     pub fn send(&self, command: &impl Serialize) -> Result<(), NotConnected> {
-        let text = serde_json::to_string(command).expect("a protocol command serializes");
-        let outbox = self.shared.outbox.lock().unwrap();
-        let outbox = outbox.as_ref().ok_or(NotConnected)?;
-        self.shared.count(|t| t.sent += 1);
-        outbox.send(text).map_err(|_| NotConnected)
+        self.shared
+            .send(serde_json::to_string(command).expect("a protocol command serializes"))
     }
 
     pub fn traffic(&self) -> Traffic {
-        *self.shared.traffic.lock().unwrap()
+        self.shared.state.lock().unwrap().traffic
     }
 }
 
@@ -170,7 +204,7 @@ impl Task {
                 ended = self.session() => ended,
                 _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
             };
-            *self.shared.outbox.lock().unwrap() = None;
+            self.shared.close();
             match ended {
                 Ended::Stopped => return,
                 Ended::Refused(refusal) => {
@@ -215,13 +249,12 @@ impl Task {
             return Ended::Lost { greeted: false };
         };
         let (mut write, mut read) = socket.split();
+        let (outbox, mut commands) = mpsc::unbounded_channel();
+        self.shared.open(outbox);
         let hello = serde_json::to_string(&self.hello()).expect("client_hello serializes");
-        self.shared.count(|t| t.sent += 1);
-        if write.send(Message::text(hello)).await.is_err() {
+        if self.shared.send(hello).is_err() {
             return Ended::Lost { greeted: false };
         }
-        let (outbox, mut commands) = mpsc::unbounded_channel();
-        *self.shared.outbox.lock().unwrap() = Some(outbox);
         let mut greeted = false;
         loop {
             self.park(Parked::Reading);

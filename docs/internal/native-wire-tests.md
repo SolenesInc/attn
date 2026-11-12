@@ -29,6 +29,10 @@ fn a_reconnect_after_a_handshake_starts_over_at_one_second() {
 }
 ```
 
+A crate's wire tests need `attn-testkit` as a dev-dependency, and usually
+`attn-protocol` for the generated message types, `attn-client` for `Parked` and
+`Frame`, and `serde_json` for `json!`. `attn-app` has them all.
+
 Run a crate's wire tests from `native/`:
 
 ```sh
@@ -48,7 +52,8 @@ cargo test -p attn-app --test wire
   system clock, and a `Runtime` instead of a window. The `Runtime` needs no GPU.
 
 `Daemon::scripted()` returns a daemon that is already listening. Configure it
-before `World::start`:
+before `World::start`. These calls take the daemon and return it, so they
+chain from `Daemon::scripted()`:
 
 | Call | What the daemon does |
 | --- | --- |
@@ -68,13 +73,17 @@ address.
   `serde_json::Value`. The reply is `()`, a `Value`, an `Option<Value>`, or a
   `Vec<Value>`. `message(m)` turns any generated protocol type into a `Value`.
   Each reply gets the request's `request_id`. A command with no answer stays
-  unanswered.
+  unanswered. `on` returns `&Daemon`, so `on` calls chain with each other.
+  `on("client_hello", ..)` replaces the `initial_state` that `.state` sets.
 - `answer_in_turn(cmd, [Answer::Reply(..), Answer::Hold])` answers successive
   requests in order. `Answer::Hold` leaves a request unanswered.
 - `reply_to(&request, reply)` answers a request the script held.
 - `emit(event)` pushes an event. `emit_frame(bytes)` pushes a binary frame,
   laid out as `internal/protocol/binaryframe.go` writes it.
-- `disconnect()` hangs up, as a daemon restart does.
+- `emit`, `emit_frame` and `disconnect` act on the newest open connection, and
+  panic when none is open.
+- `disconnect()` hangs up, as a daemon restart does. A command the app sends
+  while the connection drops is lost with it.
   `refuse_connections(true)` closes every new connection before it is
   answered, as a port with no daemon behind it does. `refuse_connections(false)`
   ends that.

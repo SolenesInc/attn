@@ -183,15 +183,21 @@ impl World {
             .expect("the link runs until the world drops")
     }
 
+    /// Messages in flight on a connection that has ended are lost with it, so the counts are
+    /// compared only while the link reads the daemon's newest connection.
     fn quiet(&self) -> bool {
         let link = self.link().traffic();
         let daemon = self.daemon.traffic();
-        let parked = match link.parked {
-            Parked::Reading | Parked::Stopped => true,
+        match link.parked {
+            Parked::Reading => {
+                link.connection == daemon.connection as u64
+                    && link.sent == daemon.received
+                    && link.received == daemon.queued
+            }
+            Parked::Stopped => true,
             Parked::Until(at) => at > self.clock.now(),
             Parked::Busy => false,
-        };
-        parked && link.sent == daemon.received && link.received == daemon.queued
+        }
     }
 }
 

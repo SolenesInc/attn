@@ -213,3 +213,18 @@ fn binary_frames_reach_the_terminal_side_decoded() {
         "a bad frame does not cost the connection"
     );
 }
+
+#[test]
+fn a_command_lost_with_a_hang_up_does_not_stall_the_reconnect() {
+    let mut world = World::start(Daemon::scripted());
+
+    world.daemon.disconnect();
+    let _ = world
+        .link()
+        .send(&serde_json::json!({ "cmd": "get_settings" }));
+    world.settle();
+    world.advance(ms(1000));
+
+    assert_eq!(world.daemon.connections(), 2);
+    assert!(world.runtime_is_at_rest());
+}

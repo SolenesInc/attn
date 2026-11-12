@@ -61,10 +61,12 @@ pub fn message(message: impl serde::Serialize) -> Value {
     serde_json::to_value(message).expect("a protocol message serializes")
 }
 
-/// What the daemon has exchanged with the app. `queued` counts messages as the script hands
-/// them over, and each hang-up; `received` counts commands once the script has answered them.
+/// What the daemon has exchanged with the app on its newest connection, numbered from 1 in
+/// the order the app opened them. `queued` counts messages as the script hands them over,
+/// and the hang-up; `received` counts commands once the script has answered them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Traffic {
+    pub connection: usize,
     pub queued: u64,
     pub received: u64,
 }
@@ -218,7 +220,7 @@ impl Daemon {
             .unwrap()
             .connections
             .last()
-            .map(|c| c.out.clone());
+            .map(|c| (c.id, c.out.clone()));
         let open = open.expect("the daemon has no open connection to emit to");
         queue(&self.shared, &open, Out::Text(event.to_string()));
     }
@@ -233,7 +235,7 @@ impl Daemon {
             .unwrap()
             .connections
             .last()
-            .map(|c| c.out.clone());
+            .map(|c| (c.id, c.out.clone()));
         let open = open.expect("the daemon has no open connection to emit to");
         queue(&self.shared, &open, Out::Binary(frame));
     }
@@ -252,7 +254,7 @@ impl Daemon {
             log.connections
                 .iter()
                 .find(|c| c.id == origin)
-                .map(|c| c.out.clone())
+                .map(|c| (c.id, c.out.clone()))
                 .expect("the request's connection has closed")
         };
         queue(&self.shared, &open, Out::Text(reply.to_string()));
@@ -262,7 +264,7 @@ impl Daemon {
     pub fn disconnect(&self) {
         let open = self.shared.log.lock().unwrap().connections.pop();
         let open = open.expect("the daemon has no open connection to hang up");
-        queue(&self.shared, &open.out, Out::HangUp);
+        queue(&self.shared, &(open.id, open.out), Out::HangUp);
     }
 
     /// While set, the daemon closes every connection before answering, as a port with no
@@ -319,9 +321,13 @@ impl Drop for Daemon {
     }
 }
 
-fn queue(shared: &Shared, to: &mpsc::UnboundedSender<Out>, out: Out) {
+fn queue(shared: &Shared, (id, to): &(usize, mpsc::UnboundedSender<Out>), out: Out) {
     if to.send(out).is_ok() {
-        shared.log.lock().unwrap().traffic.queued += 1;
+        let mut log = shared.log.lock().unwrap();
+        if log.traffic.connection == *id {
+            log.traffic.queued += 1;
+        }
+        drop(log);
         shared.pulse.beat();
     }
 }
@@ -396,6 +402,10 @@ async fn connection(shared: Arc<Shared>, mut stream: TcpStream) {
         let mut log = shared.log.lock().unwrap();
         log.opened += 1;
         let id = log.opened;
+        log.traffic = Traffic {
+            connection: id,
+            ..Traffic::default()
+        };
         log.connections.push(Connection {
             id,
             out,
@@ -483,7 +493,7 @@ fn receive(shared: &Shared, id: usize, text: &str) {
             replies = handler(&request);
         }
     }
-    let out = log.connections[at].out.clone();
+    let out = (id, log.connections[at].out.clone());
     drop(log);
     for reply in replies {
         queue(
@@ -493,9 +503,13 @@ fn receive(shared: &Shared, id: usize, text: &str) {
         );
     }
     if hang_up {
-        let _ = out.send(Out::HangUp);
+        let _ = out.1.send(Out::HangUp);
     }
-    shared.log.lock().unwrap().traffic.received += 1;
+    let mut log = shared.log.lock().unwrap();
+    if log.traffic.connection == id {
+        log.traffic.received += 1;
+    }
+    drop(log);
     shared.pulse.beat();
 }
 

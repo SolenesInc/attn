@@ -78,7 +78,7 @@ type Notify = dyn Fn(&Facts, Slices) + Send + Sync;
 struct Subscriber {
     id: u64,
     reads: Slices,
-    notify: Arc<Notify>,
+    notify: Box<Notify>,
 }
 
 #[derive(Default)]
@@ -117,25 +117,22 @@ impl Store {
     }
 
     /// Calls `notify` now with every slice, then on the link's thread after each change to a
-    /// slice in `reads`.
+    /// slice in `reads`, in the order the changes happen. `notify` runs while the store is
+    /// locked, so it hands the facts on and must not call the store.
     pub fn subscribe(
         &self,
         reads: Slices,
         notify: impl Fn(&Facts, Slices) + Send + Sync + 'static,
     ) -> Subscription {
-        let notify: Arc<Notify> = Arc::new(notify);
-        let (id, facts) = {
-            let mut inner = self.0.lock().unwrap();
-            let id = inner.next_id;
-            inner.next_id += 1;
-            inner.subscribers.push(Subscriber {
-                id,
-                reads,
-                notify: notify.clone(),
-            });
-            (id, inner.facts.clone())
-        };
-        notify(&facts, Slices::ALL);
+        let mut inner = self.0.lock().unwrap();
+        notify(&inner.facts, Slices::ALL);
+        let id = inner.next_id;
+        inner.next_id += 1;
+        inner.subscribers.push(Subscriber {
+            id,
+            reads,
+            notify: Box::new(notify),
+        });
         Subscription {
             store: Arc::downgrade(&self.0),
             id,
@@ -167,22 +164,17 @@ impl Store {
     }
 
     fn change(&self, f: impl FnOnce(&mut Facts) -> Slices) {
-        let (facts, changed, notify) = {
-            let mut inner = self.0.lock().unwrap();
-            let changed = f(&mut inner.facts);
-            if changed.is_empty() {
-                return;
-            }
-            let notify: Vec<Arc<Notify>> = inner
-                .subscribers
-                .iter()
-                .filter(|s| s.reads.intersects(changed))
-                .map(|s| s.notify.clone())
-                .collect();
-            (inner.facts.clone(), changed, notify)
-        };
-        for notify in notify {
-            notify(&facts, changed);
+        let mut inner = self.0.lock().unwrap();
+        let changed = f(&mut inner.facts);
+        if changed.is_empty() {
+            return;
+        }
+        for subscriber in inner
+            .subscribers
+            .iter()
+            .filter(|s| s.reads.intersects(changed))
+        {
+            (subscriber.notify)(&inner.facts, changed);
         }
     }
 }
