@@ -358,7 +358,7 @@ fn opened(state: &mut State, which: Which, tx: &mut Tx) {
         state.window.launching.catalog,
         Catalog::Unasked | Catalog::Failed(_)
     ) {
-        ask_catalog(state);
+        ask_catalog(state, tx);
     }
     let opening = state
         .window
@@ -387,6 +387,7 @@ fn opened(state: &mut State, which: Which, tx: &mut Tx) {
             }
             highlight_top_recent(state, which);
         },
+        tx,
     );
     if let Some(picker) = state.window.launching.picker_mut(which)
         && !picker.input.text.is_empty()
@@ -410,7 +411,7 @@ pub(crate) fn reconnected(state: &mut State, tx: &mut Tx) {
     }
 }
 
-fn ask_catalog(state: &mut State) {
+fn ask_catalog(state: &mut State, tx: &mut Tx) {
     state.window.launching.catalog = Catalog::Loading;
     state.ask(
         |id| DelegationPreferencesGetMessage {
@@ -435,11 +436,12 @@ fn ask_catalog(state: &mut State) {
                 None => Catalog::Failed("Failed to load harnesses".into()),
             };
         },
+        tx,
     );
 }
 
-pub(crate) fn retry_catalog(state: &mut State) {
-    ask_catalog(state);
+pub(crate) fn retry_catalog(state: &mut State, tx: &mut Tx) {
+    ask_catalog(state, tx);
 }
 
 fn highlight_top_recent(state: &mut State, which: Which) {
@@ -480,7 +482,7 @@ pub(crate) fn edited(state: &mut State, which: Which, tx: &mut Tx) {
 }
 
 /// Browses each picker whose typing has settled. Returns whether any did.
-pub(crate) fn browse_due(state: &mut State, tx: &Tx) -> bool {
+pub(crate) fn browse_due(state: &mut State, tx: &mut Tx) -> bool {
     let due: Vec<Which> = [Which::Dialog, Which::Inline]
         .into_iter()
         .filter(|which| {
@@ -493,12 +495,12 @@ pub(crate) fn browse_due(state: &mut State, tx: &Tx) -> bool {
         })
         .collect();
     for which in &due {
-        browse(state, *which);
+        browse(state, *which, tx);
     }
     !due.is_empty()
 }
 
-fn browse(state: &mut State, which: Which) {
+fn browse(state: &mut State, which: Which, tx: &mut Tx) {
     let Some(picker) = state.window.launching.picker_mut(which) else {
         return;
     };
@@ -558,6 +560,7 @@ fn browse(state: &mut State, which: Which) {
                 picker.highlight = None;
             }
         },
+        tx,
     );
 }
 
@@ -620,7 +623,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
                 .map(|row| row.path.clone())
                 .unwrap_or_else(|| picker.input.text.clone());
             if !raw.trim().is_empty() {
-                open_path(state, which, &raw);
+                open_path(state, which, &raw, tx);
             }
             true
         }
@@ -770,7 +773,7 @@ fn set_setting(state: &State, key: &str, value: &str) {
 
 /// Opens what the user picked or typed: the daemon says whether it is a folder and whether it
 /// sits in a repository, whose checkout and worktrees the picker then offers.
-pub(crate) fn open_path(state: &mut State, which: Which, raw: &str) {
+pub(crate) fn open_path(state: &mut State, which: Which, raw: &str, tx: &mut Tx) {
     let home = state.window.launching.home.clone();
     let path = paths::normalize(raw, &home);
     let Some(picker) = state.window.launching.picker_mut(which) else {
@@ -829,6 +832,7 @@ pub(crate) fn open_path(state: &mut State, which: Which, raw: &str) {
                 None => launch(state, which, &resolved, tx),
             }
         },
+        tx,
     );
 }
 
@@ -847,7 +851,7 @@ fn load_repo(
     generation: u64,
     root: String,
     resolved: String,
-    _: &mut Tx,
+    tx: &mut Tx,
 ) {
     let home = state.window.launching.home.clone();
     if let Some(picker) = current(state, which, generation) {
@@ -884,6 +888,7 @@ fn load_repo(
                 }
             }
         },
+        tx,
     );
 }
 
@@ -999,34 +1004,39 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
         spawned_from: target.spawned_from,
         ..SpawnSessionMessage::new()
     };
-    state.ask_as(id, &message, move |state, reply, tx| {
-        state.window.launching.starting = None;
-        let result: Option<SpawnResultMessage> = reply.parse();
-        match result {
-            Some(SpawnResultMessage {
-                success: true,
-                desktop_id,
-                pane_id: Some(pane),
-                ..
-            }) => {
-                let shown = state.facts.current_desktop().map(|d| d.id.clone());
-                let desktop = desktop_id.unwrap_or(target.desktop);
-                if shown.as_deref() == Some(&desktop) {
-                    let tile = crate::shell::Holder { desktop, pane };
-                    crate::desktop::take_tile(state, &tile, tx);
+    state.ask_as(
+        id,
+        &message,
+        move |state, reply, tx| {
+            state.window.launching.starting = None;
+            let result: Option<SpawnResultMessage> = reply.parse();
+            match result {
+                Some(SpawnResultMessage {
+                    success: true,
+                    desktop_id,
+                    pane_id: Some(pane),
+                    ..
+                }) => {
+                    let shown = state.facts.current_desktop().map(|d| d.id.clone());
+                    let desktop = desktop_id.unwrap_or(target.desktop);
+                    if shown.as_deref() == Some(&desktop) {
+                        let tile = crate::shell::Holder { desktop, pane };
+                        crate::desktop::take_tile(state, &tile, tx);
+                    }
                 }
+                Some(SpawnResultMessage { success: true, .. }) => {}
+                other => state.window.notify(
+                    other
+                        .and_then(|r| r.error)
+                        .filter(|e| !e.is_empty())
+                        .unwrap_or_else(|| "Failed to start the agent".into()),
+                    tx,
+                ),
             }
-            Some(SpawnResultMessage { success: true, .. }) => {}
-            other => state.window.notify(
-                other
-                    .and_then(|r| r.error)
-                    .filter(|e| !e.is_empty())
-                    .unwrap_or_else(|| "Failed to start the agent".into()),
-                tx,
-            ),
-        }
-        let _ = follow(state, tx);
-    });
+            let _ = follow(state, tx);
+        },
+        tx,
+    );
 }
 
 fn session_id() -> String {
@@ -1175,5 +1185,6 @@ pub(crate) fn create_worktree(
                 tx,
             );
         },
+        tx,
     );
 }

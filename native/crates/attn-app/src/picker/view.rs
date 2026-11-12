@@ -197,7 +197,7 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                         .label("Retry")
                         .font(type_::LABEL)
                         .color(t.accent)
-                        .on_press_tx(|state: &mut State, _: &mut Tx| super::retry_catalog(state)),
+                        .on_press_tx(super::retry_catalog),
                 ),
         ),
         Catalog::Loaded(_) => None,
@@ -419,7 +419,9 @@ fn location_row(picker: &Picker, i: usize, r: &super::Row, _home: &str, t: &Toke
         } else {
             t.bg_elevated
         })
-        .on_press_tx(move |state: &mut State, _: &mut Tx| super::open_path(state, which, &path))
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::open_path(state, which, &path, tx)
+        })
         .child(
             row()
                 .gap(space::S1)

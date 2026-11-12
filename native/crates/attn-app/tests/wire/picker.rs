@@ -1911,3 +1911,108 @@ fn the_launcher_stays_off_home_where_new_session_opens_the_dialog() {
     assert!(launcher_focused(&world));
     rest(&mut world);
 }
+
+#[test]
+fn a_worktree_lost_to_a_daemon_restart_fails_in_the_corner_and_the_next_one_is_made() {
+    let mut world = repo_world(&[]);
+    let held = hold(&world, "create_worktree");
+    open_repo(&mut world, REPO);
+    world.gesture(|app| app.type_text("lost"));
+    press(&mut world, Key::Enter);
+    assert_eq!(held.lock().unwrap().len(), 1);
+
+    world.reconnect();
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("worktree-setup"))
+            .name
+            .as_deref(),
+        Some("Create failed: lost failed")
+    );
+    world.gesture(|app| app.click(Target::key("worktree-setup")));
+    world.gesture(|app| app.click(Target::key("worktree-setup.dismiss")));
+
+    world.daemon.on("create_worktree", |r| {
+        message(CreateWorktreeResultMessage {
+            success: true,
+            path: Some(format!("{REPO}--{}", r["branch"].as_str().unwrap())),
+            ..CreateWorktreeResultMessage::new()
+        })
+    });
+    open_repo(&mut world, REPO);
+    world.gesture(|app| app.type_text("again"));
+    press(&mut world, Key::Enter);
+
+    let spawned = spawns(&world);
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["cwd"], format!("{REPO}--again"));
+    rest(&mut world);
+}
+
+#[test]
+fn a_delete_lost_to_a_daemon_restart_hands_the_chooser_back_to_the_keyboard() {
+    let mut world = repo_world(&[]);
+    open_repo(&mut world, "/src/repo--feature");
+    let _deletes = hold(&world, "delete_worktree");
+    world.gesture(|app| app.type_text("D"));
+    world.gesture(|app| app.type_text("y"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("new-session.repo.delete"))
+            .name
+            .as_deref(),
+        Some("Deleting repo--feature")
+    );
+
+    world.reconnect();
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notice.text"))
+            .name
+            .as_deref(),
+        Some("Failed to delete worktree")
+    );
+    press(&mut world, Key::Escape);
+    world.gesture(|app| app.type_text("D"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("new-session.repo.delete"))
+            .name
+            .as_deref(),
+        Some("Delete repo--feature?"),
+        "{}",
+        world.screen()
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_launch_lost_to_a_daemon_restart_brings_the_launcher_back() {
+    let mut world = empty_desktop();
+    let _spawned = hold(&world, "spawn_session");
+    type_path(&mut world, "/tmp/plain");
+    press(&mut world, Key::Enter);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("launcher.starting"))
+            .is_some()
+    );
+
+    world.reconnect();
+
+    assert!(
+        world
+            .screen()
+            .find(Target::key("launcher.starting"))
+            .is_none(),
+        "{}",
+        world.screen()
+    );
+    assert!(launcher_focused(&world), "{}", world.screen());
+    rest(&mut world);
+}

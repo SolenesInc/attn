@@ -258,7 +258,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
             chooser.delete = None;
             return match letter {
                 Some('y' | 'Y') if forceable => {
-                    delete(state, which, path, true);
+                    delete(state, which, path, true, tx);
                     true
                 }
                 Some('n' | 'N') => true,
@@ -269,7 +269,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
             chooser.delete = None;
             return match letter {
                 Some('y' | 'Y') => {
-                    delete(state, which, path, false);
+                    delete(state, which, path, false, tx);
                     true
                 }
                 Some('n' | 'N') => true,
@@ -339,7 +339,7 @@ pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx
                 true
             }
             (_, Some('r' | 'R')) => {
-                refresh(state, which);
+                refresh(state, which, tx);
                 true
             }
             (_, Some(digit @ '1'..='9')) => {
@@ -398,7 +398,7 @@ pub(crate) fn create(state: &mut State, which: Which, tx: &mut Tx) {
     super::create_worktree(state, which, root, branch, from, tx);
 }
 
-pub(crate) fn refresh(state: &mut State, which: Which) {
+pub(crate) fn refresh(state: &mut State, which: Which, tx: &mut Tx) {
     let Some(chooser) = chooser_of(state, which).filter(|c| !c.refreshing) else {
         return;
     };
@@ -428,6 +428,7 @@ pub(crate) fn refresh(state: &mut State, which: Which) {
                 replace_info(chooser, info, None, read_at);
             }
         },
+        tx,
     );
 }
 
@@ -458,7 +459,7 @@ fn replace_info(chooser: &mut Chooser, info: RepoInfo, deleted: Option<&str>, re
         .unwrap_or(0);
 }
 
-fn delete(state: &mut State, which: Which, path: String, force: bool) {
+fn delete(state: &mut State, which: Which, path: String, force: bool, tx: &mut Tx) {
     let Some(chooser) = chooser_of(state, which) else {
         return;
     };
@@ -479,7 +480,7 @@ fn delete(state: &mut State, which: Which, path: String, force: bool) {
             };
             match result {
                 Some(r) if r.success => {
-                    reread_after_delete(state, which, repo, path);
+                    reread_after_delete(state, which, repo, path, tx);
                 }
                 other => {
                     let error = other
@@ -499,10 +500,17 @@ fn delete(state: &mut State, which: Which, path: String, force: bool) {
                 }
             }
         },
+        tx,
     );
 }
 
-fn reread_after_delete(state: &mut State, which: Which, repo: String, deleted: String) {
+fn reread_after_delete(
+    state: &mut State,
+    which: Which,
+    repo: String,
+    deleted: String,
+    tx: &mut Tx,
+) {
     state.ask(
         |id| GetRepoInfoMessage {
             repo,
@@ -531,6 +539,7 @@ fn reread_after_delete(state: &mut State, which: Which, repo: String, deleted: S
                 }
             }
         },
+        tx,
     );
 }
 

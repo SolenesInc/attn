@@ -111,7 +111,7 @@ pub fn bind(
             let (was, is) = (connected(&state.facts), connected(&facts));
             state.facts = facts;
             if was && !is {
-                requests::forget(state);
+                requests::forget(state, tx);
             }
             if !was && is {
                 picker::reconnected(state, tx);
