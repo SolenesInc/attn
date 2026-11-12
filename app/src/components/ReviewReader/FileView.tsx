@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
-import type { ReviewRow } from '../../types/generated';
+import type { ReviewNote, ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
 import { NoteRow, PathLabel } from './StopBlock';
@@ -84,9 +84,9 @@ export function changeStarts(rows: readonly ReviewRow[]): number[] {
 }
 
 /** The lines agent notes point at, and whether any of them is the place to look. */
-function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
+function notedLines(notes: readonly ReviewNote[]): ReadonlyMap<number, boolean> {
   const noted = new Map<number, boolean>();
-  for (const note of notes ?? []) {
+  for (const note of notes) {
     if (note.now_from === 0) continue;
     for (let line = note.now_from; line <= note.now_to; line += 1) noted.set(line, (noted.get(line) ?? false) || note.look);
   }
@@ -137,19 +137,21 @@ export function FileView({
   const lines = useMemo(() => rows?.map((row) => row.text) ?? null, [rows]);
   const { tokens, earlier } = useCachedTokens(tokenCache, file.target.path, file.hash, lines);
   const range = file.target.range;
-  const notes = file.target.notes;
+  const reader = useReviewReader();
+  const stops = reader?.bundle.stops;
+  const path = file.target.path;
+  const outside = file.target.outside;
+  const notes = useMemo(() => (outside ? [] : (stops ?? []).filter((stop) => stop.path === path).flatMap((stop) => stop.notes)), [outside, path, stops]);
   const noted = useMemo(() => notedLines(notes), [notes]);
   const inside = useMemo(() => (stage && range && rows ? rowsInside(rows, range) : null), [range, rows, stage]);
   const widest = useMemo(() => (rows ? widestLine(rows) : 0), [rows]);
   const resizeWatch = useResizeWatch();
-  const reader = useReviewReader();
   const labels = reader?.labels;
   const asked = reader?.asked;
-  const path = file.target.path;
   const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
   const cursorLine = rows?.[file.cursor]?.now;
   const cursorMarks = cursorLine !== undefined ? reader?.marksByLine.get(markKey(path, cursorLine)) ?? [] : [];
-  const cursorNotes = cursorLine !== undefined ? (notes ?? []).filter((note) => note.now_from > 0 && cursorLine >= note.now_from && cursorLine <= note.now_to) : [];
+  const cursorNotes = cursorLine !== undefined ? notes.filter((note) => note.now_from > 0 && cursorLine >= note.now_from && cursorLine <= note.now_to) : [];
   const selectFrom = Math.min(file.selectFrom ?? file.cursor, file.cursor);
   const selectTo = Math.max(file.selectFrom ?? file.cursor, file.cursor);
 

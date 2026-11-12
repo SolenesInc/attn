@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { ReviewBundle, ReviewNote, ReviewRow, ReviewStop } from '../../types/generated';
+import type { ReviewBundle, ReviewRow, ReviewStop } from '../../types/generated';
 import type { Annotation } from '../MarkdownReader/annotations/types';
 import type { Frame, Side } from './frames';
 import type { LabeledName, NavLine } from './navigation';
@@ -8,7 +8,6 @@ export interface FileTarget {
   path: string;
   line?: number;
   range?: [number, number];
-  notes?: readonly ReviewNote[];
   /** A file outside the review's repository that a navigation answer named; it opens read-only. */
   outside?: boolean;
 }

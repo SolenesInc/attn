@@ -62,8 +62,9 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 A long line wraps in a stop. The file view, which the Walkthrough also shows
 beside its explanation, keeps each line on one row: ⇧← and ⇧→ scroll it
 sideways by half its width. In the file view, ← and → move to the previous or
-next change, and the agent's note on the cursor's line shows under the file,
-with your own notes on it. In a stop on a markdown file on this computer, `o`
+next change. However you opened the file, the lines the agent's notes explain
+are marked, and the note on the cursor's line shows under the file, with your
+own notes on it. In a stop on a markdown file on this computer, `o`
 opens the file in an editor tile.
 
 ## Switch the frame

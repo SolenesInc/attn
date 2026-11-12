@@ -277,6 +277,67 @@ describe('App review reader', () => {
     expect(cursor(tileElement)).toHaveAttribute('data-line', '4');
   });
 
+  describe('a file opened from anywhere', () => {
+    const TWO_STOPS_DOCUMENT = DOCUMENT.replace('## Not shown', '### calc.go:9-10\n\n- L9: Order flipped.\n\n## Not shown');
+    const TWO_STOPS: ReviewBundle = {
+      ...BUNDLE,
+      stops: [
+        ...BUNDLE.stops,
+        {
+          heading_line: 26, path: 'calc.go', from: 9, to: 10, now_from: 9, now_to: 10, changed_since_presented: false, file_hash: 'h1',
+          rows: CALC_FILE.slice(-4),
+          notes: [{ line: 28, from: 9, to: 9, now_from: 9, now_to: 9, look: false, text: 'Order flipped.' }],
+        },
+      ],
+      navigation: [{ language: 'go', state: 'ready', file: 'calc.go' }],
+    };
+
+    const litRows = (scope: HTMLElement) => Array.from(fileView(scope)!.querySelectorAll('.review-file-view-row--look, .review-file-view-row--noted')).map((element) => element.textContent);
+    const strip = (scope: HTMLElement) => fileView(scope)!.querySelector('.review-file-view-marks')?.textContent ?? '';
+
+    const entries: Array<[string, (view: Awaited<ReturnType<typeof openReview>>) => Promise<void>]> = [
+      ['a stop', async ({ press }) => {
+        await press('ArrowRight');
+        await press('Enter');
+      }],
+      ['the file list', async ({ press }) => {
+        await press('ArrowDown');
+        await press('ArrowDown');
+        await press('Enter');
+        await press('ArrowDown');
+        await press('Enter');
+      }],
+      ['search', async ({ tileElement, daemon, reader }) => {
+        fireEvent.keyDown(tileElement.querySelector('.desktop-dock-tile-body')!, { key: '/' });
+        const input = reader.getByRole('textbox', { name: 'Search' });
+        fireEvent.change(input, { target: { value: 'calc' } });
+        await act(() => vi.advanceTimersByTimeAsync(0));
+        await daemon.idle();
+        fireEvent.keyDown(input, { key: 'Enter' });
+        await daemon.idle();
+      }],
+      ['a navigation answer', async ({ daemon, press }) => {
+        daemon.on('code_nav', () => ({ event: 'code_nav_result', success: true, language: 'go', locations: [{ path: 'calc.go', line: 1, character: 0, end_line: 1, end_character: 7, text: 'package calc', outside: false }] }));
+        await press('ArrowRight');
+        await press('f');
+        await press('s');
+      }],
+    ];
+
+    it.each(entries)('shows the notes of every stop in the file, opened from %s', async (_name, enter) => {
+      const view = await openReview({ review: TWO_STOPS, content: TWO_STOPS_DOCUMENT });
+      await enter(view);
+      const { tileElement, press } = view;
+      expect(fileView(tileElement)).toHaveTextContent('calc.go');
+      expect(litRows(tileElement)).toEqual(['4+\tsum := a + b', '5+\treturn sum', '9+\treturn b - a']);
+
+      for (let step = 0; step < 12 && !fileCursorText(tileElement)?.startsWith('9+'); step += 1) await press('ArrowDown');
+      expect(fileCursorText(tileElement)).toBe('9+\treturn b - a');
+      expect(strip(tileElement)).toContain('Order flipped.');
+      expect(strip(tileElement)).not.toContain('The sum gets a name.');
+    });
+  });
+
   it('keeps an open file view current: a new bundle reads the file again and the cursor stays on its line', async () => {
     const { tileElement, daemon, press, fileReads } = await openReview();
     await press('ArrowRight');

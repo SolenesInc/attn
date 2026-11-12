@@ -58,7 +58,7 @@ export function NoteRow({ note }: { note: ReviewNote }) {
 
 export function stopTarget(stop: ReviewStop, line?: number): FileTarget {
   const range: [number, number] | undefined = stop.now_from ? [stop.now_from, stop.now_to] : undefined;
-  return { path: stop.path, line: line ?? range?.[0], range, notes: stop.notes };
+  return { path: stop.path, line: line ?? range?.[0], range };
 }
 
 function noteCovers(note: ReviewNote, line: number | undefined): boolean {
