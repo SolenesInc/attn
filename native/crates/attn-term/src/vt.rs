@@ -5,6 +5,7 @@ use crate::grid::{
     BOLD, Cell, Cursor, CursorStyle, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE,
     Width,
 };
+use crate::markdown::Look;
 use crate::mouse;
 use crate::theme::Theme;
 
@@ -57,6 +58,19 @@ pub struct LinkRow {
 #[repr(C)]
 struct TrackedRef {
     _private: [u8; 0],
+}
+
+const STYLE_BOLD: u16 = 1 << 0;
+const STYLE_ITALIC: u16 = 1 << 1;
+const STYLE_STRIKETHROUGH: u16 = 1 << 6;
+const STYLE_UNDERLINE: u16 = 0x7 << 8;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct CellLook {
+    flags: u16,
+    colored: bool,
+    spacer: bool,
 }
 
 /// A screen cell the terminal keeps up to date as its history drops old rows and it reflows,
@@ -129,6 +143,13 @@ unsafe extern "C" {
         end: u16,
         out: *mut u32,
         cap: usize,
+    ) -> usize;
+    fn attn_term_row_looks(
+        t: *mut AttnTerm,
+        row: u32,
+        start: u16,
+        end: u16,
+        out: *mut CellLook,
     ) -> usize;
     fn attn_term_row_continues(t: *mut AttnTerm, row: u32) -> bool;
     fn attn_term_row_links(t: *mut AttnTerm, row: u32) -> bool;
@@ -537,6 +558,39 @@ impl Vt {
             .map(|col| links.then(|| self.cell_uri(row, col)).flatten())
             .collect();
         LinkRow { cells, uris }
+    }
+
+    /// Columns `cols` of screen row `row` as Markdown reads them: each cell's text and look, a
+    /// wide character once.
+    pub fn row_looks(&mut self, row: u32, cols: std::ops::Range<u16>) -> Vec<(String, Look)> {
+        let mut looks = vec![CellLook::default(); usize::from(cols.end.saturating_sub(cols.start))];
+        let n = unsafe {
+            attn_term_row_looks(
+                self.raw.as_ptr(),
+                row,
+                cols.start,
+                cols.end,
+                looks.as_mut_ptr(),
+            )
+        };
+        looks.truncate(n);
+        cols.zip(looks)
+            .filter(|(_, look)| !look.spacer)
+            .map(|(col, look)| {
+                let has = |mask: u16| look.flags & mask != 0;
+                let text = self.row_text(row, col..col + 1);
+                (
+                    text,
+                    Look {
+                        bold: has(STYLE_BOLD),
+                        italic: has(STYLE_ITALIC),
+                        strikethrough: has(STYLE_STRIKETHROUGH),
+                        underline: has(STYLE_UNDERLINE),
+                        colored: look.colored,
+                    },
+                )
+            })
+            .collect()
     }
 
     /// Screen row `row` continues the row above it, which wrapped into it.

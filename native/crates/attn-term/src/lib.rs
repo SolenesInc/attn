@@ -4,6 +4,7 @@ mod font;
 mod grid;
 pub mod keys;
 pub mod links;
+pub mod markdown;
 pub mod mouse;
 mod render;
 pub mod responses;

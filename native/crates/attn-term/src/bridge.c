@@ -305,6 +305,52 @@ size_t attn_term_row_text(AttnTerm *t, uint32_t row, uint16_t start, uint16_t en
   return n;
 }
 
+typedef struct {
+  uint16_t flags;
+  bool colored;
+  bool spacer;
+} AttnLook;
+
+static GhosttyColorRgb attn_term_fg(GhosttyStyleColor color, GhosttyColorRgb fg,
+                                    const GhosttyColorRgb *palette) {
+  switch (color.tag) {
+    case GHOSTTY_STYLE_COLOR_PALETTE:
+      return palette[color.value.palette];
+    case GHOSTTY_STYLE_COLOR_RGB:
+      return color.value.rgb;
+    default:
+      return fg;
+  }
+}
+
+size_t attn_term_row_looks(AttnTerm *t, uint32_t row, uint16_t start, uint16_t end,
+                           AttnLook *out) {
+  GhosttyColorRgb fg = {0};
+  GhosttyColorRgb palette[256] = {{0}};
+  ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND, &fg);
+  ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, palette);
+  size_t n = 0;
+  for (uint16_t x = start; x < end; x++, n++) {
+    GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
+                          .value = {.coordinate = {.x = x, .y = row}}};
+    GhosttyGridRef ref = {0};
+    if (ghostty_terminal_grid_ref(t->terminal, point, &ref) != GHOSTTY_SUCCESS) break;
+    GhosttyCell cell = 0;
+    ghostty_grid_ref_cell(&ref, &cell);
+    GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide);
+    GhosttyStyle style = {0};
+    ghostty_grid_ref_style(&ref, &style);
+    GhosttyColorRgb color = attn_term_fg(style.fg_color, fg, palette);
+    out[n] = (AttnLook){
+        .flags = style.flags,
+        .colored = color.r != fg.r || color.g != fg.g || color.b != fg.b,
+        .spacer = wide == GHOSTTY_CELL_WIDE_SPACER_TAIL,
+    };
+  }
+  return n;
+}
+
 static bool attn_term_ref(AttnTerm *t, uint32_t row, uint16_t col, GhosttyGridRef *ref) {
   GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
                         .value = {.coordinate = {.x = col, .y = row}}};

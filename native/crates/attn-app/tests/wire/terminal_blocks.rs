@@ -6,14 +6,7 @@ use rune::PointerButton;
 use serde_json::Value;
 
 use super::terminal::{attached, cell, inputs, live_with_modes, one_terminal, output};
-use super::terminal_view::{COPY, copied, view};
-
-/// The copy-command key: ⇧⌘C on macOS, Ctrl+Alt+C elsewhere.
-const COPY_COMMAND: &str = if cfg!(target_os = "macos") {
-    "mod+shift+c"
-} else {
-    "ctrl+alt+c"
-};
+use super::terminal_view::{COPY, COPY_COMMAND, copied, view};
 
 /// A shell's prompt, its command line and its output, marked with OSC 133 as an integrated
 /// shell marks them, ending on the next prompt.

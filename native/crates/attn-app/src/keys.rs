@@ -122,8 +122,8 @@ fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
 
 /// Copies the terminal's selection or selected block, or pastes into it where the window does
 /// not already: true when the key is the terminal's, so it never reaches the program. Copy is
-/// always the terminal's, even with nothing to copy; copying a command is only with a block
-/// selected.
+/// always the terminal's, even with nothing to copy; ⇧⌘C copies the selection as Markdown, or
+/// else the selected block's command, and is the program's when there is neither.
 fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool {
     match chord {
         Clipboard::Copy => {
@@ -133,12 +133,13 @@ fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool
             true
         }
         Clipboard::CopyCommand => {
-            let command = state.terminals.block_id(id).and_then(|block| {
+            let text = state.terminals.copy_markdown(id).or_else(|| {
+                let block = state.terminals.block_id(id)?;
                 state
                     .terminals
                     .block_text(id, block, crate::terminal::Part::Command)
             });
-            command.map(|text| tx.copy(text)).is_some()
+            text.map(|text| tx.copy(text)).is_some()
         }
         Clipboard::Paste if KeyPlatform::current() == KeyPlatform::Mac => false,
         Clipboard::Paste => {

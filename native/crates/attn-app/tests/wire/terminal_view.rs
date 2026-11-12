@@ -13,6 +13,14 @@ pub(crate) const COPY: &str = if cfg!(target_os = "macos") {
     "mod+shift+c"
 };
 
+/// The copy-command key, which copies a selection as Markdown: ⇧⌘C on macOS, Ctrl+Alt+C
+/// elsewhere.
+pub(crate) const COPY_COMMAND: &str = if cfg!(target_os = "macos") {
+    "mod+shift+c"
+} else {
+    "ctrl+alt+c"
+};
+
 pub(crate) fn view(world: &World) -> Value {
     world
         .runtime()
@@ -223,6 +231,39 @@ fn copied_lines_lose_the_indent_they_share() {
     world.settle();
     drag(&mut world, (0, 0), (20, 2));
     assert_eq!(copied(&world).as_deref(), Some("one\n  two\nthree"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_copy_command_key_copies_a_selection_as_markdown_with_its_styles() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    let cols = usize::from(world.terminal_size("r1").0);
+    let filler = "w".repeat(cols - 1);
+    let styled = format!(
+        "Use \x1b[32mattn\x1b[0m and \x1b[1mbold\x1b[0m and \x1b[3mit\x1b[0m\r\n{filler} \x1b[1mtail\x1b[0m\r\n"
+    );
+    output(&world, 1, styled.as_bytes());
+    world.settle();
+    drag(&mut world, (0, 0), (10, 2));
+    assert_eq!(
+        copied(&world),
+        Some(format!("Use attn and bold and it\n{filler}\ntail")),
+        "plain copy keeps the wrapped rows apart"
+    );
+
+    world.gesture(|app| app.press(COPY_COMMAND));
+    assert_eq!(
+        copied(&world),
+        Some(format!(
+            "Use `attn` and **bold** and *it*\n{filler} **tail**"
+        ))
+    );
+    assert_eq!(
+        inputs(&world),
+        [],
+        "the copy-command key reaches no program"
+    );
     assert!(world.runtime_is_at_rest());
 }
 

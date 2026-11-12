@@ -1,3 +1,4 @@
+use attn_term::markdown::{Line, styled_markdown};
 use attn_term::selection::{Anchor, Point, Selection, clean_lines, word_at};
 use attn_term::{Mark, Overlay, OverlayKind, Rgb, Theme, Vt};
 
@@ -210,6 +211,21 @@ impl Terminals {
         }
         let block = self.block_id(id)?;
         self.block_text(id, block, super::blocks::Part::Whole)
+    }
+
+    /// What ⇧⌘C copies from terminal `id` while text is selected: the selection as Markdown.
+    pub(crate) fn copy_markdown(&mut self, id: &str) -> Option<String> {
+        let term = self.panes.get_mut(id)?;
+        let selection = term.view.selection()?;
+        let cols = term.vt.size().0;
+        let lines: Vec<Line> = selection
+            .rows(cols)
+            .map(|(row, span)| {
+                let wrapped = term.vt.row_continues(row);
+                Line::of_cells(term.vt.row_looks(row, span), wrapped)
+            })
+            .collect();
+        Some(styled_markdown(&lines)).filter(|text| !text.is_empty())
     }
 
     /// A click ended at `at` in terminal `id` with nothing selected: it selects the block there.
