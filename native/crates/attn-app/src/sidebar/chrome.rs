@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -17,19 +17,30 @@ pub struct Chip {
     pub slot: i64,
     pub title: String,
     pub current: bool,
-    pub waiting: bool,
+    /// The turns waiting on agents of this desktop.
+    pub waiting: usize,
 }
 
-/// The chips of the desktops that have a shortcut slot, in slot order, and how many
-/// desktops have none.
-pub fn chips(state: &State, bands: Option<&Bands<'_>>) -> (Vec<Chip>, usize) {
+/// The desktops without a shortcut slot, as one chip.
+pub struct Extras {
+    pub count: usize,
+    pub waiting: usize,
+}
+
+/// The chips of the desktops that have a shortcut slot, in slot order, and the desktops
+/// that have none.
+pub fn chips(state: &State, bands: Option<&Bands<'_>>) -> (Vec<Chip>, Extras) {
     let facts = &state.facts;
     let current = (state.window.view == View::Desktop)
         .then(|| facts.current_desktop().map(|d| d.id.clone()))
         .flatten();
-    let waiting: HashSet<&str> = bands
-        .map(|b| b.turns.iter().filter_map(|r| r.desktop).collect())
-        .unwrap_or_default();
+    let mut waiting: HashMap<&str, usize> = HashMap::new();
+    for desktop in bands
+        .iter()
+        .flat_map(|b| b.turns.iter().filter_map(|r| r.desktop))
+    {
+        *waiting.entry(desktop).or_default() += 1;
+    }
     let mut chips: Vec<Chip> = ordered_desktops(&facts.desktops)
         .into_iter()
         .filter_map(|d| {
@@ -39,22 +50,35 @@ pub fn chips(state: &State, bands: Option<&Bands<'_>>) -> (Vec<Chip>, usize) {
                 slot,
                 title: desktop_title(d, &facts.desktops),
                 current: current.as_deref() == Some(d.id.as_str()),
-                waiting: waiting.contains(d.id.as_str()),
+                waiting: waiting.get(d.id.as_str()).copied().unwrap_or(0),
             })
         })
         .collect();
     chips.sort_by_key(|c| c.slot);
-    let extras = facts.desktops.len() - chips.len();
+    let slotted: HashSet<&str> = chips.iter().map(|c| c.desktop.as_str()).collect();
+    let extras = Extras {
+        count: facts.desktops.len() - chips.len(),
+        waiting: facts
+            .desktops
+            .iter()
+            .filter(|d| !slotted.contains(d.id.as_str()))
+            .map(|d| waiting.get(d.id.as_str()).copied().unwrap_or(0))
+            .sum(),
+    };
     (chips, extras)
 }
 
-pub(crate) fn chip(prefix: &str, chip: &Chip, t: &Tokens) -> El {
+/// How a chip shows the turns waiting on its desktops: the queue sidebar's strip with a dot,
+/// the queue bar with their number.
+#[derive(Clone, Copy)]
+pub(crate) enum Mark {
+    Dot,
+    Count,
+}
+
+pub(crate) fn chip(prefix: &str, chip: &Chip, mark: Mark, t: &Tokens) -> El {
     let desktop = chip.desktop.clone();
-    let label = if chip.waiting {
-        format!("{}, has turns waiting", chip.title)
-    } else {
-        chip.title.clone()
-    };
+    let label = format!("{}{}", chip.title, waiting_words(chip.waiting, mark));
     row()
         .key(format!("{prefix}.{}", chip.slot))
         .role("button")
@@ -75,22 +99,44 @@ pub(crate) fn chip(prefix: &str, chip: &Chip, t: &Tokens) -> El {
         .child(
             text(chip.slot.to_string())
                 .font(type_::MONO_CAPTION)
-                .color(if chip.waiting {
-                    t.warning
-                } else {
-                    t.text_secondary
-                }),
+                .color(t.text_secondary),
         )
+        .children(waiting_mark(chip.waiting, mark, t))
 }
 
-fn extras_chip(key: &str, extras: usize, t: &Tokens) -> Option<El> {
-    (extras > 0).then(|| {
+fn waiting_words(waiting: usize, mark: Mark) -> String {
+    match (waiting, mark) {
+        (0, _) => String::new(),
+        (_, Mark::Dot) => ", has turns waiting".into(),
+        (1, Mark::Count) => ", 1 turn waiting".into(),
+        (n, Mark::Count) => format!(", {n} turns waiting"),
+    }
+}
+
+fn waiting_mark(waiting: usize, mark: Mark, t: &Tokens) -> Option<El> {
+    (waiting > 0).then(|| match mark {
+        Mark::Dot => rune::el()
+            .size(5.0, 5.0)
+            .radius(2.5)
+            .fill(t.warning)
+            .ml(2.0),
+        Mark::Count => text(waiting.to_string())
+            .font(type_::MONO_CAPTION)
+            .color(t.warning)
+            .ml(2.0),
+    })
+}
+
+fn extras_chip(key: &str, extras: Extras, mark: Mark, t: &Tokens) -> Option<El> {
+    let Extras { count, waiting } = extras;
+    (count > 0).then(|| {
         row()
             .key(key.to_owned())
             .role("button")
             .label(format!(
-                "{extras} more desktop{} without a shortcut",
-                if extras == 1 { "" } else { "s" }
+                "{count} more desktop{} without a shortcut{}",
+                if count == 1 { "" } else { "s" },
+                waiting_words(waiting, mark)
             ))
             .h(22.0)
             .px(4.0)
@@ -102,10 +148,11 @@ fn extras_chip(key: &str, extras: usize, t: &Tokens) -> Option<El> {
                 crate::dispatch(state, crate::Action::DesktopOverview, tx);
             })
             .child(
-                text(format!("+{extras}"))
+                text(format!("+{count}"))
                     .font(type_::MONO_CAPTION)
                     .color(t.text_secondary),
             )
+            .children(waiting_mark(waiting, mark, t))
     })
 }
 
@@ -118,8 +165,8 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
         .label("Desktops")
         .w_full()
         .gap(space::S1)
-        .children(chips.iter().map(|c| chip("queue.desktop", c, t)))
-        .children(extras_chip("queue.desktop-extras", extras, t))
+        .children(chips.iter().map(|c| chip("queue.desktop", c, Mark::Dot, t)))
+        .children(extras_chip("queue.desktop-extras", extras, Mark::Dot, t))
 }
 
 /// The desktop sidebar collapsed: Home, the way back out, and the desktops' chips.
@@ -169,8 +216,8 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .on_press(|state: &mut State| state.window.sidebar_hidden = false)
                 .child(text("»").font(type_::BODY).color(t.text_secondary)),
         )
-        .children(chips.iter().map(|c| chip("rail.desktop", c, t)))
-        .children(extras_chip("rail.desktop-extras", extras, t))
+        .children(chips.iter().map(|c| chip("rail.desktop", c, Mark::Dot, t)))
+        .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t))
 }
 
 /// The title bar's own controls on the left: the flow switch and the sidebar toggle.
@@ -278,6 +325,15 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                     t.text_primary
                 })),
         )
-        .children(chips.iter().map(|c| chip("queue-bar.desktop", c, t)))
-        .children(extras_chip("queue-bar.desktop-extras", extras, t))
+        .children(
+            chips
+                .iter()
+                .map(|c| chip("queue-bar.desktop", c, Mark::Count, t)),
+        )
+        .children(extras_chip(
+            "queue-bar.desktop-extras",
+            extras,
+            Mark::Count,
+            t,
+        ))
 }

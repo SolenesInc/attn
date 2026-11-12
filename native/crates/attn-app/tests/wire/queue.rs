@@ -246,7 +246,7 @@ fn collapsing_the_queue_sidebar_moves_the_waiting_pill_and_the_desktops_into_the
     assert_eq!(name(&world, "queue-bar.pill"), "4 waiting · a › b › c +1");
     assert_eq!(
         name(&world, "queue-bar.desktop.1"),
-        "Desktop 1, has turns waiting"
+        "Desktop 1, 4 turns waiting"
     );
 
     world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
@@ -332,11 +332,12 @@ fn the_previous_and_next_keys_walk_the_queue_from_the_agent_on_screen_and_wrap()
 }
 
 #[test]
-fn the_desktop_strip_puts_each_slotted_desktop_on_a_chip_marked_where_a_turn_waits() {
-    let mut message = queue(one_desktop(vec![turn("t1", 5)]));
+fn the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them() {
+    let mut message = queue(one_desktop(vec![turn("t1", 5), turn("t2", 4)]));
+    message.sessions.as_mut().unwrap().push(turn("t3", 3));
     message.desktops.as_mut().unwrap().extend([
         slotted(desktop("d2", "b", "Review", vec![]), 2),
-        desktop("d3", "c", "Loose", vec![]),
+        desktop("d3", "c", "Loose", vec![pane("d3", "p9", "t3")]),
     ]);
     let mut world = World::start(Daemon::scripted().state(message));
 
@@ -350,9 +351,28 @@ fn the_desktop_strip_puts_each_slotted_desktop_on_a_chip_marked_where_a_turn_wai
         [
             "Desktop 1, has turns waiting",
             "Review",
-            "1 more desktop without a shortcut"
+            "1 more desktop without a shortcut, has turns waiting"
         ]
     );
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    assert_eq!(
+        world
+            .screen()
+            .children(Target::key("queue-bar"))
+            .into_iter()
+            .filter(|n| n
+                .key
+                .as_deref()
+                .is_some_and(|k| k.starts_with("queue-bar.desktop")))
+            .filter_map(|n| n.name)
+            .collect::<Vec<_>>(),
+        [
+            "Desktop 1, 2 turns waiting",
+            "Review",
+            "1 more desktop without a shortcut, 1 turn waiting"
+        ]
+    );
+    world.gesture(|app| app.click(Target::role("button").name("Show sidebar")));
 
     world.gesture(|app| app.click(Target::key("queue.desktop.2")));
     let set = world.daemon.sent_of("desktop_set_current");
