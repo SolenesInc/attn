@@ -81,6 +81,28 @@ Preconditions:
 - **Settings from home.** Go home with ⌘⇧H and click `[data-testid="settings-button"]` natively: `bridge dom_wait '{"selector":"[data-testid=\"settings-nav-general\"]","timeoutMs":5000}'` matches. Press Escape. The "+ New" button starts a new agent, whose recipe is in [agent-launch.md](agent-launch.md).
 - **Proof.** In `$P`, keep `bridge home_get_state` after each step on home, `bridge notifications_get_state` with the popover open, `bridge get_state` after each way home, and the `./attn` commands' output and exit codes. Capture `bridge capture_screenshot '{"path":"<P>/home-desktop-flow.png"}'` with the agent in a state group, `<P>/home-all-settled.png` with the banner, and `<P>/whats-new.png` with the intro open. Write `<P>` out as the folder's path. Name each file for its way in, such as `home-key-state.json`.
 
+### In the native app
+
+The native app (`native/`) opens on home and shows the Sessions card by state in desktop flow, "Your turn" and "Settled" in queue flow, "All settled" with its follow checkbox, and the snoozed group with each agent's wake button. What's new and its banner, notifications, toasts, the asks group, the PR card and the rate-limit banner drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"home"}}'`.
+- Make `P` and `A` with the fixture above and start `home-a` with `wsctl add-session --cwd $A --agent claude --label home-a --id home-a --place`.
+
+Steps:
+
+- **Home groups agents by state.** `bridge wait '{"target":{"key":"home.session.home-a"}}'` answers inside `home.group.waiting`, or the group for the state `wsctl list` shows.
+- **Open an agent from home, and home with the key.** Run `bridge press '{"target":{"key":"home.session.home-a"}}'`: `bridge state '{"of":"window"}'` shows `view: "Desktop"` and `on_screen: "home-a"`. Press `bridge key '{"chord":"mod+shift+h"}'`: `view` is `Home`.
+- **Home from the sidebar and the rail.** Open `home-a` again and run `bridge press '{"target":{"key":"sidebar.home"}}'`: `view` is `Home`. Open it again, press `mod+b` and run `bridge press '{"target":{"key":"rail.home"}}'`: `view` is `Home`. Press `mod+b` to expand.
+- **Snoozed agents.** Run `./attn session snooze home-a --until 1h`. `bridge wait '{"target":{"key":"home.group.snoozed.toggle"}}'` answers, and `bridge tree` shows it collapsed. Press it: the tree shows it expanded, and `home.session.home-a` shows with its due time in `home.session.home-a.when`. Run `bridge press '{"target":{"key":"home.session.home-a.unsnooze"}}'`: `./attn session list --tree` no longer shows `snoozed until` for `home-a`, and the snoozed group goes.
+- **Your turn.** Run `./attn settings set queue_mode_enabled true`: `home.session.home-a` shows inside `home.group.turns`.
+- **All settled, then the next turn.** Open `home-a` and press `mod+shift+e`. The app goes home: `bridge wait '{"target":{"key":"home.all-settled"}}'` answers and `bridge tree` shows `home.follow` checked. Run `wsctl input --id <terminal> --text "question" --enter`. When the agent stops, `bridge state '{"of":"window","includes":"home-a"}'` shows `on_screen: "home-a"`.
+- **Stay home instead.** Settle `home-a` again, then run `bridge press '{"target":{"key":"home.follow"}}'`: the tree shows it unchecked. Send `question` again. The user stays home, and the row returns under `home.group.turns`.
+- **Settings and a new agent from home.** Run `bridge press '{"target":{"key":"home.settings"}}'` and `bridge press '{"target":{"key":"home.new"}}'`: each opens its feature, whose recipe is in its own file.
+- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each way home, the `./attn` commands' output and `bridge tree` after each step on home. Capture `bridge shot '{"path":"<P>/native-home.png"}'` with the agent in a state group and `<P>/native-home-all-settled.png` with "All settled", with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: home reads the daemon's sessions, turns and snoozes, so it shows the same after any restart. Notifications and what the user read are the daemon's records. The app remembers in its own storage that the user saw What's new and its banner. The follow checkbox is not kept. attn ticks the checkbox only when the user settles or snoozes the last turn, and clears it when the user goes anywhere.
@@ -93,8 +115,8 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
-- Scenario: `focusless-native` (parked macOS native input), `home-dock`.
+- Wire: `native/crates/attn-app/tests/wire/home.rs` (the native app), `internal/daemon/notifications_wire_test.go`; a session's failed title reaching only its profile in `internal/daemon/session_title_wire_test.go`.
+- Scenario: `native-agent-queue` (the native app's All settled and wake), `focusless-native` (parked macOS native input), `home-dock`.
 - Kernel: `internal/store/notifications_test.go`, `internal/daemon/notifications_render_test.go`.
 - App: `app/src/App.dashboard.test.tsx`, `app/src/App.homeDock.test.tsx`, `app/src/App.notifications.test.tsx`, `app/src/App.criticalNotifications.test.tsx`, `app/src/App.whatsNew.test.tsx`, `app/src/components/Toast.lifecycle.test.tsx`.
 

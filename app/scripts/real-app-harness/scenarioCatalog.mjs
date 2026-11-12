@@ -237,6 +237,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-agent-queue',
+    runnerId: 'NATIVE-AGENT-QUEUE',
+    label: 'The native queue lists turns oldest first, opens a row, hands over on settle and snooze, lands on home and takes a woken agent back',
+    command: ['node', 'scripts/real-app-harness/scenario-native-agent-queue.mjs'],
+    app: 'native',
+  },
+  {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
     label: 'Row keys walk onto and off an empty desktop',

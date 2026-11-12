@@ -68,6 +68,28 @@ Preconditions:
 - **Width setting.** Press ⌘, and click `[data-testid="settings-nav-general"]` natively. Click `[data-testid="settings-sidebar-width"]` natively, press ⌘A, type `360` and press Enter: `./attn settings get sidebar_width` prints 360 and the sidebar moves. Type `900` and press Enter: `.settings-warning` shows `sidebar_width must be a whole number from 200 to 600, got "900"` and the setting stays 360. Type `360` again and press Enter. Run `./attn settings set sidebar_width 300`: the field shows 300 and the sidebar moves. Click `[data-testid="settings-sidebar-width-reset"]` natively: `./attn settings get sidebar_width` prints nothing, the sidebar is 240px and the button leaves. The field is empty until a relaunch, when the daemon's snapshot fills it with 240. Run `./attn settings set sidebar_width 900`: it exits 1 with the same message.
 - **Proof.** In `$P`, keep `bridge get_state` after each step and `bridge queue_get_state` after each shape change, and capture each shape: `bridge capture_screenshot '{"path":"<P>/desktop-sidebar.png"}'`, then `rail.png`, `queue-sidebar.png` and `queue-bar.png`, with `<P>` written out. Name each file for its way in, such as `sidebar-collapse-key-state.json`.
 
+### In the native app
+
+The native app (`native/`) draws both sidebars, the rail, the queue bar, the agent list and its filter, each row's actions menu, the resize edge and the width keys, and drags desktops into a new order. The palette, Settings, notifications, the title bar's feature buttons and resizing beside a browser tile drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'`.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance, then `bridge wait '{"target":{"key":"sidebar"}}'`. The native app opens on home.
+- Make `P` and `A` and start `side-a` and `side-b` as above, each with `--place`. Open `side-b` from its row and press `mod+alt+2` to send it to desktop 2. `bridge state '{"of":"desktops"}'` then lists two desktops: `<first desktop>` holding `side-a` and `<second desktop>` holding `side-b`.
+
+Steps:
+
+- **Open an agent and a desktop from their rows.** `bridge wait '{"target":{"key":"sidebar.session.side-a"}}'` answers with the row "Open side-a". Run `bridge press` on it: `bridge state '{"of":"window"}'` shows `view: "Desktop"` and `on_screen: "side-a"`. Run `bridge press '{"target":{"key":"sidebar.desktop.<second desktop>"}}'`: that desktop is current in `bridge state '{"of":"profiles"}'`. Run `bridge press '{"target":{"key":"sidebar.home"}}'`: `view` is `Home`.
+- **Collapse with the key and the title bar.** Press `bridge key '{"chord":"mod+b"}'`: `bridge wait '{"target":{"key":"rail"}}'` answers and `sidebar_hidden` is true. Run `bridge press '{"target":{"key":"rail.expand"}}'`: the sidebar is back. Run `bridge press '{"target":{"key":"titlebar.sidebar"}}'`: the rail again, and `mod+b` brings the sidebar back.
+- **The queue sidebar and its agent list.** Run `./attn settings set queue_mode_enabled true`: `bridge wait '{"target":{"key":"sidebar.queue"}}'` answers, with `queue-turn.side-a` and `queue-turn.side-b`. Settle `side-b` with `bridge press '{"target":{"key":"queue-turn.side-b.settle"}}'`. Press `mod+shift+a`: `bridge tree` shows `queue.filter` focused, and `queue-settled.side-b` shows. Run `bridge type '{"text":"zzz"}'`: `queue-settled.side-b` goes and the list reads "Nobody else.". Press `Escape`: the filter clears. Press `Escape` again: the list closes.
+- **The queue bar.** Press `mod+b`: `bridge wait '{"target":{"key":"queue-bar.pill"}}'` answers, named "1 waiting · side-a". Press `mod+b` again: `sidebar.queue` is back.
+- **A row's actions.** Run `bridge press '{"target":{"key":"queue-turn.side-a.actions"}}'`: `bridge wait '{"target":{"role":"menu","name":"Actions for side-a"}}'` answers, with `session.menu.priority` ("Mark priority"), `session.menu.rename`, `session.menu.reload` and `session.menu.close`. Press `Escape`: the menu closes. Run `./attn settings set queue_mode_enabled false` and press `sidebar.session.side-a.actions`: the same items. Press `session.menu.priority`: `wsctl list` shows `"priority": true` on `side-a`, and the menu's first item then reads "Unmark priority"; press it to clear the flag. Press `session.menu.rename`, `bridge type '{"text":"renamed"}'` (the old name starts selected) and `bridge key '{"chord":"Enter"}'`: `./attn agent list` shows `renamed`. Rename it back the same way.
+- **Resize by the edge.** Run `bridge drag '{"target":{"key":"sidebar.resize"},"by":[60,0]}'`: `./attn settings get sidebar_width` prints 300, and `bridge find '{"target":{"key":"sidebar"}}'` is 300 wide. Drag `"by":[-400,0]`: the setting prints 200, the narrowest. Run `./attn settings set sidebar_width ""` for the default 240.
+- **Width steps.** Press `mod+alt+]`: `./attn settings get sidebar_width` prints 280 and `bridge find '{"target":{"key":"sidebar.width-label"}}'` reads "280px" until it leaves on its own. Press `mod+alt+[` twice: 200, labelled "200px is the narrowest". Press it again: `bridge state '{"of":"window"}'` shows the notice "The sidebar can't go below 200px." and the setting stays. Press `mod+b` and then `mod+alt+]`: the notice says the sidebar is hidden and the setting stays. Press `mod+b` and clear the setting.
+- **Reorder desktops.** Read the `rect` of `sidebar.desktop.<first desktop>` and of `sidebar.session.side-b`, the last row, with `bridge find`. Run `bridge drag '{"target":{"key":"sidebar.desktop.<first desktop>"},"by":[0,<dy>]}'`, where `<dy>` is the last row's bottom edge minus the first desktop row's middle: `bridge state '{"of":"desktops"}'` lists the second desktop first. Drag the second desktop's row to the top of the list the same way to put them back.
+- **Proof.** In `$P`, keep `bridge state '{"of":"window"}'` after each step and `./attn settings get sidebar_width` after each width change, and capture `bridge shot '{"path":"<P>/native-desktop-sidebar.png"}'`, then `native-rail.png`, `native-queue-sidebar.png` and `native-queue-bar.png`, with `<P>` written out.
+
 ## Contexts
 
 - **Durability across restarts**: the sidebar's width is a daemon setting and comes back with it. The shape follows the daemon's flow setting and comes back with it. Collapsed or expanded is not kept: a relaunch starts expanded when there are sessions and collapsed when there are none, with the agent list closed. Harness logos are a daemon setting.
@@ -81,9 +103,10 @@ Preconditions:
 
 ## Tests
 
+- Wire: `native/crates/attn-app/tests/wire/sidebar.rs`, `queue.rs` and `sidebar_width.rs` (the native app).
 - App wire: `app/src/App.titleBar.test.tsx`.
 - Stack: `app/e2e/sidebar-rail.spec.ts`, `app/e2e/sidebar-tree.spec.ts`, `app/e2e/queue-bar.spec.ts`, `app/e2e/queue-sidebar-fit.spec.ts`, `app/e2e/queue-sidebar-rows.spec.ts`.
-- Scenario: `focusless-native` (parked macOS native input), `agent-queue`, `shelf-sidebar-resize`, `title-bar`.
+- Scenario: `native-sidebar-session` and `native-agent-queue` (the native app), `focusless-native` (parked macOS native input), `agent-queue`, `shelf-sidebar-resize`, `title-bar`.
 - App: `app/src/App.sidebarResize.test.tsx`, `app/src/App.sidebar.test.tsx`, `app/src/App.titleBarControls.test.tsx`, `app/src/App.sidebarLabels.test.tsx`, `app/src/App.desktopSidebar.test.tsx`, `app/src/App.agentNavigation.test.tsx`, `app/src/App.queueRows.test.tsx`, `app/src/components/Sidebar.test.tsx`, `app/src/components/QueueSidebar.sections.test.tsx`, `app/src/components/QueueBar.sections.test.tsx`.
 
 ## Gotchas
