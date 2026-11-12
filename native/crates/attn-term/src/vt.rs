@@ -56,6 +56,7 @@ unsafe extern "C" {
     fn attn_term_write(t: *mut AttnTerm, data: *const u8, len: usize);
     fn attn_term_resize(t: *mut AttnTerm, cols: u16, rows: u16, cw: u32, ch: u32) -> c_int;
     fn attn_term_size(t: *mut AttnTerm, cols: *mut u16, rows: *mut u16);
+    fn attn_term_cursor(t: *mut AttnTerm, col: *mut u16, row: *mut u16);
     fn attn_term_mode(t: *mut AttnTerm, value: u16, ansi: bool) -> bool;
     fn attn_term_mouse_tracking(t: *mut AttnTerm) -> bool;
     fn attn_term_alternate_screen(t: *mut AttnTerm) -> bool;
@@ -232,6 +233,13 @@ impl Vt {
         (cols, rows)
     }
 
+    /// The cell text goes to next, whether or not the program shows its cursor there.
+    pub fn cursor(&mut self) -> (u16, u16) {
+        let (mut col, mut row) = (0, 0);
+        unsafe { attn_term_cursor(self.raw.as_ptr(), &mut col, &mut row) };
+        (col, row)
+    }
+
     /// Resizes without reflowing history, as the daemon's own terminal does: the daemon's rows
     /// are the ones its output addresses. Ghostty reflows only under wraparound (DECAWM), so it
     /// is off for the resize.
@@ -300,8 +308,7 @@ impl Vt {
             color: frame.has_cursor_color.then_some(frame.cursor_color),
         });
         let cursor_moved = cursor != grid.cursor;
-        let caret = (frame.cursor_x, frame.cursor_y);
-        if frame.dirty == DIRTY_FALSE && !reshaped && !cursor_moved && caret == grid.caret {
+        if frame.dirty == DIRTY_FALSE && !reshaped && !cursor_moved {
             return false;
         }
         if reshaped {
@@ -344,7 +351,6 @@ impl Vt {
             }
             grid.cursor = cursor;
         }
-        grid.caret = caret;
         unsafe { attn_term_frame_done(t) };
         true
     }

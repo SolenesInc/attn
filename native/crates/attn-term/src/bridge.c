@@ -157,6 +157,11 @@ void attn_term_size(AttnTerm *t, uint16_t *cols, uint16_t *rows) {
   ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_ROWS, rows);
 }
 
+void attn_term_cursor(AttnTerm *t, uint16_t *col, uint16_t *row) {
+  ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_CURSOR_X, col);
+  ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_CURSOR_Y, row);
+}
+
 bool attn_term_mode(AttnTerm *t, uint16_t value, bool ansi) {
   GhosttyTerminalModeConfig config;
   memset(&config, 0, sizeof(config));

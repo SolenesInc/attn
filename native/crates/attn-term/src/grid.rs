@@ -62,8 +62,6 @@ pub struct Grid {
     pub cells: Vec<Cell>,
     pub dirty: Vec<bool>,
     pub cursor: Option<Cursor>,
-    /// The cell text goes to next, whether or not the program shows its cursor there.
-    pub caret: (u16, u16),
     strings: Vec<String>,
     interned: HashMap<String, u32>,
 }

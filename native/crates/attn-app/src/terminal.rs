@@ -11,7 +11,7 @@ use attn_protocol::{
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
 use attn_term::mouse::{self, Action, WheelRows};
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
-use rune::Tx;
+use rune::{Live, Tx};
 
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
 /// the Tauri app.
@@ -88,6 +88,9 @@ struct Term {
     tile: Option<Tile>,
     /// The slot the terminal draws in, in points, and the scale it draws at.
     slot: Option<((f32, f32), f32)>,
+    /// The cell text goes to next, in points from the slot's top-left, kept where output and
+    /// layout leave it so the input method's caret follows without a view run.
+    caret: Live<[f32; 4]>,
     sent_size: Option<(u16, u16)>,
     sent_at: f64,
     resize_due: Option<f64>,
@@ -162,6 +165,7 @@ impl Term {
             held: Vec::new(),
             tile: None,
             slot: None,
+            caret: Live::new([0.0; 4]),
             sent_size: None,
             sent_at: f64::NEG_INFINITY,
             resize_due: None,
@@ -304,6 +308,7 @@ impl Terminals {
             return;
         }
         term.slot = Some(((w, h), scale));
+        place_caret(term, &metrics);
         let size = metrics.fit(w, h);
         if term.agent && mid_layout(size, term.vt.size(), (w, h), &metrics) {
             return;
@@ -365,9 +370,16 @@ impl Terminals {
     /// Takes what the link heard since the last frame. Nothing it changes is in the view:
     /// terminal output needs only the frame the wake already asked for.
     pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) {
-        for event in self.inbox.take() {
+        let events = self.inbox.take();
+        let heard = !events.is_empty();
+        for event in events {
             self.apply(event, tx, daemon);
             self.undrawn = true;
+        }
+        if let (true, Some(metrics)) = (heard, self.metrics) {
+            self.panes
+                .values_mut()
+                .for_each(|term| place_caret(term, &metrics));
         }
         let now = tx.clock();
         for (id, term) in &mut self.panes {
@@ -734,14 +746,16 @@ impl Terminals {
     }
 
     /// The cell text goes to next in terminal `id`, as x, y, width and height in points from
-    /// its slot's top-left, where the window last drew it, and the font size it draws at.
-    pub(crate) fn caret(&self, id: &str) -> Option<([f32; 4], f32)> {
+    /// its slot's top-left: the top-left itself until the terminal is laid out.
+    pub(crate) fn caret(&self, id: &str) -> Option<&Live<[f32; 4]>> {
+        Some(&self.panes.get(id)?.caret)
+    }
+
+    /// The font size and line height a cell of terminal `id` draws at now.
+    pub(crate) fn cell_font(&self, id: &str) -> Option<(f32, f32)> {
         let metrics = self.metrics?;
-        let term = self.panes.get(id)?;
-        let (slot, scale) = term.slot?;
-        let grid = &term.grid;
-        let rect = metrics.cell_rect((grid.cols, grid.rows), slot, scale, grid.caret);
-        Some((rect, FONT_SIZE * rect[3] / metrics.cell_h))
+        let h = self.caret(id)?.get()[3];
+        Some((FONT_SIZE * h / metrics.cell_h, h))
     }
 
     /// The text of a terminal's screen as the window last drew it, row by row.
@@ -791,6 +805,13 @@ fn answer(id: &str, term: &mut Term, daemon: &Commands) {
     let replies = responses::without_daemon_owned(&term.vt.take_responses());
     if !replies.is_empty() {
         send_input(id, &replies, "response", daemon);
+    }
+}
+
+fn place_caret(term: &mut Term, metrics: &Metrics) {
+    if let Some((slot, scale)) = term.slot {
+        let rect = metrics.cell_rect(term.vt.size(), slot, scale, term.vt.cursor());
+        term.caret.set(rect);
     }
 }
 

@@ -340,39 +340,44 @@ fn an_input_method_commit_reaches_the_pty() {
 #[test]
 fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
     let mut world = World::start(one_terminal());
-    output(&world, 1, b"$ ");
-    world.settle();
     let starts_at = |rect: [f32; 4], (x, y): (f32, f32)| {
         let metrics = Fonts::default().metrics(FONT_SIZE);
         (rect[0] - (x - metrics.cell_w / 2.0)).abs() < 0.5
             && (rect[1] - (y - metrics.cell_h / 2.0)).abs() < 0.5
     };
+    let candidates = |world: &World| world.runtime().ime_area.expect("the input method is on");
+    let composition = |world: &World| {
+        world
+            .runtime()
+            .presented("terminal.r1.preedit")
+            .expect("the composition is drawn")
+            .0
+    };
+
+    output(&world, 1, b"$ ");
+    world.settle();
+    let area = candidates(&world);
+    assert!(
+        starts_at(area, cell(&world, 2, 0)),
+        "the first composition opens its candidates where output left the cursor: {area:?}"
+    );
 
     world.gesture(|app| app.runtime.ime(Ime::Preedit("にほn".into(), None)));
     assert!(inputs(&world).is_empty(), "a composition sends nothing");
-    let (drawn, _) = world
-        .runtime()
-        .presented("terminal.r1.preedit")
-        .expect("the composition is drawn");
+    let drawn = composition(&world);
     assert!(
         starts_at(drawn, cell(&world, 2, 0)),
         "drawn at the cursor: {drawn:?}"
-    );
-    let area = world.runtime().ime_area.expect("the input method is on");
-    assert!(
-        starts_at(area, cell(&world, 2, 0)),
-        "candidates open at the cursor: {area:?}"
     );
 
     output(&world, 2, b"\x1b[?25l");
     world.settle();
     output(&world, 3, b"\x1b[1;4H");
     world.settle();
-    world.gesture(|app| app.runtime.ime(Ime::Preedit("にほん".into(), None)));
-    let area = world.runtime().ime_area.expect("the input method is on");
+    let (area, drawn) = (candidates(&world), composition(&world));
     assert!(
-        starts_at(area, cell(&world, 3, 0)),
-        "the caret follows the cursor, shown or hidden: {area:?}"
+        starts_at(area, cell(&world, 3, 0)) && starts_at(drawn, cell(&world, 3, 0)),
+        "the caret and the composition follow the cursor, shown or hidden: {area:?} {drawn:?}"
     );
 
     world.gesture(|app| app.runtime.ime(Ime::Commit("日本".into())));
