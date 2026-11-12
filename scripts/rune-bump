@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="usage: scripts/rune-bump [--branch <fork-branch> | --rev <fork-rev>]
+
+Moves native/'s Rune pin to a new revision of the fork's attn branch and runs
+the native suite. Without options it first merges upstream's dev into attn;
+with --branch it merges that fork branch into attn instead; with --rev it moves
+the pin to a revision already on attn. A merge is tested and pushed to the fork
+before the pin moves. The pin move is left uncommitted."
+
+mode=upstream target=""
+case "${1-}" in
+  "") ;;
+  --branch | --rev)
+    [ "$#" -eq 2 ] && [ -n "$2" ] || { echo "$usage" >&2; exit 2; }
+    mode="${1#--}" target="$2" ;;
+  -h | --help) echo "$usage"; exit 0 ;;
+  *) echo "$usage" >&2; exit 2 ;;
+esac
+
+upstream="${RUNE_UPSTREAM:-https://github.com/anomalyco/rune.git}"
+fork="${RUNE_FORK:-git@github.com:SolenesInc/rune.git}"
+clone="${RUNE_CLONE:-$HOME/projects/rune}"
+attn="$(git rev-parse --show-toplevel)"
+manifest="$attn/native/Cargo.toml"
+
+logs="$(mktemp -d "${TMPDIR:-/tmp}/rune-bump.XXXXXX")"
+worktree=""
+cleanup() {
+  [ -z "$worktree" ] || git -C "$clone" worktree remove --force "$worktree" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+say() { echo "rune-bump: $*"; }
+die() { echo "rune-bump: $*" >&2; exit 1; }
+
+step_name="" steps=0 log=""
+step() {
+  step_name="$1" steps=$((steps + 1)) log="$logs/step-$steps.log"
+  say "$step_name"
+}
+run() {
+  if ! "$@" >>"$log" 2>&1; then
+    echo "rune-bump: $step_name failed: $*" >&2
+    tail -n 80 "$log" >&2
+    die "$step_name failed; its whole output is in $log"
+  fi
+}
+
+git -C "$clone" rev-parse --git-dir >/dev/null 2>&1 ||
+  die "no Rune clone at $clone; clone $fork there or set RUNE_CLONE"
+git -C "$attn" diff --quiet HEAD -- native/Cargo.toml native/Cargo.lock ||
+  die "native/Cargo.toml or native/Cargo.lock has uncommitted changes; land or drop them first"
+
+old_revs="$(grep -oE 'rev = "[0-9a-f]{40}"' "$manifest" | cut -d'"' -f2 | sort -u)"
+[ "$(wc -l <<<"$old_revs")" -eq 1 ] && [ -n "$old_revs" ] ||
+  die "native/Cargo.toml must pin exactly one Rune rev; it has: ${old_revs:-none}"
+old="$old_revs"
+
+step "fetch upstream dev and the fork"
+run git -C "$clone" fetch --no-tags "$upstream" "+refs/heads/dev:refs/rune-bump/upstream/dev"
+run git -C "$clone" fetch --no-tags "$fork" "+refs/heads/*:refs/rune-bump/fork/*"
+fork_attn=refs/rune-bump/fork/attn
+
+if [ "$mode" = rev ]; then
+  new="$(git -C "$clone" rev-parse --verify --quiet "$target^{commit}")" ||
+    die "$target is not a revision in the fork"
+  git -C "$clone" merge-base --is-ancestor "$new" "$fork_attn" ||
+    die "$new is not on the fork's attn branch; pin only revisions of attn"
+else
+  if [ "$mode" = upstream ]; then
+    incoming=refs/rune-bump/upstream/dev
+    message="Merge upstream dev into attn"
+    step "fast-forward the fork's dev to upstream"
+    git -C "$clone" merge-base --is-ancestor refs/rune-bump/fork/dev "$incoming" ||
+      die "the fork's dev has commits upstream's dev lacks; dev only mirrors upstream"
+    run git -C "$clone" push "$fork" "$incoming:refs/heads/dev"
+  else
+    incoming="refs/rune-bump/fork/$target"
+    message="Merge $target into attn"
+    git -C "$clone" rev-parse --verify --quiet "$incoming" >/dev/null ||
+      die "the fork has no branch $target"
+  fi
+
+  step "merge into attn"
+  worktree="$logs/rune"
+  run git -C "$clone" worktree add --detach "$worktree" "$fork_attn"
+  merged="$(git -C "$clone" rev-list --count "$fork_attn..$incoming")"
+  if ! git -C "$worktree" merge --no-edit -m "$message" "$incoming" >>"$logs/merge.log" 2>&1; then
+    cat "$logs/merge.log" >&2
+    conflicts="$(git -C "$worktree" diff --name-only --diff-filter=U | tr '\n' ' ')"
+    [ -n "$conflicts" ] || die "merging $incoming into attn failed"
+    die "merging $incoming into attn conflicts in: $conflicts
+resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/rune-bump --rev <merged attn rev>"
+  fi
+  new="$(git -C "$worktree" rev-parse HEAD)"
+  say "merged $merged commits; attn is now $(git -C "$worktree" log -1 --format='%h %s')"
+
+  step "run the tests FORK.md lists"
+  ledger="$(awk -F'|' -v os="$(uname -s)" '
+    /^\|/ && $(NF-1) !~ /^[ -]*$/ && $(NF-1) !~ /^ *Test *$/ {
+      rest = $(NF-1)
+      while (match(rest, /`[^`]+`( \(macOS\))?/)) {
+        token = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+        if (token ~ /\(macOS\)$/ && os != "Darwin") continue
+        sub(/ \(macOS\)$/, "", token)
+        gsub(/`/, "", token)
+        print token
+      }
+    }' "$worktree/FORK.md")"
+  [ -n "$ledger" ] || die "FORK.md lists no tests"
+  # shellcheck disable=SC2086
+  (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit --lib -- $ledger)
+  missing=""
+  while IFS= read -r test; do
+    grep -qxF "test $test ... ok" "$log" && say "  ok $test" || missing+=" $test"
+  done <<<"$ledger"
+  [ -z "$missing" ] || die "FORK.md lists tests that did not run:$missing; fix FORK.md or the test names"
+
+  step "push the fork's attn"
+  run git -C "$worktree" push "$fork" "HEAD:refs/heads/attn"
+fi
+
+step "move the pin from $old to $new"
+patch_keys() {
+  sed -n '/^\[patch.crates-io\]/,/^\[/p' | grep -oE '^[A-Za-z0-9_-]+ *=' | tr -d ' =' | sort || true
+}
+rune_manifest="$(git -C "$clone" show "$new:Cargo.toml")" || die "cannot read Rune's Cargo.toml at $new"
+if ! diff <(patch_keys <<<"$rune_manifest") <(patch_keys <"$manifest") >"$logs/patches.diff"; then
+  cat "$logs/patches.diff" >&2
+  die "Rune's [patch.crates-io] at $new differs from native/Cargo.toml's (< Rune, > native); copy Rune's entries into native/Cargo.toml, pointed at the fork, commit, then run scripts/rune-bump --rev $new"
+fi
+OLD="$old" NEW="$new" perl -pi -e 's/\Q$ENV{OLD}\E/$ENV{NEW}/g' "$manifest"
+(cd "$attn/native" && run cargo update -p rune)
+
+step "run the native suite"
+(cd "$attn" && run make test-native) || {
+  die "the native suite fails at $new; the pin move stays in native/ for you to fix or drop, and must not land red"
+}
+grep -E '^test result' "$log" | sed 's/^/rune-bump:   /'
+
+rm -rf "$logs"
+say "pinned Rune $new (was $old); native/Cargo.toml and native/Cargo.lock are ready to land"

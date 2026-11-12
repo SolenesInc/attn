@@ -39,24 +39,58 @@ Do not open issues, pull requests or discussions on `anomalyco/rune`.
 4. Run `cargo test -p rune -p rune-kit` for the areas you touched. A test that
    runs only on macOS runs in the fork's `fork macOS tests` workflow
    (`.github/workflows/fork-macos.yml`), on each push to `attn` and on request.
-5. Add the patch's line to `FORK.md`.
+5. Add the patch's line to `FORK.md`. Name each test in the Test column by its
+   path in backticks, followed by `(macOS)` when it runs only on macOS:
+   `scripts/rune-bump` runs exactly those names.
 6. Merge your branch into `attn` and push. Do not rewrite `attn`.
 7. Name the new revision on your seed. Do not change the pin in `native/`.
 
 ## Merge upstream every week
 
-1. Fast-forward the fork's `dev` to upstream's `dev` and push it.
-2. Merge `dev` into `attn`. Resolve conflicts in the patched areas, and drop a
-   patch whose bug upstream has fixed.
-3. Run the tests of every patch in `FORK.md`, on Linux and in the macOS
-   workflow.
-4. Push `attn`.
+`scripts/rune-bump` merges upstream and moves the pin in one command, from an
+attn checkout on a clean `main`:
+
+```sh
+scripts/rune-bump
+```
+
+It works in a clone of Rune at `~/projects/rune` (set `RUNE_CLONE` for another)
+and fetches upstream and the fork by URL, so the clone's remotes do not matter.
+In order, it:
+
+1. fast-forwards the fork's `dev` to upstream's `dev` and pushes it;
+2. merges `dev` into `attn` in a temporary worktree of the clone;
+3. runs every test `FORK.md` names, on this machine's OS, and fails when one
+   fails or does not run, so a stale ledger line is caught;
+4. pushes `attn`;
+5. fails when the crates Rune's `[patch.crates-io]` names at the new revision
+   differ from those `native/Cargo.toml` repeats;
+6. replaces the rev in `native/Cargo.toml`, runs `cargo update -p rune` and the
+   native suite (`make test-native`).
+
+It stops at the first step that fails, names it and prints its output. Nothing
+is pushed to `attn` before its tests pass. The pin move is left uncommitted:
+commit it and land it with `scripts/land.sh`, which also runs the native suite
+on CI's Linux. A move whose native suite fails does not land.
+
+When the merge conflicts, the script stops. Merge by hand in a worktree of
+`solenes/attn`: resolve the patched areas, and drop a patch whose bug upstream
+has fixed, with its line in `FORK.md`. Push `attn`, then move the pin with
+`scripts/rune-bump --rev <merged rev>`. The `fork macOS tests` workflow runs the
+macOS-only patch tests on that push.
 
 ## Move the pin
 
 Builders never move the pin. The weekly bump or the Orchestrator moves it, and
 a bump that fails the native suite does not land.
 
+- `scripts/rune-bump --rev <rev>` moves the pin to a revision already on the
+  fork's `attn`, without merging. It refuses a revision that is not on `attn`.
+- `scripts/rune-bump --branch <fork-branch>` merges a fork branch, such as a
+  Builder's patch branch, into `attn`, tests and pushes it, then moves the pin.
+
 An app that depends on Rune repeats Rune's `[patch.crates-io]` entries in its
-own workspace, because cargo ignores a dependency's `[patch]` section. Copy
-them from the pinned revision's `Cargo.toml` whenever the pin moves.
+own workspace, because cargo ignores a dependency's `[patch]` section. When
+Rune's entries change, the script stops before moving the pin: copy them into
+`native/Cargo.toml`, pointed at the fork's pinned revision, commit, and run it
+again with `--rev <new rev>`.

@@ -26,6 +26,9 @@ cd native
 cargo test
 ```
 
+`attn-term` links the libghostty-vt archive. `make test-native` builds it when
+it is missing, then runs the whole suite from `native/`.
+
 To run the app, install it on a named instance with
 `make install INSTANCE=<name> APP=native`, as [Instances](instances.md) says.
 The build bakes the instance's name, port and bundle id into `attn-app`, and the
