@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, waitForMockPtyBanner } from './fixtures';
 
 const ESC = '';
 const BSU = `${ESC}[?2026h`;
@@ -71,7 +71,7 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
 
   // Once the model is clean every further paint is a skip (`quads: null`) and
   // `null ?? 0` reads a painted surface as blank.
-  await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
+  await emitAndExpectText(page, agentId, fullFrame('OLD'), 'OLD line 0');
   await expect
     .poll(async () => lastRealDraw(await readTrace(page, agentId))?.quads ?? 0)
     .toBeGreaterThan(50);
@@ -127,7 +127,7 @@ async function setupAgent(
   await page.locator(`[data-testid="session-${agentId}"]`).click();
   const terminal = page.locator(`[data-pane-session-id="${agentId}"][data-pane-kind="agent"] .terminal-container`);
   await expect(terminal).toBeVisible();
-  await waitForPaneReady(page, agentId);
+  await waitForMockPtyBanner(page, agentId);
   return terminal;
 }
 
@@ -144,33 +144,16 @@ async function splitWithPeer(
   await page.locator(`[data-testid="sidebar-session-${peerId}"]`).getByRole('button', { name: 'Open Split Peer' }).click();
 }
 
-// A single `__TEST_EMIT_PTY_DATA` can be lost while the pane is not fully wired.
-// Scaffolding only: the post-split redraw must stay a single emit.
-async function emitUntilVisible(
+async function emitAndExpectText(
   page: import('@playwright/test').Page,
   sessionId: string,
   data: string,
   marker: string,
 ) {
+  await emit(page, sessionId, data);
   await expect
-    .poll(async () => {
-      await emit(page, sessionId, data);
-      return page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '', sessionId);
-    }, {
-      message: `setup frame never reached the model for ${sessionId} (emit dropped before the pane was wired)`,
-    })
+    .poll(async () => page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '', sessionId))
     .toContain(marker);
-}
-
-// A visible terminal container is not a pane ready for PTY data: the handle is
-// registered only once the Ghostty model loads, and an earlier emit is dropped.
-async function waitForPaneReady(
-  page: import('@playwright/test').Page,
-  sessionId: string,
-) {
-  await expect
-    .poll(async () => page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, sessionId))
-    .not.toBeNull();
 }
 
 async function expectResizedFrom(
@@ -236,7 +219,7 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   const agentId = 's-agent-race';
   const terminal = await setupAgent(page, daemon, agentId);
 
-  await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
+  await emitAndExpectText(page, agentId, fullFrame('OLD'), 'OLD line 0');
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
 
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
@@ -276,8 +259,8 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   const terminal = await setupAgent(page, daemon, agentId);
 
   const scrollback = Array.from({ length: 200 }, (_, i) => `HIST line ${String(i).padStart(3, '0')}`).join('\r\n');
-  await emitUntilVisible(page, agentId, `${ESC}[2J${ESC}[H${scrollback}`, 'HIST line 199');
-  await emitUntilVisible(page, agentId, fullFrame('OLD'), 'OLD line 0');
+  await emitAndExpectText(page, agentId, `${ESC}[2J${ESC}[H${scrollback}`, 'HIST line 199');
+  await emitAndExpectText(page, agentId, fullFrame('OLD'), 'OLD line 0');
 
   await terminal.hover({ position: { x: 80, y: 200 } });
   await page.mouse.wheel(0, -600);
@@ -311,10 +294,7 @@ test('hidden split desktop defers paints until return after a window resize', as
 
   const agentId = 's-agent-home-resize';
   const terminal = await setupAgent(page, daemon, agentId);
-  await emit(page, agentId, fullFrame('BASELINE'));
-  await expect
-    .poll(async () => page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '', agentId))
-    .toContain('BASELINE line 0');
+  await emitAndExpectText(page, agentId, fullFrame('BASELINE'), 'BASELINE line 0');
 
   const sizeBeforeSplit = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
   await splitWithPeer(page, daemon, agentId);
