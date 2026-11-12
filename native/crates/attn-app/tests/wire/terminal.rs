@@ -1084,3 +1084,45 @@ fn a_key_draws_no_terminal_frame_until_its_echo_arrives() {
     assert_eq!(world.terminal_frames(), frames + 1, "its echo did");
     assert_eq!(row(&mut world, 0), "$ l");
 }
+
+#[test]
+fn an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off()
+ {
+    let mut world = World::start(one_terminal());
+    let family = "👨\u{200d}👩\u{200d}👧";
+    let cluster_then_x = format!("{family}\x1b[1;3HX");
+
+    output(&world, 1, cluster_then_x.as_bytes());
+    world.settle();
+    assert_eq!(row(&mut world, 0), format!("{family}X"));
+
+    output(&world, 2, b"\x1b");
+    output(&world, 3, format!("c{cluster_then_x}").as_bytes());
+    world.settle();
+    assert_eq!(
+        row(&mut world, 0),
+        format!("{family}X"),
+        "after a reset split across writes"
+    );
+
+    output(&world, 4, format!("\x1bc{cluster_then_x}").as_bytes());
+    world.settle();
+    assert_eq!(
+        row(&mut world, 0),
+        format!("{family}X"),
+        "after a reset inside one write"
+    );
+
+    output(&world, 5, b"\x1b[?2027l");
+    output(
+        &world,
+        6,
+        format!("\x1b[2J\x1b[H{cluster_then_x}").as_bytes(),
+    );
+    world.settle();
+    assert_eq!(
+        row(&mut world, 0),
+        format!("{family}X"),
+        "after the program turned it off"
+    );
+}

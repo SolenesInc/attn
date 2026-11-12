@@ -131,9 +131,17 @@ pub mod mods {
 }
 
 /// One terminal's emulator: the daemon's screen restored from a snapshot, then fed its output.
-pub struct Vt(NonNull<AttnTerm>);
+pub struct Vt {
+    raw: NonNull<AttnTerm>,
+    /// The last write ended on an ESC, which a reset (`ESC c`) in the next write completes.
+    split_escape: bool,
+}
 
 const WRAPAROUND: u16 = 7;
+const GRAPHEME_CLUSTERING_MODE: u16 = 2027;
+const GRAPHEME_CLUSTERING: &[u8] = b"\x1b[?2027h";
+const ESC: u8 = 0x1b;
+const RESET_FINAL: u8 = b'c';
 const KEY_PRESS: u8 = 1;
 const KEY_REPEAT: u8 = 2;
 
@@ -143,20 +151,32 @@ unsafe impl Send for Vt {}
 impl Vt {
     pub fn new(cols: u16, rows: u16) -> Vt {
         let raw = unsafe { attn_term_new(cols.max(1), rows.max(1)) };
-        Vt(NonNull::new(raw).expect("libghostty-vt made a terminal"))
+        Vt::clustering(NonNull::new(raw).expect("libghostty-vt made a terminal"))
+    }
+
+    /// An emoji sequence draws as one glyph only while grapheme clustering (DECSET 2027) holds
+    /// it in one cell, so every terminal keeps the mode on, as the Tauri terminal does: a
+    /// program's reset or DECRST turns it off only until the end of the write.
+    fn clustering(raw: NonNull<AttnTerm>) -> Vt {
+        let mut vt = Vt {
+            raw,
+            split_escape: false,
+        };
+        vt.feed(GRAPHEME_CLUSTERING);
+        vt
     }
 
     /// The terminal a snapshot describes, or None when its bytes do not decode.
     pub fn restore(snapshot: &[u8]) -> Option<Vt> {
         let raw = unsafe { attn_term_restore(snapshot.as_ptr(), snapshot.len()) };
-        NonNull::new(raw).map(Vt)
+        NonNull::new(raw).map(Vt::clustering)
     }
 
     /// The screen as a snapshot, or None while the parser is partway through a sequence.
     pub fn snapshot(&mut self) -> Option<Vec<u8>> {
         let mut len = 0;
         unsafe {
-            let raw = attn_term_snapshot(self.0.as_ptr(), &mut len);
+            let raw = attn_term_snapshot(self.raw.as_ptr(), &mut len);
             if raw.is_null() {
                 return None;
             }
@@ -171,7 +191,7 @@ impl Vt {
         let ansi = theme.ansi.as_flattened();
         let rc = unsafe {
             attn_term_set_theme(
-                self.0.as_ptr(),
+                self.raw.as_ptr(),
                 theme.fg.as_ptr(),
                 theme.bg.as_ptr(),
                 theme.cursor.as_ptr(),
@@ -182,12 +202,33 @@ impl Vt {
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
-        unsafe { attn_term_write(self.0.as_ptr(), bytes.as_ptr(), bytes.len()) }
+        let mut rest = bytes;
+        if self.split_escape && rest.first() == Some(&RESET_FINAL) {
+            self.feed(&rest[..1]);
+            self.feed(GRAPHEME_CLUSTERING);
+            rest = &rest[1..];
+        }
+        while let Some(at) = rest.windows(2).position(|w| w == [ESC, RESET_FINAL]) {
+            self.feed(&rest[..at + 2]);
+            self.feed(GRAPHEME_CLUSTERING);
+            rest = &rest[at + 2..];
+        }
+        self.feed(rest);
+        if !bytes.is_empty() {
+            self.split_escape = bytes.last() == Some(&ESC);
+        }
+        if !self.dec_mode(GRAPHEME_CLUSTERING_MODE) {
+            self.feed(GRAPHEME_CLUSTERING);
+        }
+    }
+
+    fn feed(&mut self, bytes: &[u8]) {
+        unsafe { attn_term_write(self.raw.as_ptr(), bytes.as_ptr(), bytes.len()) }
     }
 
     pub fn size(&mut self) -> (u16, u16) {
         let (mut cols, mut rows) = (0, 0);
-        unsafe { attn_term_size(self.0.as_ptr(), &mut cols, &mut rows) };
+        unsafe { attn_term_size(self.raw.as_ptr(), &mut cols, &mut rows) };
         (cols, rows)
     }
 
@@ -200,12 +241,12 @@ impl Vt {
         }
         let wraparound = self.dec_mode(WRAPAROUND);
         if wraparound {
-            self.write(b"\x1b[?7l");
+            self.feed(b"\x1b[?7l");
         }
-        let rc = unsafe { attn_term_resize(self.0.as_ptr(), cols, rows, cell_px.0, cell_px.1) };
+        let rc = unsafe { attn_term_resize(self.raw.as_ptr(), cols, rows, cell_px.0, cell_px.1) };
         assert_eq!(rc, SUCCESS, "libghostty-vt resized to {cols}x{rows}");
         if wraparound {
-            self.write(b"\x1b[?7h");
+            self.feed(b"\x1b[?7h");
         }
     }
 
@@ -213,22 +254,22 @@ impl Vt {
     pub fn take_responses(&mut self) -> Vec<u8> {
         let mut len = 0;
         unsafe {
-            let raw = attn_term_responses(self.0.as_ptr(), &mut len);
+            let raw = attn_term_responses(self.raw.as_ptr(), &mut len);
             if len == 0 {
                 return Vec::new();
             }
             let bytes = std::slice::from_raw_parts(raw, len).to_vec();
-            attn_term_clear_responses(self.0.as_ptr());
+            attn_term_clear_responses(self.raw.as_ptr());
             bytes
         }
     }
 
     pub fn dec_mode(&mut self, mode: u16) -> bool {
-        unsafe { attn_term_mode(self.0.as_ptr(), mode, false) }
+        unsafe { attn_term_mode(self.raw.as_ptr(), mode, false) }
     }
 
     pub fn mouse_modes(&mut self) -> mouse::Modes {
-        let t = self.0.as_ptr();
+        let t = self.raw.as_ptr();
         mouse::Modes {
             tracking: unsafe { attn_term_mouse_tracking(t) },
             any_event: self.dec_mode(1003),
@@ -241,7 +282,7 @@ impl Vt {
     /// Brings `grid` up to date with the screen, reading only rows that changed, and marks
     /// them dirty. True when anything changed.
     pub fn sync(&mut self, grid: &mut Grid) -> bool {
-        let t = self.0.as_ptr();
+        let t = self.raw.as_ptr();
         let mut frame = Frame::default();
         let rc = unsafe { attn_term_frame(t, &mut frame) };
         assert_eq!(rc, SUCCESS, "libghostty-vt updated its render state");
@@ -313,7 +354,7 @@ impl Vt {
             let mut written = 0;
             let rc = unsafe {
                 attn_term_encode_key(
-                    self.0.as_ptr(),
+                    self.raw.as_ptr(),
                     if input.repeat { KEY_REPEAT } else { KEY_PRESS },
                     input.key,
                     input.mods,
@@ -352,7 +393,7 @@ impl Vt {
 
 impl Drop for Vt {
     fn drop(&mut self) {
-        unsafe { attn_term_free(self.0.as_ptr()) }
+        unsafe { attn_term_free(self.raw.as_ptr()) }
     }
 }
 
