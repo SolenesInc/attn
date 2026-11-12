@@ -220,6 +220,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-terminal-core',
+    runnerId: 'NATIVE-TERMINAL-CORE',
+    label: 'A shell in the native app draws what is typed, and a program that tracks the mouse hears presses, releases and the wheel',
+    command: ['node', 'scripts/real-app-harness/scenario-native-terminal-core.mjs'],
+    app: 'native',
+  },
+  {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
     label: 'Row keys walk onto and off an empty desktop',

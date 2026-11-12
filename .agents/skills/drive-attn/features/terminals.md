@@ -103,6 +103,35 @@ Preconditions:
 - **Images.** `app/scripts/real-app-harness/scenario-terminal-kitty-image.mjs` draws its own image, quits the instance's app, restarts its daemon and scrubs its data, so run it last on an instance nothing else drives (`pnpm --dir app run real-app:scenario-terminal-kitty-image`).
 - **Proof.** In `$P`, keep each `./attn` and `wsctl` command's output and exit code, `bridge read_pane_text` after typing and after the relaunch, `bridge get_terminal_context_menu_state` with the menu open, `pbpaste` after the copy, and `./attn agent peek term-agent` after each agent step. Capture `bridge capture_screenshot '{"path":"<P>/terminals-find.png"}'` with the find bar open. Terminal text does not show in the screenshot, so the text proof is `read_pane_text` and `wsctl screen`. Name each file for its way in, such as `terminals-agent-run-peek.txt`.
 
+### In the native app
+
+The native app (`native/`) draws, types into and resizes terminals, reports the mouse to programs that track it, answers terminal queries and reports pointer activity. Find, blocks, the context menu, links, images, the location picker and `attn terminal`'s tiles drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `scroll`, `wait`, `state` and `shot`, not the Tauri reads and native input above.
+
+Preconditions:
+
+- Install the instance with `make install INSTANCE=<name> APP=native`. On Linux, run every command that reaches the app inside one `xvfb-run -a -s '-noreset -screen 0 1600x1000x24' bash -c '…'` so the display outlives each step.
+- Launch as [../SKILL.md](../SKILL.md) says for a native instance: `bridge --launch ping`, then `bridge wait '{"target":{"key":"sidebar"}}'`. `bridge state '{"of":"connection"}'` reads `"Connected"`.
+- Make the proof folder `P` as above, and save this reader as `$P/mouse-reader.sh`. It turns on SGR mouse tracking and prints each byte it reads, ESC as `ESC`, until `q`:
+
+```bash
+stty raw -echo
+printf '\033[?1000h\033[?1006hREADY\r\n'
+while IFS= read -rs -n1 c; do
+  case "$c" in $'\e') printf 'ESC' ;; q) break ;; *) printf '%s' "$c" ;; esac
+done
+printf '\033[?1000l\033[?1006l'
+stty sane
+printf '\r\nDONE\n'
+```
+
+Steps:
+
+- **A shell.** Run `wsctl add-session --cwd $P --agent shell --label shop --id shop --place`. `bridge state '{"of":"desktops"}'` holds the shell's pane; its `runtime_id` is `<shell>`. `bridge wait '{"target":{"key":"terminal.<shell>"}}'` answers with the terminal's box.
+- **Type and read.** Run `bridge press '{"target":{"key":"terminal.<shell>"}}'`, `bridge type '{"text":"echo native-$((40 + 2))"}'` and `bridge key '{"chord":"Enter"}'`. `bridge state '{"of":"terminal:<shell>","includes":"native-42"}'` waits for the rows the window drew, and one row reads `native-42` alone. `wsctl screen --id <shell>` shows the same screen from the daemon.
+- **A program that tracks the mouse.** Type `bash <P>/mouse-reader.sh`, `<P>` written out, press Enter, and wait for `READY` with `state` and `includes`. Press the terminal again: wait for `ESC[<3;`, and one row holds `ESC[<0;<col>;<row>M` followed by `ESC[<3;<col>;<row>m`, the press and its release. Run `bridge scroll '{"target":{"key":"terminal.<shell>"},"dy":-60}'`: wait for `ESC[<65;`, the wheel turning down. Type `q` and wait for `DONE`.
+- **Restart keeps it.** Run `./attn instance stop-app`, then launch as above. `bridge wait` finds `terminal.<shell>` again, and `state` with `includes` `native-42` shows the earlier output.
+- **Proof.** Keep each `bridge state` answer, `wsctl screen` after typing, and `bridge shot '{"path":"<P>/native-terminal.png"}'` after the mouse step. Unlike the Tauri app's capture, the native shot shows the terminal's text. The `native-terminal-core` scenario runs the first three steps and takes the same shot.
+
 ## Contexts
 
 - **Durability across restarts**: an app or daemon restart leaves every terminal running in its worker, and the tile comes back with its screen and scrollback. After a machine restart, attn brings back the sessions it can resume and reaps the rest (`crash-recovery`).
@@ -117,9 +146,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/pty_*_wire_test.go`, `internal/daemon/terminal_commands_wire_test.go`, `internal/daemon/terminal_identity_wire_test.go`, `internal/daemon/stopped_terminal_wire_test.go`, `internal/daemon/kitty_wire_test.go`, `internal/daemon/attach_policy_wire_test.go`, `internal/daemon/attach_revive_wire_test.go`, `internal/daemon/screen_snapshot_wire_test.go`, `internal/daemon/satellite_wire_test.go`, `internal/daemon/session_input_wire_test.go`, `internal/daemon/session_input_credit_wire_test.go`, `internal/daemon/shell_*_wire_test.go`.
+- Wire: `native/crates/attn-app/tests/wire/terminal.rs` (the native app), `internal/daemon/pty_*_wire_test.go`, `internal/daemon/terminal_commands_wire_test.go`, `internal/daemon/terminal_identity_wire_test.go`, `internal/daemon/stopped_terminal_wire_test.go`, `internal/daemon/kitty_wire_test.go`, `internal/daemon/attach_policy_wire_test.go`, `internal/daemon/attach_revive_wire_test.go`, `internal/daemon/screen_snapshot_wire_test.go`, `internal/daemon/satellite_wire_test.go`, `internal/daemon/session_input_wire_test.go`, `internal/daemon/session_input_credit_wire_test.go`, `internal/daemon/shell_*_wire_test.go`.
 - Stack: `cmd/attnd/terminal_stack_test.go`, `scripts/verify-terminal-move.sh`, `cmd/attnd/terminal_close_stack_test.go`, `cmd/attnd/terminal_identity_stack_test.go`, `cmd/attnd/terminal_recovery_stack_test.go`, `cmd/attnd/terminal_reload_stack_test.go`, `cmd/attnd/pty_*_stack_test.go`, `cmd/attnd/session_input_stack_test.go`, `cmd/attnd/shell_titles_stack_test.go`, `app/e2e/terminal-interactions.spec.ts`, `app/e2e/terminal-find.spec.ts`, `app/e2e/terminal-blocks.spec.ts`, `app/e2e/terminal-wake.spec.ts`, `app/e2e/binary-pty-output-realpty.spec.ts`, `app/e2e/outpost-terminal-links.spec.ts`.
-- Scenario: `terminal-input`, `terminal-context-menu`, `terminal-block-copy`, `terminal-block-resize`, `terminal-md-link`, `ghostty-scroll`, `shell-titles`, `agent-terminals`, `pty-host-setting`, `crash-recovery`, `tr201-local-claude`, `tr301-local-claude`, `tr401-local-claude`, and outside the catalog, `app/scripts/real-app-harness/scenario-terminal-kitty-image.mjs` and `scenario-webgl-recovery.mjs`.
+- Scenario: `native-terminal-core` (the native app), `terminal-input`, `terminal-context-menu`, `terminal-block-copy`, `terminal-block-resize`, `terminal-md-link`, `ghostty-scroll`, `shell-titles`, `agent-terminals`, `pty-host-setting`, `crash-recovery`, `tr201-local-claude`, `tr301-local-claude`, `tr401-local-claude`, and outside the catalog, `app/scripts/real-app-harness/scenario-terminal-kitty-image.mjs` and `scenario-webgl-recovery.mjs`.
 - Kernel: `internal/pty/*_test.go`, `internal/ptybackend/*_test.go`, `internal/ghosttyvt/*_test.go`.
 - App: `app/src/App.terminalInput.test.tsx`, `app/src/App.terminalFocus.test.tsx`, `app/src/App.terminalScroll.test.tsx`, `app/src/App.terminalRuntime.test.tsx`, `app/src/App.terminalAttachment.test.tsx`, `app/src/App.paneAttach.test.tsx`, `app/src/App.switchInput.test.tsx`, `app/src/App.drawnStreaming.test.tsx`, `app/src/App.shellTitles.test.tsx`, `app/src/utils/terminal*.test.ts`, `app/src/utils/ghostty*.test.ts`, `app/src/utils/kitty*.test.ts`, `app/src/ghostty/*.test.ts`, `app/src/pty/*.test.ts`, `app/src/components/GhosttyWebGlRenderer.test.ts`, `app/src/components/terminalGlyphFont.test.ts`.
 

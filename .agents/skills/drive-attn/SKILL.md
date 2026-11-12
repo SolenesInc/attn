@@ -77,6 +77,10 @@ shell's environment:
 . /tmp/drive-attn-<name>.env && bridge --launch --wait-ready ping   # {"frontendReady": true, "pong": true}
 ```
 
+For an instance installed with `APP=native`, launch with `bridge --launch ping`
+and then `bridge wait` on an element: `--wait-ready` asks for the Tauri app's
+`get_state`, which the native app does not have.
+
 `--launch` starts the app with the instance shell's environment and parks
 the app window at the screen's edge. Keep that default on a shared Mac. Never
 activate or unpark the window, set the parking or always-on-top variables
