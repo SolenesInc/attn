@@ -1,0 +1,226 @@
+Each way a caption or a block cannot be read is a problem naming its line and
+the fix, and the diagram is still drawn from the rest.
+-- base/a.go --
+package a
+
+func A() {}
+
+func B() {}
+-- head/a.go --
+package a
+
+func A() { B() }
+
+func B() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid after
+sequenceDiagram
+  Note over a: the caption
+  Note over a: a second caption
+  a->>b: calls B
+  %% stop: a.go:3-3
+  Note over a,b: its caption
+  Note over a,b: a second caption
+  loop every line
+    Note over b: before any message
+    b->>b: prints
+    opt sometimes
+      b->>a: answers
+    end
+    Note over a: after the block it follows
+  end
+  else not in an alt
+  end
+  opt nothing inside
+  end
+  alt never closed
+    a->>b: again
+```
+
+## A calls B
+
+### a.go:3-3
+
+### a.go:5-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "groups": [
+        {
+          "first_message": 20,
+          "kind": "loop",
+          "label": "every line",
+          "last_message": 22,
+          "line": 18
+        },
+        {
+          "first_message": 22,
+          "kind": "opt",
+          "label": "sometimes",
+          "last_message": 22,
+          "line": 21
+        },
+        {
+          "first_message": 31,
+          "kind": "alt",
+          "label": "never closed",
+          "last_message": 31,
+          "line": 30
+        }
+      ],
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 14,
+          "note": "its caption",
+          "stop_line": 36,
+          "text": "calls B",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "b",
+          "line": 20,
+          "text": "prints",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "b",
+          "line": 22,
+          "text": "answers",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 31,
+          "text": "again",
+          "to": "b"
+        }
+      ],
+      "note": "the caption",
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "a"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "b"
+        }
+      ],
+      "side": "after"
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [
+    {
+      "line": 13,
+      "message": "the diagram already has its caption on line 12, and a diagram has one. Merge the two notes."
+    },
+    {
+      "line": 17,
+      "message": "the message on line 14 already has its caption on line 16, and a message has one. Merge the two notes."
+    },
+    {
+      "line": 19,
+      "message": "a Note captions the message right before it in the same block, and this one has none. Move it under a message in its block, or put the text in the block's label."
+    },
+    {
+      "line": 24,
+      "message": "a Note captions the message right before it in the same block, and this one has none. Move it under a message in its block, or put the text in the block's label."
+    },
+    {
+      "line": 26,
+      "message": "`else` divides a block opened by `alt`, and this line is inside none. Open the block with `alt`, or remove the line."
+    },
+    {
+      "line": 27,
+      "message": "`end` closes no block. Remove it, or open the block it ends with rect, opt, loop, alt, critical, par or break."
+    },
+    {
+      "line": 28,
+      "message": "the `opt` on line 28 holds no message, so there is nothing to draw it around. Put a message in it, or remove it."
+    },
+    {
+      "line": 30,
+      "message": "the `alt` block on line 30 has no `end`. Add `end` after its last message, before line 32."
+    }
+  ],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 3,
+      "heading_line": 36,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "head": 3,
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { B() }"
+        }
+      ],
+      "to": 3
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 5,
+      "heading_line": 38,
+      "notes": [],
+      "now_from": 5,
+      "now_to": 5,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func B() {}"
+        },
+        {
+          "head": 5,
+          "kind": "+",
+          "now": 5,
+          "text": "func B() { println() }"
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

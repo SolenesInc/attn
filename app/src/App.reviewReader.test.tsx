@@ -436,9 +436,9 @@ sequenceDiagram
 
 \`\`\`mermaid
 sequenceDiagram
-  loop every poll
-    poll->>calc: Add(a, b)
-  end
+  activate calc
+  poll->>calc: Add(a, b)
+  deactivate calc
 \`\`\`
 `;
 
@@ -451,13 +451,14 @@ const MAP_BUNDLE: ReviewBundle = {
   ...BUNDLE,
   frame: 'map',
   flows: [
-    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)] },
+    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
     {
       line: 39, side: 'after', drawn: true,
       participants: [participant('poll', 'Poll'), participant('calc', 'Calc'), participant('util', 'Util')],
       messages: [message(44, 'poll', 'calc', 'Add(a, b)', 15), message(46, 'calc', 'util', 'helper()', 22), message(48, 'util', 'calc', 'returns')],
+      groups: [],
     },
-    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')] },
+    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')], groups: [] },
   ],
 };
 

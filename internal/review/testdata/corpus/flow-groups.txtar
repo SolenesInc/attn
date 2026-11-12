@@ -1,0 +1,308 @@
+A block is a group around the messages written inside it, nested blocks
+included. A block's group spans all its sections, and each else, and or option
+section is also a group of its own that names its block's line. Groups are
+listed by line, outer before inner.
+-- base/a.go --
+package a
+
+func A() {}
+
+func B() {}
+-- head/a.go --
+package a
+
+func A() { B() }
+
+func B() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid after
+sequenceDiagram
+  participant a as A
+  participant b as B
+  rect rgb(40, 40, 60)
+    a->>b: calls B
+    %% stop: a.go:3-3
+    alt b is ready
+      loop every line
+        b->>b: prints
+        %% stop: a.go:5-5
+      end
+    else b is busy
+      b-->>a: busy
+    end
+  end
+  par to the log
+    a->>b: logs
+  and to the screen
+    a->>b: shows
+  end
+  opt on failure
+    b--xa: fails
+  end
+  break when a stops
+    a->>a: stops
+  end
+  alt a is ready
+    alt b is ready
+      a->>b: sends
+    end
+    a->>a: waits
+  else a is busy
+    a->>a: drops
+  end
+```
+
+## A calls B
+
+### a.go:3-3
+
+### a.go:5-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "groups": [
+        {
+          "first_message": 15,
+          "kind": "rect",
+          "label": "rgb(40, 40, 60)",
+          "last_message": 23,
+          "line": 14
+        },
+        {
+          "first_message": 19,
+          "kind": "alt",
+          "label": "b is ready",
+          "last_message": 23,
+          "line": 17
+        },
+        {
+          "first_message": 19,
+          "kind": "loop",
+          "label": "every line",
+          "last_message": 19,
+          "line": 18
+        },
+        {
+          "block": 17,
+          "first_message": 23,
+          "kind": "else",
+          "label": "b is busy",
+          "last_message": 23,
+          "line": 22
+        },
+        {
+          "first_message": 27,
+          "kind": "par",
+          "label": "to the log",
+          "last_message": 29,
+          "line": 26
+        },
+        {
+          "block": 26,
+          "first_message": 29,
+          "kind": "and",
+          "label": "to the screen",
+          "last_message": 29,
+          "line": 28
+        },
+        {
+          "first_message": 32,
+          "kind": "opt",
+          "label": "on failure",
+          "last_message": 32,
+          "line": 31
+        },
+        {
+          "first_message": 35,
+          "kind": "break",
+          "label": "when a stops",
+          "last_message": 35,
+          "line": 34
+        },
+        {
+          "first_message": 39,
+          "kind": "alt",
+          "label": "a is ready",
+          "last_message": 43,
+          "line": 37
+        },
+        {
+          "first_message": 39,
+          "kind": "alt",
+          "label": "b is ready",
+          "last_message": 39,
+          "line": 38
+        },
+        {
+          "block": 37,
+          "first_message": 43,
+          "kind": "else",
+          "label": "a is busy",
+          "last_message": 43,
+          "line": 42
+        }
+      ],
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 15,
+          "stop_line": 49,
+          "text": "calls B",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "b",
+          "line": 19,
+          "stop_line": 51,
+          "text": "prints",
+          "to": "b"
+        },
+        {
+          "arrow": "--\u003e\u003e",
+          "from": "b",
+          "line": 23,
+          "text": "busy",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 27,
+          "text": "logs",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 29,
+          "text": "shows",
+          "to": "b"
+        },
+        {
+          "arrow": "--x",
+          "from": "b",
+          "line": 32,
+          "text": "fails",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 35,
+          "text": "stops",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 39,
+          "text": "sends",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 41,
+          "text": "waits",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 43,
+          "text": "drops",
+          "to": "a"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "A"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "B"
+        }
+      ],
+      "side": "after"
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 3,
+      "heading_line": 49,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "head": 3,
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { B() }"
+        }
+      ],
+      "to": 3
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 5,
+      "heading_line": 51,
+      "notes": [],
+      "now_from": 5,
+      "now_to": 5,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func B() {}"
+        },
+        {
+          "head": 5,
+          "kind": "+",
+          "now": 5,
+          "text": "func B() { println() }"
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

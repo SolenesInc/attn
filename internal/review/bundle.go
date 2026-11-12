@@ -477,15 +477,28 @@ func plural(n int, one, many string) string {
 func (r *resolver) flows() []protocol.ReviewFlow {
 	flows := []protocol.ReviewFlow{}
 	for _, f := range r.doc.flows {
-		wire := protocol.ReviewFlow{Line: f.line, Drawn: f.undrawable == 0, Participants: []protocol.ReviewFlowParticipant{}, Messages: []protocol.ReviewFlowMessage{}}
+		wire := protocol.ReviewFlow{Line: f.line, Drawn: f.undrawable == 0, Participants: []protocol.ReviewFlowParticipant{}, Messages: []protocol.ReviewFlowMessage{}, Groups: []protocol.ReviewFlowGroup{}}
 		if f.side != "" {
 			wire.Side = protocol.Ptr(f.side)
+		}
+		if f.note.line != 0 {
+			wire.Note = protocol.Ptr(f.note.text)
+		}
+		for _, g := range f.groups {
+			group := protocol.ReviewFlowGroup{Line: g.line, Kind: g.kind, Label: g.label, FirstMessage: g.first, LastMessage: g.last}
+			if g.block != 0 {
+				group.Block = protocol.Ptr(g.block)
+			}
+			wire.Groups = append(wire.Groups, group)
 		}
 		for _, p := range f.participants {
 			wire.Participants = append(wire.Participants, protocol.ReviewFlowParticipant{ID: p.id, Label: p.label, Actor: p.actor})
 		}
 		for _, message := range f.messages {
 			entry := protocol.ReviewFlowMessage{Line: message.line, From: message.from, To: message.to, Arrow: message.arrow, Text: message.text}
+			if message.note.line != 0 {
+				entry.Note = protocol.Ptr(message.note.text)
+			}
 			if ref := message.ref; ref != nil {
 				if s, ok := r.stopShowing(*ref); ok {
 					entry.StopLine = protocol.Ptr(s.line)

@@ -47,6 +47,7 @@ sequenceDiagram
   "flows": [
     {
       "drawn": true,
+      "groups": [],
       "line": 10,
       "messages": [
         {

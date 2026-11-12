@@ -66,8 +66,10 @@ One review has three frames. The agent picks the one that suits the change, and
 - **Brief** (`1`) reads the document top to bottom.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
   stops, with the agent's explanation beside it. `z` hides the explanation.
-- **Map** (`3`) draws the change as a sequence diagram. ← and → step through
-  its messages, each beside the code that sends it. When the review has a
+- **Map** (`3`) draws the change as a sequence diagram: the parts of the
+  system, the calls between them with the agent's caption under each, and boxes
+  around a transaction, a loop or a branch. ← and → step through its messages,
+  each beside the code that sends it. When the review has a
   diagram before and after the change, `b` switches between them.
 
 A frame the review cannot fill, such as Map for a review with no diagram, is
