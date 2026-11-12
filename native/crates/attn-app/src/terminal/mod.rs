@@ -10,7 +10,6 @@ use attn_protocol::{
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
 use attn_term::mouse::{self, Action, WheelRows};
-use attn_term::osc52::Osc52;
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::{Live, Tx};
 
@@ -115,7 +114,6 @@ struct Term {
     pointer: Pointer,
     view: selection::View,
     /// The clipboard writes the program's output asks for.
-    osc52: Osc52,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
 }
@@ -195,7 +193,6 @@ impl Term {
             resize_due: None,
             pointer: Pointer::default(),
             view: selection::View::default(),
-            osc52: Osc52::default(),
             scrolled_back: 0,
         }
     }
@@ -451,8 +448,8 @@ impl Terminals {
                 };
                 if let Output::Write(bytes) = term.stream.receive(Chunk { seq, data }) {
                     term.watermark = Some(seq);
-                    copy_writes(term, &bytes, tx);
                     term.vt.write(&bytes);
+                    copy_writes(term, tx);
                     Terminals::wrote(term);
                     answer(&terminal, term, daemon);
                 }
@@ -612,10 +609,11 @@ impl Terminals {
                 term.vt.write(&chunk.data);
                 Terminals::wrote(term);
             }
+            term.vt.take_clipboard_writes();
         }
         for chunk in &restore.write {
-            copy_writes(term, &chunk.data, tx);
             term.vt.write(&chunk.data);
+            copy_writes(term, tx);
             Terminals::wrote(term);
         }
         term.watermark = Some(restore.baseline);
@@ -879,10 +877,10 @@ impl Terminals {
     }
 }
 
-/// Puts on the clipboard what the program's OSC 52 writes in `bytes` ask for, without a
-/// gesture, as the Tauri terminal does.
-fn copy_writes(term: &mut Term, bytes: &[u8], tx: &mut Tx) {
-    for text in term.osc52.writes(bytes) {
+/// Puts on the clipboard what the program's clipboard writes asked for, without a gesture, as
+/// the Tauri terminal does.
+fn copy_writes(term: &mut Term, tx: &mut Tx) {
+    for text in term.vt.take_clipboard_writes() {
         tx.copy(text);
     }
 }

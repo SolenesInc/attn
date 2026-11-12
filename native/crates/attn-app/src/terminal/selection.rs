@@ -208,11 +208,9 @@ impl Terminals {
         term.view.selection = anchor.find(&lines, top, cols);
     }
 
-    /// The screen was replaced: what the user selected on the old one goes with it, and so
-    /// does a clipboard write the old stream left unfinished.
+    /// The screen was replaced: what the user selected on the old one goes with it.
     pub(super) fn forget_screen(term: &mut Term) {
         term.view = View::default();
-        term.osc52 = Default::default();
     }
 
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.

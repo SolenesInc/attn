@@ -17,6 +17,9 @@ typedef struct {
   uint8_t *responses;
   size_t responses_len;
   size_t responses_cap;
+  uint8_t *clipboard;
+  size_t clipboard_len;
+  size_t clipboard_cap;
 } AttnTerm;
 
 typedef struct {
@@ -44,22 +47,55 @@ typedef struct {
   uint8_t bg[3];
 } AttnCell;
 
+static bool attn_append(uint8_t **buf, size_t *len, size_t *cap, const uint8_t *data, size_t n) {
+  size_t needed = *len + n;
+  if (needed > *cap) {
+    size_t next_cap = *cap == 0 ? 256 : *cap;
+    while (next_cap < needed) next_cap *= 2;
+    uint8_t *next = realloc(*buf, next_cap);
+    if (next == NULL) return false;
+    *buf = next;
+    *cap = next_cap;
+  }
+  if (n > 0) memcpy(*buf + *len, data, n);
+  *len = needed;
+  return true;
+}
+
 static void attn_write_pty(GhosttyTerminal terminal, void *userdata,
                            const uint8_t *data, size_t len) {
   (void)terminal;
   AttnTerm *t = userdata;
   if (t == NULL || data == NULL || len == 0) return;
-  size_t needed = t->responses_len + len;
-  if (needed > t->responses_cap) {
-    size_t cap = t->responses_cap == 0 ? 256 : t->responses_cap;
-    while (cap < needed) cap *= 2;
-    uint8_t *next = realloc(t->responses, cap);
-    if (next == NULL) return;
-    t->responses = next;
-    t->responses_cap = cap;
+  attn_append(&t->responses, &t->responses_len, &t->responses_cap, data, len);
+}
+
+static bool attn_text_mime(GhosttyString mime) {
+  static const char plain[] = "text/plain";
+  return mime.len >= sizeof(plain) - 1 && memcmp(mime.ptr, plain, sizeof(plain) - 1) == 0;
+}
+
+static void attn_clipboard_write(GhosttyTerminal terminal, void *userdata,
+                                 const GhosttyClipboardWrite *write) {
+  (void)terminal;
+  AttnTerm *t = userdata;
+  GhosttyClipboardWriteReply reply = GHOSTTY_INIT_SIZED(GhosttyClipboardWriteReply);
+  reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED;
+  GhosttyString text = {0};
+  bool found = write->contents_len == 0;
+  for (size_t i = 0; !found && i < write->contents_len; i++) {
+    if (attn_text_mime(write->contents[i].mime)) {
+      text = write->contents[i].data;
+      found = true;
+    }
   }
-  memcpy(t->responses + t->responses_len, data, len);
-  t->responses_len = needed;
+  uint32_t n = (uint32_t)text.len;
+  if (t != NULL && found &&
+      attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, (const uint8_t *)&n, sizeof(n)) &&
+      attn_append(&t->clipboard, &t->clipboard_len, &t->clipboard_cap, text.ptr, n)) {
+    reply.result = GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS;
+  }
+  write->reply(write, &reply);
 }
 
 static AttnTerm *attn_wrap(GhosttyTerminal terminal, size_t scrollback_bytes) {
@@ -71,6 +107,8 @@ static AttnTerm *attn_wrap(GhosttyTerminal terminal, size_t scrollback_bytes) {
   if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, t) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                            (const void *)attn_write_pty) != GHOSTTY_SUCCESS) goto fail;
+  if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE,
+                           (const void *)attn_clipboard_write) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_new(NULL, &t->state) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_row_iterator_new(NULL, &t->rows) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_render_state_row_cells_new(NULL, &t->cells) != GHOSTTY_SUCCESS) goto fail;
@@ -140,6 +178,7 @@ void attn_term_free(AttnTerm *t) {
   ghostty_render_state_free(t->state);
   ghostty_terminal_free(t->terminal);
   free(t->responses);
+  free(t->clipboard);
   free(t);
 }
 
@@ -271,6 +310,13 @@ const uint8_t *attn_term_responses(AttnTerm *t, size_t *len) {
 }
 
 void attn_term_clear_responses(AttnTerm *t) { t->responses_len = 0; }
+
+const uint8_t *attn_term_clipboard(AttnTerm *t, size_t *len) {
+  *len = t->clipboard_len;
+  return t->clipboard;
+}
+
+void attn_term_clear_clipboard(AttnTerm *t) { t->clipboard_len = 0; }
 
 static void attn_rgb(GhosttyColorRgb c, uint8_t out[3]) {
   out[0] = c.r;

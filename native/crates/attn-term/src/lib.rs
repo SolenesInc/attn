@@ -4,7 +4,6 @@ mod grid;
 pub mod keys;
 pub mod links;
 pub mod mouse;
-pub mod osc52;
 mod render;
 pub mod responses;
 pub mod selection;

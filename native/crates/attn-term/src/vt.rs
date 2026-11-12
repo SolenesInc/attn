@@ -82,6 +82,8 @@ unsafe extern "C" {
     fn attn_term_alternate_screen(t: *mut AttnTerm) -> bool;
     fn attn_term_responses(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_responses(t: *mut AttnTerm);
+    fn attn_term_clipboard(t: *mut AttnTerm, len: *mut usize) -> *const u8;
+    fn attn_term_clear_clipboard(t: *mut AttnTerm);
     fn attn_term_frame(t: *mut AttnTerm, frame: *mut Frame) -> c_int;
     fn attn_term_next_row(t: *mut AttnTerm, dirty: *mut bool) -> bool;
     fn attn_term_row_cells(t: *mut AttnTerm) -> c_int;
@@ -292,6 +294,29 @@ impl Vt {
             attn_term_clear_responses(self.raw.as_ptr());
             bytes
         }
+    }
+
+    /// The text each clipboard write the program asked for since the last call puts on the
+    /// clipboard: OSC 52 to any target, OSC 1337 Copy and OSC 5522, without a gesture. A query
+    /// reads nothing.
+    pub fn take_clipboard_writes(&mut self) -> Vec<String> {
+        let mut len = 0;
+        let mut writes = Vec::new();
+        unsafe {
+            let raw = attn_term_clipboard(self.raw.as_ptr(), &mut len);
+            let mut bytes = if len == 0 {
+                &[][..]
+            } else {
+                std::slice::from_raw_parts(raw, len)
+            };
+            while let Some((n, rest)) = bytes.split_first_chunk::<4>() {
+                let (text, rest) = rest.split_at(u32::from_ne_bytes(*n) as usize);
+                writes.push(String::from_utf8_lossy(text).into_owned());
+                bytes = rest;
+            }
+            attn_term_clear_clipboard(self.raw.as_ptr());
+        }
+        writes
     }
 
     /// Rows of history above the screen. A row counted from the top of the history is a
