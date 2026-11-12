@@ -426,6 +426,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
                 .label("Filter agents")
                 .placeholder("filter agents", t.text_muted)
                 .on_edit(|state: &mut State| &mut state.window.agent_filter)
+                .on_input_key(super::actions::filter_key)
                 .grow(1.0)
                 .color(t.text_primary),
         )

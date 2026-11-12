@@ -48,6 +48,19 @@ pub(crate) fn toggle_agent_list(state: &mut State, tx: &mut Tx) {
     }
 }
 
+/// Escape in the agent filter steps back one layer: it clears the filter, then closes the list.
+pub(crate) fn filter_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+    if ev.key != rune::Key::Escape {
+        return false;
+    }
+    if state.window.agent_filter.text.is_empty() {
+        toggle_agent_list(state, tx);
+    } else {
+        state.window.agent_filter.clear();
+    }
+    true
+}
+
 /// ⌘↑ and ⌘↓ in queue flow: the previous or next agent of the queue, wrapping.
 pub(crate) fn step(state: &mut State, by: isize, tx: &mut Tx) {
     let on_screen = state.window.on_screen(&state.facts);

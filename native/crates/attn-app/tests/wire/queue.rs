@@ -209,6 +209,26 @@ fn the_opened_list_shows_working_and_snoozed_agents_and_its_filter_narrows_them_
 }
 
 #[test]
+fn escape_in_the_filter_clears_it_then_closes_the_list() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.type_text("zzz"));
+    assert!(!lines(&world).contains(&"queue-settled.w1".to_owned()));
+
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+    assert!(lines(&world).contains(&"queue-settled.w1".to_owned()));
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("queue.filter.field"),
+        "the cleared filter keeps the keyboard"
+    );
+
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+    assert!(!lines(&world).contains(&"queue.filter".to_owned()));
+    assert!(world.daemon.sent_of("pty_input").is_empty());
+}
+
+#[test]
 fn a_turn_age_moves_on_when_it_would_read_differently_and_not_before() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
     let five_and_a_half_minutes = 29.5;
