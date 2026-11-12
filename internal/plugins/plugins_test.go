@@ -75,3 +75,23 @@ func TestLoadManifestAcceptsWhatARuntimeCanStartAndNamesWhatItRefuses(t *testing
 		})
 	}
 }
+
+func TestDiscoverSkipsAPluginStillBeingInstalled(t *testing.T) {
+	pluginDir := t.TempDir()
+	for _, dir := range []string{"sample", ".sample.install-123"} {
+		root := filepath.Join(pluginDir, dir)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		manifest := "name = \"sample\"\nversion = \"0.1.0\"\nattn_api_version = 7\n\n[plugin]\nentrypoint = \"index.ts\"\n"
+		for name, body := range map[string]string{ManifestName: manifest, "index.ts": "// entrypoint\n"} {
+			if err := os.WriteFile(filepath.Join(root, name), []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	found, issues := Discover(pluginDir)
+	if len(issues) != 0 || len(found) != 1 || filepath.Base(found[0].Dir) != "sample" {
+		t.Fatalf("Discover = %+v, issues %v; want only the installed sample, never the staging copy that is still running bun install", found, issues)
+	}
+}

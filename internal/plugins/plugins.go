@@ -127,6 +127,9 @@ func Discover(pluginDir string) ([]Manifest, []ManifestIssue) {
 	manifests := make([]Manifest, 0, len(entries))
 	var issues []ManifestIssue
 	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
 		entryPath := filepath.Join(pluginDir, entry.Name())
 		linkTarget := ""
 		if entry.Type()&os.ModeSymlink != 0 {
@@ -383,8 +386,7 @@ func Remove(pluginDir, name string) error {
 }
 
 func validInstallName(name string) bool {
-	return name != "." &&
-		name != ".." &&
+	return !strings.HasPrefix(name, ".") &&
 		name == filepath.Base(name) &&
 		!strings.ContainsAny(name, `/\`)
 }
