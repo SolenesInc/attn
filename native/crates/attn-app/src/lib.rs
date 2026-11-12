@@ -133,7 +133,7 @@ pub fn bind(
             deep_link::settle(state, tx);
             state.tick(tx);
             sidebar::snooze::follow(state);
-            sidebar::follow_countdowns(state);
+            sidebar::session_menu::follow(state);
             sidebar::advance(state, tx);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state
@@ -194,7 +194,8 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if aged {
         state.tick(tx);
     }
-    shell::expire(state, now, tx) || aged || answered || browsed || launched
+    let drains = sidebar::follow_countdowns(state, state.wall_ms(tx));
+    shell::expire(state, now, tx) || aged || answered || browsed || launched || drains
 }
 
 /// The app as every window runs it, and as `App::headless_runtime` runs it in tests.

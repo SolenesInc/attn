@@ -832,3 +832,169 @@ fn the_cancel_countdown_key_stops_the_countdowns_on_screen_or_keeps_the_next_tur
         "with nothing counting, the agent shown keeps its next turn"
     );
 }
+
+#[test]
+fn a_countdown_that_leaves_the_screen_drains_only_the_time_it_has_left() {
+    let mut world = World::start(Daemon::scripted().state(one_desktop(vec![turn("a", 5)])));
+    world.open_desktop();
+    changes(&mut world, settling("a", 1));
+    world.advance(Duration::from_secs(50));
+
+    world.gesture(|app| app.click(Target::key("sidebar.home")));
+    assert_eq!(name(&world, "sidebar.session.a.settling"), "Settling");
+    world.advance(Duration::from_secs(11));
+
+    assert!(
+        world.runtime_is_at_rest(),
+        "the bar empties at the deadline"
+    );
+}
+
+fn actions_for(world: &mut World, row: &str) {
+    world.gesture(|app| app.click(Target::key(format!("{row}.actions"))));
+}
+
+#[test]
+fn a_row_s_actions_menu_marks_priority_reloads_and_closes_the_agent() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    for row in [
+        "queue-chief.chief",
+        "queue-turn.t-old",
+        "queue-settled.w1",
+        "queue-snoozed.s1",
+    ] {
+        assert!(
+            world
+                .screen()
+                .find(Target::key(format!("{row}.actions")))
+                .is_some(),
+            "{row}"
+        );
+    }
+
+    actions_for(&mut world, "queue-turn.t-old");
+    assert!(
+        world
+            .screen()
+            .find(Target::role("menu").name("Actions for t-old"))
+            .is_some()
+    );
+    world.gesture(|app| app.click(Target::key("session.menu.priority")));
+    let priority = world.daemon.sent_of("set_session_priority");
+    assert_eq!(
+        (
+            priority[0]["session_id"].as_str(),
+            priority[0]["priority"].as_bool()
+        ),
+        (Some("t-old"), Some(true))
+    );
+    assert!(world.screen().find(Target::role("menu")).is_none());
+
+    actions_for(&mut world, "queue-turn.t-old");
+    world.gesture(|app| app.click(Target::key("session.menu.reload")));
+    assert_eq!(
+        world.daemon.sent_of("reload_session")[0]["id"].as_str(),
+        Some("t-old")
+    );
+
+    actions_for(&mut world, "queue-turn.t-new");
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+    let closed: Vec<_> = world
+        .daemon
+        .sent_of("unregister")
+        .iter()
+        .map(|m| m["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(closed, ["t-new"]);
+}
+
+#[test]
+fn closing_the_agent_on_screen_in_queue_flow_opens_the_next_turn() {
+    let mut world = World::start(
+        Daemon::scripted().state(queue(one_desktop(vec![turn("a", 30), turn("b", 20)]))),
+    );
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    daemon_shows(&mut world, &[&turn("a", 30), &turn("b", 20)], "a");
+
+    actions_for(&mut world, "queue-turn.a");
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+
+    assert_eq!(shown(&world), ["a", "b"]);
+}
+
+#[test]
+fn a_crew_member_is_protected_from_closing_and_the_chief_offers_no_close() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+
+    actions_for(&mut world, "queue-chief.chief");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("session.menu.close"))
+            .is_none()
+    );
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+
+    let mut world = World::start(
+        Daemon::scripted().state(queue(one_desktop(vec![crew("mate", "mate", false)]))),
+    );
+    actions_for(&mut world, "queue-crew.mate");
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+    assert!(world.daemon.sent_of("unregister").is_empty());
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("notice.text"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("mate is protected — ask mate to close to end its session.")
+    );
+}
+
+#[test]
+fn rename_session_sends_the_typed_name_and_refuses_an_empty_one() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    actions_for(&mut world, "queue-turn.t-old");
+    world.gesture(|app| app.click(Target::key("session.menu.rename")));
+
+    world.gesture(|app| app.type_text("   "));
+    world.gesture(|app| app.key(plain(rune::Key::Enter)));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("session.rename.refused"))
+            .is_some()
+    );
+    assert!(world.daemon.sent_of("rename_session").is_empty());
+
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+    actions_for(&mut world, "queue-turn.t-old");
+    world.gesture(|app| app.click(Target::key("session.menu.rename")));
+    world.gesture(|app| app.type_text("docs pass"));
+    world.gesture(|app| app.key(plain(rune::Key::Enter)));
+
+    let renamed = world.daemon.sent_of("rename_session");
+    assert_eq!(
+        (
+            renamed[0]["session_id"].as_str(),
+            renamed[0]["label"].as_str()
+        ),
+        (Some("t-old"), Some("docs pass"))
+    );
+    assert!(world.screen().find(Target::role("dialog")).is_none());
+}
+
+#[test]
+fn the_actions_menu_closes_when_its_agent_goes_away() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    actions_for(&mut world, "queue-turn.t-old");
+
+    world.daemon.emit(SessionUnregisteredMessage {
+        session: turn("t-old", 120),
+        ..SessionUnregisteredMessage::new()
+    });
+    world.settle();
+
+    assert!(world.screen().find(Target::role("menu")).is_none());
+}

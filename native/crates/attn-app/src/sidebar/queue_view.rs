@@ -309,7 +309,11 @@ fn line(state: &State, line: &QLine, t: &Tokens) -> El {
     if let QLine::Filter = line {
         return filter(state, key, t);
     }
-    memo(key.clone(), (line, *t), || {
+    let draining = match line {
+        QLine::Agent(a) => state.window.countdowns.contains_key(&a.agent.id),
+        _ => false,
+    };
+    memo(key.clone(), (line, draining, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         match line {
             QLine::Rule { text: label, .. } => rule(key, label, t),
@@ -494,18 +498,19 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             },
         )
     });
-    (a.settle || a.snooze || a.unsnooze).then(|| {
+    Some(
         row()
             .key(format!("{key}.controls"))
             .gap(2.0)
             .group_opacity(0.0, 1.0)
             .children(unsnooze)
             .children(snooze)
-            .children(settle)
-    })
+            .child(super::actions_button(key, &a.agent, t))
+            .children(settle),
+    )
 }
 
-fn control(row_key: &str, name: &str, label: String, glyph: &str, t: &Tokens) -> El {
+pub(super) fn control(row_key: &str, name: &str, label: String, glyph: &str, t: &Tokens) -> El {
     row()
         .key(format!("{row_key}.{name}"))
         .role("button")

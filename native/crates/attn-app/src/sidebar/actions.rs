@@ -116,10 +116,15 @@ pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
     }
 }
 
-/// The cancel-countdown key: stops every countdown on screen, or, with none running, keeps
-/// the next turn of the agent on screen from settling on its own.
+/// The cancel-countdown key: stops every countdown on the desktop shown, or, with none
+/// running, keeps the next turn of the agent shown from settling on its own.
 pub(crate) fn cancel_countdown(state: &State) {
-    let on_screen = crate::desktop::on_screen_sessions(state);
+    let on_screen: Vec<String> = match (state.window.view, state.facts.current_desktop()) {
+        (View::Desktop, Some(desktop)) => {
+            desktop.panes.iter().map(|p| p.session_id.clone()).collect()
+        }
+        _ => Vec::new(),
+    };
     let counting: Vec<&String> = on_screen
         .iter()
         .filter(|id| {
@@ -152,11 +157,31 @@ pub(crate) fn toggle_priority_on_screen(state: &mut State) {
     let Some(priority) = session(state, &id).map(|s| s.priority == Some(true)) else {
         return;
     };
+    set_priority(state, &id, !priority);
+}
+
+pub(crate) fn set_priority(state: &State, session: &str, priority: bool) {
     let _ = state.daemon.send(&SetSessionPriorityMessage {
-        session_id: id,
-        priority: !priority,
+        session_id: session.into(),
+        priority,
         ..SetSessionPriorityMessage::new()
     });
+}
+
+/// In queue flow, leaving an agent on screen that is closing opens the oldest turn owed by
+/// another agent.
+pub(crate) fn move_on_from(state: &mut State, leaving: &str, tx: &mut Tx) {
+    if !queue_flow(state) {
+        return;
+    }
+    let next = queue::bands(&state.facts, state.window.now_ms)
+        .turns
+        .iter()
+        .map(|row| row.session.id.clone())
+        .find(|id| id != leaving);
+    if let Some(id) = next {
+        open_agent(state, &id, tx);
+    }
 }
 
 /// After each change the daemon sends, in queue flow: when the turn of the agent on screen

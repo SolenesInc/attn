@@ -3,6 +3,7 @@ mod chrome;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
+pub(crate) mod session_menu;
 pub(crate) mod snooze;
 
 use std::cell::Cell;
@@ -174,13 +175,24 @@ pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
 
 fn line(state: &State, line: &Line, t: &Tokens) -> El {
     let key = line.key();
-    memo(key.clone(), (line, *t), || {
+    let draining = match line {
+        Line::Agent { row, .. } => state.window.countdowns.contains_key(&row.id),
+        _ => false,
+    };
+    memo(key.clone(), (line, draining, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         match line {
             Line::Desktop(desktop) => desktop_row(key, desktop, t),
             Line::Agent { row, .. } => {
                 let bar = settling_bar(state, &key, row, t);
-                agent_row(key, row, t).children(bar)
+                let more = rune::row()
+                    .key(format!("{key}.controls"))
+                    .group_opacity(0.0, 1.0)
+                    .child(actions_button(&key, row, t));
+                agent_row(key, row, t)
+                    .hover_group()
+                    .child(more)
+                    .children(bar)
             }
             Line::Tile(tile) => tile_row(key, tile, t),
         }
@@ -274,29 +286,60 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
         )
 }
 
+/// The ••• button that opens an agent's actions menu under itself.
+pub(crate) fn actions_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El {
+    let (id, name, under) = (
+        agent.id.clone(),
+        agent.name.clone(),
+        format!("{row_key}.actions"),
+    );
+    queue_view::control(
+        row_key,
+        "actions",
+        format!("Actions for {}", agent.name),
+        "•••",
+        t,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        session_menu::open(state, &id, name.clone(), under.clone(), tx)
+    })
+}
+
 /// One auto-settle countdown's drain: full when first seen, empty at its deadline.
 pub(crate) struct Countdown {
     fires_at: String,
     drain: rune::Tween<[f32; 2]>,
 }
 
-/// Starts a drain for each countdown the daemon began and drops those it ended, so the
-/// drain runs from when the window first saw the deadline to the deadline.
-pub(crate) fn follow_countdowns(state: &mut State) {
-    let now_ms = state.window.now_ms;
-    let counting: Vec<(String, String)> = state
+/// Keeps a drain for each countdown whose agent is off screen, started from the time left
+/// when it left the screen or began, so the bar empties at the deadline. True when one began
+/// or ended.
+pub(crate) fn follow_countdowns(state: &mut State, now_ms: i64) -> bool {
+    let counting = |s: &&attn_protocol::Session| {
+        matches!(model::Settling::of(s), model::Settling::Counting(_))
+    };
+    if state.window.countdowns.is_empty() && !state.facts.sessions.iter().any(|s| counting(&s)) {
+        return false;
+    }
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    let off_screen: Vec<(String, String)> = state
         .facts
         .sessions
         .iter()
-        .filter_map(|s| match model::Settling::of(s) {
-            model::Settling::Counting(at) => Some((s.id.clone(), at)),
-            _ => None,
-        })
+        .filter(|s| counting(s) && !on_screen.contains(&s.id))
+        .filter_map(|s| Some((s.id.clone(), s.auto_settle_fires_at.clone()?)))
         .collect();
     let countdowns = &mut state.window.countdowns;
-    countdowns.retain(|id, c| counting.iter().any(|(i, at)| i == id && *at == c.fires_at));
-    for (id, fires_at) in counting {
+    let before = countdowns.len();
+    countdowns.retain(|id, c| {
+        off_screen
+            .iter()
+            .any(|(i, at)| i == id && *at == c.fires_at)
+    });
+    let mut changed = countdowns.len() != before;
+    for (id, fires_at) in off_screen {
         countdowns.entry(id).or_insert_with(|| {
+            changed = true;
             let left_ms = queue::epoch_ms(&fires_at).map_or(0, |at| (at - now_ms).max(0));
             Countdown {
                 drain: rune::Tween::linear(
@@ -308,6 +351,7 @@ pub(crate) fn follow_countdowns(state: &mut State) {
             }
         });
     }
+    changed
 }
 
 /// The bar under a row whose agent's tile is off screen while its turn auto-settles: it

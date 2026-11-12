@@ -43,13 +43,13 @@ pub struct Window {
     pub follow_next_turn: bool,
     /// The home screen lists its snoozed agents, not only their count.
     pub home_snoozed_open: bool,
-    /// Each running auto-settle countdown's drain, by agent: kept while its deadline holds so a
-    /// row rebuilt mid-countdown keeps draining where it was.
+    /// The drain of each running auto-settle countdown whose agent is off screen, by agent.
     pub(crate) countdowns: std::collections::HashMap<String, crate::sidebar::Countdown>,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) launching: crate::picker::Launching,
     /// Links opened before the current desktop arrived, in the order they came.
     pub(crate) links: Vec<crate::deep_link::Link>,
+    pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -370,6 +370,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     }
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
+    layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
     if let Some(notice) = &window.notice {

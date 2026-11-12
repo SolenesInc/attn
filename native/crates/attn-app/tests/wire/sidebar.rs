@@ -106,9 +106,9 @@ fn rows(world: &World) -> Vec<String> {
         .all(Target::role("button"))
         .into_iter()
         .filter(|n| {
-            n.key
-                .as_deref()
-                .is_some_and(|k| k.starts_with("sidebar.") && k != "sidebar.home")
+            n.key.as_deref().is_some_and(|k| {
+                k.starts_with("sidebar.") && k != "sidebar.home" && !k.ends_with(".actions")
+            })
         })
         .filter_map(|n| n.name)
         .collect()
