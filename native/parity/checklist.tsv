@@ -1,0 +1,10 @@
+item	statement	native_test	reason
+41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
+41	Hidden tiles release GPU memory and return with one repaint; many tiles never fail		gap: s-gjttf8
+42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size		gap: s-rzb1xd
+43	An emoji ZWJ, flag, skin-tone or keycap sequence takes one cell, as grapheme clustering (DECSET 2027) stays on through a program's reset or DECRST	attn-app/tests/wire/terminal.rs::an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off	
+43	Such a sequence draws as a single glyph on macOS		gap: s-916dgb
+44	A Private Use Area icon (Nerd Font) draws from the fonts the native app bundles	live:s-916dgb/live-shot2.png	
+44	It draws on the first frame, with no fallback glyph before the fonts load		gap: s-916dgb
+46	Terminal input latency is measured natively		gap: s-c6b9zk
+92	Linux gives the same grid geometry as macOS for the same window and font size		gap: s-rzb1xd

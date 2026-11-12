@@ -1,26 +1,50 @@
 #!/usr/bin/env bash
-# Checks native/parity/wire.tsv: every row names a Vitest test that exists and
-# either a native test that exists or a reason the test was dropped.
+# Checks the native app's parity manifests.
+#
+# native/parity/wire.tsv: every row names a Vitest test that exists and either
+# a native test that exists or a reason the test was dropped.
+#
+# native/parity/checklist.tsv: every row names an item of the no-regression
+# checklist and either a native test that exists, a live run's artifact on a
+# seed, or a reason the item has none.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-manifest="${NATIVE_PARITY_WIRE:-$root/native/parity/wire.tsv}"
-header=$'vitest_file\tvitest_test\tnative_test\treason'
+wire="${NATIVE_PARITY_WIRE:-$root/native/parity/wire.tsv}"
+checklist="${NATIVE_PARITY_CHECKLIST:-$root/native/parity/checklist.tsv}"
 
 problems=()
 quoted_in() {
   grep -qF -e "'$1'" -e "\"$1\"" -e "\`$1\`" "$2"
 }
 
-line=0
+# The problem with native test $2, named at $1, or nothing when it exists.
+check_native_test() {
+  local where="$1" native="$2" path function
+  path="${native%%::*}"
+  function="${native#*::}"
+  if [ "$path" = "$native" ] || [ -z "$function" ]; then
+    problems+=("$where: name the native test as <crate>/tests/wire/<file>.rs::<function>")
+  elif [ ! -f "$root/native/crates/$path" ]; then
+    problems+=("$where: native/crates/$path does not exist")
+  elif ! grep -qE "^[[:space:]]*(pub )?fn $function\(" "$root/native/crates/$path"; then
+    problems+=("$where: native/crates/$path has no test named $function")
+  fi
+}
+
+check_header() {
+  local manifest="$1" header="$2" first
+  IFS= read -r first <"$manifest" || first=""
+  [ "$first" = "$header" ] ||
+    problems+=("${manifest#"$root"/} line 1: the header must be: ${header//$'\t'/<tab>}")
+}
+
+check_header "$wire" $'vitest_file\tvitest_test\tnative_test\treason'
+line=1
 while IFS= read -r row || [ -n "$row" ]; do
   line=$((line + 1))
-  if [ "$line" -eq 1 ]; then
-    [ "$row" = "$header" ] || problems+=("line 1: the header must be: ${header//$'\t'/<tab>}")
-    continue
-  fi
-  IFS=$'\t' read -r file test native reason extra <<<"$row"
-  where="line $line"
+  IFS=$'\x1f' read -r file test native reason extra <<<"${row//$'\t'/$'\x1f'}"
+  where="${wire#"$root"/} line $line"
   if [ -n "${extra:-}" ] || [ -z "${file:-}" ] || [ -z "${test:-}" ] || [ -z "${native:-}" ]; then
     problems+=("$where: a row has four tab-separated columns, and only reason may be empty")
     continue
@@ -40,24 +64,43 @@ while IFS= read -r row || [ -n "$row" ]; do
     continue
   fi
   [ -z "${reason:-}" ] || problems+=("$where: only a dropped test has a reason")
-  path="${native%%::*}"
-  function="${native#*::}"
-  if [ "$path" = "$native" ] || [ -z "$function" ]; then
-    problems+=("$where: name the native test as <crate>/tests/wire/<file>.rs::<function>, or write dropped")
-  elif [ ! -f "$root/native/crates/$path" ]; then
-    problems+=("$where: native/crates/$path does not exist")
-  elif ! grep -qE "^[[:space:]]*(pub )?fn $function\(" "$root/native/crates/$path"; then
-    problems+=("$where: native/crates/$path has no test named $function")
-  fi
-done <"$manifest"
+  check_native_test "$where" "$native"
+done < <(tail -n +2 "$wire")
+wire_rows=$((line - 1))
 
 while IFS= read -r twice; do
-  [ -n "$twice" ] && problems+=("${twice//$'\t'/ \"}\" has more than one row")
-done < <(tail -n +2 "$manifest" | cut -f1,2 | sort | uniq -d)
+  [ -n "$twice" ] && problems+=("${wire#"$root"/}: ${twice//$'\t'/ \"}\" has more than one row")
+done < <(tail -n +2 "$wire" | cut -f1,2 | sort | uniq -d)
+
+check_header "$checklist" $'item\tstatement\tnative_test\treason'
+line=1
+while IFS= read -r row || [ -n "$row" ]; do
+  line=$((line + 1))
+  IFS=$'\x1f' read -r item statement native reason extra <<<"${row//$'\t'/$'\x1f'}"
+  where="${checklist#"$root"/} line $line"
+  if [ -n "${extra:-}" ] || [ -z "${item:-}" ] || [ -z "${statement:-}" ]; then
+    problems+=("$where: a row has four tab-separated columns: item, statement, native_test, reason")
+    continue
+  fi
+  [[ "$item" =~ ^[0-9]+$ ]] || problems+=("$where: item is the checklist's number, not \"$item\"")
+  if [ -z "${native:-}" ]; then
+    [[ "${reason:-}" =~ ^(n/a:\ .+|gap:\ s-[a-z0-9]{6})$ ]] ||
+      problems+=("$where: a row with no native_test needs a reason, \"n/a: <why>\" or \"gap: <seed id>\"")
+    continue
+  fi
+  [ -z "${reason:-}" ] || problems+=("$where: only a row with no native_test has a reason")
+  if [[ "$native" == live:* ]]; then
+    [[ "$native" =~ ^live:s-[a-z0-9]{6}/[^/[:space:]]+$ ]] ||
+      problems+=("$where: name a live run's evidence as live:<seed id>/<artifact>")
+    continue
+  fi
+  check_native_test "$where" "$native"
+done < <(tail -n +2 "$checklist")
+checklist_rows=$((line - 1))
 
 if [ "${#problems[@]}" -gt 0 ]; then
-  echo "native-parity: ${manifest#"$root"/} has ${#problems[@]} problem(s):" >&2
+  echo "native-parity: ${#problems[@]} problem(s):" >&2
   printf '  %s\n' "${problems[@]}" >&2
   exit 1
 fi
-echo "native-parity: ${manifest#"$root"/} maps $((line - 1)) Vitest test(s)"
+echo "native-parity: ${wire#"$root"/} maps $wire_rows Vitest test(s); ${checklist#"$root"/} has $checklist_rows checklist row(s)"

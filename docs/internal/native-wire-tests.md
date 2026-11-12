@@ -169,6 +169,11 @@ both sides have nothing left to do.
   nothing.
 - `world.take_frames()` returns the binary frames the link decoded and handed
   on, oldest first.
+- `world.terminal_frames()` counts the frames that drew something new in a
+  terminal. After each settle the world asks the app's terminal compositor
+  whether its next frame would draw differently, as a window does before it
+  presents a frame that only a key or a timer asked for, and draws it without
+  a GPU when it would. A key whose echo has not come back adds none.
 - `world.runtime().state` is the window's state, for what the screen cannot
   show.
 
@@ -187,3 +192,21 @@ them. When a native wire test replaces a Vitest test, add a row:
 `scripts/native-parity` checks every row: the Vitest file has a test with that
 name, the native test exists, a dropped test gives a reason, and no Vitest test
 has two rows. `make check-native` and CI's native jobs run it.
+
+## Record what each checklist item rests on
+
+`native/parity/checklist.tsv` maps items of the no-regression checklist in
+`survey-prior-art.md` (on seed `s-kxncd8`) to the evidence that the native app
+keeps them. An item can have several rows, one per part of it.
+
+| Column | Holds |
+| --- | --- |
+| `item` | The checklist item's number. |
+| `statement` | What the native app does for that item, or that part of it. |
+| `native_test` | `<crate>/tests/wire/<file>.rs::<function>`, `live:<seed id>/<artifact>` for a live run's evidence attached to a seed, or empty. |
+| `reason` | Empty when `native_test` names evidence. Otherwise `n/a: <why>` when the item does not apply, or `gap: <seed id>` for the seed that will supply it. |
+
+`scripts/native-parity` checks every row: the native test exists, a live
+reference has the `live:<seed id>/<artifact>` form, and an empty `native_test`
+has a reason in one of those forms. It cannot see the Notebook from CI, so it
+does not check that the artifact is attached to the seed.
