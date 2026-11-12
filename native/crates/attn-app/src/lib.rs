@@ -14,6 +14,7 @@ mod shell;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
 mod terminal;
+pub mod window_host;
 
 use std::sync::Arc;
 

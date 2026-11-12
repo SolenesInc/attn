@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 
+use attn_automation::WindowInfo;
 use rune::prefs::Prefs;
 use rune::{App, Tx, WindowHandle, WindowOptions};
 
@@ -47,4 +48,35 @@ fn save(_: &mut State, _: &mut Tx) {
             eprintln!("attn-app: the window's frame was not saved: {why}");
         }
     });
+}
+
+/// The main window as a driver outside the process names it, while it is open. Call it on the
+/// UI thread.
+pub(crate) fn main_window() -> Option<WindowInfo> {
+    MAIN.with_borrow(|main| {
+        let (_, window) = main.as_ref()?;
+        window.placement()?;
+        Some(WindowInfo {
+            id: platform_id(window)?,
+            mapped: true,
+        })
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn platform_id(window: &WindowHandle) -> Option<u64> {
+    window.window_number().map(u64::from)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_id(window: &WindowHandle) -> Option<u64> {
+    use rune::raw_window_handle::RawWindowHandle;
+    window
+        .with_raw_handle(|handle| match handle.as_raw() {
+            RawWindowHandle::Xlib(x) => Some(x.window as u64),
+            RawWindowHandle::Xcb(x) => Some(u64::from(x.window.get())),
+            _ => None,
+        })
+        .ok()
+        .flatten()
 }
