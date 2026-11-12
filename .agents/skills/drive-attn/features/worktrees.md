@@ -116,7 +116,7 @@ Steps:
 ## Contexts
 
 - **Durability across restarts**: tracked repositories, pins, verdicts and the removal log are daemon records and come back after any restart. A repository stays tracked after its last worktree is gone, and until its folder is gone.
-- **Linux**: `attn worktree` and the sweep work the same where the daemon runs on Linux. `sessions.open` is Ctrl+Alt+L there (`LINUX_SHORTCUTS`).
+- **Linux**: `attn worktree` and the sweep work the same where the daemon runs on Linux. `session.new` is Ctrl+Shift+N and `sessions.open` is Ctrl+Alt+L there (`LINUX_SHORTCUTS`).
 - **Outposts**: `worktree_sweep_enabled` is a machine setting, so each machine decides for itself. A delegation with `--host` creates its worktree on that outpost, and the outpost checks the folder, refs and worktree path. When you resume a closed outpost session whose worktree was deleted, Reopen can recreate the worktree on that outpost, and offers "Recreate the worktree" (`recreate_worktree_and_reopen`), or "Fetch, recreate, reopen" (`fetch_recreate_and_reopen`) when the branch is only on a remote. For resume, see [ledger.md](ledger.md). The Worktrees list covers only the home's repositories, so it never shows a worktree on an outpost, and an outpost session's ledger row has no "Show worktree".
 - **Profiles**: worktrees belong to the machine, not to a profile. The list covers every tracked repository, and a live session in any profile keeps the worktree it runs in.
 - **Performance and idle cost**: a pass reads git state for every worktree of every tracked repository. The pass does not inspect a worktree younger than the idle floor deeply. Scenario `worktree-surface` times one refresh over a repository of tens of thousands of files.

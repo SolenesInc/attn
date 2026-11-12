@@ -72,7 +72,7 @@ Steps:
 - **Go to a tile.** Press `mod+k`, type `<seed>` and press `enter`; the native seed tile is named by the seed's id, not its title. `bridge state '{"of":"window"}'` shows the tile's desktop, and `wsctl list` shows the tile as that desktop's `active_pane_id`.
 - **Commands by typing `>`.** Press `mod+k` and type `>keyboard shortcuts`: `palette.dialog` is named `Commands` and the tree marks `palette.row.command:keyboard-shortcuts` `selected`. Press `enter`: `bridge wait '{"target":{"key":"shortcuts"}}'` answers. Press `escape`.
 - **The command palette from its key and the button.** Press `mod+shift+k`: `palette.dialog` is named `Commands`. Press `escape`. Run `bridge press '{"target":{"key":"titlebar.commands"}}'`: the same palette opens. Press `escape`.
-- **Switch faces, then close with the same key.** Press `mod+shift+k` and type `pal`. Press `mod+k`: `palette.dialog` is named `Agents` and the count reads `3 of 3`. Press `mod+k` again: `palette` is gone.
+- **Switch faces, then close with the same key.** Press `mod+shift+k` and type `pal`. Press `mod+k`: `palette.dialog` is named `Agents` and the count reads `2 of 3`, since `pal` matches the two agents and not the seed tile, which is named by its id. Press `mod+k` again: `palette` is gone.
 - **Move, and leave command mode.** Press `mod+k`: the tree marks the first agent `selected`, and `down` then `up` move the mark and back. Type `>`: the palette is named `Commands`. Press `backspace`: it is named `Agents` again. Press `escape`.
 - **The queue bar's pill and the agent list key.** Run `./attn settings set queue_mode_enabled true` and press `mod+b`: `bridge find '{"target":{"key":"queue-bar.pill"}}'` is named `1 waiting · …`. Run `bridge press '{"target":{"key":"queue-bar.pill"}}'`: the agent palette opens. Press `escape`, then `mod+shift+a`: the agent palette opens again. Press `escape` and `mod+b`.
 - **What the palette learned.** Open `pal-b` from the palette, then press `mod+shift+k` and wait for `palette.row.command:new-agent`, since the list first reads "Loading command history…". The tree lists the commands pinned for the agent on screen first, `palette.row.command:reload-active-session` among them, then `palette.row.command:keyboard-shortcuts`, which an earlier step picked, before `palette.row.command:new-agent`. Press `escape`. Quit the app by its captured PID, launch it again and repeat: the order is the same, since the history is the daemon's.
@@ -84,7 +84,7 @@ Steps:
 ## Contexts
 
 - **Durability across restarts**: what the palette learned is the daemon's, per profile, and survives app and daemon restarts. Each pick's weight halves every 14 days.
-- **Linux**: `ui.actionMenu` is Ctrl+Shift+K and `ui.commandPalette` Ctrl+Alt+K (`LINUX_SHORTCUTS`).
+- **Linux**: `ui.actionMenu` is Ctrl+Shift+K, `ui.commandPalette` Ctrl+Alt+K, `sidebar.agentList` Ctrl+Alt+A, `session.toggleSidebar` Ctrl+Alt+B, `session.settle` Ctrl+Alt+E, `session.priority` Ctrl+Alt+I, `session.snooze` Ctrl+Alt+S and `session.goToDashboard` Ctrl+Alt+H (`LINUX_SHORTCUTS`).
 - **Profiles**: the palette lists the selected profile's agents, crew and tiles only. Its history is the profile's own, and a profile switch picked from the palette counts in the profile it was picked in.
 - **Performance and idle cost**: the palette exists only while open, and each opening asks the daemon once for the profile's history.
 - **Harnesses**: the context-cap command shows only for Claude Code and Codex agents. Shared Codex adds commands of its own ([shared-codex.md](shared-codex.md)).
