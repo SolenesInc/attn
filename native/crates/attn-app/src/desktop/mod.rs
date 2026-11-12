@@ -5,6 +5,7 @@ mod actions;
 mod divider;
 mod drag;
 pub mod layout;
+mod overview;
 mod peek;
 mod shelf;
 mod view;
@@ -19,6 +20,7 @@ use crate::State;
 
 pub(crate) use actions::{escape, run, show_unseen};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
+pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
@@ -61,6 +63,8 @@ pub struct Desk {
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
+    /// The desktop the overview's keys act on.
+    pub(crate) overview_focus: Option<String>,
     /// The drain under each tile header whose agent's turn counts down to settling, by session.
     pub(crate) settling: HashMap<String, crate::sidebar::Countdown>,
 }

@@ -45,6 +45,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfSendToShelf => super::shelf::send_to_shelf(state, tx),
         ShelfFewerTiles => super::shelf::step_width(state, true, tx),
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
+        DesktopOverview => super::overview::toggle(state, tx),
         _ => return false,
     }
     if goes_to_a_desktop(action) {

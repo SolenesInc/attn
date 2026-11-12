@@ -86,6 +86,8 @@ pub enum Layer {
     NewSession,
     Settings,
     Shortcuts,
+    /// The desktop overview.
+    Overview,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -355,6 +357,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             layers.push(self::palette(palette, &window.search.query, t))
         }
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
+        Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
         Some(Layer::Settings) => layers.push(dialog(
             "settings",
             "Settings",

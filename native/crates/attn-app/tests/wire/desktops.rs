@@ -2082,3 +2082,148 @@ fn a_peek_being_replied_in_stays_while_the_pointer_crosses_another_chip() {
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+fn key(world: &mut World, key: rune::Key, shift: bool) {
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key,
+            mods: rune::Mods {
+                shift,
+                ..rune::Mods::default()
+            },
+        })
+    });
+}
+
+fn overview_card(world: &World, slot: u32) -> attn_testkit::Node {
+    world
+        .screen()
+        .get(Target::key(format!("overview.card.work/desktop_{slot}")))
+}
+
+#[test]
+fn the_overview_moves_between_desktops_by_arrow_and_switches_or_sends_the_active_tile() {
+    let mut world = start(two_desktops());
+
+    press(&mut world, Action::DesktopOverview);
+    let dialog = world.screen().get(Target::key("overview.dialog"));
+    assert_eq!(dialog.name.as_deref(), Some("Desktop overview"));
+    assert_eq!(
+        overview_card(&world, 1).value.as_deref(),
+        Some("current, focused")
+    );
+
+    key(&mut world, rune::Key::Right, false);
+    assert_eq!(overview_card(&world, 2).value.as_deref(), Some("focused"));
+    key(&mut world, rune::Key::Enter, true);
+    let moved = sent(&world, "desktop_move_leaf");
+    assert_eq!(moved.len(), 1, "Shift-Return sends the active tile");
+    assert_eq!(moved[0]["leaf_id"], "a");
+    assert_eq!(moved[0]["target_desktop_id"], "work/desktop_2");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+
+    press(&mut world, Action::DesktopOverview);
+    key(&mut world, rune::Key::Text("2".into()), false);
+    let current = sent(&world, "desktop_set_current");
+    assert_eq!(
+        current.last().unwrap()["desktop_id"],
+        "work/desktop_2",
+        "a digit switches"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+
+    press(&mut world, Action::DesktopOverview);
+    key(&mut world, rune::Key::Escape, false);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+
+    press(&mut world, Action::DesktopOverview);
+    click(&mut world, "overview.card.work/desktop_1");
+    let current = sent(&world, "desktop_set_current");
+    assert_eq!(
+        current.last().unwrap()["desktop_id"],
+        "work/desktop_1",
+        "a card switches"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_overviews_new_desktop_card_makes_a_desktop_and_switches_to_it() {
+    let daemon = daemon(two_desktops());
+    daemon.on("desktop_create", |_| {
+        attn_testkit::message(attn_protocol::ProfileActionResultMessage {
+            success: true,
+            desktops: Some(vec![desktop(3, "", None)]),
+            ..attn_protocol::ProfileActionResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.open_desktop();
+
+    press(&mut world, Action::DesktopOverview);
+    click(&mut world, "overview.new");
+
+    assert_eq!(sent(&world, "desktop_create").len(), 1);
+    let current = sent(&world, "desktop_set_current");
+    assert_eq!(current.last().unwrap()["desktop_id"], "work/desktop_3");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+}
+
+#[test]
+fn a_desktop_the_daemon_could_not_make_says_why() {
+    let daemon = daemon(two_desktops());
+    daemon.on("desktop_create", |_| {
+        attn_testkit::message(attn_protocol::ProfileActionResultMessage {
+            success: false,
+            error: Some("too many desktops".into()),
+            ..attn_protocol::ProfileActionResultMessage::new()
+        })
+    });
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.open_desktop();
+
+    press(&mut world, Action::DesktopOverview);
+    click(&mut world, "overview.new");
+
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("notice.text"))
+            .name
+            .as_deref(),
+        Some("Could not create a desktop: too many desktops")
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("overview.dialog"))
+            .is_none()
+    );
+}

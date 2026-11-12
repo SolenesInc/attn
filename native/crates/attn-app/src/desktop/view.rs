@@ -274,7 +274,7 @@ fn divider(split: String, direction: Direction, cx: &TileCx) -> El {
         })
 }
 
-fn share(child: El, ratio: f32) -> El {
+pub(super) fn share(child: El, ratio: f32) -> El {
     col()
         .grow(ratio.max(0.001))
         .min_w(0.0)
