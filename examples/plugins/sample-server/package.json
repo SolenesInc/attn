@@ -1,0 +1,7 @@
+{
+  "name": "attn-example-sample-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@victorarias/attn-plugin": "0.3.0" }
+}

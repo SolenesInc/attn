@@ -70,10 +70,16 @@ func (l *serverLink) logf(format string, args ...any) {
 func (l *serverLink) kind() string { return l.b.kind }
 
 func (l *serverLink) canRun(req *spawnRequest) bool {
-	return req.agent == l.b.agent && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
+	return req.agent == l.b.agent && (!req.hasPluginDriver || l.b.plugin == req.pluginDriver.PluginName) && !req.isShell && req.policy.unattendedLaunch.Executable == ""
 }
 
-func (l *serverLink) enabledForNewLaunches() bool { return l.d.on(l.b.feature) }
+func (l *serverLink) enabledForNewLaunches() bool {
+	if l.b.plugin != "" {
+		reg, conn := l.d.ensurePluginRegistry().driverConnection(l.b.agent, l.b.plugin)
+		return l.b.declaration.Load() != nil && conn != nil && reg.Capabilities["server_binding"]
+	}
+	return l.d.on(l.b.feature)
+}
 
 func (l *serverLink) admit(profile, conversation string) error {
 	holder := l.d.store.OpenSessionHoldingOutside(profile, conversation)
@@ -218,12 +224,12 @@ func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOpt
 	if c := l.client(); c != nil {
 		return c, nil
 	}
-	socket := l.b.socket(l.home())
+	socket := l.socketPath()
 	deadline := time.Now().Add(serverStartLimit)
 	started := false
 	for {
 		attempt, cancel := context.WithTimeout(ctx, serverCallLimit)
-		c, err := l.b.connect(attempt, socket, "attn", buildinfo.Version)
+		c, err := l.connect(attempt, socket, "attn", buildinfo.Version)
 		cancel()
 		if err == nil {
 			l.hold(c)
@@ -265,7 +271,11 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 	if err != nil {
 		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
-	argv, env := []string{executable, "serve"}, append(append([]string(nil), serverEnv...), l.b.homeVariable+"="+home)
+	args, homeVariable := []string{"serve"}, l.b.homeVariable
+	if p := l.b.declaration.Load(); p != nil {
+		args, homeVariable = p.ServeArgs, p.HomeEnv
+	}
+	argv, env := append([]string{executable}, args...), append(append([]string(nil), serverEnv...), homeVariable+"="+home)
 	spawn := ptybackend.SpawnOptions{
 		ID: terminal, Agent: l.b.kind, Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
 		Executable:    resolvedBinary(executable),
@@ -317,7 +327,11 @@ func (l *serverLink) watch(c *effectrpc.Client) {
 }
 
 func (l *serverLink) statusWatchParams() any {
-	if !l.b.tracksCompletions {
+	numbered := l.b.tracksCompletions
+	if p := l.b.declaration.Load(); p != nil {
+		numbered = p.Recovery == "numbered-completions"
+	}
+	if !numbered {
 		return nil
 	}
 	after := map[string]int64{}
@@ -514,12 +528,16 @@ func userName() string {
 }
 
 func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
-	if l.b.closeLeavesRun || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+	leavesRun := l.b.closeLeavesRun
+	if p := l.b.declaration.Load(); p != nil {
+		leavesRun = p.OnClose == "leave-running"
+	}
+	if leavesRun || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
 	defer cancel()
-	c, err := l.b.connect(ctx, l.b.socket(l.home()), "attn", buildinfo.Version)
+	c, err := l.connect(ctx, l.socketPath(), "attn", buildinfo.Version)
 	if err != nil {
 		return
 	}

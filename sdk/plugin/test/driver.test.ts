@@ -74,6 +74,39 @@ describe("AttnPluginClient driver", () => {
     });
   });
 
+  test("registers a shared server binding without terminal delivery handlers", async () => {
+    const daemon = await startDaemon();
+    const client = connectable(daemon);
+    client.driver({
+      ...baseDriver,
+      server: {
+        protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
+        homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
+        initialize: { server: "sample", protocol: { exact: 1 } },
+        callerConversationEnv: "SAMPLE_CONVERSATION", onClose: "leave-running",
+        recovery: "numbered-completions", targets: true,
+      },
+    });
+    await client.connect();
+    const registered = daemon.requests.find(request => request.method === "driver.register");
+    expect(registered?.params).toEqual({
+      agent: "sample", capabilities: { server_binding: true },
+      server: {
+        protocol: "attn-app-server-v1", executable: "sample", serve_args: ["serve"],
+        home_env: "SAMPLE_HOME", default_home: ".sample", socket_name: "sample.sock",
+        initialize: { server: "sample", protocol: { exact: 1 } },
+        caller_conversation_env: "SAMPLE_CONVERSATION", on_close: "leave-running",
+        recovery: "numbered-completions", targets: true,
+      },
+    });
+    expect(() => connectable(daemon).driver({ ...baseDriver, server: {
+      protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
+      homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
+      initialize: { protocol: { min: 7 } }, callerConversationEnv: "SAMPLE_ROOT",
+      onClose: "interrupt", recovery: "last-run",
+    }, deliver: () => accepted() })).toThrow("server binding supplies");
+  });
+
   test("keeps the driver out of the hello surfaces", async () => {
     const daemon = await startDaemon();
     const client = connectable(daemon);

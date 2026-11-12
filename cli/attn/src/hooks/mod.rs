@@ -4,9 +4,9 @@ pub mod input;
 use crate::client::{Client, SendError, read_json_value};
 use crate::instance::Paths;
 use attn_protocol::go_values::{
-    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, NISSE_CONVERSATION_PREFIX,
-    SIGMA_CONVERSATION_PREFIX, STATE_IDLE, STATE_LAUNCHING, STATE_PENDING_APPROVAL,
-    STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
+    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, MAX_SOCKET_FRAME_BYTES,
+    NISSE_CONVERSATION_PREFIX, SIGMA_CONVERSATION_PREFIX, STATE_IDLE, STATE_LAUNCHING,
+    STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
@@ -50,6 +50,54 @@ pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
         }
     }
     getenv("ATTN_SESSION_ID")
+}
+
+pub fn resolve_terminal(getenv: &dyn Fn(&str) -> String, paths: &Paths<'_>) -> String {
+    let terminal = terminal_from_env(getenv);
+    if !terminal.is_empty() {
+        return terminal;
+    }
+    server_caller(getenv, &paths.ws_port()).unwrap_or_default()
+}
+
+fn server_caller(getenv: &dyn Fn(&str) -> String, port: &str) -> Option<String> {
+    use std::io::Read;
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+    let address: SocketAddr = format!("127.0.0.1:{port}").parse().ok()?;
+    let mut connection = TcpStream::connect_timeout(&address, Duration::from_secs(1)).ok()?;
+    connection
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .ok()?;
+    connection
+        .set_write_timeout(Some(Duration::from_secs(1)))
+        .ok()?;
+    connection
+        .write_all(b"GET /agents HTTP/1.0\r\nHost: localhost\r\n\r\n")
+        .ok()?;
+    let mut reply = String::new();
+    connection
+        .take(MAX_SOCKET_FRAME_BYTES as u64)
+        .read_to_string(&mut reply)
+        .ok()?;
+    let (_, body) = reply.split_once("\r\n\r\n")?;
+    let catalog: serde_json::Value = serde_json::from_str(body).ok()?;
+    for agent in catalog.get("agents")?.as_array()? {
+        let Some(variable) = agent
+            .get("caller_conversation_env")
+            .and_then(|v| v.as_str())
+        else {
+            continue;
+        };
+        let conversation = getenv(variable);
+        if !conversation.is_empty() {
+            return Some(format!(
+                "server:{}:{conversation}",
+                agent.get("name")?.as_str()?
+            ));
+        }
+    }
+    None
 }
 
 fn conversation_terminal(prefix: &str, conversation: &str) -> String {

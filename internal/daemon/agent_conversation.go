@@ -36,11 +36,6 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		d.sendError(conn, "missing resume_session_id")
 		return
 	}
-	if observation.TranscriptPath == "" {
-		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
-		d.sendOK(conn)
-		return
-	}
 	if _, view, ours := d.linkCaller(terminal); ours {
 		if view == "" {
 			d.logf("agent conversation: no terminal shows the conversation of %s", terminal)
@@ -48,6 +43,11 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 			return
 		}
 		terminal = view
+	}
+	if observation.TranscriptPath == "" && d.linkOf(d.sessionInTerminal(terminal)) == nil {
+		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
+		d.sendOK(conn)
+		return
 	}
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
 		pausepoint.At(pausepoint.ConversationObserved)
@@ -79,7 +79,7 @@ func (d *Daemon) conversationIn(t harness.TerminalID, observation agentConversat
 func (d *Daemon) acceptMonitorConversation(source *sessionmonitor.Monitor, proposed sessionmonitor.Conversation, observation agentConversationObservation) bool {
 	t := proposed.Terminal
 	cur, placed := d.terminals().Showing(t)
-	if current := d.store.Get(cur); !placed || (current != nil && !conversationIsSession(current.Agent)) {
+	if current := d.store.Get(cur); !placed || (current != nil && d.linkOf(current.ID) == nil && !conversationIsSession(current.Agent)) {
 		observation.SessionID = d.sessionInTerminal(t)
 		defer d.lockSessionLifecycles(observation.SessionID)()
 		if source != nil {

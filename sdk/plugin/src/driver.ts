@@ -12,6 +12,32 @@ export type DriverLaunchInstructions = {
   profile_id?: string;
 };
 
+export type ServerBinding = {
+ protocol: "attn-app-server-v1";
+ executable: string;
+ executableEnv?: string;
+ serveArgs: string[];
+ homeEnv: string;
+ defaultHome: string;
+ socketName: string;
+ initialize: { server?: string; protocol: { exact: number; min?: never } | { min: number; exact?: never } };
+ callerConversationEnv: string;
+ onClose: "interrupt" | "leave-running";
+ recovery: "last-run" | "numbered-completions";
+ targets?: boolean;
+};
+
+export function serverRegistration(server: ServerBinding | undefined): Record<string, unknown> | undefined {
+ if (!server) return undefined;
+ return {
+  protocol: server.protocol, executable: server.executable, executable_env: server.executableEnv,
+  serve_args: server.serveArgs, home_env: server.homeEnv, default_home: server.defaultHome,
+  socket_name: server.socketName, initialize: server.initialize,
+  caller_conversation_env: server.callerConversationEnv, on_close: server.onClose,
+  recovery: server.recovery, targets: server.targets,
+ };
+}
+
 export type DriverSpawnParams = {
   agent: string;
   session_id: string;
@@ -22,6 +48,8 @@ export type DriverSpawnParams = {
   model?: string;
   effort?: string;
   initial_prompt?: string;
+  conversation_id?: string;
+  execution_target?: string;
   metadata?: unknown;
   resume_session_id?: string;
   instructions?: DriverLaunchInstructions;
@@ -157,6 +185,7 @@ export type DriverPromises = {
 export type DriverDefinition = DriverHandlers & DriverPromises & {
   /** Stable harness ID: lowercase letters, numbers, hyphens and underscores, starting with a letter or number. */
   id: string;
+  server?: ServerBinding;
 };
 
 export function accepted(): DriverDeliverResult {
@@ -180,7 +209,10 @@ const minimumDaemonBuild = "13595cac6922bb7b2d3d89d62e4879be500f7aa3";
 const buildGatedCapabilities = ["attributed_input", "safe_during_question", "compaction"];
 
 export function driverCapabilities(definition: DriverDefinition): Record<string, boolean> {
-  const { deliver, resume, resumeAvailable, compact, models } = definition;
+  const { deliver, resume, resumeAvailable, compact, models, server } = definition;
+ if (server && (deliver || compact || models || definition.stateReporting || definition.attributedInput || definition.safeDuringQuestion)) {
+ throw new Error("server binding supplies delivery, models and state; separate handlers are not supported");
+ }
   if (typeof definition.spawn !== "function") {
     throw new Error("driver spawn handler is required");
   }
@@ -188,6 +220,7 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
     throw new Error("driver resumeAvailable requires resume");
   }
   const capabilities: Record<string, boolean> = {
+    server_binding: !!server,
     resume: !!resume,
     resume_availability: !!resumeAvailable,
     model_discovery: !!models,
@@ -209,6 +242,7 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
 /** Turns the daemon's "unsupported driver capability" refusal into an upgrade instruction. */
 export function explainRegistrationError(error: Error): Error {
   const unsupported = /unsupported driver capability "([a-z_]+)"/.exec(error.message)?.[1];
+  if (unsupported === "server_binding") { return new Error("this attn daemon does not support server_binding; upgrade attn to a build supporting attn-app-server-v1"); }
   if (!unsupported || !buildGatedCapabilities.includes(unsupported)) {
     return error;
   }

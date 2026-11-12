@@ -30,8 +30,9 @@ type pluginDriverRegistration struct {
 }
 
 type pluginDriverRegisterParams struct {
-	Agent        string          `json:"agent"`
-	Capabilities map[string]bool `json:"capabilities,omitempty"`
+	Agent        string                   `json:"agent"`
+	Capabilities map[string]bool          `json:"capabilities,omitempty"`
+	Server       *pluginServerDeclaration `json:"server,omitempty"`
 }
 
 type pluginDriverRegisterResult struct {
@@ -68,6 +69,8 @@ type pluginDriverSpawnParams struct {
 	Yolo            bool                      `json:"yolo,omitempty"`
 	Model           string                    `json:"model,omitempty"`
 	Effort          string                    `json:"effort,omitempty"`
+	ExecutionTarget string                    `json:"execution_target,omitempty"`
+	ConversationID  string                    `json:"conversation_id,omitempty"`
 	InitialPrompt   string                    `json:"initial_prompt,omitempty"`
 	Metadata        json.RawMessage           `json:"metadata,omitempty"`
 	ResumeSessionID string                    `json:"resume_session_id,omitempty"`
@@ -230,7 +233,7 @@ func (r *pluginRegistry) registerDriver(plugin *pluginConnection, params pluginD
 }
 
 func pluginDriverRoute(reg pluginDriverRegistration) string {
-	if reg.Capabilities["message_delivery"] {
+	if reg.Capabilities["message_delivery"] || reg.Capabilities["server_binding"] {
 		return "direct"
 	}
 	return "terminal"
@@ -302,6 +305,7 @@ func normalizePluginAgent(value string) string {
 
 func validatePluginDriverCapabilities(values map[string]bool) (map[string]bool, error) {
 	allowed := map[string]struct{}{
+		"server_binding":         {},
 		"resume":                 {},
 		"resume_availability":    {},
 		"yolo":                   {},
@@ -342,11 +346,15 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 		if err := json.Unmarshal(msg.Params, &params); err != nil {
 			return nil, true, fmt.Errorf("decode driver.register params: %w", err)
 		}
-		if err := d.ensurePluginRegistry().registerDriver(plugin, params); err != nil {
+		if err := d.registerPluginDriver(plugin, params); err != nil {
 			return nil, true, err
 		}
 		d.logf("plugin driver registered plugin=%s agent=%s", plugin.name, normalizePluginAgent(params.Agent))
 		d.resolvePluginDriverRoutes(plugin.name, normalizePluginAgent(params.Agent))
+		if l := d.serverLinkFor(normalizePluginAgent(params.Agent)); l != nil && l.b.plugin == plugin.name {
+			l.recoverProcesses(d.life.Context())
+			l.recoverViews(d.life.Context())
+		}
 		d.pushMonitorPolicies()
 		d.publishFact(FactPluginDriverRegistered, plugin.name, nil)
 		d.life.Go("reviveAgentsOfRegisteredDriver", func() {

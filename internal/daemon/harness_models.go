@@ -75,7 +75,14 @@ func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCat
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)
 	defer cancel()
 	result := harnessModelCatalog{Models: []protocol.HarnessModel{}}
-	if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
+	if server := d.serverLinkFor(harness); server != nil {
+		models, err := server.models(ctx)
+		if err != nil {
+			return harnessModelCatalog{}, err
+		}
+		result.Models = models
+		result.Detail = "Models of the providers the " + server.b.name + " server has."
+	} else if plugin, ok := d.ensurePluginRegistry().driver(harness); ok {
 		if !plugin.Capabilities["model_discovery"] {
 			result.Detail = "This harness does not expose model discovery. Add an exact model or use its default."
 			return result, nil
@@ -83,13 +90,6 @@ func (d *Daemon) queryHarnessModels(harness, executable string) (harnessModelCat
 		if err := d.callPlugin(ctx, plugin.PluginName, "driver.models", map[string]string{"agent": harness}, &result); err != nil {
 			return harnessModelCatalog{}, err
 		}
-	} else if server := d.serverLinkFor(harness); server != nil {
-		models, err := server.models(ctx)
-		if err != nil {
-			return harnessModelCatalog{}, err
-		}
-		result.Models = models
-		result.Detail = "Models of the providers the " + server.b.name + " server has."
 	} else {
 		driver := agentdriver.Get(harness)
 		if driver == nil {

@@ -665,6 +665,9 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	if err := d.restorePluginServerOwners(); err != nil {
+		return fmt.Errorf("restore server ownership: %w", err)
+	}
 	if err := d.ensureEnrollment(); err != nil {
 		return fmt.Errorf("ensure enrollment record: %w", err)
 	}

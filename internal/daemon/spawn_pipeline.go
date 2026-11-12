@@ -323,7 +323,7 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 	}
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.spawnOpts.Effort)
 	if target := strings.TrimSpace(protocol.Deref(msg.ExecutionTarget)); target != "" {
-		if req.hasPluginDriver || req.driver == nil || !agentdriver.EffectiveCapabilities(req.driver).HasExecutionTarget {
+		if !agentdriver.EffectiveCapabilities(req.driver).HasExecutionTarget && !(d.serverLinkFor(req.agent) != nil && d.serverLinkFor(req.agent).hasTargets()) {
 			plan.rollback(d, msg.ID)
 			return nil, &spawnRejection{err: fmt.Errorf("agent %q has no execution targets", req.agent)}
 		}
@@ -377,7 +377,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	}
 	terminal := d.launchTerminal(req)
 	plan.spawnOpts.ID = terminal
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, nil)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.policy.startsLaunching, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"] && !req.pluginDriver.Capabilities["server_binding"], req.parentSessionID, nil)
 	session := plan.launchSession
 	session.Host = msg.Host
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
@@ -501,6 +501,12 @@ func (d *Daemon) launchedHere(sessionID protocol.SessionID, resumeID string) boo
 func (d *Daemon) persistLaunchedConversation(req *spawnRequest, plan *spawnPlan) {
 	sessionID := req.msg.ID
 	conversation := agentdriver.SpawnResumeSessionID(req.driver, string(plan.spawnOpts.ID), req.resumeSessionID, plan.spawnOpts.ResumePicker)
+	if req.hasPluginDriver && req.pluginDriver.Capabilities["server_binding"] {
+		conversation = req.resumeSessionID
+		if conversation == "" {
+			conversation = string(plan.spawnOpts.ID)
+		}
+	}
 	clearPicker := conversation == "" && !req.hasPluginDriver && (plan.spawnOpts.ResumePicker || conversationDecidesIdentity(req.driver))
 	if conversation == "" && !clearPicker {
 		return
@@ -723,6 +729,8 @@ func (d *Daemon) buildAgentSpawnLaunch(req *spawnRequest, plan *spawnPlan) (*Age
 			Yolo:            protocol.Deref(msg.YoloMode),
 			Model:           opts.Model,
 			Effort:          opts.Effort,
+			ExecutionTarget: opts.ExecutionTarget,
+			ConversationID:  d.linkConversation(msg.ID),
 			InitialPrompt:   req.initialPrompt,
 			ResumeSessionID: strings.TrimSpace(req.resumeSessionID),
 		}

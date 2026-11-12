@@ -48,7 +48,7 @@ type AgentPluginLaunch struct {
 }
 
 func (launch *AgentLaunch) driverRunID() string {
-	if launch == nil || launch.Plugin == nil {
+	if launch == nil || launch.Plugin == nil || launch.Link != "" {
 		return ""
 	}
 	return launch.Plugin.Params.RunID
@@ -97,8 +97,16 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 		if !ok || reg.PluginName != p.Plugin {
 			return nil, fmt.Errorf("agent %q is not available on this machine", opts.Agent)
 		}
-		d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
-		prepared := &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
+		serverBound := reg.Capabilities["server_binding"]
+		var prepared *preparedPluginReload
+		if serverBound {
+			if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
+				return nil, err
+			}
+		} else {
+			d.sessionMonitor(sessionID).BeginDriverLaunch(p.Plugin, p.Params.RunID)
+			prepared = &preparedPluginReload{d: d, sessionID: sessionID, pluginName: p.Plugin, runID: p.Params.RunID, route: pluginDriverRoute(reg)}
+		}
 		result, err := d.resolvePluginDriverLaunch(reg, p.Params, p.Resume)
 		if err != nil {
 			prepared.abort()
@@ -117,8 +125,13 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 				return nil, err
 			}
 		}
+		if serverBound {
+			l := d.serverLinkFor(opts.Agent)
+			declaration := l.b.declaration.Load()
+			env = append(env, declaration.HomeEnv+"="+l.home())
+		}
 		opts.LifecycleID, opts.AgentArgv, opts.AgentEnv, opts.ExternalCWD = p.Params.RunID, append([]string(nil), result.Argv...), env, externalCWD
-		if reload {
+		if reload && !serverBound {
 			opts.ResumeSessionID = ""
 		}
 		return prepared, nil
@@ -130,29 +143,14 @@ func (d *Daemon) prepareMachineAgent(sessionID protocol.SessionID, opts *ptyback
 	if opts.LaunchExecutable == "" && configuredLaunchExecutable(driver, opts) == "" {
 		opts.LaunchExecutable = strings.TrimSpace(d.setting(executableSetting(opts.Agent)))
 	}
-	l := d.linkNamed(launch.Link)
 	if err := d.refuseUnknownCodexFolder(opts, launch.Profile); err != nil {
 		return nil, err
 	}
 	if err := d.settleClaudeFolderTrust(opts, launch.RepositoryTrust); err != nil {
 		return nil, err
 	}
-	if l != nil {
-		if err := l.admit(launch.Profile, opts.ResumeSessionID); err != nil {
-			return nil, err
-		}
-		if opts.ResumeSessionID != "" {
-			if err := l.restore(launch.Profile, opts.ResumeSessionID); err != nil {
-				return nil, err
-			}
-		}
-		if reload {
-			if err := l.relaunch(opts); err != nil {
-				return nil, err
-			}
-		} else if err := l.prepareLaunch(opts, launch.Profile); err != nil {
-			return nil, err
-		}
+	if err := d.prepareLinkedLaunch(opts, launch, reload); err != nil {
+		return nil, err
 	}
 	if err := d.prepareAgentLaunch(opts, launch); err != nil {
 		return nil, fmt.Errorf("prepare %s launch: %w", opts.Agent, err)
@@ -258,6 +256,14 @@ func (d *Daemon) launchCommitted(terminal harness.TerminalID, committed bool, pr
 }
 
 func (d *Daemon) readConversationReadiness(_ context.Context, msg protocol.ConversationReadinessMessage) (protocol.ConversationReadinessResult, error) {
+	if l := d.serverLinkFor(msg.Agent); l != nil && l.b.plugin != "" {
+		if msg.Restore {
+			if err := l.restore(msg.Profile, msg.Conversation); err != nil {
+				return protocol.ConversationReadinessResult{}, err
+			}
+		}
+		return protocol.ConversationReadinessResult{Known: msg.Conversation != "", Ready: msg.Conversation != ""}, nil
+	}
 	driver := agentdriver.Get(msg.Agent)
 	if driver == nil {
 		return protocol.ConversationReadinessResult{}, fmt.Errorf("unknown agent %q", msg.Agent)
@@ -320,4 +326,26 @@ func (d *Daemon) requireCatalogAgent(host, agent, explicit string) error {
 		}
 	}
 	return fmt.Errorf("agent %q is not available on %s", agent, catalog.Machine)
+}
+
+func (d *Daemon) prepareLinkedLaunch(opts *ptybackend.SpawnOptions, launch *AgentLaunch, reload bool) error {
+	l := d.linkNamed(launch.Link)
+	if l != nil {
+		if err := l.admit(launch.Profile, opts.ResumeSessionID); err != nil {
+			return err
+		}
+		if opts.ResumeSessionID != "" {
+			if err := l.restore(launch.Profile, opts.ResumeSessionID); err != nil {
+				return err
+			}
+		}
+		if reload {
+			if err := l.relaunch(opts); err != nil {
+				return err
+			}
+		} else if err := l.prepareLaunch(opts, launch.Profile); err != nil {
+			return err
+		}
+	}
+	return nil
 }

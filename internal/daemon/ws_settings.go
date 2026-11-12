@@ -271,6 +271,10 @@ func (d *Daemon) daemonSettingsSnapshot() map[string]interface{} {
 	}
 	for _, driver := range d.ensurePluginRegistry().registeredDrivers() {
 		settings[availabilitySettingKey(driver.Agent)] = "true"
+		if l := d.serverLinkFor(driver.Agent); l != nil && l.b.plugin != "" {
+			settings[capabilitySettingKey(driver.Agent, "execution_target")] = strconv.FormatBool(l.hasTargets())
+			settings[capabilitySettingKey(driver.Agent, "model_discovery")] = "true"
+		}
 		for capability, enabled := range driver.Capabilities {
 			settings[capabilitySettingKey(driver.Agent, capability)] = strconv.FormatBool(enabled)
 		}

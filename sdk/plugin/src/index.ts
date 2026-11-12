@@ -1,7 +1,7 @@
 import { createConnection, type Socket } from "node:net";
 
 import {
-  driverCapabilities,
+  driverCapabilities, serverRegistration,
   explainRegistrationError,
   type DriverCompactParams,
   type DriverCompactionOutcome,
@@ -264,6 +264,7 @@ export class AttnPluginClient {
       return await this.request<RegisterResult>("driver.register", {
         agent: definition.id,
         capabilities: driverCapabilities(definition),
+        server: serverRegistration(definition.server),
       });
     } catch (error) {
       throw explainRegistrationError(error instanceof Error ? error : new Error(String(error)));

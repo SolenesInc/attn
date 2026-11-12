@@ -26,7 +26,7 @@ func (d *Daemon) harnessTargets(harness, cwd string) ([]protocol.ExecutionTarget
 	}
 	driver := agentdriver.Get(harness)
 	server := d.serverLinkFor(harness)
-	if driver == nil || server == nil || !agentdriver.EffectiveCapabilities(driver).HasExecutionTarget {
+	if server == nil || !(agentdriver.EffectiveCapabilities(driver).HasExecutionTarget || server.hasTargets()) {
 		return nil, fmt.Errorf("agent %q has no execution targets", harness)
 	}
 	ctx, cancel := context.WithTimeout(d.life.Context(), harnessModelDiscoveryTimeout)

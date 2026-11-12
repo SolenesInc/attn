@@ -381,7 +381,7 @@ func runList() {
 }
 
 func detectPresence() (sessionID string, present bool) {
-	if os.Getenv("ATTN_INSIDE_APP") != "1" {
+	if os.Getenv("ATTN_INSIDE_APP") != "1" && !strings.HasPrefix(string(ownTerminalID()), "server:") {
 		return "", false
 	}
 	return string(currentSessionOrExit()), true

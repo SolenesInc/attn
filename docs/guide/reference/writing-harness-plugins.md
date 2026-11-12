@@ -13,7 +13,8 @@ or later. No release carries that revision yet, so an older daemon refuses the
 registration with `unsupported driver capability "attributed_input"` or one of
 the other two capabilities listed below, and the SDK turns that refusal into
 the revision to upgrade to. A terminal-only plugin that declares none of the
-three runs on any API 7 daemon.
+three runs on any API 7 daemon. Shared servers additionally need the
+`server_binding` capability described below.
 
 ## From nothing to a running harness
 
@@ -140,6 +141,121 @@ then registers the driver, and Attn can deliver input again. The sample keeps
 nothing in memory: its socket path comes from the `run_id`, and the harness
 deduplicates input by ID.
 
+## Bind a shared app-server
+
+A harness with a shared server can declare `server` instead of a `deliver`
+handler. Attn joins a running server or starts one for its home, submits input
+directly and follows the server's status. The plugin prepares terminal views.
+An open conversation can keep receiving input after its last view moves on.
+
+The declaration needs SDK 0.3.0 and a daemon supporting `server_binding`.
+An older daemon refuses that capability. No published SDK version is required
+when you pack the SDK from the checkout:
+
+```bash
+mkdir -p /tmp/attn-plugin-pack
+(cd sdk/plugin && bun pm pack --destination /tmp/attn-plugin-pack)
+cp -R examples/plugins/sample-server /tmp/my-server-plugin
+# In /tmp/my-server-plugin/package.json, replace "0.3.0" with
+# "file:/tmp/attn-plugin-pack/victorarias-attn-plugin-0.3.0.tgz".
+# In src/index.ts, change harnessId to your own ID and adapt view() to your CLI.
+attn plugin install --path /tmp/my-server-plugin
+```
+
+The sample expects a Sigma-compatible executable, supplied by
+`ATTN_SAMPLE_SERVER_EXECUTABLE` or `sigma` on PATH. Set `SIGMA_HOME` in the
+daemon's environment to select an existing server home. The default is
+`~/.sample-server`. The isolated stack check supplies the fake app-server,
+packs the SDK, and installs the example outside the checkout:
+
+```bash
+scripts/verify-plugin-server.sh
+```
+
+The server declaration in the sample is:
+
+```ts
+server: {
+  protocol: "attn-app-server-v1",
+  executable: "sigma",
+  executableEnv: "ATTN_SAMPLE_SERVER_EXECUTABLE",
+  serveArgs: ["serve"],
+  homeEnv: "SIGMA_HOME",
+  defaultHome: ".sample-server",
+  socketName: "sigma.sock",
+  initialize: { server: "sigma", protocol: { exact: 1 } },
+  callerConversationEnv: "SIGMA_ROOT_CONVERSATION",
+  onClose: "leave-running",
+  recovery: "numbered-completions",
+  targets: true,
+}
+```
+
+`protocol` selects Attn's RPC contract. `initialize.server`, when set, checks
+the server's identity. `initialize.protocol` accepts either `{ exact: N }` or
+`{ min: N }`. A mismatched identity or protocol refuses the operation before a
+view starts. Use `onClose: "interrupt"` to interrupt a conversation when its
+last owning session closes, or `"leave-running"` to leave the server's run going.
+`recovery` is `"last-run"` or `"numbered-completions"`.
+
+The executable, optional executable override, home variable and default home
+resolve in the daemon's machine and login environment. `socketName` is a filename
+inside that home. `callerConversationEnv` names the variable the server sets
+on its shell tools, including tools of a server started outside Attn. The Go and
+Rust CLIs discover that variable through the catalog when no terminal or Codex
+identity exists. They send the harness and conversation identity, never the
+whole environment. Commands keep the owning session's profile.
+
+`spawn` and `resume` receive `conversation_id`, the exact native conversation
+that the view must open, and optional `execution_target`. Keep that ID on every
+view. A target-capable plugin forwards the target on both launch and resume.
+An invalid target must fail without creating a replacement conversation or
+falling back to another target.
+
+A server binding supplies delivery, models and state. Leave out `deliver`,
+`compact`, `models`, `stateReporting`, `attributedInput` and `safeDuringQuestion`.
+The terminal-driver reports described above do not apply to server views.
+A server view has no active terminal driver run to recover. Attn owns the
+session and view associations, and the server owns its native conversation.
+
+A plugin restart keeps the established binding and direct delivery usable.
+After a daemon restart, Attn retains ownership and waits for that plugin's
+registration before reconnecting. Registration and view recovery can happen
+in either order. Missing bindings remain unavailable, and input never falls
+back to PTY. Uninstall refuses an owner with any open server session, including
+one with no view. Close those sessions first. A different plugin cannot take
+the harness ID. To change a registered server declaration, restart the daemon
+and register the changed declaration from the same owner.
+
+### Shared server RPC contract
+
+The server uses the existing line-delimited Effect RPC framing. A request is
+`{ jsonrpc: "2.0", id, method, params }`. A unary response has the same `id`
+and `result` or `error`. A streamed response has `chunk: true` and a `result`
+array. The client acknowledges each chunk with `@effect/rpc/Ack` and
+`{ requestId }`.
+
+The required calls are `initialize {client, version, protocol}`,
+`conversation/submit {conversation, author, requestId, text}`, `models/list`,
+`status/watch` and `conversation/list`. An interrupting binding also supports
+`conversation/interrupt {conversation}`. A target-capable binding supports
+`targets/list {cwd}` returning `[{id, name, available, detail}]`.
+
+`conversation/submit` takes durable custody before replying. Repeating its
+`requestId` must return the original admission without submitting twice.
+The `author` is the user's name for user input and `"attn"` for notices.
+`models/list` returns providers with `provider` and `models`, where each model
+has `id`, `name`, `description` and `efforts`.
+
+`status/watch` starts with `{_tag: "trees", trees: [...]}` for busy
+conversations, then streams `{conversation, status, ended?}` changes.
+`status` is `working`, `waiting` for approval, or `idle`.
+`ended` has `outcome` (`answered`, `interrupted`, or a failure), optional
+`message`, `said`, and, with numbered recovery, `completion`.
+`conversation/list` returns `[{id, ended?}]` for recovery of the last run.
+Numbered recovery accepts `status/watch {after: {conversation: completion}}`
+and replays newer idle completions. Completion numbers ascend per conversation.
+
 ## The wire, for any language
 
 Attn starts an installed plugin with these environment variables:
@@ -171,12 +287,21 @@ recover the runs from `driver.register`, then register again to resume delivery.
 an Attn session or of a native conversation. A capability name Attn does not
 know, or one that needs `message_delivery` without it, is refused.
 
+A shared-server registration adds `capabilities: {"server_binding": true}` and
+`server` to `driver.register`. Its keys are `protocol`, `executable`, optional
+`executable_env`, `serve_args`, `home_env`, `default_home`, `socket_name`,
+`initialize`, `caller_conversation_env`, `on_close`, `recovery`, and optional
+`targets`. Their values match the SDK declaration above. The SDK translates
+camel case option names to these snake case wire names. `server_binding` and
+`message_delivery` are mutually exclusive. The server supplies models and state
+without `model_discovery` or `state_reporting`.
+
 Attn to plugin, each answered with a result or a JSON-RPC error:
 
 | Method | Params | Result |
 |---|---|---|
 | `attn.health` | `now` | `{"ok":true}` or `{"ok":false,"message":"…"}`, every 15 seconds |
-| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
+| `driver.spawn`, `driver.resume` | `agent`, `session_id`, `run_id`, `cwd`, and when set `label`, `yolo`, `model`, `effort`, `initial_prompt`, `metadata`, `resume_session_id`, `instructions`, and for server views `conversation_id`, `execution_target` | `{"argv":["…"],"env":{…},"cwd":"…"}` |
 | `driver.resume_available` | `conversations`: `agent`, `cwd`, `resume_session_id` | `{"availability":[` the same fields plus `available` and `reason` `]}` |
 | `driver.models` | `agent` | `{"models":[…],"detail":"…"}` |
 | `driver.deliver_message` | `session_id`, `run_id`, `input_id`, `text`, and with `attributed_input` `voice` and `conversation_id` | `{"ok":true}`; `{"ok":false,"status":"deferred"}`; `{"ok":false,"status":"rejected","reason":"…"}`; `{"ok":false,"status":"target_ended"}` |

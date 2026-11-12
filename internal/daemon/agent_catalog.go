@@ -63,6 +63,24 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 			EffortPin: driver.Capabilities["effort_pin"],
 		})
 	}
+	for _, l := range d.appServerLinks() {
+		if l.b.plugin == "" {
+			continue
+		}
+		if _, live := registry.driver(l.b.agent); live {
+			continue
+		}
+		if p := l.b.declaration.Load(); p != nil {
+			agents = append(agents, agentdriver.Descriptor{Name: l.b.agent, Plugin: l.b.plugin, Health: agentdriver.HealthUnhealthy, Detail: "plugin unavailable for new views", CallerConversationEnv: p.CallerConversationEnv})
+		}
+	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })
+	for i := range agents {
+		if l := d.serverLinkFor(agents[i].Name); l != nil {
+			if p := l.b.declaration.Load(); p != nil {
+				agents[i].CallerConversationEnv = p.CallerConversationEnv
+			}
+		}
+	}
 	return agents
 }

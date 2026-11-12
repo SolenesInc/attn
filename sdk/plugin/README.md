@@ -93,6 +93,29 @@ in-memory state from durable sources in `recover` before it returns. A harness
 started by a driver keeps running while its plugin restarts, and attn holds
 direct input until recovery finishes.
 
+## Bind a shared app-server
+
+With SDK 0.3.0, `client.driver({ id, spawn, resume, server })` can bind a harness
+speaking `attn-app-server-v1`. The daemon handles direct input, status and model
+discovery. The plugin prepares native terminal views with the host's
+`conversation_id` and optional `execution_target`. A server view does not use
+`DriverRun` reports, `sessionClosed` or `recover`; the server owns the conversation.
+
+`server` cannot be combined with `deliver`, `compact`, `models`,
+`stateReporting`, `attributedInput` or `safeDuringQuestion`. The SDK negotiates
+`server_binding`; an older daemon refuses that capability clearly. This addition
+does not change API 7 for existing plugins.
+
+See [Writing a harness plugin](../../docs/guide/reference/writing-harness-plugins.md#bind-a-shared-app-server)
+for the declaration, RPC contract and install recipe.
+`examples/plugins/sample-server` prepares Sigma-compatible views and runs
+against the repository's fake app-server in the stack verification.
+
+A plugin disconnect leaves an established server binding usable. After a daemon
+restart, existing sessions wait for the owning plugin to register again. Input
+never falls back to the terminal, including for an open session with no view.
+Attn refuses uninstall while the plugin owns an open server session.
+
 ## Hook worktree creation
 
 ```ts

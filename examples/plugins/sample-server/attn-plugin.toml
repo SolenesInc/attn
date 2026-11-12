@@ -1,0 +1,7 @@
+name = "sample-server"
+version = "0.1.0"
+attn_api_version = 7
+description = "Example shared app-server harness plugin"
+
+[plugin]
+entrypoint = "src/index.ts"

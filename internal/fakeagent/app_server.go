@@ -220,6 +220,9 @@ type appServer struct {
 }
 
 func runAppServer(cfg config, flavor appServerFlavor) int {
+	if root := os.Getenv("ATTN_TEST_SERVER_CALLER_ENV"); root != "" {
+		flavor.rootVariable = root
+	}
 	s := &appServer{flavor: flavor, conns: map[*appServerConn]bool{}, convs: map[string]*ServerConversation{}, submissions: map[string]chan ServerSubmission{}, interrupts: map[string]chan struct{}{}}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {

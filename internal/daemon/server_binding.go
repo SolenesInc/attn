@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/effectrpc"
@@ -18,6 +19,8 @@ import (
 )
 
 type serverBinding struct {
+	plugin            string
+	declaration       atomic.Pointer[pluginServerDeclaration]
 	agent             string
 	name              string
 	kind              string
@@ -123,13 +126,23 @@ func (l *serverLink) home() string {
 		}
 		return ""
 	}
-	if home := strings.TrimSpace(lookup(l.b.homeVariable)); home != "" {
+	variable, dir := l.b.homeVariable, l.b.homeDir
+	if p := l.b.declaration.Load(); p != nil {
+		variable, dir = p.HomeEnv, p.DefaultHome
+	}
+	if home := strings.TrimSpace(lookup(variable)); home != "" {
 		return home
 	}
-	return filepath.Join(lookup("HOME"), l.b.homeDir)
+	return filepath.Join(lookup("HOME"), dir)
 }
 
 func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
+	if p := l.b.declaration.Load(); p != nil {
+		if override := l.environmentValue(p.ExecutableEnv); override != "" {
+			return override
+		}
+		return p.Executable
+	}
 	driver := agentdriver.MustGet(l.b.agent)
 	if opts != nil {
 		if configured := configuredLaunchExecutable(driver, opts); configured != "" {
@@ -137,4 +150,38 @@ func (l *serverLink) executable(opts *ptybackend.SpawnOptions) string {
 		}
 	}
 	return driver.ResolveExecutable(l.d.setting(executableSetting(l.b.agent)))
+}
+
+func (l *serverLink) environmentValue(key string) string {
+	if key == "" {
+		return ""
+	}
+	env := pty.MergeEnvironment(os.Environ(), l.d.latestLoginEnv())
+	for i := len(env) - 1; i >= 0; i-- {
+		if name, value, ok := strings.Cut(env[i], "="); ok && name == key {
+			return value
+		}
+	}
+	return ""
+}
+
+func (l *serverLink) socketPath() string {
+	if p := l.b.declaration.Load(); p != nil {
+		return filepath.Join(l.home(), p.SocketName)
+	}
+	if l.b.socket == nil {
+		return ""
+	}
+	return l.b.socket(l.home())
+}
+
+func (l *serverLink) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, error) {
+	if l.b.plugin != "" {
+		p := l.b.declaration.Load()
+		if p == nil {
+			return nil, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
+		}
+		return p.connect(ctx, socket, client, version)
+	}
+	return l.b.connect(ctx, socket, client, version)
 }
