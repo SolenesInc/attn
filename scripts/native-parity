@@ -15,8 +15,12 @@ checklist="${NATIVE_PARITY_CHECKLIST:-$root/native/parity/checklist.tsv}"
 
 problems=()
 quoted_in() {
-  local escaped="${1//\'/\\\'}"
-  grep -qF -e "'$1'" -e "'$escaped'" -e "\"$1\"" -e "\`$1\`" "$2"
+  local name="$1" file="$2" quote escaped_quote
+  for quote in "'" '"' '`'; do
+    escaped_quote="\\$quote"
+    grep -qF -e "$quote$name$quote" -e "$quote${name//$quote/$escaped_quote}$quote" "$file" && return 0
+  done
+  return 1
 }
 
 # The problem with native test $2, named at $1, or nothing when it exists.
