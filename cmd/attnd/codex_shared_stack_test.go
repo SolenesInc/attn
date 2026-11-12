@@ -535,7 +535,15 @@ func TestACodexUpdateOfferKeepsItsInstallActionAcrossADaemonRestart(t *testing.T
 		return found
 	}
 	app := s.App()
-	if before := offers(app); len(before) != 1 || len(before[0].Actions) == 0 {
+	var before []protocol.Notification
+	for {
+		mark := len(app.Log())
+		if before = offers(app); len(before) > 0 {
+			break
+		}
+		testworld.AwaitSince(app, mark, protocol.EventNotificationsUpdated, func(protocol.NotificationsUpdatedMessage) bool { return true })
+	}
+	if len(before) != 1 || len(before[0].Actions) == 0 {
 		t.Fatalf("with Codex 0.162.1 installed and 0.163.0 out, the offers are %+v, want one with Install", before)
 	}
 
