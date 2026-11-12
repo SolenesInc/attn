@@ -185,3 +185,22 @@ fn a_restored_screen_brings_back_its_placements_and_asks_for_their_pixels() {
     assert_eq!(drawn(&world)[0]["row"], 1);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn an_image_asked_for_on_a_connection_that_dropped_is_asked_for_again_on_the_next() {
+    let mut world = started();
+    describe(&world, 2, vec![placement(1, 7, 1, 0)]);
+    world.settle();
+    assert_eq!(asked(&world), [json!(7)]);
+
+    world.reconnect();
+    assert_eq!(
+        asked(&world),
+        [json!(7), json!(7)],
+        "the answer to the first ask went with the connection"
+    );
+    send_pixels(&world, 7, 1, (1, 1), &[0, 255, 0, 255]);
+    world.settle();
+    assert_eq!(drawn(&world)[0]["image"], 7);
+    assert!(world.runtime_is_at_rest());
+}

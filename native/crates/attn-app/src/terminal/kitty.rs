@@ -69,6 +69,12 @@ impl Images {
         }
     }
 
+    /// Forgets the images terminal `id` asked for and was not answered, as it attaches: an ask
+    /// made on a connection that dropped is never answered.
+    pub(super) fn unanswered(&mut self, id: &str) {
+        self.asked.retain(|(terminal, _), _| terminal != id);
+    }
+
     /// Drops what terminal `id` kept, as its pane goes.
     pub(super) fn forget(&mut self, id: &str) {
         let keys: Vec<Key> = self

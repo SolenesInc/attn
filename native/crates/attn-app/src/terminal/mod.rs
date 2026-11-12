@@ -500,6 +500,7 @@ impl Terminals {
             TerminalEvent::Attached(result) => {
                 let id = result.id.clone();
                 self.attached(*result, tx, daemon);
+                self.images.unanswered(&id);
                 self.ask_images(&id, daemon);
             }
             TerminalEvent::Resized(resized) => {
