@@ -95,7 +95,9 @@ Put the cursor on a line, or select several lines with ⇧↑ and ⇧↓. Then:
   shows under the line when the agent replies. The question stays in the review.
 - `i` edits the line and saves the file. In a string or comment that spans
   several lines, `i` takes all of it. In a markdown stop, it takes the
-  paragraph. ⌥↑ and ⌥↓ take in one more line. `u` on the line undoes the edit.
+  paragraph. ⌥↑ and ⌥↓ take in one more line. Enter saves a single line; for
+  several lines press ⌘Enter, or Ctrl+Enter on Linux, and Shift+Enter adds a
+  line. `u` on the line undoes the edit.
 
 If the file changed underneath you since you opened the edit, attn writes
 nothing and says so.
