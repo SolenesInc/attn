@@ -92,6 +92,7 @@ fn field(s: &Showcase, cx: &mut Cx<Showcase>) -> El {
 fn menu(_: &Showcase, cx: &mut Cx<Showcase>) -> El {
     stage(cx, |k, layer| {
         Menu::new("story.menu")
+            .label("Session")
             .trigger(Button::new("Session").build(k))
             .item(MenuItem::new("Rename").shortcut("⌘R"))
             .item(MenuItem::new("Snooze"))
