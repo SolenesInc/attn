@@ -203,7 +203,7 @@ fn strip_scanner_owned(responses: &[u8]) -> Vec<u8> {
                     result.extend_from_slice(&responses[index..]);
                     break;
                 }
-                if !matches!(responses[end], b'R' | b'c') {
+                if !is_scanner_owned_report(&responses[index..=end]) {
                     result.extend_from_slice(&responses[index..=end]);
                 }
                 index = end + 1;
@@ -233,6 +233,15 @@ fn strip_scanner_owned(responses: &[u8]) -> Vec<u8> {
         }
     }
     result
+}
+
+fn is_scanner_owned_report(sequence: &[u8]) -> bool {
+    let params = &sequence[2..sequence.len() - 1];
+    match sequence[sequence.len() - 1] {
+        b'R' => params.first() != Some(&b'?'),
+        b'c' => params.first() == Some(&b'?'),
+        _ => false,
+    }
 }
 
 fn is_osc_color_report(sequence: &[u8]) -> bool {
@@ -278,6 +287,21 @@ mod tests {
         terminal.write(b"abc");
         let after = String::from_utf8(queries.replies_after_feed(&terminal, &[])).unwrap();
         assert_eq!(after, "\x1b[1;4R\x1b[?1;2c");
+    }
+
+    #[test]
+    fn forwards_replies_to_queries_the_scanner_does_not_answer() {
+        let mut terminal = Terminal::new(80, 24).expect("terminal");
+        let output = b"\x1b[>c\x1b[?6n";
+        let queries = TerminalQueries::detect(output);
+        terminal.write(output);
+        let drained = terminal.drain_responses();
+        let replies = String::from_utf8(queries.replies_after_feed(&terminal, &drained)).unwrap();
+        assert!(replies.contains("\x1b[>"), "DA2 reply dropped: {replies:?}");
+        assert!(
+            replies.contains("\x1b[?1;1;1R"),
+            "extended CPR reply dropped: {replies:?}"
+        );
     }
 
     #[test]
