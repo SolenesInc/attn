@@ -5,7 +5,17 @@ plays the daemon. It is the native app's counterpart of an
 [app wire test](app-wire-tests.md), and [Testing](testing.md) is the strategy
 around both. The harness is the crate `attn-testkit` in
 `native/crates/attn-testkit`. Each crate keeps its wire tests in
-`tests/wire/`, one file per feature, listed as modules in `tests/wire.rs`.
+`tests/wire/`, one file per feature, listed as modules in `tests/wire.rs`:
+
+```rust
+mod wire {
+    mod connection;
+    mod profile;
+}
+```
+
+A test starts a world, plays the daemon, and asserts what the app showed and
+sent:
 
 ```rust
 use std::time::Duration;
@@ -39,6 +49,10 @@ Run a crate's wire tests from `native/`:
 cargo test -p attn-app --test wire
 ```
 
+To print each test's time, run the test binary that
+`cargo test -p attn-app --test wire --no-run` names, as
+`RUSTC_BOOTSTRAP=1 <binary> -Z unstable-options --report-time`.
+
 ## The app and its daemon
 
 - `World::start(daemon)` runs `attn_app::view` on Rune's windowless `Runtime`
@@ -60,6 +74,22 @@ chain from `Daemon::scripted()`:
 | `.state(InitialStateMessage { .. })` | Answers `client_hello` with this `initial_state`. A `protocol_version` left as `None` is this build's. |
 | `.instance("default")` | Reports this instance on `/health`. |
 | `.client_token("other")` | Accepts only this token. |
+
+Build a message from its generated type's `new()`, which fills the `event`
+field. `Default::default()` leaves `event` empty. Nested types such as
+`Profile` have no `event` and take `..Default::default()`:
+
+```rust
+let state = InitialStateMessage {
+    selected_profile_id: Some("work".into()),
+    profiles: Some(vec![Profile { id: "work".into(), name: "Work".into(), ..Default::default() }]),
+    ..InitialStateMessage::new()
+};
+let world = World::start(Daemon::scripted().state(state));
+```
+
+The daemon answers every `client_hello` with that state, so after a reconnect
+the app gets the same state again.
 
 ## Playing the daemon
 
@@ -87,8 +117,10 @@ address.
   `refuse_connections(true)` closes every new connection before it is
   answered, as a port with no daemon behind it does. `refuse_connections(false)`
   ends that.
-- `sent()` lists every command the app sent, in order, across connections.
-  `sent_of(cmd)` filters it.
+- `sent()` returns every command the app sent as a `Vec<Request>`, in order,
+  across connections. `sent_of(cmd)` filters it. Each connection starts with
+  its own `client_hello`, so after `World::start` and one `reconnect()`,
+  `sent_of("client_hello")` holds two.
 - `connections()` counts the WebSocket connections the app opened.
   `attempts()` counts the times the app tried to open one, refused or not.
 
@@ -129,7 +161,9 @@ both sides have nothing left to do.
   matches any name. Rune keeps an unnamed `status` element on every screen
   for its announcements, so `Target::role("status")` alone always matches.
 - Assert the exact commands the app sent with `world.daemon.sent_of(cmd)`, to
-  catch an extra request.
+  catch an extra request. The app leaves an empty optional field out of a
+  command, so assert `request.get("profile_id").is_none()`, not that the field
+  is `null`.
 - End each test with `assert!(world.runtime_is_at_rest())`. It holds when the
   `Runtime` asks for no frame and holds no wake deadline: an idle window draws
   nothing.
