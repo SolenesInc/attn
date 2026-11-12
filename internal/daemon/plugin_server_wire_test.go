@@ -171,3 +171,24 @@ func TestAPluginServerHandshakeMismatchFailsBeforeLaunchingAView(t *testing.T) {
 		t.Fatalf("incompatible server: %+v", result)
 	}
 }
+
+func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	session, view, _ := appServerSession(t, w, app, fakeagent.Sigma)
+	registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
+	awaitDriverAvailable(app, serverPluginAgent)
+	side := createProfile(app, "Side")
+	for _, p := range []*testworld.Peer{app, w.AppOn(side.ID)} {
+		refused, _, _ := w.RequestSpawn(p, fakeagent.Harness(serverPluginAgent), w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ResumeSessionID = protocol.Ptr(view.ConversationID) })
+		if refused.Success {
+			t.Fatalf("alias admitted conversation of %s in profile %s", session, p.SelectedProfile())
+		}
+		if !strings.Contains(protocol.Deref(refused.Error), "conversation "+view.ConversationID) {
+			t.Fatalf("alias refusal: %+v", refused)
+		}
+	}
+	if got := queriedSession(t, w.Client(), session); got.Agent != "sigma" || got.ProfileID != app.SelectedProfile() {
+		t.Fatalf("alias changed original owner: %+v", got)
+	}
+}

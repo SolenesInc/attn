@@ -162,8 +162,8 @@ cp -R examples/plugins/sample-server /tmp/my-server-plugin
 attn plugin install --path /tmp/my-server-plugin
 ```
 
-The sample expects a Sigma-compatible executable, supplied by
-`ATTN_SAMPLE_SERVER_EXECUTABLE` or `sigma` on PATH. Set `SIGMA_HOME` in the
+The sample expects an executable speaking the fake server's Sigma-compatible protocol, supplied by
+`ATTN_SAMPLE_SERVER_EXECUTABLE` or `sample-server` on PATH. Set `SAMPLE_SERVER_HOME` in the
 daemon's environment to select an existing server home. The default is
 `~/.sample-server`. The isolated stack check supplies the fake app-server,
 packs the SDK, and installs the example outside the checkout:
@@ -177,14 +177,14 @@ The server declaration in the sample is:
 ```ts
 server: {
   protocol: "attn-app-server-v1",
-  executable: "sigma",
+  executable: "sample-server",
   executableEnv: "ATTN_SAMPLE_SERVER_EXECUTABLE",
   serveArgs: ["serve"],
-  homeEnv: "SIGMA_HOME",
+  homeEnv: "SAMPLE_SERVER_HOME",
   defaultHome: ".sample-server",
-  socketName: "sigma.sock",
+  socketName: "sample-server.sock",
   initialize: { server: "sigma", protocol: { exact: 1 } },
-  callerConversationEnv: "SIGMA_ROOT_CONVERSATION",
+  callerConversationEnv: "SAMPLE_SERVER_CONVERSATION",
   onClose: "leave-running",
   recovery: "numbered-completions",
   targets: true,
@@ -203,7 +203,7 @@ resolve in the daemon's machine and login environment. `socketName` is a filenam
 inside that home. `callerConversationEnv` names the variable the server sets
 on its shell tools, including tools of a server started outside Attn. The Go and
 Rust CLIs discover that variable through the catalog when no terminal or Codex
-identity exists. They send the harness and conversation identity, never the
+identity exists. They send the declared variable name and native conversation ID, never the
 whole environment. Commands keep the owning session's profile.
 
 `spawn` and `resume` receive `conversation_id`, the exact native conversation
@@ -224,7 +224,8 @@ registration before reconnecting. Registration and view recovery can happen
 in either order. Missing bindings remain unavailable, and input never falls
 back to PTY. Uninstall refuses an owner with any open server session, including
 one with no view. Close those sessions first. A different plugin cannot take
-the harness ID. To change a registered server declaration, restart the daemon
+the harness ID. An open native conversation has one server-harness and profile
+owner, so another harness ID cannot open it while that session stays open. To change a registered server declaration, restart the daemon
 and register the changed declaration from the same owner.
 
 ### Shared server RPC contract

@@ -77,7 +77,7 @@ describe("AttnPluginClient driver", () => {
   test("registers a shared server binding without terminal delivery handlers", async () => {
     const daemon = await startDaemon();
     const client = connectable(daemon);
-    client.driver({
+    const definition: DriverDefinition = {
       ...baseDriver,
       server: {
         protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
@@ -86,7 +86,8 @@ describe("AttnPluginClient driver", () => {
         callerConversationEnv: "SAMPLE_CONVERSATION", onClose: "leave-running",
         recovery: "numbered-completions", targets: true,
       },
-    });
+    };
+    client.driver(definition);
     await client.connect();
     const registered = daemon.requests.find(request => request.method === "driver.register");
     expect(registered?.params).toEqual({
@@ -99,6 +100,10 @@ describe("AttnPluginClient driver", () => {
         recovery: "numbered-completions", targets: true,
       },
     });
+    const legacyDaemon = await startDaemon({ "driver.register": new Error('unsupported driver capability "server_binding"') });
+    const legacyClient = connectable(legacyDaemon);
+    legacyClient.driver(definition);
+    await expect(legacyClient.connect()).rejects.toThrow(/does not support server_binding.*attn-app-server-v1/);
     expect(() => connectable(daemon).driver({ ...baseDriver, server: {
       protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
       homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",

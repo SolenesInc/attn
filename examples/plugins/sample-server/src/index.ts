@@ -1,7 +1,7 @@
 import { AttnPluginClient, type DriverSpawnParams } from "@victorarias/attn-plugin";
 
 const harnessId = "sample-server";
-const executable = process.env.ATTN_SAMPLE_SERVER_EXECUTABLE || "sigma";
+const executable = process.env.ATTN_SAMPLE_SERVER_EXECUTABLE || "sample-server";
 const client = new AttnPluginClient({ version: "0.1.0" });
 
 function view(launch: DriverSpawnParams) {
@@ -34,11 +34,11 @@ client.driver({
     executable,
     executableEnv: "ATTN_SAMPLE_SERVER_EXECUTABLE",
     serveArgs: ["serve"],
-    homeEnv: "SIGMA_HOME",
+    homeEnv: "SAMPLE_SERVER_HOME",
     defaultHome: ".sample-server",
-    socketName: "sigma.sock",
+    socketName: "sample-server.sock",
     initialize: { server: "sigma", protocol: { exact: 1 } },
-    callerConversationEnv: "SIGMA_ROOT_CONVERSATION",
+    callerConversationEnv: "SAMPLE_SERVER_CONVERSATION",
     onClose: "leave-running",
     recovery: "numbered-completions",
     targets: true,

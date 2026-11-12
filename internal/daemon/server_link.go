@@ -82,12 +82,18 @@ func (l *serverLink) enabledForNewLaunches() bool {
 }
 
 func (l *serverLink) admit(profile, conversation string) error {
-	holder := l.d.store.OpenSessionHoldingOutside(profile, conversation)
-	if holder == "" || l.d.store.SessionLink(holder) != l.b.kind {
-		return nil
-	}
-	if session := l.d.store.Get(holder); session != nil {
-		return fmt.Errorf("conversation %s is open in a session of profile %s; close it there first", conversation, session.ProfileID)
+	for _, holder := range l.d.store.OpenSessionsHolding(conversation) {
+		if _, server := l.d.linkOf(holder).(*serverLink); !server {
+			continue
+		}
+		if session := l.d.store.Get(holder); session != nil {
+			if session.ProfileID != profile {
+				return fmt.Errorf("conversation %s is open in a session of profile %s; close it there first", conversation, session.ProfileID)
+			}
+			if l.d.store.SessionLink(holder) != l.b.kind {
+				return fmt.Errorf("conversation %s is owned by harness %s; close its session before using harness %s", conversation, session.Agent, l.b.agent)
+			}
+		}
 	}
 	return nil
 }
@@ -211,11 +217,12 @@ func (l *serverLink) sessions() []protocol.SessionID {
 }
 
 func (l *serverLink) holder(conversation string) protocol.SessionID {
-	sessionID := l.d.store.OtherOpenSessionHolding(conversation, "")
-	if sessionID == "" || l.d.store.SessionLink(sessionID) != l.b.kind {
-		return ""
+	for _, sessionID := range l.d.store.OpenSessionsHolding(conversation) {
+		if l.d.store.SessionLink(sessionID) == l.b.kind {
+			return sessionID
+		}
 	}
-	return sessionID
+	return ""
 }
 
 func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOptions) (*effectrpc.Client, error) {

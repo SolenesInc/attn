@@ -272,6 +272,9 @@ export class AttnPluginClient {
   }
 
   private runFor(terminalId: string, runId: string): ClientRun {
+    if (this.definition?.server) {
+      return new ClientRun(terminalId, runId, () => Promise.reject(new Error("server views do not report terminal runs")));
+    }
     let run = this.runs.get(runId);
     if (!run) {
       run = new ClientRun(terminalId, runId, (method, params) => this.request(method, params));

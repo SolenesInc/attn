@@ -130,3 +130,25 @@ func (s *Store) OpenSessionHolding(profileID, nativeID string) protocol.SessionI
 	}
 	return id
 }
+
+func (s *Store) OpenSessionsHolding(nativeID string) []protocol.SessionID {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil || nativeID == "" {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT id FROM sessions WHERE resume_session_id = ? AND closed_at = '' ORDER BY id`, nativeID)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var ids []protocol.SessionID
+	for rows.Next() {
+		var id protocol.SessionID
+		if err := rows.Scan(&id); err != nil {
+			return nil
+		}
+		ids = append(ids, id)
+	}
+	return ids
+}

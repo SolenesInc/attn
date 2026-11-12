@@ -69,6 +69,12 @@ var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "
 
 func appServerProgram(h Harness) func(config) int {
 	flavor := appServerFlavors[h]
+	if home := os.Getenv("ATTN_TEST_SERVER_HOME_ENV"); home != "" {
+		flavor.homeVariable = home
+	}
+	if socket := os.Getenv("ATTN_TEST_SERVER_SOCKET"); socket != "" {
+		flavor.socket = func(home string) string { return filepath.Join(home, socket) }
+	}
 	return func(cfg config) int {
 		if len(os.Args) > 1 && os.Args[1] == "serve" {
 			return runAppServer(cfg, flavor)

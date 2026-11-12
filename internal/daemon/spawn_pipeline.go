@@ -654,6 +654,11 @@ func (d *Daemon) runSpawnPipelineProtected(protection foregroundCleanupProtectio
 	if rejection != nil {
 		return placementOutcome{}, rejection
 	}
+	if l := d.serverLinkFor(req.agent); l != nil {
+		if err := l.admit(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); err != nil {
+			return placementOutcome{}, &spawnRejection{err: err}
+		}
+	}
 	if holder := d.linkHolder(req.profile.ID, protocol.Deref(msg.ResumeSessionID)); holder != "" && holder != msg.ID {
 		return d.showHolderProtected(protection, holder, msg, policy)
 	}

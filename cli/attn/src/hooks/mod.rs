@@ -4,9 +4,9 @@ pub mod input;
 use crate::client::{Client, SendError, read_json_value};
 use crate::instance::Paths;
 use attn_protocol::go_values::{
-    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, MAX_SOCKET_FRAME_BYTES,
-    NISSE_CONVERSATION_PREFIX, SIGMA_CONVERSATION_PREFIX, STATE_IDLE, STATE_LAUNCHING,
-    STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
+    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, MAX_SOCKET_FRAME_BYTES, STATE_IDLE,
+    STATE_LAUNCHING, STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT,
+    STATE_WORKING,
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
@@ -39,15 +39,6 @@ pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
     let profile = getenv(CODEX_SHARED_PROFILE_ENV);
     if !profile.is_empty() {
         return codex_thread_terminal(&profile, &getenv("CODEX_THREAD_ID"));
-    }
-    for (variable, prefix) in [
-        ("NISSE_ROOT_CONVERSATION", NISSE_CONVERSATION_PREFIX),
-        ("SIGMA_ROOT_CONVERSATION", SIGMA_CONVERSATION_PREFIX),
-    ] {
-        let conversation = getenv(variable);
-        if !conversation.is_empty() {
-            return conversation_terminal(prefix, &conversation);
-        }
     }
     getenv("ATTN_SESSION_ID")
 }
@@ -91,21 +82,10 @@ fn server_caller(getenv: &dyn Fn(&str) -> String, port: &str) -> Option<String> 
         };
         let conversation = getenv(variable);
         if !conversation.is_empty() {
-            return Some(format!(
-                "server:{}:{conversation}",
-                agent.get("name")?.as_str()?
-            ));
+            return Some(format!("server-env:{variable}:{conversation}"));
         }
     }
     None
-}
-
-fn conversation_terminal(prefix: &str, conversation: &str) -> String {
-    let trimmed = conversation.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    format!("{prefix}{trimmed}")
 }
 
 fn codex_thread_terminal(profile: &str, thread: &str) -> String {

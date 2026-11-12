@@ -30,7 +30,6 @@ func TerminalFromEnv() harness.TerminalID {
 		}
 		var catalog struct {
 			Agents []struct {
-				Name                  string `json:"name"`
 				CallerConversationEnv string `json:"caller_conversation_env"`
 			} `json:"agents"`
 		}
@@ -42,7 +41,7 @@ func TerminalFromEnv() harness.TerminalID {
 				continue
 			}
 			if conversation := os.Getenv(agent.CallerConversationEnv); conversation != "" {
-				serverCaller = harness.TerminalID("server:" + agent.Name + ":" + conversation)
+				serverCaller = harness.TerminalID("server-env:" + agent.CallerConversationEnv + ":" + conversation)
 				return
 			}
 		}

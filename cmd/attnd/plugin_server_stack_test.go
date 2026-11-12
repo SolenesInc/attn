@@ -17,7 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func authorsServerPlugin(t *testing.T, id, tarball, gate string) string {
+func authorsServerPlugin(t *testing.T, id, tarball, gate, callerVariable string) string {
 	t.Helper()
 	dir := t.TempDir()
 	for _, file := range []string{"attn-plugin.toml", "package.json", "src/index.ts"} {
@@ -31,7 +31,7 @@ func authorsServerPlugin(t *testing.T, id, tarball, gate string) string {
 		}
 		if file == "src/index.ts" {
 			content = strings.Replace(content, `const harnessId = "sample-server"`, `const harnessId = "`+id+`"`, 1)
-			content = strings.ReplaceAll(content, "SIGMA_ROOT_CONVERSATION", "CUSTOM_CONVERSATION")
+			content = strings.ReplaceAll(content, "SAMPLE_SERVER_CONVERSATION", callerVariable)
 			control := fmt.Sprintf(`const control = (await import("node:net")).createConnection(%q);
 await new Promise<void>((resolve, reject) => { control.once("error", reject); control.once("data", () => resolve()); });
 control.on("data", data => { if (String(data).trim() === "exit") process.exit(1); });
@@ -84,11 +84,15 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 					t.Fatalf("registration: %q %v", line, err)
 				}
 			}
-			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sigma"), "ATTN_TEST_SERVER_CALLER_ENV=CUSTOM_CONVERSATION")
+			callerVariable := "SIGMA_ROOT_CONVERSATION"
+			if backend == testworld.WorkerPTY {
+				callerVariable = "SAMPLE_SERVER_CONVERSATION"
+			}
+			s.Vars = append(s.Vars, "ATTN_SAMPLE_SERVER_EXECUTABLE="+filepath.Join(s.Dir, "bin", "sigma"), "ATTN_TEST_SERVER_CALLER_ENV="+callerVariable, "ATTN_TEST_SERVER_HOME_ENV=SAMPLE_SERVER_HOME", "ATTN_TEST_SERVER_SOCKET=sample-server.sock", "SAMPLE_SERVER_HOME="+filepath.Join(s.Dir, "sample-server-home"))
 			s.Start()
 			app := s.App()
 			id := "installed_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
-			plugin := authorsServerPlugin(t, id, packSDK(t), gatePath)
+			plugin := authorsServerPlugin(t, id, packSDK(t), gatePath, callerVariable)
 			installed := s.Attn("plugin", "install", "--path", plugin)
 			if installed.Code != 0 {
 				t.Fatalf("install: %s%s", installed.Stdout, installed.Stderr)
@@ -102,6 +106,18 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			session := s.Spawn(app, fakeagent.Harness(id), s.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
 			view := s.Launched(session)
 			conversation := view.ConversationID
+			direct := func(text string) {
+				t.Helper()
+				input := uuid.NewString()
+				if r := serverInput(app, session, input, text); !r.Success || r.Status != "delivered" {
+					t.Fatalf("%s: %+v", text, r)
+				}
+				got := server.Prompted(conversation)
+				if got.Text != text || !strings.Contains(got.RequestID, input) {
+					t.Fatalf("direct delivery used a different input: %+v", got)
+				}
+				t.Logf("direct input %q kept request ID %s", text, got.RequestID)
+			}
 			if got := server.Started(conversation).Target; got != "devvm" {
 				t.Fatalf("target %q", got)
 			}
@@ -161,25 +177,23 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 				t.Fatal(err)
 			}
 			control = accept()
-			if r := serverInput(app, session, uuid.NewString(), "while plugin restarts"); !r.Success || r.Status != "delivered" {
-				t.Fatalf("plugin restart input: %+v", r)
-			}
-			server.Prompted(conversation)
+			direct("while plugin restarts")
 			register(control)
 			awaitAgentAvailable(app, fakeagent.Harness(id))
 			s.Stop()
 			s.Start()
 			app = s.App()
 			control = accept()
+			before := server.Submissions(conversation)
 			if r := serverInput(app, session, uuid.NewString(), "before registration"); r.Status == "delivered" {
 				t.Fatal("missing binding accepted input")
 			}
+			if got := server.Submissions(conversation); got != before {
+				t.Fatalf("missing binding leaked input through the view: %d -> %d", before, got)
+			}
 			register(control)
 			awaitAgentAvailable(app, fakeagent.Harness(id))
-			if r := serverInput(app, session, uuid.NewString(), "after daemon restart"); !r.Success || r.Status != "delivered" {
-				t.Fatalf("daemon restart input: %+v", r)
-			}
-			server.Prompted(conversation)
+			direct("after daemon restart")
 			reloaded := s.Attn("agent", "reload", session, "--source-session", session)
 			if reloaded.Code != 0 {
 				t.Fatalf("reload: %s%s", reloaded.Stdout, reloaded.Stderr)
@@ -230,10 +244,40 @@ func TestAnInstalledServerPluginKeepsConversationOwnershipThroughRegistrationAnd
 			if settled.ProfileID != profile {
 				t.Fatal("recovery changed profile")
 			}
-			if r := serverInput(app, session, uuid.NewString(), "hidden followup"); !r.Success || r.Status != "delivered" {
-				t.Fatalf("hidden input: %+v", r)
+			app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: protocol.SessionID(session)})
+			handled := testworld.AwaitSession(app, session, func(x protocol.Session) bool { return !protocol.Deref(x.TurnOwed) })
+			s.Stop()
+			s.StartHeldAt(recovery)
+			control = accept()
+			register(control)
+			recovery.Release()
+			app = s.App()
+			neighbor := s.Spawn(app, fakeagent.Harness(id), s.Path("neighbor"))
+			neighborView := s.Launched(neighbor)
+			if r := serverInput(app, neighbor, uuid.NewString(), "sync recovery"); !r.Success || r.Status != "delivered" {
+				t.Fatalf("neighbor: %+v", r)
 			}
-			server.Prompted(conversation)
+			server.Prompted(neighborView.ConversationID)
+			testworld.AwaitSession(app, neighbor, func(x protocol.Session) bool { return x.State == protocol.SessionStateWorking })
+			listed, err := s.Client().List("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, x := range listed.Sessions {
+				if string(x.ID) == session {
+					found = true
+					if protocol.Deref(x.TurnOwed) || protocol.Deref(x.TurnOpenedAt) != protocol.Deref(handled.TurnOpenedAt) {
+						t.Fatalf("replayed a handled completion: %+v", x)
+					}
+				}
+			}
+			if !found {
+				t.Fatal("lost the zero-view session")
+			}
+			t.Log("repeated daemon recovery kept the already handled completion settled")
+
+			direct("hidden followup")
 			if n := s.AppServers(fakeagent.Sigma); n != 1 {
 				t.Fatalf("recovery started %d servers", n)
 			}

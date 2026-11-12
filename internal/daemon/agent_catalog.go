@@ -64,23 +64,21 @@ func (d *Daemon) agentCatalog() []agentdriver.Descriptor {
 		})
 	}
 	for _, l := range d.appServerLinks() {
-		if l.b.plugin == "" {
+		if l.callerConversationEnv() == "" {
 			continue
 		}
-		if _, live := registry.driver(l.b.agent); live {
-			continue
+		found := false
+		for i := range agents {
+			if agents[i].Name == l.b.agent {
+				agents[i].CallerConversationEnv = l.callerConversationEnv()
+				found = true
+				break
+			}
 		}
-		if p := l.b.declaration.Load(); p != nil {
-			agents = append(agents, agentdriver.Descriptor{Name: l.b.agent, Plugin: l.b.plugin, Health: agentdriver.HealthUnhealthy, Detail: "plugin unavailable for new views", CallerConversationEnv: p.CallerConversationEnv})
+		if !found && (l.b.plugin != "" || len(l.sessions()) > 0) {
+			agents = append(agents, agentdriver.Descriptor{Name: l.b.agent, Plugin: l.b.plugin, Health: agentdriver.HealthUnhealthy, Detail: "unavailable for new views", CallerConversationEnv: l.callerConversationEnv()})
 		}
 	}
 	sort.Slice(agents, func(i, j int) bool { return agents[i].Name < agents[j].Name })
-	for i := range agents {
-		if l := d.serverLinkFor(agents[i].Name); l != nil {
-			if p := l.b.declaration.Load(); p != nil {
-				agents[i].CallerConversationEnv = p.CallerConversationEnv
-			}
-		}
-	}
 	return agents
 }

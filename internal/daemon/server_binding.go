@@ -26,6 +26,7 @@ type serverBinding struct {
 	kind              string
 	terminal          harness.TerminalID
 	feature           *setting.Setting
+	callerVariable    string
 	homeVariable      string
 	homeDir           string
 	socket            func(home string) string
@@ -47,6 +48,7 @@ var nisseBinding = &serverBinding{
 	terminal:       "nisse-server",
 	feature:        setting.NisseEnabled,
 	homeVariable:   "NISSE_HOME",
+	callerVariable: "NISSE_ROOT_CONVERSATION",
 	homeDir:        ".nisse",
 	socket:         nisse.Socket,
 	connect:        nisse.Connect,
@@ -60,6 +62,7 @@ var sigmaBinding = &serverBinding{
 	terminal:          "sigma-server",
 	feature:           setting.SigmaEnabled,
 	homeVariable:      "SIGMA_HOME",
+	callerVariable:    "SIGMA_ROOT_CONVERSATION",
 	homeDir:           ".sigma",
 	socket:            sigma.Socket,
 	connect:           sigma.Connect,
@@ -184,4 +187,11 @@ func (l *serverLink) connect(ctx context.Context, socket, client, version string
 		return p.connect(ctx, socket, client, version)
 	}
 	return l.b.connect(ctx, socket, client, version)
+}
+
+func (l *serverLink) callerConversationEnv() string {
+	if p := l.b.declaration.Load(); p != nil {
+		return p.CallerConversationEnv
+	}
+	return l.b.callerVariable
 }

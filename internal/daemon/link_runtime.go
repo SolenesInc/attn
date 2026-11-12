@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/layouttree"
@@ -128,6 +129,19 @@ func (d *Daemon) keepsWhenLeft(sessionID protocol.SessionID) bool {
 }
 
 func (d *Daemon) linkCaller(t protocol.TerminalID) (session protocol.SessionID, view harness.TerminalID, ours bool) {
+	if raw, neutral := strings.CutPrefix(string(t), "server-env:"); neutral {
+		variable, conversation, _ := strings.Cut(raw, ":")
+		var owner protocol.SessionID
+		for _, id := range d.store.OpenSessionsHolding(conversation) {
+			if l, ok := d.linkOf(id).(*serverLink); ok && l.callerConversationEnv() == variable {
+				if owner != "" {
+					return "", "", true
+				}
+				owner = id
+			}
+		}
+		return owner, d.primaryTerminal(owner), true
+	}
 	for _, l := range d.links() {
 		if session, view, ours = l.resolveCaller(t); ours {
 			return session, view, true
