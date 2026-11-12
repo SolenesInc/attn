@@ -2445,7 +2445,10 @@ fn a_tiles_header_button_pops_it_out() {
         .get(Target::key("tile.m.popout"))
         .name
         .clone();
-    assert_eq!(button.as_deref(), Some("Pop out tile (Ctrl+Shift+O)"));
+    assert_eq!(
+        button,
+        Some(format!("Pop out tile ({})", key_label(Action::TilePopOut)))
+    );
     world.gesture(|app| app.click(Target::key("tile.m.popout")));
     let leaves: Vec<_> = sent(&world, "desktop_pop_out_leaf")
         .into_iter()

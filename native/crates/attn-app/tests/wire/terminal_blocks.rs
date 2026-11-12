@@ -123,7 +123,7 @@ fn a_click_on_the_command_line_selects_the_command_the_shell_sent() {
 }
 
 #[test]
-fn the_copy_command_key_without_a_block_reaches_the_program() {
+fn the_copy_command_key_without_a_block_keeps_the_clipboard_and_passes_the_key_on() {
     let mut world = World::start(one_terminal());
     world.open_desktop();
     output(&world, 1, b"plain\r\n");
@@ -132,7 +132,15 @@ fn the_copy_command_key_without_a_block_reaches_the_program() {
     world.clipboard.set_text("kept");
     world.gesture(|app| app.press(COPY_COMMAND));
     assert_eq!(copied(&world).as_deref(), Some("kept"));
-    assert_eq!(inputs(&world).len(), 1, "the program hears the key");
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            inputs(&world),
+            [],
+            "⌘ chords never reach the program on macOS"
+        );
+    } else {
+        assert_eq!(inputs(&world).len(), 1, "the program hears Ctrl+Alt+C");
+    }
     assert!(world.runtime_is_at_rest());
 }
 
