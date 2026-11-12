@@ -214,10 +214,8 @@ type Daemon struct {
 	claudeModState           *claudeMod
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
-	nisseOnce                sync.Once
-	nisseState               *serverLink
-	sigmaOnce                sync.Once
-	sigmaState               *serverLink
+	serverLinksMu            sync.Mutex
+	serverLinks              map[string]*serverLink
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState

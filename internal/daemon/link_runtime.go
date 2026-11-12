@@ -40,7 +40,11 @@ type linkRuntime interface {
 }
 
 func (d *Daemon) links() []linkRuntime {
-	return []linkRuntime{d.codexShared(), d.nisse(), d.sigma()}
+	links := []linkRuntime{d.codexShared()}
+	for _, l := range d.appServerLinks() {
+		links = append(links, l)
+	}
+	return links
 }
 
 func (d *Daemon) linkNamed(kind string) linkRuntime {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
@@ -66,16 +67,6 @@ var sigmaBinding = &serverBinding{
 
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}
 
-func (d *Daemon) nisse() *serverLink {
-	d.nisseOnce.Do(func() { d.nisseState = newServerLink(d, nisseBinding) })
-	return d.nisseState
-}
-
-func (d *Daemon) sigma() *serverLink {
-	d.sigmaOnce.Do(func() { d.sigmaState = newServerLink(d, sigmaBinding) })
-	return d.sigmaState
-}
-
 func appServerBinding(agent string) *serverBinding {
 	for _, b := range []*serverBinding{nisseBinding, sigmaBinding} {
 		if b.agent == agent {
@@ -86,13 +77,35 @@ func appServerBinding(agent string) *serverBinding {
 }
 
 func (d *Daemon) serverLinkFor(agent string) *serverLink {
-	switch appServerBinding(agent) {
-	case nisseBinding:
-		return d.nisse()
-	case sigmaBinding:
-		return d.sigma()
+	d.serverLinksMu.Lock()
+	defer d.serverLinksMu.Unlock()
+	if l := d.serverLinks[agent]; l != nil {
+		return l
 	}
-	return nil
+	b := appServerBinding(agent)
+	if b == nil {
+		return nil
+	}
+	if d.serverLinks == nil {
+		d.serverLinks = make(map[string]*serverLink)
+	}
+	l := newServerLink(d, b)
+	d.serverLinks[agent] = l
+	return l
+}
+
+func (d *Daemon) appServerLinks() []*serverLink {
+	for _, b := range []*serverBinding{nisseBinding, sigmaBinding} {
+		d.serverLinkFor(b.agent)
+	}
+	d.serverLinksMu.Lock()
+	defer d.serverLinksMu.Unlock()
+	links := make([]*serverLink, 0, len(d.serverLinks))
+	for _, l := range d.serverLinks {
+		links = append(links, l)
+	}
+	sort.Slice(links, func(i, j int) bool { return links[i].b.agent < links[j].b.agent })
+	return links
 }
 
 func (d *Daemon) agentOffered(agent string) bool {
