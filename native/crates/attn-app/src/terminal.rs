@@ -6,8 +6,10 @@ use attn_client::{Commands, Connection, Facts, Frame, TerminalEvent};
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
     PtyResizeMessage, SetTerminalThemeMessage, TerminalFocusMessage,
+    TerminalPointerActivityMessage,
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
+use attn_term::mouse::{self, Action, WheelRows};
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::Tx;
 
@@ -22,6 +24,9 @@ const AGENT_USABLE: (u16, u16) = (21, 11);
 const ATTACH_RETRY: f64 = 0.15;
 const ATTACH_RETRY_FOR: f64 = 3.0;
 const FIRST_SIZE: (u16, u16) = (80, 24);
+/// How often pointer motion over an agent's terminal tells the daemon the user is there, as in
+/// the Tauri app: sampled well inside the daemon's five-second quiet window.
+const POINTER_ACTIVITY_INTERVAL: f64 = 0.25;
 
 /// What the link hears about terminals, waiting for the window's next frame.
 #[derive(Clone, Default)]
@@ -77,9 +82,39 @@ struct Term {
     watermark: Option<u32>,
     held: Vec<Vec<u8>>,
     tile: Option<Tile>,
+    /// The slot the terminal draws in, in points, and the scale it draws at.
+    slot: Option<((f32, f32), f32)>,
     sent_size: Option<(u16, u16)>,
     sent_at: f64,
     resize_due: Option<f64>,
+    pointer: Pointer,
+}
+
+#[derive(Debug)]
+struct Pointer {
+    /// A button is down on the terminal.
+    held: bool,
+    /// The button whose press the program heard, owed its release.
+    reported: Option<u8>,
+    /// The cell of the last report, where a release off the grid lands.
+    cell: Option<(u16, u16)>,
+    /// Where the pointer last moved to, so a release at the same point is no motion.
+    at: Option<(f32, f32)>,
+    wheel: WheelRows,
+    active_at: f64,
+}
+
+impl Default for Pointer {
+    fn default() -> Pointer {
+        Pointer {
+            held: false,
+            reported: None,
+            cell: None,
+            at: None,
+            wheel: WheelRows::default(),
+            active_at: f64::NEG_INFINITY,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -125,9 +160,11 @@ impl Term {
             watermark: None,
             held: Vec::new(),
             tile: None,
+            slot: None,
             sent_size: None,
             sent_at: f64::NEG_INFINITY,
             resize_due: None,
+            pointer: Pointer::default(),
         }
     }
 }
@@ -166,7 +203,8 @@ impl Terminals {
             .cloned()
             .collect();
         for id in gone {
-            let term = self.panes.remove(&id).expect("listed above");
+            let mut term = self.panes.remove(&id).expect("listed above");
+            release(&id, &mut term, None, 0, daemon);
             if self.connected
                 && matches!(
                     term.phase,
@@ -263,6 +301,7 @@ impl Terminals {
         if w <= 0.0 || h <= 0.0 {
             return;
         }
+        term.slot = Some(((w, h), scale));
         let size = metrics.fit(w, h);
         if term.agent && mid_layout(size, term.vt.size(), (w, h), &metrics) {
             return;
@@ -557,6 +596,114 @@ impl Terminals {
         Some(self.panes.get_mut(id)?.vt.encode_paste(text))
     }
 
+    /// The pointer moved to `at` over a terminal's slot, in its points.
+    pub(crate) fn pointer_moved(
+        &mut self,
+        id: &str,
+        at: (f32, f32),
+        mods: u8,
+        now: f64,
+        daemon: &Commands,
+    ) {
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(id) else {
+            return;
+        };
+        if term.pointer.at.replace(at) == Some(at) {
+            return;
+        }
+        if term.agent && self.connected && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL
+        {
+            term.pointer.active_at = now;
+            let _ = daemon.send(&TerminalPointerActivityMessage {
+                id: id.into(),
+                ..TerminalPointerActivityMessage::new()
+            });
+        }
+        let modes = term.vt.mouse_modes();
+        let Some(cell) = cell_at(term, &metrics, at) else {
+            return;
+        };
+        if !modes.tracking || !mouse::reports_move(modes, term.pointer.reported, term.pointer.held)
+        {
+            return;
+        }
+        let report = mouse::report(Action::Move, term.pointer.reported, cell, modes.sgr, mods);
+        send_input(id, report.as_bytes(), "pointer", daemon);
+        term.pointer.cell = Some(cell);
+    }
+
+    /// `button` went down at `at` on a terminal's slot. A program that tracks the mouse hears
+    /// it, unless Alt holds a primary or middle press for the terminal's own selection.
+    pub(crate) fn pointer_pressed(
+        &mut self,
+        id: &str,
+        button: u8,
+        at: (f32, f32),
+        mods: u8,
+        daemon: &Commands,
+    ) {
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(id) else {
+            return;
+        };
+        term.pointer.held = true;
+        let alt = mods & mouse::modifiers(false, true, false) != 0;
+        if alt && button != mouse::SECONDARY {
+            return;
+        }
+        let modes = term.vt.mouse_modes();
+        let Some(cell) = cell_at(term, &metrics, at).filter(|_| modes.tracking) else {
+            return;
+        };
+        let report = mouse::report(Action::Press, Some(button), cell, modes.sgr, mods);
+        send_input(id, report.as_bytes(), "pointer", daemon);
+        term.pointer.reported = Some(button);
+        term.pointer.cell = Some(cell);
+    }
+
+    /// The button held on a terminal came up at `at`, wherever that is, or was cancelled with
+    /// no point.
+    pub(crate) fn pointer_released(
+        &mut self,
+        id: &str,
+        at: Option<(f32, f32)>,
+        mods: u8,
+        daemon: &Commands,
+    ) {
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(id) else {
+            return;
+        };
+        let cell = at.and_then(|at| cell_at(term, &metrics, at));
+        release(id, term, cell, mods, daemon);
+    }
+
+    /// The wheel turned `dy` points over `at`: true when the terminal took it, reporting it to
+    /// a program that tracks the mouse or as arrow keys on the alternate screen.
+    pub(crate) fn wheel(&mut self, id: &str, dy: f32, at: (f32, f32), daemon: &Commands) -> bool {
+        let metrics = self.metrics();
+        let Some(term) = self.panes.get_mut(id) else {
+            return false;
+        };
+        let lines = term.pointer.wheel.take(-dy / metrics.cell_h);
+        let modes = term.vt.mouse_modes();
+        if !modes.tracking && !modes.alternate_screen {
+            return false;
+        }
+        if lines != 0 {
+            let cell = cell_at(term, &metrics, at).unwrap_or((0, 0));
+            let source = if modes.tracking { "pointer" } else { "user" };
+            send_input(
+                id,
+                mouse::wheel(lines, cell, modes).as_bytes(),
+                source,
+                daemon,
+            );
+        }
+        true
+    }
+
     /// The text on a terminal's screen, row by row with trailing blanks trimmed.
     pub fn screen_text(&mut self, id: &str) -> Option<Vec<String>> {
         let term = self.panes.get_mut(id)?;
@@ -601,6 +748,26 @@ fn answer(id: &str, term: &mut Term, daemon: &Commands) {
     if !replies.is_empty() {
         send_input(id, &replies, "response", daemon);
     }
+}
+
+fn cell_at(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u16, u16)> {
+    let (slot, scale) = term.slot?;
+    metrics.cell_at(term.vt.size(), slot, scale, at)
+}
+
+/// Sends the release a program is owed for the press it heard, at `cell` or where it last
+/// heard the pointer.
+fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon: &Commands) {
+    term.pointer.held = false;
+    if term.pointer.reported.take().is_none() {
+        return;
+    }
+    let Some(cell) = cell.or(term.pointer.cell.take()) else {
+        return;
+    };
+    let sgr = term.vt.mouse_modes().sgr;
+    let report = mouse::report(Action::Release, None, cell, sgr, mods);
+    send_input(id, report.as_bytes(), "pointer", daemon);
 }
 
 fn send_input(id: &str, data: &[u8], source: &'static str, daemon: &Commands) {

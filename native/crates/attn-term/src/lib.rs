@@ -2,6 +2,7 @@ pub mod attach;
 mod font;
 mod grid;
 pub mod keys;
+pub mod mouse;
 mod render;
 pub mod responses;
 mod sprites;

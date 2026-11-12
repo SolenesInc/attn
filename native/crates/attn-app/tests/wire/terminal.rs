@@ -5,10 +5,10 @@ use attn_protocol::{
     ProfileArrangementChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
     SessionExitedMessage,
 };
-use attn_term::{SNAPSHOT_FORMAT, Vt};
+use attn_term::{FONT_SIZE, Fonts, SNAPSHOT_FORMAT, Vt};
 use attn_testkit::{Answer, Daemon, World, message};
 use base64::Engine;
-use rune::{Ime, Key, KeyEvent, Mods};
+use rune::{Ime, Key, KeyEvent, Mods, PhysicalInput, PointerButton, WheelEvent};
 
 fn pane(id: &str, runtime: &str) -> DesktopPane {
     DesktopPane {
@@ -833,4 +833,237 @@ fn the_daemon_hears_the_terminal_colors_after_each_handshake() {
         theme.as_object_mut().unwrap().remove("request_id");
         assert_eq!(theme, dark);
     }
+}
+
+/// The window point at the middle of cell (`col`, `row`) of terminal r1, both zero-based.
+fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
+    let (rect, _) = world
+        .runtime()
+        .presented("terminal.r1")
+        .expect("r1 is drawn");
+    let metrics = Fonts::default().metrics(FONT_SIZE);
+    (
+        rect[0] + (f32::from(col) + 0.5) * metrics.cell_w,
+        rect[1] + (f32::from(row) + 0.5) * metrics.cell_h,
+    )
+}
+
+fn pointed(data: &str) -> (String, String) {
+    (data.into(), "pointer".into())
+}
+
+fn live_with_modes(modes: &[u8]) -> World {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, modes);
+    world.settle();
+    world
+}
+
+#[test]
+fn a_program_that_tracks_the_mouse_hears_presses_drags_and_releases_in_the_encoding_it_chose() {
+    let mut world = World::start(one_terminal());
+    let (a, b) = (cell(&world, 2, 1), cell(&world, 4, 1));
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_up(a.0, a.1);
+    });
+    assert_eq!(
+        inputs(&world),
+        [],
+        "a program that does not track the mouse hears nothing"
+    );
+
+    output(&world, 1, b"\x1b[?1002h\x1b[?1006h");
+    world.settle();
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+    });
+    world.gesture(|app| {
+        app.runtime.physical_input(PhysicalInput::Modifiers(Mods {
+            shift: true,
+            ..Mods::default()
+        }))
+    });
+    world.gesture(|app| app.runtime.pointer_up(b.0, b.1));
+    world.gesture(|app| {
+        app.runtime
+            .physical_input(PhysicalInput::Modifiers(Mods::default()))
+    });
+    output(&world, 2, b"\x1b[?1006l");
+    world.settle();
+    world.gesture(|app| {
+        app.runtime.pointer_move(a.0, a.1);
+        app.runtime.button_down(a.0, a.1, PointerButton::Middle);
+        app.runtime.button_up(a.0, a.1, PointerButton::Middle);
+    });
+
+    assert_eq!(
+        inputs(&world),
+        [
+            pointed("\x1b[<0;3;2M"),
+            pointed("\x1b[<32;5;2M"),
+            pointed("\x1b[<7;5;2m"),
+            pointed("\x1b[M!#\""),
+            pointed("\x1b[M##\""),
+        ]
+    );
+}
+
+#[test]
+fn motion_with_no_button_held_reports_only_under_any_event_tracking() {
+    let mut world = live_with_modes(b"\x1b[?1002h\x1b[?1006h");
+    let (a, b) = (cell(&world, 0, 0), cell(&world, 1, 2));
+    world.gesture(|app| app.runtime.pointer_move(a.0, a.1));
+    output(&world, 2, b"\x1b[?1003h");
+    world.settle();
+    let commits = world.runtime().stats.commits;
+    world.gesture(|app| app.runtime.pointer_move(b.0, b.1));
+
+    assert_eq!(inputs(&world), [pointed("\x1b[<35;2;3M")]);
+    assert_eq!(
+        world.runtime().stats.commits,
+        commits,
+        "motion runs no view"
+    );
+}
+
+#[test]
+fn a_press_with_alt_held_and_its_drag_stay_with_the_terminal() {
+    let mut world = live_with_modes(b"\x1b[?1002h\x1b[?1006h");
+    let (a, b) = (cell(&world, 0, 0), cell(&world, 3, 1));
+    world.gesture(|app| {
+        app.runtime.physical_input(PhysicalInput::Modifiers(Mods {
+            alt: true,
+            ..Mods::default()
+        }))
+    });
+    world.gesture(|app| {
+        app.runtime.pointer_move(a.0, a.1);
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+        app.runtime.pointer_up(b.0, b.1);
+    });
+
+    assert_eq!(inputs(&world), []);
+}
+
+#[test]
+fn a_reported_press_is_released_where_the_pointer_left_the_terminal_and_when_the_window_loses_focus()
+ {
+    let mut world = live_with_modes(b"\x1b[?1000h\x1b[?1006h");
+    let a = cell(&world, 3, 2);
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_up(1.0, 1.0);
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.window_focus(false);
+    });
+
+    assert_eq!(
+        inputs(&world),
+        [
+            pointed("\x1b[<0;4;3M"),
+            pointed("\x1b[<3;4;3m"),
+            pointed("\x1b[<0;4;3M"),
+            pointed("\x1b[<3;4;3m"),
+        ]
+    );
+}
+
+#[test]
+fn a_terminal_that_goes_away_with_a_reported_press_releases_it() {
+    let mut world = live_with_modes(b"\x1b[?1000h\x1b[?1006h");
+    let a = cell(&world, 1, 1);
+    world.gesture(|app| app.runtime.pointer_down(a.0, a.1));
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![desktop(vec![])],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(
+        inputs(&world),
+        [pointed("\x1b[<0;2;2M"), pointed("\x1b[<3;2;2m")]
+    );
+}
+
+#[test]
+fn the_wheel_reports_to_a_tracking_program_and_turns_into_arrow_keys_on_the_alternate_screen() {
+    let mut world = World::start(one_terminal());
+    let a = cell(&world, 1, 0);
+    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    let wheel = |world: &mut World, rows: f32| {
+        world.gesture(|app| {
+            app.runtime
+                .wheel_event(WheelEvent::new(0.0, -rows * row).at(a.0, a.1))
+        });
+        world.advance(Duration::from_secs(1));
+    };
+    wheel(&mut world, 2.0);
+    output(&world, 1, b"\x1b[?1049h");
+    world.settle();
+    for rows in [0.4, 0.4, 0.4, -0.4, -0.4, -0.4, 8.0] {
+        wheel(&mut world, rows);
+    }
+    output(&world, 2, b"\x1b[?1000h\x1b[?1006h");
+    world.settle();
+    wheel(&mut world, 9.0);
+    wheel(&mut world, -1.0);
+    output(&world, 3, b"\x1b[?1006l");
+    world.settle();
+    wheel(&mut world, -1.0);
+
+    assert_eq!(
+        inputs(&world),
+        [
+            typed("\x1b[B"),
+            typed("\x1b[A"),
+            typed(&"\x1b[B".repeat(5)),
+            pointed(&"\x1b[<65;2;1M".repeat(5)),
+            pointed("\x1b[<64;2;1M"),
+            pointed("\x1b[M`\"!"),
+        ]
+    );
+}
+
+#[test]
+fn pointer_motion_over_an_agent_tells_the_daemon_at_most_every_quarter_second_while_connected() {
+    let mut world = World::start(one_terminal());
+    let (a, b) = (cell(&world, 0, 0), cell(&world, 1, 0));
+    world.gesture(|app| {
+        app.runtime.pointer_move(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+    });
+    world.advance(Duration::from_millis(250));
+    world.gesture(|app| app.runtime.pointer_move(a.0, a.1));
+    world.daemon.on("client_hello", |_| ());
+    world.daemon.disconnect();
+    world.settle();
+    world.advance(Duration::from_secs(1));
+    world.advance(Duration::from_millis(250));
+    let c = cell(&world, 2, 0);
+    world.gesture(|app| app.runtime.pointer_move(c.0, c.1));
+
+    let activity = world.daemon.sent_of("terminal_pointer_activity");
+    let once = serde_json::json!({ "cmd": "terminal_pointer_activity", "id": "r1" });
+    assert_eq!(
+        activity,
+        [once.clone(), once],
+        "only while the handshake holds"
+    );
+}
+
+#[test]
+fn pointer_motion_over_a_shell_tells_the_daemon_nothing() {
+    let shell = DesktopPane {
+        kind: "shell".into(),
+        ..pane("t1", "r1")
+    };
+    let mut world = World::start(Daemon::scripted().state(showing(vec![shell], "daemon-1")));
+    let a = cell(&world, 0, 0);
+    world.gesture(|app| app.runtime.pointer_move(a.0, a.1));
+
+    assert!(world.daemon.sent_of("terminal_pointer_activity").is_empty());
 }

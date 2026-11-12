@@ -5,6 +5,7 @@ use crate::grid::{
     BOLD, Cell, Cursor, CursorStyle, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE,
     Width,
 };
+use crate::mouse;
 use crate::theme::Theme;
 
 #[repr(C)]
@@ -56,6 +57,8 @@ unsafe extern "C" {
     fn attn_term_resize(t: *mut AttnTerm, cols: u16, rows: u16, cw: u32, ch: u32) -> c_int;
     fn attn_term_size(t: *mut AttnTerm, cols: *mut u16, rows: *mut u16);
     fn attn_term_mode(t: *mut AttnTerm, value: u16, ansi: bool) -> bool;
+    fn attn_term_mouse_tracking(t: *mut AttnTerm) -> bool;
+    fn attn_term_alternate_screen(t: *mut AttnTerm) -> bool;
     fn attn_term_responses(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_responses(t: *mut AttnTerm);
     fn attn_term_frame(t: *mut AttnTerm, frame: *mut Frame) -> c_int;
@@ -222,6 +225,17 @@ impl Vt {
 
     pub fn dec_mode(&mut self, mode: u16) -> bool {
         unsafe { attn_term_mode(self.0.as_ptr(), mode, false) }
+    }
+
+    pub fn mouse_modes(&mut self) -> mouse::Modes {
+        let t = self.0.as_ptr();
+        mouse::Modes {
+            tracking: unsafe { attn_term_mouse_tracking(t) },
+            any_event: self.dec_mode(1003),
+            drag: self.dec_mode(1002),
+            sgr: self.dec_mode(1006),
+            alternate_screen: unsafe { attn_term_alternate_screen(t) },
+        }
     }
 
     /// Brings `grid` up to date with the screen, reading only rows that changed, and marks

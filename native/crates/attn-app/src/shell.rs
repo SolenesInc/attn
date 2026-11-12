@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use attn_client::{Connection, Facts};
+use attn_term::mouse;
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
-use rune::{Chord, Cx, El, Tx, col, el, memo, row, text, text_input};
+use rune::{Chord, Cx, Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text, text_input};
 
 use crate::action::{Action, Category};
 use crate::keymap::Keymap;
@@ -278,8 +279,10 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
         let panes = desktop.panes.iter().map(|pane| {
             let active = pane.pane_id == desktop.active_pane_id;
             let held = holder.as_ref().is_some_and(|h| h.pane == pane.pane_id);
-            let pane_id = pane.pane_id.clone();
-            let desktop_id = desktop.id.clone();
+            let tile = Holder {
+                desktop: desktop.id.clone(),
+                pane: pane.pane_id.clone(),
+            };
             col()
                 .key(format!("tile.{}", pane.pane_id))
                 .grow(1.0)
@@ -297,10 +300,9 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
                     },
                 )
                 .padding(space::S3)
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    state.window.take_keyboard(&desktop_id, &pane_id, tx);
-                    let keyboard = state.window.keyboard_terminal(&state.facts);
-                    state.terminals.focus(keyboard, &state.daemon);
+                .on_press_tx({
+                    let tile = tile.clone();
+                    move |state: &mut State, tx: &mut Tx| take_tile(state, &tile, tx)
                 })
                 .role("group")
                 .label(tile_name(&pane.title))
@@ -311,7 +313,7 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
                 )
                 .children(
                     (!pane.runtime_id.is_empty())
-                        .then(|| terminal_slot(&pane.runtime_id, held, t.dark, scale)),
+                        .then(|| terminal_slot(&pane.runtime_id, tile, held, t.dark, scale)),
                 )
         });
         row()
@@ -332,8 +334,9 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
 
 /// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
 /// size the terminal asks its PTY for.
-fn terminal_slot(runtime_id: &str, held: bool, dark: bool, scale: f32) -> El {
+fn terminal_slot(runtime_id: &str, tile: Holder, held: bool, dark: bool, scale: f32) -> El {
     let id = runtime_id.to_owned();
+    let (pointing, pressing, wheeling) = (id.clone(), id.clone(), id.clone());
     let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
@@ -346,8 +349,69 @@ fn terminal_slot(runtime_id: &str, held: bool, dark: bool, scale: f32) -> El {
                 .terminals
                 .laid_out(&id, (w, h), scale, tx, &state.daemon);
             tx.live_only();
+        })
+        .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
+            let mods = report_mods(tx.mods());
+            let now = tx.clock();
+            state
+                .terminals
+                .pointer_moved(&pointing, (p.x, p.y), mods, now, &state.daemon);
+            tx.live_only();
+        })
+        .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
+        .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
+            let mods = report_mods(tx.mods());
+            match d.phase {
+                rune::Phase::Down => {
+                    take_tile(state, &tile, tx);
+                    let button = match tx.button() {
+                        PointerButton::Middle => mouse::MIDDLE,
+                        PointerButton::Secondary => mouse::SECONDARY,
+                        _ => mouse::PRIMARY,
+                    };
+                    state.terminals.pointer_pressed(
+                        &pressing,
+                        button,
+                        (d.x, d.y),
+                        mods,
+                        &state.daemon,
+                    );
+                }
+                rune::Phase::Move => tx.live_only(),
+                rune::Phase::Up if d.cancelled() => {
+                    state
+                        .terminals
+                        .pointer_released(&pressing, None, 0, &state.daemon);
+                    tx.live_only();
+                }
+                rune::Phase::Up => {
+                    state.terminals.pointer_released(
+                        &pressing,
+                        Some((d.x, d.y)),
+                        mods,
+                        &state.daemon,
+                    );
+                    tx.live_only();
+                }
+            }
+        })
+        .on_wheel(move |state: &mut State, e, tx: &mut Tx| {
+            tx.live_only();
+            state
+                .terminals
+                .wheel(&wheeling, e.dy, (e.x, e.y), &state.daemon)
         });
     if held { slot.ime_cursor() } else { slot }
+}
+
+fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
+    state.window.take_keyboard(&tile.desktop, &tile.pane, tx);
+    let keyboard = state.window.keyboard_terminal(&state.facts);
+    state.terminals.focus(keyboard, &state.daemon);
+}
+
+fn report_mods(mods: Mods) -> u8 {
+    mouse::modifiers(mods.shift, mods.alt, mods.ctrl)
 }
 
 fn tile_name(title: &str) -> String {

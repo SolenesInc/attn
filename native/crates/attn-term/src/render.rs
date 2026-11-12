@@ -11,7 +11,7 @@ use rune::render::EffectSite;
 use swash::scale::{Render, ScaleContext, Source, StrikeWith, image::Content};
 use swash::zeno::Format;
 
-use crate::font::{FAMILY, Fonts, Metrics};
+use crate::font::{FAMILY, Fonts, Metrics, fit};
 use crate::grid::{
     BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE, Width,
 };
@@ -113,10 +113,7 @@ impl Raster {
     }
 
     fn cell(&self) -> (f32, f32) {
-        (
-            (self.metrics.cell_w * self.scale).round(),
-            (self.metrics.cell_h * self.scale).round(),
-        )
+        self.metrics.device_cell(self.scale)
     }
 
     fn layout(&mut self, text: &str, style: u8) -> parley::Layout<()> {
@@ -919,30 +916,5 @@ impl Cells {
             pass.set_pipeline(pipeline);
             pass.draw(0..6, 1..count);
         }
-    }
-}
-
-struct Fit {
-    zoom: f32,
-    offset: [f32; 2],
-}
-
-/// How a grid sits in its slot: a PTY smaller than the slot, sized by another client, is
-/// scaled up to fit and centered, as the Tauri terminal's `scaledToFitTransform` does.
-fn fit((cols, rows): (u16, u16), (cw, ch): (f32, f32), (w, h): (f32, f32)) -> Fit {
-    let room = ((w / cw).floor(), (h / ch).floor());
-    let (cols, rows) = (f32::from(cols), f32::from(rows));
-    let spare = cols <= room.0 && rows <= room.1 && (cols < room.0 || rows < room.1);
-    if !spare {
-        return Fit {
-            zoom: 1.0,
-            offset: [0.0, 0.0],
-        };
-    }
-    let (gw, gh) = (cols * cw, rows * ch);
-    let zoom = (w / gw).min(h / gh);
-    Fit {
-        zoom,
-        offset: [(w - gw * zoom) / 2.0, (h - gh * zoom) / 2.0],
     }
 }

@@ -166,6 +166,20 @@ bool attn_term_mode(AttnTerm *t, uint16_t value, bool ansi) {
          config.value;
 }
 
+bool attn_term_mouse_tracking(AttnTerm *t) {
+  bool tracking = false;
+  return ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &tracking) ==
+             GHOSTTY_SUCCESS &&
+         tracking;
+}
+
+bool attn_term_alternate_screen(AttnTerm *t) {
+  GhosttyTerminalScreen screen = GHOSTTY_TERMINAL_SCREEN_PRIMARY;
+  return ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, &screen) ==
+             GHOSTTY_SUCCESS &&
+         screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE;
+}
+
 const uint8_t *attn_term_responses(AttnTerm *t, size_t *len) {
   *len = t->responses_len;
   return t->responses;
