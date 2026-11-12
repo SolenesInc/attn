@@ -33,6 +33,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
+      apps: ${{ steps.plan.outputs.apps }}
       repeat: ${{ steps.plan.outputs.repeat }}
     steps:
       - uses: actions/checkout@v4
@@ -54,8 +55,11 @@ jobs:
           --scenarios "$SCENARIOS" --repeat "$REPEAT" >> "$GITHUB_OUTPUT"
 
   build:
-    name: Build App acceptance tree
+    name: Build App acceptance tree (${{ matrix.app }})
     needs: plan
+    strategy:
+      matrix:
+        app: ${{ fromJSON(needs.plan.outputs.apps) }}
     runs-on: ${{ inputs.runner }}
     env:
       ATTN_INSTANCE: app-acceptance
@@ -72,11 +76,12 @@ jobs:
         uses: ./.github/actions/build-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
+          app: ${{ matrix.app }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
         with:
-          name: acceptance-soak-tree-${{ github.run_id }}
+          name: acceptance-soak-tree-${{ github.run_id }}-${{ matrix.app }}
           path: ${{ steps.build-app.outputs.archive }}
           retention-days: 1
           compression-level: 0
@@ -106,13 +111,14 @@ jobs:
       - name: Download the app tree
         uses: actions/download-artifact@v4
         with:
-          name: acceptance-soak-tree-${{ github.run_id }}
+          name: acceptance-soak-tree-${{ github.run_id }}-${{ matrix.app }}
           path: ${{ runner.temp }}
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
           instance: ${{ env.ATTN_INSTANCE }}
+          app: ${{ matrix.app }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Validate scenario on runner

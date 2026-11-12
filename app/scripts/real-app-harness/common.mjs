@@ -321,6 +321,14 @@ export async function launchFreshAppAndConnect(client, observer, {
   }
 }
 
+export async function launchFreshNativeAppAndConnect(client, observer) {
+  await client.launchFreshApp();
+  await client.waitForManifest(20_000);
+  await client.waitForReady(20_000);
+  await observer.connect();
+  await sweepStaleHarnessSessions(observer);
+}
+
 export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
   const startedAt = Date.now();
   let last = null;

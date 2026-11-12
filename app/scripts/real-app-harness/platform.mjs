@@ -3,7 +3,8 @@ import path from 'node:path';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
-import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
+import { NativeAppDriver } from './nativeAppDriver.mjs';
+import { appExecutableInAppTree, instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 
 // The harness uses its own bridges; a broken desktop bus blocked WebKitGTK
 // before Tauri setup for over 45 seconds.
@@ -89,7 +90,7 @@ const darwinPlatform = {
   os: 'darwin',
 
   appExecutableInTree(appPath) {
-    return appPath.endsWith('.app') ? path.join(appPath, 'Contents', 'MacOS', 'app') : appPath;
+    return appPath.endsWith('.app') ? appExecutableInAppTree(appPath, 'darwin') : appPath;
   },
 
   appCliInTree(appPath) {
@@ -129,7 +130,8 @@ const darwinPlatform = {
   },
 
   async launchApp({ appPath, env = null, logPath }) {
-    return spawnDetached(this.appExecutableInTree(appPath), env, appPath, logPath);
+    const quiet = appShellInTree(appPath) === 'native' ? { MAC_APP_QUIET: '1' } : {};
+    return spawnDetached(this.appExecutableInTree(appPath), { ...env, ...quiet }, appPath, logPath);
   },
 
   async requestQuit({ bundleId }) {
@@ -296,8 +298,19 @@ print('exited', flush=True)
   return { completed };
 }
 
+export function appShellInTree(appPath) {
+  try {
+    return JSON.parse(fs.readFileSync(appPlatform.appBuildIdentityInTree(appPath), 'utf8')).app ?? 'tauri';
+  } catch {
+    return 'tauri';
+  }
+}
+
 export function createWindowDriver(options = {}) {
-  return appPlatform.createWindowDriver(options);
+  const window = appPlatform.createWindowDriver(options);
+  return options.appPath && appShellInTree(options.appPath) === 'native'
+    ? new NativeAppDriver({ client: options.client, window })
+    : window;
 }
 
 export function appExecutableInTree(appPath) {

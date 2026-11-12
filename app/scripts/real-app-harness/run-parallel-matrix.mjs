@@ -6,9 +6,10 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { emitVerdict, harnessArtifactsRoot, timestampSlug } from './common.mjs';
-import { instanceCliEnv } from './harnessInstance.mjs';
+import { defaultAppPathForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { formatShardDigest, selectFailedScenarios } from './matrixDigest.mjs';
-import { resolveScenarios, scenarioCatalog } from './scenarioCatalog.mjs';
+import { resolveScenarios } from './scenarioCatalog.mjs';
+import { appShellInTree } from './platform.mjs';
 import { acquireScenarioLock, instanceScenarioLockPath } from './scenarioRunner.mjs';
 import { aggregateShards } from './shardPlan.mjs';
 
@@ -80,9 +81,10 @@ function parseArgs(argv) {
   return options;
 }
 
-function selectScenarioIds({ selected, failedOnly }, artifactsRoot) {
+function selectScenarioIds({ selected, failedOnly, instancePrefix }, artifactsRoot) {
   if (!failedOnly) {
-    return resolveScenarios(selected, scenarioCatalog).map((scenario) => scenario.id);
+    const app = appShellInTree(defaultAppPathForInstance(`${instancePrefix}1`));
+    return resolveScenarios(selected, app).map((scenario) => scenario.id);
   }
   const lastMatrixPath = path.join(artifactsRoot, 'last-matrix.json');
   if (!fs.existsSync(lastMatrixPath)) {

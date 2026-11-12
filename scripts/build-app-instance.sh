@@ -76,8 +76,8 @@ fi
 echo ">>> Building $label $app_shell app: $app_name (id=$bundle_id, port=$ws_port)"
 
 write_build_identity() {
-  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "demo": %s\n}\n' \
-    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" "$([ -n "$demo" ] && echo true || echo false)" > "$1"
+  printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s",\n  "demo": %s,\n  "app": "%s"\n}\n' \
+    "$VERSION" "$SOURCE_FINGERPRINT" "$GIT_COMMIT" "$BUILD_TIME" "$([ -n "$demo" ] && echo true || echo false)" "$app_shell" > "$1"
 }
 
 codesign_identity() {

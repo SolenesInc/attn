@@ -203,6 +203,13 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-close-desktop'],
   },
   {
+    id: 'native-sidebar-session',
+    runnerId: 'NATIVE-SIDEBAR-SESSION',
+    label: 'The native app launches parked, lists a shell session in its sidebar and takes a press on its row',
+    command: ['node', 'scripts/real-app-harness/scenario-native-sidebar-session.mjs'],
+    app: 'native',
+  },
+  {
     id: 'empty-desktop-keys',
     runnerId: 'EMPTY-DESKTOP-KEYS',
     label: 'Row keys walk onto and off an empty desktop',
@@ -540,19 +547,26 @@ export const scenarioCatalog = [
   },
 ];
 
-export function resolveScenarios(selected, catalog = scenarioCatalog) {
+export function resolveScenarios(selected, app, catalog = scenarioCatalog) {
   const matrixCatalog = catalog.filter((scenario) => !scenario.soakOnly);
   if (!selected.length) {
-    return matrixCatalog;
+    return matrixCatalog.filter((scenario) => scenarioApp(scenario) === app);
   }
   const byId = new Map(matrixCatalog.map((scenario) => [scenario.id, scenario]));
-  return selected.map((id) => {
+  const scenarios = selected.map((id) => {
     const scenario = byId.get(id);
     if (!scenario) {
       throw new Error(`Unknown scenario id: ${id}`);
     }
     return scenario;
   });
+  const others = scenarios.filter((scenario) => scenarioApp(scenario) !== app);
+  if (others.length > 0) {
+    const needs = [...new Set(others.map(scenarioApp))].join(' and ');
+    throw new Error(`${others.map((scenario) => scenario.id).join(', ')} need the ${needs} app, and the instance has the ${app} app; `
+      + `install the one they need with make install INSTANCE=<name> APP=${needs}`);
+  }
+  return scenarios;
 }
 
 export function scenariosAllowingRealAgents(catalog = scenarioCatalog) {
@@ -575,6 +589,10 @@ export function allowRealAgentsForRunner(runnerId, catalog = scenarioCatalog) {
   }
   const named = entries.flatMap((scenario) => (Array.isArray(scenario.allowRealAgents) ? scenario.allowRealAgents : []));
   return named.length > 0 ? [...new Set(named)] : undefined;
+}
+
+export function scenarioApp(scenario) {
+  return scenario.app ?? 'tauri';
 }
 
 export function resolveScenario(id, catalog = scenarioCatalog) {

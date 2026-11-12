@@ -907,7 +907,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
           ATTN_NATIVE_APP_BIN: ${{ github.workspace }}/native/target/debug/attn-app
-        run: ./scripts/test-go.sh --packages -run '^TestTheNativeApp' ./cmd/attnd
+        run: ./scripts/test-go.sh --packages -run '^TestTheNativeApp' -v ./cmd/attnd
 
       - name: Upload test receipts
         if: always()

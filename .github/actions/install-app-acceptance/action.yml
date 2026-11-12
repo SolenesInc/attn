@@ -5,6 +5,10 @@ inputs:
   instance:
     description: Non-production instance to install
     required: true
+  app:
+    description: The app shell the archive holds, tauri or native
+    required: false
+    default: tauri
   archive:
     description: Path to the packed application tree
     required: true
@@ -41,7 +45,7 @@ runs:
       shell: bash
       run: |
         tar -xzf "${{ inputs.archive }}"
-        make install-staged INSTANCE="${{ inputs.instance }}"
+        make install-staged INSTANCE="${{ inputs.instance }}" APP="${{ inputs.app }}"
 
     - name: Install Linux URL opener
       if: runner.os == 'Linux'

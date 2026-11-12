@@ -98,6 +98,35 @@ Hosts run the protocol on the app's `Runtime`:
   which builds the workspace's debug `attn-app` unless `ATTN_NATIVE_APP_BIN`
   names one. CI's Daemon jobs have no native toolchain and skip these tests;
   `Native (ubuntu-24.04)` runs them.
+- The installed app serves it on a named instance, or with `ATTN_AUTOMATION=1`
+  (`0` turns it off), and writes its manifest where the Tauri app does:
+  `debug/ui-automation.json` in the bundle id's application data directory.
+  Requests run on the window's runtime between frames, so they work while the
+  window is parked or in the background. A covered window holds its motion
+  until it shows, so a request waiting for an element to stop moving waits
+  for that too. `shot` captures the window
+  in-process, which macOS refuses to an app without Screen Recording
+  permission; a driver that has it captures the id `native_windows` reports.
+
+### Scenarios and the VM
+
+A catalog entry in `app/scripts/real-app-harness/scenarioCatalog.mjs` with
+`app: 'native'` runs against the native app; entries without it need the Tauri
+app. The install writes the shell into the tree's `build-identity.json`, and the
+serial matrix leaves out the entries for the other one, or refuses when they
+were named. The acceptance soak builds and installs the shell each named
+scenario needs. Install a native tree with
+`make install INSTANCE=<name> APP=native`.
+
+`createWindowDriver` returns a `NativeAppDriver` for a native tree. Its input
+goes through the automation server, so on both platforms it takes no focus and
+leaves the pointer alone. It finds, parks, places and captures the window with
+the platform driver, from the harness process. `launchFreshNativeAppAndConnect`
+in `common.mjs` launches the app and connects. `scenario-native-sidebar-session.mjs`
+is the smallest example.
+
+`APP=native scripts/vm up` builds and runs the native app in the macOS VM.
+`drive` then takes the native app's actions, and `shot` uses its `shot` action.
 
 ## Build output
 

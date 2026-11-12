@@ -51,6 +51,10 @@ window repaints, so a clip of a still window has few frames. Publish clips from
 the host with `./scripts/pr-evidence.sh publish`; its `record` command does not
 work in the VM, where `screencapture -v` writes an empty video.
 
+`APP=native` on `up` and `shot` runs the native app instead, built without
+`DEMO=1`; `drive` then takes its actions, which
+[Native app](native-app.md#automation) lists.
+
 Each agent gets its own instance by default, `vm-<worktree name>-<hash>`, even
 when agents share a checkout. `--instance NAME`, before or right after the
 command, selects another. `down` quits and cleans the instance and releases the
