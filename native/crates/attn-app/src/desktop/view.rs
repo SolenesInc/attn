@@ -29,6 +29,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     let area_bits = desk
         .area
         .map(|a| [a.w, a.h, a.px_per_col].map(f32::to_bits));
+    let dragging = desk
+        .drag
+        .as_ref()
+        .and_then(|d| d.dragging())
+        .map(str::to_owned);
     let reads = (
         version(&facts.desktops),
         version(&facts.profiles),
@@ -37,6 +42,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         composing,
         row_state,
         area_bits,
+        dragging.clone(),
         *t,
         scale.to_bits(),
     );
@@ -64,9 +70,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .min_w(0.0)
         .h_full()
         .padding(GAP)
-        .on_layout_tx(|state: &mut State, [_, _, w, h], tx: &mut Tx| {
+        .on_layout_tx(|state: &mut State, [x, y, w, h], tx: &mut Tx| {
             let px_per_col = state.terminals.metrics().cell_w;
             let area = Some(Area {
+                x: x + GAP,
+                y: y + GAP,
                 w: w - 2.0 * GAP,
                 h: h - 2.0 * GAP,
                 px_per_col,
@@ -96,8 +104,12 @@ fn screen(
             Some((tree, plan)) => {
                 let view = desk.row(&desktop.id).view;
                 let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);
+                let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
                 let cx = TileCx {
                     desktop,
+                    facts,
+                    tree: &tree,
+                    dragging,
                     holder,
                     terminals,
                     t,
@@ -123,6 +135,9 @@ fn empty(t: &Tokens, message: &str) -> El {
 
 struct TileCx<'a> {
     desktop: &'a Desktop,
+    facts: &'a attn_client::Facts,
+    tree: &'a Node,
+    dragging: Option<&'a str>,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
     t: &'a Tokens,
@@ -228,13 +243,30 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         })
         .role("group")
         .label(title.clone())
-        .child(header(&leaf.id, &title, t))
+        .opacity(if cx.dragging == Some(leaf.id.as_str()) {
+            0.5
+        } else {
+            1.0
+        })
+        .child(header(leaf, &title, cx))
         .child(body)
 }
 
-fn header(leaf: &str, title: &str, t: &Tokens) -> El {
-    row()
-        .key(format!("tile.{leaf}.header"))
+/// A tile's header, which drags the tile.
+fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
+    let t = cx.t;
+    let source = super::drag::Source::Header {
+        desktop: cx.desktop.id.clone(),
+        leaf: leaf.id.clone(),
+        label: super::shelf::title(cx.desktop, cx.facts, cx.tree, &leaf.id),
+        movable: matches!(leaf.kind, LeafKind::Tile { .. }) || cx.tree.leaves().len() > 1,
+    };
+    let header = row().key(format!("tile.{}.header", leaf.id)).on_drag(
+        move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
+            super::drag::gesture(state, d, tx, &source)
+        },
+    );
+    header
         .w_full()
         .items_center()
         .px(space::S2)

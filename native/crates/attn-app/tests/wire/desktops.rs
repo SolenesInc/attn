@@ -662,7 +662,7 @@ fn a_chip_brings_its_column_beside_the_active_tile_and_the_anchor_keeps_its_plac
         sent(&world, "desktop_move_leaf"),
         [json(
             r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"d",
-                "anchor_id":"a","edge":"right","whole_column":true,"activate":true}"#
+                "anchor_id":"a","edge":"right","whole_column":true}"#
         )]
     );
     let moved = row([pane("a"), pane("d"), pane("b"), pane("c")]);
@@ -770,7 +770,7 @@ fn carrying_moves_the_active_column_one_place_and_says_when_it_is_at_the_end() {
         sent(&world, "desktop_move_leaf"),
         [json(
             r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
-                "anchor_id":"b","edge":"right","whole_column":true,"activate":true}"#
+                "anchor_id":"b","edge":"right","whole_column":true}"#
         )]
     );
 
@@ -806,7 +806,7 @@ fn sending_to_the_shelf_unstacks_holds_or_moves_the_tile_and_shows_the_next() {
         sent(&world, "desktop_move_leaf"),
         [json(
             r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
-                "anchor_id":"c","edge":"right","whole_column":false,"activate":false}"#
+                "anchor_id":"c","edge":"right","activate":false}"#
         )]
     );
 
@@ -1035,6 +1035,246 @@ fn a_caps_menu_closes_on_a_press_outside_it_and_on_another_desktop() {
             .find(Target::key("shelf.menu.after"))
             .is_none(),
         "the menu does not follow the window to another desktop"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+/// A point in `leaf`'s tile at fractions `fx`, `fy` of its width and height.
+fn in_tile(world: &World, leaf: &str, fx: f32, fy: f32) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .runtime()
+        .presented(&format!("tile.{leaf}"))
+        .unwrap_or_else(|| panic!("{leaf} is drawn"))
+        .0;
+    (x + w * fx, y + h * fy)
+}
+
+fn drag(world: &mut World, from: &str, to: (f32, f32)) {
+    let from = from.to_owned();
+    world.gesture(|app| app.drag(Target::key(from), to));
+}
+
+#[test]
+fn a_header_dragged_onto_a_tiles_edge_docks_the_tile_there_taking_the_band_it_showed() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let to = in_tile(&world, "b", 0.75, 0.5);
+    world.gesture(|app| app.drag_over(Target::key("tile.a.header"), to));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("drag.ghost"))
+            .name
+            .as_deref(),
+        Some("Agent a")
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("drag.target"))
+            .name
+            .as_deref(),
+        Some("b right")
+    );
+    world.gesture(|app| app.release(to));
+
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
+                "anchor_id":"b","edge":"right","leaf_share":0.25}"#
+        )]
+    );
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn escape_cancels_a_drag_and_a_press_that_does_not_travel_is_a_click() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let to = in_tile(&world, "b", 0.75, 0.5);
+    world.gesture(|app| {
+        app.drag_over(Target::key("tile.a.header"), to);
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        });
+        app.release(to);
+    });
+    assert!(sent(&world, "desktop_move_leaf").is_empty());
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+
+    click(&mut world, "tile.b.header");
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b"}"#)]
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_chip_dragged_onto_a_tiles_edge_brings_its_whole_column_and_lands_beside_a_tile_too_short_to_stack_on()
+ {
+    let tree = row([pane("a"), pane("b"), below(pane("c"), pane("e"))]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+
+    let to = in_tile(&world, "b", 0.5, 0.1);
+    drag(&mut world, "shelf.chip.c", to);
+
+    let moves = sent(&world, "desktop_move_leaf");
+    assert_eq!(moves.len(), 1);
+    assert_eq!(moves[0]["anchor_id"], "b");
+    assert_eq!(
+        moves[0]["edge"], "right",
+        "a stack of two needs 960px over b"
+    );
+    assert_eq!(moves[0]["whole_column"], true);
+    let said = notice(&world).unwrap();
+    assert!(
+        said.starts_with(
+            "Stacking here needs 960px to keep every tile at the 320px minimum. This tile has "
+        ),
+        "{said}"
+    );
+    assert!(said.ends_with("px, so it moved beside instead."), "{said}");
+}
+
+#[test]
+fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips_place() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let to = in_tile(&world, "b", 0.5, 0.5);
+    drag(&mut world, "shelf.chip.d", to);
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [
+            json(
+                r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"d",
+                    "anchor_id":"b","edge":"left","whole_column":true}"#
+            ),
+            json(
+                r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"b",
+                    "anchor_id":"c","edge":"right","whole_column":true,"activate":false}"#
+            ),
+        ]
+    );
+
+    let first = row(["a", "d", "b", "c"].map(pane));
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "d", Some(first))],
+    );
+    assert_eq!(
+        shown(&world),
+        ["a", "d"],
+        "b waits off screen while it moves"
+    );
+    let landed = row(["a", "d", "c", "b"].map(pane));
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "d", Some(landed))],
+    );
+    assert_eq!(shown(&world), ["a", "d"]);
+    assert!(
+        chip(&world, "b").is_some(),
+        "b is back on the shelf where d was"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_header_dropped_on_a_chip_moves_the_tile_beside_that_column() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let [x, y, w, _] = world.runtime().presented("shelf.chip.d").unwrap().0;
+    drag(&mut world, "tile.b.header", (x + w * 0.75, y + 4.0));
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"b",
+                "anchor_id":"d","edge":"right"}"#
+        )]
+    );
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b"}"#)],
+        "the dropped tile becomes the active one"
+    );
+}
+
+#[test]
+fn a_chip_dropped_on_another_chip_reorders_the_shelf_without_changing_the_screen() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let [x, y, w, _] = world.runtime().presented("shelf.chip.d").unwrap().0;
+    drag(&mut world, "shelf.chip.c", (x + w * 0.75, y + 4.0));
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"c",
+                "anchor_id":"d","edge":"right","whole_column":true,"activate":false}"#
+        )]
+    );
+}
+
+#[test]
+fn a_drag_ends_when_the_tile_it_drags_leaves_the_desktop() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let to = in_tile(&world, "b", 0.75, 0.5);
+    world.gesture(|app| app.drag_over(Target::key("tile.a.header"), to));
+    assert!(world.screen().find(Target::key("drag.ghost")).is_some());
+    let without_a = row(["b", "c", "d"].map(pane));
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "b", Some(without_a))],
+    );
+
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+    world.gesture(|app| app.release(to));
+    assert!(sent(&world, "desktop_move_leaf").is_empty());
+}
+
+#[test]
+fn an_agent_alone_on_its_desktop_does_not_drag() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+
+    let to = in_tile(&world, "a", 0.9, 0.5);
+    world.gesture(|app| app.drag_over(Target::key("tile.a.header"), to));
+    assert!(world.screen().find(Target::key("drag.ghost")).is_none());
+    world.gesture(|app| app.release(to));
+    assert!(sent(&world, "desktop_move_leaf").is_empty());
+}
+
+#[test]
+fn a_swapped_out_tile_comes_back_when_the_row_changes_without_the_swap() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    let to = in_tile(&world, "b", 0.5, 0.5);
+    drag(&mut world, "shelf.chip.c", to);
+    assert_eq!(
+        sent(&world, "desktop_move_leaf").len(),
+        1,
+        "beside its neighbour the chip needs one move"
+    );
+    assert!(
+        !shows(&world, "Agent b"),
+        "b holds off screen while c takes its place"
+    );
+
+    let refused = row(["a", "b", "c", "d", "e"].map(pane));
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(refused))],
+    );
+    assert!(
+        shows(&world, "Agent b"),
+        "b is no longer held once the row changed without c moving"
     );
     assert!(world.runtime_is_at_rest());
 }

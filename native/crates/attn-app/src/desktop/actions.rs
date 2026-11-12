@@ -348,13 +348,13 @@ fn toggle_view(state: &mut State, focus: bool) {
     };
 }
 
-/// Escape takes the current desktop out of focus mode before anything else hears it; false
-/// when the desktop is not in focus mode.
+/// Escape ends a drag, closes a shelf cap's menu, or takes the current desktop out of focus
+/// mode, before anything else hears it; false when there is none of those to end.
 pub(crate) fn escape(state: &mut State) -> bool {
     let Some(desktop) = state.facts.current_desktop() else {
         return false;
     };
-    if state.window.desk.cap_open.take().is_some() {
+    if state.window.desk.drag.take().is_some() || state.window.desk.cap_open.take().is_some() {
         return true;
     }
     let row = state.window.desk.row_mut(&desktop.id);

@@ -2,6 +2,7 @@
 //! and what the window does to it.
 
 mod actions;
+mod drag;
 pub mod layout;
 mod shelf;
 mod view;
@@ -12,6 +13,7 @@ use attn_client::Facts;
 use attn_protocol::Desktop;
 
 pub(crate) use actions::{escape, run};
+pub(crate) use drag::overlay as drag_overlay;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
 
@@ -38,10 +40,16 @@ pub struct Desk {
     /// The shelf cap whose menu is open.
     pub(crate) cap_open: Option<layout::Edge>,
     pub(crate) width_label: Option<shelf::WidthLabel>,
+    /// A tile or shelf column being dragged.
+    pub(crate) drag: Option<drag::LeafDrag>,
+    /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
+    pub(crate) rects: HashMap<String, [f32; 4]>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Area {
+    pub x: f32,
+    pub y: f32,
     pub w: f32,
     pub h: f32,
     pub px_per_col: f32,
@@ -60,6 +68,8 @@ pub(crate) struct RowState {
     /// A column brought beside the active tile that the daemon has not yet moved.
     pub drop: Option<shelf::PendingDrop>,
     pub settled: Option<shelf::Settled>,
+    /// A tile a chip took the place of, held off screen until the moves land.
+    pub swap: Option<drag::Swap>,
 }
 
 /// A walk back and forward through the tiles a window showed, as a browser's history.

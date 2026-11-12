@@ -800,6 +800,8 @@ pub struct ShelfDrop {
     pub leaf: String,
     pub anchor: String,
     pub edge: Edge,
+    /// The leaf brought its whole column rather than coming alone.
+    pub whole_column: bool,
 }
 
 /// Where the screen starts so a dropped leaf shows beside its anchor, and the dragged widths

@@ -386,6 +386,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
+    layers.extend(crate::desktop::drag_overlay(state, t));
     layers.extend(crate::picker::worktree_setup(state, t));
     if let Some(notice) = &window.notice {
         layers.push(floating_status("notice", notice.text.clone(), t));

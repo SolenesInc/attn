@@ -6,7 +6,9 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Tx, col, row, text};
+use rune::{Drag, El, Tx, col, row, text};
+
+use super::drag::Source;
 
 use super::layout::{
     self, Column, Edge, LeafKind, NarrowestStep, Node, RowInput, ShelfDrop, ShelfSend, View,
@@ -37,6 +39,7 @@ struct Chip {
     go: String,
     label: String,
     needs: bool,
+    leaves: Vec<String>,
 }
 
 fn needs_you(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> bool {
@@ -51,7 +54,12 @@ fn needs_you(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> bool 
 }
 
 /// A tile's name on the shelf: an agent by its session's name, a tile by what it holds.
-fn title(desktop: &Desktop, facts: &attn_client::Facts, tree: &Node, leaf: &str) -> String {
+pub(crate) fn title(
+    desktop: &Desktop,
+    facts: &attn_client::Facts,
+    tree: &Node,
+    leaf: &str,
+) -> String {
     match tree.find_leaf(leaf) {
         Some(Node::Leaf(l)) => match &l.kind {
             LeafKind::Tile { kind, params, .. } => {
@@ -96,6 +104,7 @@ fn chip(
         key: column.first().to_owned(),
         go: column.last_used(focus).to_owned(),
         label: label(&titles),
+        leaves: column.leaf_ids.clone(),
         needs: column
             .leaf_ids
             .iter()
@@ -124,36 +133,111 @@ fn allot(available: f32, before: usize, after: usize, dots: usize) -> (usize, us
     (left, right)
 }
 
-/// The shelf of the current desktop, or None when nothing is off screen, the window shows
-/// Home, or the active tile is in focus mode.
-pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    if state.window.view != crate::shell::View::Desktop {
-        return None;
+/// The current desktop's shelf as this window lays it out: chips either side of the dots,
+/// and the chips the title bar has no room for in the caps.
+pub(crate) struct Shelf {
+    pub desktop: String,
+    active: String,
+    before: Vec<Chip>,
+    screen: Vec<Chip>,
+    after: Vec<Chip>,
+    /// How many of `before`, from its start, wait in the before cap.
+    capped_before: usize,
+    /// How many of `after`, from its start, show as chips.
+    shown_after: usize,
+}
+
+/// A place on the shelf a tile can be dropped beside: a chip by either half, or a cap by the
+/// side it holds.
+pub(crate) struct Anchor {
+    pub element: String,
+    pub column: String,
+    pub edge: Option<Edge>,
+}
+
+impl Shelf {
+    /// The shelf of the current desktop, or None when nothing is off screen, the window shows
+    /// Home, or the active tile is in focus mode.
+    pub(crate) fn of(state: &State) -> Option<Shelf> {
+        if state.window.view != crate::shell::View::Desktop {
+            return None;
+        }
+        let facts = &state.facts;
+        let desk = &state.window.desk;
+        let desktop = facts.current_desktop()?;
+        let row_state = desk.row(&desktop.id);
+        if matches!(row_state.view, View::Focused(_)) {
+            return None;
+        }
+        let (tree, plan) = desk.plan(facts, desktop)?;
+        if plan.before.is_empty() && plan.after.is_empty() {
+            return None;
+        }
+        let focus = &row_state.focus_order;
+        let chips = |columns: &[Column]| -> Vec<Chip> {
+            columns
+                .iter()
+                .map(|c| chip(desktop, facts, &tree, focus, c))
+                .collect()
+        };
+        let (before, screen, after) =
+            (chips(&plan.before), chips(&plan.screen), chips(&plan.after));
+        let available = desk.shelf_px.unwrap_or(f32::INFINITY);
+        let (left, right) = allot(available, before.len(), after.len(), screen.len());
+        Some(Shelf {
+            desktop: desktop.id.clone(),
+            active: desktop.active_pane_id.clone(),
+            capped_before: before.len() - left,
+            shown_after: right,
+            before,
+            screen,
+            after,
+        })
     }
-    let facts = &state.facts;
-    let desk = &state.window.desk;
-    let desktop = facts.current_desktop()?;
-    let row_state = desk.row(&desktop.id);
-    if matches!(row_state.view, View::Focused(_)) {
-        return None;
+
+    fn before_cap(&self) -> &[Chip] {
+        &self.before[..self.capped_before]
     }
-    let (tree, plan) = desk.plan(facts, desktop)?;
-    if plan.before.is_empty() && plan.after.is_empty() {
-        return None;
+
+    fn before_chips(&self) -> &[Chip] {
+        &self.before[self.capped_before..]
     }
-    let focus = &row_state.focus_order;
-    let chips = |columns: &[Column]| -> Vec<Chip> {
-        columns
-            .iter()
-            .map(|c| chip(desktop, facts, &tree, focus, c))
+
+    fn after_chips(&self) -> &[Chip] {
+        &self.after[..self.shown_after]
+    }
+
+    fn after_cap(&self) -> &[Chip] {
+        &self.after[self.shown_after..]
+    }
+
+    /// Where a dragged tile can land on the shelf, in the order the shelf shows them.
+    pub(crate) fn anchors(&self) -> Vec<Anchor> {
+        let chip = |c: &Chip| Anchor {
+            element: format!("shelf.chip.{}", c.key),
+            column: c.key.clone(),
+            edge: None,
+        };
+        let cap = |name: &str, c: Option<&Chip>, edge| {
+            c.map(|c| Anchor {
+                element: format!("shelf.cap.{name}"),
+                column: c.key.clone(),
+                edge: Some(edge),
+            })
+        };
+        cap("before", self.before_cap().first(), Edge::Left)
+            .into_iter()
+            .chain(self.before_chips().iter().map(chip))
+            .chain(self.after_chips().iter().map(chip))
+            .chain(cap("after", self.after_cap().last(), Edge::Right))
             .collect()
-    };
-    let (before, screen, after) = (chips(&plan.before), chips(&plan.screen), chips(&plan.after));
-    let available = desk.shelf_px.unwrap_or(f32::INFINITY);
-    let (left, right) = allot(available, before.len(), after.len(), screen.len());
-    let split = before.len() - left;
-    let id = desktop.id.clone();
-    let active = desktop.active_pane_id.clone();
+    }
+}
+
+pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
+    let shelf = Shelf::of(state)?;
+    let desk = &state.window.desk;
+    let id = &shelf.desktop;
     let dots = row()
         .key("shelf.live")
         .items_center()
@@ -161,15 +245,26 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .on_hover_change(|state: &mut State, inside, _: &mut Tx| {
             state.window.desk.width_control = inside
         })
-        .children(plan.screen.iter().zip(&screen).map(|(column, chip)| {
-            let current = column.holds(&active);
-            dot(chip, current, &id, t)
+        .children(shelf.screen.iter().map(|chip| {
+            let current = chip.leaves.contains(&shelf.active);
+            dot(chip, current, id, t)
         }))
         .children(
             desk.width_control
-                .then(|| width_control(plan.screen.len(), Desk::narrowest_cols(facts), t)),
+                .then(|| width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t)),
         );
-    let menu = |side: Edge, columns: &[Chip]| cap(side, columns, desk.cap_open == Some(side), t);
+    let drop = desk.drag.as_ref().and_then(|d| d.shelf_mark());
+    let menu = |side: Edge, columns: &[Chip]| {
+        let marked = drop.as_ref().is_some_and(|(column, edge)| {
+            *edge == side && columns.iter().any(|c| c.key == *column)
+        });
+        cap(side, columns, desk.cap_open == Some(side), marked, t)
+    };
+    let mark = |c: &Chip| {
+        drop.as_ref()
+            .filter(|(column, _)| *column == c.key)
+            .map(|(_, e)| *e)
+    };
     Some(
         row()
             .key("shelf")
@@ -177,12 +272,33 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
             .label("Shelf")
             .items_center()
             .gap(space::S1)
-            .children(menu(Edge::Left, &before[..split]))
-            .children(before[split..].iter().map(|c| chip_button(c, &id, t)))
+            .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| record(state, "shelf", rect, tx))
+            .children(menu(Edge::Left, shelf.before_cap()))
+            .children(
+                shelf
+                    .before_chips()
+                    .iter()
+                    .map(|c| chip_button(c, id, mark(c), t)),
+            )
             .child(dots)
-            .children(after[..right].iter().map(|c| chip_button(c, &id, t)))
-            .children(menu(Edge::Right, &after[right..])),
+            .children(
+                shelf
+                    .after_chips()
+                    .iter()
+                    .map(|c| chip_button(c, id, mark(c), t)),
+            )
+            .children(menu(Edge::Right, shelf.after_cap())),
     )
+}
+
+/// Keeps where a shelf element is in the window, for drops.
+fn record(state: &mut State, key: &str, rect: [f32; 4], tx: &mut Tx) {
+    let rects = &mut state.window.desk.rects;
+    if rects.get(key) == Some(&rect) {
+        tx.live_only();
+        return;
+    }
+    rects.insert(key.to_owned(), rect);
 }
 
 /// The title bar's middle, which the shelf sits in and measures for its chips.
@@ -203,10 +319,17 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .children(view(state, t))
 }
 
-fn chip_button(chip: &Chip, desktop: &str, t: &Tokens) -> El {
-    let (desktop, leaf) = (desktop.to_owned(), chip.go.clone());
-    row()
-        .key(format!("shelf.chip.{}", chip.key))
+fn chip_button(chip: &Chip, desktop: &str, drop: Option<Edge>, t: &Tokens) -> El {
+    let source = Source::Chip {
+        desktop: desktop.to_owned(),
+        column: chip.key.clone(),
+        leaf: chip.go.clone(),
+        label: chip.label.clone(),
+    };
+    let key = format!("shelf.chip.{}", chip.key);
+    let recorded = key.clone();
+    let chip = row()
+        .key(key)
         .role("button")
         .label(chip.label.clone())
         .a11y_value(if chip.needs { "needs you" } else { "" })
@@ -217,16 +340,19 @@ fn chip_button(chip: &Chip, desktop: &str, t: &Tokens) -> El {
         .radius(4.0)
         .fill(t.bg_tile)
         .border(1.0, if chip.needs { t.accent } else { t.border })
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            state.window.desk.cap_open = None;
-            bring(state, &desktop, &leaf, tx);
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            record(state, &recorded, rect, tx)
+        })
+        .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
+            super::drag::gesture(state, d, tx, &source)
         })
         .child(
             text(chip.label.clone())
                 .font(type_::LABEL)
                 .color(t.text_secondary)
                 .single_line(),
-        )
+        );
+    drop_bar(chip, drop, t)
 }
 
 fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
@@ -247,7 +373,16 @@ fn dot(chip: &Chip, current: bool, desktop: &str, t: &Tokens) -> El {
         }))
 }
 
-fn cap(side: Edge, chips: &[Chip], open: bool, t: &Tokens) -> Option<El> {
+/// The accent bar on the side of a chip or cap a dragged tile would land on.
+fn drop_bar(el: El, drop: Option<Edge>, t: &Tokens) -> El {
+    match drop {
+        None => el,
+        Some(Edge::Left) => el.border_sides([3.0, 0.0, 0.0, 0.0], t.accent),
+        Some(Edge::Right) => el.border_sides([0.0, 3.0, 0.0, 0.0], t.accent),
+    }
+}
+
+fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option<El> {
     if chips.is_empty() {
         return None;
     }
@@ -256,55 +391,42 @@ fn cap(side: Edge, chips: &[Chip], open: bool, t: &Tokens) -> Option<El> {
         Edge::Left => ("before", format!("‹ {n}")),
         Edge::Right => ("after", format!("{n} ›")),
     };
-    Some(
-        row()
-            .key(format!("shelf.cap.{name}"))
-            .role("button")
-            .label(format!("{n} more this way"))
-            .px(space::S2)
-            .py(space::S1)
-            .radius(4.0)
-            .border(
-                1.0,
-                if chips.iter().any(|c| c.needs) {
-                    t.accent
-                } else {
-                    t.border
-                },
-            )
-            .on_press(move |state: &mut State| {
-                let desk = &mut state.window.desk;
-                desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
-            })
-            .a11y_value(if open { "open" } else { "" })
-            .child(text(caption).font(type_::LABEL).color(t.text_secondary)),
-    )
+    let key = format!("shelf.cap.{name}");
+    let recorded = key.clone();
+    let cap = row()
+        .key(key)
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            record(state, &recorded, rect, tx)
+        })
+        .role("button")
+        .label(format!("{n} more this way"))
+        .px(space::S2)
+        .py(space::S1)
+        .radius(4.0)
+        .border(
+            1.0,
+            if chips.iter().any(|c| c.needs) {
+                t.accent
+            } else {
+                t.border
+            },
+        )
+        .on_press(move |state: &mut State| {
+            let desk = &mut state.window.desk;
+            desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
+        })
+        .a11y_value(if open { "open" } else { "" })
+        .child(text(caption).font(type_::LABEL).color(t.text_secondary));
+    Some(drop_bar(cap, drop.then_some(side), t))
 }
 
 /// The open cap's menu of the chips it holds, under the title bar on its side.
 pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
-    let desk = &state.window.desk;
-    let side = desk.cap_open?;
-    let facts = &state.facts;
-    let desktop = facts.current_desktop()?;
-    let (tree, plan) = desk.plan(facts, desktop)?;
-    let focus = &desk.row(&desktop.id).focus_order;
-    let chips = |columns: &[Column]| -> Vec<Chip> {
-        columns
-            .iter()
-            .map(|c| chip(desktop, facts, &tree, focus, c))
-            .collect()
-    };
-    let (before, after) = (chips(&plan.before), chips(&plan.after));
-    let (left, right) = allot(
-        desk.shelf_px.unwrap_or(f32::INFINITY),
-        before.len(),
-        after.len(),
-        plan.screen.len(),
-    );
+    let side = state.window.desk.cap_open?;
+    let shelf = Shelf::of(state)?;
     let (name, held) = match side {
-        Edge::Left => ("before", &before[..before.len() - left]),
-        Edge::Right => ("after", &after[right..]),
+        Edge::Left => ("before", shelf.before_cap()),
+        Edge::Right => ("after", shelf.after_cap()),
     };
     if held.is_empty() {
         return None;
@@ -318,7 +440,7 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         .radius(6.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
-        .children(held.iter().map(|c| chip_button(c, &desktop.id, t)));
+        .children(held.iter().map(|c| chip_button(c, &shelf.desktop, None, t)));
     let place = row().w_full().padding(space::S2);
     let place = match side {
         Edge::Left => place,
@@ -448,6 +570,34 @@ fn request_id() -> String {
     uuid::Uuid::new_v4().to_string()
 }
 
+/// Moves `leaf` beside `anchor` on `target`, leaving out what the daemon takes as given: no
+/// share, a single leaf rather than its column, and the moved leaf becoming active.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn send_move(
+    state: &State,
+    source: &str,
+    target: &str,
+    leaf: &str,
+    anchor: &str,
+    edge: &str,
+    share: Option<f32>,
+    whole_column: bool,
+    activate: bool,
+) {
+    let _ = state.daemon.send(&DesktopMoveLeafMessage {
+        request_id: request_id(),
+        source_desktop_id: source.to_owned(),
+        target_desktop_id: Some(target.to_owned()),
+        leaf_id: leaf.to_owned(),
+        anchor_id: Some(anchor.to_owned()),
+        edge: Some(edge.to_owned()),
+        leaf_share: share.map(f64::from),
+        whole_column: whole_column.then_some(true),
+        activate: (!activate).then_some(false),
+        ..DesktopMoveLeafMessage::new()
+    });
+}
+
 fn move_leaf(
     state: &State,
     desktop: &str,
@@ -457,17 +607,17 @@ fn move_leaf(
     whole_column: bool,
     activate: bool,
 ) {
-    let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: request_id(),
-        source_desktop_id: desktop.to_owned(),
-        target_desktop_id: Some(desktop.to_owned()),
-        leaf_id: leaf.to_owned(),
-        anchor_id: Some(anchor.to_owned()),
-        edge: Some(edge.as_str().to_owned()),
-        whole_column: Some(whole_column),
-        activate: Some(activate),
-        ..DesktopMoveLeafMessage::new()
-    });
+    send_move(
+        state,
+        desktop,
+        desktop,
+        leaf,
+        anchor,
+        edge.as_str(),
+        None,
+        whole_column,
+        activate,
+    );
 }
 
 fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
@@ -530,6 +680,7 @@ pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, _tx: &mut T
             leaf: leaf.to_owned(),
             anchor: active,
             edge,
+            whole_column: true,
         },
         tree: sent_on,
         active: active_then,
@@ -674,6 +825,7 @@ pub(crate) fn settle(state: &mut State) {
     for id in ids {
         settle_desktop(state, &id);
     }
+    super::drag::settle_drag(state);
 }
 
 fn settle_desktop(state: &mut State, id: &str) {
@@ -682,6 +834,7 @@ fn settle_desktop(state: &mut State, id: &str) {
     let Some(desktop) = facts.desktops.iter().find(|d| d.id == *id) else {
         return;
     };
+    let desktop_tree = desktop.tree_json.clone();
     let Some(tree) = Node::parse(&desktop.tree_json).and_then(|t| t.main()) else {
         return;
     };
@@ -718,6 +871,7 @@ fn settle_desktop(state: &mut State, id: &str) {
     });
     let moved = row_state.settled.as_ref() != Some(&settled);
     let row_mut = state.window.desk.row_mut(id);
+    super::drag::settle_swap(row_mut, &row, &desktop_tree);
     row_mut.cleared = cleared;
     row_mut.drop = waiting;
     row_mut.settled = Some(settled);
@@ -749,14 +903,20 @@ pub(crate) struct PendingDrop {
 }
 
 fn dropped_beside(row: &[Column], active: &str, drop: &ShelfDrop) -> bool {
+    active == drop.leaf && beside(row, drop)
+}
+
+/// The moved leaf sits in the column on the drop's side of its anchor, alone there unless it
+/// brought its whole column.
+pub(crate) fn beside(row: &[Column], drop: &ShelfDrop) -> bool {
     let Some(at) = layout::column_index(row, &drop.anchor) else {
         return false;
     };
-    let beside = match drop.edge {
+    let next = match drop.edge {
         Edge::Left => at.checked_sub(1).and_then(|i| row.get(i)),
         Edge::Right => row.get(at + 1),
     };
-    active == drop.leaf && beside.is_some_and(|c| c.holds(&drop.leaf))
+    next.is_some_and(|c| c.holds(&drop.leaf) && (drop.whole_column || c.leaf_ids.len() == 1))
 }
 
 impl Desk {

@@ -95,6 +95,39 @@ impl Driver<'_> {
         self.runtime.pointer_down(x, y);
         self.runtime.pointer_up(x, y);
     }
+
+    /// Presses the element `target` names, drags to `to` in window points, and lets go there.
+    pub fn drag(&mut self, target: Target, to: (f32, f32)) {
+        self.drag_over(target, to);
+        self.release(to);
+    }
+
+    /// Lets go of the pointer at `at`.
+    pub fn release(&mut self, at: (f32, f32)) {
+        self.runtime.pointer_up(at.0, at.1);
+    }
+
+    /// Presses the element `target` names and drags to `to` in window points, still held.
+    pub fn drag_over(&mut self, target: Target, to: (f32, f32)) {
+        let screen = Screen(self.runtime.accessibility_json());
+        let key = screen
+            .get(target.clone())
+            .key
+            .unwrap_or_else(|| panic!("{target:?} has no key to drag by:\n{screen}"));
+        let (x, y) = self
+            .runtime
+            .find(&key)
+            .unwrap_or_else(|| panic!("{key} is not laid out:\n{screen}"));
+        self.runtime.pointer_down(x, y);
+        self.runtime.frame(0.0);
+        let steps = 4;
+        for i in 1..=steps {
+            let f = i as f32 / steps as f32;
+            self.runtime
+                .pointer_move(x + (to.0 - x) * f, y + (to.1 - y) * f);
+            self.runtime.frame(0.0);
+        }
+    }
 }
 
 /// The key event the keyboard sends for `chord` on this platform.
