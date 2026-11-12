@@ -337,12 +337,39 @@ fn split_opens_a_shell_beside_or_below_the_active_terminal_in_its_folder() {
             ))
         );
     }
-    let shown: Vec<_> = sent(&world, "desktop_show_session")
-        .iter()
-        .map(|r| r["session_id"].clone())
-        .collect();
-    assert_eq!(shown, [spawned[0]["id"].clone(), spawned[1]["id"].clone()]);
+    assert!(sent(&world, "desktop_show_session").is_empty());
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_split_is_placed_by_its_spawn_and_its_shell_takes_the_keyboard_once_it_shows() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+    press(&mut world, Action::TerminalSplitVertical);
+    let spawned = sent(&world, "spawn_session")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let desktop_traffic: Vec<_> = world
+        .daemon
+        .sent()
+        .iter()
+        .filter_map(|r| r["cmd"].as_str().map(str::to_owned))
+        .filter(|cmd| cmd.starts_with("desktop_"))
+        .collect();
+    assert_eq!(desktop_traffic, ["desktop_set_current"]);
+
+    let mut placed = desktop(1, "n", Some(row([pane("a"), pane("n")])));
+    placed.panes[1].session_id = spawned;
+    arrange(&mut world, "work/desktop_1", vec![placed]);
+    world.gesture(|app| app.type_text("x"));
+
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].clone())
+        .collect();
+    assert_eq!(typed, ["r-n"]);
 }
 
 #[test]

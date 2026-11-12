@@ -78,6 +78,9 @@ pub struct Desk {
     /// The drain under each tile header whose agent's turn counts down to settling, by session.
     pub(crate) settling: HashMap<String, crate::sidebar::Countdown>,
     pub(crate) windows: windows::Pool,
+    /// The session a split here spawned, whose tile takes the keyboard when the daemon places
+    /// it.
+    pub(crate) split: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

@@ -192,6 +192,18 @@ impl Window {
             self.keyboard = None;
             return;
         };
+        if let Some(session) = self.desk.split.clone()
+            && let Some((on, pane)) = facts.desktops.iter().find_map(|d| {
+                let pane = d.panes.iter().find(|p| p.session_id == session)?;
+                Some((d.id.clone(), pane.pane_id.clone()))
+            })
+        {
+            self.desk.split = None;
+            if on == desktop.id {
+                self.keyboard = Some(Holder { desktop: on, pane });
+                return;
+            }
+        }
         let kept = self.keyboard.as_ref().is_some_and(|holder| {
             holder.desktop == desktop.id && desktop.panes.iter().any(|p| p.pane_id == holder.pane)
         });

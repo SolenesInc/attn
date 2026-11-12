@@ -2,7 +2,7 @@ use attn_client::Facts;
 use attn_protocol::{
     Desktop, DesktopCloseMessage, DesktopCloseTileMessage, DesktopCreateMessage,
     DesktopMoveLeafMessage, DesktopRemoveLeafMessage, DesktopSetCurrentMessage,
-    DesktopShowLeafMessage, DesktopShowSessionMessage, SessionPlacement, SpawnSessionMessage,
+    DesktopShowLeafMessage, SessionPlacement, SpawnSessionMessage,
 };
 use rune::Tx;
 
@@ -353,11 +353,7 @@ pub(super) fn split_at(
         profile_id,
         ..SpawnSessionMessage::new()
     });
-    let _ = state.daemon.send(&DesktopShowSessionMessage {
-        request_id: super::request_id(),
-        session_id: id,
-        ..DesktopShowSessionMessage::new()
-    });
+    state.window.desk.split = Some(id);
 }
 
 /// Zoom gives the active tile most of the room and follows the active tile; focus shows the
