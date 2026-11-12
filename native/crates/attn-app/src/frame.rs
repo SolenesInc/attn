@@ -73,7 +73,7 @@ fn platform_id(window: &WindowHandle) -> Option<u64> {
     use rune::raw_window_handle::RawWindowHandle;
     window
         .with_raw_handle(|handle| match handle.as_raw() {
-            RawWindowHandle::Xlib(x) => Some(x.window as u64),
+            RawWindowHandle::Xlib(x) => Some(x.window),
             RawWindowHandle::Xcb(x) => Some(u64::from(x.window.get())),
             _ => None,
         })

@@ -547,19 +547,19 @@ export const scenarioCatalog = [
   },
 ];
 
-export function resolveScenarios(selected, app, catalog = scenarioCatalog) {
-  const matrixCatalog = catalog.filter((scenario) => !scenario.soakOnly);
-  if (!selected.length) {
-    return matrixCatalog.filter((scenario) => scenarioApp(scenario) === app);
+export function matrixScenario(id, catalog = scenarioCatalog) {
+  const scenario = catalog.find((entry) => entry.id === id && !entry.soakOnly);
+  if (!scenario) {
+    throw new Error(`Unknown scenario id: ${id}`);
   }
-  const byId = new Map(matrixCatalog.map((scenario) => [scenario.id, scenario]));
-  const scenarios = selected.map((id) => {
-    const scenario = byId.get(id);
-    if (!scenario) {
-      throw new Error(`Unknown scenario id: ${id}`);
-    }
-    return scenario;
-  });
+  return scenario;
+}
+
+export function resolveScenarios(selected, app, catalog = scenarioCatalog) {
+  if (!selected.length) {
+    return catalog.filter((scenario) => !scenario.soakOnly && scenarioApp(scenario) === app);
+  }
+  const scenarios = selected.map((id) => matrixScenario(id, catalog));
   const others = scenarios.filter((scenario) => scenarioApp(scenario) !== app);
   if (others.length > 0) {
     const needs = [...new Set(others.map(scenarioApp))].join(' and ');
