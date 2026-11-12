@@ -93,6 +93,11 @@ pub fn app() -> rune::App<State> {
     .on_ime(keys::on_ime)
 }
 
+fn quit(state: &mut State, tx: &mut Tx) {
+    frame::save(state, tx);
+    instance::remove_app_pid();
+}
+
 /// The app with its window, reopened where it last closed in the prefs `bundle_id` names, and
 /// the items it adds to the macOS menu bar. Each item runs an action; AppKit takes ⌘. before
 /// any view, so Stop Countdown's item is how its keys arrive.
@@ -104,6 +109,7 @@ pub fn native_app(bundle_id: &str) -> rune::App<State> {
         .compositor(screen::Screens::default())
         .playground(attn_ui::playground());
     frame::restored(app, bundle_id)
+        .on_quit(quit)
         .menu_item(
             MenuItem::new("Stop Countdown", |state, tx| {
                 dispatch(state, Action::SessionCancelCountdown, tx)

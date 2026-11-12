@@ -14,8 +14,8 @@ thread_local! {
     static MAIN: RefCell<Option<(Prefs, WindowHandle)>> = const { RefCell::new(None) };
 }
 
-/// Opens the main window where it was when it last closed, and keeps where it is when it
-/// quits, in the instance's own prefs (`bundle_id` names them).
+/// Opens the main window where it was when it last closed, from the instance's own prefs
+/// (`bundle_id` names them). [`save`] keeps where it is.
 pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
     let prefs = Prefs::open(bundle_id);
     let app = match prefs.get::<Saved>(KEY) {
@@ -36,10 +36,9 @@ pub(crate) fn restored(app: App<State>, bundle_id: &str) -> App<State> {
             .unwrap_or_else(|| MAIN.take().map(|(p, _)| p).unwrap_or_else(Prefs::memory));
         MAIN.set(Some((prefs, window.clone())));
     })
-    .on_quit(save)
 }
 
-fn save(_: &mut State, _: &mut Tx) {
+pub(crate) fn save(_: &mut State, _: &mut Tx) {
     MAIN.with_borrow_mut(|main| {
         let Some((prefs, window)) = main else { return };
         let Some(p) = window.placement() else { return };

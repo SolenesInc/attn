@@ -30,9 +30,8 @@ fn main() -> ExitCode {
     let store = Store::default();
     let frames = Pulse::default();
     let beat = frames.clone();
-    let app = attn_app::native_app(&launch.instance.bundle_id)
-        .on_quit(|_, _| remove_app_pid())
-        .on_frame_encoded(move |_| beat.beat());
+    let app =
+        attn_app::native_app(&launch.instance.bundle_id).on_frame_encoded(move |_| beat.beat());
     let handle = app.handle();
     let _automation = enabled(&launch.instance.name)
         .then(|| {
