@@ -401,6 +401,7 @@ entry names:
 - Terminal input that stops working =>
   docs/internal/diagnosing-terminal-input.md
 - Shared Rust PTY host => docs/internal/pty-host-verification.md
+- The Rune fork, its patches or the native app's pin => docs/internal/rune-fork.md
 - The Cloud Relay's wire contract or its conformance suite =>
   docs/internal/cloud-relay-contract.md
 - The analytics ingest service (`cmd/attn-ingest`) =>
