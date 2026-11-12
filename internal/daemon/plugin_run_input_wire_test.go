@@ -435,3 +435,77 @@ func TestAPluginRingRejectionOrTargetChangeReleasesTheOriginalInput(t *testing.T
 		})
 	}
 }
+
+func TestALegacyDriverCanDiscoverItsConversationWhileAcceptingItsFirstCapture(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app := w.TrustedApp()
+		driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"state_reporting": true, "message_delivery": true})
+		session, run := spawnDriven(w, app, driver, w.Path("shop"))
+		awaitingInput(t, app, driver, session, run)
+		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+		capture := sendQuickCapture(t, app, mailbox, "first native input")
+		var input deliveredMessage
+		held := driver.asked("driver.deliver_message", &input)
+		reportDriverConversation(driver, run, 2, "new-native-conversation")
+		driver.answer(held, map[string]bool{"ok": true})
+		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+		if len(driver.requests) != 0 {
+			t.Fatal("initial native ID discovery duplicated the accepted input")
+		}
+	})
+}
+
+func TestADeferredPluginNoticeDoesNotHoldBackTheUsersInputDuringWork(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.TrustedApp(), w.Client()
+		driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"state_reporting": true, "message_delivery": true, "attributed_input": true})
+		author, _ := spawnDriven(w, app, driver, w.Path("author"))
+		session, run := spawnDriven(w, app, driver, w.Path("shop"))
+		reportDriverConversation(driver, run, 1, "native-conversation")
+		if err := driver.state(run, 2, protocol.StateWorking); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+		receipt := sendAgentMessage(t, cli, author, session, "queued notice")
+		if receipt.Status != protocol.AgentMsgStatusQueued {
+			t.Fatalf("notice=%+v", receipt)
+		}
+		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+		capture := sendQuickCapture(t, app, mailbox, "the user is steering this turn")
+		var input deliveredMessage
+		held := driver.asked("driver.deliver_message", &input)
+		if input.Voice != "user" || !strings.Contains(input.Text, capture.Content) || strings.Contains(input.Text, inboxDoorbell) {
+			t.Fatalf("typed input=%+v", input)
+		}
+		driver.answer(held, map[string]bool{"ok": true})
+		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+	})
+}
+
+func TestAPluginRingWithUserTextAndAnInboxNoticeKeepsAttnsVoice(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		app, cli := w.TrustedApp(), w.Client()
+		driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"state_reporting": true, "message_delivery": true, "attributed_input": true})
+		author, _ := spawnDriven(w, app, driver, w.Path("author"))
+		session, run := spawnDriven(w, app, driver, w.Path("shop"))
+		reportDriverConversation(driver, run, 1, "native-conversation")
+		if err := driver.state(run, 2, protocol.StatePendingApproval); err != nil {
+			t.Fatal(err)
+		}
+		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStatePendingApproval })
+		sendAgentMessage(t, cli, author, session, "queued notice")
+		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+		capture := sendQuickCapture(t, app, mailbox, "the user's note")
+		w.advance(0)
+		if err := driver.state(run, 3, protocol.StateIdle); err != nil {
+			t.Fatal(err)
+		}
+		var input deliveredMessage
+		held := driver.asked("driver.deliver_message", &input)
+		if input.Voice != "attn" || !strings.Contains(input.Text, capture.Content) || !strings.Contains(input.Text, inboxDoorbell) {
+			t.Fatalf("mixed input=%+v", input)
+		}
+		driver.answer(held, map[string]bool{"ok": true})
+		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+	})
+}

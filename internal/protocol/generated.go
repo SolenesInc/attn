@@ -13137,6 +13137,9 @@ type SessionPlaceMessage struct {
 
 	// Text corresponds to the JSON schema field "text".
 	Text string `json:"text"`
+
+	// UserWords corresponds to the JSON schema field "user_words".
+	UserWords *bool `json:"user_words,omitempty,omitzero"`
 }
 
 type SessionPlaceOrigin string
@@ -13168,6 +13171,9 @@ type SessionPlaceResult struct {
 
 	// Stage corresponds to the JSON schema field "stage".
 	Stage SessionPlaceStage `json:"stage"`
+
+	// Uncertain corresponds to the JSON schema field "uncertain".
+	Uncertain *bool `json:"uncertain,omitempty,omitzero"`
 }
 
 type SessionPlaceStage string

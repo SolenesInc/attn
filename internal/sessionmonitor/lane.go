@@ -74,6 +74,7 @@ func (id AttemptID) String() string {
 }
 
 type Delivery struct {
+	UserWords            bool
 	ExpectedDriverRun    string
 	ExpectedConversation string
 	ID                   AttemptID
@@ -135,11 +136,12 @@ func (r runRef) valid() bool { return r.epoch > 0 }
 
 // Custody is a delivery's only result: never confirm afterwards that the harness used it.
 type Attempt struct {
-	Stage   Stage
-	At      time.Time
-	Err     error
-	Held    bool
-	steered bool
+	Uncertain bool
+	Stage     Stage
+	At        time.Time
+	Err       error
+	Held      bool
+	steered   bool
 }
 
 type runState struct {
@@ -362,7 +364,7 @@ func (m *Monitor) deliveryTargetMatchesLocked(delivery Delivery) bool {
 	if native == "" {
 		native = m.conversationInput.NativeID
 	}
-	return delivery.ExpectedDriverRun == "" || (m.driver.Run == delivery.ExpectedDriverRun && native == delivery.ExpectedConversation)
+	return delivery.ExpectedDriverRun == "" || (m.driver.Run == delivery.ExpectedDriverRun && (delivery.ExpectedConversation == "" || native == delivery.ExpectedConversation))
 }
 
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
@@ -385,6 +387,9 @@ func (l *lane) unlockedWhilePlacing(work func()) {
 
 func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, duringQuestion bool) (Attempt, bool) {
 	voice := delivery.origin.voice()
+	if delivery.UserWords {
+		voice = harness.VoiceUser
+	}
 	var link harness.Link
 	var custody harness.Custody
 	l.unlockedWhilePlacing(func() {
@@ -405,7 +410,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 		return Attempt{}, false
 	}
 	if custody.Stopped {
-		if voice == harness.VoiceUser {
+		if delivery.origin.kind == originUserConversation {
 			return Attempt{}, false
 		}
 		return Attempt{Stage: Deferred, Err: ErrSessionStopped}, true
@@ -414,7 +419,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 		return Attempt{Stage: Failed, Err: errors.New(custody.Reason)}, true
 	}
 	if !custody.Taken {
-		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason)}, true
+		return Attempt{Stage: Deferred, Err: errors.New(custody.Reason), Uncertain: custody.Uncertain}, true
 	}
 	return Attempt{Stage: Placed, At: custody.At, Held: custody.Held, steered: custody.Held}, true
 }

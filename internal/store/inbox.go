@@ -387,11 +387,31 @@ func (s *Store) SavePendingInboxInput(to who.Address, raw string) error {
 	return err
 }
 
+func clearPendingInboxInput(tx *sql.Tx, to who.Address) error {
+	result, err := tx.Exec(`UPDATE inbox_delivery SET pending_input='' WHERE address=? AND pending_input<>''`, to.String())
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil || changed == 0 {
+		return err
+	}
+	_, err = tx.Exec(`DELETE FROM inbox_delivery WHERE address=? AND outstanding_at=''`, to.String())
+	return err
+}
+
 func (s *Store) ClearPendingInboxInput(to who.Address) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`UPDATE inbox_delivery SET pending_input='' WHERE address=?`, to.String())
-	return err
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := clearPendingInboxInput(tx, to); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
@@ -408,7 +428,7 @@ func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, r
 			return "", fmt.Errorf("read typed inbox item %s: %w", id, err)
 		}
 	}
-	if _, err := tx.Exec(`UPDATE inbox_delivery SET pending_input='' WHERE address=?`, to.String()); err != nil {
+	if err := clearPendingInboxInput(tx, to); err != nil {
 		return "", err
 	}
 	if !notified {
@@ -491,7 +511,7 @@ func (s *Store) PendingSeedInboxAddresses() ([]who.Address, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rows, err := s.db.Query(`SELECT address FROM inbox_items WHERE address >= 'seed:' AND address < 'seed;' AND read_at=''
-		UNION SELECT address FROM inbox_delivery WHERE address >= 'seed:' AND address < 'seed;' ORDER BY address`)
+		UNION SELECT address FROM inbox_delivery WHERE address >= 'seed:' AND address < 'seed;' AND (outstanding_at<>'' OR pending_input<>'') ORDER BY address`)
 	if err != nil {
 		return nil, err
 	}

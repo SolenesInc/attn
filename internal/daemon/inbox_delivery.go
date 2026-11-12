@@ -57,7 +57,7 @@ func (d *Daemon) pendingInboxTargetMatches(pending *inboxRing, session protocol.
 		return false
 	}
 	expected := protocol.Deref(pending.Message.ExpectedDriverRun)
-	return expected == "" || (d.store.GetAgentDriverRun(session).RunID == expected && d.store.GetSessionConversation(session).NativeID == protocol.Deref(pending.Message.ExpectedConversation))
+	return expected == "" || (d.store.GetAgentDriverRun(session).RunID == expected && (protocol.Deref(pending.Message.ExpectedConversation) == "" || d.store.GetSessionConversation(session).NativeID == protocol.Deref(pending.Message.ExpectedConversation)))
 }
 
 func (d *Daemon) clearPendingInbox(a who.Address, state *inboxDeliveryState) error {
@@ -356,6 +356,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 	}
 	pending := state.pending
+	fresh := pending == nil
 	if pending == nil {
 		bellWaitsForPrompt := attempt.FromUser > 0 && !sessionmonitor.PromptReady(holder.State, d.stateReason(holder.ID))
 		paste, err := d.inboxPaste(a, holder.ProfileID, bellHeldUntil.IsZero() && !bellWaitsForPrompt)
@@ -371,6 +372,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		}
 		input := sessionmonitor.MaintenanceInput(sessionmonitor.InboxRing, uuid.NewString(), paste.text, when)
 		input.BypassInitialGate = true
+		input.UserWords = len(paste.typed) > 0 && !paste.notified && !(finishingStart && tenderResume != nil)
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
 		run := d.store.GetAgentDriverRun(holder.ID)
@@ -389,6 +391,18 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 			}
 		}
 		state.pending = pending
+	}
+	if protocol.Deref(pending.Message.ExpectedDriverRun) != "" && protocol.Deref(pending.Message.ExpectedConversation) == "" {
+		if native := d.store.GetSessionConversation(holder.ID).NativeID; native != "" {
+			pending.Message.ExpectedConversation = protocol.Ptr(native)
+			raw, err := json.Marshal(pending)
+			if err != nil {
+				return receipt, err
+			}
+			if err := d.store.SavePendingInboxInput(a, string(raw)); err != nil {
+				return receipt, err
+			}
+		}
 	}
 	ring := pending.Message.Ring
 	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.FinishingStart, pending.BellWaitsForPrompt, pending.HeldUntil
@@ -437,7 +451,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		return receipt, nil
 	}
 	var callError *placementCallError
-	if placement.Stage == sessionmonitor.Failed || (protocol.Deref(pending.Message.ExpectedDriverRun) == "" && !errors.As(placement.Err, &callError)) {
+	if placement.Stage == sessionmonitor.Failed || (!errors.As(placement.Err, &callError) && !placement.Uncertain && (fresh || protocol.Deref(pending.Message.ExpectedDriverRun) == "")) {
 		if err := d.clearPendingInbox(a, state); err != nil {
 			return receipt, err
 		}

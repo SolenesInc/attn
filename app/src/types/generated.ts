@@ -12686,6 +12686,7 @@ export interface SessionPlaceMessage {
     session_id:             string;
     source?:                string;
     text:                   string;
+    user_words?:            boolean;
     [property: string]: any;
 }
 
@@ -12711,6 +12712,7 @@ export interface SessionPlaceResult {
     held?:           boolean;
     retry_after_ms?: number;
     stage:           SessionPlaceStage;
+    uncertain?:      boolean;
     [property: string]: any;
 }
 
@@ -29843,6 +29845,7 @@ const typeMap: any = {
         { json: "session_id", js: "session_id", typ: "" },
         { json: "source", js: "source", typ: u(undefined, "") },
         { json: "text", js: "text", typ: "" },
+        { json: "user_words", js: "user_words", typ: u(undefined, true) },
     ], "any"),
     "SessionPlaceResult": o([
         { json: "at", js: "at", typ: u(undefined, "") },
@@ -29851,6 +29854,7 @@ const typeMap: any = {
         { json: "held", js: "held", typ: u(undefined, true) },
         { json: "retry_after_ms", js: "retry_after_ms", typ: u(undefined, 0) },
         { json: "stage", js: "stage", typ: r("SessionPlaceStage") },
+        { json: "uncertain", js: "uncertain", typ: u(undefined, true) },
     ], "any"),
     "SessionPlacement": o([
         { json: "anchor_pane_id", js: "anchor_pane_id", typ: u(undefined, "") },

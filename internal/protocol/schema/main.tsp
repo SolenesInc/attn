@@ -9565,6 +9565,7 @@ model SessionPlaceMessage {
   allow_user_composer?: boolean;
   compact?: boolean;
   ring?: InboxRingRecord;
+  user_words?: boolean;
   expected_driver_run?: string;
   expected_conversation?: string;
 }
@@ -9574,6 +9575,7 @@ model SessionPlaceResult {
   error?: string;
   error_kind?: SessionPlaceErrorKind;
   retry_after_ms?: int32;
+  uncertain?: boolean;
   held?: boolean; // The Claude mod took the input and has not placed it yet, so it can still give it back.
 }
 

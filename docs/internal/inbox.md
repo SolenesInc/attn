@@ -315,9 +315,10 @@ retain their existing attempt counts. A successful ring records its receipt
 and clears the pending attempt in one transaction, with the same counting
 rules as other rings.
 
-A driver that accepts attributed input receives the user's annotations as
-`voice: "user"` and inbox notices as `voice: "attn"`, with the expected native
-conversation. Input waits until that conversation is known. A driver that
+A driver that accepts attributed input receives annotations and rings containing
+only typed user input as `voice: "user"`. Rings with notices use `voice: "attn"`,
+even when they also carry user input. Each attributed input names the expected
+native conversation. Input waits until that conversation is known. A driver that
 promises permission-safe delivery can accept annotations during a running
 turn's approval without answering it. The existing inbox policy still decides
 when to ring.

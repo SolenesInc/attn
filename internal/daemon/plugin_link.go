@@ -41,7 +41,7 @@ func (l pluginLink) compactTarget() pluginCompactTarget {
 }
 
 func (l pluginLink) request(_ context.Context, method string, in harness.Input) harness.Custody {
-	if in.ExpectedDriverRun != "" && (l.run != in.ExpectedDriverRun || l.conversation.NativeID != in.ExpectedConversation) {
+	if in.ExpectedDriverRun != "" && (l.run != in.ExpectedDriverRun || (in.ExpectedConversation != "" && l.conversation.NativeID != in.ExpectedConversation)) {
 		return harness.Custody{Rejected: true, Reason: "the input's driver run or native conversation has ended"}
 	}
 	if l.route != "direct" || l.connection == nil || !l.registration.Capabilities["message_delivery"] {
@@ -74,7 +74,7 @@ func (l pluginLink) request(_ context.Context, method string, in harness.Input) 
 	defer cancel()
 	var result pluginDeliverMessageResult
 	if err := l.connection.request(ctx, method, params, &result); err != nil {
-		return harness.Custody{Reason: fmt.Sprintf("deliver message via plugin %q: %v", l.plugin, err)}
+		return harness.Custody{Reason: fmt.Sprintf("deliver message via plugin %q: %v", l.plugin, err), Uncertain: true}
 	}
 	if !result.OK {
 		reason := result.Reason

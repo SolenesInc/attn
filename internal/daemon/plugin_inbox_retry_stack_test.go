@@ -25,6 +25,9 @@ func TestAPluginInboxRetryKeepsTheExactInputAcrossLostRepliesAndRestart(t *testi
 			first := sendQuickCapture(t, app, mailbox, "first user input")
 			var original deliveredMessage
 			driver.asked("driver.deliver_message", &original)
+			if original.Voice != "user" {
+				t.Fatalf("typed user ring voice=%q", original.Voice)
+			}
 			if restart {
 				s.Stop()
 				s.Start()
