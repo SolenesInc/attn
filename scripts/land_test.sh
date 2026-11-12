@@ -40,6 +40,14 @@ case "$3" in
     printf 'sync\n' >>"$LAND_CHECK_LOG"
     exit "${LAND_SYNC_EXIT:-0}"
     ;;
+  capture)
+    printf 'capture in %s: %s\n' "$(basename "$PWD")" "${*:4}" >>"$LAND_CHECK_LOG"
+    while [ "$#" -gt 0 ]; do
+      [ "$1" != --receipt-out ] || : >"$2"
+      shift
+    done
+    ;;
+  summary) echo 'PASS cargo example --lib (0.0s)' ;;
   land)
     printf '%s\n' "land ${*:6}" >>"$LAND_CHECK_LOG"
     [ "${LAND_SELECT_EXIT:-0}" -eq 0 ] || exit "$LAND_SELECT_EXIT"
@@ -438,5 +446,15 @@ fi
 : >"$LAND_CHECK_LOG"
 scripts/landing-tests.sh --no-go-vet --unit 'go ./internal/example TestExample' >/dev/null
 grep -qF -- '-vet=off' "$LAND_CHECK_LOG" || { echo '--no-go-vet kept the vet of go test' >&2; exit 1; }
+
+mkdir -p native
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --unit 'cargo example --lib' --unit 'cargo .' --unit 'cargo example --test wire' >"$work/output"
+[ "$(grep -c . "$LAND_CHECK_LOG")" = 1 ] && grep -qE '^capture in native: cargo --receipt-out [^ ]+ -- --no-fail-fast --workspace$' "$LAND_CHECK_LOG" || { echo 'cargo . did not run the whole workspace once, from native/, in place of the narrower cargo units' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+: >"$LAND_CHECK_LOG"
+scripts/landing-tests.sh --unit 'cargo example --test wire' >"$work/output"
+grep -qF -- "--unit cargo example --test wire --receipt-out" "$LAND_CHECK_LOG" && grep -qF -- '-- --no-fail-fast -p example --test wire' "$LAND_CHECK_LOG" || { echo 'a cargo unit did not run its own target' >&2; cat "$LAND_CHECK_LOG" >&2; exit 1; }
+if scripts/landing-tests.sh --unit 'cargo example' >"$work/output" 2>&1; then echo 'a cargo unit without a target ran' >&2; exit 1; fi
+expect_output "'cargo .', 'cargo <package> --lib', 'cargo <package> --doc' or 'cargo <package> --test|--bin <name>'"
 
 echo 'landing fast gate: OK'

@@ -45,20 +45,28 @@ func CargoTestUnits(repoPath string) []string {
 		return []string{"cargo " + pkg + " --lib", "cargo " + pkg + " --doc"}
 	case file == "src/main.rs":
 		return []string{"cargo " + pkg + " --bin " + pkg}
-	case strings.HasPrefix(file, "src/bin/") && strings.HasSuffix(file, ".rs") && !strings.Contains(strings.TrimPrefix(file, "src/bin/"), "/"):
-		return []string{"cargo " + pkg + " --bin " + strings.TrimSuffix(strings.TrimPrefix(file, "src/bin/"), ".rs")}
 	}
-	target, ok := strings.CutPrefix(file, "tests/")
-	if !ok {
-		return nil
+	if name, ok := cargoTargetName(file, "src/bin/"); ok {
+		return []string{"cargo " + pkg + " --bin " + name}
 	}
-	if dir, ok := strings.CutSuffix(target, "/main.rs"); ok && !strings.Contains(dir, "/") {
-		return []string{"cargo " + pkg + " --test " + dir}
-	}
-	if name, ok := strings.CutSuffix(target, ".rs"); ok && !strings.Contains(name, "/") {
+	if name, ok := cargoTargetName(file, "tests/"); ok {
 		return []string{"cargo " + pkg + " --test " + name}
 	}
 	return nil
+}
+
+func cargoTargetName(file, dir string) (string, bool) {
+	rest, ok := strings.CutPrefix(file, dir)
+	if !ok {
+		return "", false
+	}
+	if name, ok := strings.CutSuffix(rest, "/main.rs"); ok && !strings.Contains(name, "/") {
+		return name, true
+	}
+	if name, ok := strings.CutSuffix(rest, ".rs"); ok && !strings.Contains(name, "/") {
+		return name, true
+	}
+	return "", false
 }
 
 var vitestInclude = []struct {

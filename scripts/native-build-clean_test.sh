@@ -22,6 +22,7 @@ build() {
   mkdir -p "$dir/debug/deps" "$dir/debug/.fingerprint"
   : >"$dir/CACHEDIR.TAG"
   : >"$dir/debug/.cargo-build-lock"
+  : >"$dir/debug/.cargo-lock"
   head -c $((mib * 1048576)) /dev/zero >"$dir/debug/deps/libexample.rlib"
 }
 
@@ -31,13 +32,15 @@ age() {
 }
 
 hold_lock() {
+  local name="$2"
+  rm -f "$work/locked" "$work/release"
   mkfifo "$work/locked" "$work/release"
   perl -MFcntl=:flock -e '
     open(my $lock, "<", shift) or die;
     flock($lock, LOCK_EX) or die;
     open(my $out, ">", shift) or die; print $out "locked\n"; close $out;
     open(my $in, "<", shift) or die; my $line = <$in>;
-  ' "$ATTN_NATIVE_BUILD_ROOT$checkouts/$1/native/debug/.cargo-build-lock" "$work/locked" "$work/release" &
+  ' "$ATTN_NATIVE_BUILD_ROOT$checkouts/$1/native/debug/$name" "$work/locked" "$work/release" &
   holder=$!
   read -r _ <"$work/locked"
 }
@@ -52,7 +55,7 @@ build fresh 1
 rm -r "$checkouts/deleted"
 age 10 stale
 age 10 building
-hold_lock building
+hold_lock building .cargo-build-lock
 
 "$root/scripts/native-build-clean" >"$work/out"
 present deleted && fail "kept the output of a checkout that no longer exists"
@@ -64,6 +67,17 @@ grep -qF "not built for 10 days, past 3" "$work/out" || fail "did not say why it
 grep -qF "kept $ATTN_NATIVE_BUILD_ROOT$checkouts/building/native" "$work/out" || fail "did not name the build it kept because it is in use"
 grep -qF "budget 64.0 GiB" "$work/out" || fail "did not print the budget"
 release_lock
+
+hold_lock building .cargo-lock
+"$root/scripts/native-build-clean" >"$work/out"
+present building || fail "removed a build whose lock, as cargo before 1.91 names it, a running build holds"
+release_lock
+
+"$root/scripts/native-build-clean" >"$work/out"
+present building && fail "kept a stale build after its build ended"
+grep -qF "removed $ATTN_NATIVE_BUILD_ROOT$checkouts/building/native" "$work/out" || fail "did not name the stale build it removed once its build ended"
+[ -d "$ATTN_NATIVE_BUILD_ROOT$checkouts/fresh/native/debug/.fingerprint" ] || fail "removed an empty directory inside a build it kept"
+[ ! -e "$ATTN_NATIVE_BUILD_ROOT$checkouts/building" ] || fail "left the empty directories that held a removed build"
 
 "$root/scripts/native-build-clean" >"$work/out"
 [ ! -s "$work/out" ] || fail "printed when it removed nothing and was under budget"

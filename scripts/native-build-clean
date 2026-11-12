@@ -11,14 +11,14 @@ root="${ATTN_NATIVE_BUILD_ROOT:-${CARGO_HOME:-$HOME/.cargo}/attn-native-build}"
 # ai-sandbox and a 400-line Rune app 4.9 GiB on the Mac (2026-11-12). Six
 # Builders and an Orchestrator building at once hold about 35 GiB.
 budget_mib="${ATTN_NATIVE_BUILD_BUDGET_MIB:-65536}"
-# A build left alone this long costs a cold rebuild, 85 s for a debug build on
-# a loaded ai-sandbox (2026-11-12), when its checkout builds again.
+# A build left alone this long costs a cold rebuild, 85 to 139 s for a debug
+# build on a loaded ai-sandbox (2026-11-12), when its checkout builds again.
 stale_days=3
 
 [ -d "$root" ] || exit 0
 
 remove_unless_building() {
-  find "$1" -maxdepth 3 -name .cargo-build-lock -print0 | perl -MFcntl=:flock -0 -e '
+  find "$1" -maxdepth 3 \( -name .cargo-build-lock -o -name .cargo-lock \) -print0 | perl -MFcntl=:flock -0 -e '
     my $build = shift;
     my @held;
     while (my $path = <STDIN>) {
@@ -45,12 +45,20 @@ before="$(kib "$root")"
 removed=""
 in_use=""
 
+remove_empty_parents() {
+  local dir="$1"
+  while [ "$dir" != "$root" ] && rmdir "$dir" 2>/dev/null; do dir="$(dirname "$dir")"; done
+}
+
 remove() {
   local build="$1" reason="$2" size status=0
   size="$(kib "$build")"
   remove_unless_building "$build" || status=$?
   case "$status" in
-    0) removed+="  removed $build ($(gib "$size")): $reason"$'\n' ;;
+    0)
+      removed+="  removed $build ($(gib "$size")): $reason"$'\n'
+      remove_empty_parents "$(dirname "$build")"
+      ;;
     3) in_use+="  kept $build ($(gib "$size")): a cargo build holds its lock"$'\n' ;;
     *) echo "native-build-clean: could not remove $build" >&2; return 1 ;;
   esac
@@ -82,7 +90,6 @@ if [ "$total" -gt $((budget_mib * 1024)) ]; then
   done < <(sort -n <<<"$kept")
   total="$(kib "$root")"
 fi
-find "$root" -mindepth 1 -type d -empty -delete 2>/dev/null || true
 
 [ -n "$removed$over_budget" ] || exit 0
 echo "native-build-clean: $(gib "$before") of native build output in $root, budget $(gib $((budget_mib * 1024)))"

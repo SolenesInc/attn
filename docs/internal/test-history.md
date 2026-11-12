@@ -13,7 +13,6 @@ These commands record a receipt:
   receipt's shard.
 - `pnpm --dir app test`, `pnpm --dir app run e2e` and
   `pnpm --dir app run real-app:serial-matrix`.
-- CI's Native jobs, which test the Rust workspace in `native/`.
 - `scripts/landing-tests.sh`, which also names the tests it requested, so a
   test that reported nothing shows as `MISSING`. It runs groups of
   `scripts/landing-tests`, or single tests with `--unit '<unit>'`.
@@ -28,7 +27,8 @@ command is the arguments to `go test`: capture runs `go test -json` and prints
 the text `go test` itself prints. For `cargo`, the command is the arguments to
 `cargo test`: capture runs `cargo test --message-format=json` from the current
 directory, `native/` for attn's workspace, and prints what `cargo test` prints,
-stderr included, without cargo's JSON messages. The output and the exit status are the command's own.
+stderr included, without cargo's JSON messages. For every runner, the output
+and the exit status are the command's own.
 When capture cannot write to the spool (described below), it warns that history
 will not keep the run. It still writes `--receipt-out` and runs the command to
 the end.
@@ -213,11 +213,11 @@ runs:
 
 `land.sh` runs the tests through `scripts/landing-tests.sh --unit`, and any
 failure stops the push. `land.sh` prints each test's result, skipped tests
-included, and the command that reruns a failed test. The whole Vitest suite
-prints its failures and a count of the files that passed, and its log only when
-a file failed, and so does `cargo .`, counting test targets. `landing-tests.sh`
-runs its Go, Vitest, Playwright and cargo tests at once, and splits `./cmd/attnd`'s tests across
-five `go test` runs, each with its own receipt. When a landing runs the Go
+included, and the command that reruns a failed test. The whole Vitest suite prints its failures, a count of the files that passed,
+and its log only when a file failed. `cargo .` does the same and counts test
+targets. `landing-tests.sh` runs its Go, Vitest, Playwright and cargo tests at
+once, and splits `./cmd/attnd`'s tests across five `go test` runs, each with
+its own receipt. When a landing runs the Go
 checks, `land.sh` passes `--no-go-vet`, which leaves out `go test`'s own vet,
 because those checks run `go vet` on every package. Every other run keeps it,
 and only the first `./cmd/attnd` run vets that package.

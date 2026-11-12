@@ -21,11 +21,18 @@ workspace's first crates on Rune `f3ab74c1`:
 | then `cargo test --no-run` | 1.9 GiB | 124 MiB | 6 s |
 | then `cargo build --release` | 3.2 GiB | 165 MiB | 180 s cold |
 
-Almost all of it is Rune and its dependencies. Sharing them between checkouts
-would need one build directory, and cargo locks a build directory for the
-whole build, so every worktree's build would wait for every other's. Rune's
+Almost all of the build directory is Rune and its dependencies. Sharing them
+between checkouts would need one build directory, and cargo locks a build
+directory for the whole build, so every worktree's build would wait for every
+other's. Rune's
 source is already shared: cargo keeps one checkout of each pinned revision in
 `~/.cargo/git`.
+
+A 400-line Rune app's `target/` held 4.9 GiB after a debug and a release build
+on the Mac. Six Builders and an Orchestrator building at once therefore hold
+about 35 GiB, under the cleanup's budget of 64 GiB below. A build removed
+after 3 unused days costs one cold rebuild, 85 to 139 s for a debug build on
+ai-sandbox.
 
 `scripts/native-build-clean` removes, from the build root:
 
@@ -35,7 +42,7 @@ source is already shared: cargo keeps one checkout of each pinned revision in
 
 It never removes a build whose cargo lock a running build holds: it takes the
 lock first and keeps it while it removes. When it removes anything or the root
-is over budget, it prints the budget, the size and each build it removed or
-kept. `ATTN_NATIVE_BUILD_BUDGET_MIB` raises the budget.
-
-`scripts/land.sh` runs it after every push, so no one has to remember to.
+is over budget, it prints the budget, the size, each build it removed, and each
+build it kept because a running build holds its lock.
+`ATTN_NATIVE_BUILD_BUDGET_MIB` raises the budget. `scripts/land.sh` runs it
+after every push.
