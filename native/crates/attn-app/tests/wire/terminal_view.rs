@@ -246,6 +246,27 @@ fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
 }
 
 #[test]
+fn a_double_click_after_a_wide_character_selects_the_word_under_the_pointer() {
+    let mut world = World::start(one_terminal());
+    world.open_desktop();
+    output(&world, 1, "😀hello world\r\n".as_bytes());
+    world.settle();
+    for col in [2, 6] {
+        let at = cell(&world, col, 0);
+        world.gesture(|app| {
+            for _ in 0..2 {
+                app.runtime.pointer_down(at.0, at.1);
+                app.runtime.pointer_up(at.0, at.1);
+            }
+        });
+        assert_eq!(copied(&world).as_deref(), Some("hello"), "column {col}");
+        assert_eq!(washes(&world), [(0, [2, 7])], "column {col}");
+        world.clipboard.set_text("");
+    }
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
     let mut world = World::start(one_terminal());
     world.open_desktop();

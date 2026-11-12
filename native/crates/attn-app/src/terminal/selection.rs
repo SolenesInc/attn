@@ -96,8 +96,7 @@ impl Terminals {
         let cols = term.vt.size().0;
         let selection = match clicks {
             2 => {
-                let line = term.vt.row_text(row, 0..cols);
-                let (start, end) = word_at(line.trim_end(), col)?;
+                let (start, end) = word_at(&term.vt.link_row(row).cells, col)?;
                 Selection::at(row, start, end)
             }
             3 => Selection::at(row, 0, cols),

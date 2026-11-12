@@ -43,14 +43,17 @@ impl Selection {
     }
 }
 
-/// The word under `col` of `line`, as the Tauri terminal picks it on a double click: letters,
-/// digits, `_` and `-`.
-pub fn word_at(line: &str, col: u16) -> Option<(u16, u16)> {
-    let chars: Vec<char> = line.chars().collect();
+/// The word under column `col` of a row's `cells`, as the Tauri terminal picks it on a double
+/// click: letters, digits, `_` and `-`. A wide character's second cell is empty.
+pub fn word_at(cells: &[String], col: u16) -> Option<(u16, u16)> {
     let word = |i: usize| {
-        chars
-            .get(i)
-            .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
+        cells.get(i).is_some_and(|cell| {
+            let mut chars = cell.chars();
+            matches!(
+                (chars.next(), chars.next()),
+                (Some(c), None) if c.is_ascii_alphanumeric() || c == '_' || c == '-'
+            )
+        })
     };
     let col = usize::from(col);
     if !word(col) {
@@ -229,12 +232,29 @@ mod tests {
         }
     }
 
+    /// A row's cells, the column double-clicked, and the word's columns it picks.
+    type Picking = (Vec<String>, u16, Option<(u16, u16)>);
+
     #[test]
     fn a_double_click_takes_the_word_of_letters_digits_underscores_and_dashes() {
-        assert_eq!(word_at("git push --force origin", 6), Some((4, 8)));
-        assert_eq!(word_at("git push --force origin", 10), Some((9, 16)));
-        assert_eq!(word_at("a.b", 1), None);
-        assert_eq!(word_at("short", 9), None);
+        let cells = |text: &str| -> Vec<String> { text.chars().map(String::from).collect() };
+        let after_wide: Vec<String> = ["😀", ""]
+            .into_iter()
+            .map(String::from)
+            .chain(cells("hello"))
+            .collect();
+        let cases: &[Picking] = &[
+            (cells("git push --force origin"), 6, Some((4, 8))),
+            (cells("git push --force origin"), 10, Some((9, 16))),
+            (cells("a.b"), 1, None),
+            (cells("short"), 9, None),
+            (after_wide.clone(), 2, Some((2, 7))),
+            (after_wide.clone(), 6, Some((2, 7))),
+            (after_wide.clone(), 1, None),
+        ];
+        for (cells, col, want) in cases {
+            assert_eq!(word_at(cells, *col), *want, "{cells:?} at {col}");
+        }
     }
 
     #[test]
