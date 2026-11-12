@@ -842,6 +842,10 @@ fn a_countdown_that_leaves_the_screen_drains_only_the_time_it_has_left() {
 
     world.gesture(|app| app.click(Target::key("sidebar.home")));
     assert_eq!(name(&world, "sidebar.session.a.settling"), "Settling");
+    assert!(
+        !world.runtime_is_at_rest(),
+        "the bar drains once its agent leaves the screen"
+    );
     world.advance(Duration::from_secs(11));
 
     assert!(
@@ -893,9 +897,15 @@ fn a_row_s_actions_menu_marks_priority_reloads_and_closes_the_agent() {
 
     actions_for(&mut world, "queue-turn.t-old");
     world.gesture(|app| app.click(Target::key("session.menu.reload")));
+    let reload = &world.daemon.sent_of("reload_session")[0];
     assert_eq!(
-        world.daemon.sent_of("reload_session")[0]["id"].as_str(),
-        Some("t-old")
+        (
+            reload["id"].as_str(),
+            reload["cols"].as_i64(),
+            reload["rows"].as_i64()
+        ),
+        (Some("t-old"), Some(80), Some(24)),
+        "an agent with no terminal on screen reloads at the size the daemon can restart it in"
     );
 
     actions_for(&mut world, "queue-turn.t-new");

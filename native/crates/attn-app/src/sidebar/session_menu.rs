@@ -97,11 +97,21 @@ fn submit_rename(state: &mut State) {
     }
 }
 
+/// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
+/// the daemon needs a size to restart an agent that has no live worker.
+const FALLBACK_SIZE: (u16, u16) = (80, 24);
+const MIN_COLS: u16 = 20;
+const MIN_ROWS: u16 = 8;
+
 fn reload(state: &mut State) {
     let Some(session) = target(state) else {
         return;
     };
-    let (cols, rows) = state.terminals.size(&session.id).unwrap_or((0, 0));
+    let (cols, rows) = state
+        .terminals
+        .size(&session.id)
+        .filter(|&(cols, rows)| cols >= MIN_COLS && rows >= MIN_ROWS)
+        .unwrap_or(FALLBACK_SIZE);
     let _ = state.daemon.send(&ReloadSessionMessage {
         id: session.id,
         cols: i64::from(cols),

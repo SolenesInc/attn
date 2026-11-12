@@ -748,12 +748,12 @@ impl Terminals {
         self.preedit = None;
     }
 
-    /// What an input method is composing for terminal `id`.
     /// Terminal `id`'s columns and rows, once it has a screen.
     pub(crate) fn size(&mut self, id: &str) -> Option<(u16, u16)> {
         self.panes.get_mut(id).map(|term| term.vt.size())
     }
 
+    /// What an input method is composing for terminal `id`.
     pub(crate) fn preedit(&self, id: &str) -> Option<&str> {
         self.preedit
             .as_ref()
