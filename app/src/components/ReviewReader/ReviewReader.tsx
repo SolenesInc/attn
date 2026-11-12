@@ -21,6 +21,7 @@ import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
+import { showLeadIn } from './leadIn';
 import { isDocumentPath } from './DocStop';
 import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
@@ -143,6 +144,10 @@ function stageLine(stop: ReviewStop): number | undefined {
   const change = stop.rows.find((row) => row.kind === '+' && row.now !== undefined && row.now >= stop.now_from && row.now <= stop.now_to);
   return change?.now ?? (stop.now_from || undefined);
 }
+
+type CursorScroll = ScrollLogicalPosition | 'lead-in';
+
+type StageChange = 'step' | 'pick' | 'refresh';
 
 interface StageKey {
   path: string;
@@ -310,7 +315,8 @@ export function ReviewReader({
   const cursorElementRef = useRef<HTMLElement | null>(null);
   const cursorIndexRef = useRef(0);
   const scrolledKeyRef = useRef<string | null>(null);
-  const scrollModeRef = useRef<ScrollLogicalPosition>('nearest');
+  const scrollModeRef = useRef<CursorScroll>('nearest');
+  const stageScrollRef = useRef<StageChange>('refresh');
   const fileReadsRef = useRef(new Map<string, Promise<ReviewFileResultMessage>>());
   const fileIdRef = useRef(0);
   const readsRef = useRef(new Map<number, number>());
@@ -486,8 +492,10 @@ export function ReviewReader({
   /** Puts a stop's file on the Walkthrough's stage. A refresh keeps the files
    * opened on top of it and the cursor in the stage's file; a move to another
    * stop drops them. */
-  const showStage = useCallback((stop: ReviewStop, line?: number, refresh = false) => {
+  const showStage = useCallback((stop: ReviewStop, line?: number, how: StageChange = 'step') => {
+    const refresh = how === 'refresh';
     if (!refresh) setSearch(null);
+    stageScrollRef.current = how;
     setStageKey(stageKeyOf(bundle, stop));
     const target = stopTarget(stop, line ?? stageLine(stop));
     const id = ++fileIdRef.current;
@@ -500,6 +508,8 @@ export function ReviewReader({
     });
     loadFile(id, stop.path, (rows, open) => (refresh ? rowIndexAfterRefresh(rows, open) : rowIndexOf(rows, target.line)));
   }, [bundle, loadFile]);
+
+  const pickStage = useCallback((stop: ReviewStop) => showStage(stop, undefined, 'pick'), [showStage]);
 
   const returnToOpenBox = useCallback(() => {
     rootRef.current?.querySelector<HTMLTextAreaElement>('.review-composer textarea')?.focus({ preventScroll: true });
@@ -540,7 +550,7 @@ export function ReviewReader({
     });
   }, []);
 
-  const setCursor = useCallback((element: HTMLElement | null, scroll: ScrollLogicalPosition = 'nearest') => {
+  const setCursor = useCallback((element: HTMLElement | null, scroll: CursorScroll = 'nearest') => {
     if (!element) return;
     briefEditedRef.current = null;
     scrollModeRef.current = scroll;
@@ -576,7 +586,12 @@ export function ReviewReader({
     cursorIndexRef.current = Math.max(0, documentTargets(root).indexOf(element));
     if (scrolledKeyRef.current !== cursorKey) {
       scrolledKeyRef.current = cursorKey;
-      element.scrollIntoView?.({ block: scrollModeRef.current });
+      const scroll = scrollModeRef.current;
+      if (scroll !== 'lead-in') element.scrollIntoView?.({ block: scroll });
+      else {
+        const stop = element.closest<HTMLElement>('[data-review-stop-head]');
+        if (stop) showLeadIn(stop, root, element);
+      }
     }
     scrollModeRef.current = 'nearest';
   }, [cursorKey, content, bundle, expansions, scope, mapIndex, side]);
@@ -623,7 +638,7 @@ export function ReviewReader({
       next = before[before.length - 1];
     }
     const firstRow = next?.querySelector<HTMLElement>('[data-review-cursor]');
-    if (firstRow) setCursor(firstRow, 'start');
+    if (firstRow) setCursor(firstRow, 'lead-in');
   }, [currentTarget, setCursor]);
 
   const stopOf = useCallback((element: Element | null) => {
@@ -746,7 +761,7 @@ export function ReviewReader({
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
-    if (frame === 'walkthrough' && bundle.stops[0]) showStage(bundle.stops[0]);
+    if (frame === 'walkthrough' && bundle.stops[0]) showStage(bundle.stops[0], undefined, 'pick');
     if (frame === 'map') selectMessage(0);
   }, [bundle, frame, selectMessage, showStage]);
 
@@ -756,15 +771,20 @@ export function ReviewReader({
     shownBundleRef.current = bundle;
     const stage = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
     filesRef.current.forEach((file, index) => {
-      if (index === 0 && stage) showStage(stage, undefined, true);
+      if (index === 0 && stage) showStage(stage, undefined, 'refresh');
       else loadFile(file.id, file.target.path, rowIndexAfterRefresh);
     });
   }, [bundle, frame, loadFile, showStage, stageKey]);
 
-  useEffect(() => {
-    if (!stageStop) return;
-    docRef.current?.querySelector(`[data-review-stop-head="${stageStop.heading_line}"]`)?.scrollIntoView?.({ block: 'nearest' });
-  }, [stageStop]);
+  useLayoutEffect(() => {
+    const how = stageScrollRef.current;
+    stageScrollRef.current = 'refresh';
+    const doc = docRef.current;
+    const card = stageStop && doc?.querySelector<HTMLElement>(`[data-review-stop-head="${stageStop.heading_line}"]`);
+    if (!doc || !card || how === 'refresh') return;
+    if (how === 'step') showLeadIn(card, doc, card);
+    else card.scrollIntoView?.({ block: 'nearest' });
+  }, [stageKey, stageStop]);
 
   const markTarget = useCallback((): MarkTarget | null => {
     if (openFileView) {
@@ -1306,8 +1326,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
-    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
+    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor],
   );
 
   return (

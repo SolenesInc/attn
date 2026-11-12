@@ -22,6 +22,11 @@
   overflow: auto;
 }
 
+.review-frame > .review-doc .md-reader-doc {
+  height: auto;
+  overflow-y: visible;
+}
+
 .review-frame > .review-doc[hidden] {
   display: none;
 }
