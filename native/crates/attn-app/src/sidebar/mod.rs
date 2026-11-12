@@ -3,6 +3,7 @@ mod chrome;
 pub(crate) mod model;
 pub(crate) mod queue;
 mod queue_view;
+pub(crate) mod reorder;
 pub(crate) mod session_menu;
 pub(crate) mod snooze;
 pub(crate) mod width;
@@ -121,6 +122,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         home,
         on_screen.clone(),
         width::of(state).to_bits(),
+        state.window.reorder.clone(),
         *t,
     );
     memo("sidebar", reads, || {
@@ -158,7 +160,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 lines.len(),
                                 ROW_HEIGHT,
                                 move |_: &State, i| keys[i].key().into(),
-                                move |state: &State, i| line(state, &lines[i], &t),
+                                move |state: &State, i| line(state, &lines, i, &t),
                             ),
                     ),
             )
@@ -184,34 +186,52 @@ pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
         .child(text("Home").font(type_::BODY).color(t.text_primary))
 }
 
-fn line(state: &State, line: &Line, t: &Tokens) -> El {
+fn line(state: &State, lines: &[Line], index: usize, t: &Tokens) -> El {
+    let line = &lines[index];
     let key = line.key();
     let draining = match line {
         Line::Agent { row, .. } => state.window.countdowns.contains_key(&row.id),
         _ => false,
     };
-    memo(key.clone(), (line, draining, *t), || {
+    let seam = reorder::seam_on(state, lines, index);
+    memo(key.clone(), (line, draining, seam, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
-        match line {
-            Line::Desktop(desktop) => desktop_row(key, desktop, t),
+        let row = match line {
+            Line::Desktop(desktop) => desktop_row(key.clone(), desktop, t),
             Line::Agent { row, .. } => {
                 let bar = settling_bar(state, &key, row, t);
                 let more = rune::row()
                     .key(format!("{key}.controls"))
                     .group_opacity(0.0, 1.0)
                     .child(actions_button(&key, row, t));
-                agent_row(key, row, t)
+                agent_row(key.clone(), row, t)
                     .hover_group()
                     .child(more)
                     .children(bar)
             }
-            Line::Tile(tile) => tile_row(key, tile, t),
-        }
+            Line::Tile(tile) => tile_row(key.clone(), tile, t),
+        };
+        row.children(seam.map(|seam| {
+            rune::el()
+                .key(format!("{key}.seam"))
+                .absolute(
+                    0.0,
+                    if seam == reorder::Seam::Above {
+                        0.0
+                    } else {
+                        ROW_HEIGHT - 2.0
+                    },
+                )
+                .w_full()
+                .h(2.0)
+                .fill(t.accent)
+        }))
     })
 }
 
 fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
     let id = desktop.id.clone();
+    let dragged = desktop.id.clone();
     row()
         .key(key)
         .role("button")
@@ -230,6 +250,9 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
         .radius(4.0)
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &id, tx))
+        .on_drag(move |state: &mut State, d: &mut rune::Drag, _: &mut Tx| {
+            reorder::drag(state, &dragged, d)
+        })
         .child(
             text(desktop.number.to_string())
                 .font(type_::MONO_CAPTION)

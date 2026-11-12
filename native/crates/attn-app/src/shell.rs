@@ -50,6 +50,7 @@ pub struct Window {
     /// Links opened before the current desktop arrived, in the order they came.
     pub(crate) links: Vec<crate::deep_link::Link>,
     pub(crate) width: crate::sidebar::width::Width,
+    pub(crate) reorder: Option<crate::sidebar::reorder::Reorder>,
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
 }
 

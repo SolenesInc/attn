@@ -390,3 +390,164 @@ fn clicking_a_tile_row_asks_the_daemon_to_show_that_tile() {
     assert_eq!(shown[0]["desktop_id"], "d1");
     assert_eq!(shown[0]["leaf_id"], "tile-docs");
 }
+
+fn three_desktops() -> InitialStateMessage {
+    let mut state = two_desktops();
+    state
+        .desktops
+        .get_or_insert_default()
+        .push(desktop("d3", "c", "Notes", vec![]));
+    state
+}
+
+#[test]
+fn dragging_a_desktop_shows_where_it_lands_and_the_release_places_it_between_its_new_neighbours() {
+    let mut world = World::start(Daemon::scripted().state(three_desktops()));
+    world.open_desktop();
+    let (rect, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d1")
+        .expect("the first desktop is drawn");
+    let (x, y) = (rect[0] + rect[2] / 2.0, rect[1] + rect[3] / 2.0);
+    let (below, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d3")
+        .expect("the last desktop is drawn");
+
+    let opened = world.daemon.sent_of("desktop_set_current").len();
+
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_move(x, y + 3.0);
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d3.seam"))
+            .is_none(),
+        "inside the threshold it is still a press"
+    );
+    world.gesture(|app| app.runtime.pointer_move(x, below[1] - rect[1] + y - 8.0));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d3.seam"))
+            .is_some()
+    );
+    world.gesture(|app| app.runtime.pointer_up(x, below[1] - rect[1] + y - 8.0));
+
+    let moved = world.daemon.sent_of("desktop_reorder");
+    assert_eq!(moved.len(), 1);
+    assert_eq!(moved[0]["desktop_id"], "d1");
+    assert_eq!(moved[0]["previous_desktop_id"], "d2");
+    assert_eq!(moved[0]["next_desktop_id"], "d3");
+    assert_eq!(
+        world.daemon.sent_of("desktop_set_current").len(),
+        opened,
+        "a drag is not a click"
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.desktop.d3.seam"))
+            .is_none()
+    );
+    let (last, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d3")
+        .expect("the last desktop is drawn");
+    let (lx, ly) = (last[0] + last[2] / 2.0, last[1] + last[3] / 2.0);
+    world.gesture(|app| {
+        app.runtime.pointer_down(lx, ly);
+        app.runtime.pointer_move(lx, rect[1] + 2.0);
+        app.runtime.pointer_up(lx, rect[1] + 2.0);
+    });
+    let moved = world.daemon.sent_of("desktop_reorder");
+    assert_eq!(
+        (
+            moved[1]["desktop_id"].as_str(),
+            moved[1]["previous_desktop_id"].as_str(),
+            moved[1]["next_desktop_id"].as_str()
+        ),
+        (Some("d3"), None, Some("d1")),
+        "dragged up to the top"
+    );
+    world.advance(std::time::Duration::from_secs(1));
+    assert!(
+        world.runtime_is_at_rest(),
+        "nothing keeps painting after the drop"
+    );
+}
+
+#[test]
+fn a_desktop_dropped_beside_itself_or_with_escape_stays_put() {
+    let mut world = World::start(Daemon::scripted().state(three_desktops()));
+    world.open_desktop();
+    let (rect, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d2")
+        .expect("the desktop is drawn");
+    let (x, y) = (rect[0] + rect[2] / 2.0, rect[1] + rect[3] / 2.0);
+
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_move(x, y + 10.0);
+        app.runtime.pointer_up(x, y + 10.0);
+    });
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_move(x, y - 200.0);
+    });
+    world.gesture(|app| app.key(super::queue::plain(rune::Key::Escape)));
+    world.gesture(|app| app.runtime.pointer_up(x, y - 200.0));
+
+    assert!(world.daemon.sent_of("desktop_reorder").is_empty());
+}
+
+#[test]
+fn a_desktop_dragged_after_the_rows_above_it_changed_lands_where_the_pointer_shows() {
+    let mut world = World::start(Daemon::scripted().state(two_desktops()));
+    world.open_desktop();
+    world
+        .daemon
+        .emit(attn_protocol::ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: "d1".into(),
+                ..Profile::default()
+            },
+            desktops: vec![
+                desktop("d1", "a", "", vec![pane("d1", "p1", "side-b")]),
+                desktop("d2", "b", "Review", vec![pane("d2", "p3", "side-c")]),
+            ],
+            ..attn_protocol::ProfileArrangementChangedMessage::new()
+        });
+    world.settle();
+    let (first, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d1")
+        .expect("the first desktop is drawn");
+    let (dragged, _) = world
+        .runtime()
+        .presented("sidebar.desktop.d2")
+        .expect("the second desktop is drawn");
+    let (x, y) = (dragged[0] + dragged[2] / 2.0, dragged[1] + dragged[3] / 2.0);
+
+    world.gesture(|app| {
+        app.runtime.pointer_down(x, y);
+        app.runtime.pointer_move(x, first[1] + 2.0);
+        app.runtime.pointer_up(x, first[1] + 2.0);
+    });
+
+    let moved = world.daemon.sent_of("desktop_reorder");
+    assert_eq!(moved.len(), 1, "{moved:?}");
+    assert_eq!(
+        (
+            moved[0]["desktop_id"].as_str(),
+            moved[0]["previous_desktop_id"].as_str(),
+            moved[0]["next_desktop_id"].as_str()
+        ),
+        (Some("d2"), None, Some("d1"))
+    );
+}
