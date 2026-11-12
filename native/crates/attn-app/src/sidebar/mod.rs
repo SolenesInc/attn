@@ -182,7 +182,11 @@ pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
         .fill(if home { t.bg_selected } else { t.bg_panel })
         .hover(t.bg_elevated)
         .on_press(|state: &mut State| state.window.go_home())
-        .child(text("⌂").font(type_::BODY).color(t.text_secondary))
+        .child(
+            text(attn_ui::icon::HOME)
+                .font(type_::BODY)
+                .color(t.text_secondary),
+        )
         .child(text("Home").font(type_::BODY).color(t.text_primary))
 }
 

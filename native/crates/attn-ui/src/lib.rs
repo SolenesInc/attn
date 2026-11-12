@@ -169,5 +169,6 @@ pub const FAMILIES: (&str, &str) = (
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, Symbols Nerd Font Mono",
 );
 
+pub mod icon;
 mod stories;
 pub use stories::{STORIES, Showcase, playground};

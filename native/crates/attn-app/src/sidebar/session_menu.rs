@@ -202,7 +202,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> El {
         .child(
             item(
                 "priority",
-                "⚑",
+                attn_ui::icon::FLAG,
                 if priority {
                     "Unmark priority"
                 } else {
@@ -215,7 +215,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> El {
                 super::actions::set_priority(state, &id, !priority);
             }),
         )
-        .child(item("rename", "✎", "Rename session".into()).on_press_tx(rename))
+        .child(item("rename", attn_ui::icon::PENCIL, "Rename session".into()).on_press_tx(rename))
         .child(divider())
         .child(
             item("reload", "↻", "Reload session".into())

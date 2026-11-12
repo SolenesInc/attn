@@ -61,11 +61,13 @@ fn header(t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 ),
         )
-        .child(button("home.settings", "Settings", "⚙", t).on_press_tx(
-            |state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, Action::UiOpenSettings, tx);
-            },
-        ))
+        .child(
+            button("home.settings", "Settings", attn_ui::icon::SETTINGS, t).on_press_tx(
+                |state: &mut State, tx: &mut Tx| {
+                    crate::dispatch(state, Action::UiOpenSettings, tx);
+                },
+            ),
+        )
 }
 
 fn all_settled(running: &str, follow: bool, t: &Tokens) -> El {
@@ -113,9 +115,13 @@ fn follow_check(follow: bool, t: &Tokens) -> El {
             state.window.follow_next_turn = !state.window.follow_next_turn
         })
         .child(
-            text(if follow { "☑" } else { "☐" })
-                .font(type_::BODY)
-                .color(if follow { t.accent } else { t.text_tertiary }),
+            text(if follow {
+                attn_ui::icon::CHECKED
+            } else {
+                attn_ui::icon::UNCHECKED
+            })
+            .font(type_::BODY)
+            .color(if follow { t.accent } else { t.text_tertiary }),
         )
         .child(text(LABEL).font(type_::LABEL).color(t.text_secondary))
 }
@@ -245,9 +251,13 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
                     state.window.home_snoozed_open = !state.window.home_snoozed_open
                 })
                 .child(
-                    text(if open { "▾" } else { "▸" })
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary),
+                    text(if open {
+                        attn_ui::icon::CARET_DOWN
+                    } else {
+                        attn_ui::icon::CARET_RIGHT
+                    })
+                    .font(type_::LABEL)
+                    .color(t.text_tertiary),
                 )
                 .child(group_label("Snoozed", Some(rows.len()), t)),
         )

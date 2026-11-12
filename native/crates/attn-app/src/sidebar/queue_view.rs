@@ -395,9 +395,13 @@ fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
         .hover(t.bg_elevated)
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
         .child(
-            text(if open { "▾" } else { "▸" })
-                .font(type_::LABEL)
-                .color(t.text_tertiary),
+            text(if open {
+                attn_ui::icon::CARET_DOWN
+            } else {
+                attn_ui::icon::CARET_RIGHT
+            })
+            .font(type_::LABEL)
+            .color(t.text_tertiary),
         )
         .child(text(label).font(type_::SECTION).color(t.text_tertiary))
 }
@@ -409,7 +413,11 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         .h(ROW_HEIGHT)
         .items_center()
         .gap(space::S1)
-        .child(text("⌕").font(type_::BODY).color(t.text_tertiary))
+        .child(
+            text(attn_ui::icon::SEARCH)
+                .font(type_::BODY)
+                .color(t.text_tertiary),
+        )
         .child(
             text_input(&state.window.agent_filter, type_::BODY)
                 .key(FILTER_FIELD)
@@ -493,11 +501,16 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
     });
     let snooze = a.snooze.then(|| {
         let (id, name, under) = (id.clone(), name.clone(), format!("{key}.snooze"));
-        control(key, "snooze", format!("Snooze {name}"), "☾", t).on_press_tx(
-            move |state: &mut State, tx: &mut Tx| {
-                super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx)
-            },
+        control(
+            key,
+            "snooze",
+            format!("Snooze {name}"),
+            attn_ui::icon::MOON,
+            t,
         )
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx)
+        })
     });
     Some(
         row()
