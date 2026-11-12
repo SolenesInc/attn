@@ -34,8 +34,10 @@ pin.
 
 ## Tests
 
-Wire tests run a view on Rune's windowless `Runtime` and live in each crate's
-`tests/wire/`. No test waits on time: clippy rejects `std::thread::sleep`,
+Wire tests run the app's view on Rune's windowless `Runtime`, with its real
+daemon link talking to a scripted daemon, and live in each crate's
+`tests/wire/`. [Native wire tests](native-wire-tests.md) describes the harness.
+No test waits on time: clippy rejects `std::thread::sleep`,
 `Instant::now` and `SystemTime::now` anywhere in `native/`
 (`native/clippy.toml`). Code reads time through an injected clock, so a test
 moves it.

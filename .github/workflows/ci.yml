@@ -150,6 +150,7 @@ jobs:
               - '.github/actions/setup-toolchains/**'
             native:
               - 'native/**'
+              - 'scripts/native-parity'
               - 'cli/protocol/**'
               - 'internal/protocol/schema/**'
               - 'internal/testhistory/**'
@@ -850,6 +851,9 @@ jobs:
         with:
           workspaces: native
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Native parity
+        run: ../scripts/native-parity
 
       - name: Cargo fmt
         run: cargo fmt --all --check

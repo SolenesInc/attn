@@ -46,7 +46,7 @@ prompt_outputs=(
   app/src/prompts/catalog.generated.json
 )
 frozen_paths='^app/src/|^app/src-tauri/'
-native_paths='^native/|^internal/protocol/schema/|^cli/protocol/'
+native_paths='^native/|^internal/protocol/schema/|^cli/protocol/|^scripts/native-parity$'
 
 fail() {
   echo "land: $*" >&2

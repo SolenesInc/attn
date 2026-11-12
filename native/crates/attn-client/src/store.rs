@@ -1,0 +1,188 @@
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex, Weak};
+
+use attn_protocol::{Desktop, InitialStateMessage, Profile, Session};
+
+/// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
+/// so a slice that did not change keeps its pointer and a view's `memo` can key on it.
+#[derive(Clone, Default)]
+pub struct Facts {
+    pub connection: Connection,
+    pub sessions: Arc<Vec<Session>>,
+    pub profiles: Arc<Profiles>,
+    pub desktops: Arc<Vec<Desktop>>,
+    pub settings: Arc<BTreeMap<String, String>>,
+}
+
+#[derive(Clone, Default)]
+pub struct Profiles {
+    pub all: Vec<Profile>,
+    pub selected: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Connection {
+    #[default]
+    Connecting,
+    Connected,
+    /// The link lost the daemon, or never reached it, and retries on its own.
+    Reconnecting,
+    /// The link stopped and will not retry: the user has to act.
+    Refused(Refusal),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Refusal {
+    ProtocolMismatch { app: String, daemon: String },
+    InstanceMismatch { app: String, daemon: String },
+    Unauthorized(String),
+}
+
+/// Which slices of `Facts` a change touched, and which a window reads.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Slices(u32);
+
+impl Slices {
+    pub const NONE: Slices = Slices(0);
+    pub const CONNECTION: Slices = Slices(1);
+    pub const SESSIONS: Slices = Slices(1 << 1);
+    pub const PROFILES: Slices = Slices(1 << 2);
+    pub const DESKTOPS: Slices = Slices(1 << 3);
+    pub const SETTINGS: Slices = Slices(1 << 4);
+    pub const ALL: Slices = Slices((1 << 5) - 1);
+
+    pub fn intersects(self, other: Slices) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    pub fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+}
+
+impl std::ops::BitOr for Slices {
+    type Output = Slices;
+    fn bitor(self, other: Slices) -> Slices {
+        Slices(self.0 | other.0)
+    }
+}
+
+impl std::ops::BitOrAssign for Slices {
+    fn bitor_assign(&mut self, other: Slices) {
+        self.0 |= other.0;
+    }
+}
+
+type Notify = dyn Fn(&Facts, Slices) + Send + Sync;
+
+struct Subscriber {
+    id: u64,
+    reads: Slices,
+    notify: Arc<Notify>,
+}
+
+#[derive(Default)]
+struct Inner {
+    facts: Facts,
+    subscribers: Vec<Subscriber>,
+    next_id: u64,
+}
+
+/// One per process. The link writes it from its own thread; each window subscribes to the
+/// slices it reads and hears only about changes to those.
+#[derive(Clone, Default)]
+pub struct Store(Arc<Mutex<Inner>>);
+
+/// Ends its subscription when dropped.
+pub struct Subscription {
+    store: Weak<Mutex<Inner>>,
+    id: u64,
+}
+
+impl Drop for Subscription {
+    fn drop(&mut self) {
+        if let Some(store) = self.store.upgrade() {
+            store
+                .lock()
+                .unwrap()
+                .subscribers
+                .retain(|s| s.id != self.id);
+        }
+    }
+}
+
+impl Store {
+    pub fn facts(&self) -> Facts {
+        self.0.lock().unwrap().facts.clone()
+    }
+
+    /// Calls `notify` now with every slice, then on the link's thread after each change to a
+    /// slice in `reads`.
+    pub fn subscribe(
+        &self,
+        reads: Slices,
+        notify: impl Fn(&Facts, Slices) + Send + Sync + 'static,
+    ) -> Subscription {
+        let notify: Arc<Notify> = Arc::new(notify);
+        let (id, facts) = {
+            let mut inner = self.0.lock().unwrap();
+            let id = inner.next_id;
+            inner.next_id += 1;
+            inner.subscribers.push(Subscriber {
+                id,
+                reads,
+                notify: notify.clone(),
+            });
+            (id, inner.facts.clone())
+        };
+        notify(&facts, Slices::ALL);
+        Subscription {
+            store: Arc::downgrade(&self.0),
+            id,
+        }
+    }
+
+    pub(crate) fn set_connection(&self, connection: Connection) {
+        self.change(|facts| {
+            if facts.connection == connection {
+                return Slices::NONE;
+            }
+            facts.connection = connection;
+            Slices::CONNECTION
+        });
+    }
+
+    pub(crate) fn apply_initial_state(&self, state: InitialStateMessage) {
+        self.change(|facts| {
+            facts.connection = Connection::Connected;
+            facts.sessions = Arc::new(state.sessions.unwrap_or_default());
+            facts.profiles = Arc::new(Profiles {
+                all: state.profiles.unwrap_or_default(),
+                selected: state.selected_profile_id.unwrap_or_default(),
+            });
+            facts.desktops = Arc::new(state.desktops.unwrap_or_default());
+            facts.settings = Arc::new(state.settings.unwrap_or_default());
+            Slices::ALL
+        });
+    }
+
+    fn change(&self, f: impl FnOnce(&mut Facts) -> Slices) {
+        let (facts, changed, notify) = {
+            let mut inner = self.0.lock().unwrap();
+            let changed = f(&mut inner.facts);
+            if changed.is_empty() {
+                return;
+            }
+            let notify: Vec<Arc<Notify>> = inner
+                .subscribers
+                .iter()
+                .filter(|s| s.reads.intersects(changed))
+                .map(|s| s.notify.clone())
+                .collect();
+            (inner.facts.clone(), changed, notify)
+        };
+        for notify in notify {
+            notify(&facts, changed);
+        }
+    }
+}

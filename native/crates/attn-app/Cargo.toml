@@ -5,7 +5,13 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+attn-client = { path = "../attn-client" }
 rune.workspace = true
+
+[dev-dependencies]
+attn-protocol = { path = "../../../cli/protocol" }
+attn-testkit = { path = "../attn-testkit" }
+serde_json = "1.0.154"
 
 [lints]
 workspace = true

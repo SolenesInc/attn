@@ -258,6 +258,7 @@ check-mobile: $(MOBILE_NODE_MODULES)
 
 NATIVE_CLIPPY ?= --workspace
 check-native:
+	scripts/native-parity
 	cd native && cargo fmt --all --check
 	cd native && cargo check --locked --workspace --all-targets
 	$(if $(strip $(NATIVE_CLIPPY)),cd native && cargo clippy --locked --all-targets $(NATIVE_CLIPPY) -- -D warnings)

@@ -1,3 +1,3 @@
 mod wire {
-    mod window;
+    mod connection;
 }

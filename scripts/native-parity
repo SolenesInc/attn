@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Checks native/parity/wire.tsv: every row names a Vitest test that exists and
+# either a native test that exists or a reason the test was dropped.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+manifest="${NATIVE_PARITY_WIRE:-$root/native/parity/wire.tsv}"
+header=$'vitest_file\tvitest_test\tnative_test\treason'
+
+problems=()
+quoted_in() {
+  grep -qF -e "'$1'" -e "\"$1\"" -e "\`$1\`" "$2"
+}
+
+line=0
+while IFS= read -r row || [ -n "$row" ]; do
+  line=$((line + 1))
+  if [ "$line" -eq 1 ]; then
+    [ "$row" = "$header" ] || problems+=("line 1: the header must be: ${header//$'\t'/<tab>}")
+    continue
+  fi
+  IFS=$'\t' read -r file test native reason extra <<<"$row"
+  where="line $line"
+  if [ -n "${extra:-}" ] || [ -z "${file:-}" ] || [ -z "${test:-}" ] || [ -z "${native:-}" ]; then
+    problems+=("$where: a row has four tab-separated columns, and only reason may be empty")
+    continue
+  fi
+  if [ ! -f "$root/$file" ]; then
+    problems+=("$where: $file does not exist")
+  else
+    rest="$test"
+    while [ -n "$rest" ]; do
+      name="${rest%% > *}"
+      [ "$name" = "$rest" ] && rest="" || rest="${rest#* > }"
+      quoted_in "$name" "$root/$file" || problems+=("$where: $file has no describe or test named \"$name\"")
+    done
+  fi
+  if [ "$native" = dropped ]; then
+    [ -n "${reason:-}" ] || problems+=("$where: a dropped test needs a reason")
+    continue
+  fi
+  [ -z "${reason:-}" ] || problems+=("$where: only a dropped test has a reason")
+  path="${native%%::*}"
+  function="${native#*::}"
+  if [ "$path" = "$native" ] || [ -z "$function" ]; then
+    problems+=("$where: name the native test as <crate>/tests/wire/<file>.rs::<function>, or write dropped")
+  elif [ ! -f "$root/native/crates/$path" ]; then
+    problems+=("$where: native/crates/$path does not exist")
+  elif ! grep -qE "^[[:space:]]*(pub )?fn $function\(" "$root/native/crates/$path"; then
+    problems+=("$where: native/crates/$path has no test named $function")
+  fi
+done <"$manifest"
+
+while IFS= read -r twice; do
+  [ -n "$twice" ] && problems+=("${twice//$'\t'/ \"}\" has more than one row")
+done < <(tail -n +2 "$manifest" | cut -f1,2 | sort | uniq -d)
+
+if [ "${#problems[@]}" -gt 0 ]; then
+  echo "native-parity: ${manifest#"$root"/} has ${#problems[@]} problem(s):" >&2
+  printf '  %s\n' "${problems[@]}" >&2
+  exit 1
+fi
+echo "native-parity: ${manifest#"$root"/} maps $((line - 1)) Vitest test(s)"

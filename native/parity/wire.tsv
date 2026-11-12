@@ -1,0 +1,5 @@
+vitest_file	vitest_test	native_test	reason
+app/src/App.clientToken.test.tsx	App client token > presents the instance token in client_hello	attn-app/tests/wire/connection.rs::the_app_says_hello_with_its_token_and_shows_the_daemon_state	
+app/src/App.clientToken.test.tsx	App client token > stops reconnecting and shows the daemon message when the token is refused	attn-app/tests/wire/connection.rs::a_refused_token_stops_the_app_with_the_daemon_reason	
+app/src/App.instanceMismatch.test.tsx	App instance mismatch > refuses a daemon of another instance, says which, and never opens its socket	attn-app/tests/wire/connection.rs::a_daemon_of_another_instance_is_refused_before_the_hello	
+app/src/App.instanceMismatch.test.tsx	App instance mismatch > connects to a daemon of its own instance	attn-app/tests/wire/connection.rs::the_app_says_hello_with_its_token_and_shows_the_daemon_state	

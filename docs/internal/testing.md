@@ -137,7 +137,8 @@ hooks, transcript files, and terminal output. To simulate a network failure,
 wrap the client's `net.Conn` inside a `synctest` bubble.
 
 [Daemon wire tests](daemon-wire-tests.md) and [App wire tests](app-wire-tests.md)
-describe each form's harness.
+describe each form's harness. The native app in `native/` has its own app wire
+tests, in Rust: [Native wire tests](native-wire-tests.md).
 
 ### Stack
 
