@@ -139,6 +139,36 @@ func TestRunnerOutputNormalizesToReceiptResults(t *testing.T) {
 		},
 		{fixture: "playwright/truncated.json", runner: RunnerPlaywright, finished: false},
 		{
+			fixture: "cargo/mixed.log", runner: RunnerCargo, finished: true,
+			expect: []expect{
+				{unit: "cargo good --lib", attempt: 1, outcome: Fail},
+				{unit: "cargo good --lib", test: "tests::passes", attempt: 1, outcome: Pass},
+				{unit: "cargo good --lib", test: "tests::fails", attempt: 1, outcome: Fail},
+				{unit: "cargo good --lib", test: "tests::skips", attempt: 1, outcome: Skip, detail: "needs a GPU"},
+				{unit: "cargo good --test crash", attempt: 1, outcome: Fail, detail: "the test binary exited before reporting its result"},
+				{unit: "cargo good --test slow", attempt: 1, outcome: Pass},
+				{unit: "cargo good --test wire", attempt: 1, outcome: Pass},
+				{unit: "cargo good --test wire", test: "wire::passes", attempt: 1, outcome: Pass},
+				{unit: "cargo good --doc", attempt: 1, outcome: Pass},
+				{unit: "cargo good --doc", test: "good/src/lib.rs - two (line 1)", attempt: 1, outcome: Pass},
+			},
+			absent: []absent{{unit: "cargo good --test crash", test: "passes_first"}},
+		},
+		{
+			fixture: "cargo/build-failure.log", runner: RunnerCargo, finished: true,
+			expect: []expect{
+				{unit: "cargo broken --lib", attempt: 1, outcome: BuildFailure},
+			},
+			absent: []absent{{unit: "cargo broken --lib", test: "never_builds"}},
+		},
+		{
+			fixture: "cargo/interrupted.log", runner: RunnerCargo, finished: false,
+			expect: []expect{
+				{unit: "cargo good --test slow", attempt: 1, outcome: Interrupted},
+			},
+			absent: []absent{{unit: "cargo good --test wire"}},
+		},
+		{
 			fixture: "native/complete.json", runner: RunnerNative, finished: true,
 			expect: []expect{
 				{unit: "native session-close-ledger", attempt: 1, outcome: Pass},

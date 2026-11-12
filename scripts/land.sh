@@ -325,6 +325,11 @@ take_land_queue() {
   echo "pid $$ ($(basename "$PWD")) since $(date +%H:%M:%S)" >"$queue"
 }
 
+clean_native_builds() {
+  [ -x scripts/native-build-clean ] || return 0
+  scripts/native-build-clean || echo "land: scripts/native-build-clean failed; old native build output stays until the next land" >&2
+}
+
 patch_applies_on() {
   local commit="$1" tree="$2" index="$3"
   GIT_INDEX_FILE="$index" git read-tree "$tree" &&
@@ -364,6 +369,7 @@ land() {
     if ATTN_LANDING=1 git push --quiet origin HEAD:main; then
       echo "land: main is at $(git rev-parse --short HEAD)"
       sync_history "this landing's test receipts upload at the next sync"
+      clean_native_builds
       warn_about_undone_commits "$undone"
       exit 0
     fi

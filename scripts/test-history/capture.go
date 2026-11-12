@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -57,8 +58,11 @@ func parseCapture(args []string) (captureRequest, error) {
 		return captureRequest{}, errors.New("capture needs -- before the command")
 	}
 	request.command = args[1:]
-	if runner == testhistory.RunnerGo {
+	switch runner {
+	case testhistory.RunnerGo:
 		request.command = append([]string{"go", "test", "-json"}, request.command...)
+	case testhistory.RunnerCargo:
+		request.command = append([]string{"cargo", "test", "--message-format=json"}, request.command...)
 	}
 	if len(request.command) == 0 {
 		return captureRequest{}, errors.New("capture needs a command after --")
@@ -146,18 +150,23 @@ func exitStatus(ending testhistory.Ending) int {
 func run(request captureRequest, working *testhistory.Working) (testhistory.Ending, error) {
 	cmd := exec.Command(request.command[0], request.command[1:]...)
 	cmd.Stdin, cmd.Stderr = os.Stdin, os.Stderr
-	var goEvents io.ReadCloser
+	var events, eventsWriter *os.File
 	var results *os.File
 	if working != nil {
 		cmd.ExtraFiles = []*os.File{working.Lock()}
 		cmd.Env = append(os.Environ(), "ATTN_TEST_RESULTS="+working.ResultsPath)
 	}
-	if request.runner == testhistory.RunnerGo {
-		pipe, err := cmd.StdoutPipe()
-		if err != nil {
+	if request.runner == testhistory.RunnerGo || request.runner == testhistory.RunnerCargo {
+		var err error
+		if events, eventsWriter, err = os.Pipe(); err != nil {
 			return testhistory.Ending{FinishedAt: time.Now()}, err
 		}
-		goEvents = pipe
+		defer func() { _ = events.Close() }()
+		defer func() { _ = eventsWriter.Close() }()
+		cmd.Stdout = eventsWriter
+		if request.runner == testhistory.RunnerCargo {
+			cmd.Stderr = eventsWriter
+		}
 		if working != nil {
 			if results, err = os.OpenFile(working.ResultsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err != nil {
 				return testhistory.Ending{FinishedAt: time.Now()}, err
@@ -174,11 +183,17 @@ func run(request captureRequest, working *testhistory.Working) (testhistory.Endi
 	if err := cmd.Start(); err != nil {
 		return testhistory.Ending{FinishedAt: time.Now()}, err
 	}
+	if eventsWriter != nil {
+		_ = eventsWriter.Close()
+	}
 	exited := make(chan struct{})
 	received := make(chan string, 1)
 	go relaySignals(signals, cmd.Process, received, exited)
-	if goEvents != nil {
-		renderGoEvents(goEvents, results, request.command)
+	switch {
+	case events != nil && request.runner == testhistory.RunnerGo:
+		renderGoEvents(events, results, request.command)
+	case events != nil:
+		renderCargoOutput(events, results)
 	}
 	waitErr := cmd.Wait()
 	close(exited)
@@ -210,6 +225,38 @@ func relaySignals(signals <-chan os.Signal, command *os.Process, received chan<-
 			}
 		}
 	}
+}
+
+func renderCargoOutput(stream io.Reader, results *os.File) {
+	reader := bufio.NewReaderSize(stream, 64*1024)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if len(line) > 0 {
+			if results != nil {
+				_, _ = results.Write(line)
+			}
+			_, _ = os.Stdout.Write(cargoDisplay(line))
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func cargoDisplay(line []byte) []byte {
+	if !bytes.HasPrefix(line, []byte("{")) {
+		return line
+	}
+	var message struct {
+		Reason  string `json:"reason"`
+		Message struct {
+			Rendered string `json:"rendered"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &message) != nil || message.Reason == "" {
+		return line
+	}
+	return []byte(message.Message.Rendered)
 }
 
 func renderGoEvents(stream io.Reader, results *os.File, command []string) {
@@ -299,8 +346,15 @@ func raceRequested(command []string) bool {
 }
 
 func toolVersions(runner testhistory.Runner) map[string]string {
-	if runner == testhistory.RunnerGo {
+	switch runner {
+	case testhistory.RunnerGo:
 		return map[string]string{"go": runtime.Version()}
+	case testhistory.RunnerCargo:
+		out, err := exec.Command("rustc", "--version").Output()
+		if err != nil {
+			return nil
+		}
+		return map[string]string{"rustc": strings.TrimSpace(string(out))}
 	}
 	out, err := exec.Command("node", "--version").Output()
 	if err != nil {

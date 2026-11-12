@@ -24,7 +24,7 @@ type RecipeList struct {
 	Recipes []Recipe
 }
 
-var landingRunners = map[Runner]bool{RunnerGo: true, RunnerVitest: true, RunnerPlaywright: true}
+var landingRunners = map[Runner]bool{RunnerGo: true, RunnerVitest: true, RunnerPlaywright: true, RunnerCargo: true}
 
 func ParseRecipeList(text string) (RecipeList, error) {
 	var list RecipeList
@@ -64,9 +64,13 @@ func checkLandingUnit(unit string) error {
 	runner := UnitRunner(unit)
 	switch {
 	case !landingRunners[runner]:
-		return fmt.Errorf("%q: landing tests run go, vitest and playwright units", unit)
+		return fmt.Errorf("%q: landing tests run go, vitest, playwright and cargo units", unit)
 	case runner == RunnerGo && len(fields) != 3:
 		return fmt.Errorf("%q: want \"go <package> <TestName>\"", unit)
+	case runner == RunnerCargo:
+		if _, ok := cargoTestArgs(unit); !ok {
+			return fmt.Errorf("%q: want \"cargo .\", \"cargo <package> --lib\", \"cargo <package> --doc\" or \"cargo <package> --test|--bin <name>\"", unit)
+		}
 	case runner != RunnerGo && len(fields) != 2:
 		return fmt.Errorf("%q: want \"%s <file>\"", unit, runner)
 	}
@@ -101,6 +105,9 @@ func RecipeCommand(unit string) string {
 		return fmt.Sprintf("./scripts/test-go.sh --packages -count=1 -run '^%s$' %s", fields[2], fields[1])
 	case RunnerVitest:
 		return "pnpm --dir app exec vitest run " + fields[1]
+	case RunnerCargo:
+		args, _ := cargoTestArgs(unit)
+		return "(cd native && cargo test " + strings.Join(args, " ") + ")"
 	default:
 		return "pnpm --dir app exec playwright test " + fields[1]
 	}
@@ -121,4 +128,17 @@ func (list RecipeList) Named(names []string) ([]Group, error) {
 		}
 	}
 	return groups, nil
+}
+
+func cargoTestArgs(unit string) ([]string, bool) {
+	fields := strings.Fields(unit)
+	switch {
+	case unit == CargoSuiteUnit:
+		return []string{"--workspace"}, true
+	case len(fields) == 3 && (fields[2] == "--lib" || fields[2] == "--doc"):
+		return []string{"-p", fields[1], fields[2]}, true
+	case len(fields) == 4 && (fields[2] == "--test" || fields[2] == "--bin"):
+		return []string{"-p", fields[1], fields[2], fields[3]}, true
+	}
+	return nil, false
 }

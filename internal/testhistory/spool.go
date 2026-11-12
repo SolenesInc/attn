@@ -62,8 +62,11 @@ func Compress(data []byte) []byte { return sharedEncoder.EncodeAll(data, nil) }
 func Decompress(data []byte) ([]byte, error) { return sharedDecoder.DecodeAll(data, nil) }
 
 func resultsFile(runner Runner) string {
-	if runner == RunnerGo || runner == RunnerVitest {
+	switch runner {
+	case RunnerGo, RunnerVitest:
 		return string(runner) + ".jsonl"
+	case RunnerCargo:
+		return string(runner) + ".log"
 	}
 	return string(runner) + ".json"
 }
@@ -153,6 +156,8 @@ func Observe(runner Runner, raw []byte, goModule string) Observed {
 		return ObserveVitest(raw)
 	case RunnerPlaywright:
 		return ObservePlaywright(raw)
+	case RunnerCargo:
+		return ObserveCargo(raw)
 	default:
 		return ObserveNative(raw)
 	}

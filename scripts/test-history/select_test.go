@@ -308,3 +308,59 @@ func TestSelectChoosesTheCheckoutsTestsFromItsHistory(t *testing.T) {
 		}
 	})
 }
+
+const cargoTestSource = `#[cfg(test)]
+mod tests {
+    #[test]
+    fn holds() {
+        assert!(%s);
+    }
+}
+`
+
+func TestACargoTestThatFailedOnMainRunsByNameUntilItClears(t *testing.T) {
+	repo := newCheckout(t)
+	start := time.Now().Add(-time.Hour).Truncate(time.Second)
+	repo.write("scripts/landing-tests", "group native ^native/\ncargo .\n")
+	repo.write("native/.gitignore", "/target\n")
+	repo.write("native/Cargo.toml", "[workspace]\nresolver = \"3\"\nmembers = [\"crates/*\"]\n")
+	repo.write("native/crates/good/Cargo.toml", "[package]\nname = \"good\"\nversion = \"0.0.0\"\nedition = \"2024\"\n")
+	repo.write("native/crates/good/src/lib.rs", fmt.Sprintf(cargoTestSource, "false"))
+	repo.write("native/crates/good/tests/wire.rs", "#[test]\nfn passes() {}\n")
+	repo.commit("a failing native test", start)
+	native := filepath.Join(repo.dir, "native")
+	captureCargo := func() string {
+		cmd := historyCommand(t, repo.spool, native, "capture", "cargo", "--", "--no-fail-fast")
+		out, _ := cmd.CombinedOutput()
+		return string(out)
+	}
+	if out := captureCargo(); !strings.Contains(out, "test tests::holds ... FAILED") || strings.Contains(out, `"reason"`) {
+		t.Fatalf("capture must print what cargo test prints, without cargo's JSON messages:\n%s", out)
+	}
+	repo.write("native/crates/good/src/lib.rs", fmt.Sprintf(cargoTestSource, "true"))
+	repo.commit("fix it", start.Add(time.Minute))
+	captureCargo()
+
+	repo.git("checkout", "-q", "-b", "change")
+	repo.write("native/crates/good/src/lib.rs", fmt.Sprintf(cargoTestSource, "true")+"\npub fn more() {}\n")
+	out, code := repo.history("select", "--main", "main", "--json")
+	if code != 0 {
+		t.Fatalf("select exited %d", code)
+	}
+	selection := decode[testhistory.Selection](t, out)
+	if suite := choiceOf(t, selection, "cargo ."); !suite.Baseline || suite.Status != testhistory.Selected {
+		t.Fatalf("the whole native suite is the baseline: %+v", suite)
+	}
+	failed := choiceOf(t, selection, "cargo good --lib")
+	if failed.Status != testhistory.Selected || failed.Standing == nil || failed.Standing.PassesSince != 1 {
+		t.Fatalf("a native test that failed on main and passed once since runs until it clears: %+v %+v", failed, failed.Standing)
+	}
+	if failed.Command != "(cd native && cargo test -p good --lib)" {
+		t.Fatalf("rerun command %q", failed.Command)
+	}
+	for _, choice := range selection.Choices {
+		if choice.Unit == "cargo good --test wire" {
+			t.Fatalf("a native test that never failed is not a candidate of its own: %+v", choice)
+		}
+	}
+}

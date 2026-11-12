@@ -100,6 +100,9 @@ share a file with it, and names each commit whose whole change could be applied
 again on top of the landing. It misses a commit that the landing only partly
 undoes, and one whose lines a later commit changed.
 
+After the push, `land.sh` runs `scripts/native-build-clean`, which removes old
+Rust build output. [Native app](native-app.md#build-output) says what it removes.
+
 One land runs at a time per clone. `land.sh` takes the clone's land queue, a
 lock that every worktree of the clone shares, before its first fetch, and holds
 it until it exits. A land that finds the queue taken prints the holder's PID,

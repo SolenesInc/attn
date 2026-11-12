@@ -31,6 +31,36 @@ func AppTestUnit(repoPath string) (string, bool) {
 	return "", false
 }
 
+func CargoTestUnits(repoPath string) []string {
+	rest, ok := strings.CutPrefix(repoPath, "native/crates/")
+	if !ok {
+		return nil
+	}
+	pkg, file, ok := strings.Cut(rest, "/")
+	if !ok {
+		return nil
+	}
+	switch {
+	case file == "src/lib.rs":
+		return []string{"cargo " + pkg + " --lib", "cargo " + pkg + " --doc"}
+	case file == "src/main.rs":
+		return []string{"cargo " + pkg + " --bin " + pkg}
+	case strings.HasPrefix(file, "src/bin/") && strings.HasSuffix(file, ".rs") && !strings.Contains(strings.TrimPrefix(file, "src/bin/"), "/"):
+		return []string{"cargo " + pkg + " --bin " + strings.TrimSuffix(strings.TrimPrefix(file, "src/bin/"), ".rs")}
+	}
+	target, ok := strings.CutPrefix(file, "tests/")
+	if !ok {
+		return nil
+	}
+	if dir, ok := strings.CutSuffix(target, "/main.rs"); ok && !strings.Contains(dir, "/") {
+		return []string{"cargo " + pkg + " --test " + dir}
+	}
+	if name, ok := strings.CutSuffix(target, ".rs"); ok && !strings.Contains(name, "/") {
+		return []string{"cargo " + pkg + " --test " + name}
+	}
+	return nil
+}
+
 var vitestInclude = []struct {
 	dir      string
 	suffixes []string

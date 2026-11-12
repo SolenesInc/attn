@@ -221,6 +221,16 @@ func (t tree) inventory() (testhistory.Inventory, error) {
 		}
 	}
 	inventory[testhistory.VitestSuiteUnit] = true
+	crates, err := t.files("native/crates/")
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range crates {
+		for _, unit := range testhistory.CargoTestUnits(file) {
+			inventory[unit] = true
+		}
+	}
+	inventory[testhistory.CargoSuiteUnit] = true
 	return inventory, nil
 }
 

@@ -1,0 +1,62 @@
+   Compiling good v0.0.0 (/fixture/cargo/good)
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/cargo/good#0.0.0","manifest_path":"/fixture/cargo/good/Cargo.toml","target":{"kind":["lib"],"crate_types":["lib"],"name":"good","src_path":"/fixture/cargo/good/src/lib.rs","edition":"2024","doc":true,"doctest":true,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":false},"features":[],"filenames":["/fixture/cargo/target/debug/deps/libgood-f09ca9c89b999679.rlib","/fixture/cargo/target/debug/deps/libgood-f09ca9c89b999679.rmeta"],"executable":null,"fresh":false}
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/cargo/good#0.0.0","manifest_path":"/fixture/cargo/good/Cargo.toml","target":{"kind":["test"],"crate_types":["bin"],"name":"wire","src_path":"/fixture/cargo/good/tests/wire.rs","edition":"2024","doc":false,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/cargo/target/debug/deps/wire-a4c3e26cb44a4b0b"],"executable":"/fixture/cargo/target/debug/deps/wire-a4c3e26cb44a4b0b","fresh":false}
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/cargo/good#0.0.0","manifest_path":"/fixture/cargo/good/Cargo.toml","target":{"kind":["lib"],"crate_types":["lib"],"name":"good","src_path":"/fixture/cargo/good/src/lib.rs","edition":"2024","doc":true,"doctest":true,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/cargo/target/debug/deps/good-b35772e012aeed5f"],"executable":"/fixture/cargo/target/debug/deps/good-b35772e012aeed5f","fresh":false}
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/cargo/good#0.0.0","manifest_path":"/fixture/cargo/good/Cargo.toml","target":{"kind":["test"],"crate_types":["bin"],"name":"crash","src_path":"/fixture/cargo/good/tests/crash.rs","edition":"2024","doc":false,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/cargo/target/debug/deps/crash-22977f7c2301f33c"],"executable":"/fixture/cargo/target/debug/deps/crash-22977f7c2301f33c","fresh":false}
+{"reason":"compiler-artifact","package_id":"path+file:///fixture/cargo/good#0.0.0","manifest_path":"/fixture/cargo/good/Cargo.toml","target":{"kind":["test"],"crate_types":["bin"],"name":"slow","src_path":"/fixture/cargo/good/tests/slow.rs","edition":"2024","doc":false,"doctest":false,"test":true},"profile":{"opt_level":"0","debuginfo":2,"debug_assertions":true,"overflow_checks":true,"test":true},"features":[],"filenames":["/fixture/cargo/target/debug/deps/slow-b52fdc54b0b4252d"],"executable":"/fixture/cargo/target/debug/deps/slow-b52fdc54b0b4252d","fresh":false}
+{"reason":"build-finished","success":true}
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.64s
+     Running unittests src/lib.rs (target/debug/deps/good-b35772e012aeed5f)
+
+running 3 tests
+test tests::skips ... ignored, needs a GPU
+test tests::fails ... FAILED
+test tests::passes ... ok
+
+failures:
+
+---- tests::fails stdout ----
+
+thread 'tests::fails' (1208633) panicked at good/src/lib.rs:15:9:
+this one fails
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::fails
+
+test result: FAILED. 1 passed; 1 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p good --lib`
+     Running tests/crash.rs (target/debug/deps/crash-22977f7c2301f33c)
+
+running 2 tests
+error: test failed, to rerun pass `-p good --test crash`
+
+Caused by:
+  process didn't exit successfully: `/fixture/cargo/target/debug/deps/crash-22977f7c2301f33c` (signal: 6, SIGABRT: process abort signal)
+     Running tests/slow.rs (target/debug/deps/slow-b52fdc54b0b4252d)
+
+running 1 test
+test waits_for_its_signal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/wire.rs (target/debug/deps/wire-a4c3e26cb44a4b0b)
+
+running 1 test
+test wire::passes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests good
+
+running 1 test
+test good/src/lib.rs - two (line 1) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+all doctests ran in 0.51s; merged doctests compilation took 0.50s
+error: 2 targets failed:
+    `-p good --lib`
+    `-p good --test crash`

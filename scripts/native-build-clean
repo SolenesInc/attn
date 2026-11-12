@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage="usage: scripts/native-build-clean"
+[ "$#" -eq 0 ] || { echo "$usage" >&2; exit 2; }
+
+# native/.cargo/config.toml puts each checkout's intermediate build output here,
+# under the checkout's own path.
+root="${ATTN_NATIVE_BUILD_ROOT:-${CARGO_HOME:-$HOME/.cargo}/attn-native-build}"
+# One checkout's debug, test and release builds of native/ measured 3.3 GiB on
+# ai-sandbox and a 400-line Rune app 4.9 GiB on the Mac (2026-11-12). Six
+# Builders and an Orchestrator building at once hold about 35 GiB.
+budget_mib="${ATTN_NATIVE_BUILD_BUDGET_MIB:-65536}"
+# A build left alone this long costs a cold rebuild, 85 s for a debug build on
+# a loaded ai-sandbox (2026-11-12), when its checkout builds again.
+stale_days=3
+
+[ -d "$root" ] || exit 0
+
+remove_unless_building() {
+  find "$1" -maxdepth 3 -name .cargo-build-lock -print0 | perl -MFcntl=:flock -0 -e '
+    my $build = shift;
+    my @held;
+    while (my $path = <STDIN>) {
+      chomp $path;
+      open(my $lock, "<", $path) or next;
+      flock($lock, LOCK_EX | LOCK_NB) or exit 3;
+      push @held, $lock;
+    }
+    exit(system("rm", "-rf", "--", $build) == 0 ? 0 : 1);
+  ' "$1"
+}
+
+newest_change() {
+  find "$1" -print0 | perl -0 -ne 'chomp; my $m = (lstat)[9]; $n = $m if $m > $n; END { print $n + 0 }'
+}
+
+kib() { du -sk "$1" | cut -f1; }
+gib() { awk -v kib="$1" 'BEGIN { printf "%.1f GiB", kib / 1048576 }'; }
+
+builds="$(find "$root" -name CACHEDIR.TAG | sed 's#/CACHEDIR.TAG$##' | sort)"
+[ -n "$builds" ] || exit 0
+now="$(date +%s)"
+before="$(kib "$root")"
+removed=""
+in_use=""
+
+remove() {
+  local build="$1" reason="$2" size status=0
+  size="$(kib "$build")"
+  remove_unless_building "$build" || status=$?
+  case "$status" in
+    0) removed+="  removed $build ($(gib "$size")): $reason"$'\n' ;;
+    3) in_use+="  kept $build ($(gib "$size")): a cargo build holds its lock"$'\n' ;;
+    *) echo "native-build-clean: could not remove $build" >&2; return 1 ;;
+  esac
+}
+
+kept=""
+while IFS= read -r build; do
+  workspace="${build#"$root"}"
+  if [ ! -f "$workspace/Cargo.toml" ]; then
+    remove "$build" "its checkout $workspace no longer exists"
+    continue
+  fi
+  changed="$(newest_change "$build")"
+  if [ $((now - changed)) -gt $((stale_days * 86400)) ]; then
+    remove "$build" "not built for $(((now - changed) / 86400)) days, past $stale_days"
+    continue
+  fi
+  kept+="$changed $build"$'\n'
+done <<<"$builds"
+
+total="$(kib "$root")"
+over_budget=""
+if [ "$total" -gt $((budget_mib * 1024)) ]; then
+  over_budget="build output $(gib "$total") is over its budget of $(gib $((budget_mib * 1024)))"
+  while read -r _ build; do
+    [ -n "$build" ] || continue
+    [ "$(kib "$root")" -gt $((budget_mib * 1024)) ] || break
+    remove "$build" "least recently built while over budget"
+  done < <(sort -n <<<"$kept")
+  total="$(kib "$root")"
+fi
+find "$root" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+
+[ -n "$removed$over_budget" ] || exit 0
+echo "native-build-clean: $(gib "$before") of native build output in $root, budget $(gib $((budget_mib * 1024)))"
+[ -z "$over_budget" ] || echo "native-build-clean: $over_budget"
+printf '%s' "$removed$in_use"
+echo "native-build-clean: $(gib "$total") left"
+if [ "$total" -gt $((budget_mib * 1024)) ]; then
+  echo "native-build-clean: still over the budget of $(gib $((budget_mib * 1024))): every build left is in use or recent; raise ATTN_NATIVE_BUILD_BUDGET_MIB or free a checkout" >&2
+fi

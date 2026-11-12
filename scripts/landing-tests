@@ -12,6 +12,9 @@
 #   vitest <file>             a Vitest file, relative to app/
 #   vitest .                  the whole Vitest suite, in one run
 #   playwright <file>         a Playwright spec, relative to app/
+#   cargo .                   the whole native/ workspace, in one run
+#   cargo <package> --lib     a native/ crate's unit tests; also --doc
+#   cargo <package> --test <name>   a native/ test target; also --bin <name>
 #
 # The list grows from red main. When the sheriff's repair for a red cause lands,
 # the test that caught it joins the group whose paths can break it, if it runs

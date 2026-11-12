@@ -6,6 +6,7 @@ cd "$(git rev-parse --show-toplevel)"
 list=scripts/landing-tests
 groups="$(awk '$1 == "group" { print $2 }' "$list")"
 usage="usage: scripts/landing-tests.sh [--no-go-vet] <group>... | --unit '<unit>'... [--red 'vitest <file>']...; groups: $(paste -sd' ' - <<<"$groups")"
+cargo_unit_shape="'cargo .', 'cargo <package> --lib', 'cargo <package> --doc' or 'cargo <package> --test|--bin <name>'"
 go_vet_options=()
 if [ "${1:-}" = --no-go-vet ]; then
   go_vet_options=(-vet=off)
@@ -25,9 +26,9 @@ if [ "$1" = --unit ]; then
     fi
     [ "$1" = --unit ] && [ "$#" -ge 2 ] || { echo "$usage" >&2; exit 2; }
     read -r -a fields <<<"$2"
-    case "${fields[0]}:${#fields[@]}" in
-      go:3 | vitest:2 | playwright:2) entries+="${fields[*]}"$'\n' ;;
-      *) echo "landing tests: $2 is not a unit; units are 'go <package> <TestName>', 'vitest <file>' or 'playwright <file>'" >&2; exit 2 ;;
+    case "${fields[0]}:${#fields[@]}:${fields[2]-${fields[1]-}}" in
+      go:3:* | vitest:2:* | playwright:2:* | cargo:2:. | cargo:3:--lib | cargo:3:--doc | cargo:4:--test | cargo:4:--bin) entries+="${fields[*]}"$'\n' ;;
+      *) echo "landing tests: $2 is not a unit; units are 'go <package> <TestName>', 'vitest <file>', 'playwright <file>', $cargo_unit_shape" >&2; exit 2 ;;
     esac
     shift 2
   done
@@ -39,13 +40,17 @@ else
   done
   entries="$(awk -v wanted=" $* " '
     $1 == "group" { selected = index(wanted, " " $2 " ") > 0; next }
-    selected && ($1 == "go" || $1 == "vitest" || $1 == "playwright") && !seen[$0]++ { print }
+    selected && ($1 == "go" || $1 == "vitest" || $1 == "playwright" || $1 == "cargo") && !seen[$0]++ { print }
   ' "$list")"
 fi
 
 vitest_suite="vitest ."
 if grep -qxF -- "$vitest_suite" <<<"$entries"; then
   entries="$(awk -v suite="$vitest_suite" '$1 != "vitest" || $0 == suite' <<<"$entries")"
+fi
+cargo_suite="cargo ."
+if grep -qxF -- "$cargo_suite" <<<"$entries"; then
+  entries="$(awk -v suite="$cargo_suite" '$1 != "cargo" || $0 == suite' <<<"$entries")"
 fi
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-landing-tests.XXXXXX")"
@@ -65,13 +70,15 @@ summarize() {
     status=1
   fi
   awk '$1 != "PASS" && $1 != "SKIP"' "$lines" >"$work/unsettled"
-  if [ "$*" = "$vitest_suite" ]; then
+  if [ "$*" = "$vitest_suite" ] || [ "$*" = "$cargo_suite" ]; then
     cat "$work/unsettled" >>"$summary"
-    passed_files="$(awk '$1 == "PASS"' "$lines" | wc -l | tr -d ' ')"
-    if [ "$passed_files" -eq 0 ]; then
-      echo "MISSING $vitest_suite - the run reported no passing file" | tee -a "$summary" >>"$work/unsettled"
+    passed="$(awk '$1 == "PASS"' "$lines" | wc -l | tr -d ' ')"
+    if [ "$passed" -eq 0 ]; then
+      echo "MISSING $* - the run reported nothing that passed" | tee -a "$summary" >>"$work/unsettled"
+    elif [ "$*" = "$vitest_suite" ]; then
+      echo "PASS $vitest_suite: $passed files" >>"$summary"
     else
-      echo "PASS $vitest_suite: $passed_files files" >>"$summary"
+      echo "PASS $cargo_suite: $passed test targets" >>"$summary"
     fi
   else
     cat "$lines" >>"$summary"
@@ -152,6 +159,42 @@ settle_all_go_units() {
   if [ -n "$uncached_go_entries" ]; then settle_go_units go-uncached "$uncached_go_entries"; fi
 }
 
+cargo_entries="$(awk '$1 == "cargo"' <<<"$entries")"
+awk '$1 == "cargo" { print NR, $0 }' <<<"$entries" >"$work/cargo-units"
+run_cargo_units() {
+  local run unit fields args unit_options status
+  while read -r run unit; do
+    read -r -a fields <<<"$unit"
+    args=(--workspace)
+    unit_options=()
+    if [ "$unit" != "$cargo_suite" ]; then
+      args=(-p "${fields[@]:1}")
+      unit_options=(--unit "$unit")
+    fi
+    echo "landing tests: cargo test ${args[*]} (in native/)"
+    status=0
+    (cd native && go tool test-history capture cargo ${unit_options[@]+"${unit_options[@]}"} --receipt-out "$work/cargo-$run.json" -- --no-fail-fast "${args[@]}") >"$work/cargo-$run.log" 2>&1 || status=$?
+    echo "$status" >"$work/cargo-$run.status"
+  done <"$work/cargo-units"
+}
+settle_cargo_units() {
+  local run unit
+  while read -r run unit; do
+    if ! summarize "$work/cargo-$run.json" "$(cat "$work/cargo-$run.status")" "$unit"; then
+      failed=1
+      cat "$work/cargo-$run.log" >&2
+      awk '$1 != "PASS" && $1 != "SKIP" {
+        args = "-p " $3 " " $4
+        if ($4 == "--test" || $4 == "--bin") args = args " " $5
+        print "rerun: (cd native && cargo test " args ")"
+      }' "$work/lines" >>"$work/reruns"
+    fi
+  done <"$work/cargo-units"
+}
+if [ -n "$cargo_entries" ]; then
+  run_cargo_units >"$work/cargo.log" 2>&1 &
+fi
+
 if [ -n "$go_entries" ]; then
   ./scripts/test-go.sh --provide-test-binaries "$work/test-binaries" $(awk '!seen[$2]++ { print $2 }' <<<"$go_entries")
   { read -r ATTN_E2E_BIN; read -r ATTN_FAKEAGENT_BIN; read -r ATTN_TEST_PTY_HOST; } <"$work/test-binaries"
@@ -215,6 +258,12 @@ else
     fi
   done <"$work/app-units"
   if [ "$vitest_failed" -eq 1 ]; then cat "$work/vitest.log" >&2; fi
+fi
+
+if [ -n "$cargo_entries" ]; then
+  wait
+  cat "$work/cargo.log"
+  settle_cargo_units
 fi
 
 echo

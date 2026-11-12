@@ -39,6 +39,13 @@ ATTN_TEST_RESULTS="$here/vitest/interrupted.jsonl" "$vitest" run --no-file-paral
   --reporter=default --reporter="$root/app/scripts/vitest-results-reporter.mjs" >/dev/null 2>&1 &
 interrupt_when "$here/vitest/interrupted.jsonl" 'finishes first' "$!"
 
+cd "$work/cargo" || exit 1
+cargo test --message-format=json --no-fail-fast -p good >"$here/cargo/mixed.log" 2>&1
+cargo test --message-format=json --no-fail-fast -p broken >"$here/cargo/build-failure.log" 2>&1
+FIXTURE_WAIT="$work/never" cargo test --message-format=json --no-fail-fast -p good --test wire --test slow >"$here/cargo/interrupted.log" 2>&1 &
+interrupt_when "$here/cargo/interrupted.log" 'Running tests/slow.rs' "$!"
+sed -i.bak "s#$work#/fixture#g" "$here"/cargo/*.log && rm "$here"/cargo/*.log.bak
+
 for run in playwright:mixed playwright-broken:load-error playwright-slow:interrupted; do
   project="${run%%:*}" name="${run#*:}"
   cd "$work/$project" || exit 1
