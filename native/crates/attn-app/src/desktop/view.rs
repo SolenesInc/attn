@@ -43,6 +43,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         row_state,
         area_bits,
         dragging.clone(),
+        ratio_bits(&desk.ratios),
         *t,
         scale.to_bits(),
     );
@@ -64,6 +65,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     });
     col()
         .key("tiles")
+        .on_drag(super::divider::area_gesture)
         .role("main")
         .label("Tiles")
         .grow(1.0)
@@ -99,6 +101,7 @@ fn screen(
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
+        Some(_) if desk.area.is_none() => col(),
         Some(desktop) => match desk.plan(facts, desktop) {
             None => empty(t, "Empty desktop"),
             Some((tree, plan)) => {
@@ -107,6 +110,8 @@ fn screen(
                 let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
                 let cx = TileCx {
                     desktop,
+                    ratios: &desk.ratios,
+                    dividers: view == super::layout::View::Normal,
                     facts,
                     tree: &tree,
                     dragging,
@@ -119,6 +124,17 @@ fn screen(
             }
         },
     }
+}
+
+fn ratio_bits(
+    ratios: &std::collections::HashMap<String, super::divider::RatioOverride>,
+) -> Vec<(String, u32)> {
+    let mut bits: Vec<(String, u32)> = ratios
+        .iter()
+        .map(|(k, o)| (k.clone(), o.ratio.to_bits()))
+        .collect();
+    bits.sort();
+    bits
 }
 
 fn version<T>(arc: &std::sync::Arc<T>) -> usize {
@@ -135,6 +151,10 @@ fn empty(t: &Tokens, message: &str) -> El {
 
 struct TileCx<'a> {
     desktop: &'a Desktop,
+    /// Splits this window shows at its own ratio, ahead of the daemon.
+    ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
+    /// Dividers drag only in the normal view.
+    dividers: bool,
     facts: &'a attn_client::Facts,
     tree: &'a Node,
     dragging: Option<&'a str>,
@@ -153,17 +173,55 @@ fn node(n: &Node, cx: &TileCx) -> El {
                 Direction::Vertical => row(),
                 Direction::Horizontal => col(),
             };
+            let ratio = cx.ratios.get(&split.id).map_or(split.ratio, |o| o.ratio);
+            let key = format!("split.{}", split.id);
+            let recorded = key.clone();
             parent
-                .key(format!("split.{}", split.id))
+                .key(key)
                 .w_full()
                 .h_full()
                 .min_w(0.0)
                 .min_h(0.0)
-                .gap(GAP)
-                .child(share(node(a, cx), split.ratio))
-                .child(share(node(b, cx), 1.0 - split.ratio))
+                .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+                    let rects = &mut state.window.desk.rects;
+                    if rects.get(&recorded) == Some(&rect) {
+                        tx.live_only();
+                        return;
+                    }
+                    rects.insert(recorded.clone(), rect);
+                })
+                .child(share(node(a, cx), ratio))
+                .child(divider(split.id.clone(), split.direction, cx))
+                .child(share(node(b, cx), 1.0 - ratio))
         }
     }
+}
+
+/// The gap between a split's two sides, which drags the split's ratio, or between screen
+/// columns their widths. The tile area runs the drag, so it outlives the divider moving.
+fn divider(split: String, direction: Direction, cx: &TileCx) -> El {
+    let key = format!("divider.{split}");
+    let bar = match direction {
+        Direction::Vertical => rune::el().w(GAP).h_full(),
+        Direction::Horizontal => rune::el().h(GAP).w_full(),
+    };
+    if !cx.dividers {
+        return bar;
+    }
+    bar.key(key)
+        .role("separator")
+        .cursor(match direction {
+            Direction::Vertical => rune::Cursor::ResizeColumn,
+            Direction::Horizontal => rune::Cursor::ResizeRow,
+        })
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            let dividers = &mut state.window.desk.dividers;
+            if dividers.get(&split) == Some(&(rect, direction)) {
+                tx.live_only();
+                return;
+            }
+            dividers.insert(split.clone(), (rect, direction));
+        })
 }
 
 fn share(child: El, ratio: f32) -> El {

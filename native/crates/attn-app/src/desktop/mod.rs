@@ -2,6 +2,7 @@
 //! and what the window does to it.
 
 mod actions;
+mod divider;
 mod drag;
 pub mod layout;
 mod shelf;
@@ -40,6 +41,14 @@ pub struct Desk {
     /// The shelf cap whose menu is open.
     pub(crate) cap_open: Option<layout::Edge>,
     pub(crate) width_label: Option<shelf::WidthLabel>,
+    /// A column divider being dragged.
+    pub(crate) column_drag: Option<divider::ColumnDrag>,
+    /// A split divider being dragged.
+    pub(crate) ratio_drag: Option<divider::RatioDrag>,
+    /// Where each divider on screen is in the window, and which way it splits, by split id.
+    pub(crate) dividers: HashMap<String, ([f32; 4], layout::Direction)>,
+    /// Split ratios this window shows ahead of the daemon, by split id.
+    pub(crate) ratios: HashMap<String, divider::RatioOverride>,
     /// A tile or shelf column being dragged.
     pub(crate) drag: Option<drag::LeafDrag>,
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
@@ -64,7 +73,7 @@ pub(crate) struct RowState {
     /// Leaves in the order this window last used them, newest first.
     pub focus_order: Vec<String>,
     /// Columns, by first leaf, whose dragged width this window asked the daemon to forget.
-    pub cleared: Vec<String>,
+    pub pending_widths: Vec<(String, u32)>,
     /// A column brought beside the active tile that the daemon has not yet moved.
     pub drop: Option<shelf::PendingDrop>,
     pub settled: Option<shelf::Settled>,
@@ -207,7 +216,7 @@ impl Desk {
             active: &desktop.active_pane_id,
             first_column: row.first_column.as_ref(),
             held: &row.held,
-            cleared: &row.cleared,
+            pending: &row.pending_widths,
             measures,
         });
         Some((tree, plan))

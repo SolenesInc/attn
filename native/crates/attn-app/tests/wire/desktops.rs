@@ -1278,3 +1278,161 @@ fn a_swapped_out_tile_comes_back_when_the_row_changes_without_the_swap() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+fn divider_at(world: &World, split: &str) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .runtime()
+        .presented(&format!("divider.{split}"))
+        .unwrap_or_else(|| panic!("the divider of {split} is drawn"))
+        .0;
+    (x + w / 2.0, y + h / 2.0)
+}
+
+#[test]
+fn dragging_a_column_divider_widens_one_column_at_its_neighbours_cost_and_saves_both_widths() {
+    let mut world = start(vec![four_in_a_row("a")]);
+    assert_eq!(width(&world, "a"), width(&world, "b"));
+
+    let (x, y) = divider_at(&world, "row:a");
+    world.gesture(|app| {
+        app.drag_from((x, y), (x + 50.0, y));
+        app.release((x + 50.0, y));
+    });
+
+    assert_eq!(
+        sent(&world, "desktop_set_wanted_cols"),
+        [
+            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"a","cols":80,"area_cols":149}"#),
+            json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b","cols":69,"area_cols":149}"#),
+        ]
+    );
+    assert!(width(&world, "a") > width(&world, "b") + 90.0);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn escape_puts_a_column_divider_back_and_saves_nothing() {
+    let mut world = start(vec![four_in_a_row("a")]);
+    let before = width(&world, "a");
+
+    let (x, y) = divider_at(&world, "row:a");
+    world.gesture(|app| app.drag_from((x, y), (x + 50.0, y)));
+    assert!(
+        width(&world, "a") > before,
+        "the columns follow the divider"
+    );
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        });
+        app.release((x + 50.0, y));
+    });
+
+    assert!(sent(&world, "desktop_set_wanted_cols").is_empty());
+    assert_eq!(width(&world, "a"), before);
+}
+
+#[test]
+fn a_double_click_on_a_column_divider_forgets_the_dragged_widths_beside_it() {
+    let mut wide = pane("a");
+    wide["wanted_cols"] = 70.into();
+    let mut world = start(vec![desktop(
+        1,
+        "a",
+        Some(row([wide, pane("b"), pane("c")])),
+    )]);
+
+    let at = divider_at(&world, "row:a");
+    world.gesture(|app| {
+        app.click_at(at);
+        app.click_at(at);
+    });
+
+    assert_eq!(
+        sent(&world, "desktop_set_wanted_cols"),
+        [json(
+            r#"{"desktop_id":"work/desktop_1","leaf_id":"a","cols":0,"area_cols":0}"#
+        )]
+    );
+    assert_eq!(width(&world, "a"), width(&world, "b"));
+}
+
+#[test]
+fn dragging_a_stacks_divider_sets_its_split_ratio_once_let_go() {
+    let tree = row([below(pane("a"), pane("c")), pane("b")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    let height = |world: &World, leaf: &str| {
+        world
+            .runtime()
+            .presented(&format!("tile.{leaf}"))
+            .unwrap()
+            .0[3]
+    };
+    assert_eq!(height(&world, "a"), height(&world, "c"));
+
+    let (x, y) = divider_at(&world, "horizontal:a");
+    world.gesture(|app| app.drag_from((x, y), (x, y + 100.0)));
+    assert!(
+        sent(&world, "desktop_set_split_ratio").is_empty(),
+        "nothing goes out while it moves"
+    );
+    assert!(height(&world, "a") > height(&world, "c"));
+    world.gesture(|app| app.release((x, y + 100.0)));
+
+    let ratios = sent(&world, "desktop_set_split_ratio");
+    assert_eq!(ratios.len(), 1);
+    assert_eq!(ratios[0]["split_id"], "horizontal:a");
+    let ratio = ratios[0]["ratio"].as_f64().unwrap();
+    assert!(ratio > 0.55 && ratio < 0.65, "{ratio}");
+    assert!(
+        height(&world, "a") > height(&world, "c"),
+        "the stack keeps the dragged ratio until the daemon has it"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_column_drag_that_shelves_the_first_column_follows_the_pointer_back_and_saves_on_release() {
+    let three = || desktop(1, "c", Some(row(["a", "b", "c"].map(pane))));
+    let mut world = World::start_sized(daemon(vec![three()]), THREE_FIT);
+    world.open_desktop();
+    assert_eq!(shown(&world), ["a", "b", "c"]);
+    let (x, y) = divider_at(&world, "row:b");
+
+    world.gesture(|app| app.drag_from((x, y), (x - 250.0, y)));
+    assert_eq!(shown(&world), ["b", "c"], "a leaves for the shelf");
+    world.gesture(|app| {
+        app.move_to((x, y));
+        app.release((x, y));
+    });
+    assert_eq!(shown(&world), ["a", "b", "c"], "dragged back, a returns");
+    assert!(sent(&world, "desktop_set_wanted_cols").is_empty());
+
+    world.gesture(|app| {
+        app.drag_from((x, y), (x - 250.0, y));
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        });
+        app.release((x - 250.0, y));
+    });
+    assert_eq!(shown(&world), ["a", "b", "c"], "Escape puts a back");
+    assert!(sent(&world, "desktop_set_wanted_cols").is_empty());
+
+    world.gesture(|app| {
+        app.drag_from((x, y), (x - 250.0, y));
+        app.release((x - 250.0, y));
+    });
+    let saved = sent(&world, "desktop_set_wanted_cols");
+    let leaves: Vec<&str> = saved
+        .iter()
+        .map(|w| w["leaf_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(leaves, ["b", "c"]);
+    assert_eq!(shown(&world), ["b", "c"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

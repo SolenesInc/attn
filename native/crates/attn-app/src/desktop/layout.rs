@@ -160,6 +160,15 @@ impl Node {
         }
     }
 
+    /// The share `split` gives its first side, when the tree holds that split.
+    pub fn split_ratio(&self, split: &str) -> Option<f32> {
+        match self {
+            Node::Leaf(_) => None,
+            Node::Split(s) if s.id == split => Some(s.ratio),
+            Node::Split(s) => s.children.iter().find_map(|c| c.split_ratio(split)),
+        }
+    }
+
     /// Each leaf's rectangle as fractions of the tree's.
     pub fn bounds(&self) -> Vec<(&str, Rect)> {
         let mut out = Vec::new();
@@ -500,27 +509,28 @@ pub struct RowInput<'a> {
     pub first_column: Option<&'a FirstColumn>,
     /// Leaves sent to the shelf while they would fit, kept off screen.
     pub held: &'a [String],
-    /// Columns, by first leaf, laid out as if a divider drag had never widened them.
-    pub cleared: &'a [String],
+    /// Widths this window asked for that the daemon's row may not show yet, by each column's
+    /// first leaf, in terminal columns; 0 forgets a column's width.
+    pub pending: &'a [(String, u32)],
     pub measures: Measures,
 }
 
 impl RowInput<'_> {
-    /// The row as the screen places it: held leaves left out and cleared widths forgotten.
+    /// The row as the screen places it: held leaves left out and pending widths applied.
     fn shown(&self) -> Vec<Column> {
         shown_row(
-            without_widths(read_row(self.tree), self.cleared),
+            with_widths(read_row(self.tree), self.pending),
             self.held,
             self.active,
         )
     }
 }
 
-/// `row` with the dragged widths of the columns whose first leaf is in `cleared` forgotten.
-pub fn without_widths(mut row: Vec<Column>, cleared: &[String]) -> Vec<Column> {
+/// `row` with the widths in `pending` in place of the ones its columns carry.
+pub fn with_widths(mut row: Vec<Column>, pending: &[(String, u32)]) -> Vec<Column> {
     for column in &mut row {
-        if cleared.iter().any(|id| id == column.first()) {
-            column.wanted_cols = None;
+        if let Some((_, cols)) = pending.iter().rev().find(|(id, _)| id == column.first()) {
+            column.wanted_cols = (*cols > 0).then_some(*cols);
             column.wanted_area_cols = None;
         }
     }
@@ -601,7 +611,7 @@ fn widths(screen: &[Column], m: &Measures) -> Vec<f32> {
 
 /// Which run of an empty-free tree's row shows. The tree has at least one leaf.
 pub fn resolve_row(input: &RowInput) -> RowPlan {
-    let row = without_widths(read_row(input.tree), input.cleared);
+    let row = with_widths(read_row(input.tree), input.pending);
     let shown = shown_row(row.clone(), input.held, input.active);
     let (start, end, _) = place_screen(&shown, input.active, input.first_column, &input.measures);
     let screen = shown[start..end].to_vec();
@@ -635,8 +645,9 @@ impl RowPlan {
         let mut span = self.widths[n - 1];
         for i in (0..n - 1).rev() {
             span += self.widths[i];
-            let ratio = if span > 0.0 {
-                self.widths[i] / span
+            let share = self.widths[i] / span;
+            let ratio = if share.is_finite() {
+                share
             } else {
                 1.0 / (n - i) as f32
             };
@@ -811,7 +822,7 @@ pub fn reveal_drop(
     drop: &ShelfDrop,
     current_start: usize,
 ) -> Option<(FirstColumn, Vec<String>)> {
-    let row = without_widths(read_row(input.tree), input.cleared);
+    let row = with_widths(read_row(input.tree), input.pending);
     let widened: Vec<String> = [&drop.anchor, &drop.leaf]
         .into_iter()
         .filter_map(|leaf| row.get(column_index(&row, leaf)?))
@@ -824,15 +835,15 @@ pub fn reveal_drop(
         attempts.push(widened.clone());
     }
     attempts.into_iter().find_map(|clear| {
-        let cleared: Vec<String> = input
-            .cleared
+        let pending: Vec<(String, u32)> = input
+            .pending
             .iter()
             .cloned()
-            .chain(clear.iter().cloned())
+            .chain(clear.iter().map(|leaf| (leaf.clone(), 0)))
             .collect();
         let first = reveal_first_column(
             &RowInput {
-                cleared: &cleared,
+                pending: &pending,
                 ..*input
             },
             &drop.anchor,
@@ -907,13 +918,13 @@ pub fn step_narrowest_cols(
     }
     let m = &input.measures;
     if !fewer {
-        let row = without_widths(read_row(input.tree), input.cleared);
-        let all: Vec<String> = row.iter().map(|c| c.first().to_owned()).collect();
+        let row = with_widths(read_row(input.tree), input.pending);
+        let all: Vec<(String, u32)> = row.iter().map(|c| (c.first().to_owned(), 0)).collect();
         let screen_without = |cols: u32| {
             let measures = Measures::new(m.area_px, cols, m.px_per_col);
             resolve_row(&RowInput {
                 measures,
-                cleared: &all,
+                pending: &all,
                 ..*input
             })
             .screen
@@ -974,6 +985,137 @@ pub fn step_narrowest_cols(
     ))
 }
 
+/// A column's divider as a drag starts: the columns on screen, their widths in points, and
+/// where the screen starts.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColumnDragStart {
+    pub screen: Vec<Column>,
+    pub widths: Vec<f32>,
+    pub first_column: FirstColumn,
+}
+
+/// What dragging a column divider asks for: each staying column's width in terminal columns
+/// by its first leaf, where the screen starts, and whether the drag ran out of room.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColumnDrag {
+    pub wanted: Vec<(String, u32)>,
+    pub first_column: FirstColumn,
+    pub stopped: bool,
+}
+
+/// How far a column's width can move before the drag counts it as changed.
+const COLUMN_UNCHANGED_PX: f32 = 0.25;
+
+/// Drags the divider right of screen column `divider` by `distance` points: the column on the
+/// side it moves away from grows, taking room from the columns on the other side, nearest
+/// first, down to the narrowest width. A far column with no room left goes to the shelf and
+/// its room to the next one, except the active tile's column, where the drag stops.
+pub fn apply_column_drag(
+    start: &ColumnDragStart,
+    divider: usize,
+    distance: f32,
+    active: &str,
+    m: &Measures,
+) -> ColumnDrag {
+    let mut widths = start.widths.clone();
+    let grows_left = distance > 0.0;
+    let grower = if grows_left { divider } else { divider + 1 };
+    let left: Vec<usize> = (0..=divider).rev().collect();
+    let right: Vec<usize> = (divider + 1..start.screen.len()).collect();
+    let mut givers = if grows_left {
+        right.clone()
+    } else {
+        left.clone()
+    };
+    let mut amount = distance.abs();
+    let mut stopped = false;
+    let mut left_count = 0;
+    loop {
+        let spare: f32 = givers
+            .iter()
+            .map(|i| (widths[*i] - m.narrowest_px).max(0.0))
+            .sum();
+        if amount <= spare {
+            break;
+        }
+        let far = givers[givers.len() - 1];
+        if start.screen[far].holds(active) {
+            amount = spare;
+            stopped = true;
+            break;
+        }
+        let far_width = widths[far];
+        givers.pop();
+        left_count += 1;
+        if givers.is_empty() {
+            amount = far_width;
+            stopped = true;
+            break;
+        }
+        widths[givers[0]] += far_width;
+    }
+    let mut owed = amount;
+    for i in &givers {
+        let taken = owed.min((widths[*i] - m.narrowest_px).max(0.0));
+        widths[*i] -= taken;
+        owed -= taken;
+    }
+    widths[grower] += amount;
+    let stays = |i: usize| {
+        i == grower
+            || givers.contains(&i)
+            || if grows_left {
+                left.contains(&i)
+            } else {
+                right.contains(&i)
+            }
+    };
+    let moved = |i: usize| (widths[i] - start.widths[i]).abs() > COLUMN_UNCHANGED_PX;
+    let other_width = |c: &Column, i: usize| {
+        m.wanted_px(c).is_some() && (start.widths[i] - m.need_px(c)).abs() > COLUMN_UNCHANGED_PX
+    };
+    let mut wanted = Vec::new();
+    if (0..start.screen.len()).any(moved) {
+        let mut saved = 0.0;
+        for (i, column) in start.screen.iter().enumerate() {
+            if stays(i) && (moved(i) || other_width(column, i)) {
+                let before = (saved / m.px_per_col).floor();
+                saved += widths[i];
+                wanted.push((
+                    column.first().to_owned(),
+                    ((saved / m.px_per_col).floor() - before) as u32,
+                ));
+            }
+        }
+    }
+    let first_column = if grows_left || left_count == 0 {
+        start.first_column.clone()
+    } else {
+        FirstColumn {
+            leaf: start.screen[left_count].first().to_owned(),
+            index: start.first_column.index + left_count,
+        }
+    };
+    ColumnDrag {
+        wanted,
+        first_column,
+        stopped,
+    }
+}
+
+/// How far a divider can move a split `span_px` long, as the share of its first child: far
+/// enough to keep each side at the minimum tile width or height.
+pub fn ratio_bounds(direction: Direction, span_px: f32) -> (f32, f32) {
+    if span_px <= 0.0 {
+        return (0.1, 0.9);
+    }
+    let least = match direction {
+        Direction::Vertical => TILE_MIN_WIDTH,
+        Direction::Horizontal => TILE_MIN_HEIGHT,
+    } / span_px;
+    (least.min(0.5), (1.0 - least).max(0.5))
+}
+
 /// The message when a column cannot take one more stacked tile at the minimum height, or
 /// None when it can.
 pub fn stack_limit_message(tree: &Node, anchor: &str, tile_height_px: f32) -> Option<String> {
@@ -1029,7 +1171,7 @@ mod tests {
             active,
             first_column: first,
             held: &[],
-            cleared: &[],
+            pending: &[],
             measures: Measures {
                 area_px: 1500.0,
                 narrowest_px: 500.0,
@@ -1074,6 +1216,140 @@ mod tests {
         assert_eq!(row[0].wanted_cols, Some(80));
         assert_eq!(Node::parse(""), None);
         assert_eq!(Node::parse("{\"type\":\"tile\",\"tile_id\":\"x\"}"), None);
+    }
+
+    #[test]
+    fn a_column_drag_takes_room_nearest_first_and_shelves_far_columns_but_never_the_active_one() {
+        let m = Measures {
+            area_px: 1800.0,
+            narrowest_px: 500.0,
+            px_per_col: PX_PER_COL,
+        };
+        type Case<'a> = (
+            &'a str,
+            &'a [&'a str],
+            &'a str,
+            usize,
+            f32,
+            &'a [(&'a str, u32)],
+            &'a str,
+            bool,
+        );
+        let cases: [Case; 9] = [
+            (
+                "right drag",
+                &["a", "b", "c"],
+                "a",
+                0,
+                50.0,
+                &[("a", 65), ("b", 55)],
+                "a",
+                false,
+            ),
+            (
+                "left drag",
+                &["a", "b", "c"],
+                "a",
+                1,
+                -50.0,
+                &[("b", 55), ("c", 65)],
+                "a",
+                false,
+            ),
+            (
+                "next neighbour",
+                &["a", "b", "c"],
+                "a",
+                0,
+                150.0,
+                &[("a", 75), ("b", 50), ("c", 55)],
+                "a",
+                false,
+            ),
+            (
+                "far column leaves",
+                &["a", "b", "c"],
+                "a",
+                0,
+                250.0,
+                &[("a", 85), ("b", 95)],
+                "a",
+                false,
+            ),
+            (
+                "stops before the active column",
+                &["a", "b", "c"],
+                "c",
+                0,
+                1000.0,
+                &[("a", 80), ("b", 50), ("c", 50)],
+                "a",
+                true,
+            ),
+            (
+                "active neighbour",
+                &["a", "b", "c"],
+                "b",
+                0,
+                1000.0,
+                &[("a", 130), ("b", 50)],
+                "a",
+                true,
+            ),
+            (
+                "nothing left",
+                &["a", "b"],
+                "a",
+                0,
+                5000.0,
+                &[("a", 180)],
+                "a",
+                true,
+            ),
+            (
+                "left drag shelves the first",
+                &["a", "b", "c"],
+                "c",
+                1,
+                -250.0,
+                &[("b", 95), ("c", 85)],
+                "b",
+                false,
+            ),
+            (
+                "never the active on the left",
+                &["a", "b", "c"],
+                "a",
+                1,
+                -1000.0,
+                &[("a", 50), ("b", 50), ("c", 80)],
+                "a",
+                true,
+            ),
+        ];
+        for (name, ids, active, divider, distance, wanted, first, stopped) in cases {
+            let tree = chain(ids);
+            let plan = resolve_row(&RowInput {
+                tree: &tree,
+                active,
+                first_column: None,
+                held: &[],
+                pending: &[],
+                measures: m,
+            });
+            let start = ColumnDragStart {
+                screen: plan.screen,
+                widths: plan.widths,
+                first_column: plan.first_column,
+            };
+            let drag = apply_column_drag(&start, divider, distance, active, &m);
+            let mut got: Vec<(&str, u32)> =
+                drag.wanted.iter().map(|(l, c)| (l.as_str(), *c)).collect();
+            got.sort();
+            assert_eq!(got, wanted, "{name}");
+            assert_eq!(drag.first_column.leaf, first, "{name}");
+            assert_eq!(drag.stopped, stopped, "{name}");
+        }
     }
 
     #[test]

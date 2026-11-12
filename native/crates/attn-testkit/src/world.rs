@@ -94,14 +94,25 @@ impl Driver<'_> {
             .runtime
             .find(&key)
             .unwrap_or_else(|| panic!("{key} is not laid out:\n{screen}"));
-        self.runtime.pointer_down(x, y);
-        self.runtime.pointer_up(x, y);
+        self.click_at((x, y));
+    }
+
+    /// Presses and lets go at `at` in window points.
+    pub fn click_at(&mut self, at: (f32, f32)) {
+        self.runtime.pointer_down(at.0, at.1);
+        self.runtime.pointer_up(at.0, at.1);
     }
 
     /// Presses the element `target` names, drags to `to` in window points, and lets go there.
     pub fn drag(&mut self, target: Target, to: (f32, f32)) {
         self.drag_over(target, to);
         self.release(to);
+    }
+
+    /// Moves the held pointer to `at` in window points.
+    pub fn move_to(&mut self, at: (f32, f32)) {
+        self.runtime.pointer_move(at.0, at.1);
+        self.runtime.frame(0.0);
     }
 
     /// Lets go of the pointer at `at`.
@@ -120,6 +131,12 @@ impl Driver<'_> {
             .runtime
             .find(&key)
             .unwrap_or_else(|| panic!("{key} is not laid out:\n{screen}"));
+        self.drag_from((x, y), to);
+    }
+
+    /// Presses at `from` and drags to `to`, both in window points, still held.
+    pub fn drag_from(&mut self, from: (f32, f32), to: (f32, f32)) {
+        let (x, y) = from;
         self.runtime.pointer_down(x, y);
         self.runtime.frame(0.0);
         let steps = 4;

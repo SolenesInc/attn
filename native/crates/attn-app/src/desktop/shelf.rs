@@ -620,7 +620,7 @@ fn move_leaf(
     );
 }
 
-fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
+pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
     for leaf in leaves {
         let _ = state.daemon.send(&DesktopSetWantedColsMessage {
             request_id: request_id(),
@@ -632,7 +632,8 @@ fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
         });
     }
     let row = state.window.desk.row_mut(desktop);
-    row.cleared.extend(leaves.iter().cloned());
+    row.pending_widths
+        .extend(leaves.iter().map(|leaf| (leaf.clone(), 0)));
 }
 
 /// Brings `leaf`'s column beside the active tile, or jumps to it where it is when it is on
@@ -826,6 +827,7 @@ pub(crate) fn settle(state: &mut State) {
         settle_desktop(state, &id);
     }
     super::drag::settle_drag(state);
+    super::divider::settle_ratios(state);
 }
 
 fn settle_desktop(state: &mut State, id: &str) {
@@ -843,14 +845,15 @@ fn settle_desktop(state: &mut State, id: &str) {
         return;
     };
     let row = layout::read_row(&tree);
-    let widened = |leaf: &String| {
+    let awaited = |(leaf, cols): &(String, u32)| {
         row.iter()
-            .any(|c| c.first() == leaf && c.wanted_cols.is_some())
+            .any(|c| c.first() == leaf && c.wanted_cols.unwrap_or(0) != *cols)
     };
-    let cleared: Vec<String> = row_state
-        .cleared
+    let mid_drag = desk.column_drag.as_ref().is_some_and(|d| d.desktop == *id);
+    let pending: Vec<(String, u32)> = row_state
+        .pending_widths
         .iter()
-        .filter(|l| widened(l))
+        .filter(|w| mid_drag || awaited(w))
         .cloned()
         .collect();
     let plan = layout::resolve_row(&input);
@@ -872,7 +875,7 @@ fn settle_desktop(state: &mut State, id: &str) {
     let moved = row_state.settled.as_ref() != Some(&settled);
     let row_mut = state.window.desk.row_mut(id);
     super::drag::settle_swap(row_mut, &row, &desktop_tree);
-    row_mut.cleared = cleared;
+    row_mut.pending_widths = pending;
     row_mut.drop = waiting;
     row_mut.settled = Some(settled);
     match reveal {
@@ -933,7 +936,7 @@ impl Desk {
             active: &desktop.active_pane_id,
             first_column: row.first_column.as_ref(),
             held: &row.held,
-            cleared: &row.cleared,
+            pending: &row.pending_widths,
             measures: self.measures(facts)?,
         })
     }
