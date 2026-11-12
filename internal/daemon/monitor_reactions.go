@@ -87,6 +87,7 @@ func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {
 
 func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view sessionmonitor.View) {
 	host := d.sessionHost(session)
+	var sentWhileBridged []string
 	for path, report := range view.SentFiles.Entries {
 		if previous.SentFiles.Entries[path].Same(report) {
 			continue
@@ -94,7 +95,7 @@ func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view ses
 		if report.AwayFromHome {
 			d.store.CatchUpFileActivity(d.sentFileActivity(session, host, path, report.At))
 		} else {
-			d.receiveSentFile(session, path, report.At)
+			sentWhileBridged = append(sentWhileBridged, path)
 		}
 	}
 	for path, report := range view.EditedFiles.Entries {
@@ -107,5 +108,8 @@ func (d *Daemon) reactFileReports(session protocol.SessionID, previous, view ses
 		} else {
 			d.store.RecordFileActivity(activity)
 		}
+	}
+	for _, path := range sentWhileBridged {
+		d.receiveSentFile(session, path, view.SentFiles.Entries[path].At)
 	}
 }
