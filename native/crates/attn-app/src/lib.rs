@@ -2,6 +2,7 @@ mod action;
 pub mod automation;
 mod connection;
 pub mod daemon;
+mod deep_link;
 pub mod desktop;
 mod dispatch;
 mod frame;
@@ -30,6 +31,7 @@ use attn_client::{
 use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
+pub use deep_link::open_link;
 pub use dispatch::dispatch;
 pub use keymap::{Binding, Keymap};
 pub use requests::ReplyInbox;
@@ -122,6 +124,7 @@ pub fn bind(
             state.window.follow(&state.facts);
             desktop::settle(state);
             let _ = picker::follow(state, tx);
+            deep_link::settle(state, tx);
             state.tick(tx);
             sidebar::snooze::follow(state);
             sidebar::advance(state, tx);
@@ -199,6 +202,7 @@ pub fn app() -> rune::App<State> {
     })
     .titlebar(Titlebar::new(shell::TITLE_BAR_HEIGHT))
     .on_ime(keys::on_ime)
+    .on_open_url(open_link)
 }
 
 fn quit(state: &mut State, tx: &mut Tx) {

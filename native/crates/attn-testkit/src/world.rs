@@ -53,6 +53,12 @@ impl Driver<'_> {
         self.runtime.update(f);
     }
 
+    /// Opens a link with the app, as the system hands one to `App::on_open_url`.
+    pub fn open_link(&mut self, url: &str) {
+        self.runtime
+            .update(|state, tx| attn_app::open_link(state, url, tx));
+    }
+
     /// Presses a key, as the window hears it from the keyboard.
     pub fn key(&mut self, ev: KeyEvent) {
         self.runtime.key(ev);

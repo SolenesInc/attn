@@ -54,6 +54,7 @@ app_name="$("$attn" instance resolve --instance "$instance" --field appName)"
 bundle_id="$("$attn" instance resolve --instance "$instance" --field bundleId)"
 ws_port="$("$attn" instance claim-port --instance "$instance")"
 label="$("$attn" instance resolve --instance "$instance" --field label)"
+deep_link_scheme="$("$attn" instance resolve --instance "$instance" --field deepLinkScheme)"
 
 if [ -n "$harness_default" ] && [ -z "$instance" ]; then
   echo "ATTN_BUILD_DEFAULT_INSTANCE_HARNESS requires a named packaging instance" >&2
@@ -141,6 +142,13 @@ if [ "$app_shell" = native ]; then
   <key>CFBundleVersion</key><string>${VERSION}</string>
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key><string>${bundle_id}</string>
+      <key>CFBundleURLSchemes</key><array><string>${deep_link_scheme}</string></array>
+    </dict>
+  </array>
   <key>NSMicrophoneUsageDescription</key><string>Microphone access lets hosted coding agents receive voice input.</string>
 </dict>
 </plist>

@@ -43,6 +43,8 @@ pub struct Window {
     pub follow_next_turn: bool,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) launching: crate::picker::Launching,
+    /// Links opened before the current desktop arrived, in the order they came.
+    pub(crate) links: Vec<crate::deep_link::Link>,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.

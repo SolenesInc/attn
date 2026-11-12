@@ -373,6 +373,7 @@ dependencies = [
  "attn-ui",
  "base64",
  "libc",
+ "percent-encoding",
  "rune",
  "rune-kit",
  "rune-mac",

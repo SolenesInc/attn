@@ -12,6 +12,7 @@ attn-term = { path = "../attn-term" }
 attn-ui = { path = "../attn-ui" }
 base64 = "0.22"
 libc = "0.2"
+percent-encoding = "2.3"
 rune.workspace = true
 rune-kit.workspace = true
 rune-mac.workspace = true
