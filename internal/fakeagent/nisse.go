@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/nisse"
 )
@@ -47,7 +48,7 @@ func runNisse(cfg config) int {
 
 type nisseTUI struct {
 	args         parsedArgs
-	client       *nisse.Client
+	client       *effectrpc.Client
 	conversation string
 }
 

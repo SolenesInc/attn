@@ -348,8 +348,8 @@ func (h monitorHost) Link(monitor *sessionmonitor.Monitor, voice harness.Voice) 
 	if target.Kind == codexLinkKind {
 		return codexMonitorLink{shared: h.daemon.codexShared(), monitor: monitor, target: target}
 	}
-	if target.Kind == nisseLinkKind {
-		return nisseSessionLink{link: h.daemon.nisse(), session: target.Session}
+	if l, ok := h.daemon.linkNamed(target.Kind).(*serverLink); ok {
+		return serverSessionLink{link: l, session: target.Session}
 	}
 	targetSession, _ := monitor.TitleTarget()
 	if driver, ok := h.daemon.ensurePluginRegistry().driver(targetSession.Agent); ok && driver.Capabilities["message_delivery"] && target.Driver.Plugin == driver.PluginName && target.Driver.Run != "" {

@@ -1,24 +1,19 @@
-package nisse
+package effectrpc
 
 import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 )
 
-const Protocol = 7
-
 const ackMethod = "@effect/rpc/Ack"
 
-func Socket(home string) string { return filepath.Join(home, "nisse.sock") }
-
 type Error struct {
+	Server  string
 	Method  string
 	Tag     string
 	Message string
@@ -26,12 +21,10 @@ type Error struct {
 
 func (e *Error) Error() string {
 	if e.Tag != "" {
-		return fmt.Sprintf("nisse %s: %s", e.Method, e.Tag)
+		return fmt.Sprintf("%s %s: %s", e.Server, e.Method, e.Tag)
 	}
-	return fmt.Sprintf("nisse %s: %s", e.Method, e.Message)
+	return fmt.Sprintf("%s %s: %s", e.Server, e.Method, e.Message)
 }
-
-var ErrClosed = errors.New("the connection to nisse closed")
 
 type message struct {
 	ID     *uint64         `json:"id,omitempty"`
@@ -61,39 +54,24 @@ type pending struct {
 }
 
 type Client struct {
+	server  string
 	conn    net.Conn
 	writeMu sync.Mutex
 	mu      sync.Mutex
 	pending map[uint64]*pending
 	next    atomic.Uint64
 	done    chan struct{}
-	version string
 }
 
-func Connect(ctx context.Context, socket, client, version string) (*Client, error) {
+func Dial(ctx context.Context, socket, server string) (*Client, error) {
 	conn, err := (&net.Dialer{}).DialContext(ctx, "unix", socket)
 	if err != nil {
 		return nil, err
 	}
-	c := &Client{conn: conn, pending: make(map[uint64]*pending), done: make(chan struct{})}
+	c := &Client{server: server, conn: conn, pending: make(map[uint64]*pending), done: make(chan struct{})}
 	go c.read()
-	var hello struct {
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}
-	if err := c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": Protocol}, &hello); err != nil {
-		c.Close()
-		return nil, err
-	}
-	if hello.Protocol < Protocol {
-		c.Close()
-		return nil, fmt.Errorf("nisse %s speaks protocol %d; attn needs %d or later", hello.Version, hello.Protocol, Protocol)
-	}
-	c.version = hello.Version
 	return c, nil
 }
-
-func (c *Client) Version() string { return c.version }
 
 func (c *Client) Done() <-chan struct{} { return c.done }
 
@@ -129,7 +107,7 @@ func (c *Client) send(ctx context.Context, method string, params any, items func
 	select {
 	case m := <-p.done:
 		if m.Error != nil {
-			failure := &Error{Method: method, Message: m.Error.Message}
+			failure := &Error{Server: c.server, Method: method, Message: m.Error.Message}
 			if len(m.Error.Data) > 0 {
 				failure.Tag = m.Error.Data[0].Error.Tag
 			}
@@ -137,7 +115,7 @@ func (c *Client) send(ctx context.Context, method string, params any, items func
 		}
 		return m.Result, nil
 	case <-c.done:
-		return nil, ErrClosed
+		return nil, fmt.Errorf("the connection to %s closed", c.server)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

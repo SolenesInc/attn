@@ -215,7 +215,7 @@ type Daemon struct {
 	codexSharedOnce          sync.Once
 	codexSharedState         *codexShared
 	nisseOnce                sync.Once
-	nisseState               *nisseLink
+	nisseState               *serverLink
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState
