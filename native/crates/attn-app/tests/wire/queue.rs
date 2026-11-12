@@ -860,7 +860,9 @@ fn the_cancel_countdown_key_stops_the_countdowns_on_screen_or_keeps_the_next_tur
         "nothing is on screen at home"
     );
 
+    changes(&mut world, turn("a", 5));
     world.open_desktop();
+    changes(&mut world, settling("a", 1));
     world.gesture(|app| app.key(chord(Action::SessionCancelCountdown)));
     assert_eq!(sent_ids(&world, "cancel_countdown"), ["a"]);
 
@@ -1056,4 +1058,60 @@ fn the_actions_menu_closes_when_its_agent_goes_away() {
     world.settle();
 
     assert!(world.screen().find(Target::role("menu")).is_none());
+}
+
+#[test]
+fn an_agents_header_shows_its_turn_settling_and_pressing_it_keeps_the_turn_or_undoes_keeping() {
+    let mut world = World::start(Daemon::scripted().state(one_desktop(vec![turn("a", 5)])));
+    world.open_desktop();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.p0.settling"))
+            .is_none()
+    );
+
+    changes(&mut world, settling("a", 1));
+    assert_eq!(name(&world, "tile.p0.settling"), "Keep this turn");
+    assert!(
+        !world.runtime_is_at_rest(),
+        "the track drains to the deadline"
+    );
+    world.gesture(|app| app.click(Target::key("tile.p0.settling")));
+    assert_eq!(sent_ids(&world, "cancel_countdown"), ["a"]);
+
+    changes(
+        &mut world,
+        Session {
+            auto_settle_held: Some(true),
+            ..turn("a", 5)
+        },
+    );
+    assert_eq!(name(&world, "tile.p0.settling"), "Keep this turn");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest(), "a held countdown stands still");
+
+    changes(
+        &mut world,
+        Session {
+            auto_settle_dismiss_armed: Some(true),
+            ..turn("a", 5)
+        },
+    );
+    assert_eq!(
+        name(&world, "tile.p0.settling"),
+        "Turn kept; undo to let it auto-settle again"
+    );
+    world.gesture(|app| app.click(Target::key("tile.p0.settling")));
+    assert_eq!(sent_ids(&world, "cancel_countdown"), ["a", "a"]);
+
+    changes(&mut world, turn("a", 5));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.p0.settling"))
+            .is_none()
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
 }

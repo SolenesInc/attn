@@ -197,7 +197,8 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if aged {
         state.tick(tx);
     }
-    let drains = sidebar::follow_countdowns(state, state.wall_ms(tx));
+    let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
+        | desktop::follow_settling(state, state.wall_ms(tx));
     shell::expire(state, now, tx) || aged || answered || browsed || launched || drains
 }
 

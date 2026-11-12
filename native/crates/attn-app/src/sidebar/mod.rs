@@ -443,8 +443,23 @@ pub(crate) fn actions_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El 
 
 /// One auto-settle countdown's drain: full when first seen, empty at its deadline.
 pub(crate) struct Countdown {
-    fires_at: String,
-    drain: rune::Tween<[f32; 2]>,
+    pub(crate) fires_at: String,
+    pub(crate) drain: rune::Tween<[f32; 2]>,
+}
+
+impl Countdown {
+    /// The drain of a countdown that fires at `fires_at`, first seen at `now_ms`.
+    pub(crate) fn seen(fires_at: String, now_ms: i64) -> Countdown {
+        let left_ms = queue::epoch_ms(&fires_at).map_or(0, |at| (at - now_ms).max(0));
+        Countdown {
+            drain: rune::Tween::linear(
+                [0.0, 1.0],
+                [1.0, 1.0],
+                std::time::Duration::from_millis(left_ms as u64),
+            ),
+            fires_at,
+        }
+    }
 }
 
 /// Keeps a drain for each countdown whose agent is off screen, started from the time left
@@ -476,15 +491,7 @@ pub(crate) fn follow_countdowns(state: &mut State, now_ms: i64) -> bool {
     for (id, fires_at) in off_screen {
         countdowns.entry(id).or_insert_with(|| {
             changed = true;
-            let left_ms = queue::epoch_ms(&fires_at).map_or(0, |at| (at - now_ms).max(0));
-            Countdown {
-                drain: rune::Tween::linear(
-                    [0.0, 1.0],
-                    [1.0, 1.0],
-                    std::time::Duration::from_millis(left_ms as u64),
-                ),
-                fires_at,
-            }
+            Countdown::seen(fires_at, now_ms)
         });
     }
     changed

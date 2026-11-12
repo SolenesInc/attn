@@ -61,6 +61,8 @@ pub struct Desk {
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
+    /// The drain under each tile header whose agent's turn counts down to settling, by session.
+    pub(crate) settling: HashMap<String, crate::sidebar::Countdown>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -247,6 +249,40 @@ impl Desk {
         });
         Some((tree, plan))
     }
+}
+
+/// Keeps a drain for each agent on screen whose turn counts down to settling. True when one
+/// began or ended.
+pub(crate) fn follow_settling(state: &mut State, now_ms: i64) -> bool {
+    let settling = &state.window.desk.settling;
+    let any = state.facts.sessions.iter().any(|s| {
+        s.auto_settle_fires_at
+            .as_ref()
+            .is_some_and(|at| !at.is_empty())
+    });
+    if settling.is_empty() && !any {
+        return false;
+    }
+    let on_screen = on_screen_sessions(state);
+    let counting: Vec<(String, String)> = state
+        .facts
+        .sessions
+        .iter()
+        .filter(|s| on_screen.contains(&s.id))
+        .filter_map(|s| Some((s.id.clone(), s.auto_settle_fires_at.clone()?)))
+        .filter(|(_, at)| !at.is_empty())
+        .collect();
+    let settling = &mut state.window.desk.settling;
+    let before = settling.len();
+    settling.retain(|id, c| counting.iter().any(|(i, at)| i == id && *at == c.fires_at));
+    let mut changed = settling.len() != before;
+    for (id, fires_at) in counting {
+        settling.entry(id).or_insert_with(|| {
+            changed = true;
+            crate::sidebar::Countdown::seen(fires_at, now_ms)
+        });
+    }
+    changed
 }
 
 pub(crate) fn leaf_ids(desktop: &Desktop) -> Vec<String> {

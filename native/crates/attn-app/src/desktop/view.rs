@@ -11,6 +11,30 @@ use crate::shell::Holder;
 use crate::terminal::{Release, Terminals, accelerator};
 
 const GAP: f32 = 6.0;
+const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
+const SETTLING_TRACK_PX: f32 = 2.0;
+
+/// What an agent's header says about its turn settling on its own.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum Settle {
+    /// Settles when its countdown runs out, the deadline named.
+    Counting(String),
+    /// The countdown stands still until the host comes back.
+    Held,
+    /// The person kept the next turn: it will not settle on its own.
+    Kept,
+}
+
+impl Settle {
+    fn of(session: &attn_protocol::Session) -> Option<Settle> {
+        match &session.auto_settle_fires_at {
+            Some(at) if !at.is_empty() => Some(Settle::Counting(at.clone())),
+            _ if session.auto_settle_held == Some(true) => Some(Settle::Held),
+            _ if session.auto_settle_dismiss_armed == Some(true) => Some(Settle::Kept),
+            _ => None,
+        }
+    }
+}
 
 /// The tile area: the current desktop's screen of its row, each tile with its header.
 pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
@@ -48,6 +72,22 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         *t,
         scale.to_bits(),
     );
+    let settles: Vec<(String, Settle)> = desktop
+        .map(|d| {
+            d.panes
+                .iter()
+                .filter_map(|p| {
+                    let session = facts.sessions.iter().find(|s| s.id == p.session_id)?;
+                    Some((p.pane_id.clone(), Settle::of(session)?))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let keep_key = state
+        .keymap
+        .binding(&crate::action::Action::SessionCancelCountdown)
+        .map(|b| state.keymap.label(b));
+    let reads = (reads, settles.clone(), keep_key.clone());
     let launcher = desktop
         .filter(|d| d.panes.is_empty())
         .and_then(|_| crate::picker::inline(state, t));
@@ -57,10 +97,10 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop,
                 desk,
                 facts,
+                (&settles, keep_key.as_deref()),
                 holder.as_ref(),
                 &state.terminals,
-                t,
-                scale,
+                (t, scale),
             ))
         })
     });
@@ -96,10 +136,10 @@ fn screen(
     desktop: Option<&Desktop>,
     desk: &super::Desk,
     facts: &attn_client::Facts,
+    (settles, keep_key): (&[(String, Settle)], Option<&str>),
     holder: Option<&Holder>,
     terminals: &Terminals,
-    t: &Tokens,
-    scale: f32,
+    (t, scale): (&Tokens, f32),
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
@@ -114,6 +154,9 @@ fn screen(
                 let cx = TileCx {
                     desktop,
                     unsent: &unsent,
+                    settles,
+                    keep_key,
+                    drains: &desk.settling,
                     ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
                     dragging,
@@ -155,6 +198,11 @@ struct TileCx<'a> {
     desktop: &'a Desktop,
     /// Replies a peek could not send, by terminal.
     unsent: &'a [(String, String)],
+    /// How each agent's turn settles, by leaf.
+    settles: &'a [(String, Settle)],
+    /// The keys that keep a turn from settling.
+    keep_key: Option<&'a str>,
+    drains: &'a std::collections::HashMap<String, crate::sidebar::Countdown>,
     /// Splits this window shows at its own ratio, ahead of the daemon.
     ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
     /// Dividers drag only in the normal view.
@@ -348,19 +396,148 @@ pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::So
 /// A tile's header, which the tile area drags the tile by.
 fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
     let t = cx.t;
-    row()
+    let settle = cx
+        .settles
+        .iter()
+        .find(|(l, _)| *l == leaf.id)
+        .map(|(_, s)| s);
+    let session = pane_of(cx.desktop, &leaf.id).map(|p| p.session_id.clone());
+    let drain = session.as_ref().and_then(|s| cx.drains.get(s));
+    let header = row()
         .key(format!("tile.{}.header", leaf.id))
         .w_full()
+        .h(HEADER_PX)
         .items_center()
+        .gap(space::S2)
         .px(space::S2)
-        .py(space::S1)
         .child(
             text(title.to_owned())
                 .font(type_::LABEL)
                 .color(t.text_secondary)
                 .single_line()
+                .truncate()
                 .grow(1.0),
-        )
+        );
+    match (settle, session) {
+        (Some(settle), Some(session)) => header
+            .child(settling_chip(&leaf.id, settle, &session, cx.keep_key))
+            .children(settling_track(&leaf.id, settle, drain)),
+        _ => header,
+    }
+}
+
+/// The settling violet, which the Tauri app keeps out of its theme so packaged apps match.
+fn settling(alpha: f32) -> rune::Color {
+    rune::color::hex("#a78bfa")
+        .expect("the settling accent is #rrggbb")
+        .alpha(alpha)
+}
+
+/// The header's mark of a turn that settles on its own, or that the person kept; pressing it
+/// keeps the turn, or undoes keeping it.
+fn settling_chip(leaf: &str, settle: &Settle, session: &str, keep_key: Option<&str>) -> El {
+    let (label, words, verb, fill, edge, ink) = match settle {
+        Settle::Counting(_) => ("Keep this turn", "SETTLING…", "keep", 0.16, 0.55, "#e2d9fd"),
+        Settle::Held => (
+            "Keep this turn",
+            "SETTLING PAUSED",
+            "keep",
+            0.10,
+            0.35,
+            "#c8bcf0",
+        ),
+        Settle::Kept => (
+            "Turn kept; undo to let it auto-settle again",
+            "TURN KEPT",
+            "undo",
+            0.09,
+            0.40,
+            "#c8bcf0",
+        ),
+    };
+    let ink = rune::color::hex(ink).expect("a settling ink is #rrggbb");
+    let mark = el().w(6.0).h(6.0).fill(settling(1.0));
+    let mark = match settle {
+        Settle::Counting(_) => mark.radius(3.0),
+        Settle::Held => mark.radius(3.0).opacity(0.55),
+        Settle::Kept => mark.radius(1.0).opacity(0.7),
+    };
+    let font = rune::TextStyle {
+        size: 10.0,
+        weight: 600.0,
+        ..type_::LABEL
+    };
+    let session = session.to_owned();
+    row()
+        .key(format!("tile.{leaf}.settling"))
+        .role("button")
+        .label(label)
+        .items_center()
+        .gap(7.0)
+        .px(9.0)
+        .py(2.0)
+        .radius(5.0)
+        .fill(settling(fill))
+        .border(1.0, settling(edge))
+        .on_press(move |state: &mut State| {
+            let _ = state.daemon.send(&attn_protocol::CancelCountdownMessage {
+                session_id: session.clone(),
+                ..attn_protocol::CancelCountdownMessage::new()
+            });
+        })
+        .child(mark)
+        .child(text(words).font(font).color(ink).single_line())
+        .children(keep_key.map(|key| {
+            row()
+                .items_center()
+                .gap(4.0)
+                .opacity(0.8)
+                .child(
+                    row().px(4.0).py(2.0).radius(3.0).border(1.0, ink).child(
+                        text(key.to_owned())
+                            .font(rune::TextStyle {
+                                weight: 700.0,
+                                ..font
+                            })
+                            .color(ink),
+                    ),
+                )
+                .child(text(verb).font(font).color(ink))
+        }))
+}
+
+/// The hairline along the header's foot that drains to the countdown's deadline, or stands
+/// dimmed while the countdown is held.
+fn settling_track(
+    leaf: &str,
+    settle: &Settle,
+    drain: Option<&crate::sidebar::Countdown>,
+) -> Option<El> {
+    if *settle == Settle::Kept {
+        return None;
+    }
+    let line = rune::Shape::new().view_box(1.0, 1.0).line(
+        [0.0, 0.5],
+        [1.0, 0.5],
+        1.0,
+        rune::LineCap::Butt,
+        settling(1.0),
+    );
+    let fill = rune::canvas(line)
+        .key(format!("tile.{leaf}.settling.track"))
+        .w_full()
+        .h(SETTLING_TRACK_PX);
+    let fill = match (settle, drain) {
+        (Settle::Counting(_), Some(c)) => fill.live_trim(&c.drain),
+        _ => fill.opacity(0.45),
+    };
+    Some(
+        el().absolute(0.0, HEADER_PX - SETTLING_TRACK_PX)
+            .w_full()
+            .h(SETTLING_TRACK_PX)
+            .fill(settling(0.16))
+            .child(fill),
+    )
 }
 
 /// The input method's caret in the terminal holding the keyboard: the cell text goes to
