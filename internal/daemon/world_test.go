@@ -109,6 +109,7 @@ func setWorldEnv(t testing.TB, prepared *testworld.World) *testworld.World {
 
 func (w *world) start() {
 	w.T.Helper()
+	testworld.RemoveTempDirsAfterTheDaemon(w.T)
 	w.listen()
 	var terminals ptybackend.Backend
 	if w.terms != nil {

@@ -80,6 +80,14 @@ func worldDir(t testing.TB) string {
 	return dir
 }
 
+// RemoveTempDirsAfterTheDaemon has Go remove the test's t.TempDir folders only
+// after a daemon stopped by a cleanup registered from here on: Go removes them
+// all in one cleanup, registered at the test's first t.TempDir.
+func RemoveTempDirsAfterTheDaemon(t testing.TB) {
+	t.Helper()
+	t.TempDir()
+}
+
 func prepareIn(t testing.TB, dir, wrapper string, harnesses []fakeagent.Harness, withAgentKit bool) *World {
 	t.Helper()
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
