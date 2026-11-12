@@ -54,6 +54,9 @@ try {
     const pane = desktops.flatMap((desktop) => desktop.panes ?? []).find((p) => p.session_id === id || p.pane_id === id);
     runner.assert(pane?.runtime_id, 'a desktop holds the shell as a pane with a terminal', desktops);
     runtimeId = pane.runtime_id;
+    await driver.waitFor({ key: `sidebar.session.${id}` });
+    const opened = await driver.click({ key: `sidebar.session.${id}` });
+    runner.assert(opened.matched, 'the press lands on the sidebar row that opens the shell', opened);
     await driver.waitFor({ key: `terminal.${runtimeId}` });
   });
   const terminal = () => ({ key: `terminal.${runtimeId}` });
