@@ -123,10 +123,10 @@ fn step_back(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 fn cursor_row(state: &State) -> Option<super::queue_view::AgentLine> {
-    let cursor = state.window.queue_cursor.as_deref()?;
-    super::queue_view::agent_rows(state)
-        .into_iter()
-        .find(|row| row.key == cursor)
+    let cursor = state.window.queue_cursor.as_ref()?;
+    let mut rows = super::queue_view::agent_rows(state);
+    let at = super::queue_view::reached(&rows, cursor)?;
+    Some(rows.swap_remove(at))
 }
 
 /// Moves the cursor to the next or previous row, wrapping at both ends, starting from the top
@@ -140,8 +140,8 @@ fn walk(state: &mut State, down: bool, tx: &mut Tx) -> bool {
     let at = state
         .window
         .queue_cursor
-        .as_deref()
-        .and_then(|cursor| rows.iter().position(|row| row.key == cursor));
+        .as_ref()
+        .and_then(|cursor| super::queue_view::reached(&rows, cursor));
     let next = match (at, down) {
         (None, true) => 0,
         (None, false) => last,
@@ -150,34 +150,25 @@ fn walk(state: &mut State, down: bool, tx: &mut Tx) -> bool {
         (Some(0), false) => last,
         (Some(at), false) => at - 1,
     };
-    let key = rows[next].key.clone();
+    let row = rows[next].clone();
     state.window.agent_filter.focused = false;
-    tx.scroll_into_view_in(super::queue_view::LIST, key.clone());
+    tx.scroll_into_view_in(super::queue_view::LIST, row.key.clone());
     tx.focus(super::queue_view::LIST, true);
-    state.window.queue_cursor = Some(key);
+    state.window.queue_cursor = Some(row);
     true
 }
 
 /// The agent the settle, priority and snooze keys act on: the row the arrows reached while the
-/// queue list holds the keyboard, the row whose button holds it, or else the agent on screen.
+/// queue list holds the keyboard, or else the agent on screen.
 struct Target {
     session: String,
     row: Option<String>,
 }
 
 fn target(state: &State, tx: &Tx) -> Option<Target> {
-    let focused = tx.focused().unwrap_or_default();
-    let row = if focused == super::queue_view::LIST {
-        cursor_row(state)
-    } else {
-        super::queue_view::agent_rows(state)
-            .into_iter()
-            .find(|row| {
-                focused
-                    .strip_prefix(row.key.as_str())
-                    .is_some_and(|rest| rest.starts_with('.'))
-            })
-    };
+    let row = (tx.focused() == Some(super::queue_view::LIST))
+        .then(|| cursor_row(state))
+        .flatten();
     match row {
         Some(row) => Some(Target {
             session: row.session,

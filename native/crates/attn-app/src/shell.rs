@@ -35,7 +35,7 @@ pub struct Window {
     pub(crate) agent_filter: rune::TextEdit,
     /// The queue row the arrows reached, by key: the settle, priority and snooze keys act on
     /// it while the queue list holds the keyboard.
-    pub(crate) queue_cursor: Option<String>,
+    pub(crate) queue_cursor: Option<crate::sidebar::AgentLine>,
     /// Wall-clock milliseconds as of the last change the window shows by time: turn ages and
     /// snooze deadlines read it, so it moves only when one of them would read differently.
     pub now_ms: i64,

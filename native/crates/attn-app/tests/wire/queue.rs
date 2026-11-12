@@ -1370,3 +1370,26 @@ fn the_queue_moving_on_by_itself_leaves_the_keyboard_in_the_filter_being_typed_i
     assert_eq!(shown(&world), ["a", "b"], "the next turn opens");
     assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
 }
+
+#[test]
+fn the_reached_row_follows_its_agent_when_a_settle_moves_it_to_another_band() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("a", 60),
+        turn("b", 30),
+        turn("c", 5),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.c")));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+    changes(&mut world, settled("b"));
+
+    assert_eq!(sent_ids(&world, "settle_turn"), ["b"]);
+    assert_eq!(reached(&world).as_deref(), Some("queue-settled.b"));
+    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    assert_eq!(sent_ids(&world, "set_session_priority"), ["b"]);
+    world.gesture(|app| app.key(plain(rune::Key::Up)));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.c"));
+}

@@ -75,6 +75,7 @@ impl QLine {
 }
 
 /// A queue row's key and the agent it shows.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct AgentLine {
     pub key: String,
     pub session: String,
@@ -83,9 +84,13 @@ pub(crate) struct AgentLine {
 /// The agent rows of the queue sidebar, top to bottom, as the keyboard walks them.
 pub(crate) fn agent_rows(state: &State) -> Vec<AgentLine> {
     let bands = queue::bands(&state.facts, state.window.now_ms);
-    lines(state, &bands)
-        .into_iter()
-        .filter_map(|line| match &line {
+    agent_lines(&lines(state, &bands))
+}
+
+fn agent_lines(lines: &[QLine]) -> Vec<AgentLine> {
+    lines
+        .iter()
+        .filter_map(|line| match line {
             QLine::Agent(a) => Some(AgentLine {
                 key: line.key(),
                 session: a.agent.id.clone(),
@@ -93,6 +98,14 @@ pub(crate) fn agent_rows(state: &State) -> Vec<AgentLine> {
             _ => None,
         })
         .collect()
+}
+
+/// Where the row the arrows reached is now: the same row, or, once its agent moved to another
+/// band, that agent's first row.
+pub(crate) fn reached(rows: &[AgentLine], cursor: &AgentLine) -> Option<usize> {
+    rows.iter()
+        .position(|row| row == cursor)
+        .or_else(|| rows.iter().position(|row| row.session == cursor.session))
 }
 
 /// The slot badge a queue row carries for its desktop: its number among the slotted
@@ -291,6 +304,12 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         let bands = queue::bands(facts, window.now_ms);
         let lines: Rc<[QLine]> = lines(state, &bands).into();
         let keys = lines.clone();
+        let rows = agent_lines(&lines);
+        let cursor: Option<String> = window
+            .queue_cursor
+            .as_ref()
+            .and_then(|cursor| reached(&rows, cursor))
+            .map(|at| rows[at].key.clone());
         let t = *t;
         col()
             .key("sidebar")
@@ -323,7 +342,11 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                                 lines.len(),
                                 ROW_HEIGHT,
                                 move |_: &State, i| keys[i].key().into(),
-                                move |state: &State, i| line(state, &lines[i], &t),
+                                move |state: &State, i| {
+                                    let line_key = lines[i].key();
+                                    let reached = cursor.as_deref() == Some(line_key.as_str());
+                                    line(state, &lines[i], reached, &t)
+                                },
                             )
                             .focusable(true)
                             .on_key(super::actions::list_key),
@@ -333,7 +356,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     })
 }
 
-fn line(state: &State, line: &QLine, t: &Tokens) -> El {
+fn line(state: &State, line: &QLine, cursor: bool, t: &Tokens) -> El {
     let key = line.key();
     if let QLine::Filter = line {
         return filter(state, key, t);
@@ -342,7 +365,6 @@ fn line(state: &State, line: &QLine, t: &Tokens) -> El {
         QLine::Agent(a) => state.window.countdowns.contains_key(&a.agent.id),
         _ => false,
     };
-    let cursor = state.window.queue_cursor.as_deref() == Some(key.as_str());
     memo(key.clone(), (line, draining, cursor, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         match line {

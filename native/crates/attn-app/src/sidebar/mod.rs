@@ -32,6 +32,7 @@ thread_local! {
 }
 
 pub(crate) use chrome::title_controls;
+pub(crate) use queue_view::AgentLine;
 
 /// The window's sidebar for its flow: the queue sidebar in queue flow, the desktop sidebar
 /// otherwise. Collapsed, desktop flow keeps the rail and queue flow keeps nothing here,
