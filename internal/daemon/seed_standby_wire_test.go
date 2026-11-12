@@ -214,9 +214,7 @@ func TestSeedMailReachesAResumedClaudeTenderThroughItsModAfterTheFirstPoll(t *te
 	first := w.Launched(string(session))
 	first.Prompted()
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
-	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby: %v", err)
-	}
+	onStandbyAndClosed(t, w, cli, delegated, first)
 
 	boot := w.HoldNextBoot()
 	mark := len(app.Log())
@@ -246,11 +244,10 @@ func TestAResumedClaudeTenderWhoseModMissesItsFirstPollGetsNoTypedMail(t *testin
 
 	delegated := seedResumeDelegate(t, w, fakeagent.Claude, "api")
 	session, seed := delegated.SessionID, delegated.SeedID
-	w.Launched(string(session)).Prompted()
+	first := w.Launched(string(session))
+	first.Prompted()
 	w.awaitTimer(daemon.ClaudeModPollHoldTimer)
-	if _, err := standbyAs(t, cli, delegated, true); err != nil {
-		t.Fatalf("seed standby: %v", err)
-	}
+	onStandbyAndClosed(t, w, cli, delegated, first)
 
 	boot := w.HoldNextBoot()
 	sendAgentMessage(t, cli, "sender", seed, "the pull request is approved")
