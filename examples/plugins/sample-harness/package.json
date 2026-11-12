@@ -1,0 +1,9 @@
+{
+  "name": "attn-example-sample-harness",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "dependencies": {
+    "@victorarias/attn-plugin": "0.2.0"
+  }
+}

@@ -17,7 +17,8 @@ The example keeps the behavior genuinely useful:
 - otherwise run `npm install` when `package-lock.json` is present
 - surface package-manager failures back to attn through the hook RPC call
 
-This example consumes `@victorarias/attn-plugin` through a local `file:` dependency back
-into this repository. Until the SDK has a publishable external consumption path,
-treat this as a source-tree example rather than a plugin to install with
-`attn plugin install --path`.
+This example consumes `@victorarias/attn-plugin` through a `file:` dependency
+back into this repository, so it runs from a checkout. To install it with
+`attn plugin install --path`, copy the folder and change that dependency to a
+published version of `@victorarias/attn-plugin`, as
+`examples/plugins/sample-harness` does.

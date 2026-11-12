@@ -1,5 +1,23 @@
 import { createConnection, type Socket } from "node:net";
 
+import {
+  driverCapabilities,
+  explainRegistrationError,
+  type DriverCompactParams,
+  type DriverCompactionOutcome,
+  type DriverDefinition,
+  type DriverDeliverParams,
+  type DriverHealth,
+  type DriverReportedState,
+  type DriverRun,
+  type DriverSessionClosedParams,
+  type DriverSpawnParams,
+  type DriverStopVerdict,
+} from "./driver";
+
+export { accepted, deferred, rejected, targetEnded } from "./driver";
+export type * from "./driver";
+
 export type ProviderDecline = {
   status: "decline";
 };
@@ -116,8 +134,9 @@ type HelloResult = {
   ok: boolean;
 };
 
-type HealthResult = {
+type RegisterResult = {
   ok: boolean;
+  active_runs?: { session_id: string; run_id: string; metadata?: unknown; seq: number }[];
 };
 
 const pluginAPIVersion = 7;
@@ -128,6 +147,8 @@ export class AttnPluginClient {
   private readBuffer = "";
   private readonly handlers = new Map<PluginSurface, PluginHandler>();
   private readonly pending = new Map<string, PendingRequest>();
+  private definition?: DriverDefinition;
+  private readonly runs = new Map<string, ClientRun>();
 
   private readonly options: ResolvedAttnPluginClientOptions;
 
@@ -174,6 +195,7 @@ export class AttnPluginClient {
       if (!result.ok) {
         throw new Error("attn rejected plugin hello");
       }
+      await this.registerDriver();
     } catch (error) {
       this.resetSocket(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -194,6 +216,49 @@ export class AttnPluginClient {
       throw new Error("attn plugin surfaces must be registered before connect");
     }
     this.handlers.set(surface, handler as PluginHandler);
+  }
+
+  driver(definition: DriverDefinition): void {
+    if (this.socket) {
+      throw new Error("attn plugin driver must be registered before connect");
+    }
+    if (this.definition) {
+      throw new Error(`attn plugin client already registers driver ${this.definition.id}`);
+    }
+    driverCapabilities(definition);
+    this.definition = definition;
+  }
+
+  private async registerDriver(): Promise<void> {
+    const definition = this.definition;
+    if (!definition) {
+      return;
+    }
+    let result: RegisterResult;
+    try {
+      result = await this.request<RegisterResult>("driver.register", {
+        agent: definition.id,
+        capabilities: driverCapabilities(definition),
+      });
+    } catch (error) {
+      throw explainRegistrationError(error instanceof Error ? error : new Error(String(error)));
+    }
+    this.runs.clear();
+    const active = (result.active_runs ?? []).map((run) => {
+      const driverRun = this.runFor(run.session_id, run.run_id);
+      driverRun.restore(run.seq, run.metadata);
+      return driverRun;
+    });
+    await definition.recover?.(active);
+  }
+
+  private runFor(terminalId: string, runId: string): ClientRun {
+    let run = this.runs.get(runId);
+    if (!run) {
+      run = new ClientRun(terminalId, runId, (method, params) => this.request(method, params));
+      this.runs.set(runId, run);
+    }
+    return run;
   }
 
   private async request<TResult = unknown>(method: string, params?: unknown): Promise<TResult> {
@@ -256,11 +321,20 @@ export class AttnPluginClient {
 
   private async handleRequest(request: JsonRpcRequest): Promise<void> {
     if (request.method === "attn.health") {
-      this.send({
-        jsonrpc: "2.0",
-        id: request.id,
-        result: { ok: true } satisfies HealthResult,
-      });
+      try {
+        this.send({
+          jsonrpc: "2.0",
+          id: request.id,
+          result: (await this.definition?.health?.()) ?? ({ ok: true } satisfies DriverHealth),
+        });
+      } catch (error) {
+        this.sendError(request.id, -32603, error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
+
+    if (request.method.startsWith("driver.")) {
+      await this.handleDriverRequest(request);
       return;
     }
 
@@ -279,6 +353,53 @@ export class AttnPluginClient {
       });
     } catch (error) {
       this.sendError(request.id, -32603, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async handleDriverRequest(request: JsonRpcRequest): Promise<void> {
+    const definition = this.definition;
+    try {
+      const result = await this.dispatchDriver(definition, request);
+      if (result === undefined) {
+        this.sendError(request.id, -32601, `unknown method ${request.method}`);
+        return;
+      }
+      this.send({ jsonrpc: "2.0", id: request.id, result });
+    } catch (error) {
+      this.sendError(request.id, -32603, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private async dispatchDriver(definition: DriverDefinition | undefined, request: JsonRpcRequest): Promise<unknown> {
+    if (!definition) {
+      return undefined;
+    }
+    const params = request.params as Record<string, unknown>;
+    const run = () => this.runFor(params.session_id as string, params.run_id as string);
+    switch (request.method) {
+      case "driver.spawn":
+        return definition.spawn(params as DriverSpawnParams, run());
+      case "driver.resume":
+        return definition.resume?.(params as DriverSpawnParams, run());
+      case "driver.resume_available": {
+        if (!definition.resumeAvailable) return undefined;
+        const conversations = (params as { conversations: Parameters<NonNullable<DriverDefinition["resumeAvailable"]>>[0] }).conversations;
+        return { availability: await definition.resumeAvailable(conversations) };
+      }
+      case "driver.models":
+        return definition.models?.();
+      case "driver.deliver_message":
+        return definition.deliver?.(params as DriverDeliverParams, run());
+      case "driver.compact":
+        return definition.compact?.(params as DriverCompactParams, run());
+      case "driver.session_closed": {
+        const closed = params as DriverSessionClosedParams;
+        await definition.sessionClosed?.(closed);
+        this.runs.delete(closed.run_id);
+        return { ok: true };
+      }
+      default:
+        return undefined;
     }
   }
 
@@ -350,4 +471,75 @@ function resolvePluginGeneration(): number {
     throw new Error("ATTN_PLUGIN_GENERATION must be a positive integer");
   }
   return generation;
+}
+
+class ClientRun implements DriverRun {
+  private seq = 0;
+  private reported: unknown;
+
+  constructor(
+    readonly terminalId: string,
+    readonly runId: string,
+    private readonly call: (method: string, params: unknown) => Promise<unknown>,
+  ) {}
+
+  get metadata(): unknown {
+    return this.reported;
+  }
+
+  restore(seq: number, metadata: unknown): void {
+    this.seq = Math.max(this.seq, seq);
+    this.reported = metadata;
+  }
+
+  state(state: DriverReportedState, options: { onlyIfUnknown?: boolean } = {}): Promise<void> {
+    return this.report("session.report_state", { state, only_if_unknown: options.onlyIfUnknown || undefined });
+  }
+
+  async classifyStop(assistantText: string): Promise<DriverStopVerdict> {
+    const result = (await this.call("attn.classify_stop", {
+      session_id: this.terminalId,
+      run_id: this.runId,
+      assistant_text: assistantText,
+    })) as { verdict: DriverStopVerdict };
+    return result.verdict;
+  }
+
+  stop(verdict: DriverStopVerdict): Promise<void> {
+    return this.report("session.report_stop", { verdict });
+  }
+
+  reportMetadata(metadata: unknown, options: { resumeSessionId?: string } = {}): Promise<void> {
+    this.reported = metadata;
+    return this.report("session.report_metadata", { metadata, resume_session_id: options.resumeSessionId });
+  }
+
+  transcriptPath(path: string): Promise<void> {
+    return this.call("session.report_transcript_path", this.identity({ path })).then(() => undefined);
+  }
+
+  pullRequest(url: string): Promise<void> {
+    return this.call("session.report_pull_request", this.identity({ url })).then(() => undefined);
+  }
+
+  compaction(report: { inputId: string; conversationId: string; outcome: DriverCompactionOutcome; reason?: string }): Promise<void> {
+    return this.call(
+      "session.report_compaction",
+      this.identity({
+        input_id: report.inputId,
+        conversation_id: report.conversationId,
+        outcome: report.outcome,
+        reason: report.reason,
+      }),
+    ).then(() => undefined);
+  }
+
+  private report(method: string, fields: Record<string, unknown>): Promise<void> {
+    this.seq += 1;
+    return this.call(method, this.identity({ ...fields, seq: this.seq })).then(() => undefined);
+  }
+
+  private identity(fields: Record<string, unknown>): Record<string, unknown> {
+    return { session_id: this.terminalId, run_id: this.runId, ...fields };
+  }
 }
