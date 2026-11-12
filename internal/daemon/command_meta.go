@@ -120,6 +120,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdSetSessionContextWindowCap:    commandMetadata(false, true),
 	protocol.CmdSnoozeTurn:                    commandMetadata(false, true),
 	protocol.CmdWakeTurn:                      commandMetadata(false, true),
+	protocol.CmdStandbySession:                commandMetadata(true, true),
 	protocol.CmdCancelCountdown:               commandMetadata(false, true),
 	protocol.CmdQueryPRs:                      commandMetadata(false, true),
 	protocol.CmdMutePR:                        commandMetadata(false, true),

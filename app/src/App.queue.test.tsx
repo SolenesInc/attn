@@ -349,6 +349,21 @@ describe('App queue', () => {
     expect(daemon.sentOf('desktop_set_current')).toEqual([]);
   });
 
+  it('asks an agent to go on standby until a snooze time, from the snooze menu', async () => {
+    const { daemon } = await launch();
+
+    await press(daemon, 'Snooze older');
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('menuitem', { name: 'Standby until…' })));
+    const menu = within(screen.getByRole('menu', { name: 'Standby older until' }));
+    expect(menu.getByTestId('standby-choice-30m')).toHaveFocus();
+    const until = new Date(Date.now() + 2 * HOUR).toISOString();
+    await gesture(daemon, () => fireEvent.click(menu.getByTestId('standby-choice-2h')));
+
+    expect(daemon.sentOf('standby_session')).toEqual([{ cmd: 'standby_session', session_id: 'older', until }]);
+    expect(daemon.sentOf('snooze_turn')).toEqual([]);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('collects deferred agents under Snoozed in the agent list, and unsnoozes one without opening it', async () => {
     const { daemon } = await launch({ sessions: [...team(), agent('later', { turn_snoozed_until: fromNow(HOUR) })] });
 

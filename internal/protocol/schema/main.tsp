@@ -1814,6 +1814,16 @@ model SnoozeTurnMessage {
   until: string;
 }
 
+// StandbySessionMessage asks the session's agent to go on standby until an
+// instant: the daemon types a prompt into the session, and the agent puts the
+// seed it tends on standby until then, which closes the session. `until` is
+// computed by the client for the same reason as a snooze's.
+model StandbySessionMessage {
+  cmd: "standby_session";
+  session_id: SessionID;
+  until: utcDateTime;
+}
+
 // WakeTurnMessage ends a snooze early. It clears the deadline; whether a turn
 // then opens depends on the state the agent is in at that instant, which is the
 // daemon's call. Fire-and-forget.

@@ -816,6 +816,29 @@
           }
         },
         {
+          "id": "standby-request",
+          "delivery": "user_message",
+          "description": "Typed into a session when the user picks Standby until… for it in the app. Asks the agent to put the seed it tends on standby until that time.",
+          "body": {
+            "kind": "text",
+            "id": "session.standby-request",
+            "source": "content/session/standby-request.md",
+            "bindings": [
+              {
+                "name": "until",
+                "node": {
+                  "kind": "input",
+                  "field": {
+                    "name": "until",
+                    "kind": "text",
+                    "description": "The RFC3339 time the user picked."
+                  }
+                }
+              }
+            ]
+          }
+        },
+        {
           "id": "start-cause-message",
           "delivery": "message_fragment",
           "description": "inboxStartCause: an unread peer message that started the recipient's run. Names the sender, never the body.",
@@ -6801,5 +6824,5 @@
       ]
     }
   ],
-  "definitions_hash": "1ad8ee4ffa0ca29b81a8428f216f28487307a8fa66fead4da2fe66175e68d754"
+  "definitions_hash": "1eb227b9f5d22c69c6ebfe57be799f31e5b96e6da8f36a42678f23ce268e532e"
 }

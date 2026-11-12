@@ -217,6 +217,7 @@ const (
 	CmdAgentTurn                     = "agent_turn"
 	CmdSnoozeTurn                    = "snooze_turn"
 	CmdWakeTurn                      = "wake_turn"
+	CmdStandbySession                = "standby_session"
 	CmdCancelCountdown               = "cancel_countdown"
 	CmdQueryPRs                      = "query_prs"
 	CmdMutePR                        = "mute_pr"

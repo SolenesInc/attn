@@ -82,7 +82,10 @@ async function main() {
         fs.mkdirSync(cwd, { recursive: true });
         writeMockAgentFixture(cwd, {
           name: 'snooze keyboard mock',
-          turns: [{ includes: 'READY', actions: [{ type: 'reply', text: 'Ready for keyboard snooze', state: 'waiting_input' }] }],
+          turns: [
+            { includes: 'READY', actions: [{ type: 'reply', text: 'Ready for keyboard snooze', state: 'waiting_input' }] },
+            { includes: 'go on standby until', actions: [{ type: 'reply', text: 'Standby request received', state: 'waiting_input' }] },
+          ],
         });
         let sessionId;
         if (label === 'beta') {
@@ -130,7 +133,7 @@ async function main() {
       runner.assert(JSON.stringify(menuAfter.bounds) === JSON.stringify(menuBefore.bounds), 'always-on shortcuts leave picker geometry unchanged');
       runner.assert(observer.getSetting('uiScale') === scaleBefore, 'font shortcuts do not persist scale changes');
       await driver.pressKey('ArrowUp');
-      await focusedChoice('monday');
+      await waitDom('[data-testid="snooze-standby"]', { focused: true });
       await driver.pressKeyCode(115);
       await focusedChoice('30m');
       await driver.pressKey('ArrowDown');
@@ -140,6 +143,8 @@ async function main() {
       await driver.pressKeyCode(48, { shift: true });
       await focusedChoice('1h');
       await driver.pressKeyCode(119);
+      await waitDom('[data-testid="snooze-standby"]', { focused: true });
+      await driver.pressKey('ArrowUp');
       await focusedChoice('monday');
       await pressShortcutKeys(client, driver, 'session.next');
       runner.assert((await client.request('get_state')).activeLeaf?.sessionId === alpha.sessionId, 'navigation stays with picker target');
@@ -337,6 +342,21 @@ async function main() {
       await waitDom('[data-testid="queue-snoozed-header"]', { absent: true });
       await waitForPaneInputFocus(client, alpha.sessionId, alpha.paneId);
       runner.assert((await client.request('get_state')).activeLeaf?.sessionId === alpha.sessionId, 'home follows the newly woken turn');
+    });
+    await runner.step('keyboard_standby_asks_the_agent', async () => {
+      await select(alpha);
+      await openPicker();
+      await driver.pressKey('ArrowUp');
+      await waitDom('[data-testid="snooze-standby"]', { focused: true });
+      await driver.pressEnter();
+      await waitDom('[role="menu"][aria-label^="Standby "]');
+      await waitDom('[data-testid="standby-choice-30m"]', { focused: true });
+      await driver.pressKey('ArrowDown');
+      await waitDom('[data-testid="standby-choice-1h"]', { focused: true });
+      await driver.pressEnter();
+      await waitDom('[data-testid="snooze-menu"]', { absent: true });
+      await waitForPaneText(client, alpha.sessionId, alpha.paneId, (text) => text.includes('Standby request received'), 'agent answered the standby request');
+      runner.assert(!observer.getSession(alpha.sessionId)?.turn_snoozed_until, 'standby sends no snooze');
     });
     await runner.step('removed_target_returns_to_the_current_agent', async () => {
       const desktop = await client.request('get_desktop', { sessionId: alpha.sessionId });

@@ -13922,6 +13922,17 @@ type SpawnSessionMessage struct {
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`
 }
 
+type StandbySessionMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID SessionID `json:"session_id"`
+
+	// Until corresponds to the JSON schema field "until".
+	Until time.Time `json:"until"`
+}
+
 type StartUpdateMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

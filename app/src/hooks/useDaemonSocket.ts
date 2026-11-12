@@ -2352,7 +2352,7 @@ export function useDaemonSocket({
               break;
             }
             console.error('[Daemon] Command error:', data.cmd, data.error);
-            if (data.cmd === 'settle_turn' || data.cmd === 'snooze_turn' || data.cmd === 'wake_turn' || data.cmd === 'cancel_countdown') {
+            if (data.cmd === 'settle_turn' || data.cmd === 'snooze_turn' || data.cmd === 'standby_session' || data.cmd === 'wake_turn' || data.cmd === 'cancel_countdown') {
               useToastStore.getState().append({ message: data.error || `Command ${data.cmd} failed` });
             }
             rejectPendingForCommand(data.cmd, data.error || `Command ${data.cmd || ''} failed`);
@@ -3783,6 +3783,12 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'snooze_turn', session_id: sessionId, until: until.toISOString() }));
   }, []);
 
+  const sendStandbySession = useCallback((sessionId: string, until: Date) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ cmd: 'standby_session', session_id: sessionId, until: until.toISOString() }));
+  }, []);
+
   const sendWakeTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -4513,6 +4519,7 @@ export function useDaemonSocket({
     sendSettleTurn,
     sendSetSessionPriority,
     sendSnoozeTurn,
+    sendStandbySession,
     sendWakeTurn,
     sendCancelCountdown,
     desktopTileContents,

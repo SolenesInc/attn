@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "061f4b9b1fbc";
+pub const PROTOCOL_VERSION: &str = "ed7a8e59037f";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -12759,6 +12759,22 @@ impl SpawnSessionMessage {
     pub fn new() -> Self {
         Self {
             cmd: "spawn_session".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct StandbySessionMessage {
+    pub cmd: String,
+    pub session_id: SessionID,
+    pub until: String,
+}
+
+impl StandbySessionMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "standby_session".to_string(),
             ..Self::default()
         }
     }

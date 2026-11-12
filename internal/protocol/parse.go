@@ -203,6 +203,7 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdSettleTurn:                    decodeInto[SettleTurnMessage],
 	CmdSnoozeTurn:                    decodeInto[SnoozeTurnMessage],
 	CmdWakeTurn:                      decodeInto[WakeTurnMessage],
+	CmdStandbySession:                decodeInto[StandbySessionMessage],
 	CmdCancelCountdown:               decodeInto[CancelCountdownMessage],
 	CmdQueryPRs:                      decodeInto[QueryPRsMessage],
 	CmdMutePR:                        decodeInto[MutePRMessage],

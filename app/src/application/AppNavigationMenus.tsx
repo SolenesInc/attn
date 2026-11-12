@@ -19,7 +19,7 @@ export function AppNavigationMenus() {
     loadOpenerIndex,
     setMarkdownOpenerOpen,
   } = useDesktopTilesContext();
-  const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
+  const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn, sendStandbySession } = useDaemonApi();
   const { snoozeMenu, setSnoozeMenu, restoreSnoozeFocus } = useAttentionQueueContext();
   const { showError } = useAppErrorsContext();
   return (
@@ -55,6 +55,7 @@ export function AppNavigationMenus() {
           sessionLabel={sessionDisplayName(snoozeMenu.session)}
           placement={snoozeMenu.placement}
           onSnooze={(until) => sendSnoozeTurn(snoozeMenu.session.id, until)}
+          onStandby={(until) => sendStandbySession(snoozeMenu.session.id, until)}
           onClose={() => setSnoozeMenu(null)}
           onRestoreFocus={restoreSnoozeFocus}
         />

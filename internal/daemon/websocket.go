@@ -1127,6 +1127,14 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 				}
 			}
 		})
+	case protocol.CmdStandbySession:
+		standby := msg.(*protocol.StandbySessionMessage)
+		d.offPumpInSessionOrder(client, protocol.TrimID(standby.SessionID), func() {
+			if err := d.handleStandbySession(standby); err != nil {
+				d.logf("standby request rejected: %v", err)
+				d.sendCommandError(client, protocol.CmdStandbySession, err.Error())
+			}
+		})
 	case protocol.CmdCancelCountdown:
 		cancel := msg.(*protocol.CancelCountdownMessage)
 		d.inSessionOrder(client, cancel.SessionID, func() {
