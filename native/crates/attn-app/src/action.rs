@@ -22,35 +22,61 @@ impl Category {
 
 macro_rules! actions {
     ($($variant:ident = $id:literal, $category:ident, $label:literal;)*) => {
-        /// Everything a person can ask the app to do by key, menu or palette. The id is the
-        /// shortcut id the daemon's `keybindings_config` setting keys rebinds by, shared with
-        /// the Tauri app.
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        /// Everything a person can ask the app to do by key, menu or palette. A unit variant is
+        /// one the keymap can bind: its id is the shortcut id the daemon's `keybindings_config`
+        /// setting keys rebinds by, shared with the Tauri app. A variant with data names what
+        /// it acts on, as a palette row does, and no key binds it.
+        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub enum Action {
             $($variant,)*
+            /// Go to an agent: its desktop and its tile.
+            OpenAgent { session: String },
+            /// Start a session for a crew member between sessions.
+            StartCrewMember { member: String },
+            /// Go to a tile that is not an agent, on its desktop.
+            OpenTile { desktop: String, tile: String },
+            GoToDesktop { desktop: String },
+            /// Move the active tile and its delegates to a desktop.
+            MoveWithDelegates { desktop: String },
+            SwitchToProfile { profile: String },
         }
 
         impl Action {
+            /// The actions a key can bind.
             pub const ALL: &[Action] = &[$(Action::$variant,)*];
 
-            pub fn id(self) -> &'static str {
+            pub fn id(&self) -> &'static str {
                 match self {
                     $(Action::$variant => $id,)*
+                    Action::OpenAgent { .. } => "agent.open",
+                    Action::StartCrewMember { .. } => "crew.start",
+                    Action::OpenTile { .. } => "tile.open",
+                    Action::GoToDesktop { .. } => "desktop.goTo",
+                    Action::MoveWithDelegates { .. } => "desktop.moveWithDelegates",
+                    Action::SwitchToProfile { .. } => "profile.switchTo",
                 }
             }
 
-            pub fn label(self) -> &'static str {
+            pub fn label(&self) -> &'static str {
                 match self {
                     $(Action::$variant => $label,)*
+                    Action::OpenAgent { .. } => "Go to an agent",
+                    Action::StartCrewMember { .. } => "Start a crew member",
+                    Action::OpenTile { .. } => "Go to a tile",
+                    Action::GoToDesktop { .. } => "Go to a desktop",
+                    Action::MoveWithDelegates { .. } => "Move with delegates to a desktop",
+                    Action::SwitchToProfile { .. } => "Switch to a profile",
                 }
             }
 
-            pub fn category(self) -> Category {
+            pub fn category(&self) -> Category {
                 match self {
                     $(Action::$variant => Category::$category,)*
+                    _ => Category::Sessions,
                 }
             }
 
+            /// The bindable action with this id.
             pub fn from_id(id: &str) -> Option<Action> {
                 match id {
                     $($id => Some(Action::$variant),)*
@@ -156,7 +182,7 @@ actions! {
 impl Action {
     /// Settings, Keyboard shortcuts and Quit can be rebound but never unbound: they are the
     /// way back to every other binding.
-    pub fn is_protected(self) -> bool {
+    pub fn is_protected(&self) -> bool {
         matches!(
             self,
             Action::UiOpenSettings | Action::UiShowShortcuts | Action::AppQuit

@@ -66,14 +66,14 @@ fn two_terminals() -> Vec<Desktop> {
 }
 
 /// The keys `action` has by default on this platform.
-fn chord(action: Action) -> KeyEvent {
+fn chord(action: &Action) -> KeyEvent {
     match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }
 }
 
-fn press(world: &mut World, action: Action) {
+fn press(world: &mut World, action: &Action) {
     let ev = chord(action);
     world.gesture(|app| app.key(ev));
 }
@@ -125,7 +125,7 @@ fn rest(world: &mut World) {
 
 /// Whether `action` runs from its keys only while no terminal holds the keyboard. The
 /// others run with a terminal holding it, which the terminal-only actions need.
-fn needs_no_terminal(action: Action) -> bool {
+fn needs_no_terminal(action: &Action) -> bool {
     matches!(
         action,
         Action::SessionClose | Action::MarkdownSendAnnotations | Action::SessionRefreshPrs
@@ -162,7 +162,7 @@ fn every_shortcut_runs_its_own_action(category: Category) {
     let mut with_terminal =
         World::start(Daemon::scripted().state(state(two_terminals(), &settings)));
     let mut without = World::start(Daemon::scripted().state(state(vec![], &settings)));
-    for &action in Action::ALL.iter().filter(|a| a.category() == category) {
+    for action in Action::ALL.iter().filter(|a| a.category() == category) {
         let world = if needs_no_terminal(action) {
             &mut without
         } else {
@@ -177,7 +177,7 @@ fn every_shortcut_runs_its_own_action(category: Category) {
         match (recorded.as_slice(), notice(world)) {
             ([id], None) => {
                 assert_eq!(id, action.id());
-                if action != Action::AppQuit {
+                if *action != Action::AppQuit {
                     press(world, action);
                 }
             }
@@ -206,11 +206,11 @@ fn every_shortcut_runs_its_own_action(category: Category) {
 #[test]
 fn a_focused_field_takes_typing_and_the_keys_it_keeps() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
-    press(&mut world, Action::UiCommandPalette);
+    press(&mut world, &Action::UiCommandPalette);
     assert!(shows(&world, "dialog", "Commands"));
 
     world.gesture(|app| app.type_text("ab"));
-    press(&mut world, Action::TerminalFind);
+    press(&mut world, &Action::TerminalFind);
 
     assert_eq!(
         world
@@ -223,8 +223,8 @@ fn a_focused_field_takes_typing_and_the_keys_it_keeps() {
     assert!(typed(&world).is_empty(), "typing stays in the field");
     assert_eq!(notice(&world), None, "the field keeps Find's keys");
 
-    press(&mut world, Action::UiCommandPalette);
-    press(&mut world, Action::UiOpenSettings);
+    press(&mut world, &Action::UiCommandPalette);
+    press(&mut world, &Action::UiOpenSettings);
     assert!(
         shows(&world, "dialog", "Settings"),
         "the field passes on keys it does not keep"
@@ -244,8 +244,8 @@ fn the_terminal_holding_the_keyboard_gets_what_the_keymap_does_not_take() {
             mods: Mods::default(),
         });
     });
-    press(&mut world, Action::SessionToggleSidebar);
-    press(&mut world, Action::SessionRefreshPrs);
+    press(&mut world, &Action::SessionToggleSidebar);
+    press(&mut world, &Action::SessionRefreshPrs);
 
     assert!(
         !shows(&world, "navigation", "Sidebar"),
@@ -285,7 +285,7 @@ fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
 #[test]
 fn close_closes_the_pane_while_a_terminal_holds_the_keyboard_and_the_session_otherwise() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
-    press(&mut world, Action::SessionClose);
+    press(&mut world, &Action::SessionClose);
     assert_eq!(
         notice(&world).as_deref(),
         Some("Not in the native app yet: Close focused pane")
@@ -293,7 +293,7 @@ fn close_closes_the_pane_while_a_terminal_holds_the_keyboard_and_the_session_oth
     rest(&mut world);
 
     let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
-    press(&mut world, Action::SessionClose);
+    press(&mut world, &Action::SessionClose);
     assert_eq!(
         notice(&world).as_deref(),
         Some("Not in the native app yet: Close session, focused pane or empty desktop")
@@ -349,7 +349,7 @@ fn the_keyboard_stays_on_its_tile_when_the_active_tile_moves_elsewhere() {
 #[test]
 fn closing_the_palette_gives_the_keyboard_back_to_its_tile() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
-    press(&mut world, Action::UiCommandPalette);
+    press(&mut world, &Action::UiCommandPalette);
     world.gesture(|app| app.type_text("x"));
 
     world.gesture(|app| {
@@ -369,7 +369,7 @@ fn closing_the_palette_gives_the_keyboard_back_to_its_tile() {
 fn an_open_dialog_keeps_typing_from_the_terminal_behind_it() {
     for action in [Action::UiShowShortcuts, Action::UiOpenSettings] {
         let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
-        press(&mut world, action);
+        press(&mut world, &action);
         world.gesture(|app| app.type_text("ls"));
         world.gesture(|app| {
             app.key(KeyEvent {
@@ -470,7 +470,7 @@ fn escape_cancels_a_leader_and_the_leader_again_keeps_it_armed() {
 
 #[test]
 fn a_rebind_moves_the_action_and_takes_its_keys_from_the_default_holding_them() {
-    let toggle_sidebar = chord(Action::SessionToggleSidebar);
+    let toggle_sidebar = chord(&Action::SessionToggleSidebar);
     let config = format!(
         r#"{{"version":1,"overrides":{{"ui.showShortcuts":{}}},"dock":{{"collapsed":false,"items":[]}}}}"#,
         stored(&toggle_sidebar)
@@ -493,7 +493,7 @@ fn a_rebind_moves_the_action_and_takes_its_keys_from_the_default_holding_them() 
 
 #[test]
 fn a_sequence_that_leads_with_a_default_takes_its_keys() {
-    let palette = chord(Action::UiCommandPalette);
+    let palette = chord(&Action::UiCommandPalette);
     let config = format!(
         r#"{{"version":1,"overrides":{{"ui.showShortcuts":{{"leader":{},"then":{{"key":"j"}}}}}},"dock":{{"collapsed":false,"items":[]}}}}"#,
         stored(&palette)
@@ -542,7 +542,7 @@ fn a_rebind_saved_with_the_shifted_character_takes_the_keys_of_its_physical_key(
 #[test]
 fn a_rebind_arriving_from_the_daemon_applies_at_once() {
     let mut world = World::start(Daemon::scripted().state(state(vec![], &[])));
-    let show_shortcuts = chord(Action::UiShowShortcuts);
+    let show_shortcuts = chord(&Action::UiShowShortcuts);
     let config = r#"{"version":1,"overrides":{"ui.showShortcuts":null},"dock":{"collapsed":false,"items":[]}}"#;
     world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
         settings: Some([("keybindings_config".to_owned(), config.to_owned())].into()),

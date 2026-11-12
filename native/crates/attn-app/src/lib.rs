@@ -97,7 +97,7 @@ pub fn app() -> rune::App<State> {
 /// the items it adds to the macOS menu bar. Each item runs an action; AppKit takes ⌘. before
 /// any view, so Stop Countdown's item is how its keys arrive.
 pub fn native_app(bundle_id: &str) -> rune::App<State> {
-    let stop_countdown = keymap::default_chord(Action::SessionCancelCountdown, KeyPlatform::Mac)
+    let stop_countdown = keymap::default_chord(&Action::SessionCancelCountdown, KeyPlatform::Mac)
         .and_then(|chord| Shortcut::parse_on(chord, KeyPlatform::Mac).ok())
         .expect("Stop Countdown's Mac default is a menu key equivalent");
     let app = app()

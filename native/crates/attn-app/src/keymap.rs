@@ -36,7 +36,7 @@ impl Binding {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct Entry {
     action: Action,
     binding: Binding,
@@ -86,17 +86,17 @@ impl Keymap {
             .unwrap_or_default();
         let defaults = defaults(platform);
         let mut entries = Vec::new();
-        for &action in Action::ALL {
-            let entry = match overrides.get(&action) {
-                Some(Some(entry)) => *entry,
+        for action in Action::ALL {
+            let entry = match overrides.get(action) {
+                Some(Some(entry)) => entry.clone(),
                 Some(None) => continue,
                 None => {
-                    let Some(&binding) = defaults.get(&action) else {
+                    let Some(&binding) = defaults.get(action) else {
                         continue;
                     };
-                    let claimed = overrides.iter().any(|(&other, claim)| {
+                    let claimed = overrides.iter().any(|(other, claim)| {
                         other != action
-                            && claim.is_some_and(|claim| {
+                            && claim.as_ref().is_some_and(|claim| {
                                 !(may_share_keys(action, other)
                                     && matches!(
                                         (binding, claim.binding),
@@ -109,7 +109,7 @@ impl Keymap {
                         continue;
                     }
                     Entry {
-                        action,
+                        action: action.clone(),
                         binding,
                         field_keeps: field_keeps(action, platform),
                     }
@@ -121,18 +121,18 @@ impl Keymap {
         Keymap { platform, entries }
     }
 
-    pub fn binding(&self, action: Action) -> Option<Binding> {
+    pub fn binding(&self, action: &Action) -> Option<Binding> {
         self.entries
             .iter()
-            .find(|entry| entry.action == action)
+            .find(|entry| entry.action == *action)
             .map(|entry| entry.binding)
     }
 
     /// Whether a focused text field keeps `action`'s keys for itself.
-    pub fn kept_by_fields(&self, action: Action) -> bool {
+    pub fn kept_by_fields(&self, action: &Action) -> bool {
         self.entries
             .iter()
-            .any(|entry| entry.action == action && entry.field_keeps)
+            .any(|entry| entry.action == *action && entry.field_keeps)
     }
 
     /// The action a key runs where `focus` holds the keyboard, or the sequences it starts.
@@ -143,7 +143,7 @@ impl Keymap {
                 continue;
             };
             if matches(&chord) && applies(entry, focus) {
-                return Press::Action(entry.action);
+                return Press::Action(entry.action.clone());
             }
         }
         if focus.field {
@@ -156,7 +156,7 @@ impl Keymap {
             .filter_map(|entry| match entry.binding {
                 Binding::Sequence { leader, then } if matches(&leader) && applies(entry, focus) => {
                     chord.get_or_insert(leader);
-                    Some((entry.action, then))
+                    Some((entry.action.clone(), then))
                 }
                 _ => None,
             })
@@ -172,7 +172,7 @@ impl Keymap {
         sequences
             .iter()
             .find(|(_, then)| then.matches_tx_on(ev, tx, self.platform))
-            .map(|&(action, _)| action)
+            .map(|(action, _)| action.clone())
     }
 
     pub fn matches(&self, chord: &Chord, ev: &KeyEvent, tx: &Tx) -> bool {
@@ -195,7 +195,7 @@ impl Keymap {
 /// version wins while a terminal holds the keyboard.
 const TERMINAL_ONLY: [Action; 2] = [Action::TerminalClose, Action::TerminalSendAnnotations];
 
-fn may_share_keys(a: Action, b: Action) -> bool {
+fn may_share_keys(a: &Action, b: &Action) -> bool {
     matches!(
         (a, b),
         (Action::SessionClose, Action::TerminalClose)
@@ -224,7 +224,7 @@ fn applies(entry: &Entry, focus: Focus) -> bool {
 
 /// The defaults a focused text field keeps. ⌘B stays the field's on macOS only: its Linux
 /// keys type nothing a field takes.
-fn field_keeps(action: Action, platform: KeyPlatform) -> bool {
+fn field_keeps(action: &Action, platform: KeyPlatform) -> bool {
     match action {
         Action::TerminalToggleZoom
         | Action::TerminalFind
@@ -238,10 +238,10 @@ fn field_keeps(action: Action, platform: KeyPlatform) -> bool {
 }
 
 /// The chord `action` is bound to on `platform` before any rebind, as `Chord::parse` reads it.
-pub(crate) fn default_chord(action: Action, platform: KeyPlatform) -> Option<&'static str> {
+pub(crate) fn default_chord(action: &Action, platform: KeyPlatform) -> Option<&'static str> {
     table(platform)
         .iter()
-        .find(|&&(a, _)| a == action)
+        .find(|(a, _)| a == action)
         .map(|&(_, spec)| spec)
 }
 
@@ -256,10 +256,10 @@ fn table(platform: KeyPlatform) -> &'static [(Action, &'static str)] {
 fn defaults(platform: KeyPlatform) -> BTreeMap<Action, Binding> {
     table(platform)
         .iter()
-        .map(|&(action, spec)| {
+        .map(|(action, spec)| {
             let chord = Chord::parse(spec)
                 .unwrap_or_else(|why| panic!("{} default {spec:?}: {why}", action.id()));
-            (action, Binding::Chord(chord))
+            (action.clone(), Binding::Chord(chord))
         })
         .collect()
 }
@@ -287,7 +287,7 @@ fn overrides(raw: &str, platform: KeyPlatform) -> BTreeMap<Action, Option<Entry>
             out.insert(action, None);
         } else if let Some((binding, field_keeps)) = stored_binding(value, platform) {
             out.insert(
-                action,
+                action.clone(),
                 Some(Entry {
                     action,
                     binding,

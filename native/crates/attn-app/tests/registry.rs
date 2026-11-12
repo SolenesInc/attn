@@ -58,7 +58,7 @@ fn same_as_tauri(name: &str, platform: KeyPlatform) {
         .unwrap_or_else(|why| panic!("{name} did not read as JSON ({why}): {setting}"));
     let tauri = Keymap::from_setting(Some(&setting), platform);
     let native = Keymap::from_setting(None, platform);
-    for &action in Action::ALL {
+    for action in Action::ALL {
         assert!(
             tauri.binding(action).is_some(),
             "{} did not parse: {}",
@@ -91,7 +91,7 @@ fn the_linux_defaults_are_the_tauri_apps() {
     same_as_tauri("LINUX_SHORTCUTS", KeyPlatform::Linux);
 }
 
-fn chord(keymap: &Keymap, action: Action) -> Chord {
+fn chord(keymap: &Keymap, action: &Action) -> Chord {
     match keymap.binding(action) {
         Some(Binding::Chord(chord)) => chord,
         other => panic!("{} defaults to {other:?}, not one chord", action.id()),
@@ -108,7 +108,7 @@ fn letter(chord: &Chord) -> Option<char> {
 #[test]
 fn every_linux_default_leaves_plain_ctrl_and_a_letter_to_the_shell() {
     let linux = Keymap::from_setting(None, KeyPlatform::Linux);
-    for &action in Action::ALL {
+    for action in Action::ALL {
         let mods = chord(&linux, action).mods_on(KeyPlatform::Linux);
         assert!(
             mods.contains(&ChordMod::Primary),
@@ -126,7 +126,7 @@ fn every_linux_default_leaves_plain_ctrl_and_a_letter_to_the_shell() {
 #[test]
 fn no_linux_default_takes_a_ctrl_alt_chord_the_ubuntu_desktop_reserves() {
     let linux = Keymap::from_setting(None, KeyPlatform::Linux);
-    for &action in Action::ALL {
+    for action in Action::ALL {
         let chord = chord(&linux, action);
         if !chord.has(ChordMod::Alt) || chord.has(ChordMod::Shift) {
             continue;
@@ -150,7 +150,7 @@ fn no_linux_default_takes_a_ctrl_alt_chord_the_ubuntu_desktop_reserves() {
 fn a_mac_cmd_and_letter_action_keeps_its_letter_on_linux_behind_shift_or_alt() {
     let mac = Keymap::from_setting(None, KeyPlatform::Mac);
     let linux = Keymap::from_setting(None, KeyPlatform::Linux);
-    for &action in Action::ALL {
+    for action in Action::ALL {
         let on_mac = chord(&mac, action);
         let Some(key) = letter(&on_mac) else { continue };
         if !on_mac.has(ChordMod::Primary) || on_mac.has(ChordMod::Shift) {
@@ -180,7 +180,7 @@ fn the_former_cmd_shift_letter_actions_sit_on_ctrl_alt_on_linux() {
         Action::DockAttention,
         Action::BoardOpen,
     ] {
-        let mods = chord(&linux, action).mods_on(KeyPlatform::Linux);
+        let mods = chord(&linux, &action).mods_on(KeyPlatform::Linux);
         assert_eq!(mods, [ChordMod::Primary, ChordMod::Alt], "{}", action.id());
     }
 }

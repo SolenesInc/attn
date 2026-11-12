@@ -643,7 +643,7 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
             let rows = Action::ALL
                 .iter()
                 .filter(|a| a.category() == category)
-                .filter_map(|&action| {
+                .filter_map(|action| {
                     let keys = keymap.label(keymap.binding(action)?);
                     Some(
                         row()
