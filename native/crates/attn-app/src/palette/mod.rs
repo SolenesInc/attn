@@ -38,7 +38,6 @@ pub struct Search {
     highlight: Option<String>,
     history: History,
     opening: u64,
-    asked_for: String,
     pointer: Option<(f32, f32)>,
 }
 
@@ -107,14 +106,12 @@ fn is_open(state: &State) -> bool {
 fn ask_history(state: &mut State, tx: &mut Tx) {
     let profile = state.facts.profiles.selected.clone();
     let search = &mut state.window.search;
-    search.asked_for = profile.clone();
     if profile.is_empty() {
         search.history = History::Ready(Vec::new());
         return;
     }
     search.history = History::Loading;
     let opening = search.opening;
-    let asked = profile.clone();
     state.ask(
         |id| GetCommandUsageMessage {
             request_id: id,
@@ -124,7 +121,7 @@ fn ask_history(state: &mut State, tx: &mut Tx) {
         move |state, answer, tx| {
             let open = is_open(state);
             let search = &mut state.window.search;
-            if !open || search.opening != opening || search.asked_for != asked {
+            if !open || search.opening != opening {
                 return;
             }
             let result: Option<GetCommandUsageResultMessage> = answer.parse();

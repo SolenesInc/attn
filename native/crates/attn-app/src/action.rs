@@ -188,4 +188,9 @@ impl Action {
             Action::UiOpenSettings | Action::UiShowShortcuts | Action::AppQuit
         )
     }
+
+    /// The action that switches to the desktop on `slot`, for the slots a key reaches.
+    pub fn desktop_select(slot: i64) -> Option<Action> {
+        Action::from_id(&format!("desktop.select{slot}")).filter(|_| (1..=9).contains(&slot))
+    }
 }

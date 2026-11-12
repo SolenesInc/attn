@@ -99,7 +99,7 @@ fn extras_chip(key: &str, extras: usize, t: &Tokens) -> Option<El> {
             .fill(t.bg_button)
             .hover(t.bg_elevated)
             .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, crate::Action::DesktopOverview, tx)
+                crate::dispatch(state, crate::Action::DesktopOverview, tx);
             })
             .child(
                 text(format!("+{extras}"))
@@ -257,7 +257,7 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                 .fill(t.bg_button)
                 .hover(t.bg_elevated)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                    crate::dispatch(state, crate::Action::UiActionMenu, tx)
+                    crate::dispatch(state, crate::Action::UiActionMenu, tx);
                 })
                 .child(text(pill).font(type_::LABEL).color(if waiting == 0 {
                     t.text_tertiary

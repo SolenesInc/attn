@@ -134,6 +134,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
 
 fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     let (pointing, pressing) = (r.key.clone(), r.key.clone());
+    let shortcut_key = format!("palette.row.{}.shortcut", r.key);
     let mut name = row().gap(space::S2).grow(1.0).child(
         text(r.title.clone())
             .font(type_::BODY)
@@ -168,9 +169,10 @@ fn option(r: &Row, highlighted: bool, t: &Tokens) -> El {
     if let Some(description) = &r.description {
         option = option.description(description.clone());
     }
-    option.children(
-        r.shortcut
-            .clone()
-            .map(|s| text(s).font(type_::MONO_CAPTION).color(t.text_tertiary)),
-    )
+    option.children(r.shortcut.clone().map(|s| {
+        text(s)
+            .key(shortcut_key)
+            .font(type_::MONO_CAPTION)
+            .color(t.text_tertiary)
+    }))
 }

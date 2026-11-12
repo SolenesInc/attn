@@ -205,6 +205,16 @@ fn records(world: &World) -> Vec<(String, String)> {
         .collect()
 }
 
+fn shortcuts_used(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("record_analytics")
+        .iter()
+        .filter(|r| r["name"] == "shortcut")
+        .map(|r| r["props"]["id"].as_str().unwrap().to_owned())
+        .collect()
+}
+
 fn notice(world: &World) -> Option<String> {
     text_of(world, "notice.text")
 }
@@ -274,7 +284,12 @@ fn history_holds_still_while_the_palette_is_open_and_each_opening_reads_it_afres
 #[test]
 fn a_command_picked_by_enter_or_by_pointer_counts_once_and_runs() {
     for by_pointer in [false, true] {
-        let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
+        let mut state = initial(two_desktops(), vec![]);
+        state.settings = Some(BTreeMap::from([(
+            "analytics.enabled".to_owned(),
+            "true".to_owned(),
+        )]));
+        let mut world = World::start(daemon(state, vec![]));
         if by_pointer {
             press_action(&mut world, Action::UiActionMenu);
             world.gesture(|app| app.type_text(">keyboard"));
@@ -297,8 +312,36 @@ fn a_command_picked_by_enter_or_by_pointer_counts_once_and_runs() {
                 .is_some()
         );
         assert_eq!(world.daemon.sent_of("get_command_usage").len(), 1);
+        let opened_by = if by_pointer {
+            Action::UiActionMenu
+        } else {
+            Action::UiCommandPalette
+        };
+        assert_eq!(shortcuts_used(&world), [opened_by.id()]);
         rest(&mut world);
     }
+}
+
+#[test]
+fn a_desktop_command_shows_the_keys_of_its_slot() {
+    let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("go to"));
+
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    for (desktop, select) in [
+        ("d1", Action::DesktopSelect1),
+        ("d2", Action::DesktopSelect2),
+    ] {
+        assert_eq!(
+            text_of(
+                &world,
+                &format!("palette.row.command:desktop-{desktop}.shortcut")
+            ),
+            keymap.binding(&select).map(|b| keymap.label(b))
+        );
+    }
+    rest(&mut world);
 }
 
 #[test]

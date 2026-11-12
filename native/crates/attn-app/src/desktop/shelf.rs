@@ -347,7 +347,7 @@ fn width_control(shown: usize, cols: u32, t: &Tokens) -> El {
             .label(label.to_owned())
             .px(space::S1)
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                crate::dispatch::dispatch(state, action.clone(), tx)
+                crate::dispatch::dispatch(state, action.clone(), tx);
             })
             .child(
                 text(glyph.to_owned())

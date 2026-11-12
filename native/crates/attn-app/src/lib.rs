@@ -225,7 +225,7 @@ pub fn native_app(bundle_id: &str) -> rune::App<State> {
         .on_quit(quit)
         .menu_item(
             MenuItem::new("Stop Countdown", |state, tx| {
-                dispatch(state, Action::SessionCancelCountdown, tx)
+                dispatch(state, Action::SessionCancelCountdown, tx);
             })
             .id(Action::SessionCancelCountdown.id())
             .menu("File")
@@ -234,14 +234,14 @@ pub fn native_app(bundle_id: &str) -> rune::App<State> {
         )
         .menu_item(
             MenuItem::new("Close Pane", |state, tx| {
-                dispatch(state, Action::SessionClose, tx)
+                dispatch(state, Action::SessionClose, tx);
             })
             .id(Action::SessionClose.id())
             .menu("File"),
         )
         .menu_item(
             MenuItem::new("Pop Out or Bring Back Tile", |state, tx| {
-                dispatch(state, Action::TilePopOut, tx)
+                dispatch(state, Action::TilePopOut, tx);
             })
             .id(Action::TilePopOut.id())
             .menu("File"),

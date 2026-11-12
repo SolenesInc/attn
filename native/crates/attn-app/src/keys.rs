@@ -1,7 +1,10 @@
 use attn_term::keys;
 use rune::{Ime, Key, KeyEvent, KeyPlatform, Tx};
 
+use attn_protocol::RecordAnalyticsMessage;
+
 use crate::State;
+use crate::action::Action;
 use crate::dispatch::dispatch;
 use crate::keymap::{Focus, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
@@ -26,7 +29,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
         if let Some(action) = state.keymap.then(ev, tx, &leader.sequences) {
-            dispatch(state, action, tx);
+            run_shortcut(state, action, tx);
         } else if tx.key_repeat() || state.keymap.matches(&leader.chord, ev, tx) {
             state.window.leader = Some(Leader {
                 until: tx.clock() + LEADER_TIMEOUT,
@@ -55,7 +58,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     match state.keymap.press(ev, tx, focus) {
         Press::Action(action) => {
-            dispatch(state, action, tx);
+            run_shortcut(state, action, tx);
             true
         }
         Press::Leader { chord, sequences } => {
@@ -141,4 +144,26 @@ pub(crate) fn on_paste(state: &mut State, text: &str, tx: &mut Tx) {
     if let Some(bytes) = state.terminals.encode_paste(&id, text) {
         state.terminals.input(&id, &bytes, &state.daemon);
     }
+}
+
+fn run_shortcut(state: &mut State, action: Action, tx: &mut Tx) {
+    if dispatch(state, action.clone(), tx) {
+        record_shortcut(state, &action);
+    }
+}
+
+fn record_shortcut(state: &State, action: &Action) {
+    if !crate::setting::on(&state.facts.settings, "analytics.enabled") {
+        return;
+    }
+    let _ = state.daemon.send(&RecordAnalyticsMessage {
+        stream: "app".into(),
+        name: "shortcut".into(),
+        props: Some(
+            [("id".to_owned(), serde_json::Value::from(action.id()))]
+                .into_iter()
+                .collect(),
+        ),
+        ..RecordAnalyticsMessage::new()
+    });
 }

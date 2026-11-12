@@ -1,4 +1,3 @@
-use attn_protocol::RecordAnalyticsMessage;
 use rune::Tx;
 
 use crate::State;
@@ -7,11 +6,11 @@ use crate::palette::Face;
 use crate::picker::{self, Direction};
 use crate::shell::{Drawer, Layer, Palette};
 
-/// The one path every intent takes, from a key, the native menu or the palette.
-pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
+/// The one path every intent takes, from a key, the native menu or the palette. Whether the
+/// native app ran it.
+pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
     if crate::sidebar::dispatch(state, &action, tx) || crate::desktop::run(state, &action, tx) {
-        record(state, &action);
-        return;
+        return true;
     }
     let window = &mut state.window;
     match action {
@@ -33,24 +32,8 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
         }
         _ => {
             window.notify(format!("Not in the native app yet: {}", action.label()), tx);
-            return;
+            return false;
         }
     }
-    record(state, &action);
-}
-
-fn record(state: &State, action: &Action) {
-    if !crate::setting::on(&state.facts.settings, "analytics.enabled") {
-        return;
-    }
-    let _ = state.daemon.send(&RecordAnalyticsMessage {
-        stream: "app".into(),
-        name: "shortcut".into(),
-        props: Some(
-            [("id".to_owned(), serde_json::Value::from(action.id()))]
-                .into_iter()
-                .collect(),
-        ),
-        ..RecordAnalyticsMessage::new()
-    });
+    true
 }

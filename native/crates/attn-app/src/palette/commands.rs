@@ -13,6 +13,7 @@ pub(crate) struct Command {
     keywords: Vec<String>,
     pinned: bool,
     action: Action,
+    shortcut: Option<Action>,
 }
 
 impl Command {
@@ -23,12 +24,18 @@ impl Command {
             description: None,
             keywords: keywords.iter().map(|k| (*k).to_owned()).collect(),
             pinned: false,
+            shortcut: None,
             action,
         }
     }
 
     fn describe(mut self, description: &str) -> Command {
         self.description = Some(description.into());
+        self
+    }
+
+    fn shortcut(mut self, action: Option<Action>) -> Command {
+        self.shortcut = action;
         self
     }
 
@@ -89,14 +96,17 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .cloned()
         .collect();
     for desktop in model::ordered_desktops(&desktops) {
-        commands.push(Command::new(
-            &format!("desktop-{}", desktop.id),
-            &format!("Go to {}", model::desktop_title(desktop, &desktops)),
-            &["desktop", "switch"],
-            Action::GoToDesktop {
-                desktop: desktop.id.clone(),
-            },
-        ));
+        commands.push(
+            Command::new(
+                &format!("desktop-{}", desktop.id),
+                &format!("Go to {}", model::desktop_title(desktop, &desktops)),
+                &["desktop", "switch"],
+                Action::GoToDesktop {
+                    desktop: desktop.id.clone(),
+                },
+            )
+            .shortcut(desktop.shortcut_slot.and_then(Action::desktop_select)),
+        );
     }
     commands.push(Command::new(
         "toggle-sidebar",
@@ -164,6 +174,7 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .to_vec(),
             pinned: true,
             action: Action::SessionPriority,
+            shortcut: None,
         });
     }
     if turn_actions.is_some_and(|a| a.snooze) {
@@ -219,7 +230,7 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
             key: format!("command:{}", c.id),
             shortcut: state
                 .keymap
-                .binding(&c.action)
+                .binding(c.shortcut.as_ref().unwrap_or(&c.action))
                 .map(|b| state.keymap.label(b)),
             title: c.title,
             description: c.description,
