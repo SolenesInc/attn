@@ -360,12 +360,19 @@ fn the_desktop_strip_puts_each_slotted_desktop_on_a_chip_marked_where_a_turn_wai
 }
 
 #[test]
-fn a_hidden_agent_owing_a_turn_queues_by_default_and_a_crew_member_does_not() {
+fn a_hidden_agent_owing_a_turn_queues_by_default_and_a_crew_member_or_another_profile_s_does_not() {
     let mut message = queue(one_desktop(vec![crew("mate", "mate", false)]));
-    message.sessions.as_mut().unwrap().push(Session {
-        hidden: Some(true),
-        ..turn("h1", 5)
-    });
+    message.sessions.as_mut().unwrap().extend([
+        Session {
+            hidden: Some(true),
+            ..turn("h1", 5)
+        },
+        Session {
+            hidden: Some(true),
+            profile_id: "home".into(),
+            ..turn("elsewhere", 5)
+        },
+    ]);
     let world = World::start(Daemon::scripted().state(message));
 
     assert_eq!(
@@ -761,4 +768,67 @@ fn plain(key: rune::Key) -> rune::KeyEvent {
         key,
         mods: rune::Mods::default(),
     }
+}
+
+fn settling(id: &str, minutes_ahead: i64) -> Session {
+    Session {
+        auto_settle_fires_at: Some(ago(-minutes_ahead)),
+        ..turn(id, 5)
+    }
+}
+
+#[test]
+fn an_agent_whose_tile_is_off_screen_shows_its_countdown_on_its_row_until_it_settles() {
+    let mut world = World::start(Daemon::scripted().state(one_desktop(vec![
+        settling("a", 1),
+        Session {
+            auto_settle_held: Some(true),
+            ..turn("b", 5)
+        },
+    ])));
+
+    assert_eq!(name(&world, "sidebar.session.a.settling"), "Settling");
+    assert_eq!(
+        name(&world, "sidebar.session.b.settling"),
+        "Settling paused"
+    );
+
+    world.advance(Duration::from_secs(61));
+    assert!(
+        world.runtime_is_at_rest(),
+        "the drain stops at the deadline"
+    );
+
+    world.open_desktop();
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.session.a.settling"))
+            .is_none(),
+        "the tile shows it"
+    );
+}
+
+#[test]
+fn the_cancel_countdown_key_stops_the_countdowns_on_screen_or_keeps_the_next_turn_of_the_agent_shown()
+ {
+    let mut world =
+        World::start(Daemon::scripted().state(one_desktop(vec![settling("a", 1), turn("b", 5)])));
+    world.gesture(|app| app.key(chord(Action::SessionCancelCountdown)));
+    assert!(
+        sent_ids(&world, "cancel_countdown").is_empty(),
+        "nothing is on screen at home"
+    );
+
+    world.open_desktop();
+    world.gesture(|app| app.key(chord(Action::SessionCancelCountdown)));
+    assert_eq!(sent_ids(&world, "cancel_countdown"), ["a"]);
+
+    changes(&mut world, turn("a", 5));
+    world.gesture(|app| app.key(chord(Action::SessionCancelCountdown)));
+    assert_eq!(
+        sent_ids(&world, "cancel_countdown"),
+        ["a", "a"],
+        "with nothing counting, the agent shown keeps its next turn"
+    );
 }

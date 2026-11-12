@@ -133,6 +133,7 @@ pub fn bind(
             deep_link::settle(state, tx);
             state.tick(tx);
             sidebar::snooze::follow(state);
+            sidebar::follow_countdowns(state);
             sidebar::advance(state, tx);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state

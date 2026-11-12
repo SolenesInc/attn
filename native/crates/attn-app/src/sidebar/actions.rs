@@ -1,5 +1,6 @@
 use attn_protocol::{
-    Session, SetSessionPriorityMessage, SetSettingMessage, SettleTurnMessage, WakeTurnMessage,
+    CancelCountdownMessage, Session, SetSessionPriorityMessage, SetSettingMessage,
+    SettleTurnMessage, WakeTurnMessage,
 };
 use rune::Tx;
 
@@ -112,6 +113,34 @@ pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
     if queue::actions(&state.facts, agent, now_ms).snooze {
         let name = super::model::display_name(agent);
         super::snooze::open(state, &id, name, None, tx);
+    }
+}
+
+/// The cancel-countdown key: stops every countdown on screen, or, with none running, keeps
+/// the next turn of the agent on screen from settling on its own.
+pub(crate) fn cancel_countdown(state: &State) {
+    let on_screen = crate::desktop::on_screen_sessions(state);
+    let counting: Vec<&String> = on_screen
+        .iter()
+        .filter(|id| {
+            session(state, id)
+                .is_some_and(|s| super::model::Settling::of(s) != super::model::Settling::Off)
+        })
+        .collect();
+    let shown = state
+        .window
+        .on_screen(&state.facts)
+        .filter(|id| on_screen.contains(id));
+    let targets: Vec<String> = if counting.is_empty() {
+        shown.into_iter().collect()
+    } else {
+        counting.into_iter().cloned().collect()
+    };
+    for session_id in targets {
+        let _ = state.daemon.send(&CancelCountdownMessage {
+            session_id,
+            ..CancelCountdownMessage::new()
+        });
     }
 }
 

@@ -191,7 +191,11 @@ impl<'a> Places<'a> {
             let hidden = facts
                 .sessions
                 .iter()
-                .filter(|s| s.hidden == Some(true) && !desktop_of.contains_key(s.id.as_str()))
+                .filter(|s| {
+                    s.hidden == Some(true)
+                        && s.profile_id == facts.profiles.selected
+                        && !desktop_of.contains_key(s.id.as_str())
+                })
                 .collect();
             places.push((None, String::new(), hidden));
         }

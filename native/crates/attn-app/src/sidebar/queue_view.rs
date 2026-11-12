@@ -86,15 +86,28 @@ fn slot_of(state: &State, desktop: Option<&str>) -> String {
         .map_or_else(|| "·".to_owned(), |slot| slot.to_string())
 }
 
-fn agent(state: &State, band: Band, row: &QueueRow<'_>, now_ms: i64) -> QueueAgent {
+fn agent(
+    state: &State,
+    on_screen: &[String],
+    band: Band,
+    row: &QueueRow<'_>,
+    now_ms: i64,
+) -> QueueAgent {
     let session = row.session;
     let actions = queue::actions(&state.facts, session, now_ms);
     QueueAgent {
         band,
-        agent: AgentRow::of(
-            session,
-            state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
-        ),
+        agent: {
+            let row = AgentRow::of(
+                session,
+                state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str()),
+            );
+            if on_screen.contains(&session.id) {
+                row
+            } else {
+                row.off_screen(session)
+            }
+        },
         slot: slot_of(state, row.desktop),
         desktop_title: row.desktop_title.clone(),
         age: if band == Band::Turn {
@@ -118,6 +131,7 @@ fn agent(state: &State, band: Band, row: &QueueRow<'_>, now_ms: i64) -> QueueAge
 pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
     let now_ms = state.window.now_ms;
     let window = &state.window;
+    let on_screen = crate::desktop::on_screen_sessions(state);
     let mut lines = Vec::new();
     let chief = bands.chief.as_ref();
     if chief.is_some() || !bands.crew.is_empty() {
@@ -126,7 +140,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
             text: "Crew".into(),
         });
         if let Some(chief) = chief {
-            lines.push(QLine::Agent(agent(state, Band::Chief, chief, now_ms)));
+            lines.push(QLine::Agent(agent(
+                state,
+                &on_screen,
+                Band::Chief,
+                chief,
+                now_ms,
+            )));
         }
         let chief_member = chief.and_then(|c| c.session.crew_member.clone());
         let mut seen = std::collections::HashSet::new();
@@ -135,7 +155,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
             if Some(&member) == chief_member.as_ref() || !seen.insert(member) {
                 continue;
             }
-            lines.push(QLine::Agent(agent(state, Band::Crew, row, now_ms)));
+            lines.push(QLine::Agent(agent(
+                state,
+                &on_screen,
+                Band::Crew,
+                row,
+                now_ms,
+            )));
         }
     }
     let pinned: std::collections::HashSet<&str> =
@@ -144,7 +170,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         waiting: bands.turns.len(),
     });
     for row in &bands.turns {
-        lines.push(QLine::Agent(agent(state, Band::Turn, row, now_ms)));
+        lines.push(QLine::Agent(agent(
+            state,
+            &on_screen,
+            Band::Turn,
+            row,
+            now_ms,
+        )));
     }
     let working: Vec<&QueueRow<'_>> = bands
         .settled
@@ -187,7 +219,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
         lines.push(QLine::Empty("working"));
     }
     for row in working {
-        lines.push(QLine::Agent(agent(state, Band::Working, row, now_ms)));
+        lines.push(QLine::Agent(agent(
+            state,
+            &on_screen,
+            Band::Working,
+            row,
+            now_ms,
+        )));
     }
     if !snoozed.is_empty() {
         lines.push(QLine::Rule {
@@ -195,7 +233,13 @@ pub fn lines(state: &State, bands: &Bands<'_>) -> Vec<QLine> {
             text: format!("Snoozed {}", snoozed.len()),
         });
         for row in snoozed {
-            lines.push(QLine::Agent(agent(state, Band::Snoozed, row, now_ms)));
+            lines.push(QLine::Agent(agent(
+                state,
+                &on_screen,
+                Band::Snoozed,
+                row,
+                now_ms,
+            )));
         }
     }
     lines
@@ -213,6 +257,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.agent_list_open,
         window.agent_filter.text.to_owned(),
         window.now_ms,
+        crate::desktop::on_screen_sessions(state),
         *t,
     );
     memo("sidebar", reads, || {
@@ -278,7 +323,10 @@ fn line(state: &State, line: &QLine, t: &Tokens) -> El {
                 .key(key)
                 .font(type_::LABEL)
                 .color(t.text_muted),
-            QLine::Agent(agent) => queue_row(key, agent, t),
+            QLine::Agent(agent) => {
+                let bar = super::settling_bar(state, &key, &agent.agent, t);
+                queue_row(key, agent, t).children(bar)
+            }
             QLine::Filter => unreachable!("the filter is built above"),
         }
     })

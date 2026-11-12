@@ -67,6 +67,28 @@ pub struct AgentRow {
     pub priority: bool,
     pub owed: bool,
     pub selected: bool,
+    pub settling: Settling,
+}
+
+/// The daemon's auto-settle countdown, as a row whose tile is not on screen shows it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Settling {
+    #[default]
+    Off,
+    /// Settles at this instant.
+    Counting(String),
+    /// Stopped with no deadline until the host comes back.
+    Held,
+}
+
+impl Settling {
+    pub fn of(session: &Session) -> Settling {
+        match &session.auto_settle_fires_at {
+            Some(at) if !at.is_empty() => Settling::Counting(at.clone()),
+            _ if session.auto_settle_held == Some(true) => Settling::Held,
+            _ => Settling::Off,
+        }
+    }
 }
 
 impl AgentRow {
@@ -79,7 +101,14 @@ impl AgentRow {
             priority: session.priority == Some(true),
             owed: session.turn_owed == Some(true),
             selected,
+            settling: Settling::Off,
         }
+    }
+
+    /// The row of an agent whose tile is not on screen, which shows its countdown.
+    pub fn off_screen(mut self, session: &Session) -> AgentRow {
+        self.settling = Settling::of(session);
+        self
     }
 
     /// What the state mark says to a screen reader: "Claude · working".
@@ -295,8 +324,9 @@ pub fn leaves(tree_json: &str) -> Vec<Leaf> {
 }
 
 /// What the desktop sidebar lists: each desktop, then its agents and tiles in layout order,
-/// then any agent of it the layout does not hold.
-pub fn desktop_lines(facts: &Facts, home: bool) -> Vec<Line> {
+/// then any agent of it the layout does not hold. An agent not in `on_screen` shows its
+/// countdown.
+pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Line> {
     let desktops = &facts.desktops;
     let current = facts.current_desktop().map(|d| d.id.as_str());
     let by_id: HashMap<&str, &Session> =
@@ -339,7 +369,13 @@ pub fn desktop_lines(facts: &Facts, home: bool) -> Vec<Line> {
                         continue;
                     };
                     if placed.insert(session.id.as_str()) {
-                        children.push(agent_line(desktop, session, shown, active_session));
+                        children.push(agent_line(
+                            desktop,
+                            session,
+                            shown,
+                            active_session,
+                            on_screen,
+                        ));
                     }
                 }
             }
@@ -348,7 +384,13 @@ pub fn desktop_lines(facts: &Facts, home: bool) -> Vec<Line> {
             if desktop_of.get(session.id.as_str()) == Some(&desktop.id.as_str())
                 && placed.insert(session.id.as_str())
             {
-                children.push(agent_line(desktop, session, shown, active_session));
+                children.push(agent_line(
+                    desktop,
+                    session,
+                    shown,
+                    active_session,
+                    on_screen,
+                ));
             }
         }
         lines.push(Line::Desktop(DesktopHeader {
@@ -363,10 +405,21 @@ pub fn desktop_lines(facts: &Facts, home: bool) -> Vec<Line> {
     lines
 }
 
-fn agent_line(desktop: &Desktop, session: &Session, shown: bool, active: Option<&str>) -> Line {
+fn agent_line(
+    desktop: &Desktop,
+    session: &Session,
+    shown: bool,
+    active: Option<&str>,
+    on_screen: &[String],
+) -> Line {
     let selected = shown && active == Some(session.id.as_str());
+    let row = AgentRow::of(session, selected);
     Line::Agent {
         desktop: desktop.id.clone(),
-        row: AgentRow::of(session, selected),
+        row: if on_screen.contains(&session.id) {
+            row
+        } else {
+            row.off_screen(session)
+        },
     }
 }

@@ -66,6 +66,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SessionSettle => actions::settle_on_screen(state, tx),
         Action::SessionPriority => actions::toggle_priority_on_screen(state),
         Action::SessionSnooze => actions::snooze_on_screen(state, tx),
+        Action::SessionCancelCountdown => actions::cancel_countdown(state),
         Action::SessionPrev if queue => actions::step(state, -1, tx),
         Action::SessionNext if queue => actions::step(state, 1, tx),
         _ => return false,
@@ -101,15 +102,17 @@ fn request_id(cmd: &str) -> String {
 fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let home = state.window.view == View::Home;
+    let on_screen = crate::desktop::on_screen_sessions(state);
     let reads = (
         std::sync::Arc::as_ptr(&facts.sessions) as usize,
         std::sync::Arc::as_ptr(&facts.desktops) as usize,
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         home,
+        on_screen.clone(),
         *t,
     );
     memo("sidebar", reads, || {
-        let lines: Rc<[Line]> = model::desktop_lines(facts, home).into();
+        let lines: Rc<[Line]> = model::desktop_lines(facts, home, &on_screen).into();
         let keys = lines.clone();
         let t = *t;
         col()
@@ -143,7 +146,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
                                 lines.len(),
                                 ROW_HEIGHT,
                                 move |_: &State, i| keys[i].key().into(),
-                                move |_: &State, i| line(&lines[i], &t),
+                                move |state: &State, i| line(state, &lines[i], &t),
                             ),
                     ),
             )
@@ -169,13 +172,16 @@ pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
         .child(text("Home").font(type_::BODY).color(t.text_primary))
 }
 
-fn line(line: &Line, t: &Tokens) -> El {
+fn line(state: &State, line: &Line, t: &Tokens) -> El {
     let key = line.key();
     memo(key.clone(), (line, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         match line {
             Line::Desktop(desktop) => desktop_row(key, desktop, t),
-            Line::Agent { row, .. } => agent_row(key, row, t),
+            Line::Agent { row, .. } => {
+                let bar = settling_bar(state, &key, row, t);
+                agent_row(key, row, t).children(bar)
+            }
             Line::Tile(tile) => tile_row(key, tile, t),
         }
     })
@@ -266,6 +272,79 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
+}
+
+/// One auto-settle countdown's drain: full when first seen, empty at its deadline.
+pub(crate) struct Countdown {
+    fires_at: String,
+    drain: rune::Tween<[f32; 2]>,
+}
+
+/// Starts a drain for each countdown the daemon began and drops those it ended, so the
+/// drain runs from when the window first saw the deadline to the deadline.
+pub(crate) fn follow_countdowns(state: &mut State) {
+    let now_ms = state.window.now_ms;
+    let counting: Vec<(String, String)> = state
+        .facts
+        .sessions
+        .iter()
+        .filter_map(|s| match model::Settling::of(s) {
+            model::Settling::Counting(at) => Some((s.id.clone(), at)),
+            _ => None,
+        })
+        .collect();
+    let countdowns = &mut state.window.countdowns;
+    countdowns.retain(|id, c| counting.iter().any(|(i, at)| i == id && *at == c.fires_at));
+    for (id, fires_at) in counting {
+        countdowns.entry(id).or_insert_with(|| {
+            let left_ms = queue::epoch_ms(&fires_at).map_or(0, |at| (at - now_ms).max(0));
+            Countdown {
+                drain: rune::Tween::linear(
+                    [0.0, 1.0],
+                    [1.0, 1.0],
+                    std::time::Duration::from_millis(left_ms as u64),
+                ),
+                fires_at,
+            }
+        });
+    }
+}
+
+/// The bar under a row whose agent's tile is off screen while its turn auto-settles: it
+/// drains to the deadline, or stands full while the countdown is held.
+pub(crate) fn settling_bar(
+    state: &State,
+    row_key: &str,
+    agent: &AgentRow,
+    t: &Tokens,
+) -> Option<El> {
+    let (label, drain) = match &agent.settling {
+        model::Settling::Off => return None,
+        model::Settling::Held => ("Settling paused", None),
+        model::Settling::Counting(_) => ("Settling", state.window.countdowns.get(&agent.id)),
+    };
+    let line = rune::Shape::new().view_box(1.0, 1.0).line(
+        [0.0, 0.5],
+        [1.0, 0.5],
+        2.0,
+        rune::LineCap::Butt,
+        if drain.is_some() {
+            t.accent
+        } else {
+            t.text_muted
+        },
+    );
+    let bar = rune::canvas(line)
+        .key(format!("{row_key}.settling"))
+        .role("img")
+        .label(label)
+        .absolute(0.0, ROW_HEIGHT - 2.0)
+        .w_full()
+        .h(2.0);
+    Some(match drain {
+        Some(c) => bar.live_trim(&c.drain),
+        None => bar,
+    })
 }
 
 /// The dot in each agent's colour of state, as the Tauri app's `.session-lead[data-state]`.

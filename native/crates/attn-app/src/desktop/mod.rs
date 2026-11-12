@@ -209,3 +209,29 @@ pub(crate) fn leaf_ids(desktop: &Desktop) -> Vec<String> {
         .map(|tree| tree.leaves().into_iter().map(|l| l.id.clone()).collect())
         .unwrap_or_default()
 }
+
+/// The agents whose tiles this window shows: none at home, else the current desktop's
+/// columns on screen, or its one focused tile.
+pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
+    if state.window.view == crate::shell::View::Home {
+        return Vec::new();
+    }
+    let Some(desktop) = state.facts.current_desktop() else {
+        return Vec::new();
+    };
+    let leaves: Vec<String> = match state.window.desk.row(&desktop.id).view {
+        View::Focused(leaf) => vec![leaf],
+        _ => state
+            .window
+            .desk
+            .plan(&state.facts, desktop)
+            .map(|(_, plan)| plan.screen.into_iter().flat_map(|c| c.leaf_ids).collect())
+            .unwrap_or_default(),
+    };
+    desktop
+        .panes
+        .iter()
+        .filter(|p| leaves.contains(&p.pane_id))
+        .map(|p| p.session_id.clone())
+        .collect()
+}

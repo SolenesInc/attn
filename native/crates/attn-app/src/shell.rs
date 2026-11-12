@@ -43,6 +43,9 @@ pub struct Window {
     pub follow_next_turn: bool,
     /// The home screen lists its snoozed agents, not only their count.
     pub home_snoozed_open: bool,
+    /// Each running auto-settle countdown's drain, by agent: kept while its deadline holds so a
+    /// row rebuilt mid-countdown keeps draining where it was.
+    pub(crate) countdowns: std::collections::HashMap<String, crate::sidebar::Countdown>,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) launching: crate::picker::Launching,
     /// Links opened before the current desktop arrived, in the order they came.
