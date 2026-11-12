@@ -65,12 +65,16 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
             crate::shell::Layer::Palette(crate::shell::Palette::Agents),
             tx,
         ),
+        Action::SessionSettle => actions::settle_on_screen(state, tx),
+        Action::SessionPriority => actions::toggle_priority_on_screen(state),
         Action::SessionPrev if queue => actions::step(state, -1, tx),
         Action::SessionNext if queue => actions::step(state, 1, tx),
         _ => return false,
     }
     true
 }
+
+pub(crate) use actions::advance;
 
 /// The next wall-clock moment a turn age the window shows reads differently.
 pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
@@ -331,6 +335,7 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
 /// Shows the agent where it is, as a click on its row in the Tauri app does.
 pub(crate) fn open_agent(state: &mut State, session: &str, _: &mut Tx) {
     state.window.view = View::Desktop;
+    state.window.follow_next_turn = false;
     let _ = state.daemon.send(&DesktopShowSessionMessage {
         request_id: request_id("desktop_show_session"),
         session_id: session.into(),

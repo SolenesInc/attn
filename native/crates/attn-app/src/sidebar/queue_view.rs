@@ -43,6 +43,8 @@ pub struct QueueAgent {
     pub desktop_title: String,
     pub age: String,
     pub snoozed_until: String,
+    pub settle: bool,
+    pub unsnooze: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -103,6 +105,8 @@ fn agent(state: &State, band: Band, row: &QueueRow<'_>, now_ms: i64) -> QueueAge
         } else {
             String::new()
         },
+        settle: band == Band::Turn && queue::actions(&state.facts, session, now_ms).settle,
+        unsnooze: band == Band::Snoozed,
     }
 }
 
@@ -413,4 +417,48 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary)
         }))
+        .hover_group()
+        .children(row_controls(&key, a, t))
+}
+
+/// The buttons a queue row shows while it is hovered or holds focus.
+fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
+    let id = &a.agent.id;
+    let name = &a.agent.name;
+    let settle = a.settle.then(|| {
+        let id = id.clone();
+        control(key, "settle", format!("Settle {name}"), "✓", t)
+            .on_press(move |state: &mut State| super::actions::settle(state, &id))
+    });
+    let unsnooze = a.unsnooze.then(|| {
+        let id = id.clone();
+        control(key, "unsnooze", format!("Unsnooze {name}"), "↩", t)
+            .on_press(move |state: &mut State| super::actions::wake(state, &id))
+    });
+    (a.settle || a.unsnooze).then(|| {
+        row()
+            .key(format!("{key}.controls"))
+            .gap(2.0)
+            .group_opacity(0.0, 1.0)
+            .children(unsnooze)
+            .children(settle)
+    })
+}
+
+fn control(row_key: &str, name: &str, label: String, glyph: &str, t: &Tokens) -> El {
+    row()
+        .key(format!("{row_key}.{name}"))
+        .role("button")
+        .label(label)
+        .w(20.0)
+        .h(20.0)
+        .center()
+        .radius(4.0)
+        .hover(t.bg_button)
+        .hover_alone()
+        .child(
+            text(glyph.to_owned())
+                .font(type_::LABEL)
+                .color(t.text_secondary),
+        )
 }

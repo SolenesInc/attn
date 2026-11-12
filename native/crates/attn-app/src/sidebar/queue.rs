@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use attn_client::Facts;
 use attn_protocol::Session;
@@ -125,6 +125,34 @@ fn compare_wake_order(a: &Session, b: &Session) -> Ordering {
         .then_with(|| a.id.cmp(&b.id))
 }
 
+/// Whether an agent takes part in the queue at all: never a command terminal or an automation
+/// run, and a crew member only when the crew queues.
+pub fn participates(session: &Session, crew_in_queue: bool) -> bool {
+    session.command_terminal != Some(true)
+        && session.automation.is_none()
+        && (session.crew_member.as_deref().unwrap_or("").is_empty() || crew_in_queue)
+}
+
+/// What the queue lets the user do to an agent, as the Tauri app's `queueActions`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct QueueActions {
+    pub settle: bool,
+    pub snooze: bool,
+}
+
+pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
+    if is_snoozed(session.turn_snoozed_until.as_deref(), now_ms) {
+        return QueueActions::default();
+    }
+    let settings = &facts.settings;
+    let in_queue = setting::on(settings, QUEUE_MODE)
+        && participates(session, setting::on(settings, QUEUE_CREW));
+    QueueActions {
+        settle: session.turn_owed == Some(true) && (in_queue || session.automation.is_some()),
+        snooze: in_queue,
+    }
+}
+
 /// The queue the selected profile's sessions make at `now_ms`, in the Tauri app's
 /// `buildQueueBands` order.
 pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
@@ -241,6 +269,42 @@ impl Bands<'_> {
             Some(at) => (at as isize + step).rem_euclid(n),
         };
         Some(order[next as usize])
+    }
+
+    /// Where the user lands when the turn of the agent on screen closed without them asking:
+    /// `Some(None)` is home, `None` is stay put.
+    pub fn advance_after_turn_closed(
+        &self,
+        previous_turns: &[String],
+        on_screen: Option<&str>,
+    ) -> Option<Option<String>> {
+        let id = on_screen?;
+        if !previous_turns.iter().any(|t| t == id) {
+            return None;
+        }
+        let closed = self
+            .settled
+            .iter()
+            .chain(&self.snoozed)
+            .find(|row| row.session.id == id)?;
+        if closed.session.turn_by_agent == Some(true) {
+            return None;
+        }
+        if let Some(head) = self.head().filter(|h| h.priority == Some(true)) {
+            return Some(Some(head.id.clone()));
+        }
+        let still: HashSet<&str> = self.turns.iter().map(|r| r.session.id.as_str()).collect();
+        let at = previous_turns
+            .iter()
+            .position(|t| t == id)
+            .map_or(0, |at| at + 1);
+        let n = previous_turns.len();
+        let next = (0..n)
+            .map(|offset| &previous_turns[(at + offset) % n])
+            .find(|t| *t != id && still.contains(t.as_str()))
+            .cloned()
+            .or_else(|| self.head().map(|h| h.id.clone()));
+        Some(next)
     }
 }
 

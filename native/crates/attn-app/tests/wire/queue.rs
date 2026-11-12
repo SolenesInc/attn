@@ -3,7 +3,10 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use attn_app::Action;
-use attn_protocol::{Desktop, InitialStateMessage, Session};
+use attn_protocol::{
+    Desktop, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
+    SessionStateChangedMessage,
+};
 use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 
 use super::sidebar::{chord, desktop, pane, session, state};
@@ -375,4 +378,224 @@ fn a_hidden_agent_owing_a_turn_queues_by_default_and_a_crew_member_does_not() {
             "queue.agents-toggle",
         ]
     );
+}
+
+fn sent_ids(world: &World, cmd: &str) -> Vec<String> {
+    world
+        .daemon
+        .sent_of(cmd)
+        .iter()
+        .map(|m| m["session_id"].as_str().unwrap_or_default().to_owned())
+        .collect()
+}
+
+/// The daemon shows `session` on desktop d1, as it does once the app asked it to.
+fn daemon_shows(world: &mut World, sessions: &[&Session], session: &str) {
+    let panes: Vec<_> = sessions
+        .iter()
+        .enumerate()
+        .map(|(i, s)| pane("d1", &format!("p{i}"), &s.id))
+        .collect();
+    let mut d1 = slotted(desktop("d1", "a", "", panes), 1);
+    d1.active_pane_id = format!(
+        "p{}",
+        sessions.iter().position(|s| s.id == session).unwrap()
+    );
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: Profile {
+            id: "work".into(),
+            name: "Work".into(),
+            current_desktop_id: "d1".into(),
+            ..Profile::default()
+        },
+        desktops: vec![d1],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+}
+
+fn changes(world: &mut World, session: Session) {
+    world.daemon.emit(SessionStateChangedMessage {
+        session,
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+}
+
+fn settled(id: &str) -> Session {
+    session(id, "working")
+}
+
+#[test]
+fn a_row_settles_its_turn_and_unsnoozes_its_agent_without_opening_it() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+
+    world.gesture(|app| app.click(Target::role("button").name("Settle t-old")));
+    world.gesture(|app| app.click(Target::key("queue.agents-toggle")));
+    world.gesture(|app| app.click(Target::role("button").name("Unsnooze s1")));
+
+    assert_eq!(sent_ids(&world, "settle_turn"), ["t-old"]);
+    assert_eq!(sent_ids(&world, "wake_turn"), ["s1"]);
+    assert!(shown(&world).is_empty());
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-turn.t-new.settle"))
+            .is_some()
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue-settled.w1.settle"))
+            .is_none()
+    );
+}
+
+#[test]
+fn when_the_turn_on_screen_closes_the_window_moves_to_the_next_turn_then_home_to_follow_the_next() {
+    let (a, b) = (turn("a", 30), turn("b", 20));
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone(), b.clone()]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    assert_eq!(shown(&world), ["a"]);
+
+    changes(&mut world, settled("a"));
+    assert_eq!(shown(&world), ["a", "b"], "the next turn opens");
+
+    daemon_shows(&mut world, &[&a, &b], "b");
+    changes(&mut world, settled("b"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.home"))
+            .value
+            .as_deref(),
+        Some("current"),
+        "home after the last turn"
+    );
+
+    changes(&mut world, turn("a", 0));
+    assert_eq!(
+        shown(&world),
+        ["a", "b", "a"],
+        "home follows the next turn to open"
+    );
+}
+
+#[test]
+fn a_turn_the_agent_closes_itself_keeps_the_window_where_it_is() {
+    let (a, b) = (turn("a", 30), turn("b", 20));
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone(), b.clone()]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+
+    changes(
+        &mut world,
+        Session {
+            turn_by_agent: Some(true),
+            ..settled("a")
+        },
+    );
+
+    assert_eq!(shown(&world), ["a"]);
+}
+
+#[test]
+fn going_home_by_hand_does_not_follow_the_next_turn() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("a", 30),
+        session("w1", "working"),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    world.gesture(|app| app.click(Target::key("sidebar.home")));
+
+    changes(&mut world, turn("w1", 0));
+
+    assert_eq!(shown(&world), ["a"]);
+}
+
+#[test]
+fn the_settle_key_settles_the_turn_on_screen_and_moves_on_from_an_agent_with_none() {
+    let (a, w) = (turn("a", 30), session("w1", "working"));
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone(), w.clone()]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+    assert_eq!(sent_ids(&world, "settle_turn"), ["a"]);
+
+    daemon_shows(&mut world, &[&a, &w], "w1");
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+    assert_eq!(sent_ids(&world, "settle_turn"), ["a"]);
+    assert_eq!(
+        shown(&world),
+        ["a", "a"],
+        "a settled agent moves on to the head of the queue"
+    );
+}
+
+#[test]
+fn the_priority_key_puts_the_agent_on_screen_ahead_of_the_other_turns_and_back() {
+    let a = turn("a", 30);
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![a.clone()]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+
+    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    changes(
+        &mut world,
+        Session {
+            priority: Some(true),
+            ..a
+        },
+    );
+    world.gesture(|app| app.key(chord(Action::SessionPriority)));
+
+    let sent: Vec<_> = world
+        .daemon
+        .sent_of("set_session_priority")
+        .iter()
+        .map(|m| m["priority"].clone())
+        .collect();
+    assert_eq!(sent, [true, false]);
+}
+
+#[test]
+fn the_settle_key_goes_home_from_a_settled_agent_when_no_turn_is_owed() {
+    let mut world =
+        World::start(Daemon::scripted().state(queue(one_desktop(vec![session("w1", "working")]))));
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+
+    world.gesture(|app| app.key(chord(Action::SessionSettle)));
+
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("sidebar.home"))
+            .value
+            .as_deref(),
+        Some("current")
+    );
+    assert!(world.daemon.sent_of("settle_turn").is_empty());
+}
+
+#[test]
+fn a_closed_turn_in_the_middle_of_the_queue_moves_on_to_a_priority_head() {
+    let (a, b, c) = (turn("a", 30), turn("b", 20), turn("c", 10));
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        a.clone(),
+        b.clone(),
+        c.clone(),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    daemon_shows(&mut world, &[&a, &b, &c], "b");
+    changes(
+        &mut world,
+        Session {
+            priority: Some(true),
+            ..c
+        },
+    );
+
+    changes(&mut world, settled("b"));
+
+    assert_eq!(shown(&world), ["a", "c"]);
 }

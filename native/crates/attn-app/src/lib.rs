@@ -107,6 +107,7 @@ pub fn bind(
             state.window.follow(&state.facts);
             desktop::settle(state);
             state.tick(tx);
+            sidebar::advance(state, tx);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state
                 .terminals

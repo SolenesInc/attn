@@ -36,6 +36,11 @@ pub struct Window {
     /// Wall-clock milliseconds as of the last change the window shows by time: turn ages and
     /// snooze deadlines read it, so it moves only when one of them would read differently.
     pub now_ms: i64,
+    /// The queue's turns as of the last change, oldest first: where the next turn is found
+    /// when the one on screen closes.
+    pub(crate) queue_turns: Vec<String>,
+    /// Home follows the next turn to open, as it does after the last turn closed.
+    pub follow_next_turn: bool,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -113,6 +118,13 @@ const PALETTE_FIELD: &str = "palette.field";
 impl Window {
     pub(crate) fn go_home(&mut self) {
         self.view = View::Home;
+        self.follow_next_turn = false;
+    }
+
+    /// Home after the last turn closed, ready to open the next one that opens.
+    pub(crate) fn go_home_following(&mut self) {
+        self.view = View::Home;
+        self.follow_next_turn = true;
     }
 
     /// The agent the window shows: the active pane's agent of the current desktop.
