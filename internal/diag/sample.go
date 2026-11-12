@@ -17,6 +17,8 @@ type ProcessSample struct {
 	HeapIdle      uint64 `json:"heap_idle"`
 	HeapInuse     uint64 `json:"heap_inuse"`
 	HeapReleased  uint64 `json:"heap_released"`
+	CHeapInUse    uint64 `json:"c_heap_in_use_bytes,omitempty"`
+	CHeapFree     uint64 `json:"c_heap_free_bytes,omitempty"`
 	HeapObjects   uint64 `json:"heap_objects"`
 	Sys           uint64 `json:"sys"`
 	NextGC        uint64 `json:"next_gc"`
@@ -28,6 +30,7 @@ func Sample() ProcessSample {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	self, _ := ReadProcess(os.Getpid())
+	cHeapInUse, cHeapFree := cHeap()
 	return ProcessSample{
 		Goroutines:    runtime.NumGoroutine(),
 		ResidentBytes: self.ResidentBytes,
@@ -43,6 +46,8 @@ func Sample() ProcessSample {
 		NextGC:        ms.NextGC,
 		NumGC:         ms.NumGC,
 		GCPauseTotal:  ms.PauseTotalNs,
+		CHeapInUse:    cHeapInUse,
+		CHeapFree:     cHeapFree,
 	}
 }
 
