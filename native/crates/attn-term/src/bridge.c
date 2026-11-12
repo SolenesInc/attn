@@ -62,10 +62,12 @@ static void attn_write_pty(GhosttyTerminal terminal, void *userdata,
   t->responses_len = needed;
 }
 
-static AttnTerm *attn_wrap(GhosttyTerminal terminal) {
+static AttnTerm *attn_wrap(GhosttyTerminal terminal, size_t scrollback_bytes) {
   AttnTerm *t = calloc(1, sizeof(*t));
   if (t == NULL) goto fail;
   t->terminal = terminal;
+  if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES,
+                           &scrollback_bytes) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_USERDATA, t) != GHOSTTY_SUCCESS) goto fail;
   if (ghostty_terminal_set(terminal, GHOSTTY_TERMINAL_OPT_WRITE_PTY,
                            (const void *)attn_write_pty) != GHOSTTY_SUCCESS) goto fail;
@@ -93,14 +95,14 @@ fail:
   return NULL;
 }
 
-AttnTerm *attn_term_new(uint16_t cols, uint16_t rows) {
+AttnTerm *attn_term_new(uint16_t cols, uint16_t rows, size_t scrollback_bytes) {
   if (cols == 0 || rows == 0) return NULL;
   GhosttyTerminal terminal = NULL;
   if (ghostty_terminal_new(NULL, &terminal, cols, rows) != GHOSTTY_SUCCESS) return NULL;
-  return attn_wrap(terminal);
+  return attn_wrap(terminal, scrollback_bytes);
 }
 
-AttnTerm *attn_term_restore(const uint8_t *data, size_t len) {
+AttnTerm *attn_term_restore(const uint8_t *data, size_t len, size_t scrollback_bytes) {
   if (data == NULL || len == 0) return NULL;
   GhosttySnapshotDecoder decoder;
   if (ghostty_snapshot_decoder_new_buf(NULL, &decoder, data, len) != GHOSTTY_SUCCESS) return NULL;
@@ -108,7 +110,7 @@ AttnTerm *attn_term_restore(const uint8_t *data, size_t len) {
   GhosttyResult rc = ghostty_snapshot_decoder_decode(decoder, &terminal);
   ghostty_snapshot_decoder_free(decoder);
   if (rc != GHOSTTY_SUCCESS || terminal == NULL) return NULL;
-  return attn_wrap(terminal);
+  return attn_wrap(terminal, scrollback_bytes);
 }
 
 uint8_t *attn_term_snapshot(AttnTerm *t, size_t *out_len) {
@@ -160,6 +162,52 @@ void attn_term_size(AttnTerm *t, uint16_t *cols, uint16_t *rows) {
 void attn_term_cursor(AttnTerm *t, uint16_t *col, uint16_t *row) {
   ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_CURSOR_X, col);
   ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_CURSOR_Y, row);
+}
+
+void attn_term_scrollbar(AttnTerm *t, uint64_t *total, uint64_t *offset, uint64_t *len) {
+  GhosttyTerminalScrollbar bar = {0};
+  ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_SCROLLBAR, &bar);
+  *total = bar.total;
+  *offset = bar.offset;
+  *len = bar.len;
+}
+
+void attn_term_scroll_to_row(AttnTerm *t, size_t row) {
+  GhosttyTerminalScrollViewport behavior = {
+      .tag = GHOSTTY_TERMINAL_SCROLL_VIEWPORT_ROW,
+      .value = {.row = row},
+  };
+  ghostty_terminal_scroll_viewport(t->terminal, behavior);
+}
+
+/* The text of cells [start, end) of row `row` counted from the top of the scrollback, as code
+   points: an empty cell is a space and a wide character's spacer is left out. Returns how many
+   code points the row needs, which is more than `cap` when `out` was too small. */
+size_t attn_term_row_text(AttnTerm *t, uint32_t row, uint16_t start, uint16_t end, uint32_t *out,
+                          size_t cap) {
+  size_t n = 0;
+  for (uint16_t x = start; x < end; x++) {
+    GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
+                          .value = {.coordinate = {.x = x, .y = row}}};
+    GhosttyGridRef ref = {0};
+    if (ghostty_terminal_grid_ref(t->terminal, point, &ref) != GHOSTTY_SUCCESS) break;
+    GhosttyCell cell = 0;
+    ghostty_grid_ref_cell(&ref, &cell);
+    GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide);
+    if (wide == GHOSTTY_CELL_WIDE_SPACER_TAIL) continue;
+    uint32_t cluster[16];
+    size_t len = 0;
+    if (ghostty_grid_ref_graphemes(&ref, cluster, 16, &len) != GHOSTTY_SUCCESS) len = 0;
+    if (len == 0) {
+      cluster[0] = ' ';
+      len = 1;
+    }
+    for (size_t i = 0; i < len; i++, n++) {
+      if (n < cap) out[n] = cluster[i];
+    }
+  }
+  return n;
 }
 
 bool attn_term_mode(AttnTerm *t, uint16_t value, bool ansi) {

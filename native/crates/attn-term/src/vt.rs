@@ -48,8 +48,18 @@ const DIRTY_FULL: u8 = 2;
 const DIRTY_FALSE: u8 = 0;
 
 unsafe extern "C" {
-    fn attn_term_new(cols: u16, rows: u16) -> *mut AttnTerm;
-    fn attn_term_restore(data: *const u8, len: usize) -> *mut AttnTerm;
+    fn attn_term_new(cols: u16, rows: u16, scrollback_bytes: usize) -> *mut AttnTerm;
+    fn attn_term_restore(data: *const u8, len: usize, scrollback_bytes: usize) -> *mut AttnTerm;
+    fn attn_term_scrollbar(t: *mut AttnTerm, total: *mut u64, offset: *mut u64, len: *mut u64);
+    fn attn_term_scroll_to_row(t: *mut AttnTerm, row: usize);
+    fn attn_term_row_text(
+        t: *mut AttnTerm,
+        row: u32,
+        start: u16,
+        end: u16,
+        out: *mut u32,
+        cap: usize,
+    ) -> usize;
     fn attn_term_snapshot(t: *mut AttnTerm, len: *mut usize) -> *mut u8;
     fn attn_term_bytes_free(data: *mut u8);
     fn attn_term_free(t: *mut AttnTerm);
@@ -100,6 +110,8 @@ unsafe extern "C" {
 pub const SNAPSHOT_FORMAT: &str = env!("ATTN_SNAPSHOT_FORMAT");
 
 const BRACKETED_PASTE: u16 = 2004;
+/// How much history a terminal keeps above its screen, as the Tauri terminal keeps.
+const SCROLLBACK_BYTES: usize = 8 * 1024 * 1024;
 
 /// A key as libghostty-vt's encoder takes it: a physical key, its modifiers, the text it typed
 /// and the code point it types without Shift.
@@ -151,7 +163,7 @@ unsafe impl Send for Vt {}
 
 impl Vt {
     pub fn new(cols: u16, rows: u16) -> Vt {
-        let raw = unsafe { attn_term_new(cols.max(1), rows.max(1)) };
+        let raw = unsafe { attn_term_new(cols.max(1), rows.max(1), SCROLLBACK_BYTES) };
         Vt::clustering(NonNull::new(raw).expect("libghostty-vt made a terminal"))
     }
 
@@ -169,7 +181,7 @@ impl Vt {
 
     /// The terminal a snapshot describes, or None when its bytes do not decode.
     pub fn restore(snapshot: &[u8]) -> Option<Vt> {
-        let raw = unsafe { attn_term_restore(snapshot.as_ptr(), snapshot.len()) };
+        let raw = unsafe { attn_term_restore(snapshot.as_ptr(), snapshot.len(), SCROLLBACK_BYTES) };
         NonNull::new(raw).map(Vt::clustering)
     }
 
@@ -269,6 +281,65 @@ impl Vt {
             let bytes = std::slice::from_raw_parts(raw, len).to_vec();
             attn_term_clear_responses(self.raw.as_ptr());
             bytes
+        }
+    }
+
+    /// Rows of history above the screen. A row counted from the top of the history is a
+    /// screen row: the history's rows, then the screen's.
+    pub fn history(&mut self) -> u32 {
+        let (total, _, len) = self.scrollbar();
+        u32::try_from(total.saturating_sub(len)).unwrap_or(u32::MAX)
+    }
+
+    /// How many rows the view is scrolled back from the screen.
+    pub fn scrolled_back(&mut self) -> u32 {
+        let (total, offset, len) = self.scrollbar();
+        u32::try_from(total.saturating_sub(offset + len)).unwrap_or(u32::MAX)
+    }
+
+    /// Scrolls the view to `rows` back from the screen, as far as the history goes. A view
+    /// scrolled back keeps showing the same rows while output arrives; one at the screen
+    /// follows it.
+    pub fn scroll_back_to(&mut self, rows: u32) {
+        let (total, _, len) = self.scrollbar();
+        let top = total.saturating_sub(len).saturating_sub(u64::from(rows));
+        unsafe { attn_term_scroll_to_row(self.raw.as_ptr(), top as usize) };
+    }
+
+    /// The screen row the view shows at its top.
+    pub fn view_top(&mut self) -> u32 {
+        let (_, offset, _) = self.scrollbar();
+        u32::try_from(offset).unwrap_or(u32::MAX)
+    }
+
+    fn scrollbar(&mut self) -> (u64, u64, u64) {
+        let (mut total, mut offset, mut len) = (0, 0, 0);
+        unsafe { attn_term_scrollbar(self.raw.as_ptr(), &mut total, &mut offset, &mut len) };
+        (total, offset, len)
+    }
+
+    /// The text of columns `cols` of screen row `row`, an empty cell as a space and a wide
+    /// character once.
+    pub fn row_text(&mut self, row: u32, cols: std::ops::Range<u16>) -> String {
+        let mut buf = vec![0u32; usize::from(cols.end.saturating_sub(cols.start)) * 2];
+        loop {
+            let needed = unsafe {
+                attn_term_row_text(
+                    self.raw.as_ptr(),
+                    row,
+                    cols.start,
+                    cols.end,
+                    buf.as_mut_ptr(),
+                    buf.len(),
+                )
+            };
+            if needed <= buf.len() {
+                return buf[..needed]
+                    .iter()
+                    .filter_map(|&cp| char::from_u32(cp))
+                    .collect();
+            }
+            buf.resize(needed, 0);
         }
     }
 

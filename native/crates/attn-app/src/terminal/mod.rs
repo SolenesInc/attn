@@ -10,8 +10,11 @@ use attn_protocol::{
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
 use attn_term::mouse::{self, Action, WheelRows};
+use attn_term::osc52::Osc52;
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::{Live, Tx};
+
+mod selection;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
 /// the Tauri app.
@@ -103,6 +106,11 @@ struct Term {
     sent_at: f64,
     resize_due: Option<f64>,
     pointer: Pointer,
+    view: selection::View,
+    /// The clipboard writes the program's output asks for.
+    osc52: Osc52,
+    /// How far back the view was scrolled when the window last drew it.
+    scrolled_back: u32,
 }
 
 #[derive(Debug)]
@@ -178,6 +186,9 @@ impl Term {
             sent_at: f64::NEG_INFINITY,
             resize_due: None,
             pointer: Pointer::default(),
+            view: selection::View::default(),
+            osc52: Osc52::default(),
+            scrolled_back: 0,
         }
     }
 }
@@ -418,7 +429,9 @@ impl Terminals {
                 };
                 if let Output::Write(bytes) = term.stream.receive(Chunk { seq, data }) {
                     term.watermark = Some(seq);
+                    copy_writes(term, &bytes, tx);
                     term.vt.write(&bytes);
+                    Terminals::follow_anchor(term);
                     answer(&terminal, term, daemon);
                 }
             }
@@ -468,6 +481,7 @@ impl Terminals {
         }
         let (cols, rows) = term.vt.size();
         term.vt = themed(Vt::new(cols, rows), &self.theme);
+        Terminals::forget_screen(term);
         term.watermark = None;
         term.stream = Stream::Attaching(Default::default());
         if !self.connected {
@@ -517,6 +531,7 @@ impl Terminals {
         {
             term.phase = Phase::Stopped;
             term.vt = themed(Vt::new(clamp(screen.cols), clamp(screen.rows)), &self.theme);
+            Terminals::forget_screen(term);
             let text = screen
                 .text
                 .trim_end()
@@ -561,6 +576,7 @@ impl Terminals {
         let decoded = restored.is_some();
         if let Some(vt) = restored {
             term.vt = themed(vt, &self.theme);
+            Terminals::forget_screen(term);
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
@@ -571,6 +587,7 @@ impl Terminals {
             }
         }
         for chunk in &restore.write {
+            copy_writes(term, &chunk.data, tx);
             term.vt.write(&chunk.data);
         }
         term.watermark = Some(restore.baseline);
@@ -661,7 +678,8 @@ impl Terminals {
     }
 
     /// `button` went down at `at` on a terminal's slot. A program that tracks the mouse hears
-    /// it, unless Alt holds a primary or middle press for the terminal's own selection.
+    /// it, unless Alt holds a primary or middle press for the terminal's own selection: true
+    /// when the program heard it.
     pub(crate) fn pointer_pressed(
         &mut self,
         id: &str,
@@ -669,23 +687,24 @@ impl Terminals {
         at: (f32, f32),
         mods: u8,
         daemon: &Commands,
-    ) {
+    ) -> bool {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
-            return;
+            return false;
         };
         let alt = mods & mouse::modifiers(false, true, false) != 0;
         if alt && button != mouse::SECONDARY {
-            return;
+            return false;
         }
         let modes = term.vt.mouse_modes();
         let Some(cell) = cell_at(term, &metrics, at).filter(|_| modes.tracking) else {
-            return;
+            return false;
         };
         let report = mouse::report(Action::Press, Some(button), cell, modes.sgr, mods);
         send_input(id, report.as_bytes(), "pointer", daemon);
         term.pointer.reported = Some(button);
         term.pointer.cell = Some(cell);
+        true
     }
 
     /// The button held on a terminal came up at `at`, wherever that is, or was cancelled with
@@ -706,7 +725,8 @@ impl Terminals {
     }
 
     /// The wheel turned `dy` points over `at`: true when the terminal took it, reporting it to
-    /// a program that tracks the mouse or as arrow keys on the alternate screen.
+    /// a program that tracks the mouse, as arrow keys on the alternate screen, or else
+    /// scrolling the view through the history.
     pub(crate) fn wheel(&mut self, id: &str, dy: f32, at: (f32, f32), daemon: &Commands) -> bool {
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
@@ -715,9 +735,13 @@ impl Terminals {
         let lines = term.pointer.wheel.take(-dy / metrics.cell_h);
         let modes = term.vt.mouse_modes();
         if !modes.tracking && !modes.alternate_screen {
-            return false;
+            if lines != 0 && Terminals::scroll_view(term, lines) {
+                self.undrawn = true;
+            }
+            return true;
         }
         if lines != 0 {
+            Terminals::anchor_selection(term);
             let cell = cell_at(term, &metrics, at).unwrap_or((0, 0));
             let source = if modes.tracking { "pointer" } else { "user" };
             send_input(
@@ -798,8 +822,12 @@ impl Terminals {
     /// Each drawn terminal's screen brought up to date, by the mark of the slot it draws in.
     pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &mut Grid)> {
         self.undrawn = false;
-        self.panes.iter_mut().map(|(id, term)| {
+        let theme = self.theme;
+        self.panes.iter_mut().map(move |(id, term)| {
             term.vt.sync(&mut term.grid);
+            let overlays = Terminals::overlays(term, &theme);
+            term.grid.set_overlays(overlays);
+            term.scrolled_back = term.vt.scrolled_back();
             (mark(id), &mut term.grid)
         })
     }
@@ -812,6 +840,14 @@ impl Terminals {
     /// The size the terminal's own screen has, which follows the daemon's PTY.
     pub fn screen_size(&mut self, id: &str) -> Option<(u16, u16)> {
         Some(self.panes.get_mut(id)?.vt.size())
+    }
+}
+
+/// Puts on the clipboard what the program's OSC 52 writes in `bytes` ask for, without a
+/// gesture, as the Tauri terminal does.
+fn copy_writes(term: &mut Term, bytes: &[u8], tx: &mut Tx) {
+    for text in term.osc52.writes(bytes) {
+        tx.copy(text);
     }
 }
 

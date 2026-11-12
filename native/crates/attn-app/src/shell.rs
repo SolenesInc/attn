@@ -245,7 +245,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg_app)
-        .on_paste(crate::keys::on_paste)
+        .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
         .children(banner)
         .child(body)

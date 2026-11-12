@@ -51,6 +51,23 @@ pub struct Cursor {
     pub color: Option<Rgb>,
 }
 
+/// A color laid over part of one row of the view, as the Tauri renderer's overlays: a wash
+/// over the cells' backgrounds and under their text, or a line at the underline's place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Overlay {
+    pub row: u16,
+    pub cols: (u16, u16),
+    pub color: Rgb,
+    pub alpha: u8,
+    pub kind: OverlayKind,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OverlayKind {
+    Wash,
+    Underline,
+}
+
 /// The visible screen of one terminal, read out of libghostty-vt by dirty row. `dirty` marks
 /// the rows that changed since the renderer last took them.
 #[derive(Default)]
@@ -62,6 +79,9 @@ pub struct Grid {
     pub cells: Vec<Cell>,
     pub dirty: Vec<bool>,
     pub cursor: Option<Cursor>,
+    overlays: Vec<Overlay>,
+    /// The overlays changed since the renderer last took them.
+    pub overlays_changed: bool,
     strings: Vec<String>,
     interned: HashMap<String, u32>,
 }
@@ -93,6 +113,20 @@ impl Grid {
                 Grapheme(id)
             }
         }
+    }
+
+    pub fn overlays(&self) -> &[Overlay] {
+        &self.overlays
+    }
+
+    /// Lays `overlays` over the view; true when they differ from what it had.
+    pub fn set_overlays(&mut self, overlays: Vec<Overlay>) -> bool {
+        if overlays == self.overlays {
+            return false;
+        }
+        self.overlays = overlays;
+        self.overlays_changed = true;
+        true
     }
 
     pub fn row(&self, y: usize) -> &[Cell] {

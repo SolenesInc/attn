@@ -29,6 +29,8 @@ pub const WALL_START_MS: i64 = 1_794_474_000_000;
 /// loopback. Time moves only when the test calls `advance`.
 pub struct World {
     pub daemon: Daemon,
+    /// The clipboard the app copies to and pastes from, in place of the system's.
+    pub clipboard: rune::clipboard::MemoryClipboard,
     runtime: Runtime<State>,
     screens: Screens,
     terminal_frames: usize,
@@ -199,9 +201,12 @@ impl World {
             system_dark: true,
             scale: 2.0,
         };
-        let runtime = attn_app::app().headless_runtime(size, env);
+        let mut runtime = attn_app::app().headless_runtime(size, env);
+        let clipboard = rune::clipboard::memory();
+        runtime.use_clipboard(&clipboard);
         let mut world = World {
             daemon,
+            clipboard,
             runtime,
             screens: Screens::default(),
             terminal_frames: 0,

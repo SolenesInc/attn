@@ -420,6 +420,7 @@ dependencies = [
 name = "attn-term"
 version = "0.0.0"
 dependencies = [
+ "base64",
  "bytemuck",
  "cc",
  "parley",

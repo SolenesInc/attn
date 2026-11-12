@@ -1,5 +1,5 @@
 use attn_term::keys;
-use rune::{Ime, Key, KeyEvent, KeyPlatform, Tx};
+use rune::{ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Tx};
 
 use attn_protocol::RecordAnalyticsMessage;
 
@@ -49,6 +49,12 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         None => state.window.keyboard_terminal(&state.facts),
         Some(_) => None,
     };
+    if let Some(id) = &terminal
+        && let Some(chord) = clipboard_chord(ev)
+        && clipboard(state, id, chord, tx)
+    {
+        return true;
+    }
     if terminal.is_some() && is_shell_ctrl_letter(ev) {
         return send_to_terminal(state, terminal, ev, tx);
     }
@@ -72,6 +78,56 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             true
         }
         Press::Unbound => send_to_terminal(state, terminal, ev, tx),
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Clipboard {
+    Copy,
+    Paste,
+}
+
+/// The terminal's clipboard keys, as the Tauri terminal reads them: ⌘C and ⌘V on macOS, and
+/// Ctrl+Shift+C and Ctrl+Shift+V elsewhere, where plain Ctrl+C belongs to the shell.
+fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
+    let Key::Command(letter) = ev.key else {
+        return None;
+    };
+    let letter = letter.to_ascii_lowercase();
+    if !matches!(letter, 'c' | 'v') {
+        return None;
+    }
+    let mac = KeyPlatform::current() == KeyPlatform::Mac;
+    let meta = if mac { ev.mods.cmd } else { ev.mods.logo };
+    let chord = |letter| {
+        if letter == 'v' {
+            Clipboard::Paste
+        } else {
+            Clipboard::Copy
+        }
+    };
+    if meta && !ev.mods.shift {
+        return Some(chord(letter));
+    }
+    (!mac && ev.mods.ctrl && ev.mods.shift && !ev.mods.alt).then(|| chord(letter))
+}
+
+/// Copies the terminal's selection, or pastes into it where the window does not already: true
+/// when the key did its work.
+fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool {
+    match chord {
+        Clipboard::Copy => match state.terminals.copy_text(id) {
+            Some(text) => {
+                tx.copy(text);
+                true
+            }
+            None => false,
+        },
+        Clipboard::Paste if KeyPlatform::current() == KeyPlatform::Mac => false,
+        Clipboard::Paste => {
+            tx.read_clipboard(on_paste);
+            true
+        }
     }
 }
 
@@ -133,15 +189,24 @@ pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
     }
 }
 
-/// A paste into the terminal holding the keyboard, bracketed when its program asked.
-pub(crate) fn on_paste(state: &mut State, text: &str, tx: &mut Tx) {
+/// A paste into the terminal holding the keyboard: text bracketed when its program asked, or
+/// for an image the Ctrl-V byte, which tells an agent to read the image off the clipboard
+/// itself, as the Tauri terminal sends it.
+pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut Tx) {
     if tx.focused().is_some() {
         return;
     }
     let Some(id) = state.window.keyboard_terminal(&state.facts) else {
         return;
     };
-    if let Some(bytes) = state.terminals.encode_paste(&id, text) {
+    let bytes = if content.image().is_some() {
+        Some(b"\x16".to_vec())
+    } else if content.text().is_empty() {
+        None
+    } else {
+        state.terminals.encode_paste(&id, content.text())
+    };
+    if let Some(bytes) = bytes {
         state.terminals.input(&id, &bytes, &state.daemon);
     }
 }

@@ -1,0 +1,400 @@
+use attn_protocol::AttachResultMessage;
+use attn_term::{FONT_SIZE, Fonts, SNAPSHOT_FORMAT};
+use attn_testkit::{World, message};
+use rune::{Key, KeyEvent, Mods, PhysicalInput, WheelEvent};
+use serde_json::{Value, json};
+
+use super::terminal::{attached, cell, inputs, one_terminal, output, pointed, snapshot_of, typed};
+
+/// The terminal's copy key: ⌘C on macOS, Ctrl+Shift+C elsewhere, where Ctrl+C is the shell's.
+const COPY: &str = if cfg!(target_os = "macos") {
+    "mod+c"
+} else {
+    "mod+shift+c"
+};
+
+fn view(world: &World) -> Value {
+    world
+        .runtime()
+        .state
+        .terminals
+        .view_state("r1")
+        .expect("r1 is drawn")
+}
+
+fn washes(world: &World) -> Vec<(u64, [u64; 2])> {
+    view(world)["overlays"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|o| o["kind"] == "Wash")
+        .map(|o| {
+            let cols = o["cols"].as_array().unwrap();
+            (
+                o["row"].as_u64().unwrap(),
+                [cols[0].as_u64().unwrap(), cols[1].as_u64().unwrap()],
+            )
+        })
+        .collect()
+}
+
+fn copied(world: &World) -> Option<String> {
+    world.clipboard.text().map(|t| t.to_string())
+}
+
+/// Turns the wheel `rows` rows over terminal r1, positive toward the history.
+fn wheel(world: &mut World, rows: f32) {
+    let at = cell(world, 1, 1);
+    let row = Fonts::default().metrics(FONT_SIZE).cell_h;
+    world.gesture(|app| {
+        app.runtime
+            .wheel_event(WheelEvent::new(0.0, rows * row).at(at.0, at.1))
+    });
+}
+
+fn drag(world: &mut World, from: (u16, u16), to: (u16, u16)) {
+    let (a, b) = (cell(world, from.0, from.1), cell(world, to.0, to.1));
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+        app.runtime.pointer_up(b.0, b.1);
+    });
+}
+
+fn numbered(from: u32, to: u32) -> Vec<u8> {
+    (from..=to)
+        .map(|n| format!("line-{n}\r\n"))
+        .collect::<String>()
+        .into_bytes()
+}
+
+#[test]
+fn the_wheel_scrolls_the_view_through_the_history_and_a_scrolled_view_keeps_its_rows() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, &numbered(1, 200));
+    world.settle();
+    let bottom = world.terminal_text("r1");
+    assert_eq!(view(&world)["scrolled_back"], 0);
+    let rows = world.terminal_size("r1").1;
+    assert_eq!(view(&world)["cursor"], json!([0, rows - 1]));
+
+    wheel(&mut world, 10.0);
+    assert_eq!(view(&world)["scrolled_back"], 10);
+    assert_eq!(
+        view(&world)["cursor"],
+        Value::Null,
+        "the cursor's row is below the view"
+    );
+    wheel(&mut world, -5.0);
+    assert_eq!(view(&world)["cursor"], Value::Null);
+    wheel(&mut world, 5.0);
+    let scrolled = world.terminal_text("r1");
+    assert_eq!(scrolled[10], bottom[0], "the view moved ten rows back");
+
+    output(&world, 2, &numbered(201, 205));
+    world.settle();
+    assert_eq!(
+        world.terminal_text("r1"),
+        scrolled,
+        "output leaves a scrolled-back view on its rows"
+    );
+    assert_eq!(view(&world)["scrolled_back"], 15);
+
+    wheel(&mut world, -100.0);
+    assert_eq!(view(&world)["scrolled_back"], 0);
+    output(&world, 3, b"line-206\r\n");
+    world.settle();
+    let rows = world.terminal_text("r1");
+    assert!(
+        rows.iter().any(|r| r == "line-206"),
+        "a view at the screen follows output: {rows:?}"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_cursor_moves_with_its_row_as_the_view_scrolls() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, &numbered(1, 100));
+    output(&world, 2, b"\x1b[6A");
+    world.settle();
+    let rows = world.terminal_size("r1").1;
+    assert_eq!(view(&world)["cursor"], json!([0, rows - 7]));
+    wheel(&mut world, 3.0);
+    assert_eq!(view(&world)["cursor"], json!([0, rows - 4]));
+}
+
+#[test]
+fn output_that_clears_the_history_brings_a_scrolled_view_back_to_the_screen() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, &numbered(1, 100));
+    world.settle();
+    wheel(&mut world, 10.0);
+    output(&world, 2, b"\x1b[3J");
+    world.settle();
+    assert_eq!(view(&world)["scrolled_back"], 0);
+}
+
+#[test]
+fn a_restored_snapshot_keeps_its_history_and_keys_follow_the_modes_set_after_it() {
+    let daemon = one_terminal();
+    let history: Vec<u8> = (1..=40)
+        .map(|n| format!("row-{n:04} tail\r\n"))
+        .collect::<String>()
+        .into_bytes();
+    daemon.on("attach_session", move |request| {
+        message(AttachResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            last_seq: Some(10),
+            snapshot: Some(snapshot_of(&history, SNAPSHOT_FORMAT)),
+            ..attached()
+        })
+    });
+    let mut world = World::start(daemon);
+    assert_eq!(inputs(&world), []);
+    wheel(&mut world, 100_000.0);
+    assert_eq!(world.terminal_text("r1")[0], "row-0001 tail");
+
+    output(&world, 11, b"m\x1b[?1h");
+    world.settle();
+    world.gesture(|app| {
+        app.key(KeyEvent {
+            key: Key::Up,
+            mods: Mods::default(),
+        })
+    });
+    assert_eq!(inputs(&world), [typed("\x1bOA")]);
+}
+
+#[test]
+fn the_history_keeps_far_more_than_libghosttys_default() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, &numbered(1, 5000));
+    world.settle();
+    wheel(&mut world, 100_000.0);
+    assert_eq!(world.terminal_text("r1")[0], "line-1");
+}
+
+#[test]
+fn a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"alpha beta\r\n  gamma delta\r\n");
+    world.settle();
+    let (a, b) = (cell(&world, 0, 0), cell(&world, 6, 1));
+    world.gesture(|app| app.runtime.pointer_down(a.0, a.1));
+    let commits = world.runtime().stats.commits;
+    world.gesture(|app| {
+        app.runtime.pointer_move(b.0, b.1);
+        app.runtime.pointer_up(b.0, b.1);
+    });
+
+    assert_eq!(copied(&world).as_deref(), Some("alpha beta\ngamma"));
+    let cols = u64::from(world.terminal_size("r1").0);
+    assert_eq!(washes(&world), [(0, [0, cols]), (1, [0, 7])]);
+    assert_eq!(view(&world)["copies"], "alpha beta\ngamma");
+    assert_eq!(
+        world.runtime().stats.commits,
+        commits,
+        "dragging a selection runs no view"
+    );
+
+    world.clipboard.set_text("something else");
+    world.gesture(|app| app.press(COPY));
+    assert_eq!(copied(&world).as_deref(), Some("alpha beta\ngamma"));
+    assert_eq!(inputs(&world), [], "the copy key reaches no program");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn copied_lines_lose_the_indent_they_share() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"    one\r\n      two\r\n    three\r\n");
+    world.settle();
+    drag(&mut world, (0, 0), (20, 2));
+    assert_eq!(copied(&world).as_deref(), Some("one\n  two\nthree"));
+}
+
+#[test]
+fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"alpha beta\r\n");
+    world.settle();
+    drag(&mut world, (0, 0), (4, 0));
+    let a = cell(&world, 2, 0);
+    world.clipboard.set_text("kept");
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_up(a.0, a.1);
+    });
+
+    assert_eq!(washes(&world), []);
+    assert_eq!(copied(&world).as_deref(), Some("kept"));
+}
+
+#[test]
+fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"git push --force-with-lease origin\r\n");
+    world.settle();
+    let a = cell(&world, 12, 0);
+    world.gesture(|app| {
+        for _ in 0..2 {
+            app.runtime.pointer_down(a.0, a.1);
+            app.runtime.pointer_up(a.0, a.1);
+        }
+    });
+    assert_eq!(copied(&world).as_deref(), Some("--force-with-lease"));
+    assert_eq!(washes(&world), [(0, [9, 27])]);
+
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_up(a.0, a.1);
+    });
+    assert_eq!(
+        copied(&world).as_deref(),
+        Some("git push --force-with-lease origin")
+    );
+}
+
+#[test]
+fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_selection() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"alpha beta\r\n\x1b[?1000h\x1b[?1006h");
+    world.settle();
+    drag(&mut world, (0, 0), (4, 0));
+    assert_eq!(washes(&world), []);
+    assert_eq!(copied(&world), None);
+    assert_eq!(
+        inputs(&world),
+        [pointed("\x1b[<0;1;1M"), pointed("\x1b[<3;5;1m")]
+    );
+
+    world.gesture(|app| {
+        app.runtime.physical_input(PhysicalInput::Modifiers(Mods {
+            alt: true,
+            ..Mods::default()
+        }))
+    });
+    drag(&mut world, (0, 0), (4, 0));
+    assert_eq!(copied(&world).as_deref(), Some("alpha"));
+    assert_eq!(inputs(&world).len(), 2, "the program heard nothing more");
+}
+
+#[test]
+fn a_selection_stays_on_its_rows_as_the_view_scrolls() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, &numbered(1, 100));
+    world.settle();
+    drag(&mut world, (0, 2), (6, 2));
+    assert_eq!(washes(&world), [(2, [0, 7])]);
+    let selected = copied(&world).unwrap();
+
+    wheel(&mut world, 3.0);
+    assert_eq!(washes(&world), [(5, [0, 7])]);
+    assert_eq!(world.terminal_text("r1")[5], selected);
+}
+
+#[test]
+fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_program() {
+    let mut world = World::start(one_terminal());
+    output(
+        &world,
+        1,
+        b"\x1b[?1049h\x1b[Hheading\r\nselected first\r\nfooter",
+    );
+    world.settle();
+    drag(&mut world, (0, 1), (13, 1));
+    assert_eq!(copied(&world).as_deref(), Some("selected first"));
+
+    wheel(&mut world, 1.0);
+    assert_eq!(inputs(&world), [typed("\x1b[A")]);
+    output(
+        &world,
+        2,
+        b"\x1b[2J\x1b[Holder\r\nheading\r\nselected first\r\nfooter",
+    );
+    world.settle();
+    assert_eq!(washes(&world), [(2, [0, 14])]);
+
+    output(&world, 3, b"\x1b[2J\x1b[Hsomething else");
+    world.settle();
+    assert_eq!(washes(&world), [], "the wash goes when its text does");
+    world.clipboard.set_text("other");
+    world.gesture(|app| app.press(COPY));
+    assert_eq!(copied(&world).as_deref(), Some("selected first"));
+}
+
+#[cfg(not(target_os = "macos"))]
+#[test]
+fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
+    let mut world = World::start(one_terminal());
+    world.clipboard.set_text("echo pasted\nls");
+    world.gesture(|app| app.press("mod+shift+v"));
+    assert_eq!(inputs(&world), [typed("echo pasted\rls")]);
+}
+
+#[test]
+fn a_view_with_nothing_over_it_reports_no_overlays() {
+    let world = World::start(one_terminal());
+    assert_eq!(
+        view(&world),
+        json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null})
+    );
+}
+
+#[test]
+fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"alpha beta\r\n");
+    world.settle();
+    let (slot, _) = world.runtime().presented("terminal.r1").unwrap();
+    let header = (slot[0] + 4.0, slot[1] - 4.0);
+    let inside = cell(&world, 6, 0);
+    world.gesture(|app| {
+        app.runtime.pointer_down(header.0, header.1);
+        app.runtime.pointer_move(inside.0, inside.1);
+        app.runtime.pointer_up(inside.0, inside.1);
+    });
+    assert_eq!(washes(&world), []);
+    assert_eq!(copied(&world), None);
+}
+
+#[test]
+fn a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"\x1b]52;c;Y29w");
+    output(&world, 2, b"aWVk\x07after");
+    world.settle();
+    assert_eq!(copied(&world).as_deref(), Some("copied"));
+    assert_eq!(world.terminal_text("r1")[0], "after");
+
+    world.clipboard.set_text("kept");
+    output(&world, 3, b"\x1b]52;c;?\x07");
+    world.settle();
+    assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert_eq!(
+        inputs(&world),
+        [],
+        "the terminal answers no clipboard query"
+    );
+}
+
+#[test]
+fn pasting_an_image_sends_the_ctrl_v_byte_for_the_agent_to_read_it_itself() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"\x1b[?2004h");
+    world.settle();
+    let png: Vec<u8> = [
+        &b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"[..],
+        &1u32.to_be_bytes(),
+        &1u32.to_be_bytes(),
+        &[0u8; 8],
+    ]
+    .concat();
+    let image = rune::ClipboardImage::from_png(png).expect("a PNG header");
+    world.gesture(|app| {
+        app.runtime
+            .paste_content(rune::ClipboardContent::new("ignored").with_image(image))
+    });
+    assert_eq!(inputs(&world), [typed("\x16")]);
+}

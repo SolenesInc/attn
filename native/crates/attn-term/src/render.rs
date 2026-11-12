@@ -13,7 +13,7 @@ use swash::zeno::Format;
 
 use crate::font::{FAMILY, Fonts, Metrics, fit};
 use crate::grid::{
-    BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE, Width,
+    BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, OverlayKind, Rgb, STRIKETHROUGH, UNDERLINE, Width,
 };
 use crate::sprites;
 use crate::theme::Theme;
@@ -25,6 +25,7 @@ const EMOJI_FAMILY: &str =
 const COLOR_GLYPH: u32 = 1;
 const UNDERLINED: u32 = 2;
 const STRUCK: u32 = 4;
+const OVERLAID: u32 = 8;
 const BIAS: u16 = 32768;
 
 /// The Tauri renderer's rule (`terminalGlyphFont.ts`): VS16, a keycap, or an emoji base with
@@ -365,10 +366,14 @@ impl Atlas {
 }
 
 /// One terminal's cells on the GPU: the background fill, one instance per cell, then the
-/// cursor.
+/// cursor; and its overlays, washes first, then lines.
 struct Screen {
     buf: wgpu::Buffer,
     cap: u64,
+    over: wgpu::Buffer,
+    over_cap: u64,
+    washes: u32,
+    lines: u32,
     uniforms: wgpu::Buffer,
     bind: wgpu::BindGroup,
     shape: (u16, u16),
@@ -468,7 +473,9 @@ fn line(vi: u32, i: I, on: bool, y: f32) -> V {
   var o: V;
   let size = vec2f(f32(i.span.x) * u.cell.x, u.line) * select(0.0, 1.0, on);
   o.pos = place(vec2f(i.cell) * u.cell + vec2f(0.0, y) + corner(vi) * size);
-  o.color = vec4f(unpack(i.fg).rgb, 1.0);
+  let c = unpack(i.fg);
+  let a = select(1.0, c.a, (i.flags & 8u) != 0u);
+  o.color = vec4f(c.rgb * a, a);
   return o;
 }
 @vertex fn vs_underline(@builtin(vertex_index) vi: u32, i: I) -> V {
@@ -816,6 +823,15 @@ impl Cells {
                     mapped_at_creation: false,
                 }),
                 cap: 0,
+                over: device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("terminal overlays"),
+                    size: INST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+                over_cap: 0,
+                washes: 0,
+                lines: 0,
                 uniforms,
                 bind,
                 shape: (0, 0),
@@ -855,6 +871,26 @@ impl Cells {
             changed = Some(changed.map_or((y, y), |(first, _)| (first, y)));
         }
         let screen = self.screens.get_mut(&mark).expect("inserted above");
+        if std::mem::take(&mut grid.overlays_changed)
+            || (changed.is_some() && !grid.overlays().is_empty())
+        {
+            let overlays = overlay_insts(grid, self.theme);
+            screen.washes = overlays.0.len() as u32;
+            screen.lines = overlays.1.len() as u32;
+            let all: Vec<Inst> = overlays.0.into_iter().chain(overlays.1).collect();
+            if screen.over_cap < all.len() as u64 {
+                screen.over = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("terminal overlays"),
+                    size: all.len() as u64 * INST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                screen.over_cap = all.len() as u64;
+            }
+            if !all.is_empty() {
+                queue.write_buffer(&screen.over, 0, bytemuck::cast_slice(&all));
+            }
+        }
         let write = |a: usize, b: usize| {
             queue.write_buffer(
                 &screen.buf,
@@ -912,9 +948,57 @@ impl Cells {
         pass.set_vertex_buffer(0, screen.buf.slice(..u64::from(count) * INST));
         pass.set_pipeline(&pipelines.bg);
         pass.draw(0..6, 0..count);
+        let (washes, lines) = (screen.washes, screen.lines);
+        if washes > 0 {
+            pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
+            pass.draw(0..6, 0..washes);
+            pass.set_vertex_buffer(0, screen.buf.slice(..u64::from(count) * INST));
+        }
         for pipeline in [&pipelines.fg, &pipelines.underline, &pipelines.strike] {
             pass.set_pipeline(pipeline);
             pass.draw(0..6, 1..count);
         }
+        if lines > 0 {
+            pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
+            pass.set_pipeline(&pipelines.underline);
+            pass.draw(0..6, washes..washes + lines);
+        }
     }
+}
+
+/// A grid's overlays as instances: the washes, with the cursor drawn again over them as the
+/// Tauri renderer draws it, and the lines.
+fn overlay_insts(grid: &Grid, theme: Theme) -> (Vec<Inst>, Vec<Inst>) {
+    let (mut washes, mut lines) = (Vec::new(), Vec::new());
+    for o in grid.overlays() {
+        let (start, end) = (o.cols.0.min(grid.cols), o.cols.1.min(grid.cols));
+        if end <= start || o.row >= grid.rows {
+            continue;
+        }
+        let inst = Inst {
+            cell: [start, o.row],
+            span: [end - start, 1],
+            ..Default::default()
+        };
+        match o.kind {
+            OverlayKind::Wash => washes.push(Inst {
+                bg: pack(o.color, o.alpha),
+                ..inst
+            }),
+            OverlayKind::Underline => lines.push(Inst {
+                fg: pack(o.color, o.alpha),
+                flags: UNDERLINED | OVERLAID,
+                ..inst
+            }),
+        }
+    }
+    if let Some(c) = grid.cursor.filter(|_| !washes.is_empty()) {
+        washes.push(Inst {
+            cell: [c.col, c.row],
+            span: [1, 1],
+            bg: pack(theme.cursor, 255),
+            ..Default::default()
+        });
+    }
+    (washes, lines)
 }

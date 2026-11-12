@@ -10,7 +10,7 @@ use attn_testkit::{Answer, Daemon, World, message, tree};
 use base64::Engine;
 use rune::{Ime, Key, KeyEvent, Mods, PhysicalInput, PointerButton, WheelEvent};
 
-fn pane(id: &str, runtime: &str) -> DesktopPane {
+pub(crate) fn pane(id: &str, runtime: &str) -> DesktopPane {
     DesktopPane {
         desktop_id: "d1".into(),
         pane_id: id.into(),
@@ -21,7 +21,7 @@ fn pane(id: &str, runtime: &str) -> DesktopPane {
     }
 }
 
-fn desktop(panes: Vec<DesktopPane>) -> Desktop {
+pub(crate) fn desktop(panes: Vec<DesktopPane>) -> Desktop {
     Desktop {
         id: "d1".into(),
         name: "d1".into(),
@@ -35,7 +35,7 @@ fn desktop(panes: Vec<DesktopPane>) -> Desktop {
     }
 }
 
-fn profile() -> Profile {
+pub(crate) fn profile() -> Profile {
     Profile {
         id: "work".into(),
         name: "Work".into(),
@@ -44,7 +44,7 @@ fn profile() -> Profile {
     }
 }
 
-fn showing(panes: Vec<DesktopPane>, daemon_instance: &str) -> InitialStateMessage {
+pub(crate) fn showing(panes: Vec<DesktopPane>, daemon_instance: &str) -> InitialStateMessage {
     InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile()]),
@@ -54,11 +54,11 @@ fn showing(panes: Vec<DesktopPane>, daemon_instance: &str) -> InitialStateMessag
     }
 }
 
-fn one_terminal() -> Daemon {
+pub(crate) fn one_terminal() -> Daemon {
     Daemon::scripted().state(showing(vec![pane("t1", "r1")], "daemon-1"))
 }
 
-fn output(world: &World, seq: u32, data: &[u8]) {
+pub(crate) fn output(world: &World, seq: u32, data: &[u8]) {
     let mut frame = vec![0x01, 2];
     frame.extend_from_slice(b"r1");
     frame.extend_from_slice(&seq.to_be_bytes());
@@ -66,7 +66,7 @@ fn output(world: &World, seq: u32, data: &[u8]) {
     world.daemon.emit_frame(frame);
 }
 
-fn attached() -> AttachResultMessage {
+pub(crate) fn attached() -> AttachResultMessage {
     AttachResultMessage {
         id: "r1".into(),
         success: true,
@@ -75,7 +75,7 @@ fn attached() -> AttachResultMessage {
     }
 }
 
-fn snapshot_of(text: &[u8], format: &str) -> AttachSnapshot {
+pub(crate) fn snapshot_of(text: &[u8], format: &str) -> AttachSnapshot {
     let mut vt = Vt::new(30, 5);
     vt.write(text);
     let bytes = vt.snapshot().expect("a screen at rest encodes");
@@ -89,7 +89,7 @@ fn snapshot_of(text: &[u8], format: &str) -> AttachSnapshot {
 }
 
 /// What the app sent each terminal, with who produced it.
-fn inputs(world: &World) -> Vec<(String, String)> {
+pub(crate) fn inputs(world: &World) -> Vec<(String, String)> {
     world
         .daemon
         .sent_of("pty_input")
@@ -103,7 +103,7 @@ fn inputs(world: &World) -> Vec<(String, String)> {
         .collect()
 }
 
-fn typed(data: &str) -> (String, String) {
+pub(crate) fn typed(data: &str) -> (String, String) {
     (data.into(), "user".into())
 }
 
@@ -127,11 +127,11 @@ fn terminal_cmds(world: &World) -> Vec<String> {
         .collect()
 }
 
-fn key(key: Key, mods: Mods) -> KeyEvent {
+pub(crate) fn key(key: Key, mods: Mods) -> KeyEvent {
     KeyEvent { key, mods }
 }
 
-fn row(world: &mut World, y: usize) -> String {
+pub(crate) fn row(world: &mut World, y: usize) -> String {
     world.terminal_text("r1")[y].clone()
 }
 
@@ -948,7 +948,7 @@ fn the_daemon_hears_the_terminal_colors_after_each_handshake() {
 }
 
 /// The window point at the middle of cell (`col`, `row`) of terminal r1, both zero-based.
-fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
+pub(crate) fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
     let (rect, _) = world
         .runtime()
         .presented("terminal.r1")
@@ -960,11 +960,11 @@ fn cell(world: &World, col: u16, row: u16) -> (f32, f32) {
     )
 }
 
-fn pointed(data: &str) -> (String, String) {
+pub(crate) fn pointed(data: &str) -> (String, String) {
     (data.into(), "pointer".into())
 }
 
-fn live_with_modes(modes: &[u8]) -> World {
+pub(crate) fn live_with_modes(modes: &[u8]) -> World {
     let mut world = World::start(one_terminal());
     world.open_desktop();
     output(&world, 1, modes);

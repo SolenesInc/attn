@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 parley = { version = "0.12", default-features = false, features = ["std", "system"] }
+base64 = "0.22"
 bytemuck = { version = "1.25", features = ["derive"] }
 rune.workspace = true
 swash = "0.2.10"

@@ -52,6 +52,31 @@ impl Metrics {
         ))
     }
 
+    /// The cell under `(x, y)` as a selection ends at it, when the point is in the slot: past
+    /// the last column is the column after it, as in the Tauri terminal.
+    pub fn cell_in(
+        &self,
+        (cols, rows): (u16, u16),
+        (w, h): (f32, f32),
+        scale: f32,
+        (x, y): (f32, f32),
+    ) -> Option<(u16, u16)> {
+        if !(0.0..w).contains(&x) || !(0.0..h).contains(&y) {
+            return None;
+        }
+        let (cw, ch) = self.device_cell(scale);
+        let fit = fit((cols, rows), (cw, ch), (w * scale, h * scale));
+        let at = |p: f32, offset: f32, cell: f32, last: u16| {
+            ((p * scale - offset) / (cell * fit.zoom))
+                .floor()
+                .clamp(0.0, f32::from(last)) as u16
+        };
+        Some((
+            at(x, fit.offset[0], cw, cols),
+            at(y, fit.offset[1], ch, rows.saturating_sub(1)),
+        ))
+    }
+
     /// Where `cell` draws, as x, y, width and height in points from the slot's top-left, when a
     /// `shape` grid draws in a `slot` at `scale`.
     pub fn cell_rect(

@@ -362,28 +362,36 @@ fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, 
                         PointerButton::Secondary => mouse::SECONDARY,
                         _ => mouse::PRIMARY,
                     };
-                    state.terminals.pointer_pressed(
+                    let reported = state.terminals.pointer_pressed(
                         &pressing,
                         button,
                         (d.x, d.y),
                         mods,
                         &state.daemon,
                     );
+                    if !reported
+                        && button == mouse::PRIMARY
+                        && let Some(text) =
+                            state
+                                .terminals
+                                .select_press(&pressing, (d.x, d.y), d.clicks)
+                    {
+                        tx.copy(text);
+                    }
                 }
-                rune::Phase::Move => tx.live_only(),
-                rune::Phase::Up if d.cancelled() => {
-                    state
-                        .terminals
-                        .pointer_released(&pressing, None, 0, &state.daemon);
+                rune::Phase::Move => {
+                    state.terminals.select_drag(&pressing, (d.x, d.y));
                     tx.live_only();
                 }
                 rune::Phase::Up => {
-                    state.terminals.pointer_released(
-                        &pressing,
-                        Some((d.x, d.y)),
-                        mods,
-                        &state.daemon,
-                    );
+                    let at = (!d.cancelled()).then_some((d.x, d.y));
+                    let mods = if d.cancelled() { 0 } else { mods };
+                    state
+                        .terminals
+                        .pointer_released(&pressing, at, mods, &state.daemon);
+                    if let Some(text) = state.terminals.select_release(&pressing) {
+                        tx.copy(text);
+                    }
                     tx.live_only();
                 }
             }

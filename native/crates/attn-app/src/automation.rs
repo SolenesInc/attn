@@ -33,6 +33,9 @@ impl Hooks<State> for AppHooks {
         if let Some(id) = of.strip_prefix("terminal:") {
             return Ok(state.terminals.drawn_text(id).map(|rows| json!(rows)));
         }
+        if let Some(id) = of.strip_prefix("terminal-view:") {
+            return Ok(state.terminals.view_state(id));
+        }
         Ok(Some(match of {
             "connection" => json!(format!("{:?}", facts.connection)),
             "sessions" => json!(*facts.sessions),
@@ -49,7 +52,7 @@ impl Hooks<State> for AppHooks {
             }),
             "build" => build_identity()?,
             _ => {
-                return Err("slices: connection, sessions, desktops, profiles, window, build, terminal:<runtime id>".into());
+                return Err("slices: connection, sessions, desktops, profiles, window, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
             }
         }))
     }
