@@ -328,6 +328,11 @@ pub(crate) fn follow_settling(state: &mut State, now_ms: i64) -> bool {
     changed
 }
 
+/// A desktop with no tiles of any kind, neither agents nor documents: the launcher's place.
+pub(crate) fn holds_nothing(desktop: &Desktop) -> bool {
+    desktop.panes.is_empty() && leaf_ids(desktop).is_empty()
+}
+
 pub(crate) fn leaf_ids(desktop: &Desktop) -> Vec<String> {
     Node::parse(&desktop.tree_json)
         .map(|tree| tree.leaves().into_iter().map(|l| l.id.clone()).collect())

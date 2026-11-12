@@ -2807,3 +2807,41 @@ fn a_terminal_tile_stays_on_its_desktop() {
     assert!(world.screen().find(Target::key("tile.a.popout")).is_none());
     assert!(world.screen().find(Target::key("tile.m.popout")).is_some());
 }
+
+#[test]
+fn a_desktop_holding_only_a_document_shows_the_document_and_not_the_launcher() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "note", Some(tile("note", "markdown")))],
+    );
+
+    assert!(world.screen().find(Target::key("launcher")).is_none());
+    assert!(world.screen().find(Target::key("tile.note")).is_some());
+    let header = |world: &World| {
+        world
+            .screen()
+            .get(Target::key("sidebar.desktop.work/desktop_1"))
+            .value
+            .clone()
+            .unwrap_or_default()
+    };
+    assert!(
+        !header(&world).contains("Empty desktop"),
+        "{}",
+        header(&world)
+    );
+
+    arrange(&mut world, "work/desktop_1", vec![desktop(1, "", None)]);
+    assert!(
+        world.screen().find(Target::key("launcher")).is_some(),
+        "a desktop with no tiles of any kind shows the launcher"
+    );
+    assert!(
+        header(&world).contains("Empty desktop"),
+        "{}",
+        header(&world)
+    );
+}

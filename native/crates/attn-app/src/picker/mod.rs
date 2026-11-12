@@ -1070,11 +1070,13 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) -> bool {
         facts
             .desktops
             .iter()
-            .any(|d| d.id == id && d.panes.is_empty())
+            .any(|d| d.id == id && crate::desktop::holds_nothing(d))
     };
     let shown = facts
         .current_desktop()
-        .filter(|d| d.panes.is_empty() && state.window.view == crate::shell::View::Desktop)
+        .filter(|d| {
+            crate::desktop::holds_nothing(d) && state.window.view == crate::shell::View::Desktop
+        })
         .map(|d| d.id.clone());
     let launching = &mut state.window.launching;
     let before = launching.kept();

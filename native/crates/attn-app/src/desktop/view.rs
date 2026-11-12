@@ -95,7 +95,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.filter_panels(),
     );
     let launcher = desktop
-        .filter(|d| d.panes.is_empty())
+        .filter(|d| super::holds_nothing(d))
         .and_then(|_| crate::picker::inline(state, t));
     let content = launcher.unwrap_or_else(|| {
         memo("tiles.area", reads, || {
