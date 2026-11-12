@@ -150,3 +150,24 @@ pub fn kit(t: &Tokens) -> rune_kit::Kit {
     p.scrim = t.bg_overlay;
     kit
 }
+
+/// The faces attn draws its text in: Inter for the interface, and Symbols Nerd Font Mono for
+/// the icon glyphs a terminal shows. Rune's own Inter goes once an app registers fonts, so
+/// attn carries it.
+pub const FONTS: &[&[u8]] = &[
+    include_bytes!("../fonts/Inter-Regular.ttf"),
+    include_bytes!("../fonts/Inter-Medium.ttf"),
+    include_bytes!("../fonts/Inter-SemiBold.ttf"),
+    include_bytes!("../../../../app/public/fonts/SymbolsNerdFontMono-Regular.ttf"),
+];
+
+/// The sans and mono families, as `AppSpec::families` takes them. Mono is the Tauri app's
+/// terminal chain: the installed Iosevka, then Menlo and the other system monospaces, with
+/// the bundled symbols last for icons no other face has.
+pub const FAMILIES: (&str, &str) = (
+    "Inter",
+    "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, Symbols Nerd Font Mono",
+);
+
+mod stories;
+pub use stories::{STORIES, Showcase, playground};

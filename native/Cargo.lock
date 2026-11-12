@@ -424,6 +424,7 @@ version = "0.0.0"
 dependencies = [
  "rune",
  "rune-kit",
+ "serde_json",
 ]
 
 [[package]]

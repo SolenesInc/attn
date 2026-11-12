@@ -12,9 +12,10 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let bundle_id = format!("com.attn.manager.{}", config.instance);
     let store = Store::default();
     let link = Link::start(config, store.clone());
-    let app = attn_app::native_app();
+    let app = attn_app::native_app(&bundle_id);
     let handle = app.handle();
     let _window = attn_app::bind(&store, link.commands(), move |update| handle.update(update));
     app.run();

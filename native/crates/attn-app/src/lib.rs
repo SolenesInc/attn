@@ -1,6 +1,7 @@
 mod action;
 mod connection;
 mod dispatch;
+mod frame;
 mod keymap;
 mod keys;
 mod shell;
@@ -8,7 +9,7 @@ mod shell;
 use std::sync::Arc;
 
 use attn_client::{Commands, Facts, Slices, Store, Subscription};
-use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Tx};
+use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
 pub use dispatch::dispatch;
@@ -56,15 +57,22 @@ pub fn app() -> AppSpec<State> {
     AppSpec {
         on_key: Some(keys::on_key),
         poll: Some(shell::expire),
+        fonts: attn_ui::FONTS,
+        families: attn_ui::FAMILIES,
+        min_size: Some((800.0, 600.0)),
         ..AppSpec::new("attn", (1200.0, 800.0), State::default, shell::view)
     }
 }
 
-/// The app with its window and the items it adds to the macOS menu bar. Each item runs an
-/// action; AppKit takes ⌘. before any view, so Stop Countdown's item is how its keys arrive.
-pub fn native_app() -> rune::App<State> {
+/// The app with its window, reopened where it last closed in the prefs `bundle_id` names, and
+/// the items it adds to the macOS menu bar. Each item runs an action; AppKit takes ⌘. before
+/// any view, so Stop Countdown's item is how its keys arrive.
+pub fn native_app(bundle_id: &str) -> rune::App<State> {
     let stop_countdown = Shortcut::parse_on("mod+.", KeyPlatform::Mac).expect("⌘. parses");
-    rune::App::new(app())
+    let app = rune::App::new(app())
+        .titlebar(Titlebar::new(shell::TITLE_BAR_HEIGHT))
+        .playground(attn_ui::playground());
+    frame::restored(app, bundle_id)
         .menu_item(
             MenuItem::new("Stop Countdown", |state, tx| {
                 dispatch(state, Action::SessionCancelCountdown, tx)

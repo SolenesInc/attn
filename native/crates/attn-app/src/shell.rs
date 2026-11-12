@@ -14,6 +14,7 @@ use crate::{State, connection};
 pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays, as the Tauri app's toast does.
 const NOTICE_SECONDS: f64 = 6.0;
+pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
 const SIDEBAR_WIDTH: f32 = 240.0;
 const DRAWER_WIDTH: f32 = 360.0;
 
@@ -178,9 +179,26 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg_app)
+        .child(title_bar(cx, &t))
         .children(banner)
         .child(body)
         .children(layers(state, &t))
+}
+
+/// The band the window drags by, over which the window's own controls sit; what it holds
+/// comes with the queue bar and the title bar controls.
+fn title_bar(cx: &Cx<State>, t: &Tokens) -> El {
+    row()
+        .key("titlebar")
+        .role("banner")
+        .label("Title bar")
+        .w_full()
+        .h(TITLE_BAR_HEIGHT)
+        .pl(cx.chrome_insets().leading.max(8.0))
+        .pr(cx.chrome_insets().trailing.max(8.0))
+        .fill(t.bg_panel)
+        .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+        .window_drag()
 }
 
 fn centered(t: &Tokens, content: El) -> El {
