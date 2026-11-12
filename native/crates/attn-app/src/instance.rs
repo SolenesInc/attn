@@ -34,6 +34,7 @@ pub struct Instance {
     pub bundle_id: String,
     pub data_dir: PathBuf,
     pub app_lock: PathBuf,
+    pub tauri_web_data: PathBuf,
 }
 
 impl Instance {
@@ -65,6 +66,7 @@ impl Instance {
             bundle_id: bundle_id.to_string(),
             data_dir,
             app_lock: home.join(".attn.locks").join(format!("app-{label}.lock")),
+            tauri_web_data: home.join("Library").join("WebKit").join(bundle_id),
         })
     }
 

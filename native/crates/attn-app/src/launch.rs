@@ -23,8 +23,22 @@ pub fn prepare() -> Result<Launch, String> {
         host_token: instance.ensure_host_token()?,
         instance,
     };
+    #[cfg(target_os = "macos")]
+    import_tauri_settings(&launch.instance);
     launch.instance.write_app_pid()?;
     Ok(launch)
+}
+
+#[cfg(target_os = "macos")]
+fn import_tauri_settings(instance: &Instance) {
+    let mut prefs = rune::prefs::Prefs::open(&instance.bundle_id);
+    match crate::tauri_settings::import(&instance.tauri_web_data, &mut prefs) {
+        Ok(crate::tauri_settings::Import::Imported(count)) => {
+            eprintln!("attn-app: imported {count} settings from the Tauri app");
+        }
+        Ok(_) => {}
+        Err(reason) => eprintln!("attn-app: the Tauri app's settings were not imported: {reason}"),
+    }
 }
 
 impl Launch {

@@ -8,6 +8,8 @@ mod keymap;
 mod keys;
 pub mod launch;
 mod shell;
+#[cfg(target_os = "macos")]
+pub mod tauri_settings;
 
 use std::sync::Arc;
 
