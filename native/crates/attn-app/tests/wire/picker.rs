@@ -1630,14 +1630,22 @@ fn the_launcher_starts_on_its_desktop_and_gives_way_to_the_new_pane() {
             .as_deref(),
         Some("Starting plain…")
     );
-    world.daemon.emit(arrangement(
-        "d2",
-        both_desktops(vec![pane("d1", "p1")], vec![pane("d2", "p-new")]),
-    ));
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        request_id: request["id"].as_str().map(str::to_owned),
+        ..arrangement(
+            "d2",
+            both_desktops(vec![pane("d1", "p1")], vec![pane("d2", "p-new")]),
+        )
+    });
     world.daemon.reply_to(&request, placed(&request));
     world.settle();
 
     assert!(world.screen().find(Target::key("launcher")).is_none());
+    assert!(
+        world.screen().find(Target::key("notice")).is_none(),
+        "{}",
+        world.screen()
+    );
     rest(&mut world);
 }
 
