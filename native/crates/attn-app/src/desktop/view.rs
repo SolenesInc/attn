@@ -86,7 +86,13 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 .collect()
         })
         .unwrap_or_default();
-    let reads = (reads, settles.clone(), keys.clone(), names);
+    let reads = (
+        reads,
+        settles.clone(),
+        keys.clone(),
+        names,
+        state.terminals.find_bars(),
+    );
     let launcher = desktop
         .filter(|d| d.panes.is_empty())
         .and_then(|_| crate::picker::inline(state, t));
@@ -403,6 +409,10 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 pointing_link,
                 (t.dark, cx.scale),
             );
+            let slot = match cx.terminals.finding(&pane.runtime_id) {
+                Some(finding) => slot.child(super::find_bar::bar(&pane.runtime_id, finding, t)),
+                None => slot,
+            };
             match cx.unsent.iter().find(|(r, _)| *r == pane.runtime_id) {
                 Some((runtime, reply)) => col()
                     .w_full()

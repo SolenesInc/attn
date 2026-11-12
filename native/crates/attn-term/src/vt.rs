@@ -63,6 +63,17 @@ struct TrackedRef {
 /// so what was marked there stays on its text.
 pub struct Mark(NonNull<TrackedRef>);
 
+/// One match of a search: its first and last cells, both included, in screen rows counted from
+/// the oldest history row.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Found {
+    pub start_row: u32,
+    pub end_row: u32,
+    pub start_col: u16,
+    pub end_col: u16,
+}
+
 impl Mark {
     /// The screen row the mark is on now, or None once its row left the history.
     pub fn row(&self) -> Option<u32> {
@@ -139,6 +150,13 @@ unsafe extern "C" {
     fn attn_term_prompts(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_prompts(t: *mut AttnTerm);
     fn attn_term_mark_free(mark: *mut TrackedRef);
+    fn attn_term_find(t: *mut AttnTerm, needle: *const u8, len: usize) -> c_int;
+    fn attn_term_find_matches(
+        t: *mut AttnTerm,
+        out: *mut Found,
+        cap: usize,
+        len: *mut usize,
+    ) -> c_int;
     fn attn_term_clipboard(t: *mut AttnTerm, len: *mut usize) -> *const u8;
     fn attn_term_clear_clipboard(t: *mut AttnTerm);
     fn attn_term_frame(t: *mut AttnTerm, frame: *mut Frame) -> c_int;
@@ -358,6 +376,37 @@ impl Vt {
     /// A mark on screen row `row` at column `col`, which stays on that cell's text.
     pub fn mark(&mut self, row: u32, col: u16) -> Option<Mark> {
         NonNull::new(unsafe { attn_term_mark(self.raw.as_ptr(), row, col) }).map(Mark)
+    }
+
+    /// Searches the history and screen for `needle` from now on; an empty needle stops. Letters
+    /// match whatever their ASCII case, and a match runs on across a wrapped row.
+    pub fn find(&mut self, needle: &str) {
+        unsafe { attn_term_find(self.raw.as_ptr(), needle.as_ptr(), needle.len()) };
+    }
+
+    /// Where the needle `find` set is now, newest first: each match's first and last cells, as
+    /// screen rows counted from the oldest history row.
+    pub fn found(&mut self) -> Vec<Found> {
+        let mut found = Vec::new();
+        loop {
+            let mut len = 0;
+            let rc = unsafe {
+                attn_term_find_matches(
+                    self.raw.as_ptr(),
+                    found.as_mut_ptr(),
+                    found.capacity(),
+                    &mut len,
+                )
+            };
+            if rc == OUT_OF_SPACE {
+                found.reserve(len);
+                continue;
+            }
+            if rc == SUCCESS {
+                unsafe { found.set_len(len) };
+            }
+            return found;
+        }
     }
 
     /// The command steps the shell reported since the last call, in order.

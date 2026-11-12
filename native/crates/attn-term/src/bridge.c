@@ -23,7 +23,15 @@ typedef struct {
   uint8_t *prompts;
   size_t prompts_len;
   size_t prompts_cap;
+  GhosttySearch search;
 } AttnTerm;
+
+typedef struct {
+  uint32_t start_row;
+  uint32_t end_row;
+  uint16_t start_col;
+  uint16_t end_col;
+} AttnMatch;
 
 typedef struct {
   GhosttyTrackedGridRef at;
@@ -216,6 +224,7 @@ void attn_term_free(AttnTerm *t) {
   ghostty_render_state_row_cells_free(t->cells);
   ghostty_render_state_row_iterator_free(t->rows);
   ghostty_render_state_free(t->state);
+  if (t->search != NULL) ghostty_search_free(t->search);
   ghostty_terminal_free(t->terminal);
   free(t->responses);
   free(t->clipboard);
@@ -320,6 +329,45 @@ bool attn_term_mark_point(GhosttyTrackedGridRef mark, uint32_t *row, uint16_t *c
 }
 
 void attn_term_mark_free(GhosttyTrackedGridRef mark) { ghostty_tracked_grid_ref_free(mark); }
+
+int attn_term_find(AttnTerm *t, const uint8_t *needle, size_t len) {
+  if (t->search == NULL) {
+    GhosttyResult rc = ghostty_search_new(NULL, &t->search, t->terminal);
+    if (rc != GHOSTTY_SUCCESS) return rc;
+  }
+  GhosttyString text = {.ptr = needle, .len = len};
+  return ghostty_search_set(t->search, GHOSTTY_SEARCH_OPT_NEEDLE, len == 0 ? NULL : &text);
+}
+
+int attn_term_find_matches(AttnTerm *t, AttnMatch *out, size_t cap, size_t *len) {
+  *len = 0;
+  if (t->search == NULL) return GHOSTTY_SUCCESS;
+  GhosttyResult rc = ghostty_search_run(t->search);
+  if (rc != GHOSTTY_SUCCESS) return rc;
+  GhosttySelectionBuffer found = {.ptr = NULL, .cap = 0, .len = 0};
+  rc = ghostty_search_get(t->search, GHOSTTY_SEARCH_DATA_MATCHES, &found);
+  if (rc != GHOSTTY_SUCCESS && rc != GHOSTTY_OUT_OF_SPACE) return rc;
+  if (found.len > cap) {
+    *len = found.len;
+    return GHOSTTY_OUT_OF_SPACE;
+  }
+  if (found.len == 0) return GHOSTTY_SUCCESS;
+  GhosttySelection *selections = calloc(found.len, sizeof(GhosttySelection));
+  if (selections == NULL) return GHOSTTY_OUT_OF_MEMORY;
+  found.ptr = selections;
+  found.cap = found.len;
+  rc = ghostty_search_get(t->search, GHOSTTY_SEARCH_DATA_MATCHES, &found);
+  size_t kept = 0;
+  for (size_t i = 0; rc == GHOSTTY_SUCCESS && i < found.len; i++) {
+    GhosttyPointCoordinate start, end;
+    if (ghostty_terminal_point_from_grid_ref(t->terminal, &selections[i].start, GHOSTTY_POINT_TAG_SCREEN, &start) != GHOSTTY_SUCCESS) continue;
+    if (ghostty_terminal_point_from_grid_ref(t->terminal, &selections[i].end, GHOSTTY_POINT_TAG_SCREEN, &end) != GHOSTTY_SUCCESS) continue;
+    out[kept++] = (AttnMatch){.start_row = start.y, .end_row = end.y, .start_col = start.x, .end_col = end.x};
+  }
+  free(selections);
+  *len = kept;
+  return rc;
+}
 
 static bool attn_term_row_data(AttnTerm *t, uint32_t row, GhosttyRowData data) {
   GhosttyGridRef ref;

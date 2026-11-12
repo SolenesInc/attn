@@ -47,12 +47,20 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         DesktopOverview => super::overview::toggle(state, tx),
         TilePopOut => super::windows::toggle(state),
+        TerminalFind => find(state, tx),
         _ => return false,
     }
     if goes_to_a_desktop(action) {
         state.window.view = crate::shell::View::Desktop;
     }
     true
+}
+
+/// Opens find in the terminal holding the keyboard.
+fn find(state: &mut State, tx: &mut Tx) {
+    if let Some(id) = state.window.keyboard_terminal(&state.facts) {
+        state.terminals.open_find(&id, tx);
+    }
 }
 
 /// The actions that take the window to a desktop or a tile, which leave home.

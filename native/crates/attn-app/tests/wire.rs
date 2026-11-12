@@ -15,6 +15,7 @@ mod wire {
     mod sidebar_width;
     mod terminal;
     mod terminal_blocks;
+    mod terminal_find;
     mod terminal_links;
     mod terminal_view;
 }

@@ -14,10 +14,12 @@ use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Them
 use rune::{Live, Tx};
 
 mod blocks;
+mod find;
 mod links;
 mod selection;
 
 pub(crate) use blocks::Part;
+pub(crate) use find::{Finding, Toward, find_field_key};
 pub(crate) use links::accelerator;
 pub(crate) use selection::Release;
 
@@ -88,6 +90,8 @@ pub struct Terminals {
     preedit: Option<(String, String)>,
     /// The terminal whose slot shows the pointing hand over a link, with ⌘ or Ctrl held.
     pointing: Option<String>,
+    /// Each terminal's find bar, by runtime id, kept with its query once closed.
+    finds: HashMap<String, Finding>,
 }
 
 struct Term {
@@ -249,6 +253,7 @@ impl Terminals {
             .collect();
         for id in gone {
             let mut term = self.panes.remove(&id).expect("listed above");
+            self.finds.remove(&id);
             release(&id, &mut term, None, 0, daemon);
             if self.connected
                 && matches!(
@@ -408,9 +413,9 @@ impl Terminals {
         }
     }
 
-    /// Takes what the link heard since the last frame. Nothing it changes is in the view:
-    /// terminal output needs only the frame the wake already asked for.
-    pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) {
+    /// Takes what the link heard since the last frame. Output changes nothing in the view
+    /// beyond an open find bar's count: true when that count changed.
+    pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();
         for event in events {
@@ -425,6 +430,7 @@ impl Terminals {
         if heard {
             self.inbox.taken.beat();
         }
+        let recounted = heard && self.refind();
         let now = tx.clock();
         for (id, term) in &mut self.panes {
             match term.phase {
@@ -437,6 +443,7 @@ impl Terminals {
                 _ => {}
             }
         }
+        recounted
     }
 
     fn apply(&mut self, event: TerminalEvent, tx: &mut Tx, daemon: &Commands) {
@@ -862,9 +869,10 @@ impl Terminals {
         self.undrawn = false;
         self.refresh_hovers();
         let theme = self.theme;
+        let finds = &self.finds;
         self.panes.iter_mut().map(move |(id, term)| {
             term.vt.sync(&mut term.grid);
-            let overlays = Terminals::overlays(term, &theme);
+            let overlays = Terminals::overlays(term, &theme, finds.get(id));
             term.grid.set_overlays(overlays);
             term.scrolled_back = term.vt.scrolled_back();
             (mark(id), &mut term.grid)

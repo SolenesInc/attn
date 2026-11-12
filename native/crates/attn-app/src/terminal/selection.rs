@@ -290,8 +290,13 @@ impl Terminals {
     }
 
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.
-    pub(super) fn overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
+    pub(super) fn overlays(
+        term: &mut Term,
+        theme: &Theme,
+        finding: Option<&super::find::Finding>,
+    ) -> Vec<Overlay> {
         let mut overlays = Terminals::block_overlays(term);
+        overlays.extend(Terminals::find_overlays(term, finding));
         overlays.extend(Terminals::selection_overlays(term, theme));
         overlays.extend(Terminals::link_overlays(term, theme));
         overlays

@@ -4,6 +4,7 @@
 mod actions;
 mod divider;
 mod drag;
+mod find_bar;
 pub mod layout;
 mod overview;
 mod peek;

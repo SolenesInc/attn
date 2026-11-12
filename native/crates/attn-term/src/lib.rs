@@ -17,5 +17,5 @@ pub use grid::{Cell, Cursor, CursorStyle, Grapheme, Grid, Overlay, OverlayKind, 
 pub use render::Cells;
 pub use theme::Theme;
 pub use vt::{
-    KeyInput, LinkRow, Mark, OptionAsAlt, PromptEvent, PromptStep, SNAPSHOT_FORMAT, Vt, mods,
+    Found, KeyInput, LinkRow, Mark, OptionAsAlt, PromptEvent, PromptStep, SNAPSHOT_FORMAT, Vt, mods,
 };
