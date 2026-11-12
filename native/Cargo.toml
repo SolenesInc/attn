@@ -6,16 +6,16 @@ members = ["crates/*"]
 edition = "2024"
 
 [workspace.dependencies]
-rune = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
-rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+rune = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+rune-kit = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 
 # Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
 # Keep this list equal to Rune's at the pinned rev.
 [patch.crates-io]
-wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
-winit = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
-parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
-accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+winit = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
+accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "fbc28a8a6cd222e21f5b4e92ccc77d29ccd1e4b5" }
 
 [profile.dev]
 debug = "line-tables-only"
