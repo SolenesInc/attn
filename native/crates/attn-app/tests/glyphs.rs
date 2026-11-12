@@ -15,10 +15,21 @@ fn drawn_characters(dir: &Path, found: &mut Vec<(char, String)>) {
         }
         let source = std::fs::read_to_string(&path).expect("a source file reads");
         for (n, line) in source.lines().enumerate() {
-            let code = line.split("//").next().unwrap_or_default();
-            for literal in code.split('"').skip(1).step_by(2) {
+            if line.trim_start().starts_with("//") {
+                continue;
+            }
+            let at = || format!("{}:{}", path.display(), n + 1);
+            for literal in line.split('"').skip(1).step_by(2) {
                 for c in literal.chars().filter(|c| !c.is_ascii()) {
-                    found.push((c, format!("{}:{}", path.display(), n + 1)));
+                    found.push((c, at()));
+                }
+            }
+            let chars: Vec<char> = line.chars().collect();
+            for window in chars.windows(3) {
+                if let ['\'', c, '\''] = *window
+                    && !c.is_ascii()
+                {
+                    found.push((c, at()));
                 }
             }
         }
