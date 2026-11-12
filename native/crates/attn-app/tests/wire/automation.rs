@@ -53,6 +53,13 @@ fn a_press_aimed_by_role_and_name_lands_on_that_element_and_says_so() {
     assert_eq!(receipt["matched"], true, "{receipt}");
     assert_eq!(receipt["target"]["key"], "tile.t2");
     assert_eq!(keyboard(&mut world), "t2", "the press took the keyboard");
+    let inside = world
+        .automate("hover", json!({"target": {"key": "tiles"}}))
+        .unwrap();
+    assert_eq!(
+        inside["matched"], true,
+        "a point on a child is inside its parent: {inside}"
+    );
     assert!(world.runtime_is_at_rest());
 }
 

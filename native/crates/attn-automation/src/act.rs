@@ -253,8 +253,7 @@ fn pointer<S: 'static>(
     let Some(point) = found.point(aimed.at) else {
         return scroll_into_view(rt, &found);
     };
-    let landed = Target::landed(rt, point);
-    let matched = landed.is_some() && landed == found.key;
+    let (landed, matched) = Target::landed(rt, &found, point);
     input(rt, point);
     Attempt::Done(json!({
         "handled": true,

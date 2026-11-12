@@ -17,15 +17,14 @@ use crate::host::Host;
 /// answer, which names the element, arrives first.
 const WAIT: Duration = Duration::from_secs(30);
 
-/// What the scenario runner reads to find the server: the same file and fields as the Tauri
-/// app's, so both shells launch and connect the same way.
+/// What the scenario runner reads to find the server: the fields of the Tauri app's that the
+/// runner reads, so both shells launch and connect the same way.
 #[derive(Clone, Debug, Serialize)]
 pub struct Manifest {
     pub enabled: bool,
     pub port: u16,
     pub token: String,
     pub pid: u32,
-    pub started_at: String,
 }
 
 /// The automation server: newline-delimited JSON over loopback TCP, one request and its
@@ -52,7 +51,6 @@ impl Server {
             port,
             token: token()?,
             pid: std::process::id(),
-            started_at: format!("{}", Clock::system().now().as_secs()),
         };
         write_manifest(manifest_path, &manifest)?;
         let token = manifest.token.clone();

@@ -29,6 +29,8 @@ pub struct Found {
     #[serde(skip)]
     pub(crate) index: usize,
     #[serde(skip)]
+    pub(crate) path: String,
+    #[serde(skip)]
     pub(crate) visible: [f32; 4],
     #[serde(skip)]
     pub(crate) moving: bool,
@@ -66,15 +68,31 @@ impl Target {
             name: accessible_name(e).cloned(),
             rect: e.rect,
             index,
+            path: e.path.clone(),
             visible: e.visible,
             moving,
         })
     }
 
-    /// Which element the pointer at `(x, y)` lands on, for a receipt.
-    pub(crate) fn landed<S>(rt: &Runtime<S>, (x, y): (f32, f32)) -> Option<String> {
-        rt.element_at(x, y)
-            .map(|p| p.key().unwrap_or(p.path()).to_owned())
+    /// Which element the pointer at `(x, y)` lands on, by key or path, and whether that is
+    /// the found element or inside it, as a press on a button's label presses the button.
+    pub(crate) fn landed<S>(
+        rt: &Runtime<S>,
+        found: &Found,
+        (x, y): (f32, f32),
+    ) -> (Option<String>, bool) {
+        let Some(picked) = rt.element_at(x, y) else {
+            return (None, false);
+        };
+        let inside = picked.path() == found.path
+            || picked
+                .path()
+                .strip_prefix(found.path.as_str())
+                .is_some_and(|rest| rest.starts_with('/'));
+        (
+            Some(picked.key().unwrap_or(picked.path()).to_owned()),
+            inside,
+        )
     }
 }
 

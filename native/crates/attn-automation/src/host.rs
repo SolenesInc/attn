@@ -10,8 +10,10 @@ pub trait Host<S: 'static>: Send + Sync + 'static {
     /// Runs `f` with the runtime, handling the input it queues before the next inspection.
     fn inspect(&self, f: Inspection<S>);
 
-    /// Beats after each frame the runtime steps, drawn or not, so a request waiting for an
-    /// element to appear or stop moving wakes when the screen may have changed.
+    /// Beats after each frame the runtime steps, drawn or not, except a frame an inspection
+    /// asked for that neither handled input nor ended a motion, so a request waiting for an
+    /// element to appear or stop moving wakes when the screen may have changed and sleeps
+    /// otherwise.
     fn frames(&self) -> &Pulse;
 
     /// The window a driver outside the process aims at, for hosts that have one.

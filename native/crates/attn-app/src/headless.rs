@@ -45,7 +45,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     host.run(crate::app().headless_runtime(VIEWPORT, env), inbox);
     drop(link);
-    Ok(())
+    unreachable!("the windowless host runs for the process's life")
 }
 
 fn link_config(terminals: Box<dyn Fn(TerminalEvent) + Send + Sync>) -> Result<LinkConfig, String> {

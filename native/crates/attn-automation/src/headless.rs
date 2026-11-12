@@ -42,19 +42,21 @@ impl<S: 'static> Headless<S> {
         self.work.clone()
     }
 
-    /// Runs the runtime on this thread until every sender has gone.
+    /// Runs the runtime on this thread for the process's life: the host keeps a sender.
     pub fn run(&self, mut rt: Runtime<S>, inbox: Receiver<Work<S>>) {
         let clock = Clock::system();
         let stepped = std::cell::Cell::new(clock.now());
-        let step = |rt: &mut Runtime<S>| {
+        let step = |rt: &mut Runtime<S>, beat: bool| {
             let now = clock.now();
             rt.frame((now - stepped.get()).as_secs_f64());
             stepped.set(now);
-            self.frames.beat();
+            if beat {
+                self.frames.beat();
+            }
         };
-        step(&mut rt);
+        step(&mut rt, true);
         loop {
-            let wait = if rt.animating || rt.has_pending_input() {
+            let wait = if rt.animating {
                 Some(MOTION_STEP)
             } else {
                 rt.wake_deadline()
@@ -65,17 +67,21 @@ impl<S: 'static> Headless<S> {
                 None => inbox.recv().map_err(|_| RecvTimeoutError::Disconnected),
             };
             match next {
-                Ok(Work::Update(f)) => rt.update(f),
+                Ok(Work::Update(f)) => {
+                    rt.update(f);
+                    step(&mut rt, true);
+                }
                 Ok(Work::Inspect(f)) => {
                     f(&mut rt);
-                    if rt.has_pending_input() {
-                        step(&mut rt);
+                    let (input, moving) = (rt.has_pending_input(), rt.animating);
+                    step(&mut rt, false);
+                    if input || (moving && !rt.animating) {
+                        self.frames.beat();
                     }
                 }
-                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Timeout) => step(&mut rt, true),
                 Err(RecvTimeoutError::Disconnected) => return,
             }
-            step(&mut rt);
         }
     }
 }
@@ -87,5 +93,40 @@ impl<S: 'static> Host<S> for Headless<S> {
 
     fn frames(&self) -> &Pulse {
         &self.frames
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_inspection_s_own_frame_wakes_no_waiting_request() {
+        let (host, inbox) = Headless::<u32>::new();
+        let host = std::sync::Arc::new(host);
+        let runner = host.clone();
+        std::thread::spawn(move || {
+            let rt = Runtime::new(0, |_, _| rune::el(), (10.0, 10.0), rune::Env::default());
+            runner.run(rt, inbox)
+        });
+        let (read, seen) = std::sync::mpsc::channel();
+        host.inspect(Box::new(move |_| read.send(()).unwrap()));
+        seen.recv().unwrap();
+        let after_start = host.frames().count();
+
+        host.inspect(Box::new(|_| {}));
+        host.updates()
+            .send(Work::Update(Box::new(|n, _| *n += 1)))
+            .unwrap();
+
+        assert!(
+            host.frames()
+                .wait_past(after_start, Duration::from_secs(10))
+        );
+        assert_eq!(
+            host.frames().count(),
+            after_start + 1,
+            "only the update's frame beat"
+        );
     }
 }

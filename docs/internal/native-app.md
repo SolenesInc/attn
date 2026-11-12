@@ -57,9 +57,10 @@ when those paths change, and on every push to `main`.
 ## Automation
 
 Tests, scenarios, `scripts/vm drive` and drive-attn drive the native app over
-one automation protocol, `attn-automation`. It speaks the Tauri app's wire
-format: newline-delimited JSON over loopback TCP, `{id, token, action, payload}`
-in and `{id, ok, result, error}` out, so one Node client drives both shells.
+one automation protocol, `attn-automation`. Its envelope is the Tauri app's:
+newline-delimited JSON over loopback TCP, `{id, token, action, payload}` in and
+`{id, ok, result, error}` out, so one Node client connects to both shells. The
+actions are the native app's own.
 
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
 accessible name, `{"role": "group", "name": "Agent t2"}`. Pointer actions wait
