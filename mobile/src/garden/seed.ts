@@ -1,4 +1,4 @@
-import type { HomeGatewaySeed, HomeGatewaySeedDetail } from '@attn/types/homeGatewayGenerated'
+import type { HomeGatewaySeed, HomeGatewaySeedDetail } from '../homeGateway/generated'
 import { Schema } from 'effect'
 
 export const SeedStatus = Schema.Literals([

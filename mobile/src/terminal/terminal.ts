@@ -1,14 +1,14 @@
-import { WebGlTerminalRenderer } from '@attn/components/GhosttyWebGlRenderer'
-import { enableGraphemeClustering } from '@attn/components/terminalGraphemeMode'
-import type { GhosttyTerminal } from '@attn/ghostty'
-import { loadGhostty } from '@attn/ghostty/wasm'
+import { WebGlTerminalRenderer } from './render/GhosttyWebGlRenderer'
+import { enableGraphemeClustering } from './render/terminalGraphemeMode'
+import type { GhosttyTerminal } from './ghostty'
+import { loadGhostty } from './ghostty/wasm'
 import {
   FONT_FAMILY,
   TERMINAL_SCROLLBACK_BYTES,
   getTerminalAnsiPalette,
   getTerminalTheme,
-} from '@attn/utils/terminalSizing'
-import { applicationWheelInput, scrolledViewportCells } from '@attn/utils/ghosttyScroll'
+} from './render/terminalSizing'
+import { applicationWheelInput, scrolledViewportCells } from './render/ghosttyScroll'
 import { terminalCreditBytes, type Link, type OpenTerminal, type TerminalRequest } from '../link'
 import {
   afterOutput,

@@ -102,7 +102,9 @@ jobs:
               - '.github/actions/setup-toolchains/**'
             mobile:
               - 'mobile/**'
-              - 'app/src/**'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-wasm.lock'
+              - 'scripts/ensure-ghostty-vt-wasm.sh'
               - 'internal/cloudlink/testdata/**'
               - '.github/workflows/ci.yml'
               - '.tool-versions'

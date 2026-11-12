@@ -4,7 +4,7 @@ import type { Nodes, Root, RootContent } from 'mdast'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { gfm } from 'micromark-extension-gfm'
-import type { SeedMentionIndex } from '@attn/utils/seedMentions'
+import type { SeedMentionIndex } from './seedMentions'
 
 const walk = (node: Nodes, visit: (node: Nodes) => void) => {
   visit(node)

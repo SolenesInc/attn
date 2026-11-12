@@ -28,8 +28,8 @@ protocol_outputs=(
   internal/protocol/homegateway/generated.go
   internal/protocol/homegateway/schema.json
   internal/protocol/homegateway/version.go
-  app/src/types/homeGatewayGenerated.ts
-  app/src/types/homeGatewayVersion.ts
+  mobile/src/homeGateway/generated.ts
+  mobile/src/homeGateway/version.ts
   cli/protocol/src/generated.rs
   cli/protocol/src/go_values.rs
   cli/testdata/duration_string.jsonl
@@ -209,7 +209,7 @@ run_checks() {
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
   touches "$native_paths" && targets+=(check-native "NATIVE_CLIPPY=$(native_clippy_scope "$changed")")
-  touches '^mobile/|^app/src/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
+  touches '^mobile/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"
   if [ -n "$script_tests" ]; then
     targets+=(test-scripts "SCRIPT_TESTS=$script_tests")

@@ -482,7 +482,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 		--src internal/protocol/schema/tsp-output-home-gateway/json-schema/*.json \
 		--src-lang schema --lang typescript \
 		--no-prefer-unions --no-prefer-unknown \
-		-o app/src/types/homeGatewayGenerated.ts
+		-o mobile/src/homeGateway/generated.ts
 	node scripts/generate-home-gateway.mjs
 
 # CI check: verify generated files are up-to-date.
@@ -492,7 +492,7 @@ generate-types: ensure-go-jsonschema $(SCHEMA_NODE_MODULES)
 # diff runs and this passes silently — commit the edit if you are trying to
 # reproduce a drift failure locally.
 check-types: generate-types
-	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway app/src/types/homeGatewayGenerated.ts app/src/types/homeGatewayVersion.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata
+	git diff --exit-code internal/protocol/generated.go internal/protocol/placement_generated.go app/src/types/generated.ts app/src/types/settings.generated.ts internal/protocol/protocol_version.go app/src/types/protocolVersion.ts internal/protocol/homegateway mobile/src/homeGateway/generated.ts mobile/src/homeGateway/version.ts cli/protocol/src/generated.rs cli/protocol/src/go_values.rs cli/testdata
 
 # Refuses a Home Gateway API change that is not an addition to the schema on origin/main.
 check-home-gateway-compat:

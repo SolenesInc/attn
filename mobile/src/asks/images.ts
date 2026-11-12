@@ -1,4 +1,4 @@
-import type { HomeGatewayAskImageChunk } from '@attn/types/homeGatewayGenerated'
+import type { HomeGatewayAskImageChunk } from '../homeGateway/generated'
 import type { Link } from '../link'
 
 export const chunkWindow = 4

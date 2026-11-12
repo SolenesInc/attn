@@ -205,7 +205,7 @@ expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
 git reset -q --soft HEAD^
 export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
-expect_checks 'check-frontend check-mobile' 'land --group app' "landing-tests $selected_units" sync
+expect_checks check-frontend 'land --group app' "landing-tests $selected_units" sync
 expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
 unset ATTN_FREEZE_EXCEPTION
 
@@ -227,7 +227,7 @@ export ATTN_FREEZE_EXCEPTION=s-fix123
 
 printf '\n' >>app/src/example.ts
 land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
-expect_checks 'check-frontend check-mobile' 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
+expect_checks check-frontend 'land --group app' 'landing-tests --unit vitest . --red vitest src/red.test.ts' sync
 
 mkdir -p mobile/src
 printf 'export {};\n' >mobile/src/example.ts
