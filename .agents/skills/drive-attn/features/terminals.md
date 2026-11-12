@@ -105,7 +105,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) draws, types into and resizes terminals, reports the mouse to programs that track it, answers terminal queries and reports pointer activity. Find, blocks, the context menu, links, images, the location picker and `attn terminal`'s tiles drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `scroll`, `wait`, `state` and `shot`, not the Tauri reads and native input above.
+The native app (`native/`) draws, types into and resizes terminals, scrolls their history, selects and copies, takes OSC 52 writes and image pastes, reports the mouse to programs that track it, answers terminal queries and reports pointer activity. Find, blocks, the context menu, links, images, the location picker and `attn terminal`'s tiles drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation) such as `press`, `type`, `key`, `scroll`, `wait`, `state` and `shot`, not the Tauri reads and native input above.
 
 Preconditions:
 
@@ -128,9 +128,11 @@ Steps:
 
 - **A shell.** Run `wsctl add-session --cwd $P --agent shell --label shop --id shop --place`. `bridge state '{"of":"desktops"}'` holds the shell's pane; its `runtime_id` is `<shell>`. `bridge wait '{"target":{"key":"terminal.<shell>"}}'` answers with the terminal's box.
 - **Type and read.** Run `bridge press '{"target":{"key":"terminal.<shell>"}}'`, `bridge type '{"text":"echo native-$((40 + 2))"}'` and `bridge key '{"chord":"Enter"}'`. `bridge state '{"of":"terminal:<shell>","includes":"native-42"}'` waits for the rows the window drew, and one row reads `native-42` alone. `wsctl screen --id <shell>` shows the same screen from the daemon.
+- **Scroll, select and copy.** Type `for i in $(seq 1 200); do echo line-$i; done` and press Enter. Run `bridge scroll '{"target":{"key":"terminal.<shell>"},"dy":-400}'`: `bridge state '{"of":"terminal-view:<shell>"}'` reads a `scrolled_back` above 0. Run `bridge drag '{"target":{"key":"terminal.<shell>"},"at":[0.01,0.3],"by":[60,40]}'`: `terminal-view` lists `Wash` overlays on the dragged rows, and `copies` holds their `line-` text. Scroll back down with `dy` `4000`.
+- **A program writes the clipboard.** Press the terminal, type `printf "\033]52;c;$(printf osc52-live | base64)\a"` and press Enter. On Linux, `bridge key '{"chord":"ctrl+shift+v"}'` pastes, and the prompt row ends in `osc52-live`.
 - **A program that tracks the mouse.** Type `bash <P>/mouse-reader.sh`, `<P>` written out, press Enter, and wait for `READY` with `state` and `includes`. Press the terminal again: wait for `ESC[<3;`, and one row holds `ESC[<0;<col>;<row>M` followed by `ESC[<3;<col>;<row>m`, the press and its release. Run `bridge scroll '{"target":{"key":"terminal.<shell>"},"dy":60}'`: wait for `ESC[<65;`, the wheel turning down. Type `q` and wait for `DONE`.
 - **Restart keeps it.** Run `./attn instance stop-app`, then launch as above. `bridge wait` finds `terminal.<shell>` again, and `state` with `includes` `native-42` shows the earlier output.
-- **Proof.** Keep each `bridge state` answer, `wsctl screen` after typing, and `bridge shot '{"path":"<P>/native-terminal.png"}'` after the mouse step. Unlike the Tauri app's capture, the native shot shows the terminal's text. The `native-terminal-core` scenario runs the first three steps and takes the same shot.
+- **Proof.** Keep each `bridge state` answer, `wsctl screen` after typing, and `bridge shot '{"path":"<P>/native-terminal.png"}'` after the mouse step. Unlike the Tauri app's capture, the native shot shows the terminal's text. The `native-terminal-core` scenario runs the shell, type and read, and mouse steps and takes the same shot.
 
 ## Contexts
 

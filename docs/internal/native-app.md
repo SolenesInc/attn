@@ -83,7 +83,7 @@ are on their way to the daemon.
 | `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
 | `type` | `text`, `target` | focuses the target first, then types |
 | `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |
-| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, or `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
+| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`, or `terminal-view:<runtime id>`, its cursor, what lies over it such as the selection, how far it is scrolled back and what the copy key copies. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
 | `native_windows`, `shot` | `path` for `shot` | the window's platform id; a screenshot |
 
 A request that waits, `state` with `includes` among them, gives up after 30 s,
