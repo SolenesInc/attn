@@ -40,16 +40,21 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         *t,
         scale.to_bits(),
     );
-    let content = memo("tiles.area", reads, || {
-        col().w_full().h_full().min_w(0.0).min_h(0.0).child(screen(
-            desktop,
-            desk,
-            facts,
-            holder.as_ref(),
-            &state.terminals,
-            t,
-            scale,
-        ))
+    let launcher = desktop
+        .filter(|d| d.panes.is_empty())
+        .and_then(|_| crate::picker::inline(state, t));
+    let content = launcher.unwrap_or_else(|| {
+        memo("tiles.area", reads, || {
+            col().w_full().h_full().min_w(0.0).min_h(0.0).child(screen(
+                desktop,
+                desk,
+                facts,
+                holder.as_ref(),
+                &state.terminals,
+                t,
+                scale,
+            ))
+        })
     });
     col()
         .key("tiles")

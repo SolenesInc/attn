@@ -362,7 +362,12 @@ fn queue(shared: &Shared, (id, to): &(usize, mpsc::UnboundedSender<Out>), out: O
 
 fn correlate(request: &Request, mut reply: Value) -> Value {
     if let (Some(id), Some(fields)) = (request.get("request_id"), reply.as_object_mut()) {
-        fields.entry("request_id").or_insert_with(|| id.clone());
+        let unnamed = fields
+            .get("request_id")
+            .is_none_or(|named| named.is_null() || named == "");
+        if unnamed {
+            fields.insert("request_id".into(), id.clone());
+        }
     }
     reply
 }

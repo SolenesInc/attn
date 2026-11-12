@@ -4,6 +4,7 @@ mod wire {
     mod covered;
     mod desktops;
     mod keys;
+    mod picker;
     mod profile;
     mod queue;
     mod sidebar;

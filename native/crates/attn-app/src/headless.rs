@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use attn_automation::{Headless, Host, Server, Work};
-use attn_client::{Clock, LinkConfig, Pulse, Store, TerminalSink};
+use attn_client::{Clock, LinkConfig, Pulse, ReplySink, Store, TerminalSink};
 use rune::Env;
 
 use crate::State;
@@ -49,7 +49,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     unreachable!("the windowless host runs for the process's life")
 }
 
-fn link_config() -> Result<impl FnOnce(TerminalSink) -> LinkConfig, String> {
+fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, String> {
     let var =
         |name: &str| std::env::var(name).map_err(|_| format!("--automation-headless needs {name}"));
     let port = var("ATTN_WS_PORT")?;
@@ -67,7 +67,7 @@ fn link_config() -> Result<impl FnOnce(TerminalSink) -> LinkConfig, String> {
         read("client-token")?,
         crate::instance::ensure_host_token(&data_dir)?,
     );
-    Ok(move |terminals| LinkConfig {
+    Ok(move |terminals, replies| LinkConfig {
         daemon: format!("127.0.0.1:{port}"),
         client_token,
         host_token: Some(host_token),
@@ -78,5 +78,6 @@ fn link_config() -> Result<impl FnOnce(TerminalSink) -> LinkConfig, String> {
         clock: Clock::system(),
         pulse: Pulse::default(),
         terminals,
+        replies,
     })
 }

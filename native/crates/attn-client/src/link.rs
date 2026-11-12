@@ -24,6 +24,7 @@ const CAPABILITIES: [&str; 2] = ["binary_pty_output", "kitty_images"];
 
 /// Where the link hands what it hears about terminals.
 pub type TerminalSink = Box<dyn Fn(TerminalEvent) + Send + Sync>;
+pub type ReplySink = Box<dyn Fn(Reply) + Send + Sync>;
 
 pub struct LinkConfig {
     /// The daemon's `host:port`; the link speaks WebSocket on `/ws` and reads `/health`.
@@ -42,6 +43,25 @@ pub struct LinkConfig {
     pub pulse: Pulse,
     /// What the daemon says about terminals, on the link's thread, in arrival order.
     pub terminals: TerminalSink,
+    /// Every message that answers a request by its `request_id`, on the link's thread.
+    pub replies: ReplySink,
+}
+
+/// A daemon message that names the request it answers.
+#[derive(Debug, Clone)]
+pub struct Reply {
+    pub request_id: String,
+    pub event: String,
+    pub body: serde_json::Value,
+}
+
+impl Reply {
+    /// The reply as the protocol type its event names.
+    pub fn parse<T: serde::de::DeserializeOwned>(&self) -> Option<T> {
+        serde_json::from_value(self.body.clone())
+            .inspect_err(|why| eprintln!("attn-app: dropped an unreadable {}: {why}", self.event))
+            .ok()
+    }
 }
 
 /// A terminal's output and the daemon's answers about it, plus the connection's start and
@@ -231,7 +251,22 @@ struct Header {
     #[serde(default)]
     event: String,
     #[serde(default)]
+    request_id: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
     protocol_version: Option<String>,
+}
+
+impl Header {
+    /// The request this message answers: its `request_id`, or for `spawn_result` the session
+    /// id the spawn asked for.
+    fn answers(&self) -> Option<String> {
+        match self.event.as_str() {
+            "spawn_result" => self.id.clone(),
+            _ => self.request_id.clone(),
+        }
+    }
 }
 
 impl Task {
@@ -354,6 +389,15 @@ impl Task {
             eprintln!("attn-app: dropped a daemon message that is not a JSON object");
             return None;
         };
+        if let Some(request_id) = header.answers().filter(|id| !id.is_empty())
+            && let Ok(body) = serde_json::from_str(text)
+        {
+            (self.config.replies)(Reply {
+                request_id,
+                event: header.event.clone(),
+                body,
+            });
+        }
         match header.event.as_str() {
             "initial_state" => {
                 if let Some(daemon) = header

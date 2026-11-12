@@ -3,6 +3,7 @@ use rune::Tx;
 
 use crate::State;
 use crate::action::Action;
+use crate::picker::{self, Direction};
 use crate::shell::{Drawer, Layer, Palette};
 
 /// The one path every intent takes, from a key, the native menu or the palette.
@@ -24,6 +25,11 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
         Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
+        Action::SessionNew => picker::new_session(state, Direction::Vertical, None, tx),
+        Action::SessionNewHorizontal => picker::new_session(state, Direction::Horizontal, None, tx),
+        Action::SessionNewTerminal => {
+            picker::new_session(state, Direction::Vertical, Some(picker::TERMINAL), tx)
+        }
         _ => {
             window.notify(format!("Not in the native app yet: {}", action.label()), tx);
             return;

@@ -13,7 +13,7 @@ use attn_protocol::Desktop;
 
 pub(crate) use actions::{escape, run};
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
-pub(crate) use view::area;
+pub(crate) use view::{area, take_tile};
 
 use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowPlan, View};
 

@@ -16,7 +16,9 @@ pub(crate) const FIELD_KEY_SUFFIX: &str = ".field";
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
 /// the shell's own Ctrl keys on Linux; then the keymap; then the terminal; then nothing.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if matches!(ev.key, Key::Modifier { .. }) {
+    if matches!(ev.key, Key::Modifier { .. })
+        || state.window.layer == Some(crate::shell::Layer::NewSession)
+    {
         return false;
     }
     if let Some(leader) = state.window.leader.take().filter(|l| tx.clock() < l.until) {

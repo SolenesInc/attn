@@ -1,6 +1,6 @@
 use std::hash::{BuildHasher, Hasher};
 
-use attn_client::{Clock, LinkConfig, Pulse, TerminalSink};
+use attn_client::{Clock, LinkConfig, Pulse, ReplySink, TerminalSink};
 
 use crate::daemon;
 use crate::instance::Instance;
@@ -42,8 +42,9 @@ fn import_tauri_settings(instance: &Instance) {
 }
 
 impl Launch {
-    /// `terminals` takes what the link hears about terminals, on the link's thread.
-    pub fn link_config(&self, terminals: TerminalSink) -> LinkConfig {
+    /// `terminals` takes what the link hears about terminals, and `replies` the answers to
+    /// requests, on the link's thread.
+    pub fn link_config(&self, terminals: TerminalSink, replies: ReplySink) -> LinkConfig {
         let process_nonce = std::collections::hash_map::RandomState::new()
             .build_hasher()
             .finish();
@@ -58,6 +59,7 @@ impl Launch {
             clock: Clock::system(),
             pulse: Pulse::default(),
             terminals,
+            replies,
         }
     }
 }

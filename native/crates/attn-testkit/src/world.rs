@@ -37,6 +37,7 @@ pub struct World {
     inbox: Arc<Mutex<Vec<attn_app::Update>>>,
     frames: Arc<Mutex<Vec<Frame>>>,
     terminals: attn_app::TerminalInbox,
+    replies: attn_app::ReplyInbox,
     clock: ManualClock,
     pulse: Pulse,
 }
@@ -115,6 +116,11 @@ impl World {
             let pulse = pulse.clone();
             terminals.sink(move || pulse.beat())
         };
+        let replies = attn_app::ReplyInbox::default();
+        let answers = {
+            let pulse = pulse.clone();
+            replies.sink(move || pulse.beat())
+        };
         let link = Link::start(
             LinkConfig {
                 daemon: daemon.address().to_string(),
@@ -132,6 +138,7 @@ impl World {
                     }
                     to_app(event);
                 }),
+                replies: answers,
             },
             store.clone(),
         );
@@ -141,6 +148,7 @@ impl World {
                 &store,
                 link.commands(),
                 terminals.clone(),
+                replies.clone(),
                 WALL_START_MS,
                 move |update| {
                     inbox.lock().unwrap().push(update);
@@ -163,6 +171,7 @@ impl World {
             inbox,
             frames,
             terminals,
+            replies,
             clock,
             pulse,
         };
@@ -201,7 +210,11 @@ impl World {
                 self.screens.draw_without_gpu(&mut self.runtime);
                 self.terminal_frames += 1;
             }
-            if self.quiet() && self.inbox.lock().unwrap().is_empty() && self.terminals.is_empty() {
+            if self.quiet()
+                && self.inbox.lock().unwrap().is_empty()
+                && self.terminals.is_empty()
+                && self.replies.is_empty()
+            {
                 return;
             }
             assert!(

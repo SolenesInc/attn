@@ -85,7 +85,7 @@ impl App {
         let address = daemon.address().to_string();
         let (link, window) = attn_app::connect(
             &Store::default(),
-            |terminals| LinkConfig {
+            |terminals, replies| LinkConfig {
                 daemon: address,
                 client_token: CLIENT_TOKEN.into(),
                 host_token: None,
@@ -96,6 +96,7 @@ impl App {
                 clock: Clock::system(),
                 pulse: Pulse::default(),
                 terminals,
+                replies,
             },
             WALL_START_MS,
             host.frames.clone(),

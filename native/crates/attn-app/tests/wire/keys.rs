@@ -184,6 +184,14 @@ fn every_shortcut_runs_its_own_action(category: Category) {
                 if *action != Action::AppQuit {
                     press(world, action);
                 }
+                if world.screen().find(Target::key("new-session")).is_some() {
+                    world.gesture(|app| {
+                        app.key(KeyEvent {
+                            key: Key::Escape,
+                            mods: Mods::default(),
+                        })
+                    });
+                }
                 world.advance(Duration::from_secs(6));
             }
             ([], Some(text)) => {

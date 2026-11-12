@@ -15,7 +15,8 @@ checklist="${NATIVE_PARITY_CHECKLIST:-$root/native/parity/checklist.tsv}"
 
 problems=()
 quoted_in() {
-  grep -qF -e "'$1'" -e "\"$1\"" -e "\`$1\`" "$2"
+  local escaped="${1//\'/\\\'}"
+  grep -qF -e "'$1'" -e "'$escaped'" -e "\"$1\"" -e "\`$1\`" "$2"
 }
 
 # The problem with native test $2, named at $1, or nothing when it exists.

@@ -50,6 +50,16 @@ pub struct Node {
     pub key: Option<String>,
     pub name: Option<String>,
     pub value: Option<String>,
+    pub description: Option<String>,
+    /// What assistive technology hears about the element's state: `focused`, `disabled`,
+    /// `checked`, `selected` and the like.
+    pub states: Vec<String>,
+}
+
+impl Node {
+    pub fn is(&self, state: &str) -> bool {
+        self.states.iter().any(|s| s == state)
+    }
 }
 
 /// The window's accessibility tree at one moment.
@@ -85,6 +95,11 @@ impl Screen {
             .unwrap_or_default()
     }
 
+    /// The element that has the keyboard, if any.
+    pub fn focused(&self) -> Option<Node> {
+        self.nodes().into_iter().find(|node| node.is("focused"))
+    }
+
     fn nodes(&self) -> Vec<Node> {
         self.values().into_iter().map(node).collect()
     }
@@ -109,6 +124,18 @@ fn node(value: &Value) -> Node {
         key: field("key"),
         name: field("name"),
         value: field("value"),
+        description: field("description"),
+        states: value
+            .get("states")
+            .and_then(Value::as_array)
+            .map(|states| {
+                states
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default(),
     }
 }
 

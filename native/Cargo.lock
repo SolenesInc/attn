@@ -377,6 +377,7 @@ dependencies = [
  "rune-kit",
  "rune-mac",
  "rusqlite",
+ "serde",
  "serde_json",
  "tempfile",
  "uuid",

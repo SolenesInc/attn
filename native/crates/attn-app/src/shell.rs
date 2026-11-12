@@ -42,6 +42,7 @@ pub struct Window {
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
+    pub(crate) launching: crate::picker::Launching,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -72,6 +73,8 @@ impl Drawer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Layer {
     Palette(Palette),
+    /// The New Session dialog; `Window::launching` holds it.
+    NewSession,
     Settings,
     Shortcuts,
 }
@@ -149,6 +152,7 @@ impl Window {
     pub(crate) fn toggle_layer(&mut self, layer: Layer, tx: &mut Tx) {
         if self.layer == Some(layer) {
             self.layer = None;
+            crate::picker::refocus_inline_window(self, tx);
             return;
         }
         self.layer = Some(layer);
@@ -328,6 +332,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Palette(palette)) => {
             layers.push(self::palette(palette, &window.palette_query, t))
         }
+        Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Settings) => layers.push(dialog(
             "settings",
             "Settings",
@@ -359,6 +364,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
+    layers.extend(crate::picker::worktree_setup(state, t));
     if let Some(notice) = &window.notice {
         layers.push(floating_status("notice", notice.text.clone(), t));
     }
@@ -374,8 +380,9 @@ fn scrim(key: &str, t: &Tokens) -> El {
         .a11y_hidden()
 }
 
-fn close_layer(state: &mut State) {
+fn close_layer(state: &mut State, tx: &mut Tx) {
     state.window.layer = None;
+    crate::picker::refocus_inline(state, tx);
 }
 
 fn dialog(key: &str, title: &str, t: &Tokens, body: Vec<El>) -> El {
@@ -383,7 +390,7 @@ fn dialog(key: &str, title: &str, t: &Tokens, body: Vec<El>) -> El {
         .key(format!("{key}.dialog"))
         .role("dialog")
         .label(title)
-        .modal(true, close_layer)
+        .modal_tx(true, close_layer)
         .w_full()
         .max_w(560.0)
         .h_full()
@@ -438,7 +445,7 @@ fn palette(palette: Palette, query: &rune::TextEdit, t: &Tokens) -> El {
         .key("palette.dialog")
         .role("dialog")
         .label(palette.label())
-        .modal(true, close_layer)
+        .modal_tx(true, close_layer)
         .w_full()
         .max_w(640.0)
         .radius(8.0)
