@@ -62,7 +62,7 @@ func parseCapture(args []string) (captureRequest, error) {
 	case testhistory.RunnerGo:
 		request.command = append([]string{"go", "test", "-json"}, request.command...)
 	case testhistory.RunnerCargo:
-		request.command = append([]string{"cargo", "test", "--message-format=json"}, request.command...)
+		request.command = append([]string{"cargo", "test", "--message-format=json", "--color=never"}, request.command...)
 	}
 	if len(request.command) == 0 {
 		return captureRequest{}, errors.New("capture needs a command after --")

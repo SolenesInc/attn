@@ -319,6 +319,7 @@ mod tests {
 `
 
 func TestACargoTestThatFailedOnMainRunsByNameUntilItClears(t *testing.T) {
+	t.Setenv("CARGO_TERM_COLOR", "always")
 	repo := newCheckout(t)
 	start := time.Now().Add(-time.Hour).Truncate(time.Second)
 	repo.write("scripts/landing-tests", "group native ^native/\ncargo .\n")

@@ -28,9 +28,9 @@ Each of these commands runs through
 The runner is `go`, `vitest`, `playwright`, `native` or `cargo`. For `go`, the
 command is the arguments to `go test`: capture runs `go test -json` and prints
 the text `go test` itself prints. For `cargo`, the command is the arguments to
-`cargo test`: capture runs `cargo test --message-format=json` from the current
-directory, `native/` for attn's workspace, and prints what `cargo test` prints,
-stderr included, without cargo's JSON messages. For every runner, the output
+`cargo test`: capture runs `cargo test --message-format=json --color=never`
+from the current directory, `native/` for attn's workspace, and prints what
+`cargo test` prints, stderr included, without cargo's JSON messages or colors. For every runner, the output
 and the exit status are the command's own.
 When capture cannot write to the spool (described below), it warns that history
 will not keep the run. It still writes `--receipt-out` and runs the command to
