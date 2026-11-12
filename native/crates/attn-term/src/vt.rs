@@ -5,6 +5,7 @@ use crate::grid::{
     BOLD, Cell, Cursor, CursorStyle, FAINT, Grid, INVISIBLE, ITALIC, Rgb, STRIKETHROUGH, UNDERLINE,
     Width,
 };
+use crate::theme::Theme;
 
 #[repr(C)]
 struct AttnTerm {
@@ -67,6 +68,13 @@ unsafe extern "C" {
         cap: usize,
     ) -> bool;
     fn attn_term_frame_done(t: *mut AttnTerm) -> c_int;
+    fn attn_term_set_theme(
+        t: *mut AttnTerm,
+        fg: *const u8,
+        bg: *const u8,
+        cursor: *const u8,
+        ansi: *const u8,
+    ) -> c_int;
     fn attn_term_encode_key(
         t: *mut AttnTerm,
         action: u8,
@@ -153,6 +161,21 @@ impl Vt {
             attn_term_bytes_free(raw);
             Some(bytes)
         }
+    }
+
+    /// The colors the terminal draws with until its program sets its own.
+    pub fn set_theme(&mut self, theme: &Theme) {
+        let ansi = theme.ansi.as_flattened();
+        let rc = unsafe {
+            attn_term_set_theme(
+                self.0.as_ptr(),
+                theme.fg.as_ptr(),
+                theme.bg.as_ptr(),
+                theme.cursor.as_ptr(),
+                ansi.as_ptr(),
+            )
+        };
+        assert_eq!(rc, SUCCESS, "libghostty-vt took the theme");
     }
 
     pub fn write(&mut self, bytes: &[u8]) {

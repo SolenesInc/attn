@@ -44,3 +44,4 @@ app/src/App.switchInput.test.tsx	typing while a selection is awaiting the daemon
 app/src/App.drawnStreaming.test.tsx	streaming only the terminals the window draws > re-attaches after a respawn or a reconnect only the terminals a drawn pane holds	attn-app/tests/wire/terminal.rs::a_reconnect_attaches_the_drawn_terminals_again	
 app/src/pty/exitNotice.test.ts	formatExitNotice > treats SIGTERM (143) — attn\'s normal teardown signal — as a session end, not a crash	attn-app/tests/wire/terminal.rs::an_ended_process_leaves_its_notice_on_the_screen	
 app/src/pty/exitNotice.test.ts	formatExitNotice > keeps the raw exit code for a non-zero application exit	attn-app/tests/wire/terminal.rs::an_ended_process_leaves_its_notice_on_the_screen	
+app/src/App.reconnect.test.tsx	App daemon reconnect > holds its terminal theme until the daemon handshake completes	attn-app/tests/wire/terminal.rs::the_daemon_hears_the_terminal_colors_after_each_handshake	

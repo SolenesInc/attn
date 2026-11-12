@@ -808,3 +808,29 @@ fn a_revived_terminal_reattaches_as_a_remount_sized_to_its_tile() {
         Some("same_app_remount")
     );
 }
+
+#[test]
+fn the_daemon_hears_the_terminal_colors_after_each_handshake() {
+    let mut world = World::start(one_terminal());
+    world.reconnect();
+
+    let dark = serde_json::json!({
+        "cmd": "set_terminal_theme",
+        "foreground": "#d4d4d4",
+        "background": "#1e1e1e",
+        "cursor": "#d4d4d4",
+        "ansi_palette": [
+            "#000000", "#cd3131", "#0dbc79", "#e5e510",
+            "#2472c8", "#bc3fbc", "#11a8cd", "#e5e5e5",
+            "#666666", "#f14c4c", "#23d18b", "#f5f543",
+            "#3b8eea", "#d670d6", "#29b8db", "#ffffff",
+        ],
+    });
+    let themes = world.daemon.sent_of("set_terminal_theme");
+    assert_eq!(themes.len(), 2);
+    for theme in themes {
+        let mut theme = theme.clone();
+        theme.as_object_mut().unwrap().remove("request_id");
+        assert_eq!(theme, dark);
+    }
+}

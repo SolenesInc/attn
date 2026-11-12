@@ -6,7 +6,10 @@ publish = false
 
 [dependencies]
 parley = { version = "0.12", default-features = false, features = ["std", "system"] }
+bytemuck = { version = "1.25", features = ["derive"] }
 rune.workspace = true
+swash = "0.2.10"
+wgpu = { version = "~30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl"] }
 
 [build-dependencies]
 cc = "1.2"

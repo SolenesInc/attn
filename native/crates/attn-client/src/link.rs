@@ -51,12 +51,6 @@ pub enum TerminalEvent {
     Desync(PtyDesyncMessage),
     Respawned(RuntimeRespawnedMessage),
     Exited(SessionExitedMessage),
-    /// The daemon has greeted this connection; a new `daemon_instance` means its terminals'
-    /// streams started over.
-    Connected {
-        daemon_instance: String,
-    },
-    Lost,
 }
 
 /// Where the link's thread waits, for a caller that needs to know the link has nothing left
@@ -247,7 +241,6 @@ impl Task {
                 _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
             };
             self.shared.close();
-            (self.config.terminals)(TerminalEvent::Lost);
             match ended {
                 Ended::Stopped => return,
                 Ended::Refused(refusal) => {
@@ -377,9 +370,7 @@ impl Task {
                     }
                 };
                 *greeted = true;
-                let daemon_instance = state.daemon_instance_id.clone().unwrap_or_default();
                 self.store.apply_initial_state(state);
-                (self.config.terminals)(TerminalEvent::Connected { daemon_instance });
                 None
             }
             "settings_updated" => {

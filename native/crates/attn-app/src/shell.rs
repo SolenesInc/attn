@@ -311,7 +311,7 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
                 )
                 .children(
                     (!pane.runtime_id.is_empty())
-                        .then(|| terminal_slot(&pane.runtime_id, held, scale)),
+                        .then(|| terminal_slot(&pane.runtime_id, held, t.dark, scale)),
                 )
         });
         row()
@@ -332,12 +332,14 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
 
 /// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
 /// size the terminal asks its PTY for.
-fn terminal_slot(runtime_id: &str, held: bool, scale: f32) -> El {
+fn terminal_slot(runtime_id: &str, held: bool, dark: bool, scale: f32) -> El {
     let id = runtime_id.to_owned();
+    let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
         .w_full()
         .grow(1.0)
+        .fill(rune::color::hex(&bg).expect("a theme color is #rrggbb"))
         .effect(crate::terminal::mark(runtime_id))
         .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
             state

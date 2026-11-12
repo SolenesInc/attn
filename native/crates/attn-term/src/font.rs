@@ -52,6 +52,10 @@ impl Default for Fonts {
 }
 
 impl Fonts {
+    pub(crate) fn contexts(&mut self) -> (&mut FontContext, &mut LayoutContext<()>) {
+        (&mut self.fcx, &mut self.lcx)
+    }
+
     pub fn metrics(&mut self, font_size: f32) -> Metrics {
         let mut builder = self.lcx.ranged_builder(&mut self.fcx, "M", 1.0, true);
         builder.push_default(StyleProperty::FontFamily(FontFamily::Source(

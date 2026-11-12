@@ -417,9 +417,12 @@ dependencies = [
 name = "attn-term"
 version = "0.0.0"
 dependencies = [
+ "bytemuck",
  "cc",
  "parley",
  "rune",
+ "swash",
+ "wgpu",
 ]
 
 [[package]]

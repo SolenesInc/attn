@@ -21,10 +21,16 @@ fn the_app_says_hello_with_its_token_and_shows_the_daemon_state() {
     let world = World::start(Daemon::scripted());
 
     let hello = world.daemon.sent_of("client_hello");
+    let sent: Vec<_> = world
+        .daemon
+        .sent()
+        .iter()
+        .map(|r| r["cmd"].as_str().unwrap_or_default().to_owned())
+        .collect();
     assert_eq!(
-        world.daemon.sent(),
-        hello,
-        "the app sends nothing but its hello on connect"
+        sent,
+        ["client_hello", "set_terminal_theme"],
+        "the app says hello, then gives the daemon its terminal colors once the handshake completes"
     );
     let hello = &hello[0];
     assert_eq!(hello["client_kind"], "native-app");

@@ -9,6 +9,7 @@ pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
+pub mod screen;
 mod shell;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
@@ -96,7 +97,9 @@ pub fn app() -> rune::App<State> {
 /// any view, so Stop Countdown's item is how its keys arrive.
 pub fn native_app(bundle_id: &str) -> rune::App<State> {
     let stop_countdown = Shortcut::parse_on("mod+.", KeyPlatform::Mac).expect("⌘. parses");
-    let app = app().playground(attn_ui::playground());
+    let app = app()
+        .compositor(screen::Screens::default())
+        .playground(attn_ui::playground());
     frame::restored(app, bundle_id)
         .menu_item(
             MenuItem::new("Stop Countdown", |state, tx| {

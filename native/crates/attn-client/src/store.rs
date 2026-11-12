@@ -8,6 +8,9 @@ use attn_protocol::{Desktop, InitialStateMessage, Profile, Session};
 #[derive(Clone, Default)]
 pub struct Facts {
     pub connection: Connection,
+    /// The daemon process the connection reached; a new one started every terminal's stream
+    /// over.
+    pub daemon_instance: String,
     pub sessions: Arc<Vec<Session>>,
     pub profiles: Arc<Profiles>,
     pub desktops: Arc<Vec<Desktop>>,
@@ -166,6 +169,7 @@ impl Store {
     pub(crate) fn apply_initial_state(&self, state: InitialStateMessage) {
         self.change(|facts| {
             facts.connection = Connection::Connected;
+            facts.daemon_instance = state.daemon_instance_id.unwrap_or_default();
             facts.sessions = Arc::new(state.sessions.unwrap_or_default());
             facts.profiles = Arc::new(Profiles {
                 all: state.profiles.unwrap_or_default(),

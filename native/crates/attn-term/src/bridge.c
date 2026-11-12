@@ -281,3 +281,20 @@ int attn_term_encode_key(AttnTerm *t, uint8_t action, uint32_t key, uint16_t mod
   return ghostty_key_encoder_encode(t->keys, t->key, out, cap, written);
 }
 
+
+int attn_term_set_theme(AttnTerm *t, const uint8_t *fg, const uint8_t *bg,
+                        const uint8_t *cursor, const uint8_t *ansi) {
+  GhosttyColorRgb palette[256];
+  GhosttyResult rc = ghostty_terminal_get(t->terminal, GHOSTTY_TERMINAL_DATA_COLOR_PALETTE, palette);
+  if (rc != GHOSTTY_SUCCESS) return rc;
+  for (int i = 0; i < 16; i++) {
+    palette[i] = (GhosttyColorRgb){ansi[i * 3], ansi[i * 3 + 1], ansi[i * 3 + 2]};
+  }
+  GhosttyColorRgb f = {fg[0], fg[1], fg[2]};
+  GhosttyColorRgb b = {bg[0], bg[1], bg[2]};
+  GhosttyColorRgb c = {cursor[0], cursor[1], cursor[2]};
+  if ((rc = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &f)) != GHOSTTY_SUCCESS) return rc;
+  if ((rc = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &b)) != GHOSTTY_SUCCESS) return rc;
+  if ((rc = ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_COLOR_CURSOR, &c)) != GHOSTTY_SUCCESS) return rc;
+  return ghostty_terminal_set(t->terminal, GHOSTTY_TERMINAL_OPT_COLOR_PALETTE, palette);
+}

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
 
-use attn_client::{Commands, Facts, Frame, TerminalEvent};
+use attn_client::{Commands, Connection, Facts, Frame, TerminalEvent};
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
-    PtyResizeMessage, TerminalFocusMessage,
+    PtyResizeMessage, SetTerminalThemeMessage, TerminalFocusMessage,
 };
 use attn_term::attach::{self, Attached, Chunk, Output, Policy, Snapshot, Stream};
-use attn_term::{FONT_SIZE, Fonts, KeyInput, Metrics, SNAPSHOT_FORMAT, Vt, responses};
+use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::Tx;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
@@ -60,10 +60,13 @@ pub struct Terminals {
     focused: Option<String>,
     fonts: Option<Fonts>,
     metrics: Option<Metrics>,
+    theme: Theme,
 }
 
 struct Term {
     vt: Vt,
+    /// The screen as the renderer last took it.
+    grid: Grid,
     stream: Stream,
     phase: Phase,
     agent: bool,
@@ -111,9 +114,10 @@ struct Attaching {
 }
 
 impl Term {
-    fn new(agent: bool) -> Term {
+    fn new(agent: bool, theme: &Theme) -> Term {
         Term {
-            vt: Vt::new(FIRST_SIZE.0, FIRST_SIZE.1),
+            vt: themed(Vt::new(FIRST_SIZE.0, FIRST_SIZE.1), theme),
+            grid: Grid::default(),
             stream: Stream::Attaching(Default::default()),
             phase: Phase::Waiting,
             agent,
@@ -142,6 +146,7 @@ impl Terminals {
         now: f64,
         daemon: &Commands,
     ) {
+        self.follow_connection(facts, daemon);
         let drawn: Vec<(String, bool, bool)> = facts
             .current_desktop()
             .into_iter()
@@ -177,11 +182,36 @@ impl Terminals {
         for (id, agent, recoverable) in drawn {
             self.panes
                 .entry(id)
-                .or_insert_with(|| Term::new(agent))
+                .or_insert_with(|| Term::new(agent, &self.theme))
                 .recoverable = recoverable;
         }
         self.attach_waiting(now, daemon);
         self.focus(keyboard, daemon);
+    }
+
+    /// Streams start over on a new connection, from the start when the daemon itself is new.
+    /// Following the facts keeps a connection's change in order with the state it brought.
+    fn follow_connection(&mut self, facts: &Facts, daemon: &Commands) {
+        let connected = facts.connection == Connection::Connected;
+        if connected == self.connected {
+            return;
+        }
+        self.connected = connected;
+        if !connected {
+            for term in self.panes.values_mut() {
+                term.phase = Phase::Waiting;
+                term.sent_size = None;
+            }
+            return;
+        }
+        if facts.daemon_instance != self.daemon_instance {
+            self.daemon_instance.clone_from(&facts.daemon_instance);
+            for term in self.panes.values_mut() {
+                term.watermark = None;
+            }
+        }
+        send_theme(&self.theme, daemon);
+        self.focused = None;
     }
 
     /// Tells the daemon which terminal has the keyboard when that changes, and claims that
@@ -350,27 +380,6 @@ impl Terminals {
                     term.vt.write(format!("\r\n{notice}\r\n").as_bytes());
                 }
             }
-            TerminalEvent::Connected { daemon_instance } => {
-                if daemon_instance != self.daemon_instance {
-                    self.daemon_instance = daemon_instance;
-                    for term in self.panes.values_mut() {
-                        term.watermark = None;
-                    }
-                }
-                self.connected = true;
-                if let Some(id) = self.focused.clone() {
-                    self.focused = None;
-                    self.focus(Some(id), daemon);
-                }
-                self.attach_waiting(tx.clock(), daemon);
-            }
-            TerminalEvent::Lost => {
-                self.connected = false;
-                for term in self.panes.values_mut() {
-                    term.phase = Phase::Waiting;
-                    term.sent_size = None;
-                }
-            }
         }
     }
 
@@ -393,7 +402,7 @@ impl Terminals {
             _ => {}
         }
         let (cols, rows) = term.vt.size();
-        term.vt = Vt::new(cols, rows);
+        term.vt = themed(Vt::new(cols, rows), &self.theme);
         term.watermark = None;
         term.stream = Stream::Attaching(Default::default());
         if !self.connected {
@@ -442,7 +451,7 @@ impl Terminals {
             && let Some(screen) = &result.screen
         {
             term.phase = Phase::Stopped;
-            term.vt = Vt::new(clamp(screen.cols), clamp(screen.rows));
+            term.vt = themed(Vt::new(clamp(screen.cols), clamp(screen.rows)), &self.theme);
             let text = screen
                 .text
                 .trim_end()
@@ -486,7 +495,7 @@ impl Terminals {
         let restored = restore.snapshot.and_then(Vt::restore);
         let decoded = restored.is_some();
         if let Some(vt) = restored {
-            term.vt = vt;
+            term.vt = themed(vt, &self.theme);
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
@@ -551,9 +560,32 @@ impl Terminals {
     /// The text on a terminal's screen, row by row with trailing blanks trimmed.
     pub fn screen_text(&mut self, id: &str) -> Option<Vec<String>> {
         let term = self.panes.get_mut(id)?;
-        let mut grid = attn_term::Grid::default();
+        let mut grid = Grid::default();
         term.vt.sync(&mut grid);
         Some(grid.text_lines())
+    }
+
+    /// The colors every terminal draws with until its program sets its own, which the daemon
+    /// also answers color queries with.
+    pub(crate) fn set_theme(&mut self, theme: Theme, daemon: &Commands) {
+        if theme == self.theme {
+            return;
+        }
+        self.theme = theme;
+        for term in self.panes.values_mut() {
+            term.vt.set_theme(&theme);
+        }
+        if self.connected {
+            send_theme(&theme, daemon);
+        }
+    }
+
+    /// Each drawn terminal's screen brought up to date, by the mark of the slot it draws in.
+    pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &mut Grid)> {
+        self.panes.iter_mut().map(|(id, term)| {
+            term.vt.sync(&mut term.grid);
+            (mark(id), &mut term.grid)
+        })
     }
 
     /// The size the terminal's own screen has, which follows the daemon's PTY.
@@ -691,4 +723,19 @@ fn exit_notice(code: i64, signal: Option<&str>) -> String {
 fn base64_decode(text: &str) -> Option<Vec<u8>> {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.decode(text).ok()
+}
+
+fn themed(mut vt: Vt, theme: &Theme) -> Vt {
+    vt.set_theme(theme);
+    vt
+}
+
+fn send_theme(theme: &Theme, daemon: &Commands) {
+    let _ = daemon.send(&SetTerminalThemeMessage {
+        foreground: Theme::hex(theme.fg),
+        background: Theme::hex(theme.bg),
+        cursor: Theme::hex(theme.cursor),
+        ansi_palette: theme.ansi.iter().map(|&c| Theme::hex(c)).collect(),
+        ..SetTerminalThemeMessage::new()
+    });
 }
