@@ -13,10 +13,10 @@ fn main() -> ExitCode {
         }
     };
     let store = Store::default();
-    let app = rune::App::new(attn_app::app());
+    let link = Link::start(config, store.clone());
+    let app = attn_app::native_app();
     let handle = app.handle();
-    let _window = attn_app::bind(&store, move |update| handle.update(update));
-    let _link = Link::start(config, store);
+    let _window = attn_app::bind(&store, link.commands(), move |update| handle.update(update));
     app.run();
     ExitCode::SUCCESS
 }

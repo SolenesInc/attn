@@ -1,14 +1,14 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use attn_app::{State, Update};
+use attn_app::State;
 use attn_client::{
     Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Pulse, Store, Subscription,
 };
-use rune::{Env, Runtime, Tx};
+use rune::{Chord, ChordKey, ChordMod, Env, Key, KeyEvent, KeyPlatform, Mods, Runtime, Tx};
 
 use crate::daemon::{CLIENT_TOKEN, Daemon, INSTANCE};
-use crate::screen::Screen;
+use crate::screen::{Screen, Target};
 
 /// A wire test's settle takes milliseconds; one that has not gone quiet after this long is
 /// stuck, and the test says where.
@@ -22,7 +22,7 @@ pub struct World {
     runtime: Runtime<State>,
     link: Option<Link>,
     _window: Subscription,
-    inbox: Arc<Mutex<Vec<Update>>>,
+    inbox: Arc<Mutex<Vec<attn_app::Update>>>,
     frames: Arc<Mutex<Vec<Frame>>>,
     clock: ManualClock,
     pulse: Pulse,
@@ -38,6 +38,96 @@ impl Driver<'_> {
     pub fn update(&mut self, f: impl FnOnce(&mut State, &mut Tx)) {
         self.runtime.update(f);
     }
+
+    /// Presses a key, as the window hears it from the keyboard.
+    pub fn key(&mut self, ev: KeyEvent) {
+        self.runtime.key(ev);
+    }
+
+    /// Presses `chord` as this platform's keyboard sends it: "mod+shift+k" is ⇧⌘K on macOS
+    /// and Ctrl+Shift+K on Linux.
+    pub fn press(&mut self, chord: &str) {
+        let chord = Chord::parse(chord).unwrap_or_else(|why| panic!("{why}"));
+        self.key(key_event(&chord));
+    }
+
+    /// Types `text` one character at a time.
+    pub fn type_text(&mut self, text: &str) {
+        for c in text.chars() {
+            self.key(KeyEvent {
+                key: Key::Text(c.to_string()),
+                mods: Mods::default(),
+            });
+        }
+    }
+
+    /// Clicks the element `target` names.
+    pub fn click(&mut self, target: Target) {
+        let screen = Screen(self.runtime.accessibility_json());
+        let key = screen
+            .get(target.clone())
+            .key
+            .unwrap_or_else(|| panic!("{target:?} has no key to click by:\n{screen}"));
+        let (x, y) = self
+            .runtime
+            .find(&key)
+            .unwrap_or_else(|| panic!("{key} is not laid out:\n{screen}"));
+        self.runtime.pointer_down(x, y);
+        self.runtime.pointer_up(x, y);
+    }
+}
+
+/// The key event the keyboard sends for `chord` on this platform.
+pub fn key_event(chord: &Chord) -> KeyEvent {
+    let platform = KeyPlatform::current();
+    let mut mods = Mods::default();
+    for m in chord.mods_on(platform) {
+        match m {
+            ChordMod::Primary => {
+                mods.cmd = true;
+                if platform == KeyPlatform::Mac {
+                    mods.logo = true;
+                } else {
+                    mods.ctrl = true;
+                }
+            }
+            ChordMod::Ctrl => mods.ctrl = true,
+            ChordMod::Alt => mods.alt = true,
+            ChordMod::Shift => mods.shift = true,
+            ChordMod::Super => mods.logo = true,
+        }
+    }
+    let key = match chord.key() {
+        ChordKey::Char(c) if mods.cmd || mods.ctrl => Key::Command(c),
+        ChordKey::Char(c) if mods.shift => Key::Text(shifted(c).to_string()),
+        ChordKey::Char(c) => Key::Text(c.to_string()),
+        ChordKey::Enter => Key::Enter,
+        ChordKey::Tab => Key::Tab,
+        ChordKey::Escape => Key::Escape,
+        ChordKey::Backspace => Key::Backspace,
+        ChordKey::Delete => Key::Delete,
+        ChordKey::Home => Key::Home,
+        ChordKey::End => Key::End,
+        ChordKey::PageUp => Key::PageUp,
+        ChordKey::PageDown => Key::PageDown,
+        ChordKey::Left => Key::Left,
+        ChordKey::Right => Key::Right,
+        ChordKey::Up => Key::Up,
+        ChordKey::Down => Key::Down,
+        ChordKey::Function(n) => Key::Function(n),
+        other => panic!("no key event for {other:?}"),
+    };
+    KeyEvent { key, mods }
+}
+
+/// What a US layout types for `c` with Shift.
+fn shifted(c: char) -> char {
+    let (plain, shifted) = ("`1234567890-=[]\\;',./", "~!@#$%^&*()_+{}|:\"<>?");
+    plain
+        .chars()
+        .position(|p| p == c)
+        .and_then(|i| shifted.chars().nth(i))
+        .unwrap_or(c.to_ascii_uppercase())
 }
 
 impl World {
@@ -46,15 +136,8 @@ impl World {
     pub fn start(daemon: Daemon) -> World {
         let store = Store::default();
         let pulse = daemon.pulse();
-        let inbox: Arc<Mutex<Vec<Update>>> = Arc::default();
+        let inbox: Arc<Mutex<Vec<attn_app::Update>>> = Arc::default();
         let frames: Arc<Mutex<Vec<Frame>>> = Arc::default();
-        let window = {
-            let (inbox, pulse) = (inbox.clone(), pulse.clone());
-            attn_app::bind(&store, move |update| {
-                inbox.lock().unwrap().push(update);
-                pulse.beat();
-            })
-        };
         let clock = ManualClock::default();
         let received = frames.clone();
         let link = Link::start(
@@ -69,13 +152,23 @@ impl World {
                 pulse: pulse.clone(),
                 frames: Box::new(move |frame| received.lock().unwrap().push(frame)),
             },
-            store,
+            store.clone(),
         );
+        let window = {
+            let (inbox, pulse) = (inbox.clone(), pulse.clone());
+            attn_app::bind(&store, link.commands(), move |update| {
+                inbox.lock().unwrap().push(update);
+                pulse.beat();
+            })
+        };
         let env = Env {
             system_dark: true,
             scale: 2.0,
         };
-        let runtime = Runtime::new(State::default(), attn_app::view, VIEWPORT, env);
+        let spec = attn_app::app();
+        let mut runtime = Runtime::new((spec.init)(), spec.view, VIEWPORT, env);
+        runtime.on_key = spec.on_key;
+        runtime.poll = spec.poll;
         let mut world = World {
             daemon,
             runtime,

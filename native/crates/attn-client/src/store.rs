@@ -14,6 +14,20 @@ pub struct Facts {
     pub settings: Arc<BTreeMap<String, String>>,
 }
 
+impl Facts {
+    /// The desktop the selected profile shows.
+    pub fn current_desktop(&self) -> Option<&Desktop> {
+        let profile = self
+            .profiles
+            .all
+            .iter()
+            .find(|p| p.id == self.profiles.selected)?;
+        self.desktops
+            .iter()
+            .find(|d| d.id == profile.current_desktop_id)
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Profiles {
     pub all: Vec<Profile>,
@@ -160,6 +174,43 @@ impl Store {
             facts.desktops = Arc::new(state.desktops.unwrap_or_default());
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             Slices::ALL
+        });
+    }
+
+    pub(crate) fn set_settings(&self, settings: BTreeMap<String, String>) {
+        self.change(|facts| {
+            if *facts.settings == settings {
+                return Slices::NONE;
+            }
+            facts.settings = Arc::new(settings);
+            Slices::SETTINGS
+        });
+    }
+
+    /// A profile's desktops and its current desktop, as one arrangement. Another profile's
+    /// arrangement changes only its record.
+    pub(crate) fn apply_arrangement(&self, profile: Profile, desktops: Vec<Desktop>) {
+        self.change(|facts| {
+            let shown = profile.id == facts.profiles.selected;
+            let mut profiles = (*facts.profiles).clone();
+            match profiles.all.iter_mut().find(|p| p.id == profile.id) {
+                Some(known) => *known = profile,
+                None => profiles.all.push(profile),
+            }
+            facts.profiles = Arc::new(profiles);
+            if !shown {
+                return Slices::PROFILES;
+            }
+            facts.desktops = Arc::new(desktops);
+            Slices::PROFILES | Slices::DESKTOPS
+        });
+    }
+
+    pub(crate) fn set_profiles(&self, all: Vec<Profile>) {
+        self.change(|facts| {
+            let selected = facts.profiles.selected.clone();
+            facts.profiles = Arc::new(Profiles { all, selected });
+            Slices::PROFILES
         });
     }
 

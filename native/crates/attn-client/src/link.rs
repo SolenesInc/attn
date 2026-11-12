@@ -3,7 +3,8 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    ClientHelloMessage, CommandErrorMessage, InitialStateMessage, PROTOCOL_VERSION, go_values,
+    ClientHelloMessage, CommandErrorMessage, InitialStateMessage, PROTOCOL_VERSION,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, SettingsUpdatedMessage, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -109,6 +110,18 @@ impl Shared {
     }
 }
 
+/// Sends commands to the daemon on the link it came from. The default one belongs to no link
+/// and is never connected.
+#[derive(Clone, Default)]
+pub struct Commands(Option<Arc<Shared>>);
+
+impl Commands {
+    pub fn send(&self, command: &impl Serialize) -> Result<(), NotConnected> {
+        let shared = self.0.as_ref().ok_or(NotConnected)?;
+        shared.send(serde_json::to_string(command).expect("a protocol command serializes"))
+    }
+}
+
 /// The connection to the daemon, on a thread of its own. Dropping it closes the connection
 /// and joins the thread.
 pub struct Link {
@@ -158,8 +171,12 @@ impl Link {
     /// Hands a command to the open connection. A command handed over as the connection drops
     /// is lost with it, as on any socket; the daemon's next `initial_state` says what holds.
     pub fn send(&self, command: &impl Serialize) -> Result<(), NotConnected> {
-        self.shared
-            .send(serde_json::to_string(command).expect("a protocol command serializes"))
+        self.commands().send(command)
+    }
+
+    /// A handle that sends commands on this link, for a window that outlives no link.
+    pub fn commands(&self) -> Commands {
+        Commands(Some(self.shared.clone()))
     }
 
     pub fn traffic(&self) -> Traffic {
@@ -338,6 +355,24 @@ impl Task {
                 self.store.apply_initial_state(state);
                 None
             }
+            "settings_updated" => {
+                let message: SettingsUpdatedMessage = parse(&header.event, text)?;
+                if let Some(settings) = message.settings {
+                    self.store.set_settings(settings);
+                }
+                None
+            }
+            "profile_arrangement_changed" => {
+                let message: ProfileArrangementChangedMessage = parse(&header.event, text)?;
+                self.store
+                    .apply_arrangement(message.profile, message.desktops);
+                None
+            }
+            "profiles_changed" => {
+                let message: ProfilesChangedMessage = parse(&header.event, text)?;
+                self.store.set_profiles(message.profiles);
+                None
+            }
             "command_error" => {
                 let error: CommandErrorMessage = serde_json::from_str(text).ok()?;
                 (error.error_code.as_deref() == Some(go_values::ERROR_CODE_UNAUTHORIZED_CLIENT))
@@ -385,4 +420,10 @@ impl Task {
             health.instance
         })
     }
+}
+
+fn parse<T: serde::de::DeserializeOwned>(event: &str, text: &str) -> Option<T> {
+    serde_json::from_str(text)
+        .inspect_err(|why| eprintln!("attn-app: dropped an unreadable {event}: {why}"))
+        .ok()
 }

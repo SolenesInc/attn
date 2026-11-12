@@ -1,25 +1,26 @@
 use attn_client::Refusal;
-use rune::tok::{Theme, space, type_};
+use attn_ui::Tokens;
+use rune::tok::{space, type_};
 use rune::{El, col, text};
 
-pub(crate) fn connecting(theme: &Theme) -> El {
+pub(crate) fn connecting(t: &Tokens) -> El {
     text("Connecting to the daemon")
         .key("connection.connecting")
         .role("status")
         .font(type_::BODY)
-        .color(theme.text_secondary)
+        .color(t.text_secondary)
 }
 
-pub(crate) fn reconnecting(theme: &Theme) -> El {
+pub(crate) fn reconnecting(t: &Tokens) -> El {
     text("The daemon is not answering. Reconnecting.")
         .key("connection.reconnecting")
         .role("status")
         .font(type_::BODY)
-        .color(theme.text_secondary)
+        .color(t.text_secondary)
         .padding(space::S2)
 }
 
-pub(crate) fn refused(theme: &Theme, refusal: &Refusal) -> El {
+pub(crate) fn refused(t: &Tokens, refusal: &Refusal) -> El {
     let (title, detail) = explain(refusal);
     col()
         .key("connection.refused")
@@ -27,12 +28,12 @@ pub(crate) fn refused(theme: &Theme, refusal: &Refusal) -> El {
         .label(format!("{title}. {detail}"))
         .max_w(520.0)
         .gap(space::S2)
-        .child(text(title).font(type_::TITLE).color(theme.text))
+        .child(text(title).font(type_::TITLE).color(t.text_primary))
         .child(
             text(detail)
                 .wrap()
                 .font(type_::BODY)
-                .color(theme.text_secondary),
+                .color(t.text_secondary),
         )
 }
 
