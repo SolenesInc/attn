@@ -716,6 +716,11 @@ impl Terminals {
         Some(grid.text_lines())
     }
 
+    /// The text of a terminal's screen as the window last drew it, row by row.
+    pub fn drawn_text(&self, id: &str) -> Option<Vec<String>> {
+        Some(self.panes.get(id)?.grid.text_lines())
+    }
+
     /// The colors every terminal draws with until its program sets its own, which the daemon
     /// also answers color queries with.
     pub(crate) fn set_theme(&mut self, theme: Theme, daemon: &Commands) {

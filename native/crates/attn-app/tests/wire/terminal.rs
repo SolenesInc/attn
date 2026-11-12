@@ -1126,3 +1126,97 @@ fn an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_
         "after the program turned it off"
     );
 }
+
+#[test]
+fn automation_reads_the_terminal_screen_the_window_drew_and_waits_for_text_in_it() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"$ echo hi\r\nhi");
+    world.settle();
+
+    let rows = world
+        .automate(
+            "state",
+            serde_json::json!({"of": "terminal:r1", "includes": "hi"}),
+        )
+        .unwrap();
+    assert_eq!(rows[0], "$ echo hi");
+    assert_eq!(rows[1], "hi");
+
+    let waiting = world
+        .automate(
+            "state",
+            serde_json::json!({"of": "terminal:r1", "includes": "bye"}),
+        )
+        .unwrap_err();
+    assert!(
+        waiting.contains("still waits for state \"terminal:r1\" to include \"bye\""),
+        "{waiting}"
+    );
+
+    let undrawn = world
+        .automate(
+            "state",
+            serde_json::json!({"of": "terminal:r9", "includes": "hi"}),
+        )
+        .unwrap_err();
+    assert!(
+        undrawn.contains("still waits for state \"terminal:r9\" to be there"),
+        "{undrawn}"
+    );
+
+    let mistyped = world
+        .automate(
+            "state",
+            serde_json::json!({"of": "windows", "includes": "hi"}),
+        )
+        .unwrap_err();
+    assert!(
+        !mistyped.contains("waits"),
+        "a slice that cannot exist fails at once: {mistyped}"
+    );
+    assert!(mistyped.contains("terminal:<runtime id>"), "{mistyped}");
+}
+
+#[test]
+fn an_automation_scroll_over_a_terminal_turns_the_wheel_its_program_hears() {
+    let mut world = live_with_modes(b"\x1b[?1000h\x1b[?1006h");
+
+    world
+        .automate(
+            "scroll",
+            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": -100.0}),
+        )
+        .unwrap();
+
+    let sent = inputs(&world);
+    assert_eq!(sent.len(), 1, "{sent:?}");
+    assert!(
+        sent[0].0.contains("\x1b[<65;") && !sent[0].0.contains("\x1b[<64;"),
+        "the wheel turned down: {sent:?}"
+    );
+}
+
+#[test]
+fn an_automation_scroll_right_after_another_goes_to_its_own_target() {
+    let mut world = live_with_modes(b"\x1b[?1000h\x1b[?1006h");
+    world
+        .automate(
+            "scroll",
+            serde_json::json!({"target": {"key": "terminal.r1"}, "dy": -100.0}),
+        )
+        .unwrap();
+    let before = inputs(&world).len();
+
+    world
+        .automate(
+            "scroll",
+            serde_json::json!({"target": {"key": "sidebar"}, "dy": -100.0}),
+        )
+        .unwrap();
+
+    assert_eq!(
+        inputs(&world).len(),
+        before,
+        "the sidebar's turn did not reach the terminal"
+    );
+}

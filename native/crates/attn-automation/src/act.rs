@@ -1,4 +1,4 @@
-use rune::{Chord, Key, KeyEvent, Mods, Runtime, Tx};
+use rune::{Chord, GesturePhase, Key, KeyEvent, Mods, Runtime, Tx, WheelEvent};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -9,7 +9,9 @@ use crate::target::{Found, Target};
 pub trait Hooks<S>: Send + Sync + 'static {
     fn ready(&self, state: &S) -> bool;
     fn run(&self, state: &mut S, name: &str, tx: &mut Tx) -> Result<(), String>;
-    fn state(&self, state: &S, of: &str) -> Result<Value, String>;
+    /// A named slice, or `None` while it is not there yet, such as a terminal the window has
+    /// not drawn.
+    fn state(&self, state: &S, of: &str) -> Result<Option<Value>, String>;
 }
 
 /// One request, as the Tauri app's automation server reads it, so one Node client drives
@@ -85,6 +87,9 @@ struct Named {
 #[derive(Deserialize)]
 struct Of {
     of: String,
+    /// Waits until a string in the slice contains this text.
+    #[serde(default)]
+    includes: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -172,7 +177,13 @@ pub fn act<S: 'static>(
         }
         "scroll" => {
             let scroll: Scroll = args!(action, payload);
-            pointer(rt, &scroll.over, |rt, (x, y)| rt.wheel(x, y, scroll.dy))
+            pointer(rt, &scroll.over, |rt, (x, y)| {
+                rt.wheel_event(
+                    WheelEvent::new(0.0, scroll.dy)
+                        .at(x, y)
+                        .phase(GesturePhase::Ended),
+                );
+            })
         }
         "key" => {
             let Chorded { chord } = args!(action, payload);
@@ -225,15 +236,30 @@ pub fn act<S: 'static>(
             }
         }
         "state" => {
-            let Of { of } = args!(action, payload);
-            match hooks.state(&rt.state, &of) {
-                Ok(value) => Attempt::Done(value),
-                Err(why) => Attempt::Fail(format!("state {of:?}: {why}")),
+            let Of { of, includes } = args!(action, payload);
+            match (hooks.state(&rt.state, &of), includes) {
+                (Err(why), _) => Attempt::Fail(format!("state {of:?}: {why}")),
+                (Ok(None), Some(_)) => Attempt::Wait(format!("state {of:?} to be there")),
+                (Ok(None), None) => Attempt::Fail(format!("state {of:?} is not there yet")),
+                (Ok(Some(value)), Some(text)) if !holds(&value, &text) => {
+                    Attempt::Wait(format!("state {of:?} to include {text:?}"))
+                }
+                (Ok(Some(value)), _) => Attempt::Done(value),
             }
         }
         other => Attempt::Fail(format!(
             "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, type, run, state, native_windows, shot"
         )),
+    }
+}
+
+/// Whether a string anywhere in `value` contains `text`.
+fn holds(value: &Value, text: &str) -> bool {
+    match value {
+        Value::String(s) => s.contains(text),
+        Value::Array(items) => items.iter().any(|v| holds(v, text)),
+        Value::Object(fields) => fields.values().any(|v| holds(v, text)),
+        _ => false,
     }
 }
 

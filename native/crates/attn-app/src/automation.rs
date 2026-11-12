@@ -27,10 +27,13 @@ impl Hooks<State> for AppHooks {
         Ok(())
     }
 
-    fn state(&self, state: &State, of: &str) -> Result<Value, String> {
+    fn state(&self, state: &State, of: &str) -> Result<Option<Value>, String> {
         let facts = &state.facts;
         let window = &state.window;
-        Ok(match of {
+        if let Some(id) = of.strip_prefix("terminal:") {
+            return Ok(state.terminals.drawn_text(id).map(|rows| json!(rows)));
+        }
+        Ok(Some(match of {
             "connection" => json!(format!("{:?}", facts.connection)),
             "sessions" => json!(*facts.sessions),
             "desktops" => json!(*facts.desktops),
@@ -44,11 +47,9 @@ impl Hooks<State> for AppHooks {
             }),
             "build" => build_identity()?,
             _ => {
-                return Err(
-                    "slices: connection, sessions, desktops, profiles, window, build".into(),
-                );
+                return Err("slices: connection, sessions, desktops, profiles, window, build, terminal:<runtime id>".into());
             }
-        })
+        }))
     }
 }
 

@@ -77,15 +77,15 @@ receipt that says which element the press landed on.
 | `find`, `wait` | `target`, and `gone` for `wait` | the element now, or once it shows and stops moving, or goes |
 | `press`, `hover` | `target`, `at` | a click or a pointer move at `at`, fractions of the box (center by default) |
 | `drag` | `target`, `at`, then `to` (a target) or `by` (points) | press, move, release |
-| `scroll` | `target`, `dy` | a wheel over the element |
+| `scroll` | `target`, `dy` | turns the wheel over the element by `dy` points, as a mouse wheel does; negative `dy` turns it down. The element's own wheel handler hears it before a scroll view does |
 | `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
 | `type` | `text`, `target` | focuses the target first, then types |
 | `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |
-| `state` | `of`: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build` | a slice of the store or the window |
+| `state` | `of`, `includes` | a slice of the store or the window: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build`, or `terminal:<runtime id>`, a terminal's rows as the window last drew them, with the runtime id from a pane in `desktops`. With `includes`, waits until one string in the slice, such as one terminal row, contains the text, and waits for a terminal not drawn yet |
 | `native_windows`, `shot` | `path` for `shot` | the window's platform id; a screenshot |
 
-A request that waits gives up after 30 s, or its payload's `timeout_ms`, and
-says what it waited for.
+A request that waits, `state` with `includes` among them, gives up after 30 s,
+or its payload's `timeout_ms`, and says what it waited for.
 
 Hosts run the protocol on the app's `Runtime`:
 
