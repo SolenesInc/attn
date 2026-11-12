@@ -406,6 +406,7 @@ function readerComponents(
       const stopLine = attributes['data-review-stop'];
       if (stopLine !== undefined) return <StopSlot line={Number(stopLine)} />;
       if (attributes['data-review-not-shown'] !== undefined) return <NotShownSlot />;
+      if (attributes['data-review-summary'] !== undefined) return <SummarySlot />;
       return <div {...(props as HTMLAttributes<HTMLDivElement>)}>{children}</div>;
     },
     span({ node: _node, children, ...props }) {
@@ -589,7 +590,7 @@ const MarkdownReaderBody = memo(function MarkdownReaderBody({
 
   return (
     <article className="md-reader-card">
-      {reviewing ? <SummarySlot /> : <FrontmatterCard entries={frontmatter.entries} />}
+      {reviewing ? null : <FrontmatterCard entries={frontmatter.entries} />}
       <ReaderPresentation>
         <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={plugins} components={components}>
           {content}

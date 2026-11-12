@@ -38,6 +38,10 @@ removed lines, and the agent's notes under the lines they explain. A note marked
 as the place to look is the line the agent most wants you to check. A stop on a
 markdown file shows the text rendered, with the changed words marked.
 
+The review opens with its title and one line of facts under it: the files, the
+lines added and removed, and how many of the changed lines the stops show.
+Enter on that line lists the changed files, and Enter on a file opens it.
+
 The review always shows the files as they are now. If you or the agent edit a
 file while you read, the stop follows its lines.
 

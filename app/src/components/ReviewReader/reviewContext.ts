@@ -55,6 +55,9 @@ export interface ReviewReaderContextValue {
   labels: RowLabels | null;
   /** The line a question waits on, until its answer, its error or Escape. */
   asked: NavLine['at'] | null;
+  /** Whether the Brief lists the changed files under the change's facts. */
+  filesShown: boolean;
+  toggleFiles(): void;
 }
 
 export const ReviewReaderContext = createContext<ReviewReaderContextValue | null>(null);

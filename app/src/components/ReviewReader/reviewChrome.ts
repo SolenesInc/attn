@@ -2,7 +2,8 @@ import type { Element, ElementContent, Root, RootContent } from 'hast';
 import type { ReviewBundle } from '../../types/generated';
 
 /** The document lines a review renders as chrome instead of markdown: each
- * stop's heading and the note items under it, and the Not shown items. */
+ * stop's heading and the note items under it, and the Not shown items. The
+ * change's facts follow the title, or open the document when it has none. */
 export interface ReviewChrome {
   stops: Array<{ line: number; notes: number[] }>;
   notShown: number[];
@@ -61,6 +62,8 @@ export default function rehypeReviewChrome({ chrome }: { chrome: ReviewChrome })
         children.push(node);
       }
     }
+    const title = children.findIndex((node) => isElement(node) && node.tagName === 'h1');
+    children.splice(title + 1, 0, chromeElement('dataReviewSummary', 0));
     tree.children = children;
   };
 }

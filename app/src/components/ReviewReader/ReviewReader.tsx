@@ -293,6 +293,8 @@ export function ReviewReader({
   const [filled, setFilled] = useState(false);
   const [search, setSearch] = useState<{ query: string } | null>(null);
   const [help, setHelp] = useState(false);
+  const [filesShown, setFilesShown] = useState(false);
+  const toggleFiles = useCallback(() => setFilesShown((shown) => !shown), []);
   const [selectFrom, setSelectFrom] = useState<string | null>(null);
   const [composer, setComposer] = useState<{ kind: MarkKind; target: MarkTarget } | null>(null);
   const [sending, setSending] = useState<{ verdict: ReviewVerdict } | null>(null);
@@ -662,9 +664,13 @@ export function ReviewReader({
   }, [currentTarget, openSearch, stopOf]);
 
   const openAtCursor = useCallback((fill: boolean) => {
+    if (currentTarget()?.getAttribute('data-review-cursor') === 'facts') {
+      toggleFiles();
+      return;
+    }
     const target = targetAtCursor();
     if (target && target !== 'search') openFile(target, { fill });
-  }, [openFile, targetAtCursor]);
+  }, [currentTarget, openFile, targetAtCursor, toggleFiles]);
 
   const expandAtCursor = useCallback(() => {
     const stop = stopOf(currentTarget());
@@ -1326,8 +1332,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
-    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked, filesShown, toggleFiles }),
+    [asked, asking, bundle, expansions, filesShown, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor, toggleFiles],
   );
 
   return (

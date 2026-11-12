@@ -1,5 +1,6 @@
 import type { ReviewBundle, ReviewFile } from '../../types/generated';
 import { useReviewReader } from './reviewContext';
+import { rowKey } from './CodeRows';
 import { PathLabel, StopBlock } from './StopBlock';
 
 function shortCommit(commit: string | undefined): string {
@@ -30,19 +31,38 @@ function FileRow({ file }: { file: ReviewFile }) {
   );
 }
 
-export function ReviewSummary({ bundle }: { bundle: ReviewBundle }) {
+/** The changed lines the stops show, each counted once however many stops show it. */
+function shownChangedLines(bundle: ReviewBundle): number {
+  const shown = new Set<string>();
+  for (const stop of bundle.stops) {
+    for (const row of stop.rows) if (row.kind !== ' ') shown.add(`${stop.path}\u0000${row.kind}${rowKey(row)}`);
+  }
+  return shown.size;
+}
+
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+export function ReviewSummary({ bundle, filesShown, onToggleFiles }: { bundle: ReviewBundle; filesShown: boolean; onToggleFiles: () => void }) {
   const added = bundle.files.reduce((sum, file) => sum + file.added, 0);
   const removed = bundle.files.reduce((sum, file) => sum + file.removed, 0);
   return (
     <section className="review-summary" aria-label="The change">
-      <div className="review-summary-meta">
-        <span className="review-kicker">Review</span>
+      <div
+        className="review-summary-meta"
+        data-review-cursor="facts"
+        data-cursor-key="facts"
+        aria-expanded={bundle.files.length > 0 ? filesShown : undefined}
+        onClick={onToggleFiles}
+      >
         <span>{bundle.base ? <>base <code>{shortCommit(bundle.base)}</code> → </> : 'a tour at '}head <code>{shortCommit(bundle.head)}</code></span>
-        <span>{bundle.files.length} {bundle.files.length === 1 ? 'file' : 'files'}</span>
+        <span>{plural(bundle.files.length, 'file', 'files')}</span>
         <span><span className="review-plus">+{added}</span> <span className="review-minus">−{removed}</span></span>
-        <span>{bundle.stops.length} {bundle.stops.length === 1 ? 'stop' : 'stops'}</span>
+        <span>{plural(bundle.stops.length, 'stop shows', 'stops show')} {shownChangedLines(bundle)} of {added + removed} changed lines</span>
+        {bundle.files.length > 0 ? <span className="review-summary-toggle"><kbd>↵</kbd> {filesShown ? 'hide' : 'show'} the files</span> : null}
       </div>
-      {bundle.files.length > 0 ? (
+      {filesShown && bundle.files.length > 0 ? (
         <div className="review-files">
           {bundle.files.map((file) => <FileRow key={file.path} file={file} />)}
         </div>
@@ -96,5 +116,5 @@ export function NotShownSlot() {
 
 export function SummarySlot() {
   const reader = useReviewReader();
-  return reader ? <ReviewSummary bundle={reader.bundle} /> : null;
+  return reader ? <ReviewSummary bundle={reader.bundle} filesShown={reader.filesShown} onToggleFiles={reader.toggleFiles} /> : null;
 }

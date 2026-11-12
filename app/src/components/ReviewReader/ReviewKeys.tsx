@@ -205,7 +205,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['h'], 'Show the type of a name on the line.'],
   [['s'], 'When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.'],
   [['x'], 'Stop offering setup in this repository, or offer it again. s still sets up.'],
-  [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked.'],
+  [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked. On the change’s facts under the title, show or hide the changed files.'],
   [['e'], 'Show 10 more lines on each side of the stop.'],
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],
   [['/'], 'Search the repository: files by name, lines by text.'],

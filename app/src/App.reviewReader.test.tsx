@@ -166,17 +166,42 @@ describe('App review reader', () => {
 
     expect(reader.getByText('A paragraph between the stops.')).toBeInTheDocument();
     expect(reader.getByRole('heading', { name: 'Add keeps its result' })).toBeInTheDocument();
-    const summary = reader.getByRole('region', { name: 'The change' });
-    expect(within(summary).getAllByText(/calc\.go|util\.go|go\.sum/).map((element) => element.closest('.review-file-row')?.getAttribute('data-path'))).toEqual(['calc.go', 'util.go', 'go.sum']);
     expect(tileElement.querySelector('.review-not-shown')).toHaveTextContent('go.sumchecksums only.');
+  });
+
+  it('opens with the title and the change\'s facts under it, with the changed files one Enter away', async () => {
+    const { tileElement, reader, press, daemon } = await openReview();
+
+    const article = tileElement.querySelector('.md-reader-card')!;
+    const summary = reader.getByRole('region', { name: 'The change' });
+    expect(article.firstElementChild).toHaveTextContent('Name the sum');
+    expect(article.firstElementChild?.nextElementSibling).toBe(summary);
+    expect(summary).toHaveTextContent('3 files+5 −32 stops show 4 of 8 changed lines');
+    expect(summary.querySelector('.review-file-row')).toBeNull();
+
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveTextContent('Name the sum');
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveAttribute('data-review-cursor', 'facts');
+    await press('Enter');
+    expect(Array.from(summary.querySelectorAll('.review-file-row')).map((row) => row.getAttribute('data-path'))).toEqual(['calc.go', 'util.go', 'go.sum']);
+
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(cursor(tileElement)).toHaveAttribute('data-path', 'util.go');
+    await press('Enter');
+    expect(daemon.sentOf('review_file').slice(-1)[0]?.path).toBe('util.go');
+    expect(fileView(tileElement)).toHaveTextContent('func helper() {}');
+    await press('Escape');
+
+    await press('ArrowUp');
+    await press('ArrowUp');
+    await press('Enter');
+    expect(summary.querySelector('.review-file-row')).toBeNull();
   });
 
   it('moves the cursor by block and line with up and down, and by stop with left and right', async () => {
     const { tileElement, press } = await openReview();
-
-    await press('ArrowDown');
-    expect(cursor(tileElement)).toHaveAttribute('data-path', 'calc.go');
-    expect(cursor(tileElement)?.closest('.review-summary')).not.toBeNull();
 
     await press('ArrowRight');
     expect(cursor(tileElement)?.closest('.review-stop')).toHaveAttribute('data-path', 'calc.go');
