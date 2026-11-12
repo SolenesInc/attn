@@ -213,7 +213,7 @@ fn follow_reply(state: &mut State, runtime: &str) {
     let peeks = &mut state.window.desk.peeks;
     if peeks.open.as_ref().and_then(|o| o.runtime.as_deref()) == Some(runtime) {
         let text = peeks.replies.get(runtime).map_or("", Reply::text);
-        peeks.field = TextEdit::new(text);
+        peeks.field.replace_text(text);
     }
 }
 
@@ -422,7 +422,7 @@ fn edited(state: &mut State) {
     let typed = peeks.field.text.clone();
     match peeks.replies.get_mut(&runtime) {
         Some(Reply::Sending(text) | Reply::Typed { text, .. }) => {
-            peeks.field = TextEdit::new(text.clone());
+            peeks.field.replace_text(text.clone());
         }
         _ if typed.is_empty() => {
             peeks.replies.remove(&runtime);
@@ -847,6 +847,10 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
         .key(field_key(&open.leaf))
         .single_line()
         .label("Reply")
+        .read_only(matches!(
+            reply,
+            Some(Reply::Sending(_) | Reply::Typed { .. })
+        ))
         .placeholder(
             if blocked.is_some() {
                 "A reply cannot be sent now"
