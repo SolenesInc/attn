@@ -155,12 +155,13 @@ func TestAResumedAppServerSessionOpensTheConversationItLaunchedWith(t *testing.T
 		app := w.App()
 		session, nisse, server := appServerSession(t, w, app, h, func(m *protocol.SpawnSessionMessage) {
 			m.Model = protocol.Ptr("openai/gpt-5.5")
+			m.Effort = protocol.Ptr("high")
 			m.YoloMode = protocol.Ptr(true)
 		})
 		conversation := nisse.ConversationID
 		started := server.Started(conversation)
-		if started.Provider != "openai" || started.Model != "gpt-5.5" || started.Approvals != "auto" {
-			t.Fatalf("the conversation started as %+v, want openai's gpt-5.5 running without asking", started)
+		if started.Provider != "openai" || started.Model != "gpt-5.5" || started.Effort != "high" || started.Approvals != "auto" {
+			t.Fatalf("the conversation started as %+v, want openai's gpt-5.5 at high effort running without asking", started)
 		}
 		if !nisse.Yolo {
 			t.Errorf("the TUI ran %q, want --auto", nisse.Argv)
