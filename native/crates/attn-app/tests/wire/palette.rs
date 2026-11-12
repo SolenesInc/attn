@@ -973,3 +973,51 @@ fn a_settle_bound_to_a_sequence_says_it_has_no_keys_here_and_does_nothing() {
     assert!(world.daemon.sent_of("settle_turn").is_empty());
     rest_but_for_ages(&mut world);
 }
+
+#[test]
+fn an_age_reads_true_when_the_palette_opens_and_moves_on_while_it_shows() {
+    let mut state = crew_and_queue();
+    state.settings = Some(BTreeMap::new());
+    let mut world = World::start(daemon(state, vec![]));
+    world.advance(Duration::from_secs(2 * 3600));
+
+    open_agents(&mut world);
+    assert_eq!(
+        row_text(&world, "agent:newer-turn", "age").as_deref(),
+        Some("2h")
+    );
+
+    world.advance(Duration::from_secs(3600));
+    assert_eq!(
+        row_text(&world, "agent:newer-turn", "age").as_deref(),
+        Some("3h")
+    );
+    rest_but_for_ages(&mut world);
+}
+
+#[test]
+fn the_queue_keys_do_nothing_on_the_commands_face_or_among_snooze_choices() {
+    let mut world = World::start(daemon(crew_and_queue(), vec![]));
+    press_action(&mut world, Action::SessionJumpToWaiting);
+    press_action(&mut world, Action::UiCommandPalette);
+    for action in [
+        Action::SessionSettle,
+        Action::SessionPriority,
+        Action::SessionSnooze,
+    ] {
+        press_action(&mut world, action);
+    }
+    assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
+
+    press_action(&mut world, Action::UiActionMenu);
+    world.gesture(|app| app.type_text("older"));
+    press_action(&mut world, Action::SessionSnooze);
+    press_action(&mut world, Action::SessionSettle);
+    press_action(&mut world, Action::SessionSnooze);
+    assert_eq!(palette_named(&world).as_deref(), Some("Snooze older-turn"));
+
+    assert!(world.daemon.sent_of("settle_turn").is_empty());
+    assert!(world.daemon.sent_of("set_session_priority").is_empty());
+    assert!(world.screen().find(Target::role("menu")).is_none());
+    rest_but_for_ages(&mut world);
+}

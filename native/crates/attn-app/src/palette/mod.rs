@@ -147,6 +147,7 @@ pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
         return;
     }
     state.window.layer = Some(Layer::Palette(Palette::Search));
+    state.tick(tx);
     let search = &mut state.window.search;
     search.query = at_end(match wanted {
         Face::Commands => ">".to_owned(),
@@ -256,11 +257,13 @@ pub(crate) fn listing(state: &State) -> Listing {
         Face::Agents => {
             let rows = agents::rows(state, query);
             let selectable = |rows: &[Row]| rows.iter().filter(|r| r.selectable()).count();
-            let count = format!(
-                "{} of {}",
-                selectable(&rows),
+            let shown = selectable(&rows);
+            let all = if query.trim().is_empty() {
+                shown
+            } else {
                 selectable(&agents::rows(state, ""))
-            );
+            };
+            let count = format!("{shown} of {all}");
             Listing {
                 mode: Mode::Agents,
                 rows,
@@ -308,25 +311,23 @@ pub(crate) fn edited(state: &mut State, _: &mut Tx) {
 }
 
 /// Arrows move the highlight over the rows that can be picked, without wrapping; Enter picks
-/// the highlighted row. On the agents face the settle, priority and snooze keys act on the
-/// highlighted agent; choosing a snooze, Escape goes back to the agents.
+/// the highlighted row. The settle, priority and snooze keys act on the highlighted agent of
+/// the agents face and on nothing elsewhere in the palette; choosing a snooze, Escape goes back
+/// to the agents.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let listing = listing(state);
     let at = highlighted(&state.window.search, &listing.rows);
-    match listing.mode {
-        Mode::Snooze { .. } if ev.key == Key::Escape => {
-            leave_snooze(state);
-            return true;
+    if matches!(listing.mode, Mode::Snooze { .. }) && ev.key == Key::Escape {
+        leave_snooze(state);
+        return true;
+    }
+    if let Some(action) = queue_action(state, ev, tx) {
+        if let (Mode::Agents, Some(Look::Agent { agent, .. })) =
+            (&listing.mode, at.map(|i| &listing.rows[i].look))
+        {
+            act_on(state, action, &agent.id.clone(), tx);
         }
-        Mode::Agents => {
-            if let Some(action) = queue_action(state, ev, tx) {
-                if let Some(Look::Agent { agent, .. }) = at.map(|i| &listing.rows[i].look) {
-                    act_on(state, action, &agent.id.clone(), tx);
-                }
-                return true;
-            }
-        }
-        _ => {}
+        return true;
     }
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
@@ -511,6 +512,29 @@ pub(crate) fn row_actions(state: &State, row: Option<&Row>) -> QueueActions {
             .unwrap_or_default(),
         _ => QueueActions::default(),
     }
+}
+
+/// The next wall-clock moment an agent row of the open palette reads differently: a turn age
+/// changes, or a snooze ends.
+pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
+    if !is_open(state) {
+        return None;
+    }
+    state
+        .facts
+        .sessions
+        .iter()
+        .filter_map(|s| {
+            let until = s.turn_snoozed_until.as_deref();
+            if queue::is_snoozed(until, now_ms) {
+                until.and_then(queue::epoch_ms)
+            } else if s.turn_owed == Some(true) {
+                queue::next_age_change(s.turn_opened_at.as_deref(), now_ms)
+            } else {
+                None
+            }
+        })
+        .min()
 }
 
 pub(crate) const fn field_key() -> &'static str {
