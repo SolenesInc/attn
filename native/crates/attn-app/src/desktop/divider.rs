@@ -34,10 +34,6 @@ pub(crate) struct RatioOverride {
     dragging: bool,
 }
 
-fn request_id() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-
 /// The screen column a `row:<first leaf>` split divides from the next, or None for a split
 /// inside a column.
 fn column_divider(state: &State, desktop: &str, split: &str) -> Option<(usize, ColumnDragStart)> {
@@ -178,7 +174,7 @@ fn column_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
                 .map_or(0, |a| (a.w / a.px_per_col).floor() as i64);
             for (leaf, cols) in wanted {
                 let _ = state.daemon.send(&DesktopSetWantedColsMessage {
-                    request_id: request_id(),
+                    request_id: super::request_id(),
                     desktop_id: drag.desktop.clone(),
                     leaf_id: leaf,
                     cols: cols as i64,
@@ -280,7 +276,7 @@ fn ratio_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, drag: &RatioDrag)
                 },
             );
             let _ = state.daemon.send(&DesktopSetSplitRatioMessage {
-                request_id: request_id(),
+                request_id: super::request_id(),
                 desktop_id: desktop.to_owned(),
                 split_id: split.to_owned(),
                 ratio: ratio as f64,

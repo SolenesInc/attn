@@ -49,6 +49,18 @@ pub(crate) fn save(_: &mut State, _: &mut Tx) {
     });
 }
 
+/// Where the main window's content starts on the desktop, in points: (0, 0) without one.
+pub(crate) fn main_content_origin() -> (f64, f64) {
+    MAIN.with_borrow(|main| {
+        main.as_ref()
+            .and_then(|(_, window)| window.placement())
+            .map_or((0.0, 0.0), |p| {
+                let (x, y) = p.content_position;
+                (f64::from(x) / p.scale, f64::from(y) / p.scale)
+            })
+    })
+}
+
 /// The main window as a driver outside the process names it, while it is open. Call it on the
 /// UI thread.
 pub(crate) fn main_window() -> Option<WindowInfo> {

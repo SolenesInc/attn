@@ -46,6 +46,7 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfFewerTiles => super::shelf::step_width(state, true, tx),
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         DesktopOverview => super::overview::toggle(state, tx),
+        TilePopOut => super::windows::toggle(state),
         _ => return false,
     }
     if goes_to_a_desktop(action) {
@@ -93,10 +94,6 @@ fn slot_of(action: &Action) -> u32 {
         .expect("a desktop action's id ends in its slot")
 }
 
-fn request_id() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-
 fn profile(state: &State) -> Option<String> {
     let selected = &state.facts.profiles.selected;
     (!selected.is_empty()).then(|| selected.clone())
@@ -112,7 +109,7 @@ fn set_current(state: &State, desktop: &str) {
         return;
     };
     let _ = state.daemon.send(&DesktopSetCurrentMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         profile_id,
         desktop_id: desktop.to_owned(),
         ..DesktopSetCurrentMessage::new()
@@ -132,7 +129,7 @@ fn select_slot(state: &mut State, slot: u32) {
         .find(|d| d.shortcut_slot == Some(slot as i64))
     else {
         let _ = state.daemon.send(&DesktopCreateMessage {
-            request_id: request_id(),
+            request_id: super::request_id(),
             profile_id: profile_id.clone(),
             shortcut_slot: Some(slot as i64),
             ..DesktopCreateMessage::new()
@@ -162,7 +159,7 @@ fn send_to_slot(state: &mut State, slot: u32, follow: bool) {
         return;
     }
     let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         source_desktop_id: source.id.clone(),
         target_shortcut_slot: Some(slot as i64),
         leaf_id: source.active_pane_id.clone(),
@@ -188,7 +185,7 @@ fn move_with_delegates(state: &State, desktop: &str) {
         return;
     }
     let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         source_desktop_id: source.id.clone(),
         target_desktop_id: Some(desktop.to_owned()),
         leaf_id: source.active_pane_id.clone(),
@@ -229,7 +226,7 @@ pub(crate) fn show_unseen(state: &mut State) -> bool {
 /// Shows `leaf` on `desktop` as the active tile.
 pub(crate) fn show_leaf(state: &State, desktop: &str, leaf: &str) {
     let _ = state.daemon.send(&DesktopShowLeafMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         desktop_id: desktop.to_owned(),
         leaf_id: leaf.to_owned(),
         ..DesktopShowLeafMessage::new()
@@ -340,7 +337,7 @@ fn split(state: &mut State, direction: Direction, tx: &mut Tx) {
         ..SpawnSessionMessage::new()
     });
     let _ = state.daemon.send(&DesktopShowSessionMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         session_id: id,
         ..DesktopShowSessionMessage::new()
     });
@@ -393,7 +390,7 @@ fn close(state: &mut State) {
     let tree = Node::parse(&desktop.tree_json);
     let Some(tree) = tree else {
         let _ = state.daemon.send(&DesktopCloseMessage {
-            request_id: request_id(),
+            request_id: super::request_id(),
             desktop_id: desktop.id.clone(),
             expected_revision: desktop.revision,
             ..DesktopCloseMessage::new()
@@ -406,7 +403,7 @@ fn close(state: &mut State) {
     match leaf.kind {
         LeafKind::Tile { .. } => {
             let _ = state.daemon.send(&DesktopRemoveLeafMessage {
-                request_id: request_id(),
+                request_id: super::request_id(),
                 desktop_id: desktop.id.clone(),
                 leaf_id: leaf.id.clone(),
                 ..DesktopRemoveLeafMessage::new()
@@ -414,7 +411,7 @@ fn close(state: &mut State) {
         }
         LeafKind::Pane => {
             let _ = state.daemon.send(&DesktopCloseTileMessage {
-                request_id: request_id(),
+                request_id: super::request_id(),
                 desktop_id: desktop.id.clone(),
                 tile_id: leaf.id.clone(),
                 ..DesktopCloseTileMessage::new()

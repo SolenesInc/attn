@@ -13,3 +13,5 @@ pub const CHECKED: &str = "\u{f046}";
 pub const UNCHECKED: &str = "\u{f096}";
 pub const FLAG: &str = "\u{f024}";
 pub const PENCIL: &str = "\u{f040}";
+pub const POP_OUT: &str = "\u{f08e}";
+pub const BRING_BACK: &str = "\u{f090}";

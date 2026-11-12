@@ -2248,3 +2248,69 @@ fn a_desktop_the_daemon_could_not_make_says_why() {
             .is_none()
     );
 }
+
+fn popped(mut leaf: Value, frame: (f64, f64, f64, f64)) -> Value {
+    let (x, y, width, height) = frame;
+    leaf["window"] = serde_json::json!({"x": x, "y": y, "width": width, "height": height});
+    leaf
+}
+
+#[test]
+fn the_pop_out_key_pops_the_active_tile_out_where_it_shows_and_brings_it_back() {
+    let tree = row([pane("a"), document("m", "a")]);
+    let mut world = start(vec![desktop(1, "m", Some(tree))]);
+    let [x, y, w, h] = world.runtime().presented("tile.m").unwrap().0;
+
+    press(&mut world, Action::TilePopOut);
+    assert_eq!(
+        sent(&world, "desktop_pop_out_leaf"),
+        [serde_json::json!({
+            "desktop_id": "work/desktop_1",
+            "leaf_id": "m",
+            "frame": {"x": x, "y": y, "width": w, "height": h},
+        })]
+    );
+
+    let out = row([
+        pane("a"),
+        popped(document("m", "a"), (10.0, 20.0, 500.0, 400.0)),
+    ]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "m", Some(out))],
+    );
+    assert!(shows(&world, "Agent a"));
+    assert!(
+        !shows(&world, "m.md"),
+        "a popped tile leaves the desktop's columns"
+    );
+
+    press(&mut world, Action::TilePopOut);
+    assert_eq!(
+        sent(&world, "desktop_bring_back_leaf"),
+        [serde_json::json!({"desktop_id": "work/desktop_1", "leaf_id": "m"})]
+    );
+    assert_eq!(sent(&world, "desktop_pop_out_leaf").len(), 1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_tiles_header_button_pops_it_out() {
+    let tree = row([pane("a"), document("m", "a")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+
+    let button = world
+        .screen()
+        .get(Target::key("tile.m.popout"))
+        .name
+        .clone();
+    assert_eq!(button.as_deref(), Some("Pop out tile (Ctrl+Shift+O)"));
+    world.gesture(|app| app.click(Target::key("tile.m.popout")));
+    let leaves: Vec<_> = sent(&world, "desktop_pop_out_leaf")
+        .into_iter()
+        .map(|r| r["leaf_id"].clone())
+        .collect();
+    assert_eq!(leaves, ["m"]);
+    assert!(world.runtime_is_at_rest());
+}

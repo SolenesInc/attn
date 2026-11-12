@@ -83,10 +83,13 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 .collect()
         })
         .unwrap_or_default();
-    let keep_key = state
-        .keymap
-        .binding(&crate::action::Action::SessionCancelCountdown)
-        .map(|b| state.keymap.label(b));
+    let key_of = |action: &crate::action::Action| {
+        state.keymap.binding(action).map(|b| state.keymap.label(b))
+    };
+    let keys = (
+        key_of(&crate::action::Action::SessionCancelCountdown),
+        key_of(&crate::action::Action::TilePopOut),
+    );
     let names: Vec<String> = desktop
         .map(|d| {
             d.panes
@@ -96,7 +99,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 .collect()
         })
         .unwrap_or_default();
-    let reads = (reads, settles.clone(), keep_key.clone(), names);
+    let reads = (reads, settles.clone(), keys.clone(), names);
     let launcher = desktop
         .filter(|d| d.panes.is_empty())
         .and_then(|_| crate::picker::inline(state, t));
@@ -106,7 +109,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop,
                 desk,
                 facts,
-                (&settles, keep_key.as_deref()),
+                (&settles, keys.0.as_deref(), keys.1.as_deref()),
                 holder.as_ref(),
                 &state.terminals,
                 (t, scale),
@@ -145,7 +148,7 @@ fn screen(
     desktop: Option<&Desktop>,
     desk: &super::Desk,
     facts: &attn_client::Facts,
-    (settles, keep_key): (&[(String, Settle)], Option<&str>),
+    (settles, keep_key, pop_out_key): (&[(String, Settle)], Option<&str>, Option<&str>),
     holder: Option<&Holder>,
     terminals: &Terminals,
     (t, scale): (&Tokens, f32),
@@ -166,6 +169,7 @@ fn screen(
                     unsent: &unsent,
                     settles,
                     keep_key,
+                    pop_out_key,
                     drains: &desk.settling,
                     ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
@@ -213,6 +217,8 @@ struct TileCx<'a> {
     settles: &'a [(String, Settle)],
     /// The keys that keep a turn from settling.
     keep_key: Option<&'a str>,
+    /// The keys that pop a tile out or bring it back.
+    pop_out_key: Option<&'a str>,
     drains: &'a std::collections::HashMap<String, crate::sidebar::Countdown>,
     /// Splits this window shows at its own ratio, ahead of the daemon.
     ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
@@ -360,12 +366,21 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
+    let recorded = format!("tile.{}", leaf.id);
     col()
-        .key(format!("tile.{}", leaf.id))
+        .key(recorded.clone())
         .w_full()
         .h_full()
         .min_w(0.0)
         .min_h(0.0)
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            let rects = &mut state.window.desk.rects;
+            if rects.get(&recorded) == Some(&rect) {
+                tx.live_only();
+                return;
+            }
+            rects.insert(recorded.clone(), rect);
+        })
         .radius(6.0)
         .fill(t.bg_tile)
         .border(
@@ -435,12 +450,39 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
                 .truncate()
                 .grow(1.0),
         );
-    match (settle, session) {
+    let header = match (settle, session) {
         (Some(settle), Some(session)) => header
             .child(settling_chip(&leaf.id, settle, &session, cx.keep_key))
             .children(settling_track(&leaf.id, settle, drain)),
         _ => header,
-    }
+    };
+    header.child(pop_out_button(
+        &cx.desktop.id,
+        &leaf.id,
+        leaf.window.is_some(),
+        cx,
+    ))
+}
+
+/// The header's button that pops the tile out into its own window, or brings it back.
+fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
+    let (label, glyph) = if popped {
+        ("Bring back tile", attn_ui::icon::BRING_BACK)
+    } else {
+        ("Pop out tile", attn_ui::icon::POP_OUT)
+    };
+    let (desktop, leaf_id) = (desktop.to_owned(), leaf.to_owned());
+    text(glyph)
+        .key(format!("tile.{leaf}.popout"))
+        .role("button")
+        .label(match cx.pop_out_key {
+            Some(key) => format!("{label} ({key})"),
+            None => label.to_owned(),
+        })
+        .font(type_::LABEL)
+        .color(cx.t.text_secondary)
+        .px(space::S1)
+        .on_press(move |state: &mut State| super::windows::toggle_leaf(state, &desktop, &leaf_id))
 }
 
 /// The settling violet, which the Tauri app keeps out of its theme so packaged apps match.

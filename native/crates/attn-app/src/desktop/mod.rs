@@ -9,6 +9,7 @@ mod overview;
 mod peek;
 mod shelf;
 mod view;
+mod windows;
 
 use std::collections::HashMap;
 
@@ -319,4 +320,8 @@ pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
         .filter(|p| leaves.contains(&p.pane_id))
         .map(|p| p.session_id.clone())
         .collect()
+}
+
+fn request_id() -> String {
+    uuid::Uuid::new_v4().to_string()
 }

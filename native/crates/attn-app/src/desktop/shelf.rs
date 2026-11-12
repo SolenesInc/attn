@@ -730,10 +730,6 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
     )
 }
 
-fn request_id() -> String {
-    uuid::Uuid::new_v4().to_string()
-}
-
 /// Moves `leaf` beside `anchor` on `target`, leaving out what the daemon takes as given: no
 /// share, a single leaf rather than its column, and the moved leaf becoming active.
 #[allow(clippy::too_many_arguments)]
@@ -749,7 +745,7 @@ pub(crate) fn send_move(
     activate: bool,
 ) {
     let _ = state.daemon.send(&DesktopMoveLeafMessage {
-        request_id: request_id(),
+        request_id: super::request_id(),
         source_desktop_id: source.to_owned(),
         target_desktop_id: Some(target.to_owned()),
         leaf_id: leaf.to_owned(),
@@ -787,7 +783,7 @@ fn move_leaf(
 pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) {
     for leaf in leaves {
         let _ = state.daemon.send(&DesktopSetWantedColsMessage {
-            request_id: request_id(),
+            request_id: super::request_id(),
             desktop_id: desktop.to_owned(),
             leaf_id: leaf.clone(),
             cols: 0,
