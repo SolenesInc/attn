@@ -248,7 +248,7 @@ fn the_palette_keeps_the_query_while_history_loads_and_offers_commands_once_it_a
 
     assert_eq!(query(&world), ">keyboard");
     assert_eq!(titles(&world), ["Keyboard shortcuts"]);
-    assert_eq!(text_of(&world, "palette.count").as_deref(), Some("1 of 12"));
+    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("1 of ")));
     assert_eq!(world.daemon.sent_of("get_command_usage").len(), 1);
     assert!(records(&world).is_empty());
     rest(&mut world);
@@ -478,7 +478,7 @@ fn the_palette_turns_to_commands_on_a_leading_angle_and_its_keys_turn_or_close_i
     world.gesture(|app| app.type_text(">home"));
     assert_eq!(palette_named(&world).as_deref(), Some("Commands"));
     assert_eq!(titles(&world), ["Home"]);
-    assert_eq!(text_of(&world, "palette.count").as_deref(), Some("1 of 12"));
+    assert!(text_of(&world, "palette.count").is_some_and(|c| c.starts_with("1 of ")));
 
     press_action(&mut world, Action::UiActionMenu);
     assert_eq!(query(&world), "home");
@@ -500,7 +500,7 @@ fn the_palette_turns_to_commands_on_a_leading_angle_and_its_keys_turn_or_close_i
 fn arrows_move_the_highlight_without_wrapping_and_an_edit_puts_it_back_on_top() {
     let mut world = World::start(daemon(initial(two_desktops(), vec![]), vec![]));
     press_action(&mut world, Action::UiCommandPalette);
-    world.gesture(|app| app.type_text("go to"));
+    world.gesture(|app| app.type_text("go to desk"));
     assert_eq!(titles(&world), ["Go to Desktop 1", "Go to Desktop 2"]);
     assert_eq!(highlighted(&world).as_deref(), Some("Go to Desktop 1"));
 
@@ -1019,5 +1019,179 @@ fn the_queue_keys_do_nothing_on_the_commands_face_or_among_snooze_choices() {
     assert!(world.daemon.sent_of("settle_turn").is_empty());
     assert!(world.daemon.sent_of("set_session_priority").is_empty());
     assert!(world.screen().find(Target::role("menu")).is_none());
+    rest_but_for_ages(&mut world);
+}
+
+fn one_agent(settings: &[(&str, &str)]) -> InitialStateMessage {
+    let mut state = initial(
+        vec![desktop("d1", "work", 1, vec![agent_pane("s1")])],
+        vec![session("s1")],
+    );
+    state.settings = Some(
+        settings
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect(),
+    );
+    state
+}
+
+fn run_command(world: &mut World, query: &str) {
+    press_action(world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text(query));
+    press(world, Key::Enter);
+}
+
+fn settings_sent(world: &World) -> Vec<(String, String)> {
+    world
+        .daemon
+        .sent_of("set_setting")
+        .iter()
+        .map(|r| {
+            (
+                r["key"].as_str().unwrap().to_owned(),
+                r["value"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn rename_from_the_palette_prefills_the_name_and_shows_the_daemons_refusal_until_a_name_is_taken() {
+    let world_daemon = daemon(one_agent(&[]), vec![]);
+    let refusal = "name is 49 characters, over the 48-character limit";
+    world_daemon.on("rename_session", move |r| {
+        let label = r["label"].as_str().unwrap();
+        message(attn_protocol::RenameResultMessage {
+            cmd: "rename_session".into(),
+            id: r["session_id"].as_str().unwrap().into(),
+            success: label.chars().count() <= 48,
+            error: (label.chars().count() > 48).then(|| refusal.to_owned()),
+            ..attn_protocol::RenameResultMessage::new()
+        })
+    });
+    let mut world = World::start(world_daemon);
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("rename"));
+    assert!(titles(&world).is_empty());
+    press(&mut world, Key::Escape);
+
+    world.open_desktop();
+    run_command(&mut world, "rename");
+    press(&mut world, Key::Escape);
+    assert!(world.screen().find(Target::key("session.rename")).is_none());
+    run_command(&mut world, "rename");
+    let field = world.screen().get(Target::key("session.rename.field"));
+    assert_eq!(field.value.as_deref(), Some("s1"));
+
+    world.gesture(|app| app.type_text(&"x".repeat(49)));
+    press(&mut world, Key::Enter);
+    assert_eq!(
+        text_of(&world, "session.rename.refused").as_deref(),
+        Some(refusal)
+    );
+    assert!(world.screen().find(Target::key("session.rename")).is_some());
+
+    retype_field(&mut world, "session.rename.field", &"🙂".repeat(48));
+    press(&mut world, Key::Enter);
+    let labels: Vec<_> = world
+        .daemon
+        .sent_of("rename_session")
+        .iter()
+        .map(|r| r["label"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(labels, ["x".repeat(49), "🙂".repeat(48)]);
+    assert!(world.screen().find(Target::key("session.rename")).is_none());
+    rest(&mut world);
+}
+
+fn retype_field(world: &mut World, key: &str, text: &str) {
+    let field = world.screen().get(Target::key(key));
+    for _ in 0..field.value.unwrap_or_default().chars().count() {
+        press(world, Key::Backspace);
+    }
+    world.gesture(|app| app.type_text(text));
+}
+
+#[test]
+fn a_feature_toggle_shows_only_for_a_search_and_flips_its_setting() {
+    let mut world = World::start(daemon(one_agent(&[("nisse_enabled", "true")]), vec![]));
+    press_action(&mut world, Action::UiCommandPalette);
+    assert!(!titles(&world).iter().any(|t| t.contains("Nisse")));
+    let count = text_of(&world, "palette.count").unwrap();
+    let (shown, all) = count.split_once(" of ").unwrap();
+    assert!(
+        shown.parse::<usize>().unwrap() < all.parse::<usize>().unwrap(),
+        "{count}"
+    );
+    press(&mut world, Key::Escape);
+
+    run_command(&mut world, "nisse");
+    run_command(&mut world, "turn on sigma");
+    assert_eq!(
+        settings_sent(&world),
+        [
+            ("nisse_enabled".to_owned(), "false".to_owned()),
+            ("sigma_enabled".to_owned(), "true".to_owned())
+        ]
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_queue_and_sidebar_settings_flip_from_the_palette() {
+    let mut world = World::start(daemon(
+        one_agent(&[("queue_crew_enabled", "true"), ("sidebar_width", "320")]),
+        vec![],
+    ));
+    run_command(&mut world, "turn on the agent queue");
+    run_command(&mut world, "take the crew out");
+    run_command(&mut world, "turn on auto-settle");
+    run_command(&mut world, "reset sidebar width");
+    assert_eq!(
+        settings_sent(&world),
+        [
+            ("queue_mode_enabled".to_owned(), "true".to_owned()),
+            ("queue_crew_enabled".to_owned(), "false".to_owned()),
+            ("auto_settle_enabled".to_owned(), "true".to_owned()),
+            ("sidebar_width".to_owned(), String::new()),
+        ]
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn the_agent_on_screen_can_be_reloaded_or_unsnoozed_from_the_palette() {
+    let mut state = one_agent(&[("queue_mode_enabled", "true")]);
+    state.sessions = Some(vec![Session {
+        turn_owed: Some(true),
+        turn_snoozed_until: Some("2099-01-01T00:00:00Z".into()),
+        ..session("s1")
+    }]);
+    let mut world = World::start(daemon(state, vec![]));
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            attn_app::dispatch(
+                state,
+                Action::OpenAgent {
+                    session: "s1".into(),
+                },
+                tx,
+            );
+        })
+    });
+
+    press_action(&mut world, Action::UiCommandPalette);
+    world.gesture(|app| app.type_text("snooze"));
+    assert_eq!(titles(&world), ["Unsnooze this agent"]);
+    press(&mut world, Key::Enter);
+    run_command(&mut world, "reload this");
+
+    let woken = world.daemon.sent_of("wake_turn");
+    assert_eq!(woken.len(), 1);
+    assert_eq!(woken[0]["session_id"], "s1");
+    let reloaded = world.daemon.sent_of("reload_session");
+    assert_eq!(reloaded.len(), 1);
+    assert_eq!(reloaded[0]["id"], "s1");
     rest_but_for_ages(&mut world);
 }

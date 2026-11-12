@@ -39,6 +39,14 @@ macro_rules! actions {
             /// Move the active tile and its delegates to a desktop.
             MoveWithDelegates { desktop: String },
             SwitchToProfile { profile: String },
+            /// Rename an agent, in the rename popover over its tile.
+            RenameSession { session: String },
+            /// Restart an agent in its pane.
+            ReloadSession { session: String },
+            /// End an agent's snooze.
+            WakeSession { session: String },
+            /// Store a daemon setting.
+            SetSetting { key: String, value: String },
         }
 
         impl Action {
@@ -54,6 +62,10 @@ macro_rules! actions {
                     Action::GoToDesktop { .. } => "desktop.goTo",
                     Action::MoveWithDelegates { .. } => "desktop.moveWithDelegates",
                     Action::SwitchToProfile { .. } => "profile.switchTo",
+                    Action::RenameSession { .. } => "session.rename",
+                    Action::ReloadSession { .. } => "session.reload",
+                    Action::WakeSession { .. } => "session.wake",
+                    Action::SetSetting { .. } => "setting.set",
                 }
             }
 
@@ -66,6 +78,10 @@ macro_rules! actions {
                     Action::GoToDesktop { .. } => "Go to a desktop",
                     Action::MoveWithDelegates { .. } => "Move with delegates to a desktop",
                     Action::SwitchToProfile { .. } => "Switch to a profile",
+                    Action::RenameSession { .. } => "Rename an agent",
+                    Action::ReloadSession { .. } => "Reload an agent",
+                    Action::WakeSession { .. } => "Unsnooze an agent",
+                    Action::SetSetting { .. } => "Change a setting",
                 }
             }
 

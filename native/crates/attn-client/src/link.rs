@@ -259,12 +259,12 @@ struct Header {
 }
 
 impl Header {
-    /// The request this message answers: its `request_id`, or for `spawn_result` the session
-    /// id the spawn asked for. The arrangement a spawn changes carries that id too, ahead of
-    /// `spawn_result`, and answers nothing.
+    /// The request this message answers: its `request_id`, or for `spawn_result` and
+    /// `rename_result` the session id the request named. The arrangement a spawn changes
+    /// carries that id too, ahead of `spawn_result`, and answers nothing.
     fn answers(&self) -> Option<String> {
         match self.event.as_str() {
-            "spawn_result" => self.id.clone(),
+            "spawn_result" | "rename_result" => self.id.clone(),
             "profile_arrangement_changed" => None,
             _ => self.request_id.clone(),
         }

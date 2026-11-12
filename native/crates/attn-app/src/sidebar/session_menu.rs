@@ -1,4 +1,6 @@
-use attn_protocol::{ReloadSessionMessage, RenameSessionMessage, Session, UnregisterMessage};
+use attn_protocol::{
+    ReloadSessionMessage, RenameResultMessage, RenameSessionMessage, Session, UnregisterMessage,
+};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Side, TextEdit, Tx, col, row, text, text_input};
@@ -16,7 +18,9 @@ pub struct Menu {
     pub under: String,
     pub rename: Option<TextEdit>,
     /// Why the typed name was refused.
-    pub refused: Option<&'static str>,
+    pub refused: Option<String>,
+    /// The name sent and not answered yet.
+    pub saving: bool,
 }
 
 pub(crate) fn open(state: &mut State, session: &str, name: String, under: String, tx: &mut Tx) {
@@ -27,7 +31,31 @@ pub(crate) fn open(state: &mut State, session: &str, name: String, under: String
         under,
         rename: None,
         refused: None,
+        saving: false,
     });
+}
+
+/// Opens Rename session for `session` under `under` without the menu before it, as the
+/// palette's Rename this session… does.
+pub(crate) fn rename_session(state: &mut State, session: &str, under: String, tx: &mut Tx) {
+    let Some(name) = state
+        .facts
+        .sessions
+        .iter()
+        .find(|s| s.id == session)
+        .map(super::display_name)
+    else {
+        return;
+    };
+    state.window.session_menu = Some(Menu {
+        session: session.to_owned(),
+        name,
+        under,
+        rename: None,
+        refused: None,
+        saving: false,
+    });
+    rename(state, tx);
 }
 
 /// Closes the menu once its agent is gone.
@@ -68,11 +96,15 @@ fn rename(state: &mut State, tx: &mut Tx) {
     tx.focus(RENAME_FIELD, true);
 }
 
-/// Sends the typed name: an unchanged one only closes, and only a shell may go without one.
-fn submit_rename(state: &mut State) {
+/// Sends the typed name and closes once the daemon takes it, or shows why it did not: an
+/// unchanged name only closes, and only a shell may go without one.
+fn submit_rename(state: &mut State, tx: &mut Tx) {
     let Some(menu) = &mut state.window.session_menu else {
         return;
     };
+    if menu.saving {
+        return;
+    }
     let label = menu
         .rename
         .as_ref()
@@ -80,21 +112,50 @@ fn submit_rename(state: &mut State) {
         .unwrap_or_default();
     let session = state.facts.sessions.iter().find(|s| s.id == menu.session);
     if label.is_empty() && session.is_some_and(|s| s.agent != "shell") {
-        menu.refused =
-            Some("An agent name cannot be empty; only shell terminals have automatic titles");
+        menu.refused = Some(
+            "An agent name cannot be empty; only shell terminals have automatic titles".into(),
+        );
         return;
     }
-    let unchanged = session.is_some_and(|s| s.label.trim() == label);
-    let Some(menu) = state.window.session_menu.take() else {
+    if session.is_some_and(|s| s.label.trim() == label) {
+        state.window.session_menu = None;
         return;
+    }
+    menu.saving = true;
+    let id = menu.session.clone();
+    let command = RenameSessionMessage {
+        session_id: id.clone(),
+        label,
+        ..RenameSessionMessage::new()
     };
-    if !unchanged {
-        let _ = state.daemon.send(&RenameSessionMessage {
-            session_id: menu.session,
-            label,
-            ..RenameSessionMessage::new()
-        });
-    }
+    let asked = id.clone();
+    state.ask_as(
+        id,
+        &command,
+        move |state, answer, _| {
+            let Some(menu) = state
+                .window
+                .session_menu
+                .as_mut()
+                .filter(|m| m.session == asked && m.saving)
+            else {
+                return;
+            };
+            let result: Option<RenameResultMessage> = answer.parse();
+            if result.as_ref().is_some_and(|r| r.success) {
+                state.window.session_menu = None;
+                return;
+            }
+            menu.saving = false;
+            menu.refused = Some(
+                result
+                    .and_then(|r| r.error)
+                    .filter(|e| !e.is_empty())
+                    .unwrap_or_else(|| "The daemon did not answer; the name was not saved".into()),
+            );
+        },
+        tx,
+    );
 }
 
 /// A reload with no terminal of a usable size asks for this one, as the Tauri app does, since
@@ -104,16 +165,19 @@ const MIN_COLS: u16 = 20;
 const MIN_ROWS: u16 = 8;
 
 fn reload(state: &mut State) {
-    let Some(session) = target(state) else {
-        return;
-    };
+    if let Some(session) = target(state) {
+        reload_session(state, &session.id);
+    }
+}
+
+pub(crate) fn reload_session(state: &mut State, session: &str) {
     let (cols, rows) = state
         .terminals
-        .size(&session.id)
+        .size(session)
         .filter(|&(cols, rows)| cols >= MIN_COLS && rows >= MIN_ROWS)
         .unwrap_or(FALLBACK_SIZE);
     let _ = state.daemon.send(&ReloadSessionMessage {
-        id: session.id,
+        id: session.into(),
         cols: i64::from(cols),
         rows: i64::from(rows),
         ..ReloadSessionMessage::new()
@@ -147,7 +211,7 @@ fn close(state: &mut State, tx: &mut Tx) {
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let menu = state.window.session_menu.as_ref()?;
     let surface = match &menu.rename {
-        Some(edit) => rename_popover(edit, menu.refused, t),
+        Some(edit) => rename_popover(edit, menu.refused.as_deref(), t),
         None => actions(state, menu, t),
     };
     Some(
@@ -224,7 +288,7 @@ fn actions(state: &State, menu: &Menu, t: &Tokens) -> El {
         .children((!chief).then(|| item("close", "×", "Close session".into()).on_press_tx(close)))
 }
 
-fn rename_popover(edit: &TextEdit, refused: Option<&'static str>, t: &Tokens) -> El {
+fn rename_popover(edit: &TextEdit, refused: Option<&str>, t: &Tokens) -> El {
     col()
         .key("session.rename")
         .role("dialog")
@@ -251,12 +315,12 @@ fn rename_popover(edit: &TextEdit, refused: Option<&'static str>, t: &Tokens) ->
                         .and_then(|m| m.rename.as_mut())
                         .expect("the rename field shows only while renaming")
                 })
-                .on_submit(|state: &mut State, _: &mut Tx| submit_rename(state))
+                .on_submit(submit_rename)
                 .w_full()
                 .color(t.text_primary),
         )
         .children(refused.map(|why| {
-            text(why)
+            text(why.to_owned())
                 .key("session.rename.refused")
                 .font(type_::LABEL)
                 .color(t.error)

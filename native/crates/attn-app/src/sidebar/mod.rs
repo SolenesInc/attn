@@ -75,6 +75,12 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         }
         Action::SidebarAgentList => crate::palette::open(state, crate::palette::Face::Agents, tx),
         Action::SessionSettle => actions::settle_on_screen(state, tx),
+        Action::RenameSession { session } => {
+            let under = tile_header_of(state, session);
+            session_menu::rename_session(state, session, under, tx)
+        }
+        Action::ReloadSession { session } => session_menu::reload_session(state, session),
+        Action::WakeSession { session } => actions::wake(state, session),
         Action::SessionPriority => actions::toggle_priority_on_screen(state),
         Action::SessionSnooze => actions::snooze_on_screen(state, tx),
         Action::SessionCancelCountdown => actions::cancel_countdown(state),
@@ -574,6 +580,17 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
                 .font(type_::MONO_CAPTION)
                 .color(t.text_tertiary),
         )
+}
+
+/// The header of the tile showing `session` on the current desktop.
+fn tile_header_of(state: &State, session: &str) -> String {
+    let pane = state
+        .facts
+        .current_desktop()
+        .and_then(|d| d.panes.iter().find(|p| p.session_id == session))
+        .map(|p| p.pane_id.clone())
+        .unwrap_or_default();
+    format!("tile.{pane}.header")
 }
 
 pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut Tx) {

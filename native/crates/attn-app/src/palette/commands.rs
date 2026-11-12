@@ -1,8 +1,20 @@
 use attn_protocol::CommandUsage;
 
+use attn_protocol::go_values::FEATURES;
+
 use super::{Look, Pick, Row};
-use crate::sidebar::{model, queue};
+use crate::setting;
+use crate::sidebar::{model, queue, width};
 use crate::{Action, State};
+
+const AUTO_SETTLE: &str = "auto_settle_enabled";
+
+fn set(key: &str, on: bool) -> Action {
+    Action::SetSetting {
+        key: key.into(),
+        value: if on { "true" } else { "false" }.into(),
+    }
+}
 
 /// A command the palette offers: its id is the key the daemon keeps its history under, shared
 /// with the Tauri app.
@@ -12,6 +24,7 @@ pub(crate) struct Command {
     description: Option<String>,
     keywords: Vec<String>,
     pinned: bool,
+    search_only: bool,
     action: Action,
     shortcut: Option<Action>,
 }
@@ -24,6 +37,7 @@ impl Command {
             description: None,
             keywords: keywords.iter().map(|k| (*k).to_owned()).collect(),
             pinned: false,
+            search_only: false,
             shortcut: None,
             action,
         }
@@ -36,6 +50,11 @@ impl Command {
 
     fn shortcut(mut self, action: Option<Action>) -> Command {
         self.shortcut = action;
+        self
+    }
+
+    fn search_only(mut self) -> Command {
+        self.search_only = true;
         self
     }
 
@@ -82,6 +101,20 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .pin(),
         );
     }
+    if let Some(session) = on_screen {
+        commands.push(
+            Command::new(
+                "reload-active-session",
+                "Reload this agent",
+                &["session", "reload", "restart", "relaunch"],
+                Action::ReloadSession {
+                    session: session.id.clone(),
+                },
+            )
+            .describe("Restart the agent in its current pane")
+            .pin(),
+        );
+    }
     commands.push(Command::new(
         "home",
         "Home",
@@ -124,6 +157,29 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         &["shortcuts", "keys", "cheatsheet", "help"],
         Action::UiShowShortcuts,
     ));
+    commands.extend([
+        Command::new(
+            "sidebar-wider",
+            "Widen the sidebar",
+            &["sidebar", "width", "wider", "resize"],
+            Action::SidebarWider,
+        ),
+        Command::new(
+            "sidebar-narrower",
+            "Narrow the sidebar",
+            &["sidebar", "width", "narrower", "resize"],
+            Action::SidebarNarrower,
+        ),
+        Command::new(
+            "sidebar-reset-width",
+            "Reset sidebar width",
+            &["sidebar", "width", "default", "resize"],
+            Action::SetSetting {
+                key: width::SETTING.into(),
+                value: String::new(),
+            },
+        ),
+    ]);
     let width = ["shelf", "narrowest", "width", "tiles"];
     let along = ["shelf", "row", "move", "reorder"];
     commands.extend([
@@ -158,6 +214,65 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             Action::ShelfSendToShelf,
         ),
     ]);
+    let settings = &facts.settings;
+    let queue_on = setting::on(settings, queue::QUEUE_MODE);
+    let crew_on = setting::on(settings, queue::QUEUE_CREW);
+    let auto_settle_on = setting::on(settings, AUTO_SETTLE);
+    commands.extend([
+        Command::new(
+            "toggle-queue-mode",
+            if queue_on {
+                "Turn off the agent queue"
+            } else {
+                "Turn on the agent queue"
+            },
+            &["queue", "turn", "settle", "attention", "sidebar"],
+            set(queue::QUEUE_MODE, !queue_on),
+        )
+        .describe("Swap the desktop tree for the queue sidebar: the turns you owe, your crew and your runs"),
+        Command::new(
+            "toggle-crew-queue",
+            if crew_on {
+                "Take the crew out of the queue"
+            } else {
+                "Put the crew in the queue"
+            },
+            &["crew", "chief", "queue", "turn", "member", "sidebar"],
+            set(queue::QUEUE_CREW, !crew_on),
+        )
+        .describe("Whether a crew member or the Chief owing a turn also waits in the queue"),
+        Command::new(
+            "toggle-auto-settle",
+            if auto_settle_on {
+                "Turn off auto-settle"
+            } else {
+                "Turn on auto-settle"
+            },
+            &["auto", "settle", "turn", "countdown", "queue", "attention"],
+            set(AUTO_SETTLE, !auto_settle_on),
+        )
+        .describe("Settle a turn once you have steered the agent and it goes back to work"),
+    ]);
+    for feature in FEATURES {
+        let on = setting::on(settings, feature.key);
+        let keywords: Vec<&str> = ["experimental", "feature"]
+            .into_iter()
+            .chain(feature.search.split(' '))
+            .collect();
+        commands.push(
+            Command::new(
+                &format!("feature-{}", feature.key),
+                &format!(
+                    "{} {}",
+                    if on { "Turn off" } else { "Turn on" },
+                    feature.name
+                ),
+                &keywords,
+                set(feature.key, !on),
+            )
+            .search_only(),
+        );
+    }
     if let Some(session) = on_screen {
         let name = model::display_name(session);
         commands.push(Command {
@@ -173,9 +288,42 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
                 .map(str::to_owned)
                 .to_vec(),
             pinned: true,
+            search_only: false,
             action: Action::SessionPriority,
             shortcut: None,
         });
+        commands.push(
+            Command::new(
+                "rename-active-session",
+                "Rename this session…",
+                &["rename", "name", "label", "agent", "session", "tile"],
+                Action::RenameSession {
+                    session: session.id.clone(),
+                },
+            )
+            .describe("Change its name in the sidebar and tile")
+            .pin(),
+        );
+    }
+    let snoozed = on_screen.filter(|s| {
+        queue_on
+            && queue::participates(s, crew_on)
+            && queue::is_snoozed(s.turn_snoozed_until.as_deref(), state.window.now_ms)
+    });
+    if let Some(session) = snoozed {
+        commands.push(
+            Command::new(
+                "unsnooze-active-session",
+                "Unsnooze this agent",
+                &["unsnooze", "snooze", "defer", "queue", "turn"],
+                Action::WakeSession {
+                    session: session.id.clone(),
+                },
+            )
+            .describe("End the snooze and let it back into the queue")
+            .pin(),
+        );
+        return commands;
     }
     if turn_actions.is_some_and(|a| a.snooze) {
         commands.push(
@@ -243,7 +391,7 @@ pub(crate) fn ranked(state: &State, query: &str, history: &[CommandUsage]) -> Ve
 
 fn score(command: &Command, terms: &[String]) -> u32 {
     if terms.is_empty() {
-        return 1;
+        return u32::from(!command.search_only);
     }
     let title = command.title.to_lowercase();
     let searchable = format!(

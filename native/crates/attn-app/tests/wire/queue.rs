@@ -984,7 +984,16 @@ fn a_crew_member_is_protected_from_closing_and_the_chief_offers_no_close() {
 
 #[test]
 fn rename_session_sends_the_typed_name_and_refuses_an_empty_one() {
-    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    let daemon = Daemon::scripted().state(the_queue());
+    daemon.on("rename_session", |r| {
+        attn_testkit::message(attn_protocol::RenameResultMessage {
+            cmd: "rename_session".into(),
+            id: r["session_id"].as_str().unwrap().into(),
+            success: true,
+            ..attn_protocol::RenameResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
     actions_for(&mut world, "queue-turn.t-old");
     world.gesture(|app| app.click(Target::key("session.menu.rename")));
 

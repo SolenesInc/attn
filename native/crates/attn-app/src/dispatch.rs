@@ -1,3 +1,4 @@
+use attn_protocol::SetSettingMessage;
 use rune::Tx;
 
 use crate::State;
@@ -25,6 +26,13 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
         Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
+        Action::SetSetting { key, value } => {
+            let _ = state.daemon.send(&SetSettingMessage {
+                key,
+                value,
+                ..SetSettingMessage::new()
+            });
+        }
         Action::SessionNew => picker::new_session(state, Direction::Vertical, None, tx),
         Action::SessionNewHorizontal => picker::new_session(state, Direction::Horizontal, None, tx),
         Action::SessionNewTerminal => {
