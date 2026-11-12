@@ -175,6 +175,19 @@ func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error
 	return models, nil
 }
 
+func (l *serverLink) targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
+	c, err := l.ensureServer(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer l.releaseUnlessUsed()
+	targets := []protocol.ExecutionTarget{}
+	if err := c.Call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
+		return nil, err
+	}
+	return targets, nil
+}
+
 func (l *serverLink) client() *effectrpc.Client {
 	l.mu.Lock()
 	defer l.mu.Unlock()

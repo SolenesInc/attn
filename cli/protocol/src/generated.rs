@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "ed7a8e59037f";
+pub const PROTOCOL_VERSION: &str = "99a2a1f6a4cf";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -4642,6 +4642,13 @@ pub struct EvidenceExcerpt {
     pub turn_id: String,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ExecutionTarget {
+    pub available: bool,
+    pub detail: String,
+    pub id: String,
+    pub name: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct FetchPRDetailsMessage {
     pub cmd: String,
     pub id: String,
@@ -5731,6 +5738,43 @@ impl HarnessModelsResultMessage {
     pub fn new() -> Self {
         Self {
             event: "harness_models_result".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessTargetsMessage {
+    pub cmd: String,
+    pub cwd: String,
+    pub harness: String,
+    pub request_id: String,
+}
+
+impl HarnessTargetsMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "harness_targets".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct HarnessTargetsResultMessage {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub event: String,
+    pub request_id: String,
+    pub success: bool,
+    #[serde(deserialize_with = "null_as_default")]
+    pub targets: Vec<ExecutionTarget>,
+}
+
+impl HarnessTargetsResultMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            event: "harness_targets_result".to_string(),
             ..Self::default()
         }
     }
@@ -12729,6 +12773,8 @@ pub struct SpawnSessionMessage {
     pub effort: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_target: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
     pub id: SessionID,

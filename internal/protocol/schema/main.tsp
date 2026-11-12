@@ -1338,6 +1338,28 @@ model HarnessModelsMessage {
   refresh?: boolean;
 }
 
+model HarnessTargetsMessage {
+  cmd: "harness_targets";
+  request_id: string;
+  harness: string;
+  cwd: string;
+}
+
+model ExecutionTarget {
+  id: string;
+  name: string;
+  available: boolean;
+  detail: string; // What an unavailable target needs, or the available target's state
+}
+
+model HarnessTargetsResultMessage {
+  event: "harness_targets_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  targets: ExecutionTarget[];
+}
+
 model HarnessModelsResultMessage {
   event: "harness_models_result";
   request_id: string;
@@ -2369,6 +2391,7 @@ model SpawnSessionMessage {
   codex_executable?: string;   // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
+  execution_target?: string;   // Where a new conversation runs its tools, an id from harness_targets; empty = the harness default. The harness fixes it when it creates the conversation and never runs that conversation's tools elsewhere
 }
 
 // PTY commands and events address a terminal: their `id` is the pane's
@@ -9378,6 +9401,7 @@ alias DaemonEvent =
   | DelegationPreferencesResultMessage
   | DelegationPreferencesChangedMessage
   | HarnessModelsResultMessage
+  | HarnessTargetsResultMessage
   | AgentCatalogResultMessage
   | SettingsUpdatedMessage
   | GitHubHostsUpdatedMessage

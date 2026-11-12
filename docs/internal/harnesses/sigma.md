@@ -4,8 +4,8 @@ How Sigma behaves where attn meets it. The rules for adding a claim are in
 [Harness behavior](../harnesses.md).
 
 Read in the source of the Sigma fork of Pi at 8b5e9f24d
-(`packages/sigma/README.md`, `src/protocol.ts`, `src/cli.ts`), and probed with
-that build on Nov 12, 2026.
+(`packages/sigma/README.md`, `src/protocol.ts`, `src/cli.ts`), execution targets
+at 3b851359c, and probed with those builds on Nov 12, 2026.
 
 - One `sigma serve` per Sigma home runs every conversation of the home in one
   Pi Durable harness on one SQLite database. Clients reach it over
@@ -33,4 +33,14 @@ that build on Nov 12, 2026.
   opened with `--auto`. A waiting call survives a server restart.
 - Every shell tool runs in the conversation's cwd with
   `SIGMA_ROOT_CONVERSATION` set to the launch key.
-- The only execution target is `local`. `conversation/open` refuses any other.
+- `targets/list {cwd}` answers `[{id, name, available, detail}]`: `local` and
+  `devvm`, the folder's DevVM project VM. `detail` says what an unavailable
+  target needs, such as running `devvm` in the folder.
+- `sigma --target ID` and `conversation/open {target}` pick the target of a new
+  conversation; the default is `local`. An open of an existing conversation
+  ignores the target. An open that cannot reach its target fails with the tag
+  `TargetUnavailable` and creates nothing; the terminal view prints
+  `execution target unavailable: <reason>` and exits. Sigma never runs a
+  conversation's tools on another target.
+- The terminal view prints the target, and for DevVM where edits land, when it
+  opens and when it reattaches.

@@ -651,7 +651,7 @@ func buildSpawnEnv(opts SpawnOptions, agent, wrapperPath string) []string {
 		shellEnv = readCachedShellEnvFromProcess()
 	}
 	env = MergeEnvironment(env, shellEnv)
-	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 
 	env = config.WithoutAgentSessionIdentityEnv(env)
@@ -675,7 +675,7 @@ func buildSpawnEnv(opts SpawnOptions, agent, wrapperPath string) []string {
 	if len(opts.AgentEnv) > 0 {
 		env = MergeEnvironment(env, opts.AgentEnv)
 	}
-	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
+	env = filterEnvKeys(env, "ATTN_DAEMON_MANAGED", "ATTN_AUTO_APPROVE", "ATTN_MODEL", "ATTN_EFFORT", "ATTN_EXECUTION_TARGET", "ATTN_AUTO_COMPACT_WINDOW", "ATTN_CHIEF_AUTO_COMPACT_WINDOW", "ATTN_PTY_WORKER", "ATTN_CACHED_SHELL_ENV", "ATTN_PTY_DAEMON_ENV",
 		pausepoint.EnvPoints, pausepoint.EnvSocket)
 	env = MergeEnvironment(env, opts.DaemonEnv)
 	env = filterEnvKeys(env, "ATTN_HOST", "ATTN_PTY_HOST_NAME")

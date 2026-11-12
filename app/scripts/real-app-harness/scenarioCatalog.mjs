@@ -10,6 +10,16 @@ export const scenarioCatalog = [
     },
   },
   {
+    id: 'sigma-targets',
+    runnerId: 'SIGMA-TARGETS',
+    label: 'Sigma sessions run on the execution target they launched with, through a restart and a resume, and an unavailable DevVM target never runs locally',
+    command: ['node', 'scripts/real-app-harness/scenario-sigma-targets.mjs'],
+    skipOn: {
+      linux: 'Needs the Sigma fork build and a DevVM VM, which run only on a developer Mac',
+      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE and a DevVM project in ATTN_SCENARIO_SIGMA_DEVVM_PROJECT', unlessEnv: 'ATTN_SCENARIO_SIGMA_DEVVM_PROJECT' },
+    },
+  },
+  {
     id: 'browser-wait-navigation',
     runnerId: 'BROWSER-WAIT-NAVIGATION',
     label: 'Browser waits survive initial navigation, tile reopening and later navigation',

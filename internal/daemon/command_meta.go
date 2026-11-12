@@ -38,6 +38,7 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDelegationPreferencesGet:      commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesSave:     commandMetadata(false, false),
 	protocol.CmdHarnessModels:                 commandMetadata(false, false),
+	protocol.CmdHarnessTargets:                commandMetadata(false, false),
 	protocol.CmdDelegationRoles:               commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesShow:     commandMetadata(false, false),
 	protocol.CmdDelegationPreferencesCommit:   commandMetadata(false, true),

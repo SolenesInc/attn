@@ -60,6 +60,8 @@ type SpawnOptions struct {
 
 	Effort string
 
+	ExecutionTarget string
+
 	ContextWindowCap int
 
 	UnattendedLaunch launchcontract.UnattendedLaunchSpec

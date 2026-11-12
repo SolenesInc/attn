@@ -2,6 +2,8 @@ package daemon_test
 
 import (
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -133,5 +135,80 @@ func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
 			server.Reply(conversation, "Renamed. <!-- attn:state=idle -->")
 			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 		})
+	}
+}
+
+func TestSigmaListsTheExecutionTargetsOfAFolderAndNisseHasNone(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	folder := w.Path("shop")
+	listed := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "targets", Harness: "sigma", Cwd: folder},
+		protocol.EventHarnessTargetsResult, func(r protocol.HarnessTargetsResultMessage) bool { return r.RequestID == "targets" })
+	var want []protocol.ExecutionTarget
+	for _, target := range fakeagent.ServerTargets(folder) {
+		want = append(want, protocol.ExecutionTarget{ID: target.ID, Name: target.Name, Available: target.Available, Detail: target.Detail})
+	}
+	if !listed.Success || !slices.Equal(listed.Targets, want) {
+		t.Fatalf("Sigma's targets for %s = %+v, want %+v", folder, listed, want)
+	}
+
+	setSetting(t, app, "nisse_enabled", "true")
+	nisse := testworld.Request(app, protocol.HarnessTargetsMessage{Cmd: protocol.CmdHarnessTargets, RequestID: "nisse-targets", Harness: "nisse", Cwd: folder},
+		protocol.EventHarnessTargetsResult, func(r protocol.HarnessTargetsResultMessage) bool { return r.RequestID == "nisse-targets" })
+	if nisse.Success {
+		t.Errorf("Nisse's targets = %+v, want a refusal", nisse)
+	}
+	refused, _, _ := w.RequestSpawn(app, fakeagent.Nisse, folder, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
+	if refused.Success {
+		t.Errorf("a Nisse launch on target devvm succeeded, want it refused")
+	}
+}
+
+func TestASigmaConversationStartsOnTheTargetItsSessionLaunchedWith(t *testing.T) {
+	for _, direct := range []bool{false, true} {
+		t.Run(strconv.FormatBool(direct), func(t *testing.T) {
+			w := newWorld(t, fakeagent.Sigma)
+			app := w.App()
+			setSetting(t, app, "direct_agent_launch_enabled", strconv.FormatBool(direct))
+			_, view, server := appServerSession(t, w, app, fakeagent.Sigma, func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("devvm") })
+			if started := server.Started(view.ConversationID); started.Target != "devvm" {
+				t.Fatalf("the conversation started on %q, want devvm", started.Target)
+			}
+		})
+	}
+}
+
+func TestASigmaSessionWhoseTargetIsUnavailableKeepsItsErrorAndTriesThatTargetAgainOnResumeAndReopen(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	session := w.Spawn(app, fakeagent.Sigma, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ExecutionTarget = protocol.Ptr("gone") })
+	failed, failure := w.LaunchFailed(session)
+	if target, _ := flagValue(failed.Argv, "--target"); target != "gone" || !strings.Contains(failure, "TargetUnavailable") {
+		t.Fatalf("the view ran %q and failed with %q, want it opened on target gone and refused as TargetUnavailable", failed.Argv, failure)
+	}
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TerminalExit != nil })
+	resumed := testworld.Request(app, protocol.ReloadSessionMessage{Cmd: protocol.CmdReloadSession, ID: protocol.SessionID(session), Cols: 100, Rows: 30},
+		protocol.EventReloadSessionResult, func(r protocol.ReloadSessionResultMessage) bool { return string(r.ID) == session })
+	if !resumed.Success {
+		t.Fatalf("resume: %s", protocol.Deref(resumed.Error))
+	}
+	again, _ := w.LaunchFailed(session)
+	if target, _ := flagValue(again.Argv, "--target"); target != "gone" {
+		t.Fatalf("the resumed view ran %q, want it on target gone again", again.Argv)
+	}
+
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.TerminalExit != nil })
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close: %s", protocol.Deref(closed.Error))
+	}
+	awaitClosed(app, session)
+	if reopened := reopenOverTheWebSocket(app, session); !reopened.Success {
+		t.Fatalf("reopen: %s", protocol.Deref(reopened.Error))
+	}
+	fromLedger, _ := w.LaunchFailed(session)
+	if target, _ := flagValue(fromLedger.Argv, "--target"); target != "gone" {
+		t.Fatalf("the view reopened from the ledger ran %q, want it on target gone again", fromLedger.Argv)
 	}
 }

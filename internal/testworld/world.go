@@ -304,6 +304,13 @@ func (w *World) Launched(sessionID string) *fakeagent.Run {
 	return run
 }
 
+func (w *World) LaunchFailed(sessionID string) (*fakeagent.Run, string) {
+	w.T.Helper()
+	run, failure := w.kit.LaunchFailed(w.Terminal(sessionID))
+	run.SessionID = sessionID
+	return run, failure
+}
+
 // LaunchedCarrying needs no daemon: id is the ATTN_SESSION_ID the process carries.
 func (w *World) LaunchedCarrying(id string) *fakeagent.Run {
 	w.T.Helper()

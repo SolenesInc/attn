@@ -23,12 +23,21 @@ A Sigma session runs as a Nisse session does, as
 [Using Nisse](using-nisse.md#how-a-session-runs) describes, with these
 differences:
 
-- Attn launches `sigma --attach --conversation <id>`. Attn starts the server
+- Attn launches `sigma --attach --conversation <id>`, with `--target <id>` when
+  the session names an execution target. Attn starts the server
   with `sigma serve` in a terminal of its own, and the view never starts a
   second one.
 - Calls that change things, such as shell commands and file writes, wait in
   the terminal for you to allow them, unless the session started with YOLO.
-- Coding tools run on this computer. Other execution targets come later.
+- Coding tools run where the session's execution target says: `local`, this
+  computer, by default, or `devvm`, the project's DevVM VM. The target is
+  chosen when the conversation is created and never changes. A client picks it
+  with `execution_target` when it launches the session; the app offers no
+  picker yet. The Sigma view
+  shows it when it opens and when it reattaches.
+- When the target cannot be reached, for example because the folder has no
+  DevVM VM yet, the view says why and exits. The session never runs on this
+  computer instead: resuming it tries the same target again.
 
 ## State
 

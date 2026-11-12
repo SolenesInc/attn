@@ -648,6 +648,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		"ATTN_AUTO_APPROVE",
 		"ATTN_MODEL",
 		"ATTN_EFFORT",
+		"ATTN_EXECUTION_TARGET",
 		"ATTN_AUTO_COMPACT_WINDOW",
 		"ATTN_CACHED_SHELL_ENV",
 		"ATTN_PTY_DAEMON_ENV",

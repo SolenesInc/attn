@@ -174,6 +174,7 @@ func runAgentDirectly(requestedAgent string) {
 	opts.AutoApprove = consumeOneShotBoolEnv("ATTN_AUTO_APPROVE")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")
 	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
+	opts.ExecutionTarget = consumeOneShotEnv("ATTN_EXECUTION_TARGET")
 	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
 	if window == "" {
 		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")

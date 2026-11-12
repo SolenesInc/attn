@@ -65,7 +65,7 @@ var appServerFlavors = map[Harness]appServerFlavor{
 
 var serverViewComposer = composer{prompt: "PROMPT "}
 
-var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true, "--instructions": true}}
+var serverViewFlags = flagSpec{values: map[string]bool{"--conversation": true, "--provider": true, "--model": true, "--effort": true, "--instructions": true, "--target": true}}
 
 func appServerProgram(h Harness) func(config) int {
 	flavor := appServerFlavors[h]
@@ -116,7 +116,7 @@ func (n *serverView) begin(*terminal) error {
 	if n.args.has("--auto") {
 		start["approvals"] = "auto"
 	}
-	for flag, key := range map[string]string{"--provider": "provider", "--model": "model", "--effort": "effort", "--instructions": "instructions"} {
+	for flag, key := range map[string]string{"--provider": "provider", "--model": "model", "--effort": "effort", "--instructions": "instructions", "--target": "target"} {
 		if value := n.args.value(flag); value != "" {
 			start[key] = value
 		}
@@ -167,6 +167,21 @@ var ServerModels = []ServerProviderModels{
 	{Provider: "openai", Models: []ServerModel{{ID: "gpt-5.5", Name: "GPT-5.5", Efforts: []string{"low", "high"}}, {ID: "gpt-image", Name: "Image", Efforts: []string{}}}},
 }
 
+type ServerTarget struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+	Detail    string `json:"detail"`
+}
+
+func ServerTargets(cwd string) []ServerTarget {
+	return []ServerTarget{
+		{ID: "local", Name: "this machine", Available: true, Detail: cwd},
+		{ID: "devvm", Name: "shop-vm", Available: true, Detail: "running · project " + cwd},
+		{ID: "gone", Name: "gone-vm", Available: false, Detail: "the VM was deleted"},
+	}
+}
+
 type ServerConversation struct {
 	ID           string         `json:"id"`
 	Cwd          string         `json:"cwd"`
@@ -175,6 +190,7 @@ type ServerConversation struct {
 	Effort       string         `json:"effort,omitempty"`
 	Approvals    string         `json:"approvals,omitempty"`
 	Instructions string         `json:"instructions,omitempty"`
+	Target       string         `json:"target,omitempty"`
 	Ended        map[string]any `json:"ended,omitempty"`
 	Status       string         `json:"status"`
 	requests     map[string]int
@@ -341,6 +357,8 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		return s.flavor.hello, ""
 	case "models/list":
 		return ServerModels, ""
+	case "targets/list":
+		return ServerTargets(p.Cwd), ""
 	case "conversation/start", "conversation/open":
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -348,6 +366,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			p.ID = uuid.NewString()
 		}
 		conv := s.convs[p.ID]
+		if conv == nil && !targetAvailable(p.Target, p.Cwd) {
+			return nil, "TargetUnavailable"
+		}
 		if conv == nil {
 			conv = &p.ServerConversation
 			conv.Status, conv.requests = "idle", map[string]int{}
@@ -682,4 +703,16 @@ func (s *AppServer) call(method string, params, result any) {
 
 func appServerHome(dir string, h Harness) string {
 	return filepath.Join(dir, appServerFlavors[h].homeDir)
+}
+
+func targetAvailable(id, cwd string) bool {
+	if id == "" {
+		return true
+	}
+	for _, t := range ServerTargets(cwd) {
+		if t.ID == id {
+			return t.Available
+		}
+	}
+	return false
 }

@@ -4972,6 +4972,20 @@ type EvidenceExcerpt struct {
 	TurnID string `json:"turn_id"`
 }
 
+type ExecutionTarget struct {
+	// Available corresponds to the JSON schema field "available".
+	Available bool `json:"available"`
+
+	// Detail corresponds to the JSON schema field "detail".
+	Detail string `json:"detail"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+}
+
 type FetchPRDetailsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6025,6 +6039,37 @@ type HarnessModelsResultMessage struct {
 
 	// TierDefaults corresponds to the JSON schema field "tier_defaults".
 	TierDefaults TierDefaults `json:"tier_defaults"`
+}
+
+type HarnessTargetsMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Cwd corresponds to the JSON schema field "cwd".
+	Cwd string `json:"cwd"`
+
+	// Harness corresponds to the JSON schema field "harness".
+	Harness string `json:"harness"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type HarnessTargetsResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+
+	// Targets corresponds to the JSON schema field "targets".
+	Targets []ExecutionTarget `json:"targets"`
 }
 
 type HeatState string
@@ -13881,6 +13926,9 @@ type SpawnSessionMessage struct {
 
 	// Executable corresponds to the JSON schema field "executable".
 	Executable *string `json:"executable,omitempty,omitzero"`
+
+	// ExecutionTarget corresponds to the JSON schema field "execution_target".
+	ExecutionTarget *string `json:"execution_target,omitempty,omitzero"`
 
 	// Host corresponds to the JSON schema field "host".
 	Host *string `json:"host,omitempty,omitzero"`

@@ -322,6 +322,13 @@ func (d *Daemon) resolveSpawnIntent(ctx context.Context, req *spawnRequest) (*sp
 		return nil, &spawnRejection{err: fmt.Errorf("resolve launch model: %w", err)}
 	}
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.spawnOpts.Effort)
+	if target := strings.TrimSpace(protocol.Deref(msg.ExecutionTarget)); target != "" {
+		if req.hasPluginDriver || req.driver == nil || !agentdriver.EffectiveCapabilities(req.driver).HasExecutionTarget {
+			plan.rollback(d, msg.ID)
+			return nil, &spawnRejection{err: fmt.Errorf("agent %q has no execution targets", req.agent)}
+		}
+		plan.spawnOpts.ExecutionTarget = target
+	}
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {
 		if err := launch.Validate(); err != nil {
 			plan.rollback(d, msg.ID)

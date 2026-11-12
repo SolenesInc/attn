@@ -908,6 +908,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.life.Go("handleDelegateWS", func() { d.handleDelegateWS(client, request) })
 	case protocol.CmdHarnessModels:
 		d.life.Go("handleHarnessModels", func() { d.handleHarnessModels(client, msg.(*protocol.HarnessModelsMessage)) })
+	case protocol.CmdHarnessTargets:
+		d.life.Go("handleHarnessTargets", func() { d.handleHarnessTargets(client, msg.(*protocol.HarnessTargetsMessage)) })
 	case protocol.CmdDelegationPreferencesGet:
 		d.handleDelegationPreferencesGet(client, msg.(*protocol.DelegationPreferencesGetMessage))
 	case protocol.CmdDelegationPreferencesSave:

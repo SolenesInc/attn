@@ -51,6 +51,7 @@ const (
 	CmdDelegationPreferencesGet      = "delegation_preferences_get"
 	CmdDelegationPreferencesSave     = "delegation_preferences_save"
 	CmdHarnessModels                 = "harness_models"
+	CmdHarnessTargets                = "harness_targets"
 	CmdDelegationRoles               = "delegation_roles"
 	CmdDelegationPreferencesShow     = "delegation_preferences_show"
 	CmdDelegationPreferencesCommit   = "delegation_preferences_commit"
@@ -618,6 +619,7 @@ const (
 	EventDelegationPreferencesResult  = "delegation_preferences_result"
 	EventDelegationPreferencesChanged = "delegation_preferences_changed"
 	EventHarnessModelsResult          = "harness_models_result"
+	EventHarnessTargetsResult         = "harness_targets_result"
 	EventAgentCatalogResult           = "agent_catalog_result"
 )
 

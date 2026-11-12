@@ -150,6 +150,23 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
+func (k *Kit) LaunchFailed(sessionID string) (*Run, string) {
+	k.t.Helper()
+	select {
+	case run := <-k.launchesFor(sessionID):
+		if run.fake.Error == "" {
+			k.t.Fatalf("fake %s for session %s launched, want its launch to fail", run.Harness, sessionID)
+		}
+		k.mu.Lock()
+		k.failures = slices.DeleteFunc(k.failures, func(failure string) bool { return failure == launchFailure(run.fake) })
+		k.mu.Unlock()
+		return run, run.fake.Error
+	case <-time.After(HangGuard):
+		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
+		return nil, ""
+	}
+}
+
 func (k *Kit) NextLaunch() func() *Run {
 	k.t.Helper()
 	k.mu.Lock()
@@ -300,7 +317,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		k.fakes = append(k.fakes, f)
 		k.mu.Unlock()
 		if f.Error != "" {
-			k.fail(fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv))
+			k.fail(launchFailure(f))
 		}
 		if f.Role == roleCodexServer {
 			k.mu.Lock()
@@ -372,6 +389,10 @@ func (f *fake) exited() int {
 		return -1
 	}
 	return *f.exitCode
+}
+
+func launchFailure(f *fake) string {
+	return fmt.Sprintf("fake %s for session %q failed to launch: %s (argv %q)", f.Harness, f.AttnSessionID, f.Error, f.Argv)
 }
 
 func (k *Kit) fail(failure string) {

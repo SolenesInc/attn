@@ -67,6 +67,8 @@ type Capabilities struct {
 
 	HasEffortPin bool
 
+	HasExecutionTarget bool
+
 	ConversationIsSession bool
 }
 
@@ -173,6 +175,8 @@ type SpawnOpts struct {
 	Model string
 
 	Effort string
+
+	ExecutionTarget string
 
 	AutoCompactWindow int
 

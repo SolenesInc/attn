@@ -388,6 +388,9 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 	if intent.Effort != "" {
 		spawnMsg.Effort = protocol.Ptr(intent.Effort)
 	}
+	if intent.ExecutionTarget != "" {
+		spawnMsg.ExecutionTarget = protocol.Ptr(intent.ExecutionTarget)
+	}
 	launch := intent.UnattendedLaunch
 	if !launch.IsZero() {
 		launch = launch.WithLegacyDefaults()

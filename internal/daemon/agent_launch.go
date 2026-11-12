@@ -40,7 +40,7 @@ func (d *Daemon) prepareAgentLaunch(opts *ptybackend.SpawnOptions, intent *Agent
 		Cols: opts.Cols, Rows: opts.Rows, InitialPrompt: initialPrompt,
 		ResumeSessionID: opts.ResumeSessionID, ResumePicker: opts.ResumePicker,
 		YoloMode: opts.YoloMode, AutoApprove: opts.AutoApprove,
-		Model: opts.Model, Effort: opts.Effort, AutoCompactWindow: opts.ContextWindowCap,
+		Model: opts.Model, Effort: opts.Effort, ExecutionTarget: opts.ExecutionTarget, AutoCompactWindow: opts.ContextWindowCap,
 		Executable: executable, SocketPath: d.socketPath,
 		WrapperPath: launchenv.ActiveAttnExecutable(),
 		Garden:      launch.Garden, Asks: launch.Asks, Vent: launch.Vent, ToolVents: launch.ToolVents, CodeReview: launch.CodeReview,
@@ -115,7 +115,7 @@ func prepareLauncherLaunch(driver agentdriver.Driver, opts *ptybackend.SpawnOpti
 	if launch := opts.UnattendedLaunch; !launch.IsZero() {
 		autoApprove, model, effort = true, launch.Model, launch.Effort
 	}
-	opts.AgentEnv = []string{"ATTN_DAEMON_MANAGED=1", "ATTN_MODEL=" + model, "ATTN_EFFORT=" + effort, fmt.Sprintf("ATTN_AUTO_COMPACT_WINDOW=%d", opts.ContextWindowCap)}
+	opts.AgentEnv = []string{"ATTN_DAEMON_MANAGED=1", "ATTN_MODEL=" + model, "ATTN_EFFORT=" + effort, "ATTN_EXECUTION_TARGET=" + opts.ExecutionTarget, fmt.Sprintf("ATTN_AUTO_COMPACT_WINDOW=%d", opts.ContextWindowCap)}
 	if autoApprove {
 		opts.AgentEnv = append(opts.AgentEnv, "ATTN_AUTO_APPROVE=1")
 	}

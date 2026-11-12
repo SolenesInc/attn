@@ -481,9 +481,11 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		}
 	}
 
+	executionTarget := ""
 	if intent, ok := d.store.LaunchIntent(sessionID); ok {
 		params.Executable = intent.Executable
 		params.ClaudeExecutable, params.CodexExecutable = "", ""
+		executionTarget = intent.ExecutionTarget
 	}
 	opts := ptybackend.SpawnOptions{
 		ID:               terminal,
@@ -501,6 +503,7 @@ func (d *Daemon) buildReloadSpawnOptionsFromLaunchParams(session *protocol.Sessi
 		CodexExecutable:  params.CodexExecutable,
 		Model:            params.Model,
 		Effort:           params.Effort,
+		ExecutionTarget:  executionTarget,
 		AutoApprove:      false,
 		ContextWindowCap: d.launchContextWindowCap(sessionID, session.Agent),
 	}

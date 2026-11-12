@@ -1,6 +1,9 @@
 package agent
 
-import "os/exec"
+import (
+	"os/exec"
+	"strings"
+)
 
 type Sigma struct{}
 
@@ -20,10 +23,18 @@ func (s *Sigma) ResolveExecutable(configured string) string {
 	return resolveExec(s.ExecutableEnvVar(), configured, s.DefaultExecutable())
 }
 
-func (s *Sigma) Capabilities() Capabilities { return appServerCapabilities }
+func (s *Sigma) Capabilities() Capabilities {
+	caps := appServerCapabilities
+	caps.HasExecutionTarget = true
+	return caps
+}
 
 func (s *Sigma) BuildCommand(opts SpawnOpts) *exec.Cmd {
-	return exec.Command(opts.Executable, append([]string{"--attach"}, appServerViewArgs(opts)...)...)
+	args := []string{"--attach"}
+	if target := strings.TrimSpace(opts.ExecutionTarget); target != "" {
+		args = append(args, "--target", target)
+	}
+	return exec.Command(opts.Executable, append(args, appServerViewArgs(opts)...)...)
 }
 
 func (s *Sigma) BuildEnv(SpawnOpts) []string { return nil }

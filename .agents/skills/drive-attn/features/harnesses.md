@@ -12,6 +12,7 @@ harness's logo.
 - `harness-choice`: pick the harness when starting an agent. The default comes from Settings.
 - `harness-settings`: each harness's executable, default model and effort, and auto-approve, plus what it supports, in Settings.
 - `harness-models`: the models each harness offers, and the light, standard and deep tiers mapped to them.
+- `execution-targets`: where a Sigma conversation runs its tools, `local` or the folder's DevVM VM, chosen at launch and kept through resume. An unavailable target ends the view with its reason and never falls back to local.
 - `plugins`: install a plugin from a folder or a Git repository, link a folder while developing one, set a plugin's priority, uninstall.
 - `plugin-driver`: a plugin's driver starts its harness's agents and reports what they do.
 - `harness-logos`: the Claude or Codex mark beside each agent in the sidebar, or a state dot without it.
@@ -39,6 +40,7 @@ harness's logo.
 
 - The plugin supervisor starts each installed plugin, restarts it when it fails, and stops it on uninstall (`internal/daemon/plugin_supervisor.go`). The plugin's driver launches and reports its harness's agents (`internal/daemon/plugin_driver.go`).
 - attn asks each harness which models it offers (`internal/daemon/harness_models.go`).
+- A protocol client lists a folder's targets with `harness_targets {harness, cwd}` and launches on one with `spawn_session`'s `execution_target` (`internal/daemon/harness_targets.go`). No app picker offers it yet.
 
 ## Driving it
 
@@ -72,7 +74,7 @@ Preconditions:
 
 - Wire: `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/sigma_wire_test.go`.
 - Stack: `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`.
-- Scenario: `agent-settings`, `claude-shared-conversation`, `sigma` (macOS with the Sigma fork build in `ATTN_SCENARIO_SIGMA_EXECUTABLE`).
+- Scenario: `agent-settings`, `claude-shared-conversation`, `sigma` (macOS with the Sigma fork build in `ATTN_SCENARIO_SIGMA_EXECUTABLE`), `sigma-targets` (also needs `devvm` on PATH and a folder with a DevVM VM in `ATTN_SCENARIO_SIGMA_DEVVM_PROJECT`).
 - Kernel: `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
 - App: `app/src/components/Sidebar.harnessIcons.test.tsx`, `app/src/App.modelTierSettings.test.tsx`.
 
