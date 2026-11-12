@@ -3,6 +3,7 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage, Session,
+    SessionStateChangedMessage,
 };
 use attn_testkit::tree::{below, pane, row, tile};
 use attn_testkit::{Daemon, Request, Target, World, key_event};
@@ -422,10 +423,30 @@ fn focus_ends_when_another_tile_becomes_active() {
 }
 
 #[test]
+fn a_tile_goes_by_its_sessions_name_as_renamed_and_a_document_by_its_file() {
+    let tree = row([pane("a"), document("plan", "a")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    assert!(shows(&world, "Agent a") && shows(&world, "plan.md"));
+
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            label: "nightly docs sweep".into(),
+            ..session("a")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+
+    assert!(shows(&world, "nightly docs sweep"));
+    assert!(!shows(&world, "Agent a"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn close_removes_a_document_tile_and_ends_a_terminal_tile() {
     let tree = row([pane("a"), tile("m", "markdown")]);
     let mut world = start(vec![desktop(1, "m", Some(tree.clone()))]);
-    assert!(shows(&world, "Markdown"));
+    assert!(shows(&world, "markdown"));
 
     press(&mut world, Action::SessionClose);
     assert_eq!(
@@ -754,7 +775,7 @@ fn a_document_arriving_beside_its_agent_on_screen_shows_and_the_screen_goes_back
         vec![desktop(1, "b", Some(arrived))],
     );
     assert_eq!(shown(&world), ["b"], "the screen slides to show it");
-    assert!(shows(&world, "Markdown"));
+    assert!(shows(&world, "doc.md"));
     assert_eq!(chip(&world, "a").unwrap().value.as_deref(), Some("arrived"));
 
     arrange(&mut world, "work/desktop_1", vec![four_in_a_row("b")]);

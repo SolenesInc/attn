@@ -79,7 +79,7 @@ fn member(desktop: &Desktop, facts: &attn_client::Facts, leaf: &str) -> Member {
         .map_or(Member::Tile, |s| Member::Agent(AgentState::parse(&s.state)))
 }
 
-/// A tile's name on the shelf: an agent by its session's name, a tile by what it holds.
+/// A tile's name on the shelf, as its header gives it.
 pub(crate) fn title(
     desktop: &Desktop,
     facts: &attn_client::Facts,
@@ -87,20 +87,7 @@ pub(crate) fn title(
     leaf: &str,
 ) -> String {
     match tree.find_leaf(leaf) {
-        Some(Node::Leaf(l)) => match &l.kind {
-            LeafKind::Tile { kind, params, .. } => {
-                crate::sidebar::tile_title(kind, params.as_deref().unwrap_or(""))
-            }
-            LeafKind::Pane => {
-                let pane = super::view::pane_of(desktop, leaf);
-                let session =
-                    pane.and_then(|p| facts.sessions.iter().find(|s| s.id == p.session_id));
-                session
-                    .map(crate::sidebar::display_name)
-                    .or_else(|| pane.map(|p| p.title.clone()).filter(|t| !t.is_empty()))
-                    .unwrap_or_else(|| "Terminal".into())
-            }
-        },
+        Some(Node::Leaf(l)) => super::view::leaf_title(desktop, &facts.sessions, l),
         _ => "Terminal".into(),
     }
 }

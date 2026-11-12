@@ -1,4 +1,4 @@
-use attn_protocol::{Desktop, DesktopPane};
+use attn_protocol::{Desktop, DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -87,7 +87,16 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .keymap
         .binding(&crate::action::Action::SessionCancelCountdown)
         .map(|b| state.keymap.label(b));
-    let reads = (reads, settles.clone(), keep_key.clone());
+    let names: Vec<String> = desktop
+        .map(|d| {
+            d.panes
+                .iter()
+                .filter_map(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
+                .map(crate::sidebar::display_name)
+                .collect()
+        })
+        .unwrap_or_default();
+    let reads = (reads, settles.clone(), keep_key.clone(), names);
     let launcher = desktop
         .filter(|d| d.panes.is_empty())
         .and_then(|_| crate::picker::inline(state, t));
@@ -153,6 +162,7 @@ fn screen(
                 let unsent = desk.peeks.unsent();
                 let cx = TileCx {
                     desktop,
+                    sessions: &facts.sessions,
                     unsent: &unsent,
                     settles,
                     keep_key,
@@ -196,6 +206,7 @@ fn empty(t: &Tokens, message: &str) -> El {
 
 struct TileCx<'a> {
     desktop: &'a Desktop,
+    sessions: &'a [Session],
     /// Replies a peek could not send, by terminal.
     unsent: &'a [(String, String)],
     /// How each agent's turn settles, by leaf.
@@ -282,14 +293,20 @@ pub(super) fn share(child: El, ratio: f32) -> El {
         .child(child)
 }
 
-/// The name a leaf goes by in its header and to assistive tech.
-pub(crate) fn leaf_title(desktop: &Desktop, leaf: &Leaf) -> String {
+/// The name a leaf goes by in its header, on the shelf and to assistive tech: an agent by its
+/// session's name, a tile by what it holds.
+pub(crate) fn leaf_title(desktop: &Desktop, sessions: &[Session], leaf: &Leaf) -> String {
     match &leaf.kind {
-        LeafKind::Pane => pane_of(desktop, &leaf.id)
-            .map(|p| p.title.clone())
-            .filter(|t| !t.is_empty())
-            .unwrap_or_else(|| "Terminal".into()),
-        LeafKind::Tile { kind, .. } => tile_kind_label(kind).into(),
+        LeafKind::Tile { kind, params, .. } => {
+            crate::sidebar::tile_title(kind, params.as_deref().unwrap_or(""))
+        }
+        LeafKind::Pane => {
+            let pane = pane_of(desktop, &leaf.id);
+            pane.and_then(|p| sessions.iter().find(|s| s.id == p.session_id))
+                .map(crate::sidebar::display_name)
+                .or_else(|| pane.map(|p| p.title.clone()).filter(|t| !t.is_empty()))
+                .unwrap_or_else(|| "Terminal".into())
+        }
     }
 }
 
@@ -312,7 +329,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let desktop = cx.desktop;
     let active = leaf.id == desktop.active_pane_id;
     let held = cx.holder.is_some_and(|h| h.pane == leaf.id);
-    let title = leaf_title(desktop, leaf);
+    let title = leaf_title(desktop, cx.sessions, leaf);
     let holder = Holder {
         desktop: desktop.id.clone(),
         pane: leaf.id.clone(),
