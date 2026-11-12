@@ -28,17 +28,36 @@ func ParseCodexThreadTerminal(t TerminalID) (profile, thread string, ok bool) {
 	return rest[:i], rest[i+1:], true
 }
 
-const NisseConversationPrefix = "nisse:"
+const (
+	NisseConversationPrefix = "nisse:"
+	SigmaConversationPrefix = "sigma:"
+)
 
 func NisseConversationTerminal(conversation string) TerminalID {
-	if conversation = strings.TrimSpace(conversation); conversation == "" {
-		return ""
-	}
-	return TerminalID(NisseConversationPrefix + conversation)
+	return conversationTerminal(NisseConversationPrefix, conversation)
 }
 
 func ParseNisseConversationTerminal(t TerminalID) (conversation string, ok bool) {
-	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), NisseConversationPrefix)
+	return parseConversationTerminal(NisseConversationPrefix, t)
+}
+
+func SigmaConversationTerminal(conversation string) TerminalID {
+	return conversationTerminal(SigmaConversationPrefix, conversation)
+}
+
+func ParseSigmaConversationTerminal(t TerminalID) (conversation string, ok bool) {
+	return parseConversationTerminal(SigmaConversationPrefix, t)
+}
+
+func conversationTerminal(prefix, conversation string) TerminalID {
+	if conversation = strings.TrimSpace(conversation); conversation == "" {
+		return ""
+	}
+	return TerminalID(prefix + conversation)
+}
+
+func parseConversationTerminal(prefix string, t TerminalID) (conversation string, ok bool) {
+	conversation, ok = strings.CutPrefix(strings.TrimSpace(string(t)), prefix)
 	return conversation, ok && conversation != ""
 }
 
@@ -52,6 +71,9 @@ func TerminalFromEnv() TerminalID {
 	}
 	if conversation := os.Getenv("NISSE_ROOT_CONVERSATION"); conversation != "" {
 		return NisseConversationTerminal(conversation)
+	}
+	if conversation := os.Getenv("SIGMA_ROOT_CONVERSATION"); conversation != "" {
+		return SigmaConversationTerminal(conversation)
 	}
 	return TerminalID(os.Getenv("ATTN_SESSION_ID"))
 }

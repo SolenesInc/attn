@@ -72,6 +72,7 @@ type Monitor struct {
 	stopped              bool
 	saveMu               sync.Mutex
 	saved                savedView
+	completions          serverCompletions
 	reacted              View
 	appliedState         uint64
 	registry             *Registry
@@ -255,6 +256,7 @@ func (r *Registry) Start(previous *Monitor, start Start) *Monitor {
 			}
 		}
 		m.loadCostLocked(launch.Cost)
+		m.completions.restoreLocked(launch.ServerCompletion)
 		m.saved.cost = launch.Cost
 		m.costInitialized = m.costInitialized || start.FreshCost
 		if !m.policy.TitlesAllowed {
@@ -337,6 +339,7 @@ func (m *Monitor) initializeLocked(start Start) {
 	for _, pending := range launch.PendingConversations {
 		m.pendingConversations = append(m.pendingConversations, pendingConversation{Conversation: pending})
 	}
+	m.completions = serverCompletions{observed: launch.ServerCompletion, applied: launch.ServerCompletion}
 	m.pullRequests = launch.PullRequests
 	m.sentFiles = launch.SentFiles
 	m.editedFiles = launch.EditedFiles

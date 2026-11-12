@@ -271,6 +271,7 @@ func (m *Monitor) Begin(launch Launch) {
 	if !launch.LastSeen.IsZero() {
 		m.touchedAt = launch.LastSeen
 	}
+	m.completions.restoreLocked(launch.ServerCompletion)
 	if launch.Cost.Initialized {
 		m.loadCostLocked(launch.Cost)
 	}
@@ -588,7 +589,7 @@ var ResolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateUnknown:         true,
 }
 
-func (m *Monitor) publishResolution(current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
+func (m *Monitor) publishResolution(current protocol.SessionState, resolution sessionstate.Resolution, completion int64, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
 	linkOwns := m.linkOwnsState()
 	resolverOwnsState = ResolverOwnedStates[current] && !linkOwns
 	if resolution.Hold {
@@ -604,10 +605,15 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 	}
 	if !ResolverOwnedStates[current] || resolution.State == current {
 		m.clearDwell()
-		if m.recordStateReason(resolution) && ResolverOwnedStates[current] {
-			m.mu.Lock()
-			view := m.viewLocked()
-			m.mu.Unlock()
+		reasoned := m.recordStateReason(resolution) && ResolverOwnedStates[current]
+		m.mu.Lock()
+		applied := m.completions.applyLocked(completion)
+		var view View
+		if reasoned || applied {
+			view = m.viewLocked()
+		}
+		m.mu.Unlock()
+		if reasoned || applied {
 			m.publish(view)
 		}
 		return resolverOwnsState
@@ -618,9 +624,10 @@ func (m *Monitor) publishResolution(current protocol.SessionState, resolution se
 	}
 	m.recordStateReason(resolution)
 	m.ApplyState(Change{
-		State:  string(resolution.State),
-		Cause:  resolverObservation{},
-		Origin: Origin{Source: StateSourceResolver, Detail: resolutionDetail(resolution)},
+		State:            string(resolution.State),
+		Cause:            resolverObservation{},
+		Origin:           Origin{Source: StateSourceResolver, Detail: resolutionDetail(resolution)},
+		ServerCompletion: completion,
 	})
 	return true
 }

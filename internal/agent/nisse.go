@@ -23,20 +23,24 @@ func (n *Nisse) ResolveExecutable(configured string) string {
 	return resolveExec(n.ExecutableEnvVar(), configured, n.DefaultExecutable())
 }
 
-func (n *Nisse) Capabilities() Capabilities {
-	return Capabilities{
-		HasClassifier:         true,
-		HasResume:             true,
-		HasYolo:               true,
-		HasInitialPrompt:      true,
-		HasModelPin:           true,
-		HasEffortPin:          true,
-		HasLaunchInstructions: true,
-		ConversationIsSession: true,
-	}
+var appServerCapabilities = Capabilities{
+	HasClassifier:         true,
+	HasResume:             true,
+	HasYolo:               true,
+	HasInitialPrompt:      true,
+	HasModelPin:           true,
+	HasEffortPin:          true,
+	HasLaunchInstructions: true,
+	ConversationIsSession: true,
 }
 
+func (n *Nisse) Capabilities() Capabilities { return appServerCapabilities }
+
 func (n *Nisse) BuildCommand(opts SpawnOpts) *exec.Cmd {
+	return exec.Command(opts.Executable, appServerViewArgs(opts)...)
+}
+
+func appServerViewArgs(opts SpawnOpts) []string {
 	conversation := opts.ResumeSessionID
 	if conversation == "" {
 		conversation = string(opts.TerminalID)
@@ -61,7 +65,7 @@ func (n *Nisse) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if strings.TrimSpace(opts.InitialPrompt) != "" {
 		args = append(args, "--", opts.InitialPrompt)
 	}
-	return exec.Command(opts.Executable, args...)
+	return args
 }
 
 func (n *Nisse) BuildEnv(SpawnOpts) []string { return nil }
@@ -70,7 +74,11 @@ func (n *Nisse) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID
 	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
 }
 
-func (n *Nisse) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
+func (n *Nisse) SpawnResumeSessionID(sessionID, resolvedResumeID string, _ bool) string {
+	return conversationOrSession(sessionID, resolvedResumeID)
+}
+
+func conversationOrSession(sessionID, resolvedResumeID string) string {
 	if resolved := strings.TrimSpace(resolvedResumeID); resolved != "" {
 		return resolved
 	}

@@ -48,6 +48,7 @@ pub const SHARED_CODEX_RESTART_FAILED: &str = "failed";
 pub const CODEX_SHARED_PROFILE_ENV: &str = "ATTN_CODEX_SHARED_PROFILE";
 pub const CODEX_THREAD_PREFIX: &str = "codex:";
 pub const NISSE_CONVERSATION_PREFIX: &str = "nisse:";
+pub const SIGMA_CONVERSATION_PREFIX: &str = "sigma:";
 pub const ID_ALPHABET: &str = "0123456789abcdefghjkmnpqrstvwxyz";
 pub const CREW_KEY_REF_PREFIX: &str = "member:";
 pub const AGENT_MSG_STATUS_QUEUED: &str = "queued";
@@ -101,6 +102,7 @@ pub struct Feature {
 pub const SETTINGS: &[Setting] = &[
     Setting { key: "asks_enabled", machine: false },
     Setting { key: "nisse_enabled", machine: false },
+    Setting { key: "sigma_enabled", machine: false },
     Setting { key: "new_session_launcher_enabled", machine: false },
     Setting { key: "outposts_enabled", machine: false },
     Setting { key: "phone_access_enabled", machine: false },
@@ -193,6 +195,7 @@ pub const SETTINGS: &[Setting] = &[
 pub const FEATURES: &[Feature] = &[
     Feature { key: "asks_enabled", name: "Asks", stage: "on by default", applies: "New agents" },
     Feature { key: "nisse_enabled", name: "Nisse", stage: "experimental", applies: "New agents" },
+    Feature { key: "sigma_enabled", name: "Sigma", stage: "experimental", applies: "New agents" },
     Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", stage: "experimental", applies: "Now" },
     Feature { key: "outposts_enabled", name: "Outposts", stage: "experimental", applies: "Now" },
     Feature { key: "phone_access_enabled", name: "Phone access", stage: "experimental", applies: "Now" },

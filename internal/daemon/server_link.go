@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -25,24 +26,9 @@ const (
 	serverCallLimit  = 5 * time.Second
 )
 
-type serverBinding interface {
-	kind() string
-	agent() string
-	name() string
-	enabled() bool
-	home() string
-	socket(home string) string
-	connect(ctx context.Context, socket string) (*effectrpc.Client, error)
-	executable(opts *ptybackend.SpawnOptions) string
-	serve(executable, home string) (argv, env []string)
-	terminal() harness.TerminalID
-	conversationOf(t harness.TerminalID) (conversation string, ok bool)
-	sessionClosed(sessionID protocol.SessionID, conversation string)
-}
-
 type serverLink struct {
 	d        *Daemon
-	b        serverBinding
+	b        *serverBinding
 	ensureMu sync.Mutex
 	mu       sync.Mutex
 	control  *effectrpc.Client
@@ -60,14 +46,15 @@ type serverTree struct {
 }
 
 type serverEnded struct {
-	Outcome string `json:"outcome"`
-	Message string `json:"message"`
-	Said    string `json:"said"`
+	Completion int64  `json:"completion"`
+	Outcome    string `json:"outcome"`
+	Message    string `json:"message"`
+	Said       string `json:"said"`
 }
 
-func newServerLink(d *Daemon, b serverBinding) *serverLink {
+func newServerLink(d *Daemon, b *serverBinding) *serverLink {
 	l := &serverLink{d: d, b: b, ended: make(map[string]serverEnded)}
-	d.life.Go(b.agent()+"Stop", func() {
+	d.life.Go(b.agent+"Stop", func() {
 		<-d.life.Done()
 		if c := l.client(); c != nil {
 			c.Close()
@@ -77,20 +64,20 @@ func newServerLink(d *Daemon, b serverBinding) *serverLink {
 }
 
 func (l *serverLink) logf(format string, args ...any) {
-	l.d.logf(l.b.agent()+": "+format, args...)
+	l.d.logf(l.b.agent+": "+format, args...)
 }
 
-func (l *serverLink) kind() string { return l.b.kind() }
+func (l *serverLink) kind() string { return l.b.kind }
 
 func (l *serverLink) canRun(req *spawnRequest) bool {
-	return req.agent == l.b.agent() && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
+	return req.agent == l.b.agent && !req.hasPluginDriver && !req.isShell && req.policy.unattendedLaunch.Executable == ""
 }
 
-func (l *serverLink) enabledForNewLaunches() bool { return l.b.enabled() }
+func (l *serverLink) enabledForNewLaunches() bool { return l.d.on(l.b.feature) }
 
 func (l *serverLink) admit(profile, conversation string) error {
 	holder := l.d.store.OpenSessionHoldingOutside(profile, conversation)
-	if holder == "" || l.d.store.SessionLink(holder) != l.b.kind() {
+	if holder == "" || l.d.store.SessionLink(holder) != l.b.kind {
 		return nil
 	}
 	if session := l.d.store.Get(holder); session != nil {
@@ -103,7 +90,7 @@ func (l *serverLink) prepareLaunch(opts *ptybackend.SpawnOptions, profile string
 	if _, err := l.ensureServer(l.d.life.Context(), opts); err != nil {
 		return err
 	}
-	return l.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(opts.ID), Link: l.b.kind(), ProfileID: profile})
+	return l.d.store.SaveTerminalView(store.TerminalView{TerminalID: string(opts.ID), Link: l.b.kind, ProfileID: profile})
 }
 
 func (l *serverLink) relaunch(opts *ptybackend.SpawnOptions) error {
@@ -125,9 +112,9 @@ func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, h
 	return session, l.d.primaryTerminal(session), true
 }
 
-func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.terminal() }
+func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.terminal }
 
-func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal() }
+func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
 
 func (l *serverLink) renamed(protocol.SessionID, string) {}
 
@@ -142,7 +129,7 @@ func (l *serverLink) terminalDropped(t harness.TerminalID) {
 }
 
 func (l *serverLink) recoverViews(ctx context.Context) {
-	views, err := l.d.store.TerminalViews(l.b.kind())
+	views, err := l.d.store.TerminalViews(l.b.kind)
 	if err != nil {
 		l.logf("%v", err)
 		return
@@ -182,7 +169,7 @@ func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error
 			if len(m.Efforts) > 0 {
 				effort = protocol.ModelCapabilitySupportSupported
 			}
-			models = append(models, protocol.HarnessModel{Harness: l.b.agent(), Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown})
+			models = append(models, protocol.HarnessModel{Harness: l.b.agent, Provider: p.Provider, ID: m.ID, Name: m.Name, Description: m.Description, EffortSupport: effort, EffortLevels: append([]string{}, m.Efforts...), Access: protocol.ModelCapabilitySupportUnknown})
 		}
 	}
 	return models, nil
@@ -197,7 +184,7 @@ func (l *serverLink) client() *effectrpc.Client {
 func (l *serverLink) sessions() []protocol.SessionID {
 	var open []protocol.SessionID
 	for _, session := range l.d.store.List("") {
-		if l.d.store.SessionLink(session.ID) == l.b.kind() {
+		if l.d.store.SessionLink(session.ID) == l.b.kind {
 			open = append(open, session.ID)
 		}
 	}
@@ -206,7 +193,7 @@ func (l *serverLink) sessions() []protocol.SessionID {
 
 func (l *serverLink) holder(conversation string) protocol.SessionID {
 	sessionID := l.d.store.OtherOpenSessionHolding(conversation, "")
-	if sessionID == "" || l.d.store.SessionLink(sessionID) != l.b.kind() {
+	if sessionID == "" || l.d.store.SessionLink(sessionID) != l.b.kind {
 		return ""
 	}
 	return sessionID
@@ -218,12 +205,12 @@ func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOpt
 	if c := l.client(); c != nil {
 		return c, nil
 	}
-	socket := l.b.socket(l.b.home())
+	socket := l.b.socket(l.home())
 	deadline := time.Now().Add(serverStartLimit)
 	started := false
 	for {
 		attempt, cancel := context.WithTimeout(ctx, serverCallLimit)
-		c, err := l.b.connect(attempt, socket)
+		c, err := l.b.connect(attempt, socket, "attn", buildinfo.Version)
 		cancel()
 		if err == nil {
 			l.hold(c)
@@ -239,7 +226,7 @@ func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOpt
 			}
 			started = true
 		} else if time.Now().After(deadline) {
-			return nil, fmt.Errorf("the %s server at %s did not answer within %s: %w", l.b.name(), socket, serverStartLimit, err)
+			return nil, fmt.Errorf("the %s server at %s did not answer within %s: %w", l.b.name, socket, serverStartLimit, err)
 		}
 		select {
 		case <-ctx.Done():
@@ -250,24 +237,24 @@ func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOpt
 }
 
 func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptions) error {
-	terminal := l.b.terminal()
+	terminal := l.b.terminal
 	if _, live := l.d.liveTerminals(ctx)[terminal]; live {
 		if err := l.d.ptyBackend.Remove(ctx, terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("clear the exited %s server: %w", l.b.name(), err)
+			return fmt.Errorf("clear the exited %s server: %w", l.b.name, err)
 		}
 	}
-	executable := l.b.executable(opts)
-	home := l.b.home()
+	executable := l.executable(opts)
+	home := l.home()
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
 	loginEnv, err := l.d.launchEnv(ctx)
 	if err != nil {
-		return fmt.Errorf("start the %s server: %w", l.b.name(), err)
+		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
-	argv, env := l.b.serve(executable, home)
+	argv, env := []string{executable, "serve"}, append(append([]string(nil), serverEnv...), l.b.homeVariable+"="+home)
 	spawn := ptybackend.SpawnOptions{
-		ID: terminal, Agent: l.b.kind(), Label: l.b.name() + " server", CWD: home, Cols: 80, Rows: 24,
+		ID: terminal, Agent: l.b.kind, Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
 		Executable:    resolvedBinary(executable),
 		AgentArgv:     argv,
 		AgentEnv:      env,
@@ -275,7 +262,7 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 		DaemonEnv:     l.d.spawnRoutingEnv(),
 	}
 	if err := l.d.ptyBackend.Spawn(ctx, withLifecycleID(spawn)); err != nil {
-		return fmt.Errorf("start the %s server: %w", l.b.name(), err)
+		return fmt.Errorf("start the %s server: %w", l.b.name, err)
 	}
 	l.logf("started %s for %s in terminal %s", strings.Join(argv, " "), home, terminal)
 	return nil
@@ -285,13 +272,13 @@ func (l *serverLink) hold(c *effectrpc.Client) {
 	l.mu.Lock()
 	l.control = c
 	l.mu.Unlock()
-	if !l.d.life.Go(l.b.agent()+"Status", func() { l.watch(c) }) {
+	if !l.d.life.Go(l.b.agent+"Status", func() { l.watch(c) }) {
 		c.Close()
 	}
 }
 
 func (l *serverLink) watch(c *effectrpc.Client) {
-	err := c.Stream(l.d.life.Context(), "status/watch", nil, func(item json.RawMessage) {
+	err := c.Stream(l.d.life.Context(), "status/watch", l.statusWatchParams(), func(item json.RawMessage) {
 		var tree serverTree
 		if json.Unmarshal(item, &tree) == nil {
 			l.events.run(l.d, func() { l.apply(c, tree) })
@@ -307,13 +294,26 @@ func (l *serverLink) watch(c *effectrpc.Client) {
 	if !current || l.d.life.Context().Err() != nil {
 		return
 	}
-	l.logf("lost the status of the %s server: %v", l.b.name(), err)
+	l.logf("lost the status of the %s server: %v", l.b.name, err)
 	if len(l.sessions()) == 0 {
 		return
 	}
 	if _, err := l.ensureServer(l.d.life.Context(), nil); err != nil {
-		l.logf("reconnecting to the %s server: %v", l.b.name(), err)
+		l.logf("reconnecting to the %s server: %v", l.b.name, err)
 	}
+}
+
+func (l *serverLink) statusWatchParams() any {
+	if !l.b.tracksCompletions {
+		return nil
+	}
+	after := map[string]int64{}
+	for _, sessionID := range l.sessions() {
+		if conversation := l.d.linkConversation(sessionID); conversation != "" {
+			after[conversation] = l.d.store.SessionRuntimeRecords(sessionID).ServerCompletion
+		}
+	}
+	return map[string]any{"after": after}
 }
 
 func (l *serverLink) apply(c *effectrpc.Client, tree serverTree) {
@@ -335,7 +335,7 @@ func (l *serverLink) apply(c *effectrpc.Client, tree serverTree) {
 			if lastRuns == nil {
 				lastRuns = l.lastRuns(c)
 			}
-			l.observe(sessionID, "idle", lastRuns[conversation])
+			l.observe(sessionID, "idle", l.unseen(sessionID, lastRuns[conversation]))
 		}
 		return
 	}
@@ -359,6 +359,7 @@ func (l *serverLink) apply(c *effectrpc.Client, tree serverTree) {
 		l.busy[tree.Conversation] = tree.Status
 	}
 	holder := l.holder(tree.Conversation)
+	ended = l.unseen(holder, ended)
 	if ended != nil && tree.Status == "idle" {
 		l.d.sessionMonitor(holder).RecordRunAnswer(ended.Said)
 	}
@@ -377,7 +378,7 @@ func (l *serverLink) launchStarted(sessionID protocol.SessionID) {
 		}
 		var ended *serverEnded
 		if c := l.client(); c != nil {
-			ended = l.lastRuns(c)[conversation]
+			ended = l.unseen(sessionID, l.lastRuns(c)[conversation])
 		}
 		l.observe(sessionID, "idle", ended)
 	})
@@ -410,6 +411,13 @@ func (l *serverLink) lastRuns(c *effectrpc.Client) map[string]*serverEnded {
 	return ended
 }
 
+func (l *serverLink) unseen(sessionID protocol.SessionID, ended *serverEnded) *serverEnded {
+	if ended == nil || ended.Completion == 0 || ended.Completion > l.d.sessionMonitor(sessionID).ObservedServerCompletion() {
+		return ended
+	}
+	return nil
+}
+
 func (l *serverLink) observe(sessionID protocol.SessionID, status string, ended *serverEnded) {
 	monitor := l.d.sessionMonitor(sessionID)
 	if monitor == nil {
@@ -436,11 +444,14 @@ func (l *serverLink) observe(sessionID protocol.SessionID, status string, ended 
 		case ended == nil:
 		case answered:
 			said := ended.Said
-			l.d.life.Go(l.b.agent()+"Classify", func() { monitor.ClassifyMessage(said) })
+			monitor.RecordServerCompletion(ended.Completion)
+			l.d.life.Go(l.b.agent+"Classify", func() { monitor.ClassifyMessage(said) })
 		case ended.Outcome == "interrupted":
-			monitor.RecordTurnAborted("the "+l.b.name()+" run was interrupted", time.Now(), time.Now())
+			monitor.RecordTurnAborted("the "+l.b.name+" run was interrupted", time.Now(), time.Now())
+			monitor.RecordServerCompletion(ended.Completion)
 		default:
 			monitor.RecordStopFailure(ended.Outcome, ended.Message)
+			monitor.RecordServerCompletion(ended.Completion)
 		}
 	}
 }
@@ -464,7 +475,7 @@ func (s serverSessionLink) Deliver(ctx context.Context, in harness.Input) harnes
 func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Custody {
 	conversation := l.d.linkConversation(in.Session)
 	if conversation == "" {
-		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", in.Session, l.b.name())}
+		return harness.Custody{Reason: fmt.Sprintf("session %s holds no %s conversation", in.Session, l.b.name)}
 	}
 	author := "attn"
 	if in.Voice == harness.VoiceUser {
@@ -477,7 +488,7 @@ func (l *serverLink) Deliver(ctx context.Context, in harness.Input) harness.Cust
 		cancel()
 	}
 	if err != nil {
-		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name(), conversation, err)}
+		return harness.Custody{Reason: fmt.Sprintf("deliver to %s conversation %s: %v", l.b.name, conversation, err)}
 	}
 	return harness.Custody{Taken: true, At: time.Now()}
 }
@@ -490,7 +501,19 @@ func userName() string {
 }
 
 func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
-	l.b.sessionClosed(sessionID, conversation)
+	if conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
+	defer cancel()
+	c, err := l.b.connect(ctx, l.b.socket(l.home()), "attn", buildinfo.Version)
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": conversation}, nil); err != nil {
+		l.logf("interrupting conversation %s of closed session %s: %v", conversation, sessionID, err)
+	}
 }
 
 func (l *serverLink) profileReleased(string) { l.releaseUnlessUsed() }
@@ -507,16 +530,16 @@ func (l *serverLink) releaseUnlessUsed() {
 	l.mu.Unlock()
 	if c != nil {
 		c.Close()
-		l.logf("let go of the %s server; no session uses it", l.b.name())
+		l.logf("let go of the %s server; no session uses it", l.b.name)
 	}
 }
 
 func (l *serverLink) terminalExited(t harness.TerminalID) {
-	if t != l.b.terminal() {
+	if t != l.b.terminal {
 		l.terminalDropped(t)
 		return
 	}
-	l.logf("the %s server exited", l.b.name())
+	l.logf("the %s server exited", l.b.name)
 	if err := l.d.removePTYSession(t); err != nil {
 		l.d.logf("pty backend remove on exit failed for %s: %v", t, err)
 	}
@@ -526,9 +549,9 @@ func (l *serverLink) recoverProcesses(ctx context.Context) {
 	if len(l.sessions()) == 0 {
 		return
 	}
-	l.d.life.Go(l.b.agent()+"Reconnect", func() {
+	l.d.life.Go(l.b.agent+"Reconnect", func() {
 		if _, err := l.ensureServer(ctx, nil); err != nil {
-			l.logf("reconnect to the %s server: %v", l.b.name(), err)
+			l.logf("reconnect to the %s server: %v", l.b.name, err)
 		}
 	})
 }

@@ -82,7 +82,7 @@ func TestANisseSessionStillShowsItsServersStatusAfterItsTUIRuntimeDies(t *testin
 	}
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateRecoverable })
 	testworld.AwaitSessionSince(app, mark, session, func(x protocol.Session) bool { return x.State == protocol.SessionStatePendingApproval })
-	if servers := s.NisseServers(); servers != 1 {
+	if servers := s.AppServers(fakeagent.Nisse); servers != 1 {
 		t.Errorf("Nisse servers launched = %d, want the one still waiting on the approval", servers)
 	}
 
@@ -134,7 +134,7 @@ func TestANisseSessionStillWaitsOnItsQuestionAfterItsTUIRuntimeDies(t *testing.T
 	}
 }
 
-func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.NisseServer, string) {
+func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.Peer, string, *fakeagent.AppServer, string) {
 	t.Helper()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Nisse), testworld.OnPTYBackend(testworld.SharedHostPTY))
 	s.Start()
@@ -145,7 +145,7 @@ func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.P
 	s.EnableSharedHost(app)
 	session := s.Spawn(app, fakeagent.Nisse, s.Path("shop"))
 	tui := s.Launched(session)
-	server := s.NisseServer()
+	server := s.AppServer(fakeagent.Nisse)
 	conversation := tui.ConversationID
 	app.TypeLine(session, "rename the orders table")
 	tui.Prompted()

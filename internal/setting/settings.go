@@ -20,6 +20,15 @@ var (
 		Since:   "2026-10-29",
 		Search:  "harness server",
 	})
+	SigmaEnabled = feature("sigma_enabled", "Offer Sigma as a harness: true or false.", Info{
+		Name:    "Sigma",
+		Summary: "Offer Sigma, Pi Durable behind an app-server, as a harness.",
+		Group:   Agents,
+		Applies: NewAgents,
+		Stage:   Experimental,
+		Since:   "2026-11-12",
+		Search:  "harness server pi durable",
+	})
 	NewSessionLauncherEnabled = feature("new_session_launcher_enabled", "Show the new session launcher: true or false.", Info{
 		Name:    "Launcher 2.0",
 		Summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.",

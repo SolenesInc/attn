@@ -63,6 +63,7 @@ type Launch struct {
 	PullRequests         map[string]PullRequest
 	SentFiles            map[string]FileReport
 	EditedFiles          map[string]FileReport
+	ServerCompletion     int64
 }
 
 func (m *Monitor) SetPolicy(policy Policy) {

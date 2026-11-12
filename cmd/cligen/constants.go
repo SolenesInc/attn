@@ -70,6 +70,7 @@ func writeConstants(out *strings.Builder) {
 		{"CODEX_SHARED_PROFILE_ENV", harness.CodexSharedProfileEnv},
 		{"CODEX_THREAD_PREFIX", harness.CodexThreadPrefix},
 		{"NISSE_CONVERSATION_PREFIX", harness.NisseConversationPrefix},
+		{"SIGMA_CONVERSATION_PREFIX", harness.SigmaConversationPrefix},
 		{"ID_ALPHABET", shortid.Alphabet},
 		{"CREW_KEY_REF_PREFIX", crew.KeyRefPrefix},
 		{"AGENT_MSG_STATUS_QUEUED", string(protocol.AgentMsgStatusQueued)},

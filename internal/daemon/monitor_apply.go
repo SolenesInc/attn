@@ -245,6 +245,7 @@ func runtimeStateOf(view sessionmonitor.View) store.SessionRuntimeState {
 		PullRequests:               encodePullRequests(view.PullRequests.Entries),
 		ConversationNativeID:       view.Conversation.V.NativeID,
 		ConversationTranscriptPath: view.Conversation.V.TranscriptPath,
+		ServerCompletion:           view.ServerCompletion.V,
 	}
 }
 

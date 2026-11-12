@@ -76,13 +76,16 @@ func (r *Registry) ResolveDue(now time.Time) {
 }
 
 func (m *Monitor) resolve(now time.Time) time.Time {
+	m.mu.Lock()
+	observed := m.completions.observed
+	m.mu.Unlock()
 	evidence, _ := m.Evidence()
 	m.mu.Lock()
 	agent, current := m.agent, m.state.State
 	m.mu.Unlock()
 	policy := sessionstate.PolicyFor(agent)
 	resolution := sessionstate.Resolve(evidence.TerminalEvidence, evidence.ConversationEvidence, policy, now)
-	owned := m.publishResolution(current, resolution, sessionstate.DwellFor(resolution.State, evidence.TerminalEvidence, evidence.ConversationEvidence, policy), now)
+	owned := m.publishResolution(current, resolution, observed, sessionstate.DwellFor(resolution.State, evidence.TerminalEvidence, evidence.ConversationEvidence, policy), now)
 	if !owned {
 		return time.Time{}
 	}

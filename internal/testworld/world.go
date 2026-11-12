@@ -385,13 +385,13 @@ func (w *World) CodexServer() *fakeagent.CodexServer {
 	return w.kit.CodexServer()
 }
 
-func (w *World) NisseServer() *fakeagent.NisseServer {
+func (w *World) AppServer(h fakeagent.Harness) *fakeagent.AppServer {
 	w.T.Helper()
-	return w.kit.NisseServer()
+	return w.kit.AppServer(h)
 }
 
-func (w *World) NisseServers() int {
-	return w.kit.NisseServers()
+func (w *World) AppServers(h fakeagent.Harness) int {
+	return w.kit.AppServers(h)
 }
 
 func (w *World) CodexServerOf(profile string) *fakeagent.CodexServer {

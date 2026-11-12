@@ -228,7 +228,7 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	setSetting(t, app, "queue_mode_enabled", "true")
 	setAnalyticsEnabled(app, "true")
 	registerSessions(t, w, w.Client(), "reviewer")
-	session, nisse, server := nisseSession(t, w, app, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse, func(m *protocol.SpawnSessionMessage) { m.InitialPrompt = protocol.Ptr("plan the refund flow") })
 	conversation := nisse.ConversationID
 	nisse.Prompted()
 	server.Prompted(conversation)

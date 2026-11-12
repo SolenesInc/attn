@@ -34,6 +34,7 @@ the app still shows an older word, the page tells you which label to look for.
 | [using-shared-codex](reference/using-shared-codex.md) | Codex terminals sharing one app-server |
 | [using-claude-mod](reference/using-claude-mod.md) | Delivering messages to Claude sessions through a Claude Code mod instead of typing |
 | [using-nisse](reference/using-nisse.md) | Experimental: Nisse sessions, whose runs live in the Nisse server |
+| [using-sigma](reference/using-sigma.md) | Experimental: Sigma sessions, whose runs live in the Sigma app-server |
 
 Keyboard shortcuts live in the app: Cmd+/ (Ctrl+Shift+/ on Linux) shows the
 current list and lets you remap any of them. Each page names the keys for its

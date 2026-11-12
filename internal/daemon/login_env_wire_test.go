@@ -190,9 +190,9 @@ func TestANisseSessionDoesNotHoldTheFirstScreenForTheCapture(t *testing.T) {
 	shell := installBlockedLoginShell(t, w)
 	w.start()
 	app := w.App()
-	session, nisse, server := nisseSession(t, w, app)
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse)
 	conversation := nisse.ConversationID
-	promptNisseUntilWorking(app, session, nisse, server, "migrate the orders table")
+	promptUntilWorking(app, session, nisse, server, "migrate the orders table")
 
 	shell.block()
 	w.restart()

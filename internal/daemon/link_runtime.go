@@ -40,7 +40,7 @@ type linkRuntime interface {
 }
 
 func (d *Daemon) links() []linkRuntime {
-	return []linkRuntime{d.codexShared(), d.nisse()}
+	return []linkRuntime{d.codexShared(), d.nisse(), d.sigma()}
 }
 
 func (d *Daemon) linkNamed(kind string) linkRuntime {
