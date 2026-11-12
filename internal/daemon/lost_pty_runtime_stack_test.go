@@ -61,7 +61,7 @@ func TestEveryTerminalComesBackWhenItsSharedHostDies(t *testing.T) {
 func lostRuntimeAgentAtRest(s *testworld.Stack, app *testworld.Peer, session string) *fakeagent.Run {
 	s.T.Helper()
 	run := s.Launched(session)
-	app.TypeLine(session, "add a discount field")
+	app.Type(session, "add a discount field\r", userKeystroke)
 	run.Prompted()
 	run.Reply("Done. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
@@ -147,7 +147,7 @@ func nisseAtWorkApartFromItsServer(t *testing.T) (*testworld.Stack, *testworld.P
 	tui := s.Launched(session)
 	server := s.AppServer(fakeagent.Nisse)
 	conversation := tui.ConversationID
-	app.TypeLine(session, "rename the orders table")
+	app.Type(session, "rename the orders table\r", userKeystroke)
 	tui.Prompted()
 	server.Prompted(conversation)
 	return s, app, session, server, conversation
