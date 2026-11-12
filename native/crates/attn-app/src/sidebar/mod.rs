@@ -610,6 +610,13 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
 
 /// Shows the agent where it is, as a click on its row in the Tauri app does.
 pub(crate) fn open_agent(state: &mut State, session: &str, _: &mut Tx) {
+    let shown = state.facts.desktops.iter().find_map(|d| {
+        let pane = d.panes.iter().find(|p| p.session_id == session)?;
+        Some((d.id.clone(), pane.pane_id.clone()))
+    });
+    if let Some((desktop, leaf)) = shown {
+        state.window.desk.pick(&desktop, &leaf);
+    }
     state.window.view = View::Desktop;
     state.window.follow_next_turn = false;
     let _ = state.daemon.send(&DesktopShowSessionMessage {

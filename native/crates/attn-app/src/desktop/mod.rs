@@ -164,6 +164,14 @@ impl Desk {
         self.rows.get(desktop).cloned().unwrap_or_default()
     }
 
+    /// The person picked `leaf` on `desktop`: a tile shown alone there gives way to it.
+    pub(crate) fn pick(&mut self, desktop: &str, leaf: &str) {
+        let row = self.row_mut(desktop);
+        if matches!(&row.view, View::Focused(focused) if focused != leaf) {
+            row.view = View::Normal;
+        }
+    }
+
     pub(crate) fn row_mut(&mut self, desktop: &str) -> &mut RowState {
         self.rows.entry(desktop.to_owned()).or_default()
     }
@@ -179,7 +187,7 @@ impl Desk {
             row.focus_order.retain(|id| leaves.contains(id));
             row.held.retain(|id| leaves.contains(id));
             if let View::Focused(leaf) = &row.view
-                && *leaf != desktop.active_pane_id
+                && !leaves.contains(leaf)
             {
                 row.view = View::Normal;
             }

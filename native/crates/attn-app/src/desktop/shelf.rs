@@ -799,42 +799,10 @@ pub(crate) fn clear_widths(state: &mut State, desktop: &str, leaves: &[String]) 
 /// Brings `leaf`'s column beside the active tile, or jumps to it where it is when it is on
 /// screen already or the two cannot show side by side.
 pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, _tx: &mut Tx) {
-    let facts = &state.facts;
-    let desk = &state.window.desk;
-    let Some(desktop) = facts.desktops.iter().find(|d| d.id == desktop_id) else {
-        return;
+    let Some((active, edge, sent_on)) = beside_active(state, desktop_id, leaf) else {
+        return actions::show_leaf(state, desktop_id, leaf);
     };
-    let active = desktop.active_pane_id.clone();
-    let jump = || actions::show_leaf(state, desktop_id, leaf);
-    let Some((tree, plan)) = desk.plan(facts, desktop) else {
-        return jump();
-    };
-    let Some(measures) = desk.measures(facts) else {
-        return jump();
-    };
-    let on_screen = plan.screen.iter().any(|c| c.holds(leaf));
-    let active_at = plan.screen.iter().position(|c| c.holds(&active));
-    let row = layout::read_row(&tree);
-    let (Some(active_at), Some(column), Some(active_column)) = (
-        active_at,
-        row.iter().find(|c| c.holds(leaf)),
-        row.iter().find(|c| c.holds(&active)),
-    ) else {
-        return jump();
-    };
-    if on_screen
-        || plan.screen.len() < 2
-        || !layout::columns_fit_together(active_column, column, &measures)
-    {
-        return jump();
-    }
-    let sent_on = desktop.tree_json.clone();
     let active_then = active.clone();
-    let edge = if active_at == plan.screen.len() - 1 {
-        Edge::Left
-    } else {
-        Edge::Right
-    };
     move_leaf(state, desktop_id, leaf, &active, edge, true, true);
     state.window.desk.row_mut(desktop_id).drop = Some(PendingDrop {
         drop: ShelfDrop {
@@ -846,6 +814,34 @@ pub(crate) fn bring(state: &mut State, desktop_id: &str, leaf: &str, _tx: &mut T
         tree: sent_on,
         active: active_then,
     });
+}
+
+/// The active tile, the side of it `leaf`'s column goes to, and the tree the move is made
+/// on, when that column can come beside the active tile: off screen, and fitting beside it.
+fn beside_active(state: &State, desktop_id: &str, leaf: &str) -> Option<(String, Edge, String)> {
+    let facts = &state.facts;
+    let desk = &state.window.desk;
+    let desktop = facts.desktops.iter().find(|d| d.id == desktop_id)?;
+    let active = desktop.active_pane_id.clone();
+    let (tree, plan) = desk.plan(facts, desktop)?;
+    let measures = desk.measures(facts)?;
+    let on_screen = plan.screen.iter().any(|c| c.holds(leaf));
+    let active_at = plan.screen.iter().position(|c| c.holds(&active))?;
+    let row = layout::read_row(&tree);
+    let column = row.iter().find(|c| c.holds(leaf))?;
+    let active_column = row.iter().find(|c| c.holds(&active))?;
+    if on_screen
+        || plan.screen.len() < 2
+        || !layout::columns_fit_together(active_column, column, &measures)
+    {
+        return None;
+    }
+    let edge = if active_at == plan.screen.len() - 1 {
+        Edge::Left
+    } else {
+        Edge::Right
+    };
+    Some((active, edge, desktop.tree_json.clone()))
 }
 
 /// Carries the active tile's column one place along the row.

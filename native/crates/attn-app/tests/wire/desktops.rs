@@ -408,7 +408,7 @@ fn escape_leaves_focus_before_the_terminal_hears_it() {
 }
 
 #[test]
-fn focus_ends_when_another_tile_becomes_active() {
+fn a_focused_tile_stays_alone_when_the_daemon_moves_on_and_gives_way_to_a_pick_of_another() {
     let tree = row([pane("a"), pane("b")]);
     let mut world = start(vec![desktop(1, "a", Some(tree.clone()))]);
     press(&mut world, Action::TerminalToggleMaximize);
@@ -417,8 +417,17 @@ fn focus_ends_when_another_tile_becomes_active() {
     arrange(
         &mut world,
         "work/desktop_1",
-        vec![desktop(1, "b", Some(tree))],
+        vec![desktop(1, "b", Some(tree.clone()))],
     );
+    assert!(shows(&world, "Agent a") && !shows(&world, "Agent b"));
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-a")));
+    assert!(
+        !shows(&world, "Agent b"),
+        "picking the focused tile keeps it alone"
+    );
+
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-b")));
     assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
 }
 

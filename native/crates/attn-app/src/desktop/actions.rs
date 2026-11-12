@@ -223,8 +223,9 @@ pub(crate) fn show_unseen(state: &mut State) -> bool {
     true
 }
 
-/// Shows `leaf` on `desktop` as the active tile.
-pub(crate) fn show_leaf(state: &State, desktop: &str, leaf: &str) {
+/// Shows `leaf` on `desktop` as the active tile, as the person picked it.
+pub(crate) fn show_leaf(state: &mut State, desktop: &str, leaf: &str) {
+    state.window.desk.pick(desktop, leaf);
     let _ = state.daemon.send(&DesktopShowLeafMessage {
         request_id: super::request_id(),
         desktop_id: desktop.to_owned(),
@@ -234,7 +235,7 @@ pub(crate) fn show_leaf(state: &State, desktop: &str, leaf: &str) {
 }
 
 /// A tile the window took: it becomes the active tile of the current desktop.
-pub(crate) fn activate(state: &State, desktop: &str, leaf: &str) {
+pub(crate) fn activate(state: &mut State, desktop: &str, leaf: &str) {
     let current = state.facts.current_desktop();
     let already = current.is_some_and(|d| d.id == desktop && d.active_pane_id == leaf);
     if !already {
@@ -279,8 +280,9 @@ fn focus_toward(state: &mut State, toward: Toward) {
         plan.rendered(&tree, &row_state.view, active)
             .leaf_toward(active, toward)
     };
+    let desktop = desktop.id.clone();
     match next {
-        Some(leaf) => show_leaf(state, &desktop.id, &leaf),
+        Some(leaf) => show_leaf(state, &desktop, &leaf),
         None => step_desktop(state, edge),
     }
 }
