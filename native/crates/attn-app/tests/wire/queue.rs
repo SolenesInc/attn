@@ -12,7 +12,7 @@ use attn_testkit::{Daemon, Target, WALL_START_MS, World};
 use super::sidebar::{chord, desktop, pane, session, state};
 
 /// An RFC 3339 instant `minutes` before every world starts.
-fn ago(minutes: i64) -> String {
+pub(super) fn ago(minutes: i64) -> String {
     let at = WALL_START_MS / 1000 - minutes * 60;
     let (days, secs) = (at.div_euclid(86_400), at.rem_euclid(86_400));
     let (y, m, d) = civil(days);
@@ -36,7 +36,7 @@ fn civil(days: i64) -> (i64, i64, i64) {
     (yoe + era * 400 + i64::from(m <= 2), m, d)
 }
 
-fn turn(id: &str, opened_minutes_ago: i64) -> Session {
+pub(super) fn turn(id: &str, opened_minutes_ago: i64) -> Session {
     Session {
         turn_owed: Some(true),
         turn_opened_at: Some(ago(opened_minutes_ago)),
@@ -44,7 +44,7 @@ fn turn(id: &str, opened_minutes_ago: i64) -> Session {
     }
 }
 
-fn queue(mut message: InitialStateMessage) -> InitialStateMessage {
+pub(super) fn queue(mut message: InitialStateMessage) -> InitialStateMessage {
     message.settings = Some(BTreeMap::from([(
         "queue_mode_enabled".to_owned(),
         "true".to_owned(),
@@ -52,7 +52,7 @@ fn queue(mut message: InitialStateMessage) -> InitialStateMessage {
     message
 }
 
-fn crew(id: &str, member: &str, chief: bool) -> Session {
+pub(super) fn crew(id: &str, member: &str, chief: bool) -> Session {
     Session {
         crew_member: Some(member.into()),
         chief_of_staff: chief.then_some(true),
@@ -60,7 +60,7 @@ fn crew(id: &str, member: &str, chief: bool) -> Session {
     }
 }
 
-fn snoozed(id: &str, minutes_ahead: i64) -> Session {
+pub(super) fn snoozed(id: &str, minutes_ahead: i64) -> Session {
     Session {
         turn_owed: Some(true),
         turn_opened_at: Some(ago(30)),
@@ -75,7 +75,7 @@ fn slotted(mut desktop: Desktop, slot: i64) -> Desktop {
 }
 
 /// Every agent on one desktop, in the order given.
-fn one_desktop(sessions: Vec<Session>) -> InitialStateMessage {
+pub(super) fn one_desktop(sessions: Vec<Session>) -> InitialStateMessage {
     let panes = sessions
         .iter()
         .enumerate()
@@ -380,7 +380,7 @@ fn a_hidden_agent_owing_a_turn_queues_by_default_and_a_crew_member_does_not() {
     );
 }
 
-fn sent_ids(world: &World, cmd: &str) -> Vec<String> {
+pub(super) fn sent_ids(world: &World, cmd: &str) -> Vec<String> {
     world
         .daemon
         .sent_of(cmd)
@@ -390,7 +390,7 @@ fn sent_ids(world: &World, cmd: &str) -> Vec<String> {
 }
 
 /// The daemon shows `session` on desktop d1, as it does once the app asked it to.
-fn daemon_shows(world: &mut World, sessions: &[&Session], session: &str) {
+pub(super) fn daemon_shows(world: &mut World, sessions: &[&Session], session: &str) {
     let panes: Vec<_> = sessions
         .iter()
         .enumerate()
@@ -414,7 +414,7 @@ fn daemon_shows(world: &mut World, sessions: &[&Session], session: &str) {
     world.settle();
 }
 
-fn changes(world: &mut World, session: Session) {
+pub(super) fn changes(world: &mut World, session: Session) {
     world.daemon.emit(SessionStateChangedMessage {
         session,
         ..SessionStateChangedMessage::new()

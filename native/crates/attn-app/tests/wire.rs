@@ -4,6 +4,7 @@ mod wire {
     mod covered;
     mod deep_link;
     mod desktops;
+    mod home;
     mod keys;
     mod palette;
     mod picker;

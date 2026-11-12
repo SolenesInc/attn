@@ -61,10 +61,15 @@ impl State {
         self.epoch_ms + (tx.clock() * 1000.0) as i64
     }
 
-    /// Reads the wall clock into the window and wakes it when the next age would change.
+    /// Reads the wall clock into the window and wakes it when the next turn age or activity
+    /// staleness would change.
     fn tick(&mut self, tx: &mut Tx) {
         self.window.now_ms = self.wall_ms(tx);
-        self.age_wake = sidebar::next_change(self, self.window.now_ms)
+        let now_ms = self.window.now_ms;
+        self.age_wake = sidebar::next_change(self, now_ms)
+            .into_iter()
+            .chain(home::next_change(&self.facts, now_ms))
+            .min()
             .map(|at| (at - self.epoch_ms) as f64 / 1000.0);
         if let Some(at) = self.age_wake {
             tx.wake_at(at);

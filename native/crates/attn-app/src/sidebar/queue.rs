@@ -117,7 +117,7 @@ fn compare_turn_order(a: &Session, b: &Session) -> Ordering {
         .then_with(|| a.id.cmp(&b.id))
 }
 
-fn compare_wake_order(a: &Session, b: &Session) -> Ordering {
+pub fn compare_wake_order(a: &Session, b: &Session) -> Ordering {
     a.turn_snoozed_until
         .as_deref()
         .unwrap_or("")
@@ -153,44 +153,65 @@ pub fn actions(facts: &Facts, session: &Session, now_ms: i64) -> QueueActions {
     }
 }
 
+/// The selected profile's agents by place: each desktop in order with the sessions on it, then,
+/// when the queue shows hidden sessions, the hidden ones on no desktop.
+pub struct Places<'a> {
+    pub places: Vec<(Option<&'a str>, String, Vec<&'a Session>)>,
+    desktop_of: HashMap<&'a str, &'a str>,
+}
+
+impl<'a> Places<'a> {
+    pub fn of(facts: &'a Facts) -> Places<'a> {
+        let settings = &facts.settings;
+        let desktops = ordered_desktops(&facts.desktops);
+        let desktop_of: HashMap<&str, &str> = desktops
+            .iter()
+            .flat_map(|d| {
+                d.panes
+                    .iter()
+                    .map(|p| (p.session_id.as_str(), d.id.as_str()))
+            })
+            .collect();
+        let mut places: Vec<(Option<&str>, String, Vec<&Session>)> = desktops
+            .iter()
+            .map(|d| {
+                let sessions = facts
+                    .sessions
+                    .iter()
+                    .filter(|s| desktop_of.get(s.id.as_str()) == Some(&d.id.as_str()))
+                    .collect();
+                (
+                    Some(d.id.as_str()),
+                    desktop_title(d, &facts.desktops),
+                    sessions,
+                )
+            })
+            .collect();
+        if setting::on(settings, QUEUE_MODE) && setting::on(settings, QUEUE_SHOW_HIDDEN) {
+            let hidden = facts
+                .sessions
+                .iter()
+                .filter(|s| s.hidden == Some(true) && !desktop_of.contains_key(s.id.as_str()))
+                .collect();
+            places.push((None, String::new(), hidden));
+        }
+        Places { places, desktop_of }
+    }
+
+    /// Every agent but the shells, in place order: the sessions the home screen lists.
+    pub fn agents(&self) -> impl Iterator<Item = &'a Session> + '_ {
+        self.places
+            .iter()
+            .flat_map(|(_, _, sessions)| sessions.iter().copied())
+            .filter(|s| s.command_terminal != Some(true))
+    }
+}
+
 /// The queue the selected profile's sessions make at `now_ms`, in the Tauri app's
 /// `buildQueueBands` order.
 pub fn bands(facts: &Facts, now_ms: i64) -> Bands<'_> {
-    let settings = &facts.settings;
-    let crew_in_queue = setting::on(settings, QUEUE_CREW);
-    let desktops = ordered_desktops(&facts.desktops);
-    let desktop_of: HashMap<&str, &str> = desktops
-        .iter()
-        .flat_map(|d| {
-            d.panes
-                .iter()
-                .map(|p| (p.session_id.as_str(), d.id.as_str()))
-        })
-        .collect();
-    let mut places: Vec<(Option<&str>, String, Vec<&Session>)> = desktops
-        .iter()
-        .map(|d| {
-            let sessions = facts
-                .sessions
-                .iter()
-                .filter(|s| desktop_of.get(s.id.as_str()) == Some(&d.id.as_str()))
-                .collect();
-            (
-                Some(d.id.as_str()),
-                desktop_title(d, &facts.desktops),
-                sessions,
-            )
-        })
-        .collect();
-    if setting::on(settings, QUEUE_SHOW_HIDDEN) {
-        let hidden = facts
-            .sessions
-            .iter()
-            .filter(|s| s.hidden == Some(true) && !desktop_of.contains_key(s.id.as_str()))
-            .collect();
-        places.push((None, String::new(), hidden));
-    }
-
+    let crew_in_queue = setting::on(&facts.settings, QUEUE_CREW);
+    let Places { places, desktop_of } = Places::of(facts);
     let mut bands = Bands::default();
     for (desktop, title, sessions) in &places {
         for &session in sessions {
@@ -313,6 +334,16 @@ const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /// When a snooze ends, as the queue row shows it: "14:30" today, "tmrw 9:00", or
 /// "Sat 9:00", in the user's time zone.
 pub fn wake_time_short(until: Option<&str>, now_ms: i64) -> String {
+    wake_time(until, now_ms, "tmrw")
+}
+
+/// When a snooze ends, as the home screen shows it: "14:30" today, "tomorrow 9:00", or
+/// "Sat 9:00", in the user's time zone.
+pub fn wake_time_long(until: Option<&str>, now_ms: i64) -> String {
+    wake_time(until, now_ms, "tomorrow")
+}
+
+fn wake_time(until: Option<&str>, now_ms: i64, tomorrow: &str) -> String {
     let Some(at) = until.and_then(epoch_ms) else {
         return String::new();
     };
@@ -327,7 +358,7 @@ pub fn wake_time_short(until: Option<&str>, now_ms: i64) -> String {
         return time;
     }
     if date == day(now_ms + 86_400_000) {
-        return format!("tmrw {time}");
+        return format!("{tomorrow} {time}");
     }
     let days = (at.div_euclid(1000) + i64::from(local.offset)).div_euclid(86_400);
     let weekday = WEEKDAYS[(days + 4).rem_euclid(7) as usize];

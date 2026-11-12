@@ -41,6 +41,8 @@ pub struct Window {
     pub(crate) queue_turns: Vec<String>,
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
+    /// The home screen lists its snoozed agents, not only their count.
+    pub home_snoozed_open: bool,
     pub(crate) snooze: Option<crate::sidebar::snooze::Menu>,
     pub(crate) launching: crate::picker::Launching,
     /// Links opened before the current desktop arrived, in the order they came.
