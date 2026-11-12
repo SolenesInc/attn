@@ -19,7 +19,8 @@ pub(crate) fn toggle(state: &mut State) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
-    let (desktop, leaf) = (desktop.id.clone(), desktop.active_pane_id.clone());
+    let leaf = state.window.desk.acting_leaf(desktop);
+    let desktop = desktop.id.clone();
     toggle_leaf(state, &desktop, &leaf);
 }
 

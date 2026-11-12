@@ -477,6 +477,50 @@ fn a_focused_tile_stays_alone_when_the_daemon_moves_on_and_gives_way_to_a_pick_o
 }
 
 #[test]
+fn close_in_focus_closes_the_tile_shown_alone_when_the_daemon_moved_on() {
+    let tree = row([pane("a"), pane("b")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree.clone()))]);
+    press(&mut world, Action::TerminalToggleMaximize);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "b", Some(tree))],
+    );
+    assert!(shows(&world, "Agent a") && !shows(&world, "Agent b"));
+
+    press(&mut world, Action::TerminalClose);
+    let closed: Vec<_> = sent(&world, "desktop_close_tile")
+        .into_iter()
+        .map(|r| r["tile_id"].clone())
+        .collect();
+    assert_eq!(closed, ["a"], "the hidden tile b is left running");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_split_from_a_tile_shown_alone_shows_the_new_shell_holding_the_keyboard() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+    press(&mut world, Action::TerminalToggleMaximize);
+    press(&mut world, Action::TerminalSplitVertical);
+    let spawned = sent(&world, "spawn_session")[0]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut placed = desktop(1, "b", Some(row([pane("a"), pane("b")])));
+    placed.panes[1].session_id = spawned;
+    arrange(&mut world, "work/desktop_1", vec![placed]);
+
+    assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
+    let keyboard = world
+        .automate("state", serde_json::json!({"of": "window"}))
+        .unwrap()["keyboard"]["pane"]
+        .clone();
+    assert_eq!(keyboard, "b");
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_tile_goes_by_its_sessions_name_as_renamed_and_a_document_by_its_file() {
     let tree = row([pane("a"), document("plan", "a")]);
     let mut world = start(vec![desktop(1, "a", Some(tree))]);

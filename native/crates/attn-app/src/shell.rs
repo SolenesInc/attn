@@ -200,6 +200,7 @@ impl Window {
         {
             self.desk.split = None;
             if on == desktop.id {
+                self.desk.pick(&on, &pane);
                 self.keyboard = Some(Holder { desktop: on, pane });
                 return;
             }

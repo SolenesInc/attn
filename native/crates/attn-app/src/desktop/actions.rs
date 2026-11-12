@@ -164,14 +164,15 @@ fn send_to_slot(state: &mut State, slot: u32, follow: bool) {
     let Some(source) = state.facts.current_desktop() else {
         return;
     };
-    if source.shortcut_slot == Some(slot as i64) || source.active_pane_id.is_empty() {
+    let leaf = state.window.desk.acting_leaf(source);
+    if source.shortcut_slot == Some(slot as i64) || leaf.is_empty() {
         return;
     }
     let _ = state.daemon.send(&DesktopMoveLeafMessage {
         request_id: super::request_id(),
         source_desktop_id: source.id.clone(),
         target_shortcut_slot: Some(slot as i64),
-        leaf_id: source.active_pane_id.clone(),
+        leaf_id: leaf,
         ..DesktopMoveLeafMessage::new()
     });
     if follow {
@@ -190,14 +191,15 @@ fn move_with_delegates(state: &State, desktop: &str) {
     let Some(source) = state.facts.current_desktop() else {
         return;
     };
-    if source.active_pane_id.is_empty() || source.id == desktop {
+    let leaf = state.window.desk.acting_leaf(source);
+    if leaf.is_empty() || source.id == desktop {
         return;
     }
     let _ = state.daemon.send(&DesktopMoveLeafMessage {
         request_id: super::request_id(),
         source_desktop_id: source.id.clone(),
         target_desktop_id: Some(desktop.to_owned()),
-        leaf_id: source.active_pane_id.clone(),
+        leaf_id: leaf,
         with_delegates: Some(true),
         ..DesktopMoveLeafMessage::new()
     });
@@ -313,7 +315,8 @@ fn split(state: &mut State, direction: Direction, tx: &mut Tx) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
     };
-    let (desktop, leaf) = (desktop.id.clone(), desktop.active_pane_id.clone());
+    let leaf = state.window.desk.acting_leaf(desktop);
+    let desktop = desktop.id.clone();
     split_at(state, &desktop, &leaf, direction, tx);
 }
 
@@ -426,8 +429,8 @@ pub(crate) fn escape(state: &mut State) -> bool {
     true
 }
 
-/// Closes the active tile: a document or browser tile leaves the desktop, a terminal tile
-/// ends its terminal, and on an empty desktop the desktop closes.
+/// Closes the active tile, or the one shown alone: a document or browser tile leaves the
+/// desktop, a terminal tile ends its terminal, and on an empty desktop the desktop closes.
 fn close(state: &mut State) {
     let Some(desktop) = state.facts.current_desktop() else {
         return;
@@ -442,7 +445,7 @@ fn close(state: &mut State) {
         });
         return;
     };
-    let Some(Node::Leaf(leaf)) = tree.find_leaf(&desktop.active_pane_id) else {
+    let Some(Node::Leaf(leaf)) = tree.find_leaf(&state.window.desk.acting_leaf(desktop)) else {
         return;
     };
     match leaf.kind {

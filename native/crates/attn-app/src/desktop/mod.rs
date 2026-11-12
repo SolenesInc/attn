@@ -168,6 +168,15 @@ impl Desk {
         self.rows.get(desktop).cloned().unwrap_or_default()
     }
 
+    /// The tile the person acts on with the active tile's keys: the one `desktop` shows alone,
+    /// or else its active tile.
+    pub(crate) fn acting_leaf(&self, desktop: &Desktop) -> String {
+        match self.row(&desktop.id).view {
+            View::Focused(leaf) => leaf,
+            _ => desktop.active_pane_id.clone(),
+        }
+    }
+
     /// The person picked `leaf` on `desktop`: a tile shown alone there gives way to it.
     pub(crate) fn pick(&mut self, desktop: &str, leaf: &str) {
         let row = self.row_mut(desktop);
