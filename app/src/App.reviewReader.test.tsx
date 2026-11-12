@@ -492,14 +492,14 @@ const MAP_BUNDLE: ReviewBundle = {
   ...BUNDLE,
   frame: 'map',
   flows: [
-    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
+    { line: 30, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(34, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
     {
-      line: 39, side: 'after', drawn: true,
+      line: 38, side: 'after', drawn: true,
       participants: [participant('poll', 'Poll'), participant('calc', 'Calc'), participant('util', 'Util')],
-      messages: [message(44, 'poll', 'calc', 'Add(a, b)', 15), message(46, 'calc', 'util', 'helper()', 22), message(48, 'util', 'calc', 'returns')],
+      messages: [message(43, 'poll', 'calc', 'Add(a, b)', 15), message(45, 'calc', 'util', 'helper()', 22), message(47, 'util', 'calc', 'returns')],
       groups: [],
     },
-    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')], groups: [] },
+    { line: 50, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(53, 'poll', 'calc', 'Add(a, b)')], groups: [] },
   ],
 };
 
@@ -582,8 +582,8 @@ describe('App review reader frames', () => {
     const { tileElement, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
 
     expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough', '3Map *']);
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
     expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 2 · after the change');
     expect(cursorStop(tileElement)).toBe('calc.go');
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '3');
@@ -593,23 +593,23 @@ describe('App review reader frames', () => {
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '4');
 
     await press('ArrowRight');
-    expect(currentMessage(tileElement)).toBe('46');
+    expect(currentMessage(tileElement)).toBe('45');
     expect(arrowLine(tileElement)).toHaveTextContent('helper()Calc → Util');
     expect(cursorStop(tileElement)).toBe('util.go');
     await press('ArrowRight');
-    expect(currentMessage(tileElement)).toBe('46');
+    expect(currentMessage(tileElement)).toBe('45');
 
     await press('Enter');
     expect(fileView(tileElement)).toHaveTextContent('util.go');
     await press('Escape');
 
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['31']);
-    expect(currentMessage(tileElement)).toBe('35');
+    expect(diagrams(tileElement)).toEqual(['30']);
+    expect(currentMessage(tileElement)).toBe('34');
     expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1 · before the change');
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
   });
 
   it('keeps the Map on its message when the agent adds or removes a message before it', async () => {
@@ -623,7 +623,7 @@ describe('App review reader frames', () => {
       event: 'desktop_tile_content', desktop_id: daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC,
       content: MAP_DOCUMENT, review: { ...MAP_BUNDLE, flows: [before, { ...after, messages }, undrawn] },
     }));
-    show([message(42, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
+    show([message(41, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
     await daemon.idle();
     expect(arrowLine(tileElement)).toHaveTextContent('Arrow 3 of 3');
     expect(arrowLine(tileElement)).toHaveTextContent('helper()');
@@ -639,16 +639,16 @@ describe('App review reader frames', () => {
     const [before, after, undrawn] = MAP_BUNDLE.flows;
     const review: ReviewBundle = { ...MAP_BUNDLE, flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, after, undrawn] };
     const { tileElement, press } = await openReview({ review, content: MAP_DOCUMENT });
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(currentMessage(tileElement)).toBe('43');
 
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['31']);
+    expect(diagrams(tileElement)).toEqual(['30']);
     expect(arrowLine(tileElement)).toHaveTextContent('No arrow in this diagram is tied to a stop.');
     await press('ArrowRight');
-    expect(diagrams(tileElement)).toEqual(['31']);
+    expect(diagrams(tileElement)).toEqual(['30']);
     await press('b');
-    expect(diagrams(tileElement)).toEqual(['39']);
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(diagrams(tileElement)).toEqual(['38']);
+    expect(currentMessage(tileElement)).toBe('43');
   });
 
   it('switches frames with 1, 2 and 3 and keeps the stop and line the cursor is on', async () => {
@@ -667,7 +667,7 @@ describe('App review reader frames', () => {
     await press('ArrowDown');
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
     await press('3');
-    expect(currentMessage(tileElement)).toBe('44');
+    expect(currentMessage(tileElement)).toBe('43');
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '5');
 
     await press('ArrowRight');
@@ -675,6 +675,70 @@ describe('App review reader frames', () => {
     expect(tileElement.querySelector('.review-map')).toBeNull();
     expect(cursor(tileElement)?.closest('.review-stop')).toHaveAttribute('data-path', 'util.go');
     expect(cursor(tileElement)).toHaveAttribute('data-line', '1');
+  });
+
+  it('walks the Brief’s drawn diagram by its arrows, opens an arrow’s stop, and shares the side with the Map', async () => {
+    const { tileElement, press } = await openReview({ review: { ...MAP_BUNDLE, frame: 'brief' }, content: MAP_DOCUMENT });
+    const briefDiagrams = () => Array.from(tileElement.querySelectorAll('.review-doc [data-review-flow]')).map((figure) => figure.getAttribute('data-review-flow'));
+    const cursorArrow = () => cursor(tileElement)?.getAttribute('data-review-message') ?? null;
+    expect(briefDiagrams()).toEqual(['38']);
+    await act(() => vi.dynamicImportSettled());
+    expect(tileElement.querySelectorAll('.review-doc .markdown-mermaid-frame')).toHaveLength(1);
+
+    for (let presses = 0; cursorArrow() === null && presses < 30; presses += 1) await press('ArrowDown');
+    expect(cursorArrow()).toBe('43');
+    await press('ArrowUp');
+    expect(cursor(tileElement)?.closest('.review-not-shown')).not.toBeNull();
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBe('45');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBeNull();
+    await press('ArrowUp');
+    await press('ArrowUp');
+    expect(cursorArrow()).toBe('43');
+
+    await press('Enter');
+    expect(fileView(tileElement)).toHaveTextContent('calc.go');
+    expect(fileCursorText(tileElement)).toBe('33func Add(a, b int) int {');
+    await press('Escape');
+    expect(fileView(tileElement)).toBeNull();
+
+    await press('b');
+    expect(briefDiagrams()).toEqual(['30']);
+    expect(cursorArrow()).toBe('34');
+    await press('3');
+    expect(diagrams(tileElement)).toEqual(['30']);
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1 · before the change');
+    expect(mapDetail(tileElement)?.querySelector('.review-brief-diagram')).toHaveAttribute('data-review-outside');
+    await press('b');
+    await press('1');
+    expect(briefDiagrams()).toEqual(['38']);
+
+    await press('2');
+    expect(script(tileElement)?.querySelector('[data-review-flow="38"]')).not.toBeNull();
+    expect(script(tileElement)?.querySelector('[data-review-cursor="message"]')).toBeNull();
+    await press('b');
+    expect(script(tileElement)?.querySelector('[data-review-flow="30"]')).not.toBeNull();
+    expect(script(tileElement)?.querySelector('[data-review-flow="38"]')).toBeNull();
+  });
+
+  it('walks two arrows that say the same of the same stop one by one, and keeps the cursor by the diagram when b shows a side with no arrow to stand on', async () => {
+    const [before, after, undrawn] = MAP_BUNDLE.flows;
+    const review: ReviewBundle = {
+      ...MAP_BUNDLE, frame: 'brief',
+      flows: [{ ...before, messages: before.messages.map(({ stop_line: _stop, ...rest }) => rest) }, { ...after, messages: [after.messages[0], { ...after.messages[0], line: 45 }, after.messages[2]] }, undrawn],
+    };
+    const { tileElement, press } = await openReview({ review, content: MAP_DOCUMENT });
+    const cursorArrow = () => cursor(tileElement)?.getAttribute('data-review-message') ?? null;
+    for (let presses = 0; cursorArrow() === null && presses < 30; presses += 1) await press('ArrowDown');
+    expect(cursorArrow()).toBe('43');
+    await press('ArrowDown');
+    expect(cursorArrow()).toBe('45');
+
+    await press('b');
+    expect(tileElement.querySelector('.review-doc [data-review-flow="30"]')).not.toBeNull();
+    expect(cursor(tileElement)?.closest('.review-not-shown')).not.toBeNull();
   });
 
   it('leaves out a frame the document cannot fill, and shows a diagram outside the drawn subset as a mermaid figure', async () => {

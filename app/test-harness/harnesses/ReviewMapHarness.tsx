@@ -164,7 +164,8 @@ export function ReviewMapHarness({ onReady }: HarnessProps) {
   const params = new URLSearchParams(window.location.search);
   const width = Number(params.get('width')) || 716;
   const height = Number(params.get('height')) || 900;
-  const review = useMemo(() => BUNDLE, []);
+  const frame = params.get('frame') === 'brief' ? 'brief' : 'map';
+  const review = useMemo(() => ({ ...BUNDLE, frame }), [frame]);
   useEffect(() => {
     setMarkdownAnnotationsTransport({
       getMarkdownAnnotations: async () => ({ annotations: [], generation: 0 }),

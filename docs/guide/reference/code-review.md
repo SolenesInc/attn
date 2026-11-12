@@ -52,7 +52,7 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 |---|---|
 | ↑ ↓ | Move by line in code and by block in prose |
 | ← → | The previous or next stop, with the text that leads into it at the top |
-| Enter | Open the whole file at the cursor, with the stop's lines marked |
+| Enter | Open the whole file at the cursor, with the stop's lines marked. On an arrow of a diagram, open its stop's file |
 | `e` | Show 10 more lines around the stop. The stop's label names the lines it shows |
 | `z` | Fill the tile with the file |
 | `/` | Search the repository: files by name, lines by text. The empty box lists the changed files |
@@ -71,17 +71,22 @@ opens the file in an editor tile.
 One review has three frames. The agent picks the one that suits the change, and
 `1`, `2` and `3` switch:
 
-- **Brief** (`1`) reads the document top to bottom.
+- **Brief** (`1`) reads the document top to bottom. A sequence diagram the
+  reader can draw is drawn in place, and ↑ and ↓ stop on each of its arrows
+  that has a stop: Enter opens that stop's file. When the review has a diagram
+  before and after the change, the Brief shows one and `b` switches.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
   stops, with the agent's explanation beside it. Lines outside the stop are
   dimmed. `z` hides the explanation, and ⇧← and ⇧→ scroll the file sideways.
+  The explanation's diagrams switch with `b`, as in the Brief.
 - **Map** (`3`) draws the change as a sequence diagram: the parts of the
   system, the calls between them with the agent's caption under each, and boxes
   around a transaction, a loop or a branch. ← and → step through its arrows.
   Beside the diagram is the step that explains the current arrow, with its
   stops, and under the diagram the files the review leaves out. In a narrow
   tile the diagram sits above the step. When the review has a diagram before
-  and after the change, `b` switches between them.
+  and after the change, `b` switches between them, and the Brief shows the
+  same side.
 
 A frame the review cannot fill, such as Map for a review with no diagram, is
 left out.

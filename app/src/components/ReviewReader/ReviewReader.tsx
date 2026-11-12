@@ -8,7 +8,7 @@ import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
-import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
+import { FRAME_KEYS, hasSides, mapFlows, arrowTargets, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MAP_COLUMNS, MapFrame, mapFitsBeside } from './MapFrame';
 import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, OFFER_MS, offerText, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
@@ -676,6 +676,11 @@ export function ReviewReader({
     return bundle.stops.find((stop) => stop.heading_line === line);
   }, [bundle]);
 
+  const arrowStopOf = useCallback((element: Element | null) => {
+    const line = Number(element?.getAttribute('data-review-stop-line'));
+    return line > 0 ? bundle.stops.find((stop) => stop.heading_line === line) : undefined;
+  }, [bundle]);
+
   const targetAtCursor = useCallback((): FileTarget | 'search' | null => {
     const element = currentTarget();
     if (!element) return null;
@@ -684,12 +689,14 @@ export function ReviewReader({
       openSearch(searchPrefix);
       return 'search';
     }
+    const arrowStop = arrowStopOf(element);
+    if (arrowStop) return stopTarget(arrowStop);
     const path = element.getAttribute('data-path');
     if (!path) return null;
     const line = Number(element.getAttribute('data-line')) || undefined;
     const stop = stopOf(element);
     return stop ? stopTarget(stop, line) : { path, line };
-  }, [currentTarget, openSearch, stopOf]);
+  }, [arrowStopOf, currentTarget, openSearch, stopOf]);
 
   const openAtCursor = useCallback((fill: boolean) => {
     if (currentTarget()?.getAttribute('data-review-cursor') === 'facts') {
@@ -735,17 +742,36 @@ export function ReviewReader({
 
   const switchSide = useCallback((next: Side) => {
     if (!sides || next === side) return;
-    const list = mapStops(mapFlows(bundle, next));
-    const current = messageStops[mapIndex];
-    const same = current ? list.findIndex((at) => at.stopLine === current.stopLine) : -1;
     setSide(next);
-    selectMessage(Math.max(0, same), list);
-  }, [bundle, mapIndex, messageStops, selectMessage, side, sides]);
+    if (frame === 'map') {
+      const list = mapStops(mapFlows(bundle, next));
+      const current = messageStops[mapIndex];
+      const same = current ? list.findIndex((at) => at.stopLine === current.stopLine) : -1;
+      selectMessage(Math.max(0, same), list);
+      return;
+    }
+    const root = scope();
+    const current = currentTarget();
+    const arrowStop = arrowStopOf(current);
+    if (!root || !current || !arrowStop) return;
+    const candidates = bundle.flows.filter((flow) => flow.drawn && flow.side === next).flatMap((flow) => [...arrowTargets(bundle, flow).values()]);
+    const arrow = candidates.find((candidate) => candidate.stop === arrowStop) ?? candidates[0];
+    const targets = documentTargets(root);
+    const diagram = current.closest('.review-brief-diagram');
+    const beforeDiagram = targets[targets.findIndex((target) => diagram?.contains(target)) - 1];
+    const key = arrow?.key ?? (beforeDiagram ? cursorKeyOf(beforeDiagram) : null);
+    if (key === null) return;
+    scrolledKeyRef.current = null;
+    scrollModeRef.current = 'nearest';
+    setCursorKey(key);
+  }, [arrowStopOf, bundle, currentTarget, frame, mapIndex, messageStops, scope, selectMessage, side, sides]);
 
   /** The stop and line the cursor stands on in the current frame. */
   const place = useCallback((): { stop?: ReviewStop; line?: number } => {
     if (frame === 'walkthrough') return { stop: stageStop, line: stageCursorLine };
     const element = currentTarget();
+    const arrowStop = arrowStopOf(element);
+    if (arrowStop) return { stop: arrowStop };
     const stop = stopOf(element);
     if (stop) return { stop, line: Number(element?.getAttribute('data-line')) || undefined };
     if (frame === 'map') {
@@ -755,7 +781,7 @@ export function ReviewReader({
     const following = Array.from(docRef.current?.querySelectorAll<HTMLElement>('[data-review-stop-head]') ?? [])
       .find((head) => element !== null && (element.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
     return { stop: stopOf(following ?? null) };
-  }, [bundle, currentTarget, frame, mapIndex, messageStops, stageCursorLine, stageStop, stopOf]);
+  }, [arrowStopOf, bundle, currentTarget, frame, mapIndex, messageStops, stageCursorLine, stageStop, stopOf]);
 
   const switchFrame = useCallback((next: Frame) => {
     if (next === frame || !offered.includes(next)) return;
@@ -1321,6 +1347,7 @@ export function ReviewReader({
             else if (fileRows) moveFileCursor((file) => [...changeStarts(fileRows)].reverse().find((start) => start < file.cursor) ?? file.cursor);
             return true;
           case 'z': setFilled((value) => !value); return true;
+          case 'b': if (!stage || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
         }
       } else {
         switch (event.key) {
@@ -1328,7 +1355,7 @@ export function ReviewReader({
           case 'ArrowUp': moveLine(-1, event.shiftKey); return true;
           case 'ArrowRight': if (frame === 'map') selectMessage(Math.min(messageStops.length - 1, mapIndex + 1)); else moveStop(1); return true;
           case 'ArrowLeft': if (frame === 'map') selectMessage(Math.max(0, mapIndex - 1)); else moveStop(-1); return true;
-          case 'b': if (frame !== 'map' || !sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
+          case 'b': if (!sides) return false; switchSide(side === 'after' ? 'before' : 'after'); return true;
           case 'Enter': openAtCursor(false); return true;
           case 'z': openAtCursor(true); return true;
           case 'e': expandAtCursor(); return true;
@@ -1361,8 +1388,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked, filesShown, toggleFiles }),
-    [asked, asking, bundle, expansions, filesShown, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor, toggleFiles],
+    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked, filesShown, toggleFiles, side, sides, switchSide }),
+    [asked, asking, bundle, expansions, filesShown, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor, toggleFiles, side, sides, switchSide],
   );
 
   return (

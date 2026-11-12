@@ -41,7 +41,7 @@ import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
 import { ReviewReader, type ReviewReaderHandle } from '../ReviewReader/ReviewReader';
 import type { ReviewSetup } from '../ReviewReader/ReviewKeys';
 import type { ReviewMarks } from '../ReviewReader/ReviewMarks';
-import { NotShownSlot, StopSlot, SummarySlot } from '../ReviewReader/ReviewLists';
+import { DiagramSlot, NotShownSlot, StopSlot, SummarySlot } from '../ReviewReader/ReviewLists';
 import rehypeReviewChrome, { reviewChromeKey, reviewChromeOf, type ReviewChrome } from '../ReviewReader/reviewChrome';
 import './MarkdownReader.css';
 
@@ -407,6 +407,8 @@ function readerComponents(
       if (stopLine !== undefined) return <StopSlot line={Number(stopLine)} />;
       if (attributes['data-review-not-shown'] !== undefined) return <NotShownSlot />;
       if (attributes['data-review-summary'] !== undefined) return <SummarySlot />;
+      const diagramLine = attributes['data-review-diagram'];
+      if (diagramLine !== undefined) return <DiagramSlot line={Number(diagramLine)} />;
       return <div {...(props as HTMLAttributes<HTMLDivElement>)}>{children}</div>;
     },
     span({ node: _node, children, ...props }) {

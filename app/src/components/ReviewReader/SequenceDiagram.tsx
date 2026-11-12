@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import type { ReviewFlow, ReviewFlowGroup, ReviewFlowMessage, ReviewFlowParticipant } from '../../types/generated';
+import type { ArrowTarget } from './frames';
 
 const CHAR_WIDTH = 6.6;
 const CAPTION_CHAR_WIDTH = 5.9;
@@ -224,7 +225,7 @@ function ArrowHead({ arrow, x, y, direction }: { arrow: string; x: number; y: nu
   return null;
 }
 
-function Message({ row, current, geometry }: { row: Row; current: boolean; geometry: Layout }) {
+function Message({ row, current, target, geometry }: { row: Row; current: boolean; target: ArrowTarget | undefined; geometry: Layout }) {
   const { message, arrowY: y, label, caption } = row;
   const x1 = geometry.x.get(message.from) ?? 0;
   const x2 = geometry.x.get(message.to) ?? 0;
@@ -235,7 +236,12 @@ function Message({ row, current, geometry }: { row: Row; current: boolean; geome
   const line = `review-seq-line${dashed ? ' review-seq-line--dashed' : ''}`;
   const labelTop = (bottom: number) => bottom - (label.length - 1) * LINE_HEIGHT;
   return (
-    <g className={className} data-review-message={message.line} aria-current={current || undefined}>
+    <g
+      className={className}
+      data-review-message={message.line}
+      aria-current={current || undefined}
+      {...(target ? { 'data-review-cursor': 'message', 'data-cursor-key': target.key, 'data-path': target.stop.path, 'data-review-stop-line': target.stop.heading_line } : {})}
+    >
       <title>{message.note ? `${message.text}\n${message.note}` : message.text}</title>
       <rect className="review-seq-hit" x={2} y={row.top - ROW_PAD / 2} width={geometry.width - 4} height={row.bottom - row.top} rx={4} />
       {x1 === x2 ? (
@@ -263,15 +269,18 @@ export function smallestDiagramWidth(flow: ReviewFlow): number {
 }
 
 /** A sequence diagram drawn from the bundle's parsed flow, with its caption
- * under it. Messages tied to a stop are the places the Map's cursor stands. */
+ * under it. Messages tied to a stop are the places the Map's cursor stands,
+ * and in the Brief the arrows with a target take the document's cursor. */
 export const SequenceDiagram = memo(function SequenceDiagram({
   flow,
   current,
+  targets,
   onPick,
 }: {
   flow: ReviewFlow;
   current: number | null;
-  onPick: (message: ReviewFlowMessage) => void;
+  targets?: ReadonlyMap<number, ArrowTarget>;
+  onPick?: (message: ReviewFlowMessage) => void;
 }) {
   const geometry = useMemo(() => layout(flow), [flow]);
   return (
@@ -285,7 +294,7 @@ export const SequenceDiagram = memo(function SequenceDiagram({
         onClick={(event) => {
           const line = Number((event.target as Element).closest('[data-review-message]')?.getAttribute('data-review-message'));
           const message = flow.messages.find((candidate) => candidate.line === line);
-          if (message?.stop_line !== undefined) onPick(message);
+          if (message?.stop_line !== undefined) onPick?.(message);
         }}
       >
         {geometry.boxes.map((box) => (
@@ -319,7 +328,7 @@ export const SequenceDiagram = memo(function SequenceDiagram({
           );
         })}
         {geometry.rows.map((row) => (
-          <Message key={row.message.line} row={row} current={row.message.line === current} geometry={geometry} />
+          <Message key={row.message.line} row={row} current={row.message.line === current} target={targets?.get(row.message.line)} geometry={geometry} />
         ))}
       </svg>
       {flow.note ? <figcaption className="review-seq-caption-text">{flow.note}</figcaption> : null}

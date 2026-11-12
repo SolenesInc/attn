@@ -113,7 +113,7 @@ sequenceDiagram
 ```
 ````
 
-The Map draws participants, actors, messages, notes and these blocks. `attn review check` names any other line, such as `activate` or `autonumber`, and a diagram with one shows as a mermaid figure that the Map cannot walk.
+The reader draws participants, actors, messages, notes and these blocks, in the Map and in place of the fence in the Brief, where the user steps onto each arrow with a stop. `attn review check` names any other line, such as `activate` or `autonumber`, and a diagram with one shows as a mermaid figure that neither frame can walk.
 
 ## Answer a question
 

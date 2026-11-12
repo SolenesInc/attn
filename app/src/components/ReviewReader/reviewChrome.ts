@@ -2,11 +2,13 @@ import type { Element, ElementContent, Root, RootContent } from 'hast';
 import type { ReviewBundle } from '../../types/generated';
 
 /** The document lines a review renders as chrome instead of markdown: each
- * stop's heading and the note items under it, and the Not shown items. The
- * change's facts follow the title, or open the document when it has none. */
+ * stop's heading and the note items under it, the Not shown items, and the
+ * fence of each diagram the reader draws. The change's facts follow the
+ * title, or open the document when it has none. */
 export interface ReviewChrome {
   stops: Array<{ line: number; notes: number[] }>;
   notShown: number[];
+  diagrams: number[];
 }
 
 export function reviewChromeOf(bundle: ReviewBundle | undefined): ReviewChrome | null {
@@ -14,6 +16,7 @@ export function reviewChromeOf(bundle: ReviewBundle | undefined): ReviewChrome |
   return {
     stops: bundle.stops.map((stop) => ({ line: stop.heading_line, notes: stop.notes.map((note) => note.line) })),
     notShown: bundle.not_shown.map((entry) => entry.line),
+    diagrams: bundle.flows.filter((flow) => flow.drawn).map((flow) => flow.line),
   };
 }
 
@@ -44,6 +47,7 @@ export default function rehypeReviewChrome({ chrome }: { chrome: ReviewChrome })
   const stopLines = new Set(chrome.stops.map((stop) => stop.line));
   const noteLines = new Set(chrome.stops.flatMap((stop) => stop.notes));
   const notShownLines = new Set(chrome.notShown);
+  const diagramLines = new Set(chrome.diagrams);
   return (tree: Root): void => {
     const children: RootContent[] = [];
     for (const node of tree.children) {
@@ -58,6 +62,8 @@ export default function rehypeReviewChrome({ chrome }: { chrome: ReviewChrome })
         continue;
       } else if (node.tagName === 'ul' && listWithin(node, notShownLines)) {
         children.push(chromeElement('dataReviewNotShown', line ?? 0));
+      } else if (node.tagName === 'pre' && line !== undefined && diagramLines.has(line)) {
+        children.push(chromeElement('dataReviewDiagram', line));
       } else {
         children.push(node);
       }

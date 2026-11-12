@@ -1295,3 +1295,24 @@
   font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
   color: var(--color-text-primary);
 }
+
+.review-brief-diagram {
+  margin: 0 0 1rem;
+}
+
+.review-brief-diagram-scroll {
+  overflow-x: auto;
+}
+
+.review-seq-message.review-cursor .review-seq-hit {
+  fill: var(--review-cursor);
+}
+
+.review-seq-message.review-cursor .review-seq-line,
+.review-seq-message.review-cursor .review-seq-open {
+  stroke: var(--color-accent);
+}
+
+.review-seq-message.review-cursor .review-seq-head {
+  fill: var(--color-accent);
+}

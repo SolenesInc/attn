@@ -146,11 +146,14 @@ function NavigationStates({ navigation, setup }: { navigation: readonly ReviewNa
   );
 }
 
+function withSides(keys: Array<[string[], string]>, sides: boolean): Array<[string[], string]> {
+  return sides ? [...keys.slice(0, -1), [['b'], 'before, after'], ...keys.slice(-1)] : keys;
+}
+
 function keysFor(frame: Frame, fileOpen: boolean, sides: boolean): Array<[string[], string]> {
   if (fileOpen) return FILE_KEYS;
-  if (frame === 'walkthrough') return WALKTHROUGH_KEYS;
-  if (frame === 'map') return sides ? [...MAP_KEYS.slice(0, 4), [['b'], 'before, after'], ...MAP_KEYS.slice(4)] : MAP_KEYS;
-  return DOCUMENT_KEYS;
+  if (frame === 'walkthrough') return withSides(WALKTHROUGH_KEYS, sides);
+  return withSides(frame === 'map' ? MAP_KEYS : DOCUMENT_KEYS, sides);
 }
 
 export function ReviewKeyLine({
@@ -197,7 +200,7 @@ export function ReviewKeyLine({
 
 const allKeys = (): Array<[string[], string]> => [
   [['1', '2', '3'], 'Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.'],
-  [['↑', '↓'], 'Move by line in code, by block in prose. In the file view, by line; PageUp and PageDown move a page.'],
+  [['↑', '↓'], 'Move by line in code, by block in prose, by arrow with a stop in a drawn diagram. In the file view, by line; PageUp and PageDown move a page.'],
   [['⇧↑', '⇧↓'], 'Select several lines of code, so a note or question covers them.'],
   [['c'], 'Write a note on the line, the selected lines or the paragraph. It waits for the send.'],
   [['a'], 'Ask the agent about the line, the selected lines or the paragraph. The question goes at once; the answer shows under the line.'],
@@ -206,13 +209,13 @@ const allKeys = (): Array<[string[], string]> => [
   [[sendKey()], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next arrow with a stop. In the file view opened from Brief or Map, the previous or next change.'],
   [['⇧←', '⇧→'], 'Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.'],
-  [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
+  [['b'], 'Switch between the diagrams before and after the change, when the document has both. Every frame shows the same side.'],
   [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.'],
   [['r'], 'List the uses of a name on the line; ↑↓ pick one, ↵ opens it.'],
   [['h'], 'Show the type of a name on the line.'],
   [['s'], 'When a language of the review has no working server, start an agent on the review’s machine that sets one up. The review gains navigation once it works.'],
   [['x'], 'Stop offering setup in this repository, or offer it again. s still sets up.'],
-  [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked. On the change’s facts under the title, show or hide the changed files.'],
+  [['↵'], 'Open the file the cursor is on, at that line, with the stop’s lines marked. On an arrow of a diagram, open its stop’s file. On the change’s facts under the title, show or hide the changed files.'],
   [['e'], 'Show 10 more lines on each side of the stop. The stop’s label names the lines it shows.'],
   [['z'], 'Fill the tile with the file. In the file view, switch between filling the tile and the side panel. In the Walkthrough, hide or show the script.'],
   [['/'], 'Search the repository: files by name, lines by text. The empty box lists the changed files with their added and removed lines.'],

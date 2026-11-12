@@ -86,3 +86,31 @@ test('wide, → puts the lead-in of a step\'s last stop at the top too', async (
   const [view, first] = await Promise.all([boxOf(detail), boxOf(detail.getByText('The second read runs before the commit.'))]);
   expect(Math.abs(first.top - view.top)).toBeLessThanOrEqual(1);
 });
+
+test('at 716 px the Brief draws the diagram in place of its fence, every participant inside the tile, and ↓ walks its arrows', async ({ page }) => {
+  await page.goto('/test-harness/?component=ReviewMap&frame=brief&width=716&height=900');
+  await page.evaluate(() => window.__HARNESS_READY__);
+  const tile = page.getByRole('region', { name: 'Review tile' });
+  const diagram = tile.locator('.review-doc .review-brief-diagram');
+  await expect(diagram.locator('svg.review-seq')).toBeVisible();
+  await expect(tile.locator('.markdown-mermaid-frame')).toHaveCount(0);
+  await tile.focus();
+
+  expect(await diagram.locator('.review-brief-diagram-scroll').evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0);
+  const column = await boxOf(diagram);
+  const participants = diagram.locator('.review-seq-participant rect');
+  await expect(participants).toHaveCount(4);
+  for (const participant of await participants.all()) {
+    const box = await boxOf(participant);
+    expect(box.left).toBeGreaterThanOrEqual(column.left);
+    expect(box.right).toBeLessThanOrEqual(column.right);
+  }
+
+  const cursor = tile.locator('.review-doc .review-cursor');
+  const onArrow = () => tile.locator('.review-doc .review-cursor[data-review-cursor="message"]').count();
+  for (let presses = 0; presses < 5 && (await onArrow()) === 0; presses += 1) await page.keyboard.press('ArrowDown');
+  await expect(cursor).toContainText('ReplacePRsOfHosts(prsByHost)');
+  await page.keyboard.press('ArrowDown');
+  await expect(cursor).toContainText('queryPRRecords, before');
+  await expect(cursor).toBeInViewport();
+});

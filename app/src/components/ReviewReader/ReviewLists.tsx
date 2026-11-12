@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import type { ReviewBundle, ReviewFile } from '../../types/generated';
 import { useReviewReader } from './reviewContext';
 import { rowKey } from './CodeRows';
+import { arrowTargets, type ArrowTarget, type Side } from './frames';
+import { SequenceDiagram } from './SequenceDiagram';
 import { PathLabel, StopBlock } from './StopBlock';
 
 function shortCommit(commit: string | undefined): string {
@@ -117,4 +120,41 @@ export function NotShownSlot() {
 export function SummarySlot() {
   const reader = useReviewReader();
   return reader ? <ReviewSummary bundle={reader.bundle} filesShown={reader.filesShown} onToggleFiles={reader.toggleFiles} /> : null;
+}
+
+export function SideSwitch({ side, onSide }: { side: Side; onSide: (side: Side) => void }) {
+  return (
+    <div className="review-map-sides">
+      {(['before', 'after'] as const).map((value) => (
+        <button key={value} type="button" tabIndex={-1} aria-pressed={side === value} onClick={() => onSide(value)}>
+          {value === 'before' ? 'Before' : 'After'}
+        </button>
+      ))}
+      <kbd>b</kbd>
+    </div>
+  );
+}
+
+/** A diagram the reader draws, in place of its fence: in the Brief its arrows
+ * with a stop take the cursor; the other side's diagram is left out. */
+export function DiagramSlot({ line }: { line: number }) {
+  const reader = useReviewReader();
+  const flow = reader?.bundle.flows.find((candidate) => candidate.line === line && candidate.drawn);
+  const bundle = reader?.bundle;
+  const cursor = reader?.frame === 'brief';
+  const targets = useMemo(
+    () => (cursor && bundle && flow ? arrowTargets(bundle, flow) : new Map<number, ArrowTarget>()),
+    [bundle, cursor, flow],
+  );
+  if (!reader || !flow) return null;
+  const sided = reader.sides && flow.side !== undefined;
+  if (sided && flow.side !== reader.side) return null;
+  return (
+    <div className="review-brief-diagram" data-source-line={line}>
+      {sided ? <SideSwitch side={reader.side} onSide={reader.switchSide} /> : null}
+      <div className="review-brief-diagram-scroll">
+        <SequenceDiagram flow={flow} current={null} targets={targets} />
+      </div>
+    </div>
+  );
 }

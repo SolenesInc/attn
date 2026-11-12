@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import type { ReviewBundle, ReviewFlow, ReviewFlowMessage } from '../../types/generated';
 import type { MapStop, Side } from './frames';
-import { ReviewNotShown } from './ReviewLists';
+import { ReviewNotShown, SideSwitch } from './ReviewLists';
 import { SequenceDiagram, smallestDiagramWidth } from './SequenceDiagram';
 
 const DIAGRAM_SHARE = 0.44;
@@ -51,16 +51,7 @@ export function MapFrame({
   return (
     <div className="review-map">
       <section className="review-map-diagrams" ref={diagramsRef} aria-label="Map">
-        {sides ? (
-          <div className="review-map-sides">
-            {(['before', 'after'] as const).map((value) => (
-              <button key={value} type="button" tabIndex={-1} aria-pressed={side === value} onClick={() => onSide(value)}>
-                {value === 'before' ? 'Before' : 'After'}
-              </button>
-            ))}
-            <kbd>b</kbd>
-          </div>
-        ) : null}
+        {sides ? <SideSwitch side={side} onSide={onSide} /> : null}
         {flows.map((flow) => (
           <SequenceDiagram key={flow.line} flow={flow} current={current?.flow === flow ? current.message.line : null} onPick={onPick} />
         ))}
