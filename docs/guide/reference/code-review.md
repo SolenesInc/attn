@@ -53,7 +53,7 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 | ↑ ↓ | Move by line in code and by block in prose |
 | ← → | The previous or next stop, with the text that leads into it at the top |
 | Enter | Open the whole file at the cursor, with the stop's lines marked |
-| `e` | Show 10 more lines around the stop |
+| `e` | Show 10 more lines around the stop. The stop's label names the lines it shows |
 | `z` | Fill the tile with the file |
 | `/` | Search the repository: files by name, lines by text. The empty box lists the changed files |
 | ⌃O | Go back to the file you came from |

@@ -387,11 +387,13 @@ describe('App review reader', () => {
   it('shows more lines around a stop with e, fills the tile with z, and opens a Not shown file', async () => {
     const { tileElement, daemon, press } = await openReview();
     await press('ArrowRight');
+    const calc = tileElement.querySelector('.review-stop[data-path="calc.go"]')!;
+    expect(calc.querySelector('.review-stop-range')).toHaveTextContent('L3–6');
 
     await press('e');
-    const calc = tileElement.querySelector('.review-stop[data-path="calc.go"]')!;
     expect(stopRows(calc)[0]).toBe('11package calc');
     expect(stopRows(calc).slice(-1)[0]).toBe('910}');
+    expect(calc.querySelector('.review-stop-range')).toHaveTextContent('L1–10');
 
     await press('z');
     expect(fileView(tileElement)).toHaveClass('review-file-view--filled');

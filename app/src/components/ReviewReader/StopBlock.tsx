@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import type { ReviewNote, ReviewStop } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
-import { expansionKey, useReviewReader, type FileTarget, type RowLabels } from './reviewContext';
+import { expansionKey, useReviewReader, type FileTarget, type RowLabels, type StopExpansion } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 import { useTokens } from './tokenize';
 import { DocStopRows, isDocumentPath } from './DocStop';
@@ -28,6 +28,16 @@ export function PathLabel({ path }: { path: string }) {
       {name}
     </span>
   );
+}
+
+function stopRange(stop: ReviewStop): string {
+  return stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
+}
+
+/** The lines a stop shows: its own range, or the lines around it that e added. */
+function shownRange(stop: ReviewStop, expansion: StopExpansion | undefined): string {
+  const lines = expansion?.rows.flatMap((row) => (row.now === undefined ? [] : [row.now])) ?? [];
+  return lines.length > 0 ? `L${lines[0]}–${lines[lines.length - 1]}` : stopRange(stop);
 }
 
 function noteRange(note: ReviewNote): string {
@@ -61,7 +71,6 @@ function ScriptStop({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
   const stage = reader?.stage;
   const current = stage?.stopLine === stop.heading_line;
-  const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
   return (
     <section
       className={`review-stop review-stop--script${current ? ' review-stop--current' : ''}`}
@@ -75,7 +84,7 @@ function ScriptStop({ stop }: { stop: ReviewStop }) {
     >
       <header className="review-stop-header">
         <PathLabel path={stop.path} />
-        <span className="review-stop-range">{nowRange}</span>
+        <span className="review-stop-range">{stopRange(stop)}</span>
         {stop.changed_since_presented ? <span className="review-badge">changed since presented</span> : null}
       </header>
       {stop.notes.length > 0 ? (
@@ -100,12 +109,11 @@ export function StopBlock({ stop }: { stop: ReviewStop }) {
 function DocStop({ stop }: { stop: ReviewStop }) {
   const reader = useReviewReader();
   const expansion = reader?.expansions.get(expansionKey(stop));
-  const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
   return (
     <section className="review-stop review-stop--doc" data-review-stop-head={stop.heading_line} data-path={stop.path}>
       <header className="review-stop-header">
         <PathLabel path={stop.path} />
-        <span className="review-stop-range">{nowRange}</span>
+        <span className="review-stop-range">{shownRange(stop, expansion)}</span>
         {stop.changed_since_presented ? <span className="review-badge">changed since presented</span> : null}
         <span className="review-stop-actions">
           {reader?.openInEditor ? <button type="button" tabIndex={-1} onClick={() => reader.openInEditor?.(stop.path)}>editor <kbd>o</kbd></button> : null}
@@ -133,14 +141,13 @@ function CodeStop({ stop }: { stop: ReviewStop }) {
   }, [stop.notes]);
   const shownLines = new Set(rows.map((row) => row.now).filter((line): line is number => line !== undefined));
   const unplaced = stop.notes.filter((note) => !shownLines.has(note.now_to));
-  const nowRange = stop.now_from ? `L${stop.now_from}–${stop.now_to}` : `L${stop.from}–${stop.to} at head`;
   const open = () => reader?.openFile(stopTarget(stop));
 
   return (
     <section className="review-stop" data-review-stop-head={stop.heading_line} data-path={stop.path}>
       <header className="review-stop-header">
         <PathLabel path={stop.path} />
-        <span className="review-stop-range">{nowRange}</span>
+        <span className="review-stop-range">{shownRange(stop, expansion)}</span>
         {stop.changed_since_presented ? <span className="review-badge">changed since presented</span> : null}
         <span className="review-stop-actions">
           <button type="button" tabIndex={-1} onClick={open}>file <kbd>↵</kbd></button>
