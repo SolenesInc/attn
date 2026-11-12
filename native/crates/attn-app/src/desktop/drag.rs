@@ -518,16 +518,21 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
     };
     match chip {
         Some(_) if matches!(side, Side::Top | Side::Bottom) => {
-            Some(fit_column(dock, rect, &tree, dragged))
+            let source = facts
+                .desktops
+                .iter()
+                .find(|d| d.id == drag.source.desktop())
+                .and_then(|d| Node::parse(&d.tree_json));
+            Some(fit_column(dock, rect, source.as_ref()?, dragged))
         }
         _ => Some(dock),
     }
 }
 
 /// A chip's column stacked on a tile keeps every tile at the minimum height, or lands beside
-/// the tile instead, saying why.
-fn fit_column(dock: Dock, anchor_rect: [f32; 4], tree: &Node, leaf: &str) -> Dock {
-    let row = layout::read_row(tree);
+/// the tile instead, saying why. `source` is the tree of the desktop the chip comes from.
+fn fit_column(dock: Dock, anchor_rect: [f32; 4], source: &Node, leaf: &str) -> Dock {
+    let row = layout::read_row(source);
     let need = layout::column_index(&row, leaf)
         .map(|i| {
             let smallest = row[i]

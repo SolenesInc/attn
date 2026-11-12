@@ -956,6 +956,33 @@ fn the_palette_clears_the_desktops_dragged_widths_and_says_when_there_are_none()
 }
 
 #[test]
+fn a_stack_chip_carried_to_another_desktop_too_short_for_it_lands_beside_and_says_why() {
+    let source = tiles(
+        "a",
+        [pane("a"), pane("b"), pane("c"), below(pane("d"), pane("e"))],
+    );
+    let size = (TWO_FIT + BESIDE_TILES, 800.0 + ABOVE_TILES);
+    let mut world = start_sized(size, None, vec![source.clone(), other()]);
+
+    let over = in_sidebar(&world, 2);
+    world.gesture(|app| app.drag_over(Target::key("shelf.chip.d"), over));
+    world.advance(Duration::from_millis(400));
+    arrange(&mut world, "work/desktop_2", vec![source, other()]);
+    let to = in_tile(&world, "x", 0.5, 0.02);
+    world.gesture(|app| {
+        app.move_to(to);
+        app.release(to);
+    });
+
+    let sent_moves = sent(&world, "desktop_move_leaf");
+    assert_eq!(sent_moves.len(), 1, "{sent_moves:?}");
+    assert_eq!(sent_moves[0]["edge"], "right", "{sent_moves:?}");
+    let said = notice(&world).unwrap_or_default();
+    assert!(said.contains("Stacking here needs 960px"), "{said}");
+    rest(&mut world);
+}
+
+#[test]
 fn a_chip_carried_to_another_desktop_by_resting_on_it_lands_beside_a_tile_without_replacing_it() {
     let mut world = start(TWO_FIT, None, vec![four("a"), other()]);
 
