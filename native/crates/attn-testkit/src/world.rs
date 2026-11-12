@@ -2,11 +2,12 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use attn_app::State;
+use attn_app::screen::Screens;
 use attn_client::{
     Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Pulse, Store, Subscription,
     TerminalEvent,
 };
-use rune::{Chord, Env, Key, KeyEvent, Mods, Runtime, Tx};
+use rune::{Chord, Compositor, Env, Key, KeyEvent, Mods, Runtime, Tx};
 
 use attn_app::automation::AppHooks;
 use attn_automation::Attempt;
@@ -25,6 +26,8 @@ const VIEWPORT: (f32, f32) = (960.0, 640.0);
 pub struct World {
     pub daemon: Daemon,
     runtime: Runtime<State>,
+    screens: Screens,
+    terminal_frames: usize,
     link: Option<Link>,
     _window: Subscription,
     inbox: Arc<Mutex<Vec<attn_app::Update>>>,
@@ -138,6 +141,8 @@ impl World {
         let mut world = World {
             daemon,
             runtime,
+            screens: Screens::default(),
+            terminal_frames: 0,
             link: Some(link),
             _window: window,
             inbox,
@@ -176,6 +181,10 @@ impl World {
             }
             while self.runtime.has_pending_input() {
                 self.runtime.frame(0.0);
+            }
+            if self.screens.redraws(&self.runtime) {
+                self.screens.draw_without_gpu(&mut self.runtime);
+                self.terminal_frames += 1;
             }
             if self.quiet() && self.inbox.lock().unwrap().is_empty() && self.terminals.is_empty() {
                 return;
@@ -257,6 +266,13 @@ impl World {
 
     pub fn runtime(&self) -> &Runtime<State> {
         &self.runtime
+    }
+
+    /// How many settles left a terminal screen the renderer had not yet taken, which a
+    /// window asked for a frame by a key or a timer would present: a key whose echo has not
+    /// come back leaves none.
+    pub fn terminal_frames(&self) -> usize {
+        self.terminal_frames
     }
 
     /// The text on a terminal's screen, by its runtime id, row by row.

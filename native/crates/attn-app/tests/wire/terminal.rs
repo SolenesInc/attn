@@ -1067,3 +1067,20 @@ fn pointer_motion_over_a_shell_tells_the_daemon_nothing() {
 
     assert!(world.daemon.sent_of("terminal_pointer_activity").is_empty());
 }
+
+#[test]
+fn a_key_draws_no_terminal_frame_until_its_echo_arrives() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"$ ");
+    world.settle();
+    let frames = world.terminal_frames();
+
+    world.gesture(|app| app.type_text("l"));
+    assert_eq!(inputs(&world), [typed("l")]);
+    assert_eq!(world.terminal_frames(), frames, "the key changed no screen");
+
+    output(&world, 2, b"l");
+    world.settle();
+    assert_eq!(world.terminal_frames(), frames + 1, "its echo did");
+    assert_eq!(row(&mut world, 0), "$ l");
+}

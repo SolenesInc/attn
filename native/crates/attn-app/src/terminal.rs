@@ -66,6 +66,8 @@ pub struct Terminals {
     fonts: Option<Fonts>,
     metrics: Option<Metrics>,
     theme: Theme,
+    /// A screen changed since the renderer last took the grids.
+    undrawn: bool,
 }
 
 struct Term {
@@ -184,6 +186,7 @@ impl Terminals {
         daemon: &Commands,
     ) {
         self.follow_connection(facts, daemon);
+        self.undrawn = true;
         let drawn: Vec<(String, bool, bool)> = facts
             .current_desktop()
             .into_iter()
@@ -365,6 +368,7 @@ impl Terminals {
     pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) {
         for event in self.inbox.take() {
             self.apply(event, tx, daemon);
+            self.undrawn = true;
         }
         let now = tx.clock();
         for (id, term) in &mut self.panes {
@@ -719,6 +723,7 @@ impl Terminals {
             return;
         }
         self.theme = theme;
+        self.undrawn = true;
         for term in self.panes.values_mut() {
             term.vt.set_theme(&theme);
         }
@@ -729,10 +734,16 @@ impl Terminals {
 
     /// Each drawn terminal's screen brought up to date, by the mark of the slot it draws in.
     pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &mut Grid)> {
+        self.undrawn = false;
         self.panes.iter_mut().map(|(id, term)| {
             term.vt.sync(&mut term.grid);
             (mark(id), &mut term.grid)
         })
+    }
+
+    /// Whether a screen changed since the renderer last took the grids.
+    pub(crate) fn undrawn(&self) -> bool {
+        self.undrawn
     }
 
     /// The size the terminal's own screen has, which follows the daemon's PTY.
