@@ -579,3 +579,455 @@ fn palette_rows_go_to_a_desktop_open_a_tile_and_move_an_agent_with_its_delegates
     );
     assert!(world.runtime_is_at_rest());
 }
+
+fn chip(world: &World, leaf: &str) -> Option<attn_testkit::Node> {
+    world
+        .screen()
+        .find(Target::key(format!("shelf.chip.{leaf}")))
+}
+
+fn click(world: &mut World, key: &str) {
+    let key = key.to_owned();
+    world.gesture(|app| app.click(Target::key(key)));
+}
+
+fn four_in_a_row(active: &str) -> Desktop {
+    desktop(
+        1,
+        active,
+        Some(row([pane("a"), pane("b"), pane("c"), pane("d")])),
+    )
+}
+
+#[test]
+fn the_shelf_shows_a_chip_per_column_off_screen_and_a_dot_per_column_on_it() {
+    let tree = row([pane("a"), pane("b"), below(pane("c"), pane("e")), pane("d")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+
+    assert!(chip(&world, "a").is_none(), "a is on screen");
+    assert_eq!(
+        chip(&world, "c").unwrap().name.as_deref(),
+        Some("Agent c + Agent e")
+    );
+    assert_eq!(chip(&world, "d").unwrap().name.as_deref(), Some("Agent d"));
+    let current = world.screen().get(Target::key("shelf.dot.a"));
+    assert_eq!(current.value.as_deref(), Some("current"));
+    assert!(world.screen().find(Target::key("shelf.dot.b")).is_some());
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))],
+    );
+    assert!(
+        world.screen().find(Target::key("shelf")).is_none(),
+        "no shelf when every column shows"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_chip_says_when_its_agent_needs_you() {
+    let desktops = vec![four_in_a_row("a")];
+    let mut sessions: Vec<Session> = ["a", "b", "c", "d"].map(session).to_vec();
+    sessions[3].state = "waiting_input".into();
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile("work/desktop_1")]),
+        desktops: Some(desktops),
+        sessions: Some(sessions),
+        ..InitialStateMessage::new()
+    });
+    let world = World::start_sized(daemon, TWO_FIT);
+
+    assert_eq!(
+        chip(&world, "d").unwrap().value.as_deref(),
+        Some("needs you")
+    );
+    assert_eq!(chip(&world, "c").unwrap().value.as_deref(), Some(""));
+}
+
+#[test]
+fn a_chip_brings_its_column_beside_the_active_tile_and_the_anchor_keeps_its_place() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    click(&mut world, "shelf.chip.d");
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"d",
+                "anchor_id":"a","edge":"right","whole_column":true,"activate":true}"#
+        )]
+    );
+    let moved = row([pane("a"), pane("d"), pane("b"), pane("c")]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "d", Some(moved))],
+    );
+    assert!(shows(&world, "Agent a") && shows(&world, "Agent d"));
+    assert!(chip(&world, "b").is_some() && chip(&world, "c").is_some());
+
+    click(&mut world, "shelf.chip.c");
+    assert_eq!(
+        sent(&world, "desktop_move_leaf")[1]["edge"],
+        "left",
+        "beside the rightmost tile the column lands on its left"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_dot_shows_its_column_where_it_is() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    click(&mut world, "shelf.dot.b");
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b"}"#)]
+    );
+    assert!(sent(&world, "desktop_move_leaf").is_empty());
+}
+
+#[test]
+fn the_screen_keeps_where_it_starts_while_the_active_tile_stays_on_it() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("c")]);
+    assert!(shows(&world, "Agent b") && shows(&world, "Agent c"));
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("b")]);
+    assert!(
+        shows(&world, "Agent b") && shows(&world, "Agent c"),
+        "the screen does not slide back to a"
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn chips_past_the_title_bars_room_wait_in_a_cap_whose_menu_escape_closes() {
+    let ids: Vec<String> = (0..24).map(|i| format!("p{i:02}")).collect();
+    let tree = row(ids.iter().map(|id| pane(id)));
+    let mut world = start(vec![desktop(1, "p00", Some(tree))]);
+
+    let cap = world.screen().get(Target::key("shelf.cap.after"));
+    let held: usize = cap
+        .name
+        .as_deref()
+        .unwrap()
+        .split(' ')
+        .next()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let chips = (2..24)
+        .filter(|i| chip(&world, &format!("p{i:02}")).is_some())
+        .count();
+    assert_eq!(
+        chips + held,
+        22,
+        "every column off screen is a chip or in the cap"
+    );
+    assert!(
+        chip(&world, "p02").is_some(),
+        "the chips nearest the screen stay out"
+    );
+
+    click(&mut world, "shelf.cap.after");
+    let menu = world.screen().get(Target::key("shelf.menu.after"));
+    assert_eq!(menu.name, cap.name);
+    assert!(
+        chip(&world, "p23").is_some(),
+        "the menu holds the far chips"
+    );
+
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shelf.menu.after"))
+            .is_none()
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn carrying_moves_the_active_column_one_place_and_says_when_it_is_at_the_end() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    press(&mut world, Action::ShelfCarryRight);
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
+                "anchor_id":"b","edge":"right","whole_column":true,"activate":true}"#
+        )]
+    );
+
+    press(&mut world, Action::ShelfCarryLeft);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("This tile is already at the start of the row.")
+    );
+    assert_eq!(sent(&world, "desktop_move_leaf").len(), 1);
+}
+
+#[test]
+fn sending_to_the_shelf_unstacks_holds_or_moves_the_tile_and_shows_the_next() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+    press(&mut world, Action::ShelfSendToShelf);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("This is the only tile on screen.")
+    );
+
+    let stacked = row([below(pane("a"), pane("b")), pane("c")]);
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(stacked))],
+    );
+    press(&mut world, Action::ShelfSendToShelf);
+    assert_eq!(
+        sent(&world, "desktop_show_leaf"),
+        [json(r#"{"desktop_id":"work/desktop_1","leaf_id":"b"}"#)]
+    );
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
+                "anchor_id":"c","edge":"right","whole_column":false,"activate":false}"#
+        )]
+    );
+
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("a")]);
+    press(&mut world, Action::ShelfSendToShelf);
+    assert_eq!(sent(&world, "desktop_show_leaf")[1]["leaf_id"], "b");
+    assert_eq!(
+        sent(&world, "desktop_move_leaf")[1],
+        json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_1","leaf_id":"a",
+                "anchor_id":"d","edge":"right","whole_column":true,"activate":false}"#
+        )
+    );
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))],
+    );
+    press(&mut world, Action::ShelfSendToShelf);
+    assert_eq!(sent(&world, "desktop_show_leaf")[2]["leaf_id"], "b");
+    assert_eq!(
+        sent(&world, "desktop_move_leaf").len(),
+        2,
+        "a held tile stays where it is in the row"
+    );
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "b", Some(row([pane("a"), pane("b")])))],
+    );
+    assert!(!shows(&world, "Agent a"), "the window holds a off screen");
+    assert!(chip(&world, "a").is_some());
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(row([pane("a"), pane("b")])))],
+    );
+    assert!(
+        shows(&world, "Agent a") && shows(&world, "Agent b"),
+        "a held tile comes back when it is active"
+    );
+    world.advance(Duration::from_secs(10));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_shelf_hides_in_focus_mode_and_on_home() {
+    let mut world = start(vec![four_in_a_row("a")]);
+    assert!(world.screen().find(Target::key("shelf")).is_some());
+
+    press(&mut world, Action::TerminalToggleMaximize);
+    assert!(world.screen().find(Target::key("shelf")).is_none());
+    press(&mut world, Action::TerminalToggleMaximize);
+    press(&mut world, Action::TerminalToggleZoom);
+    assert!(
+        world.screen().find(Target::key("shelf")).is_some(),
+        "zoom keeps the shelf"
+    );
+}
+
+fn width_label(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("shelf.width.label"))
+        .and_then(|n| n.name)
+}
+
+#[test]
+fn fewer_and_more_tiles_step_the_narrowest_width_and_say_where_they_stop() {
+    let mut world = start(vec![four_in_a_row("a")]);
+
+    press(&mut world, Action::ShelfFewerTiles);
+    assert_eq!(
+        sent(&world, "set_setting"),
+        [json(r#"{"key":"narrowest_tile_cols","value":"76"}"#)],
+        "76 columns is the first step that shows fewer than two tiles"
+    );
+    assert_eq!(width_label(&world).as_deref(), Some("2 tiles"));
+    world.advance(Duration::from_millis(1500));
+    assert_eq!(width_label(&world), None);
+
+    press(&mut world, Action::ShelfMoreTiles);
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some(
+            "3 tiles at the narrowest width (57 cols, 513px) need 1539px. Tiles have 1348px here. Closing the sidebar would make room."
+        )
+    );
+    assert_eq!(sent(&world, "set_setting").len(), 1);
+    world.advance(Duration::from_secs(10));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn more_tiles_forgets_a_dragged_width_when_only_it_keeps_a_tile_off_screen() {
+    let mut wide = pane("b");
+    wide["wanted_cols"] = 120.into();
+    let tree = row([pane("a"), wide, pane("c")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    assert!(
+        !shows(&world, "Agent b"),
+        "b's dragged width does not fit beside a"
+    );
+
+    press(&mut world, Action::ShelfMoreTiles);
+    assert_eq!(
+        sent(&world, "desktop_set_wanted_cols"),
+        [json(
+            r#"{"desktop_id":"work/desktop_1","leaf_id":"b","cols":0,"area_cols":0}"#
+        )]
+    );
+    assert!(
+        sent(&world, "set_setting").is_empty(),
+        "the width it steps to is the one it has"
+    );
+    assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
+    let label = world.screen().get(Target::key("shelf.width.label"));
+    assert_eq!(label.name.as_deref(), Some("2 tiles"));
+    assert!(
+        world
+            .screen()
+            .to_string()
+            .contains("Cleared the dragged width")
+    );
+}
+
+/// Wide enough for three tiles at the narrowest width, and too narrow for four.
+const THREE_FIT: (f32, f32) = (2100.0, 900.0);
+
+fn five_in_a_row(active: &str) -> Desktop {
+    desktop(1, active, Some(row(["a", "b", "c", "d", "e"].map(pane))))
+}
+
+fn shown(world: &World) -> Vec<String> {
+    ["a", "b", "c", "d", "e"]
+        .into_iter()
+        .filter(|id| shows(world, &format!("Agent {id}")))
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn a_column_brought_from_before_the_screen_lands_beside_the_anchor_which_keeps_its_place() {
+    let mut world = World::start_sized(daemon(vec![five_in_a_row("a")]), THREE_FIT);
+    arrange(&mut world, "work/desktop_1", vec![five_in_a_row("d")]);
+    arrange(&mut world, "work/desktop_1", vec![five_in_a_row("c")]);
+    assert_eq!(shown(&world), ["b", "c", "d"]);
+
+    click(&mut world, "shelf.chip.a");
+    assert_eq!(sent(&world, "desktop_move_leaf")[0]["anchor_id"], "c");
+    let moved = row(["b", "c", "a", "d", "e"].map(pane));
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "a", Some(moved))],
+    );
+
+    assert_eq!(shown(&world), ["a", "b", "c"]);
+    let x = |leaf: &str| {
+        world
+            .runtime()
+            .presented(&format!("tile.{leaf}"))
+            .unwrap()
+            .0[0]
+    };
+    assert!(
+        x("b") < x("c") && x("c") < x("a"),
+        "b and c keep their slots and a lands after c"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_screen_returns_to_where_it_started_after_a_width_change() {
+    let mut world = start(vec![four_in_a_row("a")]);
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("b")]);
+    assert_eq!(shown(&world), ["a", "b"]);
+
+    let narrowest = |world: &mut World, cols: &str| {
+        world.daemon.emit(attn_protocol::SettingsUpdatedMessage {
+            settings: Some([("narrowest_tile_cols".to_owned(), cols.to_owned())].into()),
+            ..attn_protocol::SettingsUpdatedMessage::new()
+        });
+        world.settle();
+    };
+    narrowest(&mut world, "76");
+    assert_eq!(shown(&world), ["b"]);
+    narrowest(&mut world, "66");
+    assert_eq!(shown(&world), ["a", "b"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_caps_menu_closes_on_a_press_outside_it_and_on_another_desktop() {
+    let ids: Vec<String> = (0..24).map(|i| format!("p{i:02}")).collect();
+    let tree = row(ids.iter().map(|id| pane(id)));
+    let other = {
+        let mut d = desktop(2, "p00", Some(row(ids.iter().map(|id| pane(id)))));
+        d.panes.iter_mut().for_each(|p| p.desktop_id = d.id.clone());
+        d
+    };
+    let mut world = start(vec![desktop(1, "p00", Some(tree.clone())), other.clone()]);
+
+    click(&mut world, "shelf.cap.after");
+    click(&mut world, "shelf.menu.layer");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shelf.menu.after"))
+            .is_none()
+    );
+
+    click(&mut world, "shelf.cap.after");
+    arrange(
+        &mut world,
+        "work/desktop_2",
+        vec![desktop(1, "p00", Some(tree)), other],
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("shelf.menu.after"))
+            .is_none(),
+        "the menu does not follow the window to another desktop"
+    );
+    assert!(world.runtime_is_at_rest());
+}

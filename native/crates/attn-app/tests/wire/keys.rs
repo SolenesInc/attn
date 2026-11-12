@@ -178,11 +178,13 @@ fn every_shortcut_runs_its_own_action(category: Category) {
         let recorded = shortcut_records(world)[before..].to_vec();
         let pending = format!("Not in the native app yet: {}", action.label());
         match (recorded.as_slice(), notice(world)) {
-            ([id], None) => {
+            ([id], said) => {
                 assert_eq!(id, action.id());
+                assert_ne!(said.as_ref(), Some(&pending), "{}", action.id());
                 if *action != Action::AppQuit {
                     press(world, action);
                 }
+                world.advance(Duration::from_secs(6));
             }
             ([], Some(text)) => {
                 assert_eq!(text, pending, "{}", action.id());

@@ -172,7 +172,12 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
     let window = &mut state.window;
     let notice = window.notice.take_if(|n| now >= n.until).is_some();
     let leader = window.leader.take_if(|l| now >= l.until).is_some();
-    notice || leader
+    let label = window
+        .desk
+        .width_label
+        .take_if(|l| now >= l.until)
+        .is_some();
+    notice || leader || label
 }
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
@@ -192,7 +197,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .h_full()
         .fill(t.bg_app)
         .on_paste(crate::keys::on_paste)
-        .child(title_bar(cx, &t))
+        .child(title_bar(state, cx, &t))
         .children(banner)
         .child(body)
         .children(layers(state, &t))
@@ -200,7 +205,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
 
 /// The band the window drags by, over which the window's own controls sit; what it holds
 /// comes with the queue bar and the title bar controls.
-fn title_bar(cx: &Cx<State>, t: &Tokens) -> El {
+fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
     row()
         .key("titlebar")
         .role("banner")
@@ -212,6 +217,14 @@ fn title_bar(cx: &Cx<State>, t: &Tokens) -> El {
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .window_drag()
+        .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
+            if state.window.desk.window_w == Some(w) {
+                tx.live_only();
+                return;
+            }
+            state.window.desk.window_w = Some(w);
+        })
+        .child(crate::desktop::shelf_slot(state, t))
 }
 
 fn centered(t: &Tokens, content: El) -> El {
@@ -295,6 +308,8 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             t,
         ));
     }
+    layers.extend(crate::desktop::cap_menu(state, t));
+    layers.extend(crate::desktop::width_label(state, t));
     if let Some(notice) = &window.notice {
         layers.push(floating_status("notice", notice.text.clone(), t));
     }

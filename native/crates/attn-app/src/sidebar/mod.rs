@@ -11,6 +11,7 @@ use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
 
 pub use model::AgentState;
 use model::{AgentRow, DesktopHeader, Line, TileRow};
+pub(crate) use model::{display_name, tile_title};
 
 use crate::State;
 use crate::shell::View;

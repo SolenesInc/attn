@@ -40,6 +40,11 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         SessionClose | TerminalClose => close(state),
         SessionHistoryBack => walk_history(state, -1),
         SessionHistoryForward => walk_history(state, 1),
+        ShelfCarryLeft => super::shelf::carry(state, -1, tx),
+        ShelfCarryRight => super::shelf::carry(state, 1, tx),
+        ShelfSendToShelf => super::shelf::send_to_shelf(state, tx),
+        ShelfFewerTiles => super::shelf::step_width(state, true, tx),
+        ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         _ => return false,
     }
     true
@@ -314,6 +319,9 @@ pub(crate) fn escape(state: &mut State) -> bool {
     let Some(desktop) = state.facts.current_desktop() else {
         return false;
     };
+    if state.window.desk.cap_open.take().is_some() {
+        return true;
+    }
     let row = state.window.desk.row_mut(&desktop.id);
     if !matches!(row.view, View::Focused(_)) {
         return false;

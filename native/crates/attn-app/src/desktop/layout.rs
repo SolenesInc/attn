@@ -493,13 +493,42 @@ pub fn narrowest_width_px(cols: u32, px_per_col: f32) -> f32 {
     TILE_MIN_WIDTH.max(cols as f32 * px_per_col)
 }
 
+#[derive(Clone, Copy)]
 pub struct RowInput<'a> {
     pub tree: &'a Node,
     pub active: &'a str,
     pub first_column: Option<&'a FirstColumn>,
     /// Leaves sent to the shelf while they would fit, kept off screen.
     pub held: &'a [String],
+    /// Columns, by first leaf, laid out as if a divider drag had never widened them.
+    pub cleared: &'a [String],
     pub measures: Measures,
+}
+
+impl RowInput<'_> {
+    /// The row as the screen places it: held leaves left out and cleared widths forgotten.
+    fn shown(&self) -> Vec<Column> {
+        shown_row(
+            without_widths(read_row(self.tree), self.cleared),
+            self.held,
+            self.active,
+        )
+    }
+}
+
+/// `row` with the dragged widths of the columns whose first leaf is in `cleared` forgotten.
+pub fn without_widths(mut row: Vec<Column>, cleared: &[String]) -> Vec<Column> {
+    for column in &mut row {
+        if cleared.iter().any(|id| id == column.first()) {
+            column.wanted_cols = None;
+            column.wanted_area_cols = None;
+        }
+    }
+    row
+}
+
+pub fn columns_fit_together(a: &Column, b: &Column, m: &Measures) -> bool {
+    m.fits(m.need_px(a) + m.need_px(b))
 }
 
 /// What the screen shows of the row: the run of columns that fits around the active tile,
@@ -572,7 +601,7 @@ fn widths(screen: &[Column], m: &Measures) -> Vec<f32> {
 
 /// Which run of an empty-free tree's row shows. The tree has at least one leaf.
 pub fn resolve_row(input: &RowInput) -> RowPlan {
-    let row = read_row(input.tree);
+    let row = without_widths(read_row(input.tree), input.cleared);
     let shown = shown_row(row.clone(), input.held, input.active);
     let (start, end, _) = place_screen(&shown, input.active, input.first_column, &input.measures);
     let screen = shown[start..end].to_vec();
@@ -631,6 +660,318 @@ impl RowPlan {
     }
 }
 
+/// Which side of an anchor a moved leaf lands on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Edge {
+    Left,
+    Right,
+}
+
+impl Edge {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Edge::Left => "left",
+            Edge::Right => "right",
+        }
+    }
+}
+
+/// What sending the active tile to the shelf does.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ShelfSend {
+    /// Nothing else would show in its place.
+    Alone,
+    /// The tile leaves its stack for the row's end.
+    Unstack {
+        leaf: String,
+        anchor: String,
+        next: String,
+    },
+    /// The row is short enough that the tile would fit: the window holds it off screen.
+    Hold { leaf: String, next: String },
+    /// The tile's column moves to the far end of the row, past the screen.
+    Move {
+        leaf: String,
+        anchor: String,
+        edge: Edge,
+        next: String,
+    },
+}
+
+/// What sending `input.active` to the shelf does, with `screen` the columns on screen.
+pub fn plan_send_to_shelf(
+    input: &RowInput,
+    screen: &[Column],
+    focus_order: &[String],
+) -> ShelfSend {
+    let leaf = input.active.to_owned();
+    let row = read_row(input.tree);
+    let Some(at) = column_index(&row, &leaf) else {
+        return ShelfSend::Alone;
+    };
+    let column = &row[at];
+    if column.leaf_ids.len() > 1 {
+        let rest: Vec<&String> = column.leaf_ids.iter().filter(|id| **id != leaf).collect();
+        let last: Vec<&String> = row[row.len() - 1]
+            .leaf_ids
+            .iter()
+            .filter(|id| **id != leaf)
+            .collect();
+        let index = column
+            .leaf_ids
+            .iter()
+            .position(|id| *id == leaf)
+            .unwrap_or(0);
+        return ShelfSend::Unstack {
+            anchor: last[last.len() - 1].clone(),
+            next: rest[index.min(rest.len() - 1)].clone(),
+            leaf,
+        };
+    }
+    let shown = input.shown();
+    let Some(shown_at) = column_index(&shown, &leaf) else {
+        return ShelfSend::Alone;
+    };
+    let slot = column_index(screen, &leaf).unwrap_or(0);
+    let in_slot = screen
+        .get(slot + 1)
+        .or_else(|| slot.checked_sub(1).and_then(|i| screen.get(i)))
+        .or_else(|| shown.get(shown_at + 1))
+        .or_else(|| shown_at.checked_sub(1).and_then(|i| shown.get(i)));
+    let Some(in_slot) = in_slot else {
+        return ShelfSend::Alone;
+    };
+    let rest: Vec<Column> = shown
+        .iter()
+        .filter(|c| c.first() != leaf)
+        .cloned()
+        .collect();
+    let (start, end, sum) =
+        place_screen(&rest, in_slot.first(), input.first_column, &input.measures);
+    let next_column = &rest[(start + slot).min(end - 1)];
+    let next = next_column.last_used(focus_order).to_owned();
+    if input.measures.fits(sum + input.measures.need_px(column)) {
+        return ShelfSend::Hold { leaf, next };
+    }
+    let others: Vec<&Column> = row.iter().filter(|c| c.first() != leaf).collect();
+    let rest_right = screen[screen.len() - 1].first() != shown[shown.len() - 1].first();
+    let (anchor, edge) = if rest_right {
+        (others[others.len() - 1].first(), Edge::Right)
+    } else {
+        (others[0].first(), Edge::Left)
+    };
+    ShelfSend::Move {
+        anchor: anchor.to_owned(),
+        edge,
+        next,
+        leaf,
+    }
+}
+
+/// The first column nearest `current_start` from which the screen holds both `leaf` and the
+/// active tile, or None when no screen holds both.
+pub fn reveal_first_column(
+    input: &RowInput,
+    leaf: &str,
+    current_start: usize,
+) -> Option<FirstColumn> {
+    let shown = input.shown();
+    let leaf_at = column_index(&shown, leaf)?;
+    let active_at = column_index(&shown, input.active)?;
+    let mut best: Option<usize> = None;
+    for start in 0..=leaf_at.min(active_at) {
+        let (end, _) = fill_from(&shown, start, &input.measures);
+        let holds_both = leaf_at < end && active_at < end;
+        if holds_both
+            && best.is_none_or(|b| start.abs_diff(current_start) < b.abs_diff(current_start))
+        {
+            best = Some(start);
+        }
+    }
+    best.map(|index| FirstColumn {
+        leaf: shown[index].first().to_owned(),
+        index,
+    })
+}
+
+/// A leaf brought beside an anchor.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ShelfDrop {
+    pub leaf: String,
+    pub anchor: String,
+    pub edge: Edge,
+}
+
+/// Where the screen starts so a dropped leaf shows beside its anchor, and the dragged widths
+/// it has to forget for both to fit, the fewest first.
+pub fn reveal_drop(
+    input: &RowInput,
+    drop: &ShelfDrop,
+    current_start: usize,
+) -> Option<(FirstColumn, Vec<String>)> {
+    let row = without_widths(read_row(input.tree), input.cleared);
+    let widened: Vec<String> = [&drop.anchor, &drop.leaf]
+        .into_iter()
+        .filter_map(|leaf| row.get(column_index(&row, leaf)?))
+        .filter(|c| input.measures.wanted_px(c).is_some())
+        .map(|c| c.first().to_owned())
+        .collect();
+    let mut attempts: Vec<Vec<String>> = vec![vec![]];
+    attempts.extend(widened.iter().map(|w| vec![w.clone()]));
+    if widened.len() > 1 {
+        attempts.push(widened.clone());
+    }
+    attempts.into_iter().find_map(|clear| {
+        let cleared: Vec<String> = input
+            .cleared
+            .iter()
+            .cloned()
+            .chain(clear.iter().cloned())
+            .collect();
+        let first = reveal_first_column(
+            &RowInput {
+                cleared: &cleared,
+                ..*input
+            },
+            &drop.anchor,
+            current_start,
+        )?;
+        Some((first, clear))
+    })
+}
+
+/// What one press of fewer or more tiles does to the narrowest tile width.
+#[derive(Clone, Debug, PartialEq)]
+pub enum NarrowestStep {
+    Step(u32),
+    /// Dragged widths keep more tiles off screen: forget them, then step.
+    ClearThenStep {
+        cols: u32,
+        clear: Vec<String>,
+        shown: usize,
+    },
+    Limit(String),
+}
+
+fn tiles_shown_at(input: &RowInput, cols: u32) -> usize {
+    let measures = Measures::new(input.measures.area_px, cols, input.measures.px_per_col);
+    resolve_row(&RowInput { measures, ..*input }).screen.len()
+}
+
+/// The tile counts the steps reach from `current`, fewest first.
+pub fn reachable_tile_counts(input: &RowInput, current: u32) -> Vec<usize> {
+    let mut counts: Vec<usize> = std::iter::once(current)
+        .chain(NARROWEST_STEPS)
+        .map(|cols| tiles_shown_at(input, cols))
+        .collect();
+    if let NarrowestStep::ClearThenStep { shown, .. } =
+        step_narrowest_cols(input, current, false, 0.0)
+    {
+        counts.push(shown);
+    }
+    counts.sort_unstable();
+    counts.dedup();
+    counts
+}
+
+/// The next narrowest width that shows fewer tiles, or more, or why there is none.
+/// `window_px` is the window's width, to say when closing the sidebar would make room.
+pub fn step_narrowest_cols(
+    input: &RowInput,
+    current: u32,
+    fewer: bool,
+    window_px: f32,
+) -> NarrowestStep {
+    let shown = tiles_shown_at(input, current);
+    let total = input.shown().len();
+    let candidates: Vec<u32> = if fewer {
+        NARROWEST_STEPS
+            .into_iter()
+            .filter(|c| *c > current)
+            .collect()
+    } else {
+        NARROWEST_STEPS
+            .into_iter()
+            .rev()
+            .filter(|c| *c < current)
+            .collect()
+    };
+    let found = candidates.iter().copied().find(|step| {
+        let at = tiles_shown_at(input, *step);
+        if fewer { at < shown } else { at > shown }
+    });
+    if let Some(cols) = found {
+        return NarrowestStep::Step(cols);
+    }
+    let m = &input.measures;
+    if !fewer {
+        let row = without_widths(read_row(input.tree), input.cleared);
+        let all: Vec<String> = row.iter().map(|c| c.first().to_owned()).collect();
+        let screen_without = |cols: u32| {
+            let measures = Measures::new(m.area_px, cols, m.px_per_col);
+            resolve_row(&RowInput {
+                measures,
+                cleared: &all,
+                ..*input
+            })
+            .screen
+        };
+        let unblocked = std::iter::once(current)
+            .chain(candidates.iter().copied())
+            .find(|step| screen_without(*step).len() > shown);
+        if let Some(cols) = unblocked {
+            let screen = screen_without(cols);
+            let clear = row
+                .iter()
+                .filter(|c| {
+                    m.wanted_px(c).is_some() && screen.iter().any(|s| s.first() == c.first())
+                })
+                .map(|c| c.first().to_owned())
+                .collect();
+            return NarrowestStep::ClearThenStep {
+                cols,
+                clear,
+                shown: screen.len(),
+            };
+        }
+    }
+    if fewer {
+        let widest = NARROWEST_STEPS[NARROWEST_STEPS.len() - 1].max(current);
+        return NarrowestStep::Limit(if shown <= 1 {
+            "Already showing one tile.".into()
+        } else {
+            format!(
+                "{shown} tiles still fit at the widest width ({widest} cols, {}px). Tiles have {}px here.",
+                narrowest_width_px(widest, m.px_per_col),
+                m.area_px
+            )
+        });
+    }
+    if shown >= total {
+        return NarrowestStep::Limit("Every tile on this desktop is already on screen.".into());
+    }
+    let narrowest = NARROWEST_STEPS[0].min(current);
+    let narrowest_px = narrowest_width_px(narrowest, m.px_per_col);
+    let asked = shown + 1;
+    let asked_px = asked as f32 * narrowest_px;
+    let sidebar = m.area_px < window_px && asked_px <= window_px;
+    let narrower = narrowest_px > TILE_MIN_WIDTH && asked as f32 * TILE_MIN_WIDTH <= m.area_px;
+    NarrowestStep::Limit(format!(
+        "{asked} tiles at the narrowest width ({narrowest} cols, {narrowest_px}px) need {asked_px}px. Tiles have {}px here.{}{}",
+        m.area_px,
+        if sidebar {
+            " Closing the sidebar would make room."
+        } else {
+            ""
+        },
+        if narrower {
+            " A narrower width can be set in Settings → Appearance."
+        } else {
+            ""
+        },
+    ))
+}
+
 /// The message when a column cannot take one more stacked tile at the minimum height, or
 /// None when it can.
 pub fn stack_limit_message(tree: &Node, anchor: &str, tile_height_px: f32) -> Option<String> {
@@ -686,6 +1027,7 @@ mod tests {
             active,
             first_column: first,
             held: &[],
+            cleared: &[],
             measures: Measures {
                 area_px: 1500.0,
                 narrowest_px: 500.0,

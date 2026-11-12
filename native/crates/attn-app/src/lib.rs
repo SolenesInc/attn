@@ -71,6 +71,7 @@ pub fn bind(
                 state.keymap = keymap;
             }
             state.window.follow(&state.facts);
+            desktop::settle(state);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state
                 .terminals

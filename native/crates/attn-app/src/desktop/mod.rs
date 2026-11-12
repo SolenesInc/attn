@@ -3,6 +3,7 @@
 
 mod actions;
 pub mod layout;
+mod shelf;
 mod view;
 
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ use attn_client::Facts;
 use attn_protocol::Desktop;
 
 pub(crate) use actions::{escape, run};
+pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::area;
 
 use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowPlan, View};
@@ -28,6 +30,14 @@ pub struct Desk {
     /// The desktop shown before the current one, where the current desktop's digit goes.
     pub(crate) previous_desktop: Option<String>,
     shown: Option<(String, String)>,
+    /// The title bar's room for the shelf, in points.
+    pub(crate) shelf_px: Option<f32>,
+    pub(crate) window_w: Option<f32>,
+    /// The pointer is over the shelf's dots, which show the width control.
+    pub(crate) width_control: bool,
+    /// The shelf cap whose menu is open.
+    pub(crate) cap_open: Option<layout::Edge>,
+    pub(crate) width_label: Option<shelf::WidthLabel>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -45,6 +55,11 @@ pub(crate) struct RowState {
     pub held: Vec<String>,
     /// Leaves in the order this window last used them, newest first.
     pub focus_order: Vec<String>,
+    /// Columns, by first leaf, whose dragged width this window asked the daemon to forget.
+    pub cleared: Vec<String>,
+    /// A column brought beside the active tile that the daemon has not yet moved.
+    pub drop: Option<shelf::PendingDrop>,
+    pub settled: Option<shelf::Settled>,
 }
 
 /// A walk back and forward through the tiles a window showed, as a browser's history.
@@ -108,6 +123,7 @@ impl Desk {
             }
             let active = &desktop.active_pane_id;
             if leaves.contains(active) && row.focus_order.first() != Some(active) {
+                row.held.retain(|id| id != active);
                 row.focus_order.retain(|id| id != active);
                 row.focus_order.insert(0, active.clone());
             }
@@ -140,6 +156,9 @@ impl Desk {
         self.previous_desktop.take_if(|previous| {
             current.as_ref() == Some(previous) || !facts.desktops.iter().any(|d| d.id == *previous)
         });
+        if shown.is_some() && shown != self.shown {
+            self.cap_open = None;
+        }
         if shown.is_some() {
             self.shown = shown;
         }
@@ -178,6 +197,7 @@ impl Desk {
             active: &desktop.active_pane_id,
             first_column: row.first_column.as_ref(),
             held: &row.held,
+            cleared: &row.cleared,
             measures,
         });
         Some((tree, plan))
