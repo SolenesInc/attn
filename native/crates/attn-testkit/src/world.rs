@@ -114,7 +114,7 @@ impl World {
                 self.runtime.settle_all();
                 self.runtime.frame(0.0);
             }
-            if self.inbox.lock().unwrap().is_empty() && self.quiet() {
+            if self.quiet() && self.inbox.lock().unwrap().is_empty() {
                 return;
             }
             assert!(

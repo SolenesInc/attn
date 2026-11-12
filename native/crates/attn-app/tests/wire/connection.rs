@@ -228,3 +228,21 @@ fn a_command_lost_with_a_hang_up_does_not_stall_the_reconnect() {
     assert_eq!(world.daemon.connections(), 2);
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_daemon_on_another_schema_shows_the_mismatch_even_when_its_state_does_not_decode() {
+    let daemon = Daemon::scripted();
+    daemon.on("client_hello", |_| {
+        serde_json::json!({ "event": "initial_state", "protocol_version": "n3w", "sessions": "a shape this build cannot read" })
+    });
+    let world = World::start(daemon);
+
+    let alert = refusal(&world);
+    assert!(
+        alert.contains(&format!(
+            "The app speaks protocol {PROTOCOL_VERSION} and the daemon speaks n3w"
+        )),
+        "{alert}"
+    );
+    assert!(world.runtime_is_at_rest());
+}

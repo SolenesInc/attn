@@ -193,6 +193,8 @@ enum Ended {
 struct Header {
     #[serde(default)]
     event: String,
+    #[serde(default)]
+    protocol_version: Option<String>,
 }
 
 impl Task {
@@ -316,6 +318,15 @@ impl Task {
         };
         match header.event.as_str() {
             "initial_state" => {
+                if let Some(daemon) = header
+                    .protocol_version
+                    .filter(|v| !v.is_empty() && v != PROTOCOL_VERSION)
+                {
+                    return Some(Refusal::ProtocolMismatch {
+                        app: PROTOCOL_VERSION.into(),
+                        daemon,
+                    });
+                }
                 let state: InitialStateMessage = match serde_json::from_str(text) {
                     Ok(state) => state,
                     Err(why) => {
@@ -323,16 +334,6 @@ impl Task {
                         return None;
                     }
                 };
-                if let Some(daemon) = state
-                    .protocol_version
-                    .as_ref()
-                    .filter(|v| !v.is_empty() && *v != PROTOCOL_VERSION)
-                {
-                    return Some(Refusal::ProtocolMismatch {
-                        app: PROTOCOL_VERSION.into(),
-                        daemon: daemon.clone(),
-                    });
-                }
                 *greeted = true;
                 self.store.apply_initial_state(state);
                 None
