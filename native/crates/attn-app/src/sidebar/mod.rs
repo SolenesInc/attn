@@ -112,6 +112,37 @@ fn request_id(cmd: &str) -> String {
     format!("{cmd}-native-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
+/// The element whose desktops take a dragged tile: the queue bar in queue flow with the
+/// sidebar collapsed, the sidebar otherwise. The rail takes none.
+pub(crate) fn drop_scope(state: &State) -> &'static str {
+    if actions::queue_flow(state) && state.window.sidebar_hidden {
+        "queue-bar"
+    } else {
+        "sidebar"
+    }
+}
+
+/// The desktop a line or chip at element path `path` shows.
+pub(crate) fn desktop_at(state: &State, path: &str) -> Option<String> {
+    let slot = path.split('/').find_map(|segment| {
+        ["queue.desktop.", "queue-bar.desktop."]
+            .iter()
+            .find_map(|prefix| segment.strip_prefix(prefix)?.parse::<i64>().ok())
+    });
+    if let Some(slot) = slot {
+        let desktops = &state.facts.desktops;
+        return desktops
+            .iter()
+            .find(|d| d.shortcut_slot == Some(slot))
+            .map(|d| d.id.clone());
+    }
+    let path = format!("/{path}/");
+    lines(state)
+        .into_iter()
+        .find(|l| path.contains(&format!("/{}/", l.key())))
+        .map(|l| l.desktop().to_owned())
+}
+
 /// The desktop sidebar's lines, in the order it shows them.
 pub(crate) fn lines(state: &State) -> Vec<Line> {
     let home = state.window.view == View::Home;

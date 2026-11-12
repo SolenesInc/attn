@@ -8,6 +8,7 @@ use super::model::{desktop_title, ordered_desktops};
 use super::queue::Bands;
 use super::{actions, open_desktop};
 use crate::State;
+use crate::desktop::DesktopMark;
 use crate::shell::View;
 
 /// A desktop's chip: its slot, marked when it shows and when a turn waits on it.
@@ -76,10 +77,21 @@ pub(crate) enum Mark {
     Count,
 }
 
-pub(crate) fn chip(prefix: &str, chip: &Chip, mark: Mark, t: &Tokens) -> El {
+/// How desktop `desktop`'s chip shows a dragged tile, where chips take one.
+fn drop_on(state: &State, desktop: &str) -> Option<DesktopMark> {
+    state.window.desk.drag.as_ref()?.desktop_mark(desktop)
+}
+
+pub(crate) fn chip(
+    prefix: &str,
+    chip: &Chip,
+    mark: Mark,
+    drop: Option<DesktopMark>,
+    t: &Tokens,
+) -> El {
     let desktop = chip.desktop.clone();
     let label = format!("{}{}", chip.title, waiting_words(chip.waiting, mark));
-    row()
+    let el = row()
         .key(format!("{prefix}.{}", chip.slot))
         .role("button")
         .label(label)
@@ -101,7 +113,13 @@ pub(crate) fn chip(prefix: &str, chip: &Chip, mark: Mark, t: &Tokens) -> El {
                 .font(type_::MONO_CAPTION)
                 .color(t.text_secondary),
         )
-        .children(waiting_mark(chip.waiting, mark, t))
+        .children(waiting_mark(chip.waiting, mark, t));
+    match drop {
+        None => el,
+        Some(DesktopMark::Source) => el.opacity(0.4),
+        Some(DesktopMark::Accepts) => el.border(1.0, t.accent),
+        Some(DesktopMark::Entering) => el.border(1.0, t.accent).fill(t.accent.alpha(0.18)),
+    }
 }
 
 fn waiting_words(waiting: usize, mark: Mark) -> String {
@@ -165,7 +183,11 @@ pub(crate) fn desktop_strip(state: &State, bands: &Bands<'_>, t: &Tokens) -> El 
         .label("Desktops")
         .w_full()
         .gap(space::S1)
-        .children(chips.iter().map(|c| chip("queue.desktop", c, Mark::Dot, t)))
+        .children(
+            chips
+                .iter()
+                .map(|c| chip("queue.desktop", c, Mark::Dot, drop_on(state, &c.desktop), t)),
+        )
         .children(extras_chip("queue.desktop-extras", extras, Mark::Dot, t))
 }
 
@@ -216,7 +238,11 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
                 .on_press(|state: &mut State| state.window.sidebar_hidden = false)
                 .child(text("»").font(type_::BODY).color(t.text_secondary)),
         )
-        .children(chips.iter().map(|c| chip("rail.desktop", c, Mark::Dot, t)))
+        .children(
+            chips
+                .iter()
+                .map(|c| chip("rail.desktop", c, Mark::Dot, None, t)),
+        )
         .children(extras_chip("rail.desktop-extras", extras, Mark::Dot, t))
 }
 
@@ -325,11 +351,10 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
                     t.text_primary
                 })),
         )
-        .children(
-            chips
-                .iter()
-                .map(|c| chip("queue-bar.desktop", c, Mark::Count, t)),
-        )
+        .children(chips.iter().map(|c| {
+            let drop = drop_on(state, &c.desktop);
+            chip("queue-bar.desktop", c, Mark::Count, drop, t)
+        }))
         .children(extras_chip(
             "queue-bar.desktop-extras",
             extras,

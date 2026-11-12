@@ -1405,6 +1405,76 @@ fn a_tile_dropped_on_new_desktop_moves_to_a_desktop_made_for_it_and_the_window_s
     assert!(world.runtime_is_at_rest());
 }
 
+/// The middle of the element `key` names.
+fn middle(world: &World, key: &str) -> (f32, f32) {
+    let [x, y, w, h] = world
+        .runtime()
+        .presented(key)
+        .unwrap_or_else(|| panic!("{key} is drawn"))
+        .0;
+    (x + w / 2.0, y + h / 2.0)
+}
+
+#[test]
+fn in_queue_flow_desktop_chips_take_a_dragged_tile_in_the_sidebar_and_in_the_title_bar() {
+    let desktops = two_desktops();
+    let sessions = desktops
+        .iter()
+        .flat_map(|d| d.panes.iter())
+        .map(|p| session(&p.pane_id))
+        .collect();
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile("work/desktop_1")]),
+        desktops: Some(desktops),
+        sessions: Some(sessions),
+        settings: Some(
+            [("queue_mode_enabled".to_owned(), "true".to_owned())]
+                .into_iter()
+                .collect(),
+        ),
+        ..InitialStateMessage::new()
+    });
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.gesture(|app| app.click(Target::key("queue.desktop.1")));
+    world.settle();
+    assert!(shows(&world, "Agent a"));
+    let opened = world.daemon.sent_of("desktop_set_current").len();
+
+    let chip = middle(&world, "queue.desktop.2");
+    drag(&mut world, "tile.a.header", chip);
+    assert_eq!(
+        sent(&world, "desktop_move_leaf"),
+        [json(
+            r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2","leaf_id":"a",
+                "edge":"left","leaf_share":0.32}"#
+        )]
+    );
+
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    let chip = middle(&world, "queue-bar.desktop.2");
+    world.gesture(|app| app.drag_over(Target::key("tile.b.header"), chip));
+    world.advance(Duration::from_millis(400));
+    let switched = world.daemon.sent_of("desktop_set_current");
+    assert_eq!(
+        switched.len(),
+        opened + 2,
+        "the drop and then the rest on the chip each switch to desktop 2"
+    );
+    assert_eq!(switched[opened + 1]["desktop_id"], "work/desktop_2");
+    world.gesture(|app| app.release(chip));
+    assert_eq!(sent(&world, "desktop_move_leaf")[1]["leaf_id"], "b");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("sidebar.new_desktop"))
+            .is_none(),
+        "only the desktop sidebar has a drop for a new desktop"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn a_swapped_out_tile_comes_back_when_the_row_changes_without_the_swap() {
     let mut world = start(vec![four_in_a_row("a")]);

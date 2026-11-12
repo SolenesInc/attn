@@ -259,6 +259,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.now_ms,
         crate::desktop::on_screen_sessions(state),
         super::width::of(state).to_bits(),
+        window.desk.drag.as_ref().and_then(|d| d.desktop_marks()),
         *t,
     );
     memo("sidebar", reads, || {

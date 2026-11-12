@@ -205,6 +205,15 @@ impl LeafDrag {
         }
     }
 
+    /// What sidebar desktops show of the drag, for a view to read: the desktop it started on
+    /// and the one it rests on, while the press has become a drag.
+    pub(crate) fn desktop_marks(&self) -> Option<(String, Option<String>)> {
+        self.active.then(|| {
+            let entering = self.entering.as_ref().map(|(on, _)| on.clone());
+            (self.source.desktop().to_owned(), entering)
+        })
+    }
+
     /// Whether the sidebar shows its drop for a new desktop, and whether the drag is over it.
     pub(crate) fn new_desktop(&self) -> Option<bool> {
         self.active.then(|| self.target == Some(Target::NewDesktop))
@@ -254,7 +263,12 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner
             drag.active |= drag.source.movable() && distance(drag.start, at) >= ACTIVATION;
             if drag.active {
                 drag.target = target(state, &drag);
-                tx.element_at_in("sidebar", at[0], at[1], over_sidebar);
+                tx.element_at_in(
+                    crate::sidebar::drop_scope(state),
+                    at[0],
+                    at[1],
+                    over_sidebar,
+                );
             } else {
                 tx.live_only();
             }
@@ -273,7 +287,7 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner
                 let drag = LeafDrag { at, target, ..drag };
                 let with_delegates = tx.mods().alt;
                 tx.element_at_in(
-                    "sidebar",
+                    crate::sidebar::drop_scope(state),
                     at[0],
                     at[1],
                     move |state: &mut State, picked, tx: &mut Tx| {
@@ -295,19 +309,14 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner
     }
 }
 
-/// The sidebar target at `path`: a desktop other than the one the drag started on, or the
-/// drop for a new desktop.
+/// The sidebar or queue bar target at `path`: a desktop other than the one the drag started
+/// on, or the drop for a new desktop.
 fn sidebar_target(state: &State, drag: &LeafDrag, path: &str) -> Option<Target> {
     if path.split('/').any(|s| s == "sidebar.new_desktop") {
         return Some(Target::NewDesktop);
     }
-    let lines = crate::sidebar::lines(state);
-    let path = format!("/{path}/");
-    let desktop = lines
-        .iter()
-        .find(|l| path.contains(&format!("/{}/", l.key())))?
-        .desktop();
-    (desktop != drag.source.desktop()).then(|| Target::Desktop(desktop.to_owned()))
+    let desktop = crate::sidebar::desktop_at(state, path)?;
+    (desktop != drag.source.desktop()).then_some(Target::Desktop(desktop))
 }
 
 /// Takes the sidebar's part of a drag's move: what the pointer is over there, and the switch
