@@ -1,15 +1,21 @@
 package fakeagent
 
-import "github.com/google/uuid"
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/google/uuid"
+)
 
 const (
-	methodCompactions   = "compactions"
+	methodCompacted     = "compacted"
 	methodRefuseCompact = "refuse_compact"
 	heldCompaction      = "compaction"
 )
 
-type compactionsResult struct {
-	Count int `json:"count"`
+type compactedParams struct {
+	Conversation string `json:"conversation"`
 }
 
 func (s *CodexServer) HoldNextCompaction() (arrived, release func()) {
@@ -24,10 +30,9 @@ func (s *CodexServer) RefuseNextCompaction(reason string) {
 }
 
 func (s *CodexServer) Compactions(conversation string) int {
-	s.t.Helper()
-	var counted compactionsResult
-	s.call(methodCompactions, serverThreadParams{ThreadID: conversation}, &counted)
-	return counted.Count
+	s.fake.mu.Lock()
+	defer s.fake.mu.Unlock()
+	return s.fake.compactions[conversation]
 }
 
 func (s *codexAppServer) compactStart(p codexServerParams) (any, func(), error) {
@@ -71,8 +76,10 @@ func (s *codexAppServer) compact(t *codexServerThread) {
 		s.stopWhenDrained()
 		return
 	}
-	s.compactions[t.c.conversation]++
 	s.mu.Unlock()
+	if err := s.control.call(context.Background(), methodCompacted, compactedParams{Conversation: t.c.conversation}, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "fake codex app-server: report compaction: %v\n", err)
+	}
 	s.tell(t, notification("item/completed", map[string]any{"threadId": t.c.conversation, "turnId": turnID, "item": map[string]any{"type": "contextCompaction", "id": uuid.NewString()}}))
 	s.mu.Lock()
 	t.active = false

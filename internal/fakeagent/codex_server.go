@@ -84,7 +84,6 @@ type codexAppServer struct {
 	held            map[string]*codexHeldReply
 
 	compactRefusal string
-	compactions    map[string]int
 }
 
 type codexServerConn struct {
@@ -170,8 +169,6 @@ func runCodexAppServer(cfg config) int {
 		terminalsListed: make(chan struct{}, 1),
 		listed:          make(chan struct{}),
 		held:            map[string]*codexHeldReply{},
-
-		compactions: map[string]int{},
 	}
 	control, err := dialControl(cfg, s.handleKit)
 	if err != nil {
@@ -1173,10 +1170,6 @@ func (s *codexAppServer) handleKit(_ *rpcPeer, method string, raw json.RawMessag
 	case methodCloseThread:
 		s.unload(p.ThreadID)
 		return struct{}{}, nil
-	case methodCompactions:
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		return compactionsResult{Count: s.compactions[p.ThreadID]}, nil
 	case methodRefuseCompact:
 		s.mu.Lock()
 		s.compactRefusal = p.Text

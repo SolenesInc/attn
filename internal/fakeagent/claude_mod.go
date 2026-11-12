@@ -40,7 +40,6 @@ const (
 	methodModCompactHold    = "mod_compact_hold"
 	methodModCompactArrived = "mod_compact_arrived"
 	methodModCompactRelease = "mod_compact_release"
-	methodModCompactions    = "mod_compactions"
 	methodModCompactReport  = "mod_compact_report"
 	methodModPause          = "mod_pause"
 	methodModResume         = "mod_resume"
@@ -102,7 +101,6 @@ type fakeMod struct {
 
 	nextCompact ModCompactReport
 	compactHold *fakeModCompactHold
-	compactions int
 	refused     bool
 	turnsEnded  int
 	newerTurn   bool
@@ -404,10 +402,6 @@ func (m *fakeMod) handle(a *agent, method string, params json.RawMessage) (any, 
 			close(hold.release)
 		}
 		return struct{}{}, nil
-	case methodModCompactions:
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		return m.compactions, nil
 	case methodModCompactReport:
 		return <-m.reports, nil
 	}
@@ -429,9 +423,6 @@ func (m *fakeMod) compact(instance, id string) {
 	var hold *fakeModCompactHold
 	if !running {
 		next, m.nextCompact = m.nextCompact, ModCompactReport{}
-		if next.Outcome != ModCompactBusy {
-			m.compactions++
-		}
 		if m.compactHold != nil && !m.compactHold.taken {
 			hold = m.compactHold
 			hold.taken = true
@@ -446,6 +437,12 @@ func (m *fakeMod) compact(instance, id string) {
 	outcome := next.Outcome
 	if outcome == "" {
 		outcome = ModCompactCompacted
+	}
+	if outcome != ModCompactBusy {
+		if err := m.agent.control.call(context.Background(), methodCompacted, compactedParams{Conversation: m.claude.conversation}, nil); err != nil {
+			m.reportCompact(instance, id, ModCompactFailed, err.Error())
+			return
+		}
 	}
 	compacting := outcome == ModCompactCompacted
 	if compacting {

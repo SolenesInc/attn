@@ -177,9 +177,12 @@ func (r *Run) ModHoldNextCompact() (arrived, release func()) {
 }
 
 func (r *Run) ModCompactions() int {
-	r.t.Helper()
+	r.fake.mu.Lock()
+	defer r.fake.mu.Unlock()
 	var ran int
-	r.call(methodModCompactions, struct{}{}, &ran)
+	for _, compacted := range r.fake.compactions {
+		ran += compacted
+	}
 	return ran
 }
 

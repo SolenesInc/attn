@@ -51,9 +51,10 @@ type Kit struct {
 
 type fake struct {
 	launch
-	peer     *rpcPeer
-	mu       sync.Mutex
-	exitCode *int
+	peer        *rpcPeer
+	mu          sync.Mutex
+	exitCode    *int
+	compactions map[string]int
 }
 
 func Install(t testing.TB, dir, binary string, harnesses []Harness, wrapper string) *Kit {
@@ -368,6 +369,17 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 		}
 		f.mu.Lock()
 		f.exitCode = &exit.Code
+		f.mu.Unlock()
+	case methodCompacted:
+		var compacted compactedParams
+		if err := json.Unmarshal(params, &compacted); err != nil {
+			return err
+		}
+		f.mu.Lock()
+		if f.compactions == nil {
+			f.compactions = map[string]int{}
+		}
+		f.compactions[compacted.Conversation]++
 		f.mu.Unlock()
 	default:
 		return fmt.Errorf("unknown method %q", method)
