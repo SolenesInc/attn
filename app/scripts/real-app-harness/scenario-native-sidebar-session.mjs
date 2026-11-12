@@ -12,7 +12,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
 const runner = createScenarioRunner(options, {
   scenarioId: 'NATIVE-SIDEBAR-SESSION', tier: 'tier1-local-shell', prefix: 'native-sidebar-session',
-  metadata: { focus: 'The native app launches parked, connects, lists a shell session in its sidebar after a relaunch and takes a press on its row, without taking focus; it relaunches because it does not yet follow sessions spawned while it runs (s-bsjwvs)' },
+  metadata: { focus: 'The native app launches parked, connects, lists a shell session spawned while it runs in its sidebar and takes a press on its row, without taking focus' },
 });
 const client = new UiAutomationClient({ appPath: options.appPath });
 const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -36,17 +36,11 @@ try {
     runner.registerCleanup('unregister_shell', () => observer.unregisterSession(id));
   });
 
-  await runner.step('relaunch_app', async () => {
-    await client.launchFreshApp();
-    await client.waitForManifest(20_000);
-    await client.waitForReady(20_000);
-  });
-
   const row = { key: `sidebar.session.${id}` };
   let listed;
   await runner.step('sidebar_lists_session', async () => {
     listed = await driver.waitFor(row);
-    runner.assert(listed.role === 'listitem', 'the sidebar lists the session as a list item', listed);
+    runner.assert(listed.role === 'button', 'the sidebar lists the session as a row that opens it', listed);
   });
 
   let receipt;
