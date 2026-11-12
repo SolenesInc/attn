@@ -817,6 +817,7 @@ jobs:
             runs_on: ubuntu-24.04
     env:
       CARGO_BUILD_BUILD_DIR: ${{ github.workspace }}/native/target
+      RUSTUP_TOOLCHAIN: 1.99.1
     defaults:
       run:
         working-directory: native

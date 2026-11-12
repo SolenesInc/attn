@@ -256,6 +256,7 @@ check-frontend: lint-frontend check-browser-runtime
 check-mobile: $(MOBILE_NODE_MODULES)
 	cd mobile && pnpm run check
 
+NATIVE_CLIPPY ?= --workspace
 check-native:
 	cd native && cargo fmt --all --check
 	cd native && cargo check --locked --workspace --all-targets

@@ -77,6 +77,7 @@ cat >"$work/bin/attn" <<'EOF'
 [ "$*" = "seed show s-fix123" ]
 EOF
 chmod +x "$work/bin/attn"
+unset ATTN_FREEZE_EXCEPTION
 export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
