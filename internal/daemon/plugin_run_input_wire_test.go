@@ -436,23 +436,50 @@ func TestAPluginRingRejectionOrTargetChangeReleasesTheOriginalInput(t *testing.T
 	}
 }
 
-func TestALegacyDriverCanDiscoverItsConversationWhileAcceptingItsFirstCapture(t *testing.T) {
-	inBubbleWithAgents(t, func(t *testing.T, w *world) {
-		app := w.TrustedApp()
-		driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"state_reporting": true, "message_delivery": true})
-		session, run := spawnDriven(w, app, driver, w.Path("shop"))
-		awaitingInput(t, app, driver, session, run)
-		mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
-		capture := sendQuickCapture(t, app, mailbox, "first native input")
-		var input deliveredMessage
-		held := driver.asked("driver.deliver_message", &input)
-		reportDriverConversation(driver, run, 2, "new-native-conversation")
-		driver.answer(held, map[string]bool{"ok": true})
-		testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
-		if len(driver.requests) != 0 {
-			t.Fatal("initial native ID discovery duplicated the accepted input")
-		}
-	})
+func TestAPluginRingAcceptedDuringATargetChangeIsNotSentAgain(t *testing.T) {
+	for _, change := range []string{"first-conversation", "conversation", "run"} {
+		t.Run(change, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app := w.TrustedApp()
+				driver := connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"resume": true, "state_reporting": true, "message_delivery": true, "attributed_input": change != "first-conversation"})
+				session, run := spawnDriven(w, app, driver, w.Path("shop"))
+				awaitingInput(t, app, driver, session, run)
+				if change != "first-conversation" {
+					reportDriverConversation(driver, run, 2, "native-conversation")
+				}
+				mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+				capture := sendQuickCapture(t, app, mailbox, "accepted user input")
+				var input deliveredMessage
+				held := driver.asked("driver.deliver_message", &input)
+				if change == "run" {
+					stopDriven(app, driver, session)
+					run = relaunchDriven(w, driver, session, w.Path("shop"))
+					awaitingInput(t, app, driver, session, run)
+					reportDriverConversation(driver, run, 2, "new-native-conversation")
+				} else {
+					reportDriverConversation(driver, run, 3, "new-native-conversation")
+				}
+				driver.answer(held, map[string]bool{"ok": true})
+				w.advance(0)
+				if record := quickCaptureRecord(t, app, capture.CaptureID); protocol.Deref(record.ReadAt) == "" {
+					t.Fatalf("accepted input %s remained unread after %s changed", input.InputID, change)
+				}
+				testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+				if len(driver.requests) != 0 {
+					t.Fatal("target change duplicated the accepted input")
+				}
+				next := sendQuickCapture(t, app, mailbox, "later user input")
+				var later deliveredMessage
+				held = driver.asked("driver.deliver_message", &later)
+				if later.InputID == input.InputID || later.RunID != run.RunID || !strings.Contains(later.Text, next.Content) || strings.Contains(later.Text, capture.Content) {
+					t.Fatalf("later input=%+v; accepted input=%+v", later, input)
+				}
+				driver.answer(held, map[string]bool{"ok": true})
+				testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == next.CaptureID })
+				t.Logf("%s changed before the ok:true receipt; accepted input=%s read once, later input=%s", change, input.InputID, later.InputID)
+			})
+		})
+	}
 }
 
 func TestADeferredPluginNoticeDoesNotHoldBackTheUsersInputDuringWork(t *testing.T) {

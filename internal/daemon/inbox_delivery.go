@@ -407,13 +407,6 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	ring := pending.Message.Ring
 	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.FinishingStart, pending.BellWaitsForPrompt, pending.HeldUntil
 	placement := d.placeDelivery(context.Background(), holder.ID, sessionmonitor.DeliveryFromMessage(pending.Message))
-	if !d.pendingInboxTargetMatches(pending, holder.ID) {
-		if err := d.clearPendingInbox(a, state); err != nil {
-			return receipt, err
-		}
-		receipt.Detail = "queued (the input target changed before its receipt)"
-		return receipt, nil
-	}
 	if placement.Stage == sessionmonitor.Placed {
 		readAt, err := d.store.RingInbox(a, finishingStart, ring.Typed, holder.ID, ring.Notified, pending.At)
 		pausepoint.Done(pausepoint.InboxRingRecorded, err)
