@@ -26,6 +26,7 @@ tempfile = "3"
 
 [dev-dependencies]
 attn-testkit = { path = "../attn-testkit" }
+tempfile = "3"
 
 [lints]
 workspace = true

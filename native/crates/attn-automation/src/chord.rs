@@ -3,24 +3,7 @@ use rune::{Chord, ChordKey, ChordMod, Key, KeyEvent, KeyPlatform, Mods};
 /// The key event the keyboard sends for `chord` on this platform: "mod+shift+k" is ⇧⌘K on
 /// macOS and Ctrl+Shift+K on Linux.
 pub fn key_event(chord: &Chord) -> Result<KeyEvent, String> {
-    let platform = KeyPlatform::current();
-    let mut mods = Mods::default();
-    for m in chord.mods_on(platform) {
-        match m {
-            ChordMod::Primary => {
-                mods.cmd = true;
-                if platform == KeyPlatform::Mac {
-                    mods.logo = true;
-                } else {
-                    mods.ctrl = true;
-                }
-            }
-            ChordMod::Ctrl => mods.ctrl = true,
-            ChordMod::Alt => mods.alt = true,
-            ChordMod::Shift => mods.shift = true,
-            ChordMod::Super => mods.logo = true,
-        }
-    }
+    let mods = mods_of(chord.mods_on(KeyPlatform::current()));
     let key = match chord.key() {
         ChordKey::Char(c) if mods.cmd || mods.ctrl => Key::Command(c),
         ChordKey::Char(c) if mods.shift => Key::Text(shifted(c).to_string()),
@@ -42,6 +25,48 @@ pub fn key_event(chord: &Chord) -> Result<KeyEvent, String> {
         other => return Err(format!("no key event for {other:?}")),
     };
     Ok(KeyEvent { key, mods })
+}
+
+/// The modifiers `held` names as a chord does, "mod+shift" or "alt", that a keyboard holds
+/// down on this platform. Empty holds none.
+pub fn held_mods(held: &str) -> Result<Mods, String> {
+    let named = held
+        .split('+')
+        .filter(|name| !name.is_empty())
+        .map(|name| match name {
+            "mod" => Ok(ChordMod::Primary),
+            "ctrl" => Ok(ChordMod::Ctrl),
+            "alt" => Ok(ChordMod::Alt),
+            "shift" => Ok(ChordMod::Shift),
+            "super" => Ok(ChordMod::Super),
+            other => Err(format!(
+                "no modifier {other:?}; modifiers: mod, ctrl, alt, shift, super"
+            )),
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(mods_of(named))
+}
+
+fn mods_of(named: Vec<ChordMod>) -> Mods {
+    let platform = KeyPlatform::current();
+    let mut mods = Mods::default();
+    for m in named {
+        match m {
+            ChordMod::Primary => {
+                mods.cmd = true;
+                if platform == KeyPlatform::Mac {
+                    mods.logo = true;
+                } else {
+                    mods.ctrl = true;
+                }
+            }
+            ChordMod::Ctrl => mods.ctrl = true,
+            ChordMod::Alt => mods.alt = true,
+            ChordMod::Shift => mods.shift = true,
+            ChordMod::Super => mods.logo = true,
+        }
+    }
+    mods
 }
 
 /// What a US layout types for `c` with Shift.

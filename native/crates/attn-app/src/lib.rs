@@ -214,6 +214,7 @@ pub fn app() -> rune::App<State> {
     .titlebar(Titlebar::new(shell::TITLE_BAR_HEIGHT))
     .on_ime(keys::on_ime)
     .on_open_url(open_link)
+    .on_modifiers(keys::on_modifiers)
 }
 
 fn quit(state: &mut State, tx: &mut Tx) {

@@ -231,3 +231,37 @@ app/src/utils/terminalOsc.test.ts	parseOsc52Writes > parses clipboard writes spl
 app/src/utils/terminalOsc.test.ts	parseOsc52Writes > accepts ST termination and rejects clipboard read queries	attn-term/src/osc52.rs::writes_are_read_whole_from_split_chunks_with_either_terminator	
 app/src/utils/terminalOsc.test.ts	parseOsc52Writes > finds every write wherever the chunks split, among other escapes and multibyte text	attn-term/src/osc52.rs::every_write_is_found_wherever_the_output_splits_among_other_escapes_and_multibyte_text	
 app/src/components/QueueBar.sections.test.tsx	the desktop chips > badges each desktop with its owed turns and marks the current one	attn-app/tests/wire/queue.rs::the_desktop_strip_dots_each_chip_where_a_turn_waits_and_the_bar_counts_them	
+app/src/utils/terminalLinks.test.ts	urlAtColumn > returns the uri and its column range	attn-term/src/links.rs::a_url_covers_its_scheme_to_its_end_without_trailing_punctuation	
+app/src/utils/terminalLinks.test.ts	urlAtColumn > misses columns outside the uri	attn-term/src/links.rs::a_url_covers_its_scheme_to_its_end_without_trailing_punctuation	
+app/src/utils/terminalLinks.test.ts	hyperlinkRangeAt > returns the full range for a label containing spaces	attn-term/src/links.rs::a_hyperlink_spans_the_cells_that_share_its_uri	
+app/src/utils/terminalLinks.test.ts	hyperlinkRangeAt > does not merge two adjacent links with different uris	attn-term/src/links.rs::a_hyperlink_spans_the_cells_that_share_its_uri	
+app/src/utils/terminalLinks.test.ts	hyperlinkRangeAt > bounds the range exactly at the start and end of the line	attn-term/src/links.rs::a_hyperlink_spans_the_cells_that_share_its_uri	
+app/src/utils/terminalLinks.test.ts	hyperlinkRangeAt > returns null when the hovered index has no uri	attn-term/src/links.rs::a_hyperlink_spans_the_cells_that_share_its_uri	
+app/src/utils/terminalLinks.test.ts	fragmentAtColumn > finds the run of non-whitespace around the column	attn-term/src/links.rs::a_fragment_is_the_run_without_whitespace	
+app/src/utils/terminalLinks.test.ts	fragmentAtColumn > returns null on whitespace and past end of line	attn-term/src/links.rs::a_fragment_is_the_run_without_whitespace	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > parses line:col suffixes and prefers the stripped path	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > unwraps brackets and trailing punctuation	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > accepts bare filenames with extensions and tilde paths	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > rejects prose words and urls	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > keeps a colon-bearing path as a fallback candidate	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > finds a path starting mid-fragment after a non-path prefix (agent TUI tool lines)	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > finds a tilde path after an equals sign	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	pathCandidatesForFragment > does not split ordinary relative paths at interior slashes	attn-term/src/links.rs::path_candidates_match_the_tauri_terminal	
+app/src/utils/terminalLinks.test.ts	logicalLineAt > returns a single row when nothing wraps	attn-term/src/links.rs::a_line_joins_the_rows_it_wraps_over_within_the_view	
+app/src/utils/terminalLinks.test.ts	logicalLineAt > joins a wrapped group around the hovered row, padding interior rows to cols	attn-term/src/links.rs::a_line_joins_the_rows_it_wraps_over_within_the_view	
+app/src/utils/terminalLinks.test.ts	logicalLineAt > pads short interior rows so index math stays exact	attn-term/src/links.rs::a_line_joins_the_rows_it_wraps_over_within_the_view	
+app/src/utils/terminalLinks.test.ts	logicalLineAt > caps the joined group and keeps rows nearest the line start	attn-term/src/links.rs::a_line_joins_the_rows_it_wraps_over_within_the_view	
+app/src/utils/terminalLinks.test.ts	logicalLineAt > never walks outside the viewport	attn-term/src/links.rs::a_line_joins_the_rows_it_wraps_over_within_the_view	
+app/src/utils/terminalLinks.test.ts	logicalIndexForCell / spanFromLogicalRange > maps cells to logical indexes and rejects cells outside the group	attn-term/src/links.rs::a_lines_cells_map_to_indexes_and_spans_back_to_rows	
+app/src/utils/terminalLinks.test.ts	logicalIndexForCell / spanFromLogicalRange > maps a logical range back to a selection-semantics row span	attn-term/src/links.rs::a_lines_cells_map_to_indexes_and_spans_back_to_rows	
+app/src/utils/terminalLinks.test.ts	resolveDetectedPath > passes through absolute paths and normalizes dot segments	attn-term/src/links.rs::a_path_resolves_against_the_cwd_and_home	
+app/src/utils/terminalLinks.test.ts	resolveDetectedPath > resolves relative paths against cwd	attn-term/src/links.rs::a_path_resolves_against_the_cwd_and_home	
+app/src/utils/terminalLinks.test.ts	resolveDetectedPath > expands ~ against home and refuses without it	attn-term/src/links.rs::a_path_resolves_against_the_cwd_and_home	
+app/src/utils/terminalLinks.test.ts	resolveDetectedPath > refuses relative paths without cwd and escapes above root	attn-term/src/links.rs::a_path_resolves_against_the_cwd_and_home	
+app/src/utils/terminalLinks.test.ts	isMarkdownPath > matches .md and .markdown case-insensitively	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	isMarkdownPath > rejects other extensions and lookalikes	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes markdown path links to the in-app tile	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes non-markdown paths to the OS opener	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes web urls to the browser	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > treats file:// uris as paths, including markdown routing and decoding	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > returns null for links without a usable target	dropped	A native link always carries its URI or path, so a link without a target cannot be made

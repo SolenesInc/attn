@@ -36,6 +36,10 @@ export class NativeAppDriver {
     return this.client.request('scroll', { target, dy });
   }
 
+  holdKeys(mods) {
+    return this.client.request('hold', { mods });
+  }
+
   pressKey(chord) {
     return this.client.request('key', { chord });
   }

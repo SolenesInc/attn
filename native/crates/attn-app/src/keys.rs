@@ -1,5 +1,5 @@
 use attn_term::keys;
-use rune::{ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Tx};
+use rune::{ClipboardContent, Ime, Key, KeyEvent, KeyPlatform, Mods, Tx};
 
 use attn_protocol::RecordAnalyticsMessage;
 
@@ -153,6 +153,16 @@ fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, 
         return true;
     }
     state.terminals.input(&id, &bytes, &state.daemon)
+}
+
+/// ⌘ or Ctrl went down or up: over a link in a terminal, the cursor shows it opens.
+pub(crate) fn on_modifiers(state: &mut State, mods: Mods, tx: &mut Tx) {
+    if !state
+        .terminals
+        .accelerator(crate::terminal::accelerator(mods))
+    {
+        tx.live_only();
+    }
 }
 
 /// What an input method composed for the terminal holding the keyboard: a dead key's accent,

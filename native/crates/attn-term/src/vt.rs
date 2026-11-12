@@ -47,6 +47,13 @@ const OUT_OF_SPACE: c_int = -3;
 const DIRTY_FULL: u8 = 2;
 const DIRTY_FALSE: u8 = 0;
 
+/// One screen row as a terminal link reads it ([`Vt::link_row`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LinkRow {
+    pub cells: Vec<String>,
+    pub uris: Vec<Option<String>>,
+}
+
 unsafe extern "C" {
     fn attn_term_new(cols: u16, rows: u16, scrollback_bytes: usize) -> *mut AttnTerm;
     fn attn_term_restore(data: *const u8, len: usize, scrollback_bytes: usize) -> *mut AttnTerm;
@@ -60,6 +67,9 @@ unsafe extern "C" {
         out: *mut u32,
         cap: usize,
     ) -> usize;
+    fn attn_term_row_continues(t: *mut AttnTerm, row: u32) -> bool;
+    fn attn_term_row_links(t: *mut AttnTerm, row: u32) -> bool;
+    fn attn_term_cell_uri(t: *mut AttnTerm, row: u32, col: u16, out: *mut u8, cap: usize) -> usize;
     fn attn_term_snapshot(t: *mut AttnTerm, len: *mut usize) -> *mut u8;
     fn attn_term_bytes_free(data: *mut u8);
     fn attn_term_free(t: *mut AttnTerm);
@@ -338,6 +348,39 @@ impl Vt {
                     .iter()
                     .filter_map(|&cp| char::from_u32(cp))
                     .collect();
+            }
+            buf.resize(needed, 0);
+        }
+    }
+
+    /// Screen row `row` as a terminal link reads it: each cell's text, a wide character's
+    /// spacer as empty, and each cell's OSC 8 hyperlink.
+    pub fn link_row(&mut self, row: u32) -> LinkRow {
+        let cols = self.size().0;
+        let cells = (0..cols).map(|c| self.row_text(row, c..c + 1)).collect();
+        let links = unsafe { attn_term_row_links(self.raw.as_ptr(), row) };
+        let uris = (0..cols)
+            .map(|col| links.then(|| self.cell_uri(row, col)).flatten())
+            .collect();
+        LinkRow { cells, uris }
+    }
+
+    /// Screen row `row` continues the row above it, which wrapped into it.
+    pub fn row_continues(&mut self, row: u32) -> bool {
+        unsafe { attn_term_row_continues(self.raw.as_ptr(), row) }
+    }
+
+    fn cell_uri(&mut self, row: u32, col: u16) -> Option<String> {
+        let mut buf = vec![0u8; 256];
+        loop {
+            let needed = unsafe {
+                attn_term_cell_uri(self.raw.as_ptr(), row, col, buf.as_mut_ptr(), buf.len())
+            };
+            if needed == 0 {
+                return None;
+            }
+            if needed <= buf.len() {
+                return Some(String::from_utf8_lossy(&buf[..needed]).into_owned());
             }
             buf.resize(needed, 0);
         }

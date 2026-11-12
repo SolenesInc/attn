@@ -210,6 +210,38 @@ size_t attn_term_row_text(AttnTerm *t, uint32_t row, uint16_t start, uint16_t en
   return n;
 }
 
+static bool attn_term_ref(AttnTerm *t, uint32_t row, uint16_t col, GhosttyGridRef *ref) {
+  GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
+                        .value = {.coordinate = {.x = col, .y = row}}};
+  *ref = (GhosttyGridRef){0};
+  return ghostty_terminal_grid_ref(t->terminal, point, ref) == GHOSTTY_SUCCESS;
+}
+
+static bool attn_term_row_data(AttnTerm *t, uint32_t row, GhosttyRowData data) {
+  GhosttyGridRef ref;
+  if (!attn_term_ref(t, row, 0, &ref)) return false;
+  GhosttyRow r = 0;
+  if (ghostty_grid_ref_row(&ref, &r) != GHOSTTY_SUCCESS) return false;
+  bool value = false;
+  return ghostty_row_get(r, data, &value) == GHOSTTY_SUCCESS && value;
+}
+
+bool attn_term_row_continues(AttnTerm *t, uint32_t row) {
+  return attn_term_row_data(t, row, GHOSTTY_ROW_DATA_WRAP_CONTINUATION);
+}
+
+bool attn_term_row_links(AttnTerm *t, uint32_t row) {
+  return attn_term_row_data(t, row, GHOSTTY_ROW_DATA_HYPERLINK);
+}
+
+size_t attn_term_cell_uri(AttnTerm *t, uint32_t row, uint16_t col, uint8_t *out, size_t cap) {
+  GhosttyGridRef ref;
+  if (!attn_term_ref(t, row, col, &ref)) return 0;
+  size_t len = 0;
+  GhosttyResult result = ghostty_grid_ref_hyperlink_uri(&ref, out, cap, &len);
+  return result == GHOSTTY_SUCCESS || result == GHOSTTY_OUT_OF_SPACE ? len : 0;
+}
+
 bool attn_term_mode(AttnTerm *t, uint16_t value, bool ansi) {
   GhosttyTerminalModeConfig config;
   memset(&config, 0, sizeof(config));

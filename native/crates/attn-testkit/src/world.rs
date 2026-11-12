@@ -393,6 +393,12 @@ impl World {
         &self.runtime
     }
 
+    /// The links the app asked the system to open since the last call, which a test run
+    /// keeps instead of opening.
+    pub fn opened_links(&mut self) -> Vec<String> {
+        self.runtime.take_url_requests()
+    }
+
     /// How many settles left a terminal screen the renderer had not yet taken, which a
     /// window asked for a frame by a key or a timer would present: a key whose echo has not
     /// come back leaves none.

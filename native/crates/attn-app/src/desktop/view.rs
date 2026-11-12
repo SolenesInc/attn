@@ -8,7 +8,7 @@ use super::Area;
 use super::layout::{Direction, Leaf, LeafKind, Node};
 use crate::State;
 use crate::shell::Holder;
-use crate::terminal::Terminals;
+use crate::terminal::{Release, Terminals, accelerator};
 
 const GAP: f32 = 6.0;
 
@@ -40,6 +40,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         version(&facts.settings),
         holder.clone(),
         composing,
+        state.terminals.pointing_link().map(str::to_owned),
         row_state,
         area_bits,
         dragging.clone(),
@@ -268,7 +269,14 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             let caret = held
                 .then(|| ime_caret(cx.terminals, &pane.runtime_id, t.dark))
                 .flatten();
-            terminal_slot(&pane.runtime_id, holder.clone(), caret, t.dark, cx.scale)
+            let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str());
+            terminal_slot(
+                &pane.runtime_id,
+                holder.clone(),
+                caret,
+                pointing_link,
+                (t.dark, cx.scale),
+            )
         }
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
@@ -386,9 +394,15 @@ fn ime_caret(terminals: &Terminals, runtime_id: &str, dark: bool) -> Option<El> 
 /// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
 /// size the terminal asks its PTY for. While it holds the keyboard it holds the input method's
 /// `caret`.
-fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, scale: f32) -> El {
+fn terminal_slot(
+    runtime_id: &str,
+    tile: Holder,
+    caret: Option<El>,
+    pointing_link: bool,
+    (dark, scale): (bool, f32),
+) -> El {
     let id = runtime_id.to_owned();
-    let (pointing, pressing, wheeling) = (id.clone(), id.clone(), id.clone());
+    let (pointing, pressing, wheeling, leaving) = (id.clone(), id.clone(), id.clone(), id.clone());
     let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
     let slot = el()
         .key(format!("terminal.{runtime_id}"))
@@ -404,13 +418,30 @@ fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, 
             tx.live_only();
         })
         .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
-            let mods = report_mods(tx.mods());
+            let mods = (report_mods(tx.mods()), accelerator(tx.mods()));
             let now = tx.clock();
             let held = tx.pointer_held();
-            state
-                .terminals
-                .pointer_moved(&pointing, (p.x, p.y), held, mods, now, &state.daemon);
-            tx.live_only();
+            let pointing_changed = state.terminals.pointer_moved(
+                &pointing,
+                (p.x, p.y),
+                held,
+                mods,
+                now,
+                &state.daemon,
+            );
+            if !pointing_changed {
+                tx.live_only();
+            }
+        })
+        .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
+            if inside || !state.terminals.pointer_left(&leaving) {
+                tx.live_only();
+            }
+        })
+        .cursor(if pointing_link {
+            rune::Cursor::Pointer
+        } else {
+            rune::Cursor::Text
         })
         .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])
         .on_drag(move |state: &mut State, d: &mut Drag, tx: &mut Tx| {
@@ -423,13 +454,17 @@ fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, 
                         PointerButton::Secondary => mouse::SECONDARY,
                         _ => mouse::PRIMARY,
                     };
-                    let reported = state.terminals.pointer_pressed(
-                        &pressing,
-                        button,
-                        (d.x, d.y),
-                        mods,
-                        &state.daemon,
-                    );
+                    let opens = button == mouse::PRIMARY
+                        && accelerator(tx.mods())
+                        && state.terminals.presses_link(&pressing, (d.x, d.y));
+                    let reported = !opens
+                        && state.terminals.pointer_pressed(
+                            &pressing,
+                            button,
+                            (d.x, d.y),
+                            mods,
+                            &state.daemon,
+                        );
                     if !reported
                         && button == mouse::PRIMARY
                         && let Some(text) =
@@ -450,8 +485,12 @@ fn terminal_slot(runtime_id: &str, tile: Holder, caret: Option<El>, dark: bool, 
                     state
                         .terminals
                         .pointer_released(&pressing, at, mods, &state.daemon);
-                    if let Some(text) = state.terminals.select_release(&pressing) {
-                        tx.copy(text);
+                    match state.terminals.select_release(&pressing) {
+                        Release::Copied(text) => tx.copy(text),
+                        Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
+                            state.terminals.open_link_at(&pressing, (d.x, d.y), tx);
+                        }
+                        _ => {}
                     }
                     tx.live_only();
                 }

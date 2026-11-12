@@ -14,7 +14,11 @@ use attn_term::osc52::Osc52;
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::{Live, Tx};
 
+mod links;
 mod selection;
+
+pub(crate) use links::accelerator;
+pub(crate) use selection::Release;
 
 /// How often a terminal tells the daemon its new size while its tile is being resized, as in
 /// the Tauri app.
@@ -81,6 +85,8 @@ pub struct Terminals {
     undrawn: bool,
     /// What an input method is composing, and for which terminal, until it commits.
     preedit: Option<(String, String)>,
+    /// The terminal whose slot shows the pointing hand over a link, with ⌘ or Ctrl held.
+    pointing: Option<String>,
 }
 
 struct Term {
@@ -90,6 +96,7 @@ struct Term {
     stream: Stream,
     phase: Phase,
     agent: bool,
+    place: links::Place,
     /// The daemon still has the session's process to bring back, so an attach revives it.
     recoverable: bool,
     /// The highest sequence this terminal has drawn, kept across attaches: an attach without a
@@ -176,6 +183,7 @@ impl Term {
             stream: Stream::Attaching(Default::default()),
             phase: Phase::Waiting,
             agent,
+            place: links::Place::default(),
             recoverable: false,
             watermark: None,
             held: Vec::new(),
@@ -209,7 +217,7 @@ impl Terminals {
     ) {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
-        let drawn: Vec<(String, bool, bool)> = facts
+        let drawn: Vec<(String, bool, bool, links::Place)> = facts
             .current_desktop()
             .into_iter()
             .flat_map(|desktop| &desktop.panes)
@@ -218,7 +226,19 @@ impl Terminals {
                 let session = facts.sessions.iter().find(|s| s.id == pane.session_id);
                 let recoverable =
                     session.is_some_and(|s| s.terminal_exit.is_none() && s.state == "recoverable");
-                (pane.runtime_id.clone(), pane.kind == "agent", recoverable)
+                let place = links::Place {
+                    cwd: session
+                        .map(|s| s.directory.clone())
+                        .filter(|d| !d.is_empty()),
+                    outpost: session
+                        .is_some_and(|s| s.host.as_ref().is_some_and(|h| !h.is_empty())),
+                };
+                (
+                    pane.runtime_id.clone(),
+                    pane.kind == "agent",
+                    recoverable,
+                    place,
+                )
             })
             .collect();
         let gone: Vec<String> = self
@@ -242,11 +262,13 @@ impl Terminals {
                 });
             }
         }
-        for (id, agent, recoverable) in drawn {
-            self.panes
+        for (id, agent, recoverable, place) in drawn {
+            let term = self
+                .panes
                 .entry(id)
-                .or_insert_with(|| Term::new(agent, &self.theme))
-                .recoverable = recoverable;
+                .or_insert_with(|| Term::new(agent, &self.theme));
+            term.recoverable = recoverable;
+            term.place = place;
         }
         self.attach_waiting(now, daemon);
         self.focus(keyboard, daemon);
@@ -431,7 +453,7 @@ impl Terminals {
                     term.watermark = Some(seq);
                     copy_writes(term, &bytes, tx);
                     term.vt.write(&bytes);
-                    Terminals::follow_anchor(term);
+                    Terminals::wrote(term);
                     answer(&terminal, term, daemon);
                 }
             }
@@ -442,6 +464,7 @@ impl Terminals {
                 if let Some(term) = self.panes.get_mut(&resized.id) {
                     let size = (clamp(resized.cols), clamp(resized.rows));
                     term.vt.resize(size.0, size.1, cell_pixels(&metrics));
+                    Terminals::hover_moved(term);
                 }
             }
             TerminalEvent::Desync(desync) => self.restart(&desync.id, None, tx.clock(), daemon),
@@ -456,6 +479,7 @@ impl Terminals {
                     term.phase = Phase::Stopped;
                     let notice = exit_notice(exited.exit_code, exited.signal.as_deref());
                     term.vt.write(format!("\r\n{notice}\r\n").as_bytes());
+                    Terminals::wrote(term);
                 }
             }
         }
@@ -538,6 +562,7 @@ impl Terminals {
                 .replace("\r\n", "\n")
                 .replace('\n', "\r\n");
             term.vt.write(text.as_bytes());
+            Terminals::wrote(term);
             term.vt.take_responses();
             term.held.clear();
             return;
@@ -580,15 +605,18 @@ impl Terminals {
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
+            Terminals::hover_moved(term);
         }
         if restore.snapshot.is_some() && !decoded {
             for chunk in &restore.fallback {
                 term.vt.write(&chunk.data);
+                Terminals::wrote(term);
             }
         }
         for chunk in &restore.write {
             copy_writes(term, &chunk.data, tx);
             term.vt.write(&chunk.data);
+            Terminals::wrote(term);
         }
         term.watermark = Some(restore.baseline);
         term.stream = Stream::Live {
@@ -646,16 +674,17 @@ impl Terminals {
         id: &str,
         at: (f32, f32),
         held: bool,
-        mods: u8,
+        (mods, accelerator): (u8, bool),
         now: f64,
         daemon: &Commands,
-    ) {
+    ) -> bool {
+        let pointing = self.hover(id, Some(at), accelerator);
         let metrics = self.metrics();
         let Some(term) = self.panes.get_mut(id) else {
-            return;
+            return pointing;
         };
         if term.pointer.at.replace(at) == Some(at) {
-            return;
+            return pointing;
         }
         if term.agent && self.connected && now - term.pointer.active_at >= POINTER_ACTIVITY_INTERVAL
         {
@@ -667,14 +696,20 @@ impl Terminals {
         }
         let modes = term.vt.mouse_modes();
         let Some(cell) = cell_at(term, &metrics, at) else {
-            return;
+            return pointing;
         };
         if !modes.tracking || !mouse::reports_move(modes, term.pointer.reported, held) {
-            return;
+            return pointing;
         }
         let report = mouse::report(Action::Move, term.pointer.reported, cell, modes.sgr, mods);
         send_input(id, report.as_bytes(), "pointer", daemon);
         term.pointer.cell = Some(cell);
+        pointing
+    }
+
+    /// The pointer left terminal `id`'s slot: nothing there is hovered any more.
+    pub(crate) fn pointer_left(&mut self, id: &str) -> bool {
+        self.hover(id, None, false)
     }
 
     /// `button` went down at `at` on a terminal's slot. A program that tracks the mouse hears
@@ -822,6 +857,7 @@ impl Terminals {
     /// Each drawn terminal's screen brought up to date, by the mark of the slot it draws in.
     pub(crate) fn grids(&mut self) -> impl Iterator<Item = (u32, &mut Grid)> {
         self.undrawn = false;
+        self.refresh_hovers();
         let theme = self.theme;
         self.panes.iter_mut().map(move |(id, term)| {
             term.vt.sync(&mut term.grid);

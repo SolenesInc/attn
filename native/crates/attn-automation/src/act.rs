@@ -1,4 +1,4 @@
-use rune::{Chord, GesturePhase, Key, KeyEvent, Mods, Runtime, Tx, WheelEvent};
+use rune::{Chord, GesturePhase, Key, KeyEvent, Mods, PhysicalInput, Runtime, Tx, WheelEvent};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
@@ -70,6 +70,11 @@ struct Scroll {
 #[derive(Deserialize)]
 struct Chorded {
     chord: String,
+}
+
+#[derive(Deserialize)]
+struct Held {
+    mods: String,
 }
 
 #[derive(Deserialize)]
@@ -198,6 +203,16 @@ pub fn act<S: 'static>(
                 Err(why) => Attempt::Fail(format!("key: {chord:?}: {why}")),
             }
         }
+        "hold" => {
+            let Held { mods } = args!(action, payload);
+            match crate::chord::held_mods(&mods) {
+                Ok(held) => {
+                    rt.physical_input(PhysicalInput::Modifiers(held));
+                    Attempt::Done(json!({"held": mods}))
+                }
+                Err(why) => Attempt::Fail(format!("hold: {mods:?}: {why}")),
+            }
+        }
         "type" => {
             let Typed { text, target } = args!(action, payload);
             if let Some(target) = target {
@@ -248,7 +263,7 @@ pub fn act<S: 'static>(
             }
         }
         other => Attempt::Fail(format!(
-            "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, type, run, state, native_windows, shot"
+            "unknown action {other:?}; actions: ping, tree, find, wait, press, hover, drag, scroll, key, hold, type, run, state, native_windows, shot"
         )),
     }
 }

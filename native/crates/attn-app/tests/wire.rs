@@ -13,5 +13,6 @@ mod wire {
     mod sidebar;
     mod sidebar_width;
     mod terminal;
+    mod terminal_links;
     mod terminal_view;
 }

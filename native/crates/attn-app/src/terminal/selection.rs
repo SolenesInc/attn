@@ -7,7 +7,7 @@ use super::{Term, Terminals};
 const SELECTION_DARK: Rgb = [0x26, 0x4f, 0x78];
 const SELECTION_LIGHT: Rgb = [0xad, 0xd6, 0xff];
 
-/// What the user selected in one terminal, and the scroll of its view.
+/// What the user selected in one terminal and what the pointer hovers.
 #[derive(Default)]
 pub(super) struct View {
     selection: Option<Selection>,
@@ -15,10 +15,21 @@ pub(super) struct View {
     selected: Option<String>,
     /// The selection the program's own scrolling carries along, kept by its text.
     anchor: Option<Anchor>,
-    selecting: Option<Selecting>,
+    pub(super) selecting: Option<Selecting>,
+    /// The cell under the pointer and the link over it, until output or a scroll moves the
+    /// text under it.
+    pub(super) hover: Option<super::links::Hover>,
 }
 
-struct Selecting {
+/// What letting go of a selecting button did.
+pub(crate) enum Release {
+    Nothing,
+    /// The press selected no text: a click, which opens a link under it with ⌘ or Ctrl held.
+    Click,
+    Copied(String),
+}
+
+pub(super) struct Selecting {
     from: (f32, f32),
     dragged: bool,
 }
@@ -89,19 +100,30 @@ impl Terminals {
     }
 
     /// The button that started a selection in terminal `id` came up, or was cancelled. A press
-    /// that never moved clears the selection; a drag leaves it, and the clipboard holds its
-    /// text.
-    pub(crate) fn select_release(&mut self, id: &str) -> Option<String> {
-        let term = self.panes.get_mut(id)?;
-        let selecting = term.view.selecting.take()?;
+    /// that never moved was a click, which clears the selection; a drag leaves it, and the
+    /// clipboard holds its text.
+    pub(crate) fn select_release(&mut self, id: &str) -> Release {
+        let Some(term) = self.panes.get_mut(id) else {
+            return Release::Nothing;
+        };
+        let Some(selecting) = term.view.selecting.take() else {
+            return Release::Nothing;
+        };
         if !selecting.dragged {
             term.view.selection = None;
             self.undrawn = true;
-            return None;
+            return Release::Click;
         }
-        let text = text_of(term, term.view.selection?);
-        term.view.selected = (!text.is_empty()).then_some(text);
-        term.view.selected.clone()
+        let Some(selection) = term.view.selection else {
+            return Release::Nothing;
+        };
+        let text = text_of(term, selection);
+        term.view.selected = (!text.is_empty()).then(|| text.clone());
+        if text.is_empty() {
+            Release::Click
+        } else {
+            Release::Copied(text)
+        }
     }
 
     /// Where the cursor and what lies over terminal `id`'s view as the window last drew it,
@@ -148,6 +170,7 @@ impl Terminals {
             return false;
         }
         term.vt.scroll_back_to(next);
+        Terminals::hover_moved(term);
         true
     }
 
@@ -170,8 +193,10 @@ impl Terminals {
         });
     }
 
-    /// Output arrived: a selection that follows its text finds it again on the screen.
-    pub(super) fn follow_anchor(term: &mut Term) {
+    /// Output moved the text: the hover reads it again, and a selection that follows its
+    /// text finds it again on the screen.
+    pub(super) fn wrote(term: &mut Term) {
+        Terminals::hover_moved(term);
         let Some(anchor) = &term.view.anchor else {
             return;
         };
@@ -190,8 +215,14 @@ impl Terminals {
         term.osc52 = Default::default();
     }
 
-    /// What lies over terminal `id`'s view: its selection.
+    /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.
     pub(super) fn overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
+        let mut overlays = Terminals::selection_overlays(term, theme);
+        overlays.extend(Terminals::link_overlays(term, theme));
+        overlays
+    }
+
+    fn selection_overlays(term: &mut Term, theme: &Theme) -> Vec<Overlay> {
         let Some(selection) = term.view.selection else {
             return Vec::new();
         };
