@@ -406,6 +406,11 @@ dependencies = [
 [[package]]
 name = "attn-term"
 version = "0.0.0"
+dependencies = [
+ "cc",
+ "parley",
+ "rune",
+]
 
 [[package]]
 name = "attn-testkit"

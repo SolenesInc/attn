@@ -846,6 +846,13 @@ jobs:
           toolchain: '1.99.1'
           components: clippy, rustfmt
 
+      - name: Ensure ghostty-vt artifacts
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: Ensure native VT library
+        working-directory: .
+        run: ./scripts/build-libghostty-vt.sh
+
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
         with:

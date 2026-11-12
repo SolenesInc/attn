@@ -257,7 +257,7 @@ check-mobile: $(MOBILE_NODE_MODULES)
 	cd mobile && pnpm run check
 
 NATIVE_CLIPPY ?= --workspace
-check-native:
+check-native: $(NATIVE_VT_DEP)
 	scripts/native-parity
 	cd native && cargo fmt --all --check
 	cd native && cargo check --locked --workspace --all-targets
