@@ -501,7 +501,7 @@ func userName() string {
 }
 
 func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conversation string) {
-	if conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
+	if l.b.closeLeavesRun || conversation == "" || l.d.store.OtherOpenSessionHolding(conversation, sessionID) != "" {
 		return
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)

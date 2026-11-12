@@ -28,6 +28,7 @@ type serverBinding struct {
 	connect           func(ctx context.Context, socket, client, version string) (*effectrpc.Client, error)
 	conversationOf    func(harness.TerminalID) (string, bool)
 	tracksCompletions bool
+	closeLeavesRun    bool
 }
 
 const (
@@ -60,6 +61,7 @@ var sigmaBinding = &serverBinding{
 	connect:           sigma.Connect,
 	conversationOf:    harness.ParseSigmaConversationTerminal,
 	tracksCompletions: true,
+	closeLeavesRun:    true,
 }
 
 var serverEnv = []string{"ATTN_TERMINAL_ID=", "ATTN_SESSION_ID=", "ATTN_AGENT=", "ATTN_CODEX_SHARED_PROFILE=", "CODEX_THREAD_ID=", "BUN_GC_TIMER_DISABLE=1"}

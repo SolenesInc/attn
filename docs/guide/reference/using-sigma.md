@@ -41,8 +41,14 @@ back after a reconnect or a restart.
 
 ## Messages, closing and resuming
 
-These work as for Nisse. A retried delivery is one follow-up: the server
+Messages work as for Nisse. A retried delivery is one follow-up: the server
 answers a repeated delivery with the input it already stored.
+
+Closing a session never stops its conversation's run. Whether you close its
+tile in Attn or leave the Sigma view with Ctrl-D or `/detach`, the Attn session
+closes and the run keeps going on the server. Resume the session from the
+Sessions ledger to open the conversation again, with its run still going. To
+stop the run, interrupt it, or leave the view with `/close`.
 
 ## Agents using Attn
 

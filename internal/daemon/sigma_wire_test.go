@@ -103,3 +103,35 @@ func TestASigmaQuestionTheUserHandledStaysHandledThroughReconnectsAndRestarts(t 
 	testworld.AwaitSessionFromConnect(app, neighbour, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	stillHandled("after a daemon restart")
 }
+
+func TestClosingASigmaSessionLeavesItsRunGoingForAReopen(t *testing.T) {
+	closes := map[string]func(app *testworld.Peer, session string, view *fakeagent.Run){
+		"the view exits":     func(_ *testworld.Peer, _ string, view *fakeagent.Run) { view.Exit(0) },
+		"the user closes it": func(app *testworld.Peer, session string, _ *fakeagent.Run) { closeSessionPane(app, session) },
+	}
+	for name, closeSession := range closes {
+		t.Run(name, func(t *testing.T) {
+			w := newWorld(t, fakeagent.Sigma)
+			app := w.App()
+			session, view, server := appServerSession(t, w, app, fakeagent.Sigma)
+			conversation := view.ConversationID
+			promptUntilWorking(app, session, view, server, "rename the orders table")
+
+			closeSession(app, session, view)
+			testworld.Await(app, protocol.EventSessionUnregistered, func(e protocol.WebSocketEvent) bool { return e.Session != nil && string(e.Session.ID) == session })
+			if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+				t.Fatalf("the ledger shows %+v, want %s closed", entry, session)
+			}
+			if reopened := reopenOverTheWebSocket(app, session); !reopened.Success {
+				t.Fatalf("reopen: %s", protocol.Deref(reopened.Error))
+			}
+			w.Launched(session)
+			if status := server.Started(conversation).Status; status != "working" {
+				t.Fatalf("after the session closed and reopened the conversation is %s, want its run still working", status)
+			}
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+			server.Reply(conversation, "Renamed. <!-- attn:state=idle -->")
+			testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		})
+	}
+}

@@ -135,23 +135,18 @@ func TestFeedbackReachesAnAppServerSessionAsAFollowUpFromAttn(t *testing.T) {
 	})
 }
 
-func TestClosingAnAppServerSessionInterruptsItsRunAndLetsTheServerGo(t *testing.T) {
-	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-		w := newWorld(t, h)
-		app := w.App()
-		session, nisse, server := appServerSession(t, w, app, h)
-		conversation := nisse.ConversationID
-		app.TypeLine(session, "rewrite the billing module")
-		nisse.Prompted()
-		server.Prompted(conversation)
-		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+func TestClosingANisseSessionInterruptsItsRunAndLetsTheServerGo(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse)
+	conversation := nisse.ConversationID
+	promptUntilWorking(app, session, nisse, server, "rewrite the billing module")
 
-		if closed := closeFromApp(app, session); !closed.Accepted {
-			t.Fatalf("close the app-server session: %s", protocol.Deref(closed.Error))
-		}
-		server.AwaitInterrupted(conversation)
-		server.AwaitStopped()
-	})
+	if closed := closeFromApp(app, session); !closed.Accepted {
+		t.Fatalf("close the Nisse session: %s", protocol.Deref(closed.Error))
+	}
+	server.AwaitInterrupted(conversation)
+	server.AwaitStopped()
 }
 
 func TestAResumedAppServerSessionOpensTheConversationItLaunchedWith(t *testing.T) {
@@ -289,23 +284,18 @@ func TestAppServerSessionsKeepTheirAnswersAndLearnRunsThatEndedWhileTheDaemonWas
 	})
 }
 
-func TestQuittingTheAppServerTUIClosesTheSessionAndInterruptsItsRun(t *testing.T) {
-	eachAppServer(t, func(t *testing.T, h fakeagent.Harness) {
-		w := newWorld(t, h)
-		app := w.App()
-		session, nisse, server := appServerSession(t, w, app, h)
-		conversation := nisse.ConversationID
-		app.TypeLine(session, "rename the orders table")
-		nisse.Prompted()
-		server.Prompted(conversation)
-		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+func TestQuittingTheNisseTUIClosesTheSessionAndInterruptsItsRun(t *testing.T) {
+	w := newWorld(t, fakeagent.Nisse)
+	app := w.App()
+	session, nisse, server := appServerSession(t, w, app, fakeagent.Nisse)
+	conversation := nisse.ConversationID
+	promptUntilWorking(app, session, nisse, server, "rename the orders table")
 
-		nisse.Exit(0)
-		server.AwaitInterrupted(conversation)
-		if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
-			t.Errorf("the ledger shows %+v, want %s closed", entry, session)
-		}
-	})
+	nisse.Exit(0)
+	server.AwaitInterrupted(conversation)
+	if entry := ledgerShowOverTheWebSocket(app, session).Entry; entry == nil || protocol.Deref(entry.ClosedAt) == "" {
+		t.Errorf("the ledger shows %+v, want %s closed", entry, session)
+	}
 }
 
 func TestAnAppServerConversationOpenInAnotherProfileIsRefusedThere(t *testing.T) {

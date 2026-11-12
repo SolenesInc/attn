@@ -176,7 +176,7 @@ type ServerConversation struct {
 	Approvals    string         `json:"approvals,omitempty"`
 	Instructions string         `json:"instructions,omitempty"`
 	Ended        map[string]any `json:"ended,omitempty"`
-	status       string
+	Status       string         `json:"status"`
 	requests     map[string]int
 	submitted    int
 	losesSubmit  bool
@@ -350,7 +350,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		conv := s.convs[p.ID]
 		if conv == nil {
 			conv = &p.ServerConversation
-			conv.status, conv.requests = "idle", map[string]int{}
+			conv.Status, conv.requests = "idle", map[string]int{}
 			s.convs[p.ID] = conv
 		}
 		return conv, ""
@@ -379,14 +379,14 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		}
 		if lost {
 			conv.losesSubmit = false
-			conv.status = "working"
+			conv.Status = "working"
 			s.offline = make(chan struct{})
 			for other := range s.conns {
 				if other.client == "attn" {
 					_ = other.conn.Close()
 				}
 			}
-		} else if fresh && conv.status == "idle" {
+		} else if fresh && conv.Status == "idle" {
 			s.statusLocked(conv, "working", nil)
 		}
 		s.mu.Unlock()
@@ -404,7 +404,7 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 			s.mu.Unlock()
 			return nil, "NoSuchConversation"
 		}
-		if conv.status != "idle" {
+		if conv.Status != "idle" {
 			s.statusLocked(conv, "idle", s.endedLocked(conv, map[string]any{"outcome": "interrupted"}))
 		}
 		s.mu.Unlock()
@@ -418,13 +418,13 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		c.watch = &id
 		trees := []any{}
 		for _, conv := range s.convs {
-			if conv.status != "idle" {
-				trees = append(trees, map[string]any{"_tag": "tree", "conversation": conv.ID, "seq": s.seq, "status": conv.status})
+			if conv.Status != "idle" {
+				trees = append(trees, map[string]any{"_tag": "tree", "conversation": conv.ID, "seq": s.seq, "status": conv.Status})
 			}
 		}
 		items := []any{map[string]any{"_tag": "trees", "seq": s.seq, "trees": trees}}
 		for conversation, applied := range p.After {
-			if conv := s.convs[conversation]; s.flavor.completions && conv != nil && conv.status == "idle" && completionOf(conv.Ended) > applied {
+			if conv := s.convs[conversation]; s.flavor.completions && conv != nil && conv.Status == "idle" && completionOf(conv.Ended) > applied {
 				items = append(items, map[string]any{"_tag": "tree", "conversation": conversation, "status": "idle", "ended": conv.Ended})
 			}
 		}
@@ -462,7 +462,7 @@ func (s *appServer) end(conversation string, ended map[string]any) string {
 }
 
 func (s *appServer) statusLocked(conv *ServerConversation, status string, ended map[string]any) {
-	conv.status = status
+	conv.Status = status
 	if ended != nil {
 		conv.Ended = ended
 	}
