@@ -1020,6 +1020,8 @@ pub(crate) fn spawn(state: &mut State, spawn: Spawn, tx: &mut Tx) {
                     let shown = state.facts.current_desktop().map(|d| d.id.clone());
                     let desktop = desktop_id.unwrap_or(target.desktop);
                     if shown.as_deref() == Some(&desktop) {
+                        state.window.view = crate::View::Desktop;
+                        state.window.follow_next_turn = false;
                         let tile = crate::shell::Holder { desktop, pane };
                         crate::desktop::take_tile(state, &tile, tx);
                     }

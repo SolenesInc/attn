@@ -2024,3 +2024,37 @@ fn a_launch_lost_to_a_daemon_restart_brings_the_launcher_back() {
     assert!(launcher_focused(&world), "{}", world.screen());
     rest(&mut world);
 }
+
+#[test]
+fn an_agent_started_from_home_is_shown_holding_the_keyboard() {
+    let mut world = World::start(daemon(
+        initial(
+            vec![desktop("d1", "Desktop 1", vec![pane("d1", "p1")])],
+            &[],
+        ),
+        &[],
+    ));
+    let spawned = hold(&world, "spawn_session");
+    open_dialog(&mut world);
+    type_path(&mut world, "/tmp/plain");
+    press(&mut world, Key::Enter);
+
+    let request = spawned.lock().unwrap().remove(0);
+    world.daemon.emit(arrangement(
+        "d1",
+        vec![desktop(
+            "d1",
+            "Desktop 1",
+            vec![pane("d1", "p1"), pane("d1", "p-new")],
+        )],
+    ));
+    world.daemon.reply_to(&request, placed(&request));
+    world.settle();
+
+    let window = world
+        .automate("state", serde_json::json!({"of": "window"}))
+        .unwrap();
+    assert_eq!(window["view"], "Desktop", "{window}");
+    assert_eq!(window["keyboard"]["pane"], "p-new", "{window}");
+    rest(&mut world);
+}
