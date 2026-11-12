@@ -1146,13 +1146,28 @@ fn focused(world: &World) -> Option<String> {
     world.screen().focused().and_then(|n| n.key)
 }
 
+/// Where the keyboard is: the row the arrows reached while the queue list holds it, or the
+/// focused element.
+fn reached(world: &World) -> Option<String> {
+    let focused = focused(world);
+    if focused.as_deref() != Some("sidebar.queue") {
+        return focused;
+    }
+    world
+        .screen()
+        .children(Target::key("sidebar.queue"))
+        .into_iter()
+        .find(|n| n.is("selected"))
+        .and_then(|n| n.key)
+}
+
 #[test]
 fn the_arrows_walk_every_row_from_the_filter_and_wrap_and_return_opens_the_row() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
     world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
     let mut walk = |key| {
         world.gesture(|app| app.key(plain(key)));
-        focused(&world).unwrap_or_default()
+        reached(&world).unwrap_or_default()
     };
 
     let down: Vec<String> = (0..6).map(|_| walk(rune::Key::Down)).collect();
@@ -1179,21 +1194,21 @@ fn up_from_the_filter_reaches_the_last_row_and_a_letter_on_a_row_types_into_the_
     world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
 
     world.gesture(|app| app.key(plain(rune::Key::Up)));
-    assert_eq!(focused(&world).as_deref(), Some("queue-snoozed.s1"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-snoozed.s1"));
     world.gesture(|app| app.type_text("w"));
 
-    assert_eq!(focused(&world).as_deref(), Some("queue.filter.field"));
+    assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
     assert!(lines(&world).contains(&"queue-settled.w1".to_owned()));
     assert!(!lines(&world).contains(&"queue-snoozed.s1".to_owned()));
 }
 
 #[test]
-fn tab_reaches_the_queue_rows() {
+fn tab_from_the_filter_reaches_the_rows() {
     let mut world = World::start(Daemon::scripted().state(the_queue()));
     world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
 
     world.gesture(|app| app.key(plain(rune::Key::Tab)));
-    assert_eq!(focused(&world).as_deref(), Some("queue-settled.w1"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-chief.chief"));
 }
 
 #[test]
@@ -1207,10 +1222,24 @@ fn the_settle_priority_and_snooze_keys_act_on_the_focused_row_and_not_the_agent_
     world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
     world.gesture(|app| app.key(plain(rune::Key::Down)));
     world.gesture(|app| app.key(plain(rune::Key::Down)));
-    assert_eq!(focused(&world).as_deref(), Some("queue-turn.b"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.b"));
 
     world.gesture(|app| app.key(chord(Action::SessionSettle)));
     world.gesture(|app| app.key(chord(Action::SessionPriority)));
+    assert_eq!(
+        reached(&world).as_deref(),
+        Some("queue-turn.b"),
+        "a chord leaves the row the keyboard"
+    );
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("queue.filter.field"))
+            .value
+            .unwrap_or_default(),
+        "",
+        "a chord types nothing into the filter"
+    );
     world.gesture(|app| app.key(chord(Action::SessionSnooze)));
 
     assert_eq!(sent_ids(&world, "settle_turn"), ["b"]);
@@ -1223,7 +1252,7 @@ fn the_settle_priority_and_snooze_keys_act_on_the_focused_row_and_not_the_agent_
     );
     assert_eq!(shown(&world), ["c"]);
     world.gesture(|app| app.key(plain(rune::Key::Escape)));
-    assert_eq!(focused(&world).as_deref(), Some("queue-turn.b"));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.b"));
     world.advance(Duration::from_secs(1));
     assert!(
         !world.runtime().animating,
@@ -1264,5 +1293,80 @@ fn opening_an_agent_from_its_row_hands_the_keyboard_to_its_terminal() {
         })
         .collect();
     assert_eq!(typed, [("r-b".to_owned(), "x".to_owned())]);
-    assert_eq!(focused(&world), None, "the row lets go of the keyboard");
+    assert_eq!(reached(&world), None, "the list lets go of the keyboard");
+}
+
+#[test]
+fn an_arrow_held_with_a_modifier_is_left_to_the_shortcut_layer_on_the_filter_and_a_row() {
+    let mut world = World::start(Daemon::scripted().state(the_queue()));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    let alt_down = || rune::KeyEvent {
+        key: rune::Key::Down,
+        mods: rune::Mods {
+            alt: true,
+            ..rune::Mods::default()
+        },
+    };
+
+    world.gesture(|app| app.key(alt_down()));
+    assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(alt_down()));
+    assert_eq!(reached(&world).as_deref(), Some("queue-chief.chief"));
+}
+
+#[test]
+fn in_a_long_queue_the_filter_and_the_arrows_reach_rows_the_list_has_not_built_and_wrap() {
+    let mut sessions: Vec<Session> = (0..120)
+        .map(|i| turn(&format!("t{i:03}"), 1000 - i))
+        .collect();
+    sessions.push(session("w1", "working"));
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(sessions))));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
+
+    world.gesture(|app| app.key(plain(rune::Key::Up)));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(reached(&world).as_deref(), Some("queue-settled.w1"));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.t000"));
+    world.gesture(|app| app.key(plain(rune::Key::Up)));
+    world.advance(Duration::from_secs(1));
+    assert_eq!(reached(&world).as_deref(), Some("queue-settled.w1"));
+}
+
+#[test]
+fn escape_on_a_row_with_the_list_closed_gives_the_keyboard_back_to_the_agent_on_screen() {
+    let mut world = World::start(
+        Daemon::scripted().state(queue(one_desktop(vec![turn("a", 60), turn("b", 30)]))),
+    );
+    world.gesture(|app| app.click(Target::key("queue-turn.b")));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.key(plain(rune::Key::Down)));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    assert_eq!(reached(&world).as_deref(), Some("queue-turn.a"));
+
+    world.gesture(|app| app.key(plain(rune::Key::Escape)));
+
+    assert_eq!(reached(&world), None);
+    assert_eq!(shown(&world), ["b"]);
+}
+
+#[test]
+fn the_queue_moving_on_by_itself_leaves_the_keyboard_in_the_filter_being_typed_in() {
+    let mut world = World::start(Daemon::scripted().state(queue(one_desktop(vec![
+        turn("a", 30),
+        turn("b", 20),
+        session("w1", "working"),
+    ]))));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    world.gesture(|app| app.key(chord(Action::SidebarAgentList)));
+    world.gesture(|app| app.type_text("w"));
+
+    changes(&mut world, settled("a"));
+
+    assert_eq!(shown(&world), ["a", "b"], "the next turn opens");
+    assert_eq!(reached(&world).as_deref(), Some("queue.filter.field"));
 }

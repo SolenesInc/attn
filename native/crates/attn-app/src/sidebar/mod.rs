@@ -604,16 +604,19 @@ pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut T
     crate::dispatch(state, action, tx);
 }
 
-/// Shows the agent where it is and gives its pane the keyboard, as a click on its row in the
-/// Tauri app does.
+/// Shows the agent where it is and gives its terminal the keyboard, as a click on its row in
+/// the Tauri app does.
 pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
-    let shown = state.facts.desktops.iter().find_map(|d| {
-        let pane = d.panes.iter().find(|p| p.session_id == session)?;
-        Some((d.id.clone(), pane.pane_id.clone()))
-    });
-    if let Some((desktop, leaf)) = shown {
-        state.window.desk.pick(&desktop, &leaf);
+    if let Some((desktop, leaf)) = pane_of(state, session) {
         crate::desktop::give_keyboard(state, &desktop, &leaf, tx);
+    }
+    show_agent(state, session);
+}
+
+/// Shows the agent where it is and leaves the keyboard where it was.
+pub(crate) fn show_agent(state: &mut State, session: &str) {
+    if let Some((desktop, leaf)) = pane_of(state, session) {
+        state.window.desk.pick(&desktop, &leaf);
     }
     state.window.view = View::Desktop;
     state.window.follow_next_turn = false;
@@ -622,6 +625,25 @@ pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
         session_id: session.into(),
         ..DesktopShowSessionMessage::new()
     });
+}
+
+fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
+    state.facts.desktops.iter().find_map(|d| {
+        let pane = d.panes.iter().find(|p| p.session_id == session)?;
+        Some((d.id.clone(), pane.pane_id.clone()))
+    })
+}
+
+/// Gives the keyboard back to the agent on screen, or lets go of it at home.
+pub(crate) fn keyboard_to_screen(state: &mut State, tx: &mut Tx) {
+    let pane = state
+        .window
+        .on_screen(&state.facts)
+        .and_then(|session| pane_of(state, &session));
+    match pane {
+        Some((desktop, leaf)) => crate::desktop::give_keyboard(state, &desktop, &leaf, tx),
+        None => tx.blur(),
+    }
 }
 
 pub(crate) fn open_desktop(state: &mut State, desktop: &str, tx: &mut Tx) {

@@ -4,8 +4,8 @@ use attn_protocol::{
 };
 use rune::Tx;
 
-use super::open_agent;
 use super::queue::{self, QUEUE_MODE};
+use super::{keyboard_to_screen, open_agent, show_agent};
 use crate::State;
 use crate::setting;
 use crate::shell::View;
@@ -38,54 +38,64 @@ pub(crate) fn jump_to_waiting(state: &mut State, tx: &mut Tx) {
     }
 }
 
+/// Gives the agent filter the keyboard, building its row first when a long queue keeps it out
+/// of the list's built rows.
+fn focus_filter(state: &mut State, tx: &mut Tx) {
+    state.window.queue_cursor = None;
+    state.window.agent_filter.focused = true;
+    tx.scroll_into_view_in(super::queue_view::LIST, "queue.filter");
+    tx.focus(super::queue_view::FILTER_FIELD, false);
+}
+
 pub(crate) fn toggle_agent_list(state: &mut State, tx: &mut Tx) {
     let window = &mut state.window;
     window.agent_list_open = !window.agent_list_open;
     if window.agent_list_open {
-        tx.focus(super::queue_view::FILTER_FIELD, false);
+        focus_filter(state, tx);
     } else {
         window.agent_filter = rune::TextEdit::default();
     }
 }
 
-/// The agent filter's keys: Down and Up walk into the rows from the top or the bottom, and
-/// Escape steps back one layer.
+/// The agent filter's keys: Down and Tab walk into the rows from the top, Up from the bottom,
+/// and Escape steps back one layer.
 pub(crate) fn filter_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
     match ev.key {
-        rune::Key::Down | rune::Key::Up if plain(ev) => {
-            walk(state, None, ev.key == rune::Key::Down, tx)
+        rune::Key::Down | rune::Key::Up | rune::Key::Tab if plain(ev) && !ev.mods.shift => {
+            state.window.queue_cursor = None;
+            walk(state, ev.key != rune::Key::Up, tx)
         }
         rune::Key::Escape => step_back(state, tx),
         _ => false,
     }
 }
 
-/// A queue row's keys: Down and Up walk the rows and wrap at both ends, Return opens the row's
-/// agent, a letter or digit types into the open list's filter, and Escape steps back one layer.
-pub(crate) fn row_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
+/// The queue list's keys while it holds the keyboard: Down and Up walk the rows and wrap at
+/// both ends, Return opens the row reached, a letter or digit types into the open list's
+/// filter, and Escape steps back one layer, the last of which hands the keyboard back to the
+/// agent on screen.
+pub(crate) fn list_key(state: &mut State, ev: &rune::KeyEvent, tx: &mut Tx) -> bool {
     if !plain(ev) {
         return false;
     }
     match &ev.key {
-        rune::Key::Down | rune::Key::Up => {
-            let from = tx.focused().map(str::to_owned);
-            walk(state, from.as_deref(), ev.key == rune::Key::Down, tx)
-        }
-        rune::Key::Enter => {
-            let from = tx.focused().map(str::to_owned);
-            let row = super::queue_view::agent_rows(state)
-                .into_iter()
-                .find(|row| Some(&row.key) == from.as_ref());
-            row.is_some_and(|row| {
+        rune::Key::Down | rune::Key::Up => walk(state, ev.key == rune::Key::Down, tx),
+        rune::Key::Enter => match cursor_row(state) {
+            Some(row) => {
                 open_agent(state, &row.session, tx);
                 true
-            })
-        }
+            }
+            None => false,
+        },
         rune::Key::Escape if state.window.agent_list_open => step_back(state, tx),
+        rune::Key::Escape => {
+            keyboard_to_screen(state, tx);
+            true
+        }
         rune::Key::Text(typed) if state.window.agent_list_open && is_word_char(typed) => {
             let filter = format!("{}{typed}", state.window.agent_filter.text);
             state.window.agent_filter = rune::TextEdit::new(filter);
-            tx.focus(super::queue_view::FILTER_FIELD, false);
+            focus_filter(state, tx);
             true
         }
         _ => false,
@@ -102,22 +112,36 @@ fn is_word_char(typed: &str) -> bool {
 }
 
 fn step_back(state: &mut State, tx: &mut Tx) -> bool {
+    state.window.queue_cursor = None;
     if state.window.agent_filter.text.is_empty() {
         toggle_agent_list(state, tx);
     } else {
         state.window.agent_filter.clear();
-        tx.focus(super::queue_view::FILTER_FIELD, false);
+        focus_filter(state, tx);
     }
     true
 }
 
-fn walk(state: &State, from: Option<&str>, down: bool, tx: &mut Tx) -> bool {
+fn cursor_row(state: &State) -> Option<super::queue_view::AgentLine> {
+    let cursor = state.window.queue_cursor.as_deref()?;
+    super::queue_view::agent_rows(state)
+        .into_iter()
+        .find(|row| row.key == cursor)
+}
+
+/// Moves the cursor to the next or previous row, wrapping at both ends, starting from the top
+/// or the bottom when no row has it, and gives the list the keyboard with that row in view.
+fn walk(state: &mut State, down: bool, tx: &mut Tx) -> bool {
     let rows = super::queue_view::agent_rows(state);
     if rows.is_empty() {
         return false;
     }
     let last = rows.len() - 1;
-    let at = from.and_then(|from| rows.iter().position(|row| row.key == from));
+    let at = state
+        .window
+        .queue_cursor
+        .as_deref()
+        .and_then(|cursor| rows.iter().position(|row| row.key == cursor));
     let next = match (at, down) {
         (None, true) => 0,
         (None, false) => last,
@@ -126,12 +150,16 @@ fn walk(state: &State, from: Option<&str>, down: bool, tx: &mut Tx) -> bool {
         (Some(0), false) => last,
         (Some(at), false) => at - 1,
     };
-    tx.focus(rows[next].key.clone(), true);
+    let key = rows[next].key.clone();
+    state.window.agent_filter.focused = false;
+    tx.scroll_into_view_in(super::queue_view::LIST, key.clone());
+    tx.focus(super::queue_view::LIST, true);
+    state.window.queue_cursor = Some(key);
     true
 }
 
-/// The agent the settle, priority and snooze keys act on: the queue row holding focus, or the
-/// agent on screen when no row does.
+/// The agent the settle, priority and snooze keys act on: the row the arrows reached while the
+/// queue list holds the keyboard, the row whose button holds it, or else the agent on screen.
 struct Target {
     session: String,
     row: Option<String>,
@@ -139,14 +167,17 @@ struct Target {
 
 fn target(state: &State, tx: &Tx) -> Option<Target> {
     let focused = tx.focused().unwrap_or_default();
-    let row = super::queue_view::agent_rows(state)
-        .into_iter()
-        .find(|row| {
-            focused == row.key
-                || focused
+    let row = if focused == super::queue_view::LIST {
+        cursor_row(state)
+    } else {
+        super::queue_view::agent_rows(state)
+            .into_iter()
+            .find(|row| {
+                focused
                     .strip_prefix(row.key.as_str())
                     .is_some_and(|rest| rest.starts_with('.'))
-        });
+            })
+    };
     match row {
         Some(row) => Some(Target {
             session: row.session,
@@ -320,7 +351,8 @@ pub(crate) fn advance(state: &mut State, tx: &mut Tx) {
         View::Home => None,
     };
     match to {
-        Some(Some(id)) => open_agent(state, &id, tx),
+        Some(Some(id)) if tx.focused().is_none() => open_agent(state, &id, tx),
+        Some(Some(id)) => show_agent(state, &id),
         Some(None) => state.window.go_home_following(),
         None => {}
     }

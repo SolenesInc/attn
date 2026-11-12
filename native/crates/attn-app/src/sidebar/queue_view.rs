@@ -10,6 +10,7 @@ use super::{ROW_HEIGHT, ROWS_BUILT, home_row, open_agent, state_mark};
 use crate::State;
 
 pub(crate) const FILTER_FIELD: &str = "queue.filter.field";
+pub(crate) const LIST: &str = "sidebar.queue";
 
 /// Where an agent's row sits in the queue sidebar, which sets the buttons it carries.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -276,7 +277,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.settings) as usize,
         window.view,
         window.agent_list_open,
-        window.agent_filter.text.to_owned(),
+        (
+            window.agent_filter.text.to_owned(),
+            window.queue_cursor.clone(),
+        ),
         window.now_ms,
         crate::desktop::on_screen_sessions(state),
         super::width::of(state).to_bits(),
@@ -310,7 +314,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                     })
                     .child(
                         col()
-                            .key("sidebar.queue")
+                            .key(LIST)
                             .role("list")
                             .label("Queue")
                             .w_full()
@@ -320,7 +324,9 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
                                 ROW_HEIGHT,
                                 move |_: &State, i| keys[i].key().into(),
                                 move |state: &State, i| line(state, &lines[i], &t),
-                            ),
+                            )
+                            .focusable(true)
+                            .on_key(super::actions::list_key),
                     ),
             )
             .child(super::chrome::desktop_strip(state, &bands, &t))
@@ -336,7 +342,8 @@ fn line(state: &State, line: &QLine, t: &Tokens) -> El {
         QLine::Agent(a) => state.window.countdowns.contains_key(&a.agent.id),
         _ => false,
     };
-    memo(key.clone(), (line, draining, *t), || {
+    let cursor = state.window.queue_cursor.as_deref() == Some(key.as_str());
+    memo(key.clone(), (line, draining, cursor, *t), || {
         ROWS_BUILT.with(|n| n.set(n.get() + 1));
         match line {
             QLine::Rule { text: label, .. } => rule(key, label, t),
@@ -352,7 +359,7 @@ fn line(state: &State, line: &QLine, t: &Tokens) -> El {
                 .color(t.text_muted),
             QLine::Agent(agent) => {
                 let bar = super::settling_bar(state, &key, &agent.agent, t);
-                queue_row(key, agent, t).children(bar)
+                queue_row(key, agent, cursor, t).children(bar)
             }
             QLine::Filter => unreachable!("the filter is built above"),
         }
@@ -453,7 +460,7 @@ fn filter(state: &State, key: String, t: &Tokens) -> El {
         )
 }
 
-fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
+fn queue_row(key: String, a: &QueueAgent, cursor: bool, t: &Tokens) -> El {
     let id = a.agent.id.clone();
     let name = a.agent.shown_name();
     let trailing = if !a.age.is_empty() {
@@ -461,9 +468,9 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
     } else {
         a.snoozed_until.clone()
     };
-    row()
+    let row = row()
         .key(key.clone())
-        .role("button")
+        .role("listitem")
         .label(format!("Open {}", a.agent.name))
         .a11y_value(a.agent.state.wire())
         .w_full()
@@ -472,6 +479,7 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
         .gap(space::S2)
         .px(space::S1)
         .radius(4.0)
+        .focus_selected(cursor)
         .fill(if a.agent.selected {
             t.bg_selected
         } else {
@@ -479,8 +487,6 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
         })
         .hover(t.bg_elevated)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| open_agent(state, &id, tx))
-        .focusable(true)
-        .on_key(super::actions::row_key)
         .child(state_mark(&key, &a.agent, t))
         .child(
             text(name)
@@ -503,7 +509,12 @@ fn queue_row(key: String, a: &QueueAgent, t: &Tokens) -> El {
                 .color(t.text_tertiary)
         }))
         .hover_group()
-        .children(row_controls(&key, a, t))
+        .children(row_controls(&key, a, t));
+    if cursor {
+        row.focus_ring(2.0, 0.0, t.border_focus)
+    } else {
+        row
+    }
 }
 
 /// The buttons a queue row shows while it is hovered or holds focus.

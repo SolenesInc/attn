@@ -33,6 +33,9 @@ pub struct Window {
     pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
     pub(crate) agent_filter: rune::TextEdit,
+    /// The queue row the arrows reached, by key: the settle, priority and snooze keys act on
+    /// it while the queue list holds the keyboard.
+    pub(crate) queue_cursor: Option<String>,
     /// Wall-clock milliseconds as of the last change the window shows by time: turn ages and
     /// snooze deadlines read it, so it moves only when one of them would read differently.
     pub now_ms: i64,
@@ -349,6 +352,7 @@ impl Window {
             desktop: desktop.into(),
             pane: pane.into(),
         });
+        self.queue_cursor = None;
         tx.blur();
     }
 }
