@@ -454,7 +454,7 @@ fn a_view_with_nothing_over_it_reports_no_overlays() {
     world.open_desktop();
     assert_eq!(
         view(&world),
-        json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null, "block": null})
+        json!({"cursor": [0, 0], "overlays": [], "images": [], "scrolled_back": 0, "copies": null, "block": null})
     );
     assert!(world.runtime_is_at_rest());
 }

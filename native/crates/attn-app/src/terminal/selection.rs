@@ -194,9 +194,27 @@ impl Terminals {
                 })
             })
             .collect();
+        let (images, top) = term.grid.images();
+        let images: Vec<serde_json::Value> = images
+            .iter()
+            .map(|image| {
+                let p = image.placed;
+                serde_json::json!({
+                    "image": p.image_id,
+                    "placement": p.placement_id,
+                    "generation": p.generation,
+                    "row": i64::from(p.row) - i64::from(top),
+                    "col": p.col,
+                    "size": [p.pixel_width, p.pixel_height],
+                    "z": p.z,
+                    "pixels": [image.picture.width, image.picture.height],
+                })
+            })
+            .collect();
         Some(serde_json::json!({
             "cursor": term.grid.cursor.map(|c| [c.col, c.row]),
             "overlays": overlays,
+            "images": images,
             "scrolled_back": term.scrolled_back,
             "copies": term.view.selected,
             "block": term.view.block,
@@ -302,6 +320,7 @@ impl Terminals {
     pub(super) fn forget_screen(term: &mut Term) {
         term.view = View::default();
         term.blocks = Default::default();
+        term.placements = Default::default();
     }
 
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.

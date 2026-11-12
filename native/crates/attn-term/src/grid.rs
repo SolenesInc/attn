@@ -75,6 +75,19 @@ pub enum OverlayKind {
     },
 }
 
+/// A kitty image on the terminal: its pixels, and where it is placed.
+#[derive(Clone, Debug)]
+pub struct Image {
+    pub picture: std::sync::Arc<crate::kitty::Picture>,
+    pub placed: crate::kitty::Placed,
+}
+
+impl PartialEq for Image {
+    fn eq(&self, other: &Image) -> bool {
+        self.picture.id == other.picture.id && self.placed == other.placed
+    }
+}
+
 /// The visible screen of one terminal, read out of libghostty-vt by dirty row. `dirty` marks
 /// the rows that changed since the renderer last took them.
 #[derive(Default)]
@@ -89,6 +102,11 @@ pub struct Grid {
     overlays: Vec<Overlay>,
     /// The overlays changed since the renderer last took them.
     pub overlays_changed: bool,
+    images: Vec<Image>,
+    /// The images, or the row the view starts at, changed since the renderer last took them.
+    pub images_changed: bool,
+    /// The screen row the view's top row is, which the images' rows count from.
+    image_top: u32,
     strings: Vec<String>,
     interned: HashMap<String, u32>,
 }
@@ -134,6 +152,21 @@ impl Grid {
         self.overlays = overlays;
         self.overlays_changed = true;
         true
+    }
+
+    /// The kitty images placed on the terminal, drawn first to last.
+    pub fn images(&self) -> (&[Image], u32) {
+        (&self.images, self.image_top)
+    }
+
+    /// Places `images` on the terminal, its view's top row at screen row `top`.
+    pub fn set_images(&mut self, images: Vec<Image>, top: u32) {
+        if images == self.images && (images.is_empty() || top == self.image_top) {
+            return;
+        }
+        self.images = images;
+        self.image_top = top;
+        self.images_changed = true;
     }
 
     pub fn row(&self, y: usize) -> &[Cell] {

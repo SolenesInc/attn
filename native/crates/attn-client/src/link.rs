@@ -4,8 +4,9 @@ use std::time::Duration;
 
 use attn_protocol::{
     AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
-    PROTOCOL_VERSION, ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage,
-    PtyResizedMessage, RuntimeRespawnedMessage, SessionExitedMessage, SessionRegisteredMessage,
+    KittyImageResultMessage, KittyPlacementsMessage, PROTOCOL_VERSION,
+    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
+    RuntimeRespawnedMessage, SessionExitedMessage, SessionRegisteredMessage,
     SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -71,6 +72,8 @@ pub enum TerminalEvent {
     Frame(Frame),
     Attached(Box<AttachResultMessage>),
     Resized(PtyResizedMessage),
+    Placements(KittyPlacementsMessage),
+    ImageResult(KittyImageResultMessage),
     Desync(PtyDesyncMessage),
     Respawned(RuntimeRespawnedMessage),
     Exited(SessionExitedMessage),
@@ -467,6 +470,14 @@ impl Task {
             }
             "pty_resized" => {
                 (self.config.terminals)(TerminalEvent::Resized(parse(&header.event, text)?));
+                None
+            }
+            "kitty_placements" => {
+                (self.config.terminals)(TerminalEvent::Placements(parse(&header.event, text)?));
+                None
+            }
+            "kitty_image_result" => {
+                (self.config.terminals)(TerminalEvent::ImageResult(parse(&header.event, text)?));
                 None
             }
             "pty_desync" => {

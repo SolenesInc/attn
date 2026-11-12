@@ -15,6 +15,7 @@ use crate::font::{FAMILY, Fonts, Metrics, fit};
 use crate::grid::{
     BOLD, Cell, FAINT, Grid, INVISIBLE, ITALIC, OverlayKind, Rgb, STRIKETHROUGH, UNDERLINE, Width,
 };
+use crate::kitty::{Picture, Viewport, quad, source_rect};
 use crate::sprites;
 use crate::theme::Theme;
 
@@ -62,6 +63,41 @@ struct Inst {
 }
 
 const INST: u64 = std::mem::size_of::<Inst>() as u64;
+
+/// Kitty's deepest layer, as the Tauri renderer draws it: a placement below it draws under the
+/// cells' backgrounds, one from it up to zero under the text, and the rest over the text.
+const KITTY_Z_UNDER_BACKGROUND: i32 = -1_073_741_824;
+
+/// One kitty image's quad: where it draws in the grid, in device pixels, and the part of its
+/// texture it shows, in texture coordinates: x, y, width, height.
+#[repr(C)]
+#[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
+struct ImageInst {
+    rect: [f32; 4],
+    uv: [f32; 4],
+}
+
+const IMAGE_INST: u64 = std::mem::size_of::<ImageInst>() as u64;
+
+/// Where the image quads of a screen go, in the order they draw.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Layer {
+    UnderBackground,
+    UnderText,
+    OverText,
+}
+
+impl Layer {
+    fn of(z: i32) -> Layer {
+        if z < KITTY_Z_UNDER_BACKGROUND {
+            Layer::UnderBackground
+        } else if z < 0 {
+            Layer::UnderText
+        } else {
+            Layer::OverText
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Default, bytemuck::Pod, bytemuck::Zeroable)]
@@ -382,6 +418,12 @@ struct Screen {
     bind: wgpu::BindGroup,
     shape: (u16, u16),
     insts: Vec<Inst>,
+    images: wgpu::Buffer,
+    images_cap: u64,
+    /// The cursor's instance, drawn again over an image under the text.
+    cursor: Option<u32>,
+    /// The picture and layer of each quad in `images`, in the order the quads draw.
+    drawn: Vec<(u64, Layer)>,
 }
 
 struct Pipelines {
@@ -391,6 +433,7 @@ struct Pipelines {
     underline: wgpu::RenderPipeline,
     strike: wgpu::RenderPipeline,
     over: wgpu::RenderPipeline,
+    image: wgpu::RenderPipeline,
 }
 
 struct Gpu {
@@ -398,6 +441,8 @@ struct Gpu {
     layout: wgpu::BindGroupLayout,
     shader: wgpu::ShaderModule,
     pipeline_layout: wgpu::PipelineLayout,
+    image_layout: wgpu::BindGroupLayout,
+    image_pipeline_layout: wgpu::PipelineLayout,
     pipelines: Vec<Pipelines>,
     texture: wgpu::Texture,
     view: wgpu::TextureView,
@@ -412,6 +457,9 @@ pub struct Cells {
     glyphs: HashMap<GlyphKey, Option<Slot>>,
     gpu: Option<Gpu>,
     screens: HashMap<u32, Screen>,
+    /// A texture per kitty picture on a screen, by picture id; None for one past the device's
+    /// largest texture.
+    pictures: HashMap<u64, Option<wgpu::BindGroup>>,
     theme: Theme,
 }
 
@@ -504,6 +552,22 @@ fn line(vi: u32, i: I, on: bool, y: f32) -> V {
   return o;
 }
 @fragment fn fs_lines(v: V) -> @location(0) vec4f { return v.color; }
+
+@group(1) @binding(0) var image_t: texture_2d<f32>;
+@group(1) @binding(1) var image_s: sampler;
+struct J { @location(0) rect: vec4f, @location(1) uv: vec4f };
+struct W { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
+@vertex fn vs_image(@builtin(vertex_index) vi: u32, j: J) -> W {
+  var o: W;
+  o.pos = place(j.rect.xy + corner(vi) * j.rect.zw);
+  o.uv = j.uv.xy + corner(vi) * j.uv.zw;
+  return o;
+}
+@fragment fn fs_image(w: W) -> @location(0) vec4f {
+  let t = textureSampleLevel(image_t, image_s, w.uv, 0.0);
+  if (u.linear > 0.5) { return vec4f(lin(t.r) * t.a, lin(t.g) * t.a, lin(t.b) * t.a, t.a); }
+  return vec4f(t.rgb * t.a, t.a);
+}
 "#;
 
 fn pack(c: Rgb, a: u8) -> u32 {
@@ -552,6 +616,23 @@ impl Cells {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
+        let image_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("terminal images"),
+            entries: &[
+                entry(0, wgpu::ShaderStages::FRAGMENT, texture),
+                entry(
+                    1,
+                    wgpu::ShaderStages::FRAGMENT,
+                    wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                ),
+            ],
+        });
+        let image_pipeline_layout =
+            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("terminal images"),
+                bind_group_layouts: &[Some(&layout), Some(&image_layout)],
+                immediate_size: 0,
+            });
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("terminal glyph atlas"),
             size: wgpu::Extent3d {
@@ -577,12 +658,15 @@ impl Cells {
             layout,
             shader,
             pipeline_layout,
+            image_layout,
+            image_pipeline_layout,
             pipelines: Vec::new(),
             texture,
             view,
             sampler,
         });
         self.screens.clear();
+        self.pictures.clear();
         if let Some(atlas) = &mut self.atlas {
             atlas.dirty = Some([0, 0, ATLAS, ATLAS]);
         }
@@ -597,18 +681,27 @@ impl Cells {
             return &gpu.pipelines[i];
         }
         let attrs = wgpu::vertex_attr_array![0 => Uint16x2, 1 => Uint16x2, 2 => Uint16x4, 3 => Uint16x2, 4 => Uint32, 5 => Uint32, 6 => Uint32];
-        let make = |vs: &str, fs: &str| {
+        let image_attrs = wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4];
+        let cells = (&gpu.pipeline_layout, INST, &attrs[..]);
+        let images = (&gpu.image_pipeline_layout, IMAGE_INST, &image_attrs[..]);
+        let make = |(layout, stride, attributes): (
+            &wgpu::PipelineLayout,
+            u64,
+            &[wgpu::VertexAttribute],
+        ),
+                    vs: &str,
+                    fs: &str| {
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("terminal cells"),
-                layout: Some(&gpu.pipeline_layout),
+                layout: Some(layout),
                 vertex: wgpu::VertexState {
                     module: &gpu.shader,
                     entry_point: Some(vs),
                     compilation_options: Default::default(),
                     buffers: &[Some(wgpu::VertexBufferLayout {
-                        array_stride: INST,
+                        array_stride: stride,
                         step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: &attrs,
+                        attributes,
                     })],
                 },
                 fragment: Some(wgpu::FragmentState {
@@ -630,11 +723,12 @@ impl Cells {
         };
         gpu.pipelines.push(Pipelines {
             format,
-            bg: make("vs_bg", "fs_bg"),
-            fg: make("vs_fg", "fs_fg"),
-            underline: make("vs_underline", "fs_lines"),
-            strike: make("vs_strike", "fs_lines"),
-            over: make("vs_over", "fs_lines"),
+            bg: make(cells, "vs_bg", "fs_bg"),
+            fg: make(cells, "vs_fg", "fs_fg"),
+            underline: make(cells, "vs_underline", "fs_lines"),
+            strike: make(cells, "vs_strike", "fs_lines"),
+            over: make(cells, "vs_over", "fs_lines"),
+            image: make(images, "vs_image", "fs_image"),
         });
         gpu.pipelines.last().expect("just pushed")
     }
@@ -745,6 +839,7 @@ impl Cells {
         for (mark, grid) in &mut grids {
             self.prepare_screen(device, queue, *mark, grid);
         }
+        self.prepare_pictures(device, queue, &grids);
         if self.atlas.as_ref().is_some_and(|a| a.full) {
             self.restart_atlas();
             for (mark, grid) in &mut grids {
@@ -785,6 +880,83 @@ impl Cells {
                     depth_or_array_layers: 1,
                 },
             );
+        }
+    }
+
+    /// Uploads each picture a grid shows that has no texture yet, and drops the textures of
+    /// pictures no grid shows.
+    fn prepare_pictures(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        grids: &[(u32, &mut Grid)],
+    ) {
+        let shown: HashMap<u64, &Picture> = grids
+            .iter()
+            .flat_map(|(_, grid)| grid.images().0)
+            .map(|image| (image.picture.id, image.picture.as_ref()))
+            .collect();
+        self.pictures.retain(|id, _| shown.contains_key(id));
+        let gpu = self.gpu.as_ref().expect("made before any picture");
+        for (id, picture) in shown {
+            if self.pictures.contains_key(&id) {
+                continue;
+            }
+            let largest = device.limits().max_texture_dimension_2d;
+            if picture.width > largest || picture.height > largest {
+                eprintln!(
+                    "attn-term: a {}x{} kitty image is past this GPU's largest texture side, {largest}; it draws blank",
+                    picture.width, picture.height
+                );
+                self.pictures.insert(id, None);
+                continue;
+            }
+            let size = wgpu::Extent3d {
+                width: picture.width,
+                height: picture.height,
+                depth_or_array_layers: 1,
+            };
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("terminal image"),
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
+            queue.write_texture(
+                wgpu::TexelCopyTextureInfo {
+                    texture: &texture,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
+                },
+                &picture.rgba,
+                wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(picture.width * 4),
+                    rows_per_image: Some(picture.height),
+                },
+                size,
+            );
+            let view = texture.create_view(&Default::default());
+            let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("terminal image"),
+                layout: &gpu.image_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&gpu.sampler),
+                    },
+                ],
+            });
+            self.pictures.insert(id, Some(bind));
         }
     }
 
@@ -856,10 +1028,20 @@ impl Cells {
                 bind,
                 shape: (0, 0),
                 insts: Vec::new(),
+                images: device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("terminal images"),
+                    size: IMAGE_INST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                }),
+                images_cap: 0,
+                cursor: None,
+                drawn: Vec::new(),
             }
         });
         let count = usize::from(cols) * usize::from(rows) + 1;
-        if screen.shape != (cols, rows) {
+        let reshaped = screen.shape != (cols, rows);
+        if reshaped {
             if screen.cap < count as u64 {
                 screen.buf = device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("terminal cells"),
@@ -891,6 +1073,26 @@ impl Cells {
             changed = Some(changed.map_or((y, y), |(first, _)| (first, y)));
         }
         let screen = self.screens.get_mut(&mark).expect("inserted above");
+        screen.cursor = grid
+            .cursor
+            .map(|c| 1 + u32::from(c.row) * cols as u32 + u32::from(c.col));
+        if std::mem::take(&mut grid.images_changed) || reshaped {
+            let cell = self.raster.as_ref().expect("made before any screen").cell();
+            let (quads, drawn) = image_insts(grid, cell);
+            screen.drawn = drawn;
+            if screen.images_cap < quads.len() as u64 {
+                screen.images = device.create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("terminal images"),
+                    size: quads.len() as u64 * IMAGE_INST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
+                screen.images_cap = quads.len() as u64;
+            }
+            if !quads.is_empty() {
+                queue.write_buffer(&screen.images, 0, bytemuck::cast_slice(&quads));
+            }
+        }
         if std::mem::take(&mut grid.overlays_changed)
             || (changed.is_some() && !grid.overlays().is_empty())
         {
@@ -964,26 +1166,84 @@ impl Cells {
         };
         queue.write_buffer(&screen.uniforms, 0, bytemuck::bytes_of(&uniforms));
         let pipelines = Cells::pipelines(gpu, device, site.format);
+        let pictures = &self.pictures;
+        let images = |pass: &mut wgpu::RenderPass<'_>, layer: Layer| {
+            let mut set = false;
+            for (at, (picture, drawn)) in screen.drawn.iter().enumerate() {
+                let Some(Some(bind)) = pictures.get(picture).filter(|_| *drawn == layer) else {
+                    continue;
+                };
+                if !set {
+                    pass.set_pipeline(&pipelines.image);
+                    pass.set_vertex_buffer(0, screen.images.slice(..));
+                    set = true;
+                }
+                pass.set_bind_group(1, bind, &[]);
+                let at = at as u32;
+                pass.draw(0..6, at..at + 1);
+            }
+            set
+        };
+        let cells = screen.buf.slice(..u64::from(count) * INST);
         pass.set_bind_group(0, &screen.bind, &[]);
-        pass.set_vertex_buffer(0, screen.buf.slice(..u64::from(count) * INST));
+        pass.set_vertex_buffer(0, cells);
         pass.set_pipeline(&pipelines.bg);
-        pass.draw(0..6, 0..count);
+        pass.draw(0..6, 0..1);
+        if images(pass, Layer::UnderBackground) {
+            pass.set_vertex_buffer(0, cells);
+            pass.set_pipeline(&pipelines.bg);
+        }
+        pass.draw(0..6, 1..count);
+        if images(pass, Layer::UnderText) {
+            pass.set_vertex_buffer(0, cells);
+            pass.set_pipeline(&pipelines.bg);
+            if let Some(cursor) = screen.cursor {
+                pass.draw(0..6, cursor..cursor + 1);
+            }
+        }
         let (washes, lines) = (screen.washes, screen.lines);
         if washes > 0 {
             pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
             pass.draw(0..6, 0..washes);
-            pass.set_vertex_buffer(0, screen.buf.slice(..u64::from(count) * INST));
         }
+        pass.set_vertex_buffer(0, cells);
         for pipeline in [&pipelines.fg, &pipelines.underline, &pipelines.strike] {
             pass.set_pipeline(pipeline);
             pass.draw(0..6, 1..count);
         }
+        images(pass, Layer::OverText);
         if lines > 0 {
             pass.set_vertex_buffer(0, screen.over.slice(..u64::from(washes + lines) * INST));
             pass.set_pipeline(&pipelines.over);
             pass.draw(0..6, washes..washes + lines);
         }
     }
+}
+
+/// A grid's kitty images as quads in a grid of `cell`-sized cells, with the picture and layer
+/// each draws from and in.
+fn image_insts(grid: &Grid, cell: (f32, f32)) -> (Vec<ImageInst>, Vec<(u64, Layer)>) {
+    let (images, top) = grid.images();
+    let viewport = Viewport {
+        top,
+        cell,
+        size: (f32::from(grid.cols) * cell.0, f32::from(grid.rows) * cell.1),
+        device_per_unit: 1.0,
+    };
+    images
+        .iter()
+        .filter_map(|image| {
+            let q = quad(&image.placed, viewport)?;
+            let (w, h) = (image.picture.width, image.picture.height);
+            let [x, y, sw, sh] = source_rect(&image.placed, &q, (w, h));
+            let (w, h) = (w as f32, h as f32);
+            let inst = ImageInst {
+                rect: [q.x, q.y, q.width, q.height],
+                uv: [x / w, y / h, sw / w, sh / h],
+            };
+            Some((inst, (image.picture.id, Layer::of(image.placed.z))))
+        })
+        .unzip()
 }
 
 /// A grid's overlays as instances: the washes, with the cursor drawn again over them as the

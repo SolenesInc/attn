@@ -6,6 +6,7 @@ item	statement	native_test	reason
 43	Such a sequence draws as a single glyph on macOS		gap: s-916dgb
 44	A Private Use Area icon (Nerd Font) draws from the fonts the native app bundles	live:s-916dgb/live-shot2.png	
 44	It draws on the first frame, with no fallback glyph before the fonts load		gap: s-916dgb
+45	Kitty image placements draw where the worker placed them, from pixels pulled once per image, and no client parses kitty escapes	attn-app/tests/wire/terminal_kitty.rs::a_placement_asks_for_its_image_once_and_draws_it_when_the_pixels_arrive	
 46	Terminal input latency is measured natively		gap: s-c6b9zk
 92	Linux gives the same grid geometry as macOS for the same window and font size		gap: s-rzb1xd
 30	⌘C, from the keyboard or the native Edit menu, copies the terminal's selection	attn-app/tests/wire/terminal_view.rs::a_drag_selects_washes_and_copies_its_text_and_the_copy_key_copies_it_again	

@@ -16,6 +16,7 @@ use rune::{Live, Tx};
 mod blocks;
 mod filter;
 mod find;
+mod kitty;
 mod links;
 mod selection;
 
@@ -94,6 +95,7 @@ pub struct Terminals {
     pointing: Option<String>,
     /// Each terminal's find bar, by runtime id, kept with its query once closed.
     finds: HashMap<String, Finding>,
+    images: kitty::Images,
     filters: HashMap<String, Filtering>,
 }
 
@@ -123,6 +125,7 @@ struct Term {
     pointer: Pointer,
     view: selection::View,
     blocks: blocks::TermBlocks,
+    placements: attn_term::kitty::Placements,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
 }
@@ -203,6 +206,7 @@ impl Term {
             pointer: Pointer::default(),
             view: selection::View::default(),
             blocks: Default::default(),
+            placements: Default::default(),
             scrolled_back: 0,
         }
     }
@@ -259,6 +263,7 @@ impl Terminals {
             let mut term = self.panes.remove(&id).expect("listed above");
             self.finds.remove(&id);
             self.filters.remove(&id);
+            self.images.forget(&id);
             release(&id, &mut term, None, 0, daemon);
             if self.connected
                 && matches!(
@@ -469,8 +474,34 @@ impl Terminals {
                     answer(&terminal, term, daemon);
                 }
             }
-            TerminalEvent::Frame(Frame::KittyImage { .. }) => {}
-            TerminalEvent::Attached(result) => self.attached(*result, tx, daemon),
+            TerminalEvent::Frame(Frame::KittyImage {
+                terminal,
+                image,
+                generation,
+                width,
+                height,
+                format,
+                pixels,
+            }) => self.image_arrived(
+                &terminal,
+                image,
+                generation,
+                (width, height),
+                format,
+                &pixels,
+            ),
+            TerminalEvent::Placements(described) => self.placements_described(
+                &described.id,
+                described.seq,
+                &described.placements,
+                daemon,
+            ),
+            TerminalEvent::ImageResult(result) => self.image_refused(&result),
+            TerminalEvent::Attached(result) => {
+                let id = result.id.clone();
+                self.attached(*result, tx, daemon);
+                self.ask_images(&id, daemon);
+            }
             TerminalEvent::Resized(resized) => {
                 let metrics = self.metrics();
                 if let Some(term) = self.panes.get_mut(&resized.id) {
@@ -616,6 +647,11 @@ impl Terminals {
             Terminals::forget_screen(term);
             let seeded = result.snapshot.as_ref().and_then(|s| s.blocks.as_deref());
             Terminals::seed_blocks(term, seeded.unwrap_or_default());
+            let placed = result
+                .snapshot
+                .as_ref()
+                .and_then(|s| s.placements.as_deref());
+            Terminals::seed_placements(term, placed.unwrap_or_default());
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
@@ -882,8 +918,12 @@ impl Terminals {
         self.refresh_hovers();
         let theme = self.theme;
         let finds = &self.finds;
+        let images = &mut self.images;
         self.panes.iter_mut().map(move |(id, term)| {
             term.vt.sync(&mut term.grid);
+            let placed = Terminals::kitty_images(images, id, term);
+            let top = term.vt.view_top();
+            term.grid.set_images(placed, top);
             let overlays = Terminals::overlays(term, &theme, finds.get(id));
             term.grid.set_overlays(overlays);
             term.scrolled_back = term.vt.scrolled_back();
