@@ -23,8 +23,8 @@ func TestTheNativeAppListsADaemonSessionAndTakesKeysOverAutomation(t *testing.T)
 		Role string `json:"role"`
 	}
 	app.Must("wait", map[string]any{"target": row}, &found)
-	if found.Role != "listitem" {
-		t.Fatalf("the sidebar row for %s is a %q, want a listitem", session, found.Role)
+	if found.Role != "button" {
+		t.Fatalf("the sidebar row for %s is a %q, want a button", session, found.Role)
 	}
 	var tree json.RawMessage
 	app.Must("tree", nil, &tree)
