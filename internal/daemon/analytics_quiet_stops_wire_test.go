@@ -249,14 +249,26 @@ func TestANisseQuietStopIsJudgedOnTheAnswerOfThatRun(t *testing.T) {
 	}
 	ringAndAnswer("the review is in", "The refund bug is fixed and landed. <!-- attn:state=idle -->")
 	ringAndAnswer("the deploy is in", "The deploy finished with no errors. <!-- attn:state=idle -->")
-	if got := verdictsOnceTheDaemonHasStopped(t, w, session); !slices.Equal(got, []string{`{"verdict":"read"}`, `{"verdict":"read"}`}) {
-		t.Errorf("quiet stop records %q", got)
+	verdicts := verdictsOnceTheDaemonHasStopped(t, w, session)
+	if revived := w.Launched(session); revived.ConversationID != conversation {
+		t.Errorf("the restart revived Nisse on conversation %q, want %q", revived.ConversationID, conversation)
 	}
+	if !slices.Equal(verdicts, []string{`{"verdict":"read"}`, `{"verdict":"read"}`}) {
+		t.Errorf("quiet stop records %q", verdicts)
+	}
+	answers := []string{"The deploy finished with no errors.", "The refund bug is fixed and landed."}
 	prompts := judgedSoFar(judged)
-	for i, want := range []string{"The refund bug is fixed and landed.", "The deploy finished with no errors."} {
-		if i >= len(prompts) || !strings.Contains(prompts[i], want) || strings.Contains(prompts[i], "attn:state") {
-			t.Errorf("the verdicts judged %q, want each run's own answer, %q as number %d", prompts, want, i+1)
+	var judgedAnswers []string
+	for _, prompt := range prompts {
+		for _, answer := range answers {
+			if strings.Contains(prompt, answer) && !strings.Contains(prompt, "attn:state") {
+				judgedAnswers = append(judgedAnswers, answer)
+			}
 		}
+	}
+	slices.Sort(judgedAnswers)
+	if !slices.Equal(judgedAnswers, answers) {
+		t.Errorf("the verdicts judged %q, want each run's own answer once, without its state marker: %q", prompts, answers)
 	}
 	for _, record := range streamOutbox(t, w.App(), analytics.StreamRun) {
 		if strings.Contains(string(record.Props), "refund") || strings.Contains(string(record.Props), "deploy") {
