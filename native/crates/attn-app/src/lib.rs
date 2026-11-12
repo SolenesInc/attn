@@ -12,6 +12,7 @@ pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
+mod palette;
 mod picker;
 mod requests;
 pub mod screen;

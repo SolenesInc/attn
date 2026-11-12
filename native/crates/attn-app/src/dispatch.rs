@@ -3,6 +3,7 @@ use rune::Tx;
 
 use crate::State;
 use crate::action::Action;
+use crate::palette::Face;
 use crate::picker::{self, Direction};
 use crate::shell::{Drawer, Layer, Palette};
 
@@ -18,8 +19,8 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
         Action::DockAttention => window.toggle_drawer(Drawer::Attention),
         Action::DockAsks => window.toggle_drawer(Drawer::Asks),
         Action::BoardOpen => window.toggle_drawer(Drawer::Garden),
-        Action::UiActionMenu => window.toggle_layer(Layer::Palette(Palette::Agents), tx),
-        Action::UiCommandPalette => window.toggle_layer(Layer::Palette(Palette::Commands), tx),
+        Action::UiActionMenu => crate::palette::open(state, Face::Agents, tx),
+        Action::UiCommandPalette => crate::palette::open(state, Face::Commands, tx),
         Action::FileOpen => window.toggle_layer(Layer::Palette(Palette::Files), tx),
         Action::SessionsOpen => window.toggle_layer(Layer::Palette(Palette::Sessions), tx),
         Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),

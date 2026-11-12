@@ -30,7 +30,7 @@ pub struct Window {
     /// taking this window's keyboard.
     pub keyboard: Option<Holder>,
     pub(crate) desk: crate::desktop::Desk,
-    palette_query: rune::TextEdit,
+    pub(crate) search: crate::palette::Search,
     pub agent_list_open: bool,
     pub(crate) agent_filter: rune::TextEdit,
     /// Wall-clock milliseconds as of the last change the window shows by time: turn ages and
@@ -83,8 +83,8 @@ pub enum Layer {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Palette {
-    Agents,
-    Commands,
+    /// Agents, or commands behind a leading `>`.
+    Search,
     Files,
     Sessions,
 }
@@ -92,8 +92,7 @@ pub enum Palette {
 impl Palette {
     fn label(self) -> &'static str {
         match self {
-            Palette::Agents => "Agents",
-            Palette::Commands => "Commands",
+            Palette::Search => "Search",
             Palette::Files => "Files",
             Palette::Sessions => "Sessions",
         }
@@ -159,7 +158,7 @@ impl Window {
         }
         self.layer = Some(layer);
         if let Layer::Palette(_) = layer {
-            self.palette_query = rune::TextEdit::default();
+            self.search.query = rune::TextEdit::default();
             tx.focus(PALETTE_FIELD, false);
         }
     }
@@ -331,8 +330,9 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     let window = &state.window;
     let mut layers = Vec::new();
     match window.layer {
+        Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
         Some(Layer::Palette(palette)) => {
-            layers.push(self::palette(palette, &window.palette_query, t))
+            layers.push(self::palette(palette, &window.search.query, t))
         }
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Settings) => layers.push(dialog(
@@ -439,7 +439,7 @@ fn palette(palette: Palette, query: &rune::TextEdit, t: &Tokens) -> El {
             format!("Search {}", palette.label().to_lowercase()),
             t.text_muted,
         )
-        .on_edit(|state: &mut State| &mut state.window.palette_query)
+        .on_edit(|state: &mut State| &mut state.window.search.query)
         .w_full()
         .color(t.text_primary);
     debug_assert!(PALETTE_FIELD.ends_with(FIELD_KEY_SUFFIX));

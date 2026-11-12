@@ -1,7 +1,7 @@
 mod actions;
 mod chrome;
-mod model;
-mod queue;
+pub(crate) mod model;
+pub(crate) mod queue;
 mod queue_view;
 pub(crate) mod snooze;
 
@@ -62,10 +62,7 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SidebarAgentList if queue && !state.window.sidebar_hidden => {
             actions::toggle_agent_list(state, tx)
         }
-        Action::SidebarAgentList => state.window.toggle_layer(
-            crate::shell::Layer::Palette(crate::shell::Palette::Agents),
-            tx,
-        ),
+        Action::SidebarAgentList => crate::palette::open(state, crate::palette::Face::Agents, tx),
         Action::SessionSettle => actions::settle_on_screen(state, tx),
         Action::SessionPriority => actions::toggle_priority_on_screen(state),
         Action::SessionSnooze => actions::snooze_on_screen(state, tx),

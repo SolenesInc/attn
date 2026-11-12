@@ -5,6 +5,7 @@ mod wire {
     mod deep_link;
     mod desktops;
     mod keys;
+    mod palette;
     mod picker;
     mod profile;
     mod queue;

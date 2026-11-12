@@ -231,7 +231,7 @@ fn a_focused_field_takes_typing_and_the_keys_it_keeps() {
             .get(Target::key("palette.field"))
             .value
             .as_deref(),
-        Some("ab")
+        Some(">ab")
     );
     assert!(typed(&world).is_empty(), "typing stays in the field");
     assert_eq!(notice(&world), None, "the field keeps Find's keys");
