@@ -445,7 +445,7 @@ func (d *Daemon) startSessionTerminal(session *protocol.Session, terminal harnes
 			return err
 		}
 		msg.HostName = protocol.Ptr(name)
-		msg.Copy, err = d.store.SessionCopy(session.ID)
+		msg.Copy, err = d.store.LaunchCopy(session.ID, protocol.TerminalID(terminal))
 		if err != nil {
 			return err
 		}

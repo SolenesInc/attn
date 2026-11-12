@@ -102,6 +102,7 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 	}
 	startedAt := time.Now()
 	session := msg.Session
+	_, boundBefore := d.shownIn(msg.TerminalID)
 	if len(msg.Copy) > 0 {
 		home := d.homeBridge()
 		if home == nil {
@@ -127,6 +128,11 @@ func (d *Daemon) startTerminal(ctx context.Context, msg protocol.TerminalStartMe
 			return
 		}
 		d.terminals().unexpect(msg.TerminalID)
+		if len(msg.Copy) > 0 && !boundBefore {
+			if _, _, err := d.store.RemoveTerminalTile(protocol.TerminalID(msg.TerminalID)); err != nil {
+				d.logf("unbind terminal %s after its launch failed: %v", msg.TerminalID, err)
+			}
+		}
 		d.kickMonitorTerminals()
 	}()
 	opts.ID = msg.TerminalID
