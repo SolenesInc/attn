@@ -322,6 +322,31 @@ fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
 }
 
 #[test]
+fn when_the_keyboards_tile_closes_the_keyboard_goes_to_the_tile_the_daemon_shows_next() {
+    let three = vec![pane("t1", "r1"), pane("t2", "r2"), pane("t3", "r3")];
+    let mut world =
+        World::start(Daemon::scripted().state(state(vec![desktop("d1", "t3", three)], &[])));
+    world.open_desktop();
+    world.gesture(|app| app.click(Target::role("group").name("Agent t3")));
+
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile("d1"),
+        desktops: vec![desktop(
+            "d1",
+            "t2",
+            vec![pane("t1", "r1"), pane("t2", "r2")],
+        )],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+    world.gesture(|app| app.type_text("a"));
+
+    assert_eq!(typed(&world), [typed_into("r2", "a")]);
+    assert!(world.daemon.sent_of("desktop_show_leaf").is_empty());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn the_keyboard_stays_on_its_tile_when_the_active_tile_moves_elsewhere() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
     world.open_desktop();
