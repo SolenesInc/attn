@@ -242,6 +242,8 @@ func (d *Daemon) resolvePluginDriverRoutes(plugin, agent string) {
 		session := d.store.Get(run.SessionID)
 		if session != nil && session.Agent == agent {
 			d.sessionMonitor(run.SessionID).ResolveDriverRoute(plugin, run.RunID, pluginDriverRoute(reg))
+			d.kickSessionInboxAddresses(run.SessionID)
+			d.kickCompactingClose(run.SessionID)
 		}
 	}
 }

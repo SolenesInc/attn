@@ -372,6 +372,28 @@ func (s *Store) StampInboxAttempt(to who.Address, at time.Time) (bool, error) {
 }
 func InboxRingStamp(at time.Time) string { return at.UTC().Format(sortableTimeFormat) }
 
+func (s *Store) PendingInboxInput(to who.Address) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var raw string
+	err := s.db.QueryRow(`SELECT COALESCE((SELECT pending_input FROM inbox_delivery WHERE address=?),'')`, to.String()).Scan(&raw)
+	return raw, err
+}
+
+func (s *Store) SavePendingInboxInput(to who.Address, raw string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`INSERT INTO inbox_delivery(address,outstanding_at,pending_input) VALUES(?,'',?) ON CONFLICT(address) DO UPDATE SET pending_input=excluded.pending_input`, to.String(), raw)
+	return err
+}
+
+func (s *Store) ClearPendingInboxInput(to who.Address) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`UPDATE inbox_delivery SET pending_input='' WHERE address=?`, to.String())
+	return err
+}
+
 func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, readBy protocol.SessionID, notified bool, at time.Time) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -385,6 +407,9 @@ func (s *Store) RingInbox(to who.Address, finishingStart bool, typed []string, r
 		if _, err := tx.Exec(`UPDATE inbox_items SET notified_at=CASE WHEN notified_at='' THEN ? ELSE notified_at END,read_at=?,read_by=? WHERE id=? AND address=? AND read_at=''`, stamp, stamp, readBy, id, to.String()); err != nil {
 			return "", fmt.Errorf("read typed inbox item %s: %w", id, err)
 		}
+	}
+	if _, err := tx.Exec(`UPDATE inbox_delivery SET pending_input='' WHERE address=?`, to.String()); err != nil {
+		return "", err
 	}
 	if !notified {
 		return stamp, tx.Commit()
@@ -433,7 +458,10 @@ func setInboxOutstanding(tx *sql.Tx, to who.Address, at time.Time) error {
 	return err
 }
 func acknowledgeInbox(tx *sql.Tx, to who.Address) error {
-	_, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=?`, to.String())
+	if _, err := tx.Exec(`DELETE FROM inbox_delivery WHERE address=? AND pending_input=''`, to.String()); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`UPDATE inbox_delivery SET outstanding_at='' WHERE address=?`, to.String())
 	return err
 }
 func (s *Store) UnreadInboxAddresses() ([]who.Address, error) {

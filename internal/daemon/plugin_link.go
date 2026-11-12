@@ -41,6 +41,9 @@ func (l pluginLink) compactTarget() pluginCompactTarget {
 }
 
 func (l pluginLink) request(_ context.Context, method string, in harness.Input) harness.Custody {
+	if in.ExpectedDriverRun != "" && (l.run != in.ExpectedDriverRun || l.conversation.NativeID != in.ExpectedConversation) {
+		return harness.Custody{Rejected: true, Reason: "the input's driver run or native conversation has ended"}
+	}
 	if l.route != "direct" || l.connection == nil || !l.registration.Capabilities["message_delivery"] {
 		return harness.Custody{Reason: fmt.Sprintf("plugin %q is unavailable for direct input to run %s", l.plugin, l.run)}
 	}
@@ -56,6 +59,9 @@ func (l pluginLink) request(_ context.Context, method string, in harness.Input) 
 		}
 	}
 	if method == "driver.compact" {
+		if l.conversation.NativeID == "" {
+			return harness.Custody{Reason: "the driver has not reported its native conversation"}
+		}
 		if !l.registration.Capabilities["compaction"] {
 			return harness.Custody{Reason: "the plugin compaction handler is unavailable"}
 		}

@@ -13113,6 +13113,13 @@ type SessionPlaceMessage struct {
 	// DeliveryID corresponds to the JSON schema field "delivery_id".
 	DeliveryID string `json:"delivery_id"`
 
+	// ExpectedConversation corresponds to the JSON schema field
+	// "expected_conversation".
+	ExpectedConversation *string `json:"expected_conversation,omitempty,omitzero"`
+
+	// ExpectedDriverRun corresponds to the JSON schema field "expected_driver_run".
+	ExpectedDriverRun *string `json:"expected_driver_run,omitempty,omitzero"`
+
 	// Origin corresponds to the JSON schema field "origin".
 	Origin SessionPlaceOrigin `json:"origin"`
 

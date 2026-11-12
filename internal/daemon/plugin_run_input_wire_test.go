@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"fmt"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/pausepoint"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 	"strings"
@@ -304,5 +305,133 @@ func TestAReplacementDriverRunRejectsTheRetiredRunsReports(t *testing.T) {
 	driver.answer(driver.asked("driver.deliver_message", &input), map[string]bool{"ok": true})
 	if result := feedbackResult(app, submitted); !result.Success || input.RunID != second.RunID {
 		t.Fatalf("replacement input=%+v result=%+v", input, result)
+	}
+}
+
+func TestADirectDriversAvailabilityResumesQueuedMailWithoutAnotherStateChange(t *testing.T) {
+	for _, availability := range []string{"reconnect", "conversation"} {
+		t.Run(availability, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.App(), w.Client()
+				caps := map[string]bool{"state_reporting": true, "message_delivery": true, "attributed_input": true}
+				driver := connectDriver(t, w, "independent-plugin", "independent", caps)
+				author, _ := spawnDriven(w, app, driver, w.Path("author"))
+				session, run := spawnDriven(w, app, driver, w.Path("shop"))
+				awaitingInput(t, app, driver, session, run)
+				if availability == "reconnect" {
+					reportDriverConversation(driver, run, 2, "native-conversation")
+					driver.leave(w)
+				}
+				receipt := sendAgentMessage(t, cli, author, session, "read the rounding notes")
+				if receipt.Status != protocol.AgentMsgStatusQueued {
+					t.Fatalf("unavailable input=%+v", receipt)
+				}
+				if availability == "reconnect" {
+					driver = connectDriver(t, w, "independent-plugin", "independent", caps)
+				} else {
+					reportDriverConversation(driver, run, 2, "native-conversation")
+				}
+				var input deliveredMessage
+				driver.answer(driver.asked("driver.deliver_message", &input), map[string]bool{"ok": true})
+				if input.RunID != run.RunID || input.ConversationID != "native-conversation" {
+					t.Fatalf("recovered input=%+v", input)
+				}
+			})
+		})
+	}
+}
+
+func TestAPluginCompactWaitsForItsConversationAndResumesWhenItsDriverReturns(t *testing.T) {
+	for _, availability := range []string{"reconnect", "conversation"} {
+		t.Run(availability, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app, cli := w.App(), w.Client()
+				caps := map[string]bool{"state_reporting": true, "message_delivery": true, "compaction": true}
+				driver := connectDriver(t, w, "independent-plugin", "independent", caps)
+				session, run := spawnDriven(w, app, driver, w.Path("shop"))
+				awaitingInput(t, app, driver, session, run)
+				if availability == "conversation" {
+					closeCompacting(t, cli, session)
+					if len(driver.requests) != 0 {
+						t.Fatal("compact was dispatched without a native conversation")
+					}
+					reportDriverConversation(driver, run, 2, "native-conversation")
+				} else {
+					reportDriverConversation(driver, run, 2, "native-conversation")
+					placing := w.PauseAt(pausepoint.CompactingClosePlacing)
+					requested := make(chan struct{})
+					go func() { closeCompacting(t, cli, session); close(requested) }()
+					placing.Await()
+					driver.leave(w)
+					placing.Release()
+					<-requested
+					driver = connectDriver(t, w, "independent-plugin", "independent", caps)
+				}
+				var compact deliveredMessage
+				driver.answer(driver.asked("driver.compact", &compact), map[string]bool{"ok": true})
+				if compact.ConversationID != "native-conversation" {
+					t.Fatalf("compact=%+v", compact)
+				}
+				driver.mustReport("session.report_compaction", map[string]any{"session_id": run.SessionID, "run_id": run.RunID, "input_id": compact.InputID, "conversation_id": compact.ConversationID, "outcome": "completed"})
+				awaitClosed(app, session)
+			})
+		})
+	}
+}
+
+func TestAPluginRingRejectionOrTargetChangeReleasesTheOriginalInput(t *testing.T) {
+	for _, change := range []string{"rejected", "target_ended", "conversation", "retired"} {
+		t.Run(change, func(t *testing.T) {
+			inBubbleWithAgents(t, func(t *testing.T, w *world) {
+				app := w.TrustedApp()
+				caps := map[string]bool{"resume": true, "state_reporting": true, "message_delivery": true, "attributed_input": true}
+				driver := connectDriver(t, w, "independent-plugin", "independent", caps)
+				session, run := spawnDriven(w, app, driver, w.Path("shop"))
+				awaitingInput(t, app, driver, session, run)
+				reportDriverConversation(driver, run, 2, "native-conversation")
+				mailbox := protocol.QuickCaptureMailbox{Kind: protocol.QuickCaptureMailboxKindSession, SessionID: protocol.Ptr(protocol.SessionID(session))}
+				capture := sendQuickCapture(t, app, mailbox, "preserve this user input")
+				var original deliveredMessage
+				held := driver.asked("driver.deliver_message", &original)
+				if change == "rejected" || change == "target_ended" {
+					driver.answer(held, map[string]any{"ok": false, "status": change, "reason": "target refused input"})
+					driver.register("independent", caps)
+					var retry deliveredMessage
+					held = driver.asked("driver.deliver_message", &retry)
+					if retry.InputID == original.InputID {
+						t.Fatal("explicit rejection kept an ambiguous attempt")
+					}
+					driver.answer(held, map[string]bool{"ok": true})
+				} else {
+					driver.leave(w)
+					driver = connectDriver(t, w, "independent-plugin", "independent", map[string]bool{"resume": true, "state_reporting": true})
+					if change == "retired" {
+						stopDriven(app, driver, session)
+						driver.register("independent", caps)
+						run = relaunchDriven(w, driver, session, w.Path("shop"))
+						awaitingInput(t, app, driver, session, run)
+					} else {
+						reportDriverConversation(driver, run, 3, "another-conversation")
+					}
+					driver.register("independent", caps)
+					var retry deliveredMessage
+					held = driver.asked("driver.deliver_message", &retry)
+					if retry.InputID == original.InputID {
+						t.Fatal("changed target received ambiguous retry")
+					}
+					if change == "retired" && retry.RunID == original.RunID {
+						t.Fatal("retired run was retried")
+					}
+					if change == "conversation" && retry.ConversationID != "another-conversation" {
+						t.Fatalf("retry=%+v", retry)
+					}
+					driver.answer(held, map[string]bool{"ok": true})
+				}
+				testworld.Await(app, protocol.EventQuickCaptureRead, func(m protocol.QuickCaptureReadMessage) bool { return m.CaptureID == capture.CaptureID })
+				if got := w.terminal(session).Inputs(); len(got) != 0 {
+					t.Fatalf("direct ring reached PTY: %+v", got)
+				}
+			})
+		})
 	}
 }

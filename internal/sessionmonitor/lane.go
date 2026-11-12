@@ -74,14 +74,16 @@ func (id AttemptID) String() string {
 }
 
 type Delivery struct {
-	ID                AttemptID
-	Text              string
-	origin            inputOrigin
-	Placement         Placement
-	AllowUserComposer bool
-	BypassInitialGate bool
-	Compact           bool
-	Ring              *protocol.InboxRingRecord
+	ExpectedDriverRun    string
+	ExpectedConversation string
+	ID                   AttemptID
+	Text                 string
+	origin               inputOrigin
+	Placement            Placement
+	AllowUserComposer    bool
+	BypassInitialGate    bool
+	Compact              bool
+	Ring                 *protocol.InboxRingRecord
 }
 
 func MaintenanceInput(domain Maintenance, key string, text string, placement Placement) Delivery {
@@ -306,6 +308,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: fmt.Errorf("session %s: max_placed_deliveries=%d, asked for %d; reload the agent to reset its input lane", m.session, MaxPlacedDeliveries, len(l.placed)+1)}, runRef{}
 	}
 
+	if !m.deliveryTargetMatchesLocked(delivery) {
+		return Attempt{Stage: Failed, Err: errors.New("the input's driver run or native conversation has ended")}, runRef{}
+	}
 	steering := l.run != nil || l.questionInTurn
 	epochAtPlacing := l.epoch
 	var attempt Attempt
@@ -315,6 +320,9 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 		return Attempt{Stage: Failed, Err: errors.New("the session has no link that compacts its conversation")}, runRef{}
 	}
 	if !handled {
+		if !m.deliveryTargetMatchesLocked(delivery) {
+			return Attempt{Stage: Failed, Err: errors.New("the input target changed before terminal delivery")}, runRef{}
+		}
 		if duringQuestion {
 			return deferred(ErrBlockedByApproval)
 		}
@@ -349,6 +357,14 @@ func (m *Monitor) place(ctx context.Context, delivery Delivery) (Attempt, runRef
 	return attempt, credited
 }
 
+func (m *Monitor) deliveryTargetMatchesLocked(delivery Delivery) bool {
+	native := m.conversation
+	if native == "" {
+		native = m.conversationInput.NativeID
+	}
+	return delivery.ExpectedDriverRun == "" || (m.driver.Run == delivery.ExpectedDriverRun && native == delivery.ExpectedConversation)
+}
+
 func (l *lane) notificationTookLocked(source Maintenance, epochAtPlacing uint64) {
 	switch {
 	case l.epoch == epochAtPlacing:
@@ -376,7 +392,7 @@ func (l *lane) placeOverLinkLocked(ctx context.Context, delivery Delivery, durin
 		if _, safe := link.(harness.QuestionSafeLink); duringQuestion && !safe {
 			link = nil
 		}
-		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring}
+		in := harness.Input{ID: delivery.ID.String(), Text: delivery.Text, Voice: voice, Ring: delivery.Ring, ExpectedDriverRun: delivery.ExpectedDriverRun, ExpectedConversation: delivery.ExpectedConversation}
 		if compactor, ok := link.(harness.Compactor); delivery.Compact && ok {
 			custody = compactor.Compact(ctx, in)
 		} else if delivery.Compact {

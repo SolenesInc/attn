@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "99a2a1f6a4cf";
+pub const PROTOCOL_VERSION: &str = "b8b76e64ffe8";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -12026,6 +12026,10 @@ pub struct SessionPlaceMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact: Option<bool>,
     pub delivery_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_conversation: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_driver_run: Option<String>,
     pub origin: SessionPlaceOrigin,
     pub phase: SessionPlacePhase,
     #[serde(default, skip_serializing_if = "Option::is_none")]

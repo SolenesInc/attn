@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -44,13 +45,29 @@ func (s *inboxDeliveryState) lock()   { s.gate <- struct{}{} }
 func (s *inboxDeliveryState) unlock() { <-s.gate }
 
 type inboxRing struct {
-	session            protocol.SessionID
-	input              sessionmonitor.Delivery
-	paste              inboxPaste
-	finishingStart     bool
-	bellWaitsForPrompt bool
-	heldUntil          time.Time
-	at                 time.Time
+	Message            protocol.SessionPlaceMessage `json:"message"`
+	FinishingStart     bool                         `json:"finishing_start"`
+	BellWaitsForPrompt bool                         `json:"bell_waits_for_prompt"`
+	HeldUntil          time.Time                    `json:"held_until"`
+	At                 time.Time                    `json:"at"`
+}
+
+func (d *Daemon) pendingInboxTargetMatches(pending *inboxRing, session protocol.SessionID) bool {
+	if pending.Message.SessionID != session {
+		return false
+	}
+	expected := protocol.Deref(pending.Message.ExpectedDriverRun)
+	return expected == "" || (d.store.GetAgentDriverRun(session).RunID == expected && d.store.GetSessionConversation(session).NativeID == protocol.Deref(pending.Message.ExpectedConversation))
+}
+
+func (d *Daemon) clearPendingInbox(a who.Address, state *inboxDeliveryState) error {
+	if state.pending != nil && protocol.Deref(state.pending.Message.ExpectedDriverRun) != "" {
+		if err := d.store.ClearPendingInboxInput(a); err != nil {
+			return err
+		}
+	}
+	state.pending = nil
+	return nil
 }
 
 func (d *Daemon) inboxState(a who.Address) *inboxDeliveryState {
@@ -180,8 +197,23 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 	if err != nil {
 		return receipt, err
 	}
+	if state.pending == nil {
+		raw, err := d.store.PendingInboxInput(a)
+		if err != nil {
+			return receipt, err
+		}
+		if raw != "" {
+			var pending inboxRing
+			if err := json.Unmarshal([]byte(raw), &pending); err != nil {
+				return receipt, err
+			}
+			state.pending = &pending
+		}
+	}
 	if attempt.Unread == 0 {
-		state.pending = nil
+		if err := d.clearPendingInbox(a, state); err != nil {
+			return receipt, err
+		}
 		state.startedSession, state.tenderResume = "", nil
 		return receipt, nil
 	}
@@ -318,8 +350,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		receipt.Detail = agentMessageQueuedDetail(errInboxNoPromptReader)
 		return receipt, nil
 	}
-	if state.pending != nil && state.pending.session != holder.ID {
-		state.pending = nil
+	if state.pending != nil && !d.pendingInboxTargetMatches(state.pending, holder.ID) {
+		if err := d.clearPendingInbox(a, state); err != nil {
+			return receipt, err
+		}
 	}
 	pending := state.pending
 	if pending == nil {
@@ -339,14 +373,35 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		input.BypassInitialGate = true
 		at := time.Now()
 		input.Ring = &protocol.InboxRingRecord{Address: a.String(), ProfileID: holder.ProfileID, Stamp: store.InboxRingStamp(at), Typed: paste.typed, Notified: paste.notified, Captures: paste.captures, AuthorizedSeeds: paste.authorizedSeeds}
-		pending = &inboxRing{session: holder.ID, input: input, paste: paste, finishingStart: finishingStart, bellWaitsForPrompt: bellWaitsForPrompt, heldUntil: bellHeldUntil, at: at}
+		run := d.store.GetAgentDriverRun(holder.ID)
+		if run.Route == "direct" && run.RunID != "" {
+			input.ExpectedDriverRun = run.RunID
+			input.ExpectedConversation = d.store.GetSessionConversation(holder.ID).NativeID
+		}
+		pending = &inboxRing{Message: input.Message(holder.ID), FinishingStart: finishingStart, BellWaitsForPrompt: bellWaitsForPrompt, HeldUntil: bellHeldUntil, At: at}
+		if input.ExpectedDriverRun != "" {
+			raw, err := json.Marshal(pending)
+			if err != nil {
+				return receipt, err
+			}
+			if err := d.store.SavePendingInboxInput(a, string(raw)); err != nil {
+				return receipt, err
+			}
+		}
 		state.pending = pending
 	}
-	paste := pending.paste
-	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.finishingStart, pending.bellWaitsForPrompt, pending.heldUntil
-	placement := d.placeDelivery(context.Background(), holder.ID, pending.input)
+	ring := pending.Message.Ring
+	finishingStart, bellWaitsForPrompt, bellHeldUntil := pending.FinishingStart, pending.BellWaitsForPrompt, pending.HeldUntil
+	placement := d.placeDelivery(context.Background(), holder.ID, sessionmonitor.DeliveryFromMessage(pending.Message))
+	if !d.pendingInboxTargetMatches(pending, holder.ID) {
+		if err := d.clearPendingInbox(a, state); err != nil {
+			return receipt, err
+		}
+		receipt.Detail = "queued (the input target changed before its receipt)"
+		return receipt, nil
+	}
 	if placement.Stage == sessionmonitor.Placed {
-		readAt, err := d.store.RingInbox(a, finishingStart, paste.typed, holder.ID, paste.notified, pending.at)
+		readAt, err := d.store.RingInbox(a, finishingStart, ring.Typed, holder.ID, ring.Notified, pending.At)
 		pausepoint.Done(pausepoint.InboxRingRecorded, err)
 		if err != nil {
 			return receipt, err
@@ -354,10 +409,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		state.pending = nil
 		state.tenderResume = nil
 		state.rang = holder.ID
-		for _, captureID := range paste.captures {
+		for _, captureID := range ring.Captures {
 			d.publishQuickCaptureRead(holder.ProfileID, captureID, readAt)
 		}
-		for _, seedID := range paste.authorizedSeeds {
+		for _, seedID := range ring.AuthorizedSeeds {
 			d.publishFact(FactSeedAuthorizationTyped, seedID, map[string]string{"profile_id": holder.ProfileID, "read_at": readAt})
 		}
 		if !placement.Held {
@@ -369,7 +424,7 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		if !finishingStart {
 			d.logInboxExhaustion(a)
 		}
-		if paste.notified {
+		if ring.Notified {
 			d.armInboxLocked(a, state, inbox.AttemptDelay)
 		} else if !bellHeldUntil.IsZero() {
 			d.armInboxLocked(a, state, time.Until(bellHeldUntil))
@@ -382,8 +437,10 @@ func (d *Daemon) deliverInboxLocked(a who.Address, state *inboxDeliveryState) (i
 		return receipt, nil
 	}
 	var callError *placementCallError
-	if !errors.As(placement.Err, &callError) {
-		state.pending = nil
+	if placement.Stage == sessionmonitor.Failed || (protocol.Deref(pending.Message.ExpectedDriverRun) == "" && !errors.As(placement.Err, &callError)) {
+		if err := d.clearPendingInbox(a, state); err != nil {
+			return receipt, err
+		}
 	}
 	receipt.Detail = agentMessageQueuedDetail(placement.Err)
 	delay, retry := sessionmonitor.RetryDelay(placement.Err)
@@ -410,8 +467,10 @@ func (d *Daemon) settleInboxRing(_ context.Context, msg protocol.InboxRingSettle
 		d.endStandbyOnceMailRead(address)
 		return struct{}{}, nil
 	}
-	if state.pending != nil && state.pending.input.ID.String() == msg.DeliveryID {
-		state.pending = nil
+	if state.pending != nil && state.pending.Message.DeliveryID == msg.DeliveryID {
+		if err := d.clearPendingInbox(address, state); err != nil {
+			return struct{}{}, err
+		}
 	}
 	if err := d.store.ReturnInboxRing(address, msg.Ring.Typed, msg.Ring.Notified, msg.Ring.Stamp); err != nil {
 		return struct{}{}, fmt.Errorf("return ring to %s: %w", address, err)

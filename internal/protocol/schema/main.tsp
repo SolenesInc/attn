@@ -9565,6 +9565,8 @@ model SessionPlaceMessage {
   allow_user_composer?: boolean;
   compact?: boolean;
   ring?: InboxRingRecord;
+  expected_driver_run?: string;
+  expected_conversation?: string;
 }
 model SessionPlaceResult {
   stage: SessionPlaceStage;

@@ -20,11 +20,13 @@ const (
 
 // Input is one delivery to a session. ID names the attempt; a link may pass it on.
 type Input struct {
-	Session protocol.SessionID
-	ID      string
-	Text    string
-	Voice   Voice
-	Ring    *protocol.InboxRingRecord
+	ExpectedDriverRun    string
+	ExpectedConversation string
+	Session              protocol.SessionID
+	ID                   string
+	Text                 string
+	Voice                Voice
+	Ring                 *protocol.InboxRingRecord
 }
 
 // Custody is a delivery's only result: whether the harness took the input, and when.

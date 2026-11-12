@@ -21,6 +21,9 @@ func TestPluginRunRouteMigrationKeepsLegacyOwnershipWithoutGuessingTheRoute(t *t
 			}
 		}
 	}
+	if _, err := db.Exec(`INSERT INTO inbox_delivery(address,outstanding_at) VALUES('session:active','2026-11-11T10:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -29,6 +32,13 @@ func TestPluginRunRouteMigrationKeepsLegacyOwnershipWithoutGuessingTheRoute(t *t
 		t.Fatal(err)
 	}
 	defer s.Close()
+	var pending, outstanding string
+	if err := s.db.QueryRow(`SELECT pending_input,outstanding_at FROM inbox_delivery WHERE address='session:active'`).Scan(&pending, &outstanding); err != nil {
+		t.Fatal(err)
+	}
+	if pending != "" || outstanding != "2026-11-11T10:00:00Z" {
+		t.Fatalf("legacy inbox pending=%q outstanding=%q", pending, outstanding)
+	}
 	for _, id := range []string{"active", "closed", "no-driver"} {
 		var plugin, run, route, native string
 		var seq int

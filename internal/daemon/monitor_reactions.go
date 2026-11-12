@@ -50,7 +50,7 @@ func (d *Daemon) reactMonitorView(session protocol.SessionID, previous, view ses
 	if !stateChanged && (turn != previous.Turn.V || view.AutoSettle.V != previous.AutoSettle.V || state.Reason != previous.State.V.Reason) {
 		broadcast = true
 	}
-	if becamePromptReadyByReason(previous, view) || harnessJustStarted(previous, view) {
+	if becamePromptReadyByReason(previous, view) || harnessJustStarted(previous, view) || previous.Driver.V.Run != view.Driver.V.Run || previous.Conversation.V.NativeID != view.Conversation.V.NativeID {
 		d.kickSessionInboxAddresses(session)
 	}
 	if broadcast {
@@ -76,8 +76,12 @@ func harnessJustStarted(previous, view sessionmonitor.View) bool {
 	return previous.AwaitingHarness.V && !view.AwaitingHarness.V
 }
 
+func conversationBecameKnown(previous, view sessionmonitor.View) bool {
+	return previous.Conversation.V.NativeID == "" && view.Conversation.V.NativeID != ""
+}
+
 func compactingCloseMayPlace(previous, view sessionmonitor.View) bool {
-	return view.State.V.Sequence != previous.State.V.Sequence || becamePromptReadyByReason(previous, view)
+	return view.State.V.Sequence != previous.State.V.Sequence || becamePromptReadyByReason(previous, view) || conversationBecameKnown(previous, view)
 }
 
 func becamePromptReadyByReason(previous, view sessionmonitor.View) bool {

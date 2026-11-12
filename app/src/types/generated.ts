@@ -12673,17 +12673,19 @@ export enum SessionMessageWindowStatus {
 }
 
 export interface SessionPlaceMessage {
-    allow_user_composer?: boolean;
-    bypass_initial_gate?: boolean;
-    cmd:                  SessionPlaceMessageCmd;
-    compact?:             boolean;
-    delivery_id:          string;
-    origin:               SessionPlaceOrigin;
-    phase:                SessionPlacePhase;
-    ring?:                Ring;
-    session_id:           string;
-    source?:              string;
-    text:                 string;
+    allow_user_composer?:   boolean;
+    bypass_initial_gate?:   boolean;
+    cmd:                    SessionPlaceMessageCmd;
+    compact?:               boolean;
+    delivery_id:            string;
+    expected_conversation?: string;
+    expected_driver_run?:   string;
+    origin:                 SessionPlaceOrigin;
+    phase:                  SessionPlacePhase;
+    ring?:                  Ring;
+    session_id:             string;
+    source?:                string;
+    text:                   string;
     [property: string]: any;
 }
 
@@ -29833,6 +29835,8 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("SessionPlaceMessageCmd") },
         { json: "compact", js: "compact", typ: u(undefined, true) },
         { json: "delivery_id", js: "delivery_id", typ: "" },
+        { json: "expected_conversation", js: "expected_conversation", typ: u(undefined, "") },
+        { json: "expected_driver_run", js: "expected_driver_run", typ: u(undefined, "") },
         { json: "origin", js: "origin", typ: r("SessionPlaceOrigin") },
         { json: "phase", js: "phase", typ: r("SessionPlacePhase") },
         { json: "ring", js: "ring", typ: u(undefined, r("Ring")) },

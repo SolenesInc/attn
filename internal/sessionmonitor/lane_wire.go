@@ -14,7 +14,7 @@ func (delivery Delivery) Message(session protocol.SessionID) protocol.SessionPla
 	if delivery.origin.kind == originUserConversation {
 		origin = protocol.SessionPlaceOriginUserConversation
 	}
-	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer), Compact: protocol.Ptr(delivery.Compact), Ring: delivery.Ring}
+	return protocol.SessionPlaceMessage{Cmd: protocol.CmdSessionPlace, SessionID: session, DeliveryID: delivery.ID.String(), Text: delivery.Text, Phase: phases[delivery.Placement], Origin: origin, Source: protocol.Ptr(string(delivery.origin.source)), BypassInitialGate: protocol.Ptr(delivery.BypassInitialGate), AllowUserComposer: protocol.Ptr(delivery.AllowUserComposer), Compact: protocol.Ptr(delivery.Compact), Ring: delivery.Ring, ExpectedDriverRun: protocol.Ptr(delivery.ExpectedDriverRun), ExpectedConversation: protocol.Ptr(delivery.ExpectedConversation)}
 }
 
 func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
@@ -24,7 +24,7 @@ func DeliveryFromMessage(msg protocol.SessionPlaceMessage) Delivery {
 	if msg.Origin == protocol.SessionPlaceOriginUserConversation {
 		origin.kind = originUserConversation
 	}
-	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring}
+	return Delivery{ID: NewAttemptID(domain, key), Text: msg.Text, Placement: phases[msg.Phase], origin: origin, BypassInitialGate: protocol.Deref(msg.BypassInitialGate), AllowUserComposer: protocol.Deref(msg.AllowUserComposer), Compact: protocol.Deref(msg.Compact), Ring: msg.Ring, ExpectedDriverRun: protocol.Deref(msg.ExpectedDriverRun), ExpectedConversation: protocol.Deref(msg.ExpectedConversation)}
 }
 
 func (attempt Attempt) Result() protocol.SessionPlaceResult {

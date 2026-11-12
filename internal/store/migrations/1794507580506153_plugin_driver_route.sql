@@ -31,3 +31,5 @@ SELECT
     COALESCE(r.pending_conversations, '') AS pending_conversations,
     COALESCE(r.pull_requests, '') AS pull_requests 
 FROM sessions s LEFT JOIN session_runtime r ON r.session_id = s.id;
+
+ALTER TABLE inbox_delivery ADD COLUMN pending_input TEXT NOT NULL DEFAULT '';
