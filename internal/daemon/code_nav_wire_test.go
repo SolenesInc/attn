@@ -399,6 +399,54 @@ func TestAPrepareRunsBeforeTheServerStartsAndAgainOnlyOnceItsInputsChange(t *tes
 	}
 }
 
+func TestAStartingServerSaysWhenItsStartBeganAndAReadyOneDoesNot(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	placeSessions(t, w, app, cli, "s1")
+	setSetting(t, app, "code_review_enabled", "true")
+	repo := navigatedRepo(t)
+	commitFile(t, repo, "go.mod", "module calc\n")
+	linkFakeLanguageServer(t, w, cli)
+	held := w.Path("prepare.fifo")
+	if err := syscall.Mkfifo(held, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	definition := `{"command": ["gopls"], "extensions": [".go"], "roots": ["go.mod"], "prepare": {"command": ["sh", "-c", "cat ` + held + ` >/dev/null"], "inputs": ["*.mod"]}}`
+	if _, err := cli.CodeNavDefine(repo, "go", definition); err != nil {
+		t.Fatalf("nav set: %v", err)
+	}
+	document := w.Path("reviews", "calc.md")
+	if _, err := cli.ReviewStart(document, repo, "HEAD~2"); err != nil {
+		t.Fatalf("review start: %v", err)
+	}
+	w.awaitTimer(daemon.CodeNavIdleStopTimer)
+	appendReviewBody(t, document, "# Name the sum\n\n### calc.go:3-6\n\n### use.go:3-5\n\n## Not shown\n\n- go.mod: the module\n")
+	if _, err := cli.OpenMarkdown(document, "s1"); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	starting := navigation(awaitNavigation(app, document, "go", "starting").Review, "go")
+	if _, err := time.Parse(time.RFC3339Nano, protocol.Deref(starting.StartedAt)); err != nil {
+		t.Fatalf("a starting server's navigation is %+v (started_at %q: %v), want when its start began", starting, protocol.Deref(starting.StartedAt), err)
+	}
+	if servers := runningServers(t, cli); len(servers) != 1 || protocol.Deref(servers[0].StartedAt) != protocol.Deref(starting.StartedAt) {
+		t.Fatalf("nav status lists servers %+v, want the starting server with the review's started_at %s", servers, protocol.Deref(starting.StartedAt))
+	}
+
+	release, err := os.OpenFile(held, os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = release.Close()
+	ready := navigation(awaitNavigation(app, document, "go", "ready").Review, "go")
+	if ready.StartedAt != nil {
+		t.Errorf("a ready server's navigation carries started_at %q, want none", *ready.StartedAt)
+	}
+	if servers := runningServers(t, cli); len(servers) != 1 || servers[0].StartedAt != nil {
+		t.Errorf("nav status lists servers %+v, want the ready server with no started_at", servers)
+	}
+}
+
 func TestAServerThatRejectsInitializeFailsAtOnceWithItsReasonAndLeavesNoProcess(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()

@@ -1,8 +1,0 @@
-kind: fixed
-area: sessions
-change: >
-  Session cost bills Claude Sonnet 5.5 cache reads at $0.10 per million tokens,
-  its listed price, instead of $0.20.
-symptom: >
-  Sonnet 5.5 sessions showed a cost too high, by up to nearly double in long
-  sessions where cache reads make up most of the tokens.

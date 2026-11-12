@@ -2326,6 +2326,9 @@ type CodeNavServer struct {
 	// RssBytes corresponds to the JSON schema field "rss_bytes".
 	RssBytes *int `json:"rss_bytes,omitempty,omitzero"`
 
+	// StartedAt corresponds to the JSON schema field "started_at".
+	StartedAt *string `json:"started_at,omitempty,omitzero"`
+
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
 }
@@ -10058,17 +10061,43 @@ type ReviewFlow struct {
 	// Drawn corresponds to the JSON schema field "drawn".
 	Drawn bool `json:"drawn"`
 
+	// Groups corresponds to the JSON schema field "groups".
+	Groups []ReviewFlowGroup `json:"groups"`
+
 	// Line corresponds to the JSON schema field "line".
 	Line int `json:"line"`
 
 	// Messages corresponds to the JSON schema field "messages".
 	Messages []ReviewFlowMessage `json:"messages"`
 
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
+
 	// Participants corresponds to the JSON schema field "participants".
 	Participants []ReviewFlowParticipant `json:"participants"`
 
 	// Side corresponds to the JSON schema field "side".
 	Side *string `json:"side,omitempty,omitzero"`
+}
+
+type ReviewFlowGroup struct {
+	// Block corresponds to the JSON schema field "block".
+	Block *int `json:"block,omitempty,omitzero"`
+
+	// FirstMessage corresponds to the JSON schema field "first_message".
+	FirstMessage int `json:"first_message"`
+
+	// Kind corresponds to the JSON schema field "kind".
+	Kind string `json:"kind"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label string `json:"label"`
+
+	// LastMessage corresponds to the JSON schema field "last_message".
+	LastMessage int `json:"last_message"`
+
+	// Line corresponds to the JSON schema field "line".
+	Line int `json:"line"`
 }
 
 type ReviewFlowMessage struct {
@@ -10080,6 +10109,9 @@ type ReviewFlowMessage struct {
 
 	// Line corresponds to the JSON schema field "line".
 	Line int `json:"line"`
+
+	// Note corresponds to the JSON schema field "note".
+	Note *string `json:"note,omitempty,omitzero"`
 
 	// StopLine corresponds to the JSON schema field "stop_line".
 	StopLine *int `json:"stop_line,omitempty,omitzero"`
@@ -10122,6 +10154,9 @@ type ReviewNavigation struct {
 
 	// SetupSessionID corresponds to the JSON schema field "setup_session_id".
 	SetupSessionID *SessionID `json:"setup_session_id,omitempty,omitzero"`
+
+	// StartedAt corresponds to the JSON schema field "started_at".
+	StartedAt *string `json:"started_at,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`

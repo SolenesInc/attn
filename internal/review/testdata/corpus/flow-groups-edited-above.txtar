@@ -1,0 +1,316 @@
+The flow-groups document with a message added above its first block. A group
+names its messages by their lines, so each box still holds the same messages.
+-- base/a.go --
+package a
+
+func A() {}
+
+func B() {}
+-- head/a.go --
+package a
+
+func A() { B() }
+
+func B() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid after
+sequenceDiagram
+  participant a as A
+  participant b as B
+  a->>a: wakes
+  %% stop: a.go:3-3
+  rect rgb(40, 40, 60)
+    a->>b: calls B
+    %% stop: a.go:3-3
+    alt b is ready
+      loop every line
+        b->>b: prints
+        %% stop: a.go:5-5
+      end
+    else b is busy
+      b-->>a: busy
+    end
+  end
+  par to the log
+    a->>b: logs
+  and to the screen
+    a->>b: shows
+  end
+  opt on failure
+    b--xa: fails
+  end
+  break when a stops
+    a->>a: stops
+  end
+  alt a is ready
+    alt b is ready
+      a->>b: sends
+    end
+    a->>a: waits
+  else a is busy
+    a->>a: drops
+  end
+```
+
+## A calls B
+
+### a.go:3-3
+
+### a.go:5-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "groups": [
+        {
+          "first_message": 17,
+          "kind": "rect",
+          "label": "rgb(40, 40, 60)",
+          "last_message": 25,
+          "line": 16
+        },
+        {
+          "first_message": 21,
+          "kind": "alt",
+          "label": "b is ready",
+          "last_message": 25,
+          "line": 19
+        },
+        {
+          "first_message": 21,
+          "kind": "loop",
+          "label": "every line",
+          "last_message": 21,
+          "line": 20
+        },
+        {
+          "block": 19,
+          "first_message": 25,
+          "kind": "else",
+          "label": "b is busy",
+          "last_message": 25,
+          "line": 24
+        },
+        {
+          "first_message": 29,
+          "kind": "par",
+          "label": "to the log",
+          "last_message": 31,
+          "line": 28
+        },
+        {
+          "block": 28,
+          "first_message": 31,
+          "kind": "and",
+          "label": "to the screen",
+          "last_message": 31,
+          "line": 30
+        },
+        {
+          "first_message": 34,
+          "kind": "opt",
+          "label": "on failure",
+          "last_message": 34,
+          "line": 33
+        },
+        {
+          "first_message": 37,
+          "kind": "break",
+          "label": "when a stops",
+          "last_message": 37,
+          "line": 36
+        },
+        {
+          "first_message": 41,
+          "kind": "alt",
+          "label": "a is ready",
+          "last_message": 45,
+          "line": 39
+        },
+        {
+          "first_message": 41,
+          "kind": "alt",
+          "label": "b is ready",
+          "last_message": 41,
+          "line": 40
+        },
+        {
+          "block": 39,
+          "first_message": 45,
+          "kind": "else",
+          "label": "a is busy",
+          "last_message": 45,
+          "line": 44
+        }
+      ],
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 14,
+          "stop_line": 51,
+          "text": "wakes",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 17,
+          "stop_line": 51,
+          "text": "calls B",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "b",
+          "line": 21,
+          "stop_line": 53,
+          "text": "prints",
+          "to": "b"
+        },
+        {
+          "arrow": "--\u003e\u003e",
+          "from": "b",
+          "line": 25,
+          "text": "busy",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 29,
+          "text": "logs",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 31,
+          "text": "shows",
+          "to": "b"
+        },
+        {
+          "arrow": "--x",
+          "from": "b",
+          "line": 34,
+          "text": "fails",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 37,
+          "text": "stops",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 41,
+          "text": "sends",
+          "to": "b"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 43,
+          "text": "waits",
+          "to": "a"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "a",
+          "line": 45,
+          "text": "drops",
+          "to": "a"
+        }
+      ],
+      "participants": [
+        {
+          "actor": false,
+          "id": "a",
+          "label": "A"
+        },
+        {
+          "actor": false,
+          "id": "b",
+          "label": "B"
+        }
+      ],
+      "side": "after"
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 3,
+      "heading_line": 51,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "head": 3,
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { B() }"
+        }
+      ],
+      "to": 3
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 5,
+      "heading_line": 53,
+      "notes": [],
+      "now_from": 5,
+      "now_to": 5,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func B() {}"
+        },
+        {
+          "head": 5,
+          "kind": "+",
+          "now": 5,
+          "text": "func B() { println() }"
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

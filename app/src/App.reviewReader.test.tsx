@@ -101,7 +101,7 @@ let calcFile = CALC_FILE;
 function serveRepository(daemon: ScriptedDaemon) {
   calcFile = CALC_FILE;
   daemon.on('review_file', ({ path }) => {
-    if (path === 'calc.go') return { event: 'review_file_result', success: true, path, rows: calcFile, hash: 'h1' };
+    if (path === 'calc.go') return { event: 'review_file_result', success: true, path, rows: calcFile, hash: calcFile === CALC_FILE ? 'h1' : JSON.stringify(calcFile) };
     if (path === 'util.go') return { event: 'review_file_result', success: true, path, rows: UTIL_FILE, hash: 'h2' };
     return { event: 'review_file_result', success: true, path, rows: [row(' ', 1, 1, `// ${path}`)], hash: 'h3' };
   });
@@ -126,7 +126,10 @@ async function openReview({ review = BUNDLE, content = DOCUMENT }: { review?: Re
     await act(() => vi.advanceTimersByTimeAsync(0));
     await view.daemon.idle();
   };
-  return { ...view, reader: within(tile), tileElement: tile, press };
+  const warmed = view.daemon.sentOf('review_file').length;
+  /** The files read since the review opened and read its stops' files. */
+  const fileReads = () => view.daemon.sentOf('review_file').slice(warmed);
+  return { ...view, reader: within(tile), tileElement: tile, press, fileReads };
 }
 
 /** calc.go after someone inserts two lines above Add: every line from 3 on moves down by two. */
@@ -216,13 +219,13 @@ describe('App review reader', () => {
   });
 
   it('opens the whole file at the cursor, moves between its changes, goes back and closes', async () => {
-    const { tileElement, daemon, press } = await openReview();
+    const { tileElement, daemon, press, fileReads } = await openReview();
     await press('ArrowRight');
     await press('ArrowDown');
     await press('ArrowDown');
 
     await press('Enter');
-    expect(daemon.sentOf('review_file').map(({ document, path, host }) => [document, path, host])).toEqual([[DOC, 'calc.go', undefined]]);
+    expect(fileReads().map(({ document, path, host }) => [document, path, host])).toEqual([[DOC, 'calc.go', undefined]]);
     const view = fileView(tileElement)!;
     expect(view).toHaveTextContent('calc.go');
     expect(fileCursorText(tileElement)).toBe('4+\tsum := a + b');
@@ -250,7 +253,7 @@ describe('App review reader', () => {
   });
 
   it('keeps an open file view current: a new bundle reads the file again and the cursor stays on its line', async () => {
-    const { tileElement, daemon, press } = await openReview();
+    const { tileElement, daemon, press, fileReads } = await openReview();
     await press('ArrowRight');
     await press('ArrowDown');
     await press('ArrowDown');
@@ -261,7 +264,7 @@ describe('App review reader', () => {
     emitBundle(daemon, { ...BUNDLE, head: 'aaaaaaa' });
     await daemon.idle();
 
-    expect(daemon.sentOf('review_file').map(({ path }) => path)).toEqual(['calc.go', 'calc.go']);
+    expect(fileReads().map(({ path }) => path)).toEqual(['calc.go', 'calc.go']);
     expect(fileView(tileElement)).toHaveTextContent('// It names the sum.');
     expect(fileCursorText(tileElement)).toBe('6+\tsum := a + b');
 
@@ -270,7 +273,7 @@ describe('App review reader', () => {
   });
 
   it('keeps the cursor on a repeated line of a file with no base when the bundle is recomputed', async () => {
-    const { tileElement, daemon, press } = await openReview();
+    const { tileElement, daemon, press, fileReads } = await openReview();
     calcFile = ['package calc', '', 'func A() {', '\tx()', '', '\ty()', '}'].map((text, at) => row('+', undefined, at + 1, text));
     await press('ArrowRight');
     await press('ArrowDown');
@@ -282,7 +285,7 @@ describe('App review reader', () => {
     calcFile = calcFile.slice();
     emitBundle(daemon, { ...BUNDLE, head: 'aaaaaaa' });
     await daemon.idle();
-    expect(daemon.sentOf('review_file')).toHaveLength(2);
+    expect(fileReads()).toHaveLength(2);
     expect(fileCursorText(tileElement)).toBe('5+ ');
   });
 
@@ -377,7 +380,7 @@ describe('App review reader', () => {
   });
 
   it('leaves a printable key to the comment while text is selected', async () => {
-    const { tileElement, daemon, press } = await openReview();
+    const { tileElement, daemon, press, fileReads } = await openReview();
     const paragraph = within(tileElement).getByText('A paragraph between the stops.');
     const range = document.createRange();
     range.selectNodeContents(paragraph);
@@ -388,7 +391,7 @@ describe('App review reader', () => {
 
     await press('e');
     expect(document.querySelector('.md-annotation-popover textarea')).not.toBeNull();
-    expect(daemon.sentOf('review_file')).toEqual([]);
+    expect(fileReads()).toEqual([]);
   });
 
   it('renders a review document as plain markdown with no keys when the tile carries no review', async () => {
@@ -436,9 +439,9 @@ sequenceDiagram
 
 \`\`\`mermaid
 sequenceDiagram
-  loop every poll
-    poll->>calc: Add(a, b)
-  end
+  activate calc
+  poll->>calc: Add(a, b)
+  deactivate calc
 \`\`\`
 `;
 
@@ -451,13 +454,14 @@ const MAP_BUNDLE: ReviewBundle = {
   ...BUNDLE,
   frame: 'map',
   flows: [
-    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)] },
+    { line: 31, side: 'before', drawn: true, participants: [participant('poll', 'Poll'), participant('calc', 'Calc')], messages: [message(35, 'poll', 'calc', 'Add(a, b)', 15)], groups: [] },
     {
       line: 39, side: 'after', drawn: true,
       participants: [participant('poll', 'Poll'), participant('calc', 'Calc'), participant('util', 'Util')],
       messages: [message(44, 'poll', 'calc', 'Add(a, b)', 15), message(46, 'calc', 'util', 'helper()', 22), message(48, 'util', 'calc', 'returns')],
+      groups: [],
     },
-    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')] },
+    { line: 51, drawn: false, participants: [participant('poll', 'poll'), participant('calc', 'calc')], messages: [message(54, 'poll', 'calc', 'Add(a, b)')], groups: [] },
   ],
 };
 

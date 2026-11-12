@@ -3895,11 +3895,22 @@ model ReviewFlow {
   drawn: boolean;
   participants: ReviewFlowParticipant[];
   messages: ReviewFlowMessage[];
+  note?: string;                 // the diagram's caption: a Note before the first message
+  groups: ReviewFlowGroup[];     // ordered by line; an outer block comes before the blocks inside it
+}
+
+model ReviewFlowGroup {
+  line: int32;                   // the block's opening line, or its else, and or option line
+  kind: string;                  // rect | opt | loop | alt | else | critical | option | par | and | break
+  label: string;                 // the text after the keyword as written; a rect's is its color
+  first_message: int32;          // the line of the first message inside, nested blocks included
+  last_message: int32;           // a block spans all its sections; a section, its own messages
+  block?: int32;                 // for else, and and option: the line of the block it divides
 }
 
 model ReviewFlowParticipant {
   id: string;
-  label: string;
+  label: string;                 // as written; a <br/> starts its second line
   actor: boolean;
 }
 
@@ -3910,6 +3921,7 @@ model ReviewFlowMessage {
   arrow: string;                 // the mermaid arrow as written: ->>, -->>, ->, -->, -x, --x, -), --)
   text: string;
   stop_line?: int32;             // heading_line of the stop its %% stop: comment names
+  note?: string;                 // its caption: a Note between this message and the next
 }
 
 model ReviewNotShown {
@@ -3922,6 +3934,7 @@ model ReviewNavigation {
   language: string;
   state: string;                 // ready | starting | missing | failed
   detail?: string;
+  started_at?: string;           // RFC 3339, while state is starting: when this start of the server began
   file: string;                  // the review's first file in the language, relative to the repository
   setup_session_id?: SessionID;  // the session setting up a server for the language, set by the home
 }
@@ -4140,6 +4153,7 @@ model CodeNavServer {
   pid: safeint;
   state: string;                 // ready | starting | missing | failed
   detail?: string;
+  started_at?: string;           // RFC 3339, while state is starting: when this start of the server began
   needed_by: string[];           // the shown review documents that need it
   rss_bytes?: safeint;
 }

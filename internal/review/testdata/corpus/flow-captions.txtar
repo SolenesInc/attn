@@ -1,0 +1,167 @@
+A Note before the first message is the diagram's caption, a Note after a
+message is that message's caption, with its `%% stop:` between them or not, and
+a participant's label keeps its `<br/>` as written for the app to split.
+-- base/a.go --
+package a
+
+func A() {}
+
+func B() {}
+-- head/a.go --
+package a
+
+func A() { B() }
+
+func B() { println() }
+-- review.md --
+---
+frame: map
+---
+# Flow
+
+```mermaid after
+sequenceDiagram
+  participant poll as PR poll<br/>a.go
+  participant store as Store<br/>a.go
+  Note over poll,store: Both reads sit inside the write transaction.
+  poll->>store: A calls B
+  %% stop: a.go:3-3
+  Note over poll,store: one call does all of it
+  critical one transaction, holding s.mu
+    store->>store: B prints
+    %% stop: a.go:5-5
+    note right of store: first read
+  end
+  store-->>poll: returns
+```
+
+## A calls B
+
+### a.go:3-3
+
+### a.go:5-5
+-- bundle.json --
+{
+  "base": "\u003cbase\u003e",
+  "files": [
+    {
+      "added": 2,
+      "binary": false,
+      "path": "a.go",
+      "removed": 2,
+      "status": "modified"
+    }
+  ],
+  "flows": [
+    {
+      "drawn": true,
+      "groups": [
+        {
+          "first_message": 19,
+          "kind": "critical",
+          "label": "one transaction, holding s.mu",
+          "last_message": 19,
+          "line": 18
+        }
+      ],
+      "line": 10,
+      "messages": [
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "poll",
+          "line": 15,
+          "note": "one call does all of it",
+          "stop_line": 28,
+          "text": "A calls B",
+          "to": "store"
+        },
+        {
+          "arrow": "-\u003e\u003e",
+          "from": "store",
+          "line": 19,
+          "note": "first read",
+          "stop_line": 30,
+          "text": "B prints",
+          "to": "store"
+        },
+        {
+          "arrow": "--\u003e\u003e",
+          "from": "store",
+          "line": 23,
+          "text": "returns",
+          "to": "poll"
+        }
+      ],
+      "note": "Both reads sit inside the write transaction.",
+      "participants": [
+        {
+          "actor": false,
+          "id": "poll",
+          "label": "PR poll\u003cbr/\u003ea.go"
+        },
+        {
+          "actor": false,
+          "id": "store",
+          "label": "Store\u003cbr/\u003ea.go"
+        }
+      ],
+      "side": "after"
+    }
+  ],
+  "frame": "map",
+  "head": "\u003chead\u003e",
+  "navigation": [],
+  "not_shown": [],
+  "problems": [],
+  "repository": "\u003crepository\u003e",
+  "stops": [
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 3,
+      "heading_line": 28,
+      "notes": [],
+      "now_from": 3,
+      "now_to": 3,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 3,
+          "text": "func A() {}"
+        },
+        {
+          "head": 3,
+          "kind": "+",
+          "now": 3,
+          "text": "func A() { B() }"
+        }
+      ],
+      "to": 3
+    },
+    {
+      "changed_since_presented": false,
+      "file_hash": "2b8a8e7a9be65081d03f85cf9d98eb968a3664c2cfb0d02c268a4b5f3eeb5cf1",
+      "from": 5,
+      "heading_line": 30,
+      "notes": [],
+      "now_from": 5,
+      "now_to": 5,
+      "path": "a.go",
+      "rows": [
+        {
+          "kind": "-",
+          "old": 5,
+          "text": "func B() {}"
+        },
+        {
+          "head": 5,
+          "kind": "+",
+          "now": 5,
+          "text": "func B() { println() }"
+        }
+      ],
+      "to": 5
+    }
+  ]
+}

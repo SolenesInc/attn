@@ -68,8 +68,8 @@ function serveFiles(daemon: ScriptedDaemon) {
   }));
 }
 
-async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })], host?: string) {
-  const view = await openMarkdownTiles('', { path: DOC, host, script: serveFiles, initialState: { sessions } });
+async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })], host?: string, script?: (daemon: ScriptedDaemon) => void) {
+  const view = await openMarkdownTiles('', { path: DOC, host, script: (daemon) => { serveFiles(daemon); script?.(daemon); }, initialState: { sessions } });
   const show = async (shown: ReviewBundle) => {
     view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown, ...(host ? { host } : {}) });
     await view.daemon.idle();
@@ -144,44 +144,125 @@ describe('App review navigation', () => {
     expect(fileCursorText(tileElement)).toContain('pkg1.go line 2');
   });
 
-  it('offers an answer that arrived over 1.5 s after the question once the cursor moved, and follows one when it did not', async () => {
+  const offerLine = (reader: ReturnType<typeof within>) => reader.queryByLabelText('Offered answer');
+  const askedLines = (scope: HTMLElement) => Array.from(scope.querySelectorAll('.review-row--asked')).map((row) => row.getAttribute('data-line'));
+
+  async function toReturnSum({ tileElement, press }: Awaited<ReturnType<typeof openReview>>) {
+    await press('ArrowRight');
+    await press('ArrowDown');
+    await press('ArrowDown');
+    await press('ArrowDown');
+    expect(tileElement.querySelector('.review-cursor')).toHaveAttribute('data-line', '5');
+  }
+
+  async function askLateForSum({ tileElement, daemon, press, reader }: Awaited<ReturnType<typeof openReview>>) {
+    expect(tileElement.querySelector('.review-cursor')).toHaveAttribute('data-line', '5');
+    await press('f');
+    await press('s');
+    expect(reader.getByRole('status')).toHaveTextContent('Finding the definition of sum…');
+    expect(askedLines(tileElement)).toEqual(['5']);
+    await press('ArrowUp');
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    act(() => daemon.replyTo(daemon.sentOf('code_nav').slice(-1)[0], answering([at('calc.go', 4, 1, '\tsum := a + b')])));
+    await daemon.idle();
+  }
+
+  it('offers an answer that arrived over 1.5 s after the question once the cursor moved, in one line that ↵ opens while ↓ and c keep working', async () => {
+    const review = await openReview();
+    const { tileElement, daemon, press, reader } = review;
+    daemon.on('code_nav', () => undefined);
+    await toReturnSum(review);
+    await askLateForSum(review);
+
+    expect(fileView(tileElement)).toBeNull();
+    expect(askedLines(tileElement)).toEqual([]);
+    expect(reader.queryByRole('dialog')).toBeNull();
+    expect(offerLine(reader)).toHaveTextContent('sum is in calc.go:4 · ↵ open · esc');
+
+    await press('ArrowDown');
+    expect(tileElement.querySelector('.review-cursor')).toHaveAttribute('data-line', '5');
+    expect(offerLine(reader)).toBeInTheDocument();
+    await press('c');
+    expect(reader.getByRole('dialog', { name: /Write a note/ })).toBeInTheDocument();
+    expect(offerLine(reader)).toBeNull();
+    await press('Escape');
+    expect(offerLine(reader)).toHaveTextContent('sum is in calc.go:4');
+
+    await press('Enter');
+    expect(offerLine(reader)).toBeNull();
+    expect(fileCursorText(tileElement)).toContain('calc.go line 4');
+  });
+
+  it('follows an answer that arrives in time, with the asked line marked until it does', async () => {
     const { tileElement, daemon, press, reader } = await openReview();
     daemon.on('code_nav', () => undefined);
     await press('ArrowRight');
     await press('ArrowDown');
     await press('ArrowDown');
     await press('ArrowDown');
-    expect(tileElement.querySelector('.review-cursor')).toHaveAttribute('data-line', '5');
-
     await press('f');
-    expect(labelsOn(tileElement)).toEqual(['a', 's']);
     await press('s');
-    expect(reader.getByRole('status')).toHaveTextContent('Finding the definition of sum…');
-    await press('ArrowUp');
+    expect(askedLines(tileElement)).toEqual(['5']);
     await act(() => vi.advanceTimersByTimeAsync(2000));
     act(() => daemon.replyTo(daemon.sentOf('code_nav')[0], answering([at('calc.go', 4, 1, '\tsum := a + b')])));
     await daemon.idle();
-    expect(fileView(tileElement)).toBeNull();
-    const offer = reader.getByRole('dialog', { name: 'Definition of sum' });
-    expect(offer).toHaveTextContent('arrived after you moved on');
-    await press('Enter');
+    expect(offerLine(reader)).toBeNull();
     expect(fileCursorText(tileElement)).toContain('calc.go line 4');
+    expect(askedLines(tileElement)).toEqual([]);
+  });
 
+  it('drops an offer on esc, on a new question and 20 s after it shows, and lists several late uses with ↵', async () => {
+    const review = await openReview();
+    const { tileElement, daemon, press, reader } = review;
+    daemon.on('code_nav', () => undefined);
+    await toReturnSum(review);
+
+    await askLateForSum(review);
     await press('Escape');
+    expect(offerLine(reader)).toBeNull();
+    expect(fileView(tileElement)).toBeNull();
+
+    await press('ArrowDown');
+    await askLateForSum(review);
     await press('f');
+    expect(offerLine(reader)).toBeNull();
+    await press('Escape');
+
+    await press('ArrowDown');
+    await askLateForSum(review);
+    await act(() => vi.advanceTimersByTimeAsync(19_900));
+    expect(offerLine(reader)).toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(offerLine(reader)).toBeNull();
+
+    await press('ArrowDown');
+    await press('r');
     await press('s');
+    await press('ArrowUp');
     await act(() => vi.advanceTimersByTimeAsync(2000));
-    act(() => daemon.replyTo(daemon.sentOf('code_nav')[1], answering([at('calc.go', 4, 1, '\tsum := a + b')])));
+    act(() => daemon.replyTo(daemon.sentOf('code_nav').slice(-1)[0], answering([at('use.go', 9, 8, '\treturn sum'), at('more.go', 3, 8, '\tsum++')])));
     await daemon.idle();
-    expect(reader.queryByRole('dialog', { name: 'Definition of sum' })).toBeNull();
-    expect(fileCursorText(tileElement)).toContain('calc.go line 4');
+    expect(offerLine(reader)).toHaveTextContent('2 uses of sum · ↵ list · esc');
+    await press('Enter');
+    expect(within(reader.getByRole('dialog', { name: 'Uses of sum' })).getAllByRole('option')).toHaveLength(2);
+  });
+
+  it('marks the asked line in the file view while its question waits', async () => {
+    const { tileElement, daemon, press } = await openReview();
+    daemon.on('code_nav', () => undefined);
+    await press('2');
+    await press('f');
+    await press('d');
+    expect(Array.from(fileView(tileElement)!.querySelectorAll('.review-row--asked')).map((row) => row.textContent)).toEqual([expect.stringContaining('calc.go line 4')]);
+    await press('Escape');
+    expect(fileView(tileElement)!.querySelectorAll('.review-row--asked')).toHaveLength(0);
   });
 
   it.each([
     ['the search', '/', 'Search the repository'],
     ['the edit box', 'i', 'Edit the file'],
     ['the composer', 'c', 'Write a note'],
-  ])('offers a definition that arrives while %s is open, and leaves the view as it is', async (_what, key, dialog) => {
+  ])('keeps a definition that arrives while %s is open as an offer until the box closes', async (_what, key, dialog) => {
     const { tileElement, daemon, press, reader } = await openReview();
     daemon.on('code_nav', () => undefined);
     await press('ArrowRight');
@@ -192,10 +273,27 @@ describe('App review navigation', () => {
 
     act(() => daemon.replyTo(daemon.sentOf('code_nav')[0], answering([at('util.go', 7, 5, 'func helper() {}')])));
     await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(30_000));
     expect(fileView(tileElement)).toBeNull();
     expect(daemon.sentOf('review_file').map(({ path }) => path)).not.toContain('util.go');
     expect(open).toBeInTheDocument();
-    expect(reader.getByRole('dialog', { name: 'Definition of Add' })).toHaveTextContent('arrived after you moved on');
+    expect(offerLine(reader)).toBeNull();
+
+    await press('Escape');
+    expect(reader.queryByRole('dialog', { name: new RegExp(dialog) })).toBeNull();
+    expect(offerLine(reader)).toHaveTextContent('Add is in util.go:7');
+    await press('Enter');
+    expect(fileCursorText(tileElement)).toContain('util.go line 7');
+  });
+
+  it('says in plain words that a question asked while the daemon is unreachable was not asked', async () => {
+    const { tileElement, daemon, press, reader } = await openReview();
+    await press('ArrowRight');
+    act(() => daemon.disconnect());
+    await press('f');
+    await press('s');
+    expect(reader.getByRole('alert')).toHaveTextContent('The daemon is not reachable, so nothing was asked. Ask again once it is back.');
+    expect(askedLines(tileElement)).toEqual([]);
   });
 
   it('opens nothing for i, c or a in a file outside the repository, and says why', async () => {
@@ -217,11 +315,12 @@ describe('App review navigation', () => {
   });
 
   it('keeps expanded lines, reading no file when only a language server’s state changes and the file again when it changes', async () => {
-    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]));
-    daemon.on('review_file', ({ path }) => ({
-      event: 'review_file_result', success: true, path, hash: 'h1',
-      rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
-    }));
+    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]), undefined, undefined, (scripted) => {
+      scripted.on('review_file', ({ path }) => ({
+        event: 'review_file_result', success: true, path, hash: 'h1',
+        rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
+      }));
+    });
     const rows = () => tileElement.querySelectorAll('.review-stop[data-path="calc.go"] [data-review-cursor="row"]').length;
     await press('ArrowRight');
     await press('e');
@@ -293,6 +392,19 @@ describe('App review navigation', () => {
     expect(Array.from(states.querySelectorAll('.review-nav-state')).map((state) => state.textContent)).toEqual(['go ready', 'rust loading: Indexing', 'zig no server']);
     expect(within(states).getByText('zig no server')).toHaveAttribute('title', 'zls is not in /data/code-navigation/bin or on PATH');
     expect(reader.getByLabelText('Review keys')).toHaveTextContent('definition');
+  });
+
+  it('counts the seconds since a starting server began, and stops counting once it is ready', async () => {
+    const { reader, show } = await openReview(bundleWith([
+      { language: 'go', state: 'starting', detail: 'Setting up workspace', started_at: new Date(Date.now() - 12_000).toISOString(), file: 'calc.go' },
+    ]));
+    const goState = () => reader.getByLabelText('Language servers').querySelector('.review-nav-state')?.textContent;
+    expect(goState()).toBe('go loading 12s: Setting up workspace');
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(goState()).toBe('go loading 13s: Setting up workspace');
+
+    await show(bundleWith([{ language: 'go', state: 'ready', file: 'calc.go' }]));
+    expect(goState()).toBe('go ready');
   });
 
   describe('setting up a missing server', () => {

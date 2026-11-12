@@ -89,7 +89,31 @@ A stop on a markdown file renders as a document, block by block, with the change
 - `walkthrough` when the change sits in one or two files. The user steps through the stops with your prose beside the file.
 - `brief` otherwise. The user reads the document top to bottom. `attn review start` writes `brief` when the document picks no frame.
 
-The Map draws only participants, actors and messages. `attn review check` names any other line, such as `loop` or `Note`.
+Tell the story in the map's diagram, in plain mermaid:
+
+- Caption each arrow with a `Note` on the line after its message, or after its `%% stop:`. The caption shows under the arrow: say what the call does or why it matters, in a few words.
+- A `Note` before the first message captions the whole diagram.
+- Wrap a transaction, a loop or a branch in a block, and the Map draws a labelled box around the messages inside: `rect`, `opt`, `loop`, `alt` with `else`, `critical` with `option`, `par` with `and`, or `break`, each closed by `end`.
+- Give a participant a second line, such as its file, with `<br/>` in its name.
+
+````markdown
+```mermaid after
+sequenceDiagram
+  participant poll as PR poll<br/>daemon.go
+  participant store as Store<br/>store.go
+  Note over poll,store: Both reads sit inside the write transaction.
+  poll->>store: ReplacePRsOfHosts(prsByHost)
+  %% stop: internal/daemon/daemon.go:3775-3787
+  Note over poll,store: one call does all of it
+  critical one transaction, holding s.mu
+    store->>store: queryPRRecords, before
+    %% stop: internal/store/store.go:1314-1335
+    Note right of store: the first read
+  end
+```
+````
+
+The Map draws participants, actors, messages, notes and these blocks. `attn review check` names any other line, such as `activate` or `autonumber`, and a diagram with one shows as a mermaid figure that the Map cannot walk.
 
 ## Answer a question
 

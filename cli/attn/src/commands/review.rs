@@ -62,12 +62,18 @@ missing: walkthrough needs a stop, map a drawn diagram with a message tied to
 a stop.
 
 Diagrams: a mermaid sequenceDiagram ties a message to a stop with
-`%% stop: path:from-to` on the line after it. attn draws participants, actors
-and messages. A diagram with any other line (loop, alt, Note, activate) shows
-as a mermaid figure and is not mapped, and check names the line. To show the
-flow before and after the change, open one fence with ```mermaid before and one
-with ```mermaid after; the user switches between them with b. A fence with no
-side shows with both.
+`%% stop: path:from-to` on the line after it. attn draws:
+  participant a as A<br/>a.go   a participant or actor; <br/> starts a second line
+  a->>b: text                  a message
+  Note over a,b: text          after a message, its caption; before the first
+                               message, the diagram's caption
+  loop label ... end           a box around the messages inside: rect, opt,
+                               loop, alt/else, critical/option, par/and, break
+A diagram with any other line (activate, autonumber, box) shows as a mermaid
+figure and is not mapped, and check names the line. To show the flow before
+and after the change, open one fence with ```mermaid before and one with
+```mermaid after; the user switches between them with b. A fence with no side
+shows with both.
 
 Needs the experimental setting code_review_enabled.
 ";

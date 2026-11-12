@@ -66,6 +66,7 @@ batch names.
 
 | Field | Holds |
 |---|---|
+| `c_heap_in_use_bytes`, `c_heap_free_bytes` | Linux only: the daemon's C memory, mostly SQLite, that glibc malloc holds in use, and the freed C memory it keeps without returning it to the system |
 | `workload.sessions`, `workload.agents` | Sessions the daemon holds, in every profile, and those among them that run a harness rather than a shell |
 | `workload.terminals` | Terminals the daemon runs |
 | `workload.panes_drawn` | Terminals a connected app is attached to, which are the terminals it draws while the shared PTY host is on. With the host off, the app also stays attached to some terminals it hides |

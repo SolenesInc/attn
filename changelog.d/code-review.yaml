@@ -1,9 +1,0 @@
-kind: added
-area: agents
-change: >
-  Experimental: with Code review on (code_review_enabled), tell an agent
-  "present the change" and it opens a review in a tile beside it. You read the
-  change in the order that explains it, as a brief, a walkthrough or a sequence
-  diagram, jump to definitions and uses, ask questions the agent answers under the
-  line, edit lines, and send one review with a verdict.
-notes: Agents learn to present a change when they start or reload with the setting on. `attn guide code-review` covers the keys and code navigation setup.

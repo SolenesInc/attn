@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -68,6 +69,23 @@ type flow struct {
 	undrawable   int
 	participants []flowParticipant
 	messages     []flowMessage
+	note         caption
+	groups       []flowGroup
+	open         []flowGroup
+}
+
+type caption struct {
+	line int
+	text string
+}
+
+// flowGroup is a block, from its opening line to its end, or one else, and or
+// option section inside it. It holds the messages written while it is open.
+type flowGroup struct {
+	line        int
+	kind, label string
+	first, last int
+	block       int
 }
 
 type flowParticipant struct {
@@ -81,6 +99,8 @@ type flowMessage struct {
 	arrow    string
 	text     string
 	ref      *stopRef
+	note     caption
+	section  int
 }
 
 type stopRef struct {
@@ -137,6 +157,10 @@ var (
 	flowMessageLine = pattern(`^\s*([^\s%:;+-][^:;]*?)\s*(-{1,2}(?:>>|>|x|\)))([+-]?)\s*([^:;]+?)\s*:(.*)$`)
 	participantLine = pattern(`^\s*(participant|actor)\s+(.+?)(?:\s+as\s+(.+?))?\s*$`)
 	flowStopNote    = pattern(`^\s*%%\s*stop:\s*(.*?)\s*$`)
+	flowNoteLine    = pattern(`(?i)^\s*note\s+(?:left\s+of|right\s+of|over)\s+([^:]+?)\s*:(.*)$`)
+	flowBlockLine   = pattern(`^\s*(rect|opt|loop|alt|critical|par|break)(?:\s+(.*?))?\s*$`)
+	flowSectionLine = pattern(`^\s*(else|option|and)(?:\s+(.*?))?\s*$`)
+	flowEndLine     = pattern(`^\s*end\s*$`)
 	fence           = pattern("^\\s*(```+|~~~+)\\s*(\\S*)\\s*(\\S*)")
 )
 
@@ -156,6 +180,9 @@ func parse(text string) document {
 		line, number := lines[i], i+1
 		if fenceMark != "" {
 			if strings.HasPrefix(strings.TrimSpace(line), fenceMark) {
+				if openFlow != nil {
+					doc.closeFlow(openFlow, number)
+				}
 				fenceMark, openFlow = "", nil
 				continue
 			}
@@ -225,6 +252,9 @@ func parse(text string) document {
 			doc.problem(number, "%q looks like a note but does not parse. Write `- L12: text`, `- L12-14: text`, or `- L12!: text` for the place to look.", strings.TrimSpace(line))
 		}
 	}
+	if openFlow != nil {
+		doc.closeFlow(openFlow, len(lines)+1)
+	}
 	return doc
 }
 
@@ -270,11 +300,40 @@ func (d *document) flowLine(open *flow, line string, number int) {
 	}
 	if match := flowMessageLine().FindStringSubmatch(line); match != nil {
 		from, to := open.participant(match[1], "", false), open.participant(match[4], "", false)
-		open.messages = append(open.messages, flowMessage{line: number, from: from, to: to, arrow: match[2], text: strings.TrimSpace(match[5])})
+		open.messages = append(open.messages, flowMessage{line: number, from: from, to: to, arrow: match[2], text: strings.TrimSpace(match[5]), section: open.section()})
+		for i := range open.open {
+			if open.open[i].first == 0 {
+				open.open[i].first = number
+			}
+			open.open[i].last = number
+		}
 		return
 	}
 	if match := participantLine().FindStringSubmatch(line); match != nil {
 		open.participant(match[2], match[3], match[1] == "actor")
+		return
+	}
+	if match := flowNoteLine().FindStringSubmatch(line); match != nil {
+		for _, id := range strings.Split(match[1], ",") {
+			open.participant(id, "", false)
+		}
+		d.flowNote(open, caption{line: number, text: strings.TrimSpace(match[2])})
+		return
+	}
+	if match := flowBlockLine().FindStringSubmatch(line); match != nil {
+		open.open = append(open.open, flowGroup{line: number, kind: match[1], label: match[2]})
+		return
+	}
+	if match := flowSectionLine().FindStringSubmatch(line); match != nil {
+		d.flowSection(open, flowGroup{line: number, kind: match[1], label: match[2]})
+		return
+	}
+	if flowEndLine().MatchString(line) {
+		if len(open.open) == 0 {
+			d.flowProblem(open, number, "`end` closes no block. Remove it, or open the block it ends with rect, opt, loop, alt, critical, par or break.")
+			return
+		}
+		d.closeBlock(open)
 		return
 	}
 	trimmed := strings.TrimSpace(line)
@@ -282,7 +341,103 @@ func (d *document) flowLine(open *flow, line string, number int) {
 		return
 	}
 	open.undrawable = number
-	d.problem(number, "attn draws participants, actors and messages; `%s` is outside that, so this diagram shows as a mermaid figure and the Map frame cannot walk it. Remove the line, or say it in the prose.", trimmed)
+	d.problem(number, "attn draws participants, actors, messages, notes and the blocks rect, opt, loop, alt, critical, par and break; `%s` is outside that, so this diagram shows as a mermaid figure and the Map frame cannot walk it. Remove the line, or say it in the prose.", trimmed)
+}
+
+// flowProblem reports a problem in how the diagram tells its story. Once a
+// line attn cannot draw has made the diagram a mermaid figure, those problems
+// no longer apply.
+func (d *document) flowProblem(open *flow, number int, format string, args ...any) {
+	if open.undrawable == 0 {
+		d.problem(number, format, args...)
+	}
+}
+
+// section is the line of the innermost open block section, 0 outside every
+// block.
+func (f *flow) section() int {
+	if len(f.open) == 0 {
+		return 0
+	}
+	return f.open[len(f.open)-1].line
+}
+
+func (d *document) flowNote(open *flow, note caption) {
+	if len(open.messages) == 0 && open.section() == 0 {
+		if open.note.line != 0 {
+			d.flowProblem(open, note.line, "the diagram already has its caption on line %d, and a diagram has one. Merge the two notes.", open.note.line)
+			return
+		}
+		open.note = note
+		return
+	}
+	if len(open.messages) == 0 || open.messages[len(open.messages)-1].section != open.section() {
+		d.flowProblem(open, note.line, "a Note captions the message right before it in the same block, and this one has none. Move it under a message in its block, or put the text in the block's label.")
+		return
+	}
+	last := &open.messages[len(open.messages)-1]
+	if last.note.line != 0 {
+		d.flowProblem(open, note.line, "the message on line %d already has its caption on line %d, and a message has one. Merge the two notes.", last.line, last.note.line)
+		return
+	}
+	last.note = note
+}
+
+var sectionOf = map[string]string{"else": "alt", "option": "critical", "and": "par"}
+
+func isSection(group flowGroup) bool {
+	return sectionOf[group.kind] != ""
+}
+
+// flowSection opens an else, option or and section. The block stays open
+// under it, so the block's group spans all its sections.
+func (d *document) flowSection(open *flow, section flowGroup) {
+	blockKind := sectionOf[section.kind]
+	at := len(open.open) - 1
+	if at >= 0 && isSection(open.open[at]) {
+		at--
+	}
+	if at < 0 || open.open[at].kind != blockKind {
+		d.flowProblem(open, section.line, "`%s` divides a block opened by `%s`, and this line is inside none. Open the block with `%s`, or remove the line.", section.kind, blockKind, blockKind)
+		return
+	}
+	if at < len(open.open)-1 {
+		d.closeGroup(open)
+	}
+	section.block = open.open[at].line
+	open.open = append(open.open, section)
+}
+
+// closeBlock ends the innermost block and the section open inside it.
+func (d *document) closeBlock(open *flow) {
+	if isSection(open.open[len(open.open)-1]) {
+		d.closeGroup(open)
+	}
+	d.closeGroup(open)
+}
+
+func (d *document) closeGroup(open *flow) {
+	group := open.open[len(open.open)-1]
+	open.open = open.open[:len(open.open)-1]
+	if group.first == 0 {
+		d.flowProblem(open, group.line, "the `%s` on line %d holds no message, so there is nothing to draw it around. Put a message in it, or remove it.", group.kind, group.line)
+		return
+	}
+	open.groups = append(open.groups, group)
+}
+
+// closeFlow ends a diagram at its closing fence, or at the end of the
+// document when the fence never closes.
+func (d *document) closeFlow(open *flow, number int) {
+	for len(open.open) > 0 {
+		block := open.open[len(open.open)-1]
+		if isSection(block) {
+			block = open.open[len(open.open)-2]
+		}
+		d.flowProblem(open, block.line, "the `%s` block on line %d has no `end`. Add `end` after its last message, before line %d.", block.kind, block.line, number)
+		d.closeBlock(open)
+	}
+	slices.SortStableFunc(open.groups, func(a, b flowGroup) int { return a.line - b.line })
 }
 
 // participant returns the id a participant line or message names, declaring

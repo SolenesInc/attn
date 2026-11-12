@@ -30,14 +30,27 @@ export interface NavAnswer {
   name: string;
   locations: CodeNavLocation[];
   text?: string;
-  /** The answer arrived after the user moved on, so it waits to be opened instead of moving the view. */
-  offered?: boolean;
   cursor: number;
 }
 
 /** An answer slower than this, after the cursor moved, is offered instead of followed. The prototype
  * showed a jump that lands after the user moved on loses their place (F10); 1.5 s is the plot's line. */
 export const LATE_ANSWER_MS = 1500;
+
+/** How long an offered answer stays in the note line once it shows: the prototype's value (D6, O3). */
+export const OFFER_MS = 20_000;
+
+/** The one line a late answer is offered as, and what Enter does with it. */
+export function offerText(answer: NavAnswer): { text: string; take: string } {
+  const [first] = answer.locations;
+  if (answer.kind === 'hover') return { text: `The type of ${answer.name} arrived`, take: 'show' };
+  if (answer.kind === 'definition' && answer.locations.length === 1 && first) {
+    return { text: `${answer.name} is in ${first.path.slice(first.path.lastIndexOf('/') + 1)}:${first.line}`, take: 'open' };
+  }
+  const count = answer.locations.length;
+  const what = answer.kind === 'definition' ? (count === 1 ? 'definition' : 'definitions') : (count === 1 ? 'use' : 'uses');
+  return { text: `${count} ${what} of ${answer.name}`, take: 'list' };
+}
 
 const NAME = /[\p{L}_][\p{L}\p{N}_]*/gu;
 

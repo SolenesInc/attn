@@ -2,6 +2,7 @@ import { useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, 
 import type { ReactNode, Ref, RefObject } from 'react';
 import type { CodeNavLocation, ReviewBundle, ReviewFileResultMessage, ReviewFlowMessage, ReviewRow, ReviewStop } from '../../types/generated';
 import { useOptionalDaemonApi } from '../../contexts/DaemonApiContext';
+import { DaemonUnreachable } from '../../hooks/useDaemonSocket';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { useTileWindow } from '../../tileWindow';
 import { isDomInstance } from '../../utils/realm';
@@ -9,16 +10,18 @@ import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
 import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
 import { MapFrame } from './MapFrame';
-import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
+import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, OFFER_MS, offerText, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
 import { CURSOR_CLASS, expansionKey, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
+import { TokenCache } from './tokenize';
 import { stopTarget } from './StopBlock';
 import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/types';
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
+import { showLeadIn } from './leadIn';
 import { isDocumentPath } from './DocStop';
 import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
@@ -62,12 +65,23 @@ function emptyText(kind: NavKind, name: string): string {
   }
 }
 
+const UNREACHABLE = 'The daemon is not reachable, so nothing was asked. Ask again once it is back.';
+
 function pickingText(kind: NavKind): string {
   switch (kind) {
     case 'definition': return 'Go to the definition of which name? Type its label.';
     case 'references': return 'List the uses of which name? Type its label.';
     case 'hover': return 'Show the type of which name? Type its label.';
   }
+}
+
+function OfferLine({ answer }: { answer: NavAnswer }) {
+  const { text, take } = offerText(answer);
+  return (
+    <div className="review-nav-note review-nav-offer" role="status" aria-label="Offered answer">
+      {text} · <kbd>↵</kbd> {take} · <kbd>esc</kbd>
+    </div>
+  );
 }
 
 /** A line above the keys: a question on its way, or why one got no answer. */
@@ -130,6 +144,10 @@ function stageLine(stop: ReviewStop): number | undefined {
   const change = stop.rows.find((row) => row.kind === '+' && row.now !== undefined && row.now >= stop.now_from && row.now <= stop.now_to);
   return change?.now ?? (stop.now_from || undefined);
 }
+
+type CursorScroll = ScrollLogicalPosition | 'lead-in';
+
+type StageChange = 'step' | 'pick' | 'refresh';
 
 interface StageKey {
   path: string;
@@ -253,6 +271,7 @@ export function ReviewReader({
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
+  const fileBodyRef = useRef<HTMLDivElement | null>(null);
   const offered = useMemo(() => offeredFrames(bundle), [bundle]);
   const [chosenFrame, setChosenFrame] = useState<Frame>(() => openingFrame(bundle));
   const frame: Frame = offered.includes(chosenFrame) ? chosenFrame : 'brief';
@@ -283,9 +302,12 @@ export function ReviewReader({
   const [picking, setPicking] = useState<Picking | null>(null);
   const [navPanel, setNavPanel] = useState<NavAnswer | null>(null);
   const [navNote, setNavNote] = useState<NavNote | null>(null);
+  const [offer, setOffer] = useState<NavAnswer | null>(null);
+  const [asked, setAsked] = useState<NavLine['at'] | null>(null);
   const overlay = editing ? 'edit' : composer ? 'composer' : sending ? 'send' : search ? 'search' : help ? 'help' : '';
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
+  const shownOffer = overlay === '' ? offer : null;
   const questionRef = useRef(0);
   const positionRef = useRef('');
   const selectedRef = useRef<HTMLElement[]>([]);
@@ -293,8 +315,9 @@ export function ReviewReader({
   const cursorElementRef = useRef<HTMLElement | null>(null);
   const cursorIndexRef = useRef(0);
   const scrolledKeyRef = useRef<string | null>(null);
-  const scrollModeRef = useRef<ScrollLogicalPosition>('nearest');
-  const fileRowsRef = useRef(new Map<string, Promise<ReviewRow[]>>());
+  const scrollModeRef = useRef<CursorScroll>('nearest');
+  const stageScrollRef = useRef<StageChange>('refresh');
+  const fileReadsRef = useRef(new Map<string, Promise<ReviewFileResultMessage>>());
   const fileIdRef = useRef(0);
   const readsRef = useRef(new Map<number, number>());
   const openFileView = files.length > 0 ? files[files.length - 1] : null;
@@ -343,22 +366,25 @@ export function ReviewReader({
     return sendReviewFile(host, document, path);
   }, [document, host, sendReviewFile]);
 
-  const wholeFile = useCallback((path: string): Promise<ReviewRow[]> => {
-    let rows = fileRowsRef.current.get(path);
-    if (!rows) {
-      rows = readFile(path).then((answer) => answer.rows ?? []);
-      rows.catch(() => fileRowsRef.current.delete(path));
-      fileRowsRef.current.set(path, rows);
+  /** The file as this bundle found it, read once for every use but the file view. */
+  const readOnce = useCallback((path: string): Promise<ReviewFileResultMessage> => {
+    let read = fileReadsRef.current.get(path);
+    if (!read) {
+      read = readFile(path);
+      read.catch(() => fileReadsRef.current.delete(path));
+      fileReadsRef.current.set(path, read);
     }
-    return rows;
+    return read;
   }, [readFile]);
+
+  const wholeFile = useCallback((path: string): Promise<ReviewRow[]> => readOnce(path).then((answer) => answer.rows ?? []), [readOnce]);
 
   const readBundleRef = useRef(bundle);
   useEffect(() => {
     const was = readBundleRef.current;
     if (was === bundle) return;
     readBundleRef.current = bundle;
-    fileRowsRef.current.clear();
+    fileReadsRef.current.clear();
     setMarkFiles(new Map());
     const stopAt = (stops: readonly ReviewStop[], key: string) => stops.find((stop) => expansionKey(stop) === key);
     const changed = [...expansionsRef.current].flatMap(([key, expansion]) => {
@@ -384,6 +410,28 @@ export function ReviewReader({
     });
   }, [bundle, wholeFile]);
 
+  const tokenCache = useMemo(() => new TokenCache(), [bundle.repository, bundle.base]);
+
+  const stopFiles = useMemo(
+    () => [...new Map(bundle.stops.map((stop) => [stop.path, stop.file_hash])).entries()].map(([path, hash]) => `${path}\0${hash}`).join('\n'),
+    [bundle.stops],
+  );
+  useEffect(() => {
+    let current = true;
+    void (async () => {
+      for (const [path, hash] of stopFiles.split('\n').filter(Boolean).map((entry) => entry.split('\0'))) {
+        if (!current) return;
+        if (tokenCache.has(path, hash)) continue;
+        const answer = await readOnce(path).catch(() => null);
+        if (!current) return;
+        if (!answer?.rows || answer.hash === undefined) continue;
+        if (!tokenCache.fits(answer.rows.length)) return;
+        void tokenCache.warm(path, answer.hash, answer.rows.map((row) => row.text));
+      }
+    })();
+    return () => { current = false; };
+  }, [readOnce, stopFiles, tokenCache]);
+
   /** Reads a file into the stack entry `id`. A newer read of the same entry
    * replaces an older one. The entry's edited line, when it has one, places the
    * cursor; otherwise `place` picks the row from the entry as it is when the
@@ -401,7 +449,7 @@ export function ReviewReader({
         const rows = answer.rows ?? [];
         settle((open) => {
           const edited = open.edited === undefined ? -1 : rows.findIndex((row) => row.now === open.edited);
-          return { rows, problem: answer.problem, error: undefined, cursor: edited >= 0 ? edited : place(rows, open), edited: undefined };
+          return { rows, hash: answer.hash, problem: answer.problem, error: undefined, cursor: edited >= 0 ? edited : place(rows, open), edited: undefined };
         });
       },
       (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
@@ -410,7 +458,7 @@ export function ReviewReader({
 
   /** Reads a file the reader wrote again, for the marks and every open view of it. */
   const refreshFile = useCallback((path: string) => {
-    fileRowsRef.current.delete(path);
+    fileReadsRef.current.delete(path);
     void wholeFile(path).then((rows) => setMarkFiles((known) => new Map(known).set(path, rows)), () => undefined);
     filesRef.current.forEach((file) => {
       if (file.target.path === path) loadFile(file.id, path, rowIndexAfterRefresh);
@@ -444,8 +492,10 @@ export function ReviewReader({
   /** Puts a stop's file on the Walkthrough's stage. A refresh keeps the files
    * opened on top of it and the cursor in the stage's file; a move to another
    * stop drops them. */
-  const showStage = useCallback((stop: ReviewStop, line?: number, refresh = false) => {
+  const showStage = useCallback((stop: ReviewStop, line?: number, how: StageChange = 'step') => {
+    const refresh = how === 'refresh';
     if (!refresh) setSearch(null);
+    stageScrollRef.current = how;
     setStageKey(stageKeyOf(bundle, stop));
     const target = stopTarget(stop, line ?? stageLine(stop));
     const id = ++fileIdRef.current;
@@ -453,11 +503,13 @@ export function ReviewReader({
       const previous = stack[0]?.target.path === stop.path ? stack[0] : undefined;
       const stage = refresh && previous
         ? { ...previous, id, target }
-        : { id, target, rows: previous?.rows ?? null, cursor: previous?.rows ? rowIndexOf(previous.rows, target.line) : 0 };
+        : { id, target, rows: previous?.rows ?? null, hash: previous?.hash, cursor: previous?.rows ? rowIndexOf(previous.rows, target.line) : 0 };
       return refresh ? [stage, ...stack.slice(1)] : [stage];
     });
     loadFile(id, stop.path, (rows, open) => (refresh ? rowIndexAfterRefresh(rows, open) : rowIndexOf(rows, target.line)));
   }, [bundle, loadFile]);
+
+  const pickStage = useCallback((stop: ReviewStop) => showStage(stop, undefined, 'pick'), [showStage]);
 
   const returnToOpenBox = useCallback(() => {
     rootRef.current?.querySelector<HTMLTextAreaElement>('.review-composer textarea')?.focus({ preventScroll: true });
@@ -498,7 +550,7 @@ export function ReviewReader({
     });
   }, []);
 
-  const setCursor = useCallback((element: HTMLElement | null, scroll: ScrollLogicalPosition = 'nearest') => {
+  const setCursor = useCallback((element: HTMLElement | null, scroll: CursorScroll = 'nearest') => {
     if (!element) return;
     briefEditedRef.current = null;
     scrollModeRef.current = scroll;
@@ -534,7 +586,12 @@ export function ReviewReader({
     cursorIndexRef.current = Math.max(0, documentTargets(root).indexOf(element));
     if (scrolledKeyRef.current !== cursorKey) {
       scrolledKeyRef.current = cursorKey;
-      element.scrollIntoView?.({ block: scrollModeRef.current });
+      const scroll = scrollModeRef.current;
+      if (scroll !== 'lead-in') element.scrollIntoView?.({ block: scroll });
+      else {
+        const stop = element.closest<HTMLElement>('[data-review-stop-head]');
+        if (stop) showLeadIn(stop, root, element);
+      }
     }
     scrollModeRef.current = 'nearest';
   }, [cursorKey, content, bundle, expansions, scope, mapIndex, side]);
@@ -581,7 +638,7 @@ export function ReviewReader({
       next = before[before.length - 1];
     }
     const firstRow = next?.querySelector<HTMLElement>('[data-review-cursor]');
-    if (firstRow) setCursor(firstRow, 'start');
+    if (firstRow) setCursor(firstRow, 'lead-in');
   }, [currentTarget, setCursor]);
 
   const stopOf = useCallback((element: Element | null) => {
@@ -704,7 +761,7 @@ export function ReviewReader({
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
-    if (frame === 'walkthrough' && bundle.stops[0]) showStage(bundle.stops[0]);
+    if (frame === 'walkthrough' && bundle.stops[0]) showStage(bundle.stops[0], undefined, 'pick');
     if (frame === 'map') selectMessage(0);
   }, [bundle, frame, selectMessage, showStage]);
 
@@ -714,15 +771,20 @@ export function ReviewReader({
     shownBundleRef.current = bundle;
     const stage = frame === 'walkthrough' ? stopOfStage(bundle, stageKey) : undefined;
     filesRef.current.forEach((file, index) => {
-      if (index === 0 && stage) showStage(stage, undefined, true);
+      if (index === 0 && stage) showStage(stage, undefined, 'refresh');
       else loadFile(file.id, file.target.path, rowIndexAfterRefresh);
     });
   }, [bundle, frame, loadFile, showStage, stageKey]);
 
-  useEffect(() => {
-    if (!stageStop) return;
-    docRef.current?.querySelector(`[data-review-stop-head="${stageStop.heading_line}"]`)?.scrollIntoView?.({ block: 'nearest' });
-  }, [stageStop]);
+  useLayoutEffect(() => {
+    const how = stageScrollRef.current;
+    stageScrollRef.current = 'refresh';
+    const doc = docRef.current;
+    const card = stageStop && doc?.querySelector<HTMLElement>(`[data-review-stop-head="${stageStop.heading_line}"]`);
+    if (!doc || !card || how === 'refresh') return;
+    if (how === 'step') showLeadIn(card, doc, card);
+    else card.scrollIntoView?.({ block: 'nearest' });
+  }, [stageKey, stageStop]);
 
   const markTarget = useCallback((): MarkTarget | null => {
     if (openFileView) {
@@ -947,21 +1009,36 @@ export function ReviewReader({
     openFile({ path: location.path, line: location.line, ...(location.outside ? { outside: true } : {}) });
   }, [openFile]);
 
+  const takeOffer = useCallback((answer: NavAnswer) => {
+    setOffer(null);
+    if (answer.kind === 'definition' && answer.locations.length === 1) follow(answer.locations[0]);
+    else setNavPanel({ ...answer, cursor: 0 });
+  }, [follow]);
+
+  useEffect(() => {
+    if (!shownOffer) return undefined;
+    const expire = setTimeout(() => setOffer((current) => (current === shownOffer ? null : current)), OFFER_MS);
+    return () => clearTimeout(expire);
+  }, [shownOffer]);
+
   const askRef = useRef<(kind: NavKind, line: NavLine, name: LabeledName) => void>(() => undefined);
   const ask = useCallback((kind: NavKind, line: NavLine, name: LabeledName) => {
     setPicking(null);
     setNavPanel(null);
+    setOffer(null);
     if (!sendCodeNav) {
-      setNavNote({ text: 'Not connected to the daemon.', tone: 'alert' });
+      setNavNote({ text: UNREACHABLE, tone: 'alert' });
       return;
     }
     const question = ++questionRef.current;
     const askedAt = Date.now();
     const askedFrom = positionRef.current;
     setNavNote({ text: askingText(kind, name.name), tone: 'asking' });
+    setAsked(line.at);
     void sendCodeNav(host, document, { path: line.path, line: line.line, character: name.character, kind }).then(
       (answer) => {
         if (questionRef.current !== question) return;
+        setAsked(null);
         const locations = answer.locations ?? [];
         if (kind === 'definition' && locations.length === 1 && isOwnDefinition(locations[0], line.path, line.line, name.character)) {
           askRef.current('references', line, name);
@@ -977,11 +1054,15 @@ export function ReviewReader({
           follow(locations[0]);
           return;
         }
-        setNavPanel({ kind, name: name.name, locations, text: answer.text, offered: late, cursor: 0 });
+        const shown: NavAnswer = { kind, name: name.name, locations, text: answer.text, cursor: 0 };
+        if (late) setOffer(shown);
+        else setNavPanel(shown);
       },
       (error: unknown) => {
         if (questionRef.current !== question) return;
-        setNavNote({ text: error instanceof Error ? error.message : String(error), tone: 'alert' });
+        setAsked(null);
+        const text = error instanceof DaemonUnreachable ? UNREACHABLE : error instanceof Error ? error.message : String(error);
+        setNavNote({ text, tone: 'alert' });
       },
     );
   }, [document, follow, host, sendCodeNav]);
@@ -1005,6 +1086,7 @@ export function ReviewReader({
   }, [delivered.navigation, setup]);
 
   const startPicking = useCallback((kind: NavKind) => {
+    setOffer(null);
     const line = navLine();
     if (typeof line === 'string') {
       setNavNote({ text: line, tone: 'status' });
@@ -1039,6 +1121,7 @@ export function ReviewReader({
   const cancelQuestion = useCallback(() => {
     questionRef.current += 1;
     setNavNote(null);
+    setAsked(null);
   }, []);
 
   const movePanelCursor = useCallback((delta: number) => {
@@ -1067,6 +1150,7 @@ export function ReviewReader({
           : help ? 'help'
             : picking ? 'picking'
               : navPanel ? 'answer'
+                : shownOffer ? 'offer'
                 : navNote ? 'note'
                   : selecting ? 'selection'
                     : frame === 'walkthrough' ? (files.length > 1 ? 'stage' : null)
@@ -1078,6 +1162,7 @@ export function ReviewReader({
   useEscapeStack(() => setHelp(false), escapes === 'help');
   useEscapeStack(() => setPicking(null), escapes === 'picking');
   useEscapeStack(() => setNavPanel(null), escapes === 'answer');
+  useEscapeStack(() => setOffer(null), escapes === 'offer');
   useEscapeStack(cancelQuestion, escapes === 'note');
   useEscapeStack(() => {
     setSelectFrom(null);
@@ -1142,6 +1227,10 @@ export function ReviewReader({
         }
         return true;
       }
+      if (shownOffer && event.key === 'Enter') {
+        takeOffer(shownOffer);
+        return true;
+      }
       if (navNote && navNote.tone !== 'asking') setNavNote(null);
       const navKind = NAV_KEYS[event.key];
       if (navKind && !event.shiftKey) {
@@ -1178,6 +1267,11 @@ export function ReviewReader({
       const fileRows = openFileView?.rows;
       if (frame === 'walkthrough' || openFileView) {
         const stage = frame === 'walkthrough';
+        if (event.shiftKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+          const body = fileBodyRef.current;
+          body?.scrollBy({ left: (event.key === 'ArrowRight' ? 1 : -1) * body.clientWidth / 2 });
+          return true;
+        }
         switch (event.key) {
           case 'ArrowDown': moveFileCursor((file) => file.cursor + 1, event.shiftKey); return true;
           case 'ArrowUp': moveFileCursor((file) => file.cursor - 1, event.shiftKey); return true;
@@ -1213,7 +1307,7 @@ export function ReviewReader({
     };
     tileWindow.addEventListener('keydown', onKeyDown);
     return () => tileWindow.removeEventListener('keydown', onKeyDown);
-  }, [back, composer, currentTarget, editing, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, returnToOpenBox, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
+  }, [back, composer, currentTarget, editing, expandAtCursor, files.length, follow, frame, help, mapIndex, marks, messageStops.length, moveFileCursor, moveLine, movePanelCursor, moveStop, navNote, navPanel, openAtCursor, shownOffer, takeOffer, openComposer, openDocumentInEditor, openFileView, openSearch, pickLabel, picking, returnToOpenBox, rootRef, selectMessage, sendReview, sending, side, sides, startEdit, startPicking, startSetup, stepStage, switchFrame, switchSide, tileWindow, toggleSetupOffer, undoEdit]);
 
   const onScopeClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as Element;
@@ -1232,8 +1326,8 @@ export function ReviewReader({
   );
   const removeMark = marks?.deleteAnnotation;
   const context = useMemo<ReviewReaderContextValue>(
-    () => ({ bundle, expansions, frame, stage, showStop: showStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels }),
-    [asking, bundle, expansions, frame, labels, marksByLine, stage, showStage, openFile, openSearch, removeMark, openDocumentInEditor],
+    () => ({ bundle, expansions, frame, stage, showStop: pickStage, openFile, openSearch, marksByLine, asking, removeMark, openInEditor: openDocumentInEditor, labels, asked }),
+    [asked, asking, bundle, expansions, frame, labels, marksByLine, stage, pickStage, openFile, openSearch, removeMark, openDocumentInEditor],
   );
 
   return (
@@ -1257,7 +1351,9 @@ export function ReviewReader({
         {frame === 'walkthrough' && openFileView ? (
           <FileView
             file={openFileView}
+            tokenCache={tokenCache}
             filled={filled}
+            bodyRef={fileBodyRef}
             stage
             canGoBack={files.length > 1}
             onBack={back}
@@ -1278,30 +1374,34 @@ export function ReviewReader({
             onDetailClick={onScopeClick}
           />
         ) : null}
+        {frame !== 'walkthrough' && openFileView ? (
+          <FileView
+            file={openFileView}
+            tokenCache={tokenCache}
+            filled={filled}
+            bodyRef={fileBodyRef}
+            canGoBack={files.length > 1}
+            onBack={back}
+            onClose={closeFileView}
+            onPick={(index) => moveFileCursor(() => index)}
+          />
+        ) : null}
+        {notice ? <div className="review-notice" role="status">{notice}</div> : null}
+        {composer && marks ? (
+          <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
+        ) : null}
       </div>
-      {frame !== 'walkthrough' && openFileView ? (
-        <FileView
-          file={openFileView}
-          filled={filled}
-          canGoBack={files.length > 1}
-          onBack={back}
-          onClose={closeFileView}
-          onPick={(index) => moveFileCursor(() => index)}
-        />
-      ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet readOnly={openFileView?.target.outside === true} /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
-      {notice ? <div className="review-notice" role="status">{notice}</div> : null}
       {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}
-      {composer && marks ? (
-        <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
-      ) : null}
       {sending && marks ? (
         <SendSheet marks={annotations} verdict={sending.verdict} destination={marks.destination} onPick={(verdict) => setSending({ verdict })} onSend={sendReview} />
       ) : null}
       {picking ? (
         <div className="review-nav-note" role="status">{pickingText(picking.kind)} <kbd>esc</kbd> cancels.</div>
+      ) : shownOffer ? (
+        <OfferLine answer={shownOffer} />
       ) : navNote ? (
         <div className={`review-nav-note${navNote.tone === 'alert' ? ' review-nav-note--alert' : ''}`} role={navNote.tone === 'alert' ? 'alert' : 'status'}>{navNote.text}</div>
       ) : null}

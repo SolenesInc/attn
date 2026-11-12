@@ -47,7 +47,7 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 | Key | Does |
 |---|---|
 | ↑ ↓ | Move by line in code and by block in prose |
-| ← → | The previous or next stop |
+| ← → | The previous or next stop, with the text that leads into it at the top |
 | Enter | Open the whole file at the cursor, with the stop's lines marked |
 | `e` | Show 10 more lines around the stop |
 | `z` | Fill the tile with the file |
@@ -55,8 +55,11 @@ tile lists the keys for what you are looking at, and `?` shows them all.
 | ⌃O | Go back to the file you came from |
 | Escape | Close the file view, the search or the key sheet |
 
-In the file view, ← and → move to the previous or next change. In a stop on a
-markdown file on this computer, `o` opens the file in an editor tile.
+A long line wraps in a stop. The file view, which the Walkthrough also shows
+beside its explanation, keeps each line on one row: ⇧← and ⇧→ scroll it
+sideways by half its width. In the file view, ← and → move to the previous or
+next change. In a stop on a markdown file on this computer, `o` opens the file
+in an editor tile.
 
 ## Switch the frame
 
@@ -65,9 +68,12 @@ One review has three frames. The agent picks the one that suits the change, and
 
 - **Brief** (`1`) reads the document top to bottom.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
-  stops, with the agent's explanation beside it. `z` hides the explanation.
-- **Map** (`3`) draws the change as a sequence diagram. ← and → step through
-  its messages, each beside the code that sends it. When the review has a
+  stops, with the agent's explanation beside it. `z` hides the explanation, and
+  ⇧← and ⇧→ scroll the file sideways.
+- **Map** (`3`) draws the change as a sequence diagram: the parts of the
+  system, the calls between them with the agent's caption under each, and boxes
+  around a transaction, a loop or a branch. ← and → step through its messages,
+  each beside the code that sends it. When the review has a
   diagram before and after the change, `b` switches between them.
 
 A frame the review cannot fill, such as Map for a review with no diagram, is
@@ -116,14 +122,19 @@ On a line of code, in a stop or the file view:
 - `r` lists the uses of a name. ↑ and ↓ pick one, and Enter opens it.
 - `h` shows the type of a name.
 
-An answer that comes after you moved on, or while search or an edit box is
-open, waits in a list instead of moving you. A definition outside the
+While a question waits, its line is marked `…`. An answer that comes after you
+moved on, or while search, an edit box or a note is open, does not move you.
+It is offered in one line above the keys once the box closes: Enter opens a
+definition, or lists several places, and Escape drops it. Every other key keeps
+working, so you can read on and take it later. The offer leaves on its own
+after 20 seconds, or when you ask another question. A definition outside the
 repository opens for reading only: you cannot mark or edit it.
 
 A language server on the machine that holds the files answers. attn starts it
 when the review opens and stops it after five minutes with no review shown
 (`code_navigation_idle_stop_seconds`). The key line shows each language's
-server: loading, ready, failed, or no server. Built-in definitions cover
+server: loading, with the seconds since it started and what it is doing, ready,
+failed, or no server. Built-in definitions cover
 Go (`gopls`), TypeScript (`typescript-language-server`), Rust
 (`rust-analyzer`) and Python (`pyright-langserver`). attn looks for the program
 in its own code navigation folder, then on `PATH`. Answers follow the files on
@@ -142,7 +153,8 @@ while the offer is off.
 
 To set one up yourself, run these from the repository:
 
-- `attn nav status` lists each language's server and why one is missing.
+- `attn nav status` lists each language's server, how long a starting one has
+  been starting, and why one is missing.
 - `attn nav link <program>` links a program into attn's code navigation
   folder, such as a server your editor installed outside `PATH`.
 - `attn nav set <language> <definition>` sets how to start a server for this

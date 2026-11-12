@@ -1,20 +1,33 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
 import type { ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
 import { PathLabel } from './StopBlock';
 import { useResizeWatch } from '../../tileWindow';
-import { tokenizeLines, type TokenLine } from './tokenize';
+import { useCachedTokens, type TokenCache } from './tokenize';
 import { useReviewReader } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 
 export const FILE_ROW_HEIGHT = 20;
 const OVERSCAN_ROWS = 30;
+const TAB_SIZE = 8;
+
+function columnsOf(text: string): number {
+  let columns = 0;
+  for (const character of text) columns = character === '\t' ? columns + TAB_SIZE - (columns % TAB_SIZE) : columns + 1;
+  return columns;
+}
+
+function widestLine(rows: readonly ReviewRow[]): number {
+  return rows.reduce((widest, row) => Math.max(widest, columnsOf(row.text)), 0);
+}
 
 export interface OpenFile {
   id: number;
   target: FileTarget;
   rows: ReviewRow[] | null;
+  /** The content hash of the file the rows were read from. */
+  hash?: string;
   error?: string;
   problem?: string;
   cursor: number;
@@ -70,22 +83,6 @@ export function changeStarts(rows: readonly ReviewRow[]): number[] {
   return starts;
 }
 
-function useFileTokens(rows: ReviewRow[] | null, path: string): readonly (TokenLine | undefined)[] {
-  const [tokens, setTokens] = useState<readonly (TokenLine | undefined)[]>([]);
-  useEffect(() => {
-    setTokens([]);
-    if (!rows || rows.length === 0) return undefined;
-    let cancelled = false;
-    const filled: (TokenLine | undefined)[] = Array.from({ length: rows.length });
-    void tokenizeLines(rows.map((row) => row.text), path, (start, chunk) => {
-      chunk.forEach((line, index) => { filled[start + index] = line; });
-      setTokens(filled.slice());
-    }, () => cancelled);
-    return () => { cancelled = true; };
-  }, [path, rows]);
-  return tokens;
-}
-
 /** The lines agent notes point at, and whether any of them is the place to look. */
 function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
   const noted = new Map<number, boolean>();
@@ -98,7 +95,9 @@ function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
 
 export function FileView({
   file,
+  tokenCache,
   filled,
+  bodyRef,
   stage = false,
   canGoBack,
   onBack,
@@ -106,23 +105,27 @@ export function FileView({
   onPick,
 }: {
   file: OpenFile;
+  tokenCache: TokenCache;
   filled: boolean;
+  bodyRef: RefObject<HTMLDivElement | null>;
   stage?: boolean;
   canGoBack: boolean;
   onBack: () => void;
   onClose?: () => void;
   onPick: (index: number) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState({ top: 0, height: 0 });
   const rows = file.rows;
-  const tokens = useFileTokens(rows, file.target.path);
+  const lines = useMemo(() => rows?.map((row) => row.text) ?? null, [rows]);
+  const { tokens, earlier } = useCachedTokens(tokenCache, file.target.path, file.hash, lines);
   const range = file.target.range;
   const notes = file.target.notes;
   const noted = useMemo(() => notedLines(notes), [notes]);
+  const widest = useMemo(() => (rows ? widestLine(rows) : 0), [rows]);
   const resizeWatch = useResizeWatch();
   const reader = useReviewReader();
   const labels = reader?.labels;
+  const asked = reader?.asked;
   const path = file.target.path;
   const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
   const cursorLine = rows?.[file.cursor]?.now;
@@ -131,16 +134,16 @@ export function FileView({
   const selectTo = Math.max(file.selectFrom ?? file.cursor, file.cursor);
 
   useLayoutEffect(() => {
-    const element = scrollRef.current;
+    const element = bodyRef.current;
     if (!element) return undefined;
     const measure = () => setView({ top: element.scrollTop, height: element.clientHeight });
     measure();
     resizeWatch.observe(element, measure);
     return () => resizeWatch.disconnect();
-  }, [resizeWatch]);
+  }, [bodyRef, resizeWatch]);
 
   useLayoutEffect(() => {
-    const element = scrollRef.current;
+    const element = bodyRef.current;
     if (!element || !rows) return;
     const rowTop = file.cursor * FILE_ROW_HEIGHT;
     const height = element.clientHeight;
@@ -148,7 +151,7 @@ export function FileView({
       element.scrollTop = Math.max(0, rowTop - height / 3);
       setView({ top: element.scrollTop, height });
     }
-  }, [file.cursor, rows]);
+  }, [bodyRef, file.cursor, rows]);
 
   const first = Math.max(0, Math.floor(view.top / FILE_ROW_HEIGHT) - OVERSCAN_ROWS);
   const last = rows ? Math.min(rows.length, Math.ceil((view.top + view.height) / FILE_ROW_HEIGHT) + OVERSCAN_ROWS) : 0;
@@ -168,11 +171,11 @@ export function FileView({
         {onClose ? <button type="button" tabIndex={-1} onClick={onClose}>close <kbd>esc</kbd></button> : null}
       </header>
       {file.problem ? <div className="review-file-view-problem" role="status">{file.problem}</div> : null}
-      <div className="review-file-view-body" ref={scrollRef} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
+      <div className="review-file-view-body" ref={bodyRef} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
         {file.error ? <div className="review-file-view-message" role="alert">{file.error}</div> : null}
         {!rows && !file.error ? <div className="review-file-view-message">Reading {file.target.path}…</div> : null}
         {rows ? (
-          <div className="review-file-view-rows" style={{ height: rows.length * FILE_ROW_HEIGHT }}>
+          <div className="review-file-view-rows" style={{ height: rows.length * FILE_ROW_HEIGHT, '--review-file-columns': widest } as CSSProperties}>
             {rows.slice(first, last).map((row, offset) => {
               const index = first + offset;
               const look = row.now === undefined ? undefined : noted.get(row.now);
@@ -187,10 +190,11 @@ export function FileView({
                 >
                   <CodeRow
                     row={row}
-                    tokens={tokens[index]}
+                    tokens={tokens[index] ?? earlier?.get(row.text)}
                     path={file.target.path}
                     inRange={range !== undefined && row.now !== undefined && row.now >= range[0] && row.now <= range[1]}
                     labels={labels && 'fileId' in labels.at && labels.at.fileId === file.id && labels.at.row === index ? labels.names : undefined}
+                    asked={asked !== null && asked !== undefined && 'fileId' in asked && asked.fileId === file.id && asked.row === index}
                   />
                 </div>
               );

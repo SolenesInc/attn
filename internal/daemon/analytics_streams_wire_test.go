@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"io"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -127,6 +128,11 @@ func TestOneResourceSampleEveryTwentyMinutesWhileAnalyticsIsOn(t *testing.T) {
 		for _, field := range []string{"goroutines", "resident_bytes", "open_fds", "heap_alloc", "database_bytes", "bus_retained_facts", "connected_clients"} {
 			if measured, _ := sample[field].(float64); measured <= 0 {
 				t.Errorf("sample %s = %v, want a positive measurement (props %s)", field, sample[field], record.Props)
+			}
+		}
+		if runtime.GOOS == "linux" {
+			if measured, _ := sample["c_heap_in_use_bytes"].(float64); measured <= 0 {
+				t.Errorf("sample c_heap_in_use_bytes = %v, want a positive measurement on Linux (props %s)", sample["c_heap_in_use_bytes"], record.Props)
 			}
 		}
 		if _, ok := sample["cpu_time_ms"]; !ok {

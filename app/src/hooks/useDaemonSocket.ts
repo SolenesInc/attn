@@ -334,6 +334,13 @@ const MAX_PENDING_ATTACH_OUTPUTS = 512;
 const CLIENT_INSTANCE_ID =
   globalThis.crypto?.randomUUID?.() ?? `client-${Math.random().toString(36).slice(2)}`;
 
+/** A request made while the daemon's socket is not open; nothing was sent. */
+export class DaemonUnreachable extends Error {
+  constructor() {
+    super('WebSocket not connected');
+  }
+}
+
 export class AutomationActionTimeoutError extends Error {}
 
 export class AutomationActionError extends Error {
@@ -966,7 +973,7 @@ export function useDaemonSocket({
     return new Promise<T>((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
+        reject(new DaemonUnreachable());
         return;
       }
       if (supersede) {
