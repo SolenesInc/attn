@@ -1,11 +1,16 @@
 package main_test
 
 import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -30,6 +35,97 @@ func packSDK(t *testing.T) string {
 		t.Fatalf("packed %v, want one tarball", tarballs)
 	}
 	return tarballs[0]
+}
+
+func TestAnAuthorsHarnessTakesQueuedInputAfterRecovery(t *testing.T) {
+	t.Parallel()
+	harnessID := "author_" + strings.ReplaceAll(uuid.NewString()[:8], "-", "")
+	plugin := authorsPlugin(t, harnessID, packSDK(t))
+	root, err := os.MkdirTemp("", "attn-recovery-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	socketPath := filepath.Join(root, "recovery.sock")
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+
+	entry := filepath.Join(plugin, "src", "index.ts")
+	source, err := os.ReadFile(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recoverHandler := fmt.Sprintf(`  recover: async (runs) => {
+    if (runs.length === 0) return;
+    await runs[0].reportMetadata(runs[0].metadata);
+    const socket = createConnection({ path: %q });
+    await new Promise<void>((resolve, reject) => {
+      socket.once("error", reject);
+      socket.once("connect", () => socket.write(JSON.stringify(runs[0].metadata) + "\n"));
+      socket.once("data", () => { socket.end(); resolve(); });
+    });
+  },
+`, socketPath)
+	changed := strings.Replace(string(source), "client.driver({\n", "client.driver({\n"+recoverHandler, 1)
+	if changed == string(source) {
+		t.Fatal("sample no longer registers its driver")
+	}
+	if err := os.WriteFile(entry, []byte(changed), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := testworld.NewStack(t)
+	s.Start()
+	app := s.App()
+	if installed := s.Attn("plugin", "install", "--path", plugin); installed.Code != 0 {
+		t.Fatalf("install: %s%s", installed.Stdout, installed.Stderr)
+	}
+	agent := fakeagent.Harness(harnessID)
+	awaitAgentAvailable(app, agent)
+	session := s.Spawn(app, agent, s.Path("shop"))
+	app.AwaitScreen(session, "sample harness started conversation")
+	peer := s.Spawn(app, agent, s.Path("peer"))
+	app.AwaitScreen(peer, "sample harness started conversation")
+
+	s.Stop()
+	s.Start()
+	app = s.App()
+	if err := listener.SetDeadline(time.Now().Add(fakeagent.HangGuard)); err != nil {
+		t.Fatal(err)
+	}
+	conn, err := listener.AcceptUnix()
+	if err != nil {
+		t.Fatalf("plugin recovery did not start: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	line, err := bufio.NewReader(conn).ReadBytes('\n')
+	if err != nil {
+		t.Fatal(err)
+	}
+	var metadata struct {
+		ConversationID string `json:"conversationId"`
+	}
+	if err := json.Unmarshal(line, &metadata); err != nil || metadata.ConversationID == "" {
+		t.Fatalf("recovered metadata %q: %v", line, err)
+	}
+	message := s.Attn("agent", "msg", session, "queued during recovery", "--source-session", peer)
+	if message.Code != 0 || !strings.Contains(message.Stdout, "queued") {
+		t.Fatalf("message during recovery: exit %d, %s%s", message.Code, message.Stdout, message.Stderr)
+	}
+	t.Logf("agent msg while recovering: %s", strings.TrimSpace(message.Stdout))
+	if _, err := conn.Write([]byte("ready\n")); err != nil {
+		t.Fatal(err)
+	}
+	awaitAgentAvailable(app, agent)
+	app.AwaitScreen(session, "You have unread items in your attn inbox")
+	inbox := s.Run(testworld.Invocation{Args: []string{"agent", "inbox"}, Session: session})
+	if inbox.Code != 0 || !strings.Contains(inbox.Stdout, "queued during recovery") {
+		t.Fatalf("inbox after recovery: exit %d, %s%s", inbox.Code, inbox.Stdout, inbox.Stderr)
+	}
+	t.Logf("agent inbox after recovery: %s", strings.TrimSpace(inbox.Stdout))
 }
 
 // authorsPlugin copies the example to a clean directory, gives it harnessID and points it at the packed SDK.
@@ -112,10 +208,12 @@ func TestAnAuthorsInstalledHarnessLaunchesTakesInputAndSurvivesADaemonRestart(t 
 	}
 	app.AwaitScreen(session, "[user] after the restart")
 
+	terminal := app.Terminal(session)
 	reloaded := s.Attn("agent", "reload", session, "--source-session", session)
 	if reloaded.Code != 0 {
 		t.Fatalf("attn agent reload: %s%s", reloaded.Stdout, reloaded.Stderr)
 	}
+	testworld.Await(app, protocol.EventRuntimeRespawned, func(e protocol.WebSocketEvent) bool { return protocol.Deref(e.ID) == terminal })
 	app.AwaitScreen(session, "sample harness resumed conversation")
 }
 

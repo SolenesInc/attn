@@ -28,6 +28,7 @@ type FakeDaemon = {
   requests: Message[];
   call(method: string, params: Record<string, unknown>): Promise<Message>;
   next(method: string): Promise<Message>;
+  response(id: number): Promise<Message>;
 };
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -148,6 +149,7 @@ describe("AttnPluginClient driver", () => {
 
   test("continues the report sequence of a run attn still holds after a reconnect", async () => {
     const daemon = await startDaemon({
+      hello: { ok: true, active_runs: [{ session_id: "t1", run_id: "r1", metadata: { c: "native" }, seq: 7 }] },
       "driver.register": { ok: true, active_runs: [{ session_id: "t1", run_id: "r1", metadata: { c: "native" }, seq: 7 }] },
     });
     const client = connectable(daemon);
@@ -167,6 +169,98 @@ describe("AttnPluginClient driver", () => {
       ["session.report_metadata", 10],
     ]);
     expect(reports[2]?.params).toMatchObject({ session_id: "t1", run_id: "r1", resume_session_id: "next" });
+  });
+
+  test("recovers a run before accepting input sent as the driver registers", async () => {
+    const active = [{ session_id: "t1", run_id: "r1", metadata: { c: "native" }, seq: 7 }];
+    const daemon = await startDaemon(
+      { hello: { ok: true, active_runs: active }, "driver.register": { ok: true, active_runs: active } },
+      (message, socket) => {
+        if (message.method === "driver.register") {
+          socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: 900, method: "driver.deliver_message", params: {
+            session_id: "t1", run_id: "r1", input_id: "i1", text: "hello",
+          } })}\n`);
+        }
+      },
+    );
+    const client = connectable(daemon);
+    let ready = false;
+    let delivered: { ready: boolean; metadata: unknown } | undefined;
+    client.driver({
+      ...baseDriver,
+      recover: async () => { await Promise.resolve(); ready = true; },
+      deliver: async (_input, run) => {
+        delivered = { ready, metadata: run.metadata };
+        await run.state("working");
+        return accepted();
+      },
+    });
+    await client.connect();
+    const report = await daemon.next("session.report_state");
+    await daemon.response(900);
+    expect(delivered).toEqual({ ready: true, metadata: { c: "native" } });
+    expect(report.params?.seq).toBe(8);
+  });
+
+  test("defers input on an older daemon until recovery and registers again", async () => {
+    const active = [{ session_id: "t1", run_id: "r1", metadata: { c: "native" }, seq: 7 }];
+    let registrations = 0;
+    const daemon = await startDaemon(
+      { hello: { ok: true }, "driver.register": { ok: true, active_runs: active } },
+      (message, socket) => {
+        if (message.method !== "driver.register") return;
+        registrations++;
+        socket.write(`${JSON.stringify({ jsonrpc: "2.0", id: 900 + registrations, method: "driver.deliver_message", params: {
+          session_id: "t1", run_id: "r1", input_id: "i1", text: "hello",
+        } })}\n`);
+      },
+    );
+    const client = connectable(daemon);
+    let release!: () => void;
+    const recovery = new Promise<void>((resolve) => { release = resolve; });
+    let ready = false;
+    let delivered: unknown;
+    client.driver({
+      ...baseDriver,
+      recover: async () => { await recovery; ready = true; },
+      deliver: async (_input, run) => {
+        delivered = { ready, metadata: run.metadata };
+        await run.state("working");
+        return accepted();
+      },
+    });
+    const connected = client.connect();
+    expect((await daemon.response(901)).result).toMatchObject({ ok: false, status: "deferred" });
+    release();
+    await connected;
+    expect((await daemon.response(902)).result).toEqual({ ok: true });
+    expect(delivered).toEqual({ ready: true, metadata: { c: "native" } });
+    expect((await daemon.next("session.report_state")).params?.seq).toBe(8);
+    expect(registrations).toBe(2);
+  });
+
+  test("delivers a close notification after asynchronous recovery", async () => {
+    const daemon = await startDaemon({ hello: { ok: true, active_runs: [{ session_id: "t1", run_id: "r1", seq: 7 }] } });
+    const client = connectable(daemon);
+    let release!: () => void;
+    let started!: () => void;
+    const recovery = new Promise<void>((resolve) => { release = resolve; });
+    const recovering = new Promise<void>((resolve) => { started = resolve; });
+    let closed = false;
+    client.driver({
+      ...baseDriver,
+      recover: async () => { started(); await recovery; },
+      sessionClosed: () => { closed = true; },
+    });
+    const connected = client.connect();
+    await recovering;
+    const close = daemon.call("driver.session_closed", { session_id: "t1", run_id: "r1", reason: "killed" });
+    await daemon.call("attn.health", {});
+    expect(closed).toBe(false);
+    release();
+    expect((await close).result).toEqual({ ok: true });
+    await connected;
+    expect(closed).toBe(true);
   });
 
   test("reports compaction by input and conversation", async () => {
@@ -221,11 +315,15 @@ function connectable(daemon: FakeDaemon): AttnPluginClient {
   return client;
 }
 
-async function startDaemon(replies: Record<string, unknown> = {}): Promise<FakeDaemon> {
+async function startDaemon(
+  replies: Record<string, unknown> = {},
+  beforeReply: (message: Message, socket: Socket) => void = () => {},
+): Promise<FakeDaemon> {
   const root = await mkdtemp(join(tmpdir(), "attn-driver-sdk-"));
   const socketPath = join(root, "plugin.sock");
   const requests: Message[] = [];
   const waiting = new Map<number, (message: Message) => void>();
+  const responses = new Map<number, Message>();
   const arrivals: { method: string; resolve: (message: Message) => void }[] = [];
   let plugin: Socket | undefined;
   let nextID = 1000;
@@ -240,11 +338,13 @@ async function startDaemon(replies: Record<string, unknown> = {}): Promise<FakeD
         const message = JSON.parse(buffer.slice(0, newline)) as Message;
         buffer = buffer.slice(newline + 1);
         if (!message.method) {
+          responses.set(message.id!, message);
           waiting.get(message.id!)?.(message);
           continue;
         }
         requests.push(message);
-        const reply = replies[message.method] ?? { ok: true };
+        beforeReply(message, socket);
+        const reply = replies[message.method] ?? (message.method === "hello" ? { ok: true, active_runs: [] } : { ok: true });
         const answer: Message = reply instanceof Error
           ? { jsonrpc: "2.0", id: message.id, error: { code: -32603, message: reply.message } }
           : { jsonrpc: "2.0", id: message.id, result: reply };
@@ -266,6 +366,11 @@ async function startDaemon(replies: Record<string, unknown> = {}): Promise<FakeD
   return {
     socketPath,
     requests,
+    response: (id) => new Promise((resolve) => {
+      const seen = responses.get(id);
+      if (seen) resolve(seen);
+      else waiting.set(id, resolve);
+    }),
     call: (method, params) =>
       new Promise((resolve) => {
         const id = nextID++;

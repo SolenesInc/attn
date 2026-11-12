@@ -38,7 +38,8 @@ type pluginHelloParams struct {
 }
 
 type pluginHelloResult struct {
-	OK bool `json:"ok"`
+	OK         bool              `json:"ok"`
+	ActiveRuns []activePluginRun `json:"active_runs"`
 }
 
 type pluginHealthParams struct {
@@ -459,7 +460,13 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 	plugin := newPluginConnection(conn, reader, params)
 	registry := d.ensurePluginRegistry()
 	connected := false
-	if !d.life.Do("connectPlugin", func() { connected = d.connectPlugin(plugin, registry, helloID, params) }) {
+	var hello pluginHelloResult
+	if !d.life.Do("connectPlugin", func() {
+		connected = d.connectPlugin(plugin, registry, helloID, params)
+		if connected {
+			hello = pluginHelloResult{OK: true, ActiveRuns: d.activePluginRuns(plugin.name)}
+		}
+	}) {
 		_ = plugin.send(jsonRPCFailure(helloID, jsonRPCInternalError, errDaemonStopping.Error()))
 		return
 	}
@@ -485,7 +492,7 @@ func (d *Daemon) handlePluginConnection(conn net.Conn, reader *bufio.Reader, hel
 		d.publishFact(FactPluginDisconnected, plugin.name, nil)
 	}()
 
-	if err := plugin.send(jsonRPCResult(helloID, pluginHelloResult{OK: true})); err != nil {
+	if err := plugin.send(jsonRPCResult(helloID, hello)); err != nil {
 		return
 	}
 	d.life.Do("connectPlugin", func() {

@@ -61,7 +61,7 @@ you left out.
 | `stateReporting` | `state_reporting` | The plugin reports state through `run.state`; attn stops inferring state from the terminal, so report every start and end of a turn. |
 | `pullRequestReporting` | `pull_request_reporting` | With `launchInstructions`, attn leaves out the instruction that tells the agent to report its own pull requests. |
 | `sessionClosed(params)` | | Notification that a run ended. |
-| `recover(runs)` | | Called after every registration with the runs attn still holds. |
+| `recover(runs)` | | Called on connection with the runs attn still holds, before the driver handles requests. |
 | `health()` | | Answers `attn.health` with `{ ok, message? }`. Defaults to `{ ok: true }`. |
 
 `deliver` and `compact` return `accepted()`, `deferred(reason?)` for a temporary
@@ -88,11 +88,10 @@ attributed input and compaction wait for it. Reports sent while `spawn` or
 refuses until the launch is up.
 
 Attn supervises installed plugin processes. A clean exit, crash, or connection
-loss longer than five seconds triggers a restart with bounded backoff. Plugin
-code should rebuild registrations and in-memory state from durable sources each
-time `connect()` succeeds. A harness started by a driver keeps running while
-its plugin restarts, and attn holds direct input for it until the plugin
-registers again.
+loss longer than five seconds triggers a restart with bounded backoff. Rebuild
+in-memory state from durable sources in `recover` before it returns. A harness
+started by a driver keeps running while its plugin restarts, and attn holds
+direct input until recovery finishes.
 
 ## Hook worktree creation
 

@@ -46,6 +46,19 @@ type activePluginRun struct {
 	Seq        uint64              `json:"seq"`
 }
 
+func (d *Daemon) activePluginRuns(pluginName string) []activePluginRun {
+	active := d.store.ListAgentDriverRuns(pluginName)
+	runs := make([]activePluginRun, 0, len(active))
+	for _, run := range active {
+		item := activePluginRun{TerminalID: d.primaryTerminal(run.SessionID), RunID: run.RunID, Seq: run.Seq}
+		if json.Valid([]byte(run.Metadata)) {
+			item.Metadata = json.RawMessage(run.Metadata)
+		}
+		runs = append(runs, item)
+	}
+	return runs
+}
+
 type pluginDriverSpawnParams struct {
 	Agent           string                    `json:"agent"`
 	TerminalID      protocol.TerminalID       `json:"session_id"`
@@ -341,16 +354,7 @@ func (d *Daemon) handlePluginDriverMethod(plugin *pluginConnection, msg jsonRPCM
 				d.reviveRecoverableAgents("")
 			}
 		})
-		active := d.store.ListAgentDriverRuns(plugin.name)
-		runs := make([]activePluginRun, 0, len(active))
-		for _, run := range active {
-			item := activePluginRun{TerminalID: d.primaryTerminal(run.SessionID), RunID: run.RunID, Seq: run.Seq}
-			if json.Valid([]byte(run.Metadata)) {
-				item.Metadata = json.RawMessage(run.Metadata)
-			}
-			runs = append(runs, item)
-		}
-		result := pluginDriverRegisterResult{OK: true, ActiveRuns: runs}
+		result := pluginDriverRegisterResult{OK: true, ActiveRuns: d.activePluginRuns(plugin.name)}
 		return result, true, nil
 	case "session.report_compaction":
 		var params pluginReportCompactionParams

@@ -128,7 +128,7 @@ export type DriverHandlers = {
    */
   compact?(params: DriverCompactParams, run: DriverRun): DriverDeliverResult | Promise<DriverDeliverResult>;
   sessionClosed?(params: DriverSessionClosedParams): void | Promise<void>;
-  /** Called after every registration with the runs attn still holds for this plugin. */
+  /** Called on connection with the runs attn still holds, before the driver handles requests. */
   recover?(runs: DriverRun[]): void | Promise<void>;
   health?(): DriverHealth | Promise<DriverHealth>;
 };

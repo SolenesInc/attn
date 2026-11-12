@@ -132,11 +132,14 @@ type PendingRequest = {
 
 type HelloResult = {
   ok: boolean;
+  active_runs?: ActiveRun[];
 };
+
+type ActiveRun = { session_id: string; run_id: string; metadata?: unknown; seq: number };
 
 type RegisterResult = {
   ok: boolean;
-  active_runs?: { session_id: string; run_id: string; metadata?: unknown; seq: number }[];
+  active_runs?: ActiveRun[];
 };
 
 const pluginAPIVersion = 7;
@@ -149,6 +152,8 @@ export class AttnPluginClient {
   private readonly pending = new Map<string, PendingRequest>();
   private definition?: DriverDefinition;
   private readonly runs = new Map<string, ClientRun>();
+  private driverReady = false;
+  private readonly closedDuringRecovery: JsonRpcRequest[] = [];
 
   private readonly options: ResolvedAttnPluginClientOptions;
 
@@ -166,6 +171,9 @@ export class AttnPluginClient {
       return;
     }
 
+    this.driverReady = false;
+    this.closedDuringRecovery.length = 0;
+    this.runs.clear();
     try {
       this.socket = await new Promise<Socket>((resolve, reject) => {
         const socket = createConnection({ path: this.options.socketPath });
@@ -195,7 +203,7 @@ export class AttnPluginClient {
       if (!result.ok) {
         throw new Error("attn rejected plugin hello");
       }
-      await this.registerDriver();
+      await this.registerDriver(result.active_runs);
     } catch (error) {
       this.resetSocket(error instanceof Error ? error : new Error(String(error)));
       throw error;
@@ -203,6 +211,7 @@ export class AttnPluginClient {
   }
 
   close(): void {
+    this.driverReady = false;
     this.socket?.end();
     this.socket = undefined;
     this.failPending(new Error("attn plugin client closed"));
@@ -229,27 +238,36 @@ export class AttnPluginClient {
     this.definition = definition;
   }
 
-  private async registerDriver(): Promise<void> {
+  private async registerDriver(activeRuns: ActiveRun[] | undefined): Promise<void> {
     const definition = this.definition;
     if (!definition) {
       return;
     }
-    let result: RegisterResult;
+    if (activeRuns === undefined) {
+      activeRuns = (await this.sendDriverRegistration(definition)).active_runs ?? [];
+    }
+    const active = activeRuns.map((run) => {
+      const driverRun = this.runFor(run.session_id, run.run_id);
+      driverRun.restore(run.seq, run.metadata);
+      return driverRun;
+    });
+    await definition.recover?.(active);
+    while (this.closedDuringRecovery.length > 0) {
+      await this.handleDriverRequest(this.closedDuringRecovery.shift()!);
+    }
+    this.driverReady = true;
+    await this.sendDriverRegistration(definition);
+  }
+
+  private async sendDriverRegistration(definition: DriverDefinition): Promise<RegisterResult> {
     try {
-      result = await this.request<RegisterResult>("driver.register", {
+      return await this.request<RegisterResult>("driver.register", {
         agent: definition.id,
         capabilities: driverCapabilities(definition),
       });
     } catch (error) {
       throw explainRegistrationError(error instanceof Error ? error : new Error(String(error)));
     }
-    this.runs.clear();
-    const active = (result.active_runs ?? []).map((run) => {
-      const driverRun = this.runFor(run.session_id, run.run_id);
-      driverRun.restore(run.seq, run.metadata);
-      return driverRun;
-    });
-    await definition.recover?.(active);
   }
 
   private runFor(terminalId: string, runId: string): ClientRun {
@@ -334,6 +352,16 @@ export class AttnPluginClient {
     }
 
     if (request.method.startsWith("driver.")) {
+      if (this.definition && !this.driverReady) {
+        if (request.method === "driver.session_closed") {
+          this.closedDuringRecovery.push(request);
+        } else if (request.method === "driver.deliver_message" || request.method === "driver.compact") {
+          this.send({ jsonrpc: "2.0", id: request.id, result: { ok: false, status: "deferred", reason: "Driver recovery in progress" } });
+        } else {
+          this.sendError(request.id, -32603, "Driver recovery in progress");
+        }
+        return;
+      }
       await this.handleDriverRequest(request);
       return;
     }

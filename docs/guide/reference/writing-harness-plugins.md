@@ -134,10 +134,11 @@ the reports for you.
 
 Attn restarts a plugin that exits, crashes or loses its connection for more
 than five seconds. The harness keeps running in its terminal. On every
-connection `client.connect()` registers again and Attn answers with the launches
-it still holds for the plugin. Pass `recover` to `client.driver` to rebuild what
-you keep in memory from them. The sample keeps nothing in memory: its socket
-path comes from the `run_id`, and the harness deduplicates input by ID.
+connection `client.connect()` gives `recover` the launches Attn still holds for
+the plugin. Rebuild what you keep in memory before `recover` returns. The SDK
+then registers the driver, and Attn can deliver input again. The sample keeps
+nothing in memory: its socket path comes from the `run_id`, and the harness
+deduplicates input by ID.
 
 ## The wire, for any language
 
@@ -160,7 +161,12 @@ Plugin to Attn, once per connection, in this order:
 {"jsonrpc":"2.0","id":2,"method":"driver.register","params":{"agent":"my-agent","capabilities":{"resume":true,"message_delivery":true,"attributed_input":true}}}
 ```
 
-`hello` returns `{"ok":true}`. `driver.register` returns `{"ok":true,"active_runs":[{"session_id":"…","run_id":"…","metadata":…,"seq":7}]}`.
+`hello` returns `{"ok":true,"active_runs":[{"session_id":"…","run_id":"…","metadata":…, "seq":7}]}`.
+Restore those runs before you send `driver.register`. Attn can send driver
+requests as soon as it processes the registration, before it answers the call.
+`driver.register` also returns the active runs for older clients. An older
+daemon omits `active_runs` from `hello`; on that daemon, defer input while you
+recover the runs from `driver.register`, then register again to resume delivery.
 `session_id` is the terminal ID throughout the plugin wire. It is not the ID of
 an Attn session or of a native conversation. A capability name Attn does not
 know, or one that needs `message_delivery` without it, is refused.
@@ -193,5 +199,5 @@ Plugin to Attn, for a run you launched:
 
 `seq` is a number above zero that grows with each report of one run. Start at
 1 for a new run and continue from `active_runs[].seq` for a run you got back
-from `driver.register`. Attn ignores a report whose `seq` is not newer and
+from `hello`. Attn ignores a report whose `seq` is not newer and
 refuses a report from a plugin that does not own the run.
