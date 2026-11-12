@@ -84,6 +84,14 @@ function describeShardCoverage(shardResults, shardCount) {
   return problems;
 }
 
+export function matrixApp(shardResults) {
+  const apps = [...new Set(shardResults.map((shard) => shard.app ?? 'tauri'))];
+  if (apps.length > 1) {
+    throw new Error(`The shards ran different apps (${apps.join(', ')}); one matrix runs one app`);
+  }
+  return apps[0] ?? 'tauri';
+}
+
 export function aggregateShards({ shardResults, expectedIds, shardCount }) {
   const problems = describeShardCoverage(shardResults, shardCount);
   const byId = new Map();

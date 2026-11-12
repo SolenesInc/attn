@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { agentTripwireLaunchEnv } from './agentTripwire.mjs';
 import { mockGitHubLaunchEnv } from './mockGitHub.mjs';
-import { appCliInTree, appPlatform } from './platform.mjs';
+import { appCliInTree, appPlatform, appShellInTree } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
@@ -498,6 +498,9 @@ export class UiAutomationClient {
   }
 
   async waitForFrontendResponsive(timeoutMs = 20_000, action = 'list_sessions') {
+    if (appShellInTree(this.appPath) === 'native') {
+      return this.waitForReady(timeoutMs);
+    }
     const startedAt = Date.now();
     let lastError = null;
 
