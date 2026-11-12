@@ -97,32 +97,28 @@ fn clipboard_chord(ev: &KeyEvent) -> Option<Clipboard> {
     if !matches!(letter, 'c' | 'v') {
         return None;
     }
-    let mac = KeyPlatform::current() == KeyPlatform::Mac;
-    let meta = if mac { ev.mods.cmd } else { ev.mods.logo };
-    let chord = |letter| {
-        if letter == 'v' {
-            Clipboard::Paste
-        } else {
-            Clipboard::Copy
-        }
+    let held = if KeyPlatform::current() == KeyPlatform::Mac {
+        ev.mods.cmd && !ev.mods.shift
+    } else {
+        ev.mods.ctrl && ev.mods.shift && !ev.mods.alt
     };
-    if meta && !ev.mods.shift {
-        return Some(chord(letter));
-    }
-    (!mac && ev.mods.ctrl && ev.mods.shift && !ev.mods.alt).then(|| chord(letter))
+    held.then_some(if letter == 'v' {
+        Clipboard::Paste
+    } else {
+        Clipboard::Copy
+    })
 }
 
 /// Copies the terminal's selection, or pastes into it where the window does not already: true
-/// when the key did its work.
+/// when the key is the terminal's, so it never reaches the program, even with nothing to copy.
 fn clipboard(state: &mut State, id: &str, chord: Clipboard, tx: &mut Tx) -> bool {
     match chord {
-        Clipboard::Copy => match state.terminals.copy_text(id) {
-            Some(text) => {
+        Clipboard::Copy => {
+            if let Some(text) = state.terminals.copy_text(id) {
                 tx.copy(text);
-                true
             }
-            None => false,
-        },
+            true
+        }
         Clipboard::Paste if KeyPlatform::current() == KeyPlatform::Mac => false,
         Clipboard::Paste => {
             tx.read_clipboard(on_paste);

@@ -122,6 +122,7 @@ fn the_cursor_moves_with_its_row_as_the_view_scrolls() {
     assert_eq!(view(&world)["cursor"], json!([0, rows - 7]));
     wheel(&mut world, 3.0);
     assert_eq!(view(&world)["cursor"], json!([0, rows - 4]));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -133,6 +134,7 @@ fn output_that_clears_the_history_brings_a_scrolled_view_back_to_the_screen() {
     output(&world, 2, b"\x1b[3J");
     world.settle();
     assert_eq!(view(&world)["scrolled_back"], 0);
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -164,6 +166,7 @@ fn a_restored_snapshot_keeps_its_history_and_keys_follow_the_modes_set_after_it(
         })
     });
     assert_eq!(inputs(&world), [typed("\x1bOA")]);
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -173,6 +176,7 @@ fn the_history_keeps_far_more_than_libghosttys_default() {
     world.settle();
     wheel(&mut world, 100_000.0);
     assert_eq!(world.terminal_text("r1")[0], "line-1");
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -212,6 +216,7 @@ fn copied_lines_lose_the_indent_they_share() {
     world.settle();
     drag(&mut world, (0, 0), (20, 2));
     assert_eq!(copied(&world).as_deref(), Some("one\n  two\nthree"));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -229,6 +234,7 @@ fn a_click_that_does_not_drag_clears_the_selection_and_copies_nothing() {
 
     assert_eq!(washes(&world), []);
     assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -254,6 +260,13 @@ fn a_double_click_selects_the_word_and_a_triple_click_the_row() {
         copied(&world).as_deref(),
         Some("git push --force-with-lease origin")
     );
+
+    world.gesture(|app| {
+        app.runtime.pointer_down(a.0, a.1);
+        app.runtime.pointer_up(a.0, a.1);
+    });
+    assert_eq!(washes(&world), [], "a fourth click starts over");
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -278,6 +291,7 @@ fn a_program_that_tracks_the_mouse_hears_the_drag_unless_alt_holds_it_for_a_sele
     drag(&mut world, (0, 0), (4, 0));
     assert_eq!(copied(&world).as_deref(), Some("alpha"));
     assert_eq!(inputs(&world).len(), 2, "the program heard nothing more");
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -292,6 +306,17 @@ fn a_selection_stays_on_its_rows_as_the_view_scrolls() {
     wheel(&mut world, 3.0);
     assert_eq!(washes(&world), [(5, [0, 7])]);
     assert_eq!(world.terminal_text("r1")[5], selected);
+
+    let rows = world.terminal_text("r1").len() as f32;
+    wheel(&mut world, rows);
+    assert_eq!(
+        washes(&world),
+        [],
+        "a row scrolled out of view keeps no wash at the edge"
+    );
+    wheel(&mut world, -rows);
+    assert_eq!(washes(&world), [(5, [0, 7])]);
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -322,6 +347,19 @@ fn a_selection_on_a_programs_screen_follows_its_text_when_the_wheel_scrolls_the_
     world.clipboard.set_text("other");
     world.gesture(|app| app.press(COPY));
     assert_eq!(copied(&world).as_deref(), Some("selected first"));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_copy_key_with_nothing_selected_never_reaches_the_program() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"alpha\r\n\x1b[>1u");
+    world.settle();
+    world.clipboard.set_text("kept");
+    world.gesture(|app| app.press(COPY));
+    assert_eq!(inputs(&world), []);
+    assert_eq!(copied(&world).as_deref(), Some("kept"));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -331,6 +369,7 @@ fn ctrl_shift_v_pastes_into_the_terminal_on_linux() {
     world.clipboard.set_text("echo pasted\nls");
     world.gesture(|app| app.press("mod+shift+v"));
     assert_eq!(inputs(&world), [typed("echo pasted\rls")]);
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -340,6 +379,7 @@ fn a_view_with_nothing_over_it_reports_no_overlays() {
         view(&world),
         json!({"cursor": [0, 0], "overlays": [], "scrolled_back": 0, "copies": null})
     );
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -357,6 +397,7 @@ fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
     });
     assert_eq!(washes(&world), []);
     assert_eq!(copied(&world), None);
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -377,6 +418,7 @@ fn a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing() {
         [],
         "the terminal answers no clipboard query"
     );
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]
@@ -397,4 +439,5 @@ fn pasting_an_image_sends_the_ctrl_v_byte_for_the_agent_to_read_it_itself() {
             .paste_content(rune::ClipboardContent::new("ignored").with_image(image))
     });
     assert_eq!(inputs(&world), [typed("\x16")]);
+    assert!(world.runtime_is_at_rest());
 }

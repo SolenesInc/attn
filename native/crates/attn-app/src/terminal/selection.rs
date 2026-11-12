@@ -25,8 +25,8 @@ struct Selecting {
 
 impl Terminals {
     /// The primary button went down at `at` on terminal `id`'s slot, the `clicks`th press of a
-    /// run, and no program heard it. A first press starts a selection; a second selects the
-    /// word and a third the row, which the clipboard then holds.
+    /// run, and no program heard it. A second press selects the word and a third the row, which
+    /// the clipboard then holds; any other starts a selection.
     pub(crate) fn select_press(&mut self, id: &str, at: (f32, f32), clicks: u32) -> Option<String> {
         let metrics = self.metrics();
         let term = self.panes.get_mut(id)?;
@@ -37,7 +37,13 @@ impl Terminals {
         self.undrawn = true;
         let cols = term.vt.size().0;
         let selection = match clicks {
-            1 => {
+            2 => {
+                let line = term.vt.row_text(row, 0..cols);
+                let (start, end) = word_at(line.trim_end(), col)?;
+                Selection::at(row, start, end)
+            }
+            3 => Selection::at(row, 0, cols),
+            _ => {
                 view.selected = None;
                 view.selecting = Some(Selecting {
                     from: at,
@@ -46,12 +52,6 @@ impl Terminals {
                 view.selection = Some(Selection::at(row, col, col));
                 return None;
             }
-            2 => {
-                let line = term.vt.row_text(row, 0..cols);
-                let (start, end) = word_at(line.trim_end(), col)?;
-                Selection::at(row, start, end)
-            }
-            _ => Selection::at(row, 0, cols),
         };
         view.selecting = None;
         view.selection = Some(selection);

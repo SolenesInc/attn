@@ -88,6 +88,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn every_write_is_found_wherever_the_output_splits_among_other_escapes_and_multibyte_text() {
+        let output = "é\x1b[31m\x1b]52;c;YQ==\x07\x1b]0;title\x07ü\x1b]52;c;Yg==\x1b\\\x1b[0m\x1b]52;c;?\x07\x1b"
+            .as_bytes();
+        for split in 0..=output.len() {
+            let mut osc = Osc52::default();
+            let mut got = osc.writes(&output[..split]);
+            got.extend(osc.writes(&output[split..]));
+            assert_eq!(got, ["a", "b"], "split at {split}");
+        }
+    }
+
+    #[test]
     fn writes_are_read_whole_from_split_chunks_with_either_terminator() {
         let cases: &[(&[&[u8]], &[&str])] = &[
             (&[b"\x1b]52;c;aGVsbG8=\x07"], &["hello"]),
@@ -97,8 +109,7 @@ mod tests {
             (&[b"\x1b]52;c;!!notbase64\x07"], &[]),
             (&[b"\x1b]52;c;\x07"], &[""]),
             (&[b"\x1b]52;c;aGk\x07"], &["hi"]),
-            (&[b"\x1b]52;c;YQ==\x07\x1b]52;c;Yg==\x07"], &["a", "b"]),
-            (&[b"\x1b]0;title\x07plain"], &[]),
+            (&[b"\x1b]52;c;?\x1b\\\x1b]52;c;d29ybGQ=\x1b\\"], &["world"]),
         ];
         for (chunks, want) in cases {
             let mut osc = Osc52::default();
