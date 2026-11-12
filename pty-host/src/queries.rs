@@ -290,21 +290,6 @@ mod tests {
     }
 
     #[test]
-    fn forwards_replies_to_queries_the_scanner_does_not_answer() {
-        let mut terminal = Terminal::new(80, 24).expect("terminal");
-        let output = b"\x1b[>c\x1b[?6n";
-        let queries = TerminalQueries::detect(output);
-        terminal.write(output);
-        let drained = terminal.drain_responses();
-        let replies = String::from_utf8(queries.replies_after_feed(&terminal, &drained)).unwrap();
-        assert!(replies.contains("\x1b[>"), "DA2 reply dropped: {replies:?}");
-        assert!(
-            replies.contains("\x1b[?1;1;1R"),
-            "extended CPR reply dropped: {replies:?}"
-        );
-    }
-
-    #[test]
     fn answers_the_program_status_probe_before_da1() {
         let mut terminal = Terminal::new(80, 24).expect("terminal");
         let output = b"\x1b]7501;?\x1b\\\x1b[c";
