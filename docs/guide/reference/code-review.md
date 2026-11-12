@@ -63,8 +63,8 @@ A long line wraps in a stop. The file view, which the Walkthrough also shows
 beside its explanation, keeps each line on one row: ⇧← and ⇧→ scroll it
 sideways by half its width. In the file view, ← and → move to the previous or
 next change, and the agent's note on the cursor's line shows under the file,
-with your own notes on it. In a stop on a markdown file on this computer, `o` opens the file
-in an editor tile.
+with your own notes on it. In a stop on a markdown file on this computer, `o`
+opens the file in an editor tile.
 
 ## Switch the frame
 
@@ -74,8 +74,7 @@ One review has three frames. The agent picks the one that suits the change, and
 - **Brief** (`1`) reads the document top to bottom.
 - **Walkthrough** (`2`) fills the tile with the file and steps through the
   stops, with the agent's explanation beside it. Lines outside the stop are
-  dimmed. `z` hides the explanation, and
-  ⇧← and ⇧→ scroll the file sideways.
+  dimmed. `z` hides the explanation, and ⇧← and ⇧→ scroll the file sideways.
 - **Map** (`3`) draws the change as a sequence diagram: the parts of the
   system, the calls between them with the agent's caption under each, and boxes
   around a transaction, a loop or a branch. ← and → step through its messages,
@@ -107,8 +106,9 @@ Selecting text with the mouse and typing still writes a comment, as in any
 
 ## Send the review
 
-Press ⌘Enter, or Ctrl+Shift+Enter on Linux. The send sheet lists your notes and edits. Pick a verdict with
-`a` (approve), `r` (request changes) or `c` (comment), then press Enter.
+Press ⌘Enter, or Ctrl+Shift+Enter on Linux. The send sheet lists your notes
+and edits. Pick a verdict with `a` (approve), `r` (request changes) or `c`
+(comment), then press Enter.
 
 The agent receives one message: your notes in reading order with the lines they
 are on, your edits with the text before and after, and the verdict.
