@@ -1,0 +1,11 @@
+[package]
+name = "attn-client"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+attn-protocol = { path = "../../../cli/protocol" }
+
+[lints]
+workspace = true

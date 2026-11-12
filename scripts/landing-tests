@@ -156,3 +156,6 @@ go ./cmd/attnd TestAgentsOwedATurnAndAsksPushToEveryPhoneOfTheirProfileOnly
 
 group old-phones ^internal/daemon/home_gateway|^internal/daemon/testdata/old_phones/|^internal/protocol/(schema/home_gateway\.tsp|homegateway/)
 go ./internal/daemon TestAPhoneOfEveryHomeGatewayAPIKeepsWorkingAgainstThisHome
+
+group native ^native/|^internal/protocol/schema/|^cli/protocol/
+cargo .

@@ -16,6 +16,9 @@ These commands record a receipt:
 - `scripts/landing-tests.sh`, which also names the tests it requested, so a
   test that reported nothing shows as `MISSING`. It runs groups of
   `scripts/landing-tests`, or single tests with `--unit '<unit>'`.
+- CI's `Native (<os>)` jobs, which run `cargo test` for the Rust workspace in
+  `native/` as the `cargo` runner. They are not the `native` runner's
+  scenarios.
 
 Running `go test`, `vitest`, `playwright` or `cargo test` directly records
 nothing.

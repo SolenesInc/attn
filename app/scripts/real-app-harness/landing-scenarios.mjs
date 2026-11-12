@@ -14,8 +14,8 @@ function scenarioFile(scenario) {
 }
 
 function changesProductCode(path) {
-  return /^(app\/src\/|app\/src-tauri\/|internal\/|cmd\/|pty-host\/)/.test(path)
-    && !/(_test\.go$|\.test\.tsx?$|\/testdata\/|\/test\/|^internal\/prompts\/content\/|\.md$|\.generated\.)/.test(path);
+  return /^(app\/src\/|app\/src-tauri\/|internal\/|cmd\/|pty-host\/|native\/)/.test(path)
+    && !/(_test\.go$|\.test\.tsx?$|\/testdata\/|\/test\/|^native\/crates\/[^/]+\/tests\/|^internal\/prompts\/content\/|\.md$|\.generated\.)/.test(path);
 }
 
 function scenariosListedBy(featureFile) {

@@ -72,6 +72,11 @@ case "$1 $2" in
 esac
 EOF
 chmod +x "$work/bin/gh"
+cat >"$work/bin/attn" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "seed show s-fix123" ]
+EOF
+chmod +x "$work/bin/attn"
 export PATH="$work/bin:$PATH"
 export LAND_CLEAN_LOG="$work/cleans"
 export LAND_CHECK_LOG="$work/checks" LAND_MOVE_MAIN="$work/move-main" LAND_OTHER="$work/other"
@@ -188,8 +193,36 @@ expect_checks 'check-types' 'check-go GO_PACKAGES=./...' "${go_choice[@]}" sync
 
 mkdir -p app/src
 printf 'export {};\n' >app/src/example.ts
+git add -A
+git commit -qm 'Change the frozen app'
+if bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'a change to the frozen app landed without an exception' >&2; exit 1; fi
+expect_output 'the Tauri app is frozen'
+expect_output 'app/src/example.ts'
+expect_output 'ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh'
+if ATTN_FREEZE_EXCEPTION=s-nope00 bash "$root/scripts/land.sh" >"$work/output" 2>&1; then echo 'an exception naming no seed let the frozen app change land' >&2; exit 1; fi
+expect_output 'ATTN_FREEZE_EXCEPTION=s-nope00 names no seed'
+git reset -q --soft HEAD^
+export ATTN_FREEZE_EXCEPTION=s-fix123
 land 'App change'
 expect_checks 'check-frontend check-mobile' 'land --group app' "landing-tests $selected_units" sync
+expect_output 'changing the frozen Tauri app under the exception for seed s-fix123'
+unset ATTN_FREEZE_EXCEPTION
+
+mkdir -p app/src/types
+printf 'export {};\n' >app/src/types/generated.ts
+land 'Regenerated protocol types reach the frozen app'
+
+mkdir -p native/crates/demo/src
+printf '[workspace]\n' >native/Cargo.toml
+printf '[package]\n' >native/crates/demo/Cargo.toml
+printf '\n' >native/crates/demo/src/lib.rs
+land 'Native workspace arrives'
+expect_checks 'check-native NATIVE_CLIPPY=--workspace' 'land --group native' "landing-tests $selected_units" sync
+
+printf '\n' >>native/crates/demo/src/lib.rs
+land 'Native crate change'
+expect_checks 'check-native NATIVE_CLIPPY=-p demo' 'land --group native' "landing-tests $selected_units" sync
+export ATTN_FREEZE_EXCEPTION=s-fix123
 
 printf '\n' >>app/src/example.ts
 land 'App change while a Vitest file is red on main' "LAND_SELECTED=$(printf 'vitest .\nred vitest src/red.test.ts')"
@@ -205,7 +238,7 @@ printf 'true\n' >scripts/example.sh
 printf 'schema\n' >internal/protocol/schema/example.tsp
 printf 'prompt\n' >internal/prompts/example.md
 land 'Scripts and generated inputs'
-expect_checks 'check-types check-prompts' 'land --group prompts' "landing-tests $selected_units" sync
+expect_checks 'check-types check-prompts check-native NATIVE_CLIPPY=' 'land --group prompts --group native' "landing-tests $selected_units" sync
 expect_output 'the checkout has no script tests'
 
 mkdir -p internal/setting
@@ -215,7 +248,7 @@ expect_checks 'check-types' sync
 
 printf 'Home Gateway\n' >internal/protocol/schema/home_gateway.tsp
 land 'HomeGateway API change'
-expect_checks 'check-types check-home-gateway-compat' 'land --group old-phones' "landing-tests $selected_units" sync
+expect_checks 'check-types check-home-gateway-compat check-native NATIVE_CLIPPY=' 'land --group old-phones --group native' "landing-tests $selected_units" sync
 
 mkdir -p scripts/lib
 printf 'true\n' >scripts/lib/shared.sh

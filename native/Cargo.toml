@@ -1,0 +1,29 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+edition = "2024"
+
+[workspace.dependencies]
+rune = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+
+# Rune's own [patch.crates-io], repeated: cargo ignores a dependency's [patch].
+# Keep this list equal to Rune's at the pinned rev.
+[patch.crates-io]
+wgpu-hal = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+winit = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+parley_engine = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+accesskit_windows = { git = "https://github.com/SolenesInc/rune", rev = "a3ea00e3c6ad4b1a6567383ca45c73cd56f691b8" }
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[workspace.lints.clippy]
+disallowed_methods = "deny"

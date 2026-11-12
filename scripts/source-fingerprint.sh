@@ -66,7 +66,8 @@ should_exclude_path() {
   # Only app + daemon source is tracked, and the guide pages the daemon binary
   # embeds. Everything else — other docs, tests, harness scripts, and CI
   # config — can change without invalidating the packaged app bundle, so
-  # skipping those paths keeps iteration fast.
+  # skipping those paths keeps iteration fast. native/ builds a different app,
+  # not the Tauri bundle this fingerprint names.
   case "${relative_path}" in
     internal/prompts/content/*) return 1 ;;
     cmd/prompt-editor/*|internal/prompts/scenarios/*|.prompt-editor/*) return 0 ;;
@@ -77,6 +78,7 @@ should_exclude_path() {
     app/test-harness/*)             return 0 ;;
     docs/guide/*.go|docs/guide/tutorials/*|docs/guide/reference/*|docs/guide/diagrams/*.txt) return 1 ;;
     docs/*)                         return 0 ;;
+    native/*)                       return 0 ;;
     scripts/*)                      return 0 ;;
     .github/*)                      return 0 ;;
     *.md)                           return 0 ;;

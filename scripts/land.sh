@@ -45,6 +45,8 @@ prompt_outputs=(
   internal/prompts/catalog.generated.json
   app/src/prompts/catalog.generated.json
 )
+frozen_paths='^app/src/|^app/src-tauri/'
+native_paths='^native/|^internal/protocol/schema/|^cli/protocol/'
 
 fail() {
   echo "land: $*" >&2
@@ -206,6 +208,7 @@ run_checks() {
   touches '^internal/protocol/(schema/home_gateway\.tsp|homegateway/)' && targets+=(check-home-gateway-compat)
   touches '^internal/prompts/|^cmd/promptgen/' && targets+=(check-prompts)
   touches '^app/' && targets+=(check-frontend)
+  touches "$native_paths" && targets+=(check-native "NATIVE_CLIPPY=$(native_clippy_scope "$changed")")
   touches '^mobile/|^app/src/|^internal/cloudlink/testdata/' && targets+=(check-mobile)
   script_tests="$(script_tests_for "$changed")"
   if [ -n "$script_tests" ]; then
@@ -220,6 +223,18 @@ run_checks() {
     make "${targets[@]}"
   fi
   run_go_checks_beside_landing_tests
+}
+
+native_clippy_scope() {
+  local crates
+  if grep -qE '^native/[^/]+$' <<<"$1"; then
+    echo --workspace
+    return
+  fi
+  crates="$(grep -oE '^native/crates/[^/]+/' <<<"$1" | sort -u | while IFS= read -r dir; do
+    [ -f "$dir/Cargo.toml" ] && printf -- '-p %s ' "$(basename "$dir")"
+  done)"
+  echo "${crates% }"
 }
 
 run_go_checks_beside_landing_tests() {
@@ -380,6 +395,24 @@ land() {
   fail "main moved $max_attempts times while landing; run scripts/land.sh again"
 }
 
+refuse_frozen_changes() {
+  local frozen generated
+  generated="$(printf '%s\n' "${protocol_outputs[@]}" "${prompt_outputs[@]}")"
+  frozen="$(git diff --name-only origin/main...HEAD | grep -E "$frozen_paths" | grep -vxF -- "$generated" | grep -v '^app/src-tauri/generated/' || true)"
+  [ -n "$frozen" ] || return 0
+  if [ -n "${ATTN_FREEZE_EXCEPTION:-}" ]; then
+    if command -v attn >/dev/null && ! attn seed show "$ATTN_FREEZE_EXCEPTION" >/dev/null 2>&1; then
+      fail "ATTN_FREEZE_EXCEPTION=$ATTN_FREEZE_EXCEPTION names no seed; set it to the seed of the fix"
+    fi
+    echo "land: changing the frozen Tauri app under the exception for seed $ATTN_FREEZE_EXCEPTION" >&2
+    return 0
+  fi
+  fail "the Tauri app is frozen: app/src and app/src-tauri take only P0 and P1 fixes to the shipped app until the native app replaces it. A fix in an area the native app already covers lands in both apps.
+This landing changes:
+$frozen
+To land a fix, name its seed: ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh"
+}
+
 refuse_commits_by_another_author() {
   local identity others
   identity="$(git config --global --includes --get user.email || true)"
@@ -400,6 +433,7 @@ run_landing_scenarios() {
 export GOGC="${GOGC:-400}"
 git fetch --quiet origin main
 refuse_commits_by_another_author
+refuse_frozen_changes
 run_landing_scenarios
 take_land_queue
 land 9>&-

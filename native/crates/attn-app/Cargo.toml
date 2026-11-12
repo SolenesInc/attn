@@ -1,0 +1,11 @@
+[package]
+name = "attn-app"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+rune.workspace = true
+
+[lints]
+workspace = true

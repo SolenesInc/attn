@@ -1,0 +1,7 @@
+disallowed-methods = [
+  { path = "std::thread::sleep", reason = "wait on a signal, or move the Runtime's clock in a test" },
+  { path = "std::time::Instant::now", reason = "read time through an injected clock, so tests can move it" },
+  { path = "std::time::SystemTime::now", reason = "read time through an injected clock, so tests can move it" },
+]
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true

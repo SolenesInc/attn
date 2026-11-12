@@ -4,6 +4,49 @@ The native app is attn's desktop app rebuilt in Rust on
 [Rune](https://github.com/anomalyco/rune). It lives in `native/`, beside the
 Tauri app, until it replaces it. No release contains it yet.
 
+## Workspace
+
+`native/` is its own Cargo workspace:
+
+| Crate | Holds |
+| --- | --- |
+| `attn-client` | the daemon link and the store; depends on `cli/protocol`, not on Rune |
+| `attn-term` | terminals: the libghostty-vt bridge, input encoding, the cell renderer |
+| `attn-ui` | theme tokens, fonts and shared components |
+| `attn-app` | the `attn-app` binary: windows, features, actions and keymap |
+| `attn-automation` | the automation server that drives a running app |
+| `attn-testkit` | the scripted daemon and the world wire tests run in |
+
+`native/rust-toolchain.toml` pins Rust 1.99.1, which Rune needs. The rest of the
+repository keeps its own pin in `rust-toolchain.toml`. Run cargo from `native/`,
+so rustup picks the workspace's toolchain:
+
+```sh
+cd native
+cargo run -p attn-app
+cargo test
+```
+
+`native/Cargo.toml` pins one revision of the `attn` branch of attn's Rune fork
+and repeats Rune's `[patch.crates-io]` entries.
+[The Rune fork](rune-fork.md) says why, what the fork holds, and who moves the
+pin.
+
+## Tests
+
+Wire tests run a view on Rune's windowless `Runtime` and live in each crate's
+`tests/wire/`. No test waits on time: clippy rejects `std::thread::sleep`,
+`Instant::now` and `SystemTime::now` anywhere in `native/`
+(`native/clippy.toml`). Code reads time through an injected clock, so a test
+moves it.
+
+[Test history](test-history.md) records `cargo test` runs as the `cargo`
+runner. A landing that changes `native/`, the protocol schema or `cli/protocol`
+runs `make check-native` and every test of the workspace, as
+[Trunk-based development](trunk-based-development.md#what-landsh-does) says.
+CI's `Native (macos-15)` and `Native (ubuntu-24.04)` jobs run the same checks
+when those paths change, and on every push to `main`.
+
 ## Build output
 
 `native/.cargo/config.toml` puts each checkout's intermediate build output
@@ -45,4 +88,10 @@ lock first and keeps it while it removes. When it removes anything or the root
 is over budget, it prints the budget, the size, each build it removed, and each
 build it kept because a running build holds its lock.
 `ATTN_NATIVE_BUILD_BUDGET_MIB` raises the budget. `scripts/land.sh` runs it
-after every push.
+after every push, so a removed worktree's output goes at the next land on that
+machine.
+
+## Edit-to-test loop
+
+The budget for an edit to a view, rebuilt and with its wire test rerun, is
+15 s on the Mac. It is not measured yet.

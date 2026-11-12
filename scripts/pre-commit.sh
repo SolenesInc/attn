@@ -7,6 +7,7 @@ go_files=()
 tauri_rust_files=()
 pty_host_rust_files=()
 cli_rust_files=()
+native_rust_files=()
 while IFS= read -r -d '' file; do
   case "$file" in
     *.go) go_files+=("$file") ;;
@@ -14,6 +15,7 @@ while IFS= read -r -d '' file; do
     pty-host/*.rs) pty_host_rust_files+=("$file") ;;
     cli/protocol/src/generated.rs | cli/protocol/src/go_values.rs) continue ;;
     cli/*.rs) cli_rust_files+=("$file") ;;
+    native/*.rs) native_rust_files+=("$file") ;;
     *) continue ;;
   esac
   if ! git diff --quiet -- "$file"; then
@@ -44,4 +46,9 @@ fi
 
 if [ "${#cli_rust_files[@]}" -gt 0 ]; then
   format_rust 2024 "${cli_rust_files[@]}"
+fi
+
+if [ "${#native_rust_files[@]}" -gt 0 ]; then
+  (cd native && rustfmt --edition 2024 --config skip_children=true "${native_rust_files[@]#native/}")
+  git add -- "${native_rust_files[@]}"
 fi
