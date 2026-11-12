@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { ReviewNavigation } from '../../types/generated';
+import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { FRAME_KEYS, type Frame } from './frames';
 
 const DOCUMENT_KEYS: Array<[string[], string]> = [
@@ -41,12 +42,18 @@ const NAV_KEYS: Array<[string[], string]> = [
   [['f', 'r', 'h'], 'definition, uses, type'],
 ];
 
-const MARK_KEYS: Array<[string[], string]> = [
-  [['c'], 'note'],
-  [['a'], 'ask'],
-  [['i'], 'edit'],
-  [['⌘↵'], 'send'],
-];
+function sendKey(): string {
+  return formatShortcut('markdown.sendAnnotations');
+}
+
+function markKeys(): Array<[string[], string]> {
+  return [
+    [['c'], 'note'],
+    [['a'], 'ask'],
+    [['i'], 'edit'],
+    [[sendKey()], 'send'],
+  ];
+}
 
 function Keys({ keys }: { keys: string[] }) {
   return <>{keys.map((key) => <kbd key={key}>{key}</kbd>)}</>;
@@ -179,7 +186,7 @@ export function ReviewKeyLine({
           </span>
         ) : null}
         {navigation.length > 0 ? <NavigationStates navigation={navigation} setup={setup} /> : null}
-        {(marking ? [...keys.slice(0, 2), ...MARK_KEYS, ...keys.slice(2)] : keys).map(([keys, what]) => (
+        {(marking ? [...keys.slice(0, 2), ...markKeys(), ...keys.slice(2)] : keys).map(([keys, what]) => (
           <span key={what}><Keys keys={keys} /> {what}</span>
         ))}
       </span>
@@ -188,7 +195,7 @@ export function ReviewKeyLine({
   );
 }
 
-const ALL_KEYS: Array<[string[], string]> = [
+const allKeys = (): Array<[string[], string]> => [
   [['1', '2', '3'], 'Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the code of each message. A frame the document cannot fill is left out.'],
   [['↑', '↓'], 'Move by line in code, by block in prose. In the file view, by line; PageUp and PageDown move a page.'],
   [['⇧↑', '⇧↓'], 'Select several lines of code, so a note or question covers them.'],
@@ -196,7 +203,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['a'], 'Ask the agent about the line, the selected lines or the paragraph. The question goes at once; the answer shows under the line.'],
   [['i'], 'Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line; in a document, the paragraph or block as markdown. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.'],
   [['u'], 'Undo your edit where the cursor is: the file gets its old text back and the edit leaves the review.'],
-  [['⌘↵'], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
+  [[sendKey()], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
   [['⇧←', '⇧→'], 'Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
@@ -221,7 +228,7 @@ export function ReviewKeySheet({ readOnly }: { readOnly: boolean }) {
       <p>Selecting text and typing still writes a comment, as in any markdown tile.</p>
       {readOnly ? <p>This file is outside the repository and read-only: c, a and i do nothing here.</p> : null}
       <dl>
-        {ALL_KEYS.map(([keys, what]) => (
+        {allKeys().map(([keys, what]) => (
           <div key={what} className="review-key-sheet-row">
             <dt><Keys keys={keys} /></dt>
             <dd>{what}</dd>

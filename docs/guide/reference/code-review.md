@@ -107,7 +107,7 @@ Selecting text with the mouse and typing still writes a comment, as in any
 
 ## Send the review
 
-Press ⌘Enter. The send sheet lists your notes and edits. Pick a verdict with
+Press ⌘Enter, or Ctrl+Shift+Enter on Linux. The send sheet lists your notes and edits. Pick a verdict with
 `a` (approve), `r` (request changes) or `c` (comment), then press Enter.
 
 The agent receives one message: your notes in reading order with the lines they
