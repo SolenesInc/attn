@@ -173,7 +173,7 @@ fn every_shortcut_runs_its_own_action(category: Category) {
         press(world, action);
 
         let recorded = shortcut_records(world)[before..].to_vec();
-        let pending = format!("{} is not in the native app yet", action.label());
+        let pending = format!("Not in the native app yet: {}", action.label());
         match (recorded.as_slice(), notice(world)) {
             ([id], None) => {
                 assert_eq!(id, action.id());
@@ -287,7 +287,7 @@ fn close_closes_the_pane_while_a_terminal_holds_the_keyboard_and_the_session_oth
     press(&mut world, Action::SessionClose);
     assert_eq!(
         notice(&world).as_deref(),
-        Some("Close focused pane is not in the native app yet")
+        Some("Not in the native app yet: Close focused pane")
     );
     rest(&mut world);
 
@@ -295,7 +295,7 @@ fn close_closes_the_pane_while_a_terminal_holds_the_keyboard_and_the_session_oth
     press(&mut world, Action::SessionClose);
     assert_eq!(
         notice(&world).as_deref(),
-        Some("Close session, focused pane or empty desktop is not in the native app yet")
+        Some("Not in the native app yet: Close session, focused pane or empty desktop")
     );
     rest(&mut world);
 }

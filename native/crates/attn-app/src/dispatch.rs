@@ -21,10 +21,7 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
         _ => {
-            window.notify(
-                format!("{} is not in the native app yet", action.label()),
-                tx,
-            );
+            window.notify(format!("Not in the native app yet: {}", action.label()), tx);
             return;
         }
     }
