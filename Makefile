@@ -259,6 +259,11 @@ check-mobile: $(MOBILE_NODE_MODULES)
 NATIVE_CLIPPY ?= --workspace
 check-native: $(NATIVE_VT_DEP)
 	scripts/native-parity
+	@labels=$$(git grep -nE '(Ctrl|Alt|Shift|Super|Cmd)\+|⌘|⇧|⌥|⌃' -- 'native/crates/*/tests/*' | grep -vE '^[^:]+:[0-9]+:[[:space:]]*//'); \
+	if [ -n "$$labels" ]; then \
+		printf '%s\n' "$$labels" >&2; \
+		echo "native tests above write a platform's key label, which holds on one platform only: press keys by spec (mod+shift+o) and read labels from the keymap (key_label(Action::…))" >&2; exit 1; \
+	fi
 	cd native && cargo fmt --all --check
 	cd native && cargo check --locked --workspace --all-targets
 	$(if $(strip $(NATIVE_CLIPPY)),cd native && cargo clippy --locked --all-targets $(NATIVE_CLIPPY) -- -D warnings)

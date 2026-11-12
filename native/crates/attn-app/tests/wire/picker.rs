@@ -255,7 +255,7 @@ fn open_dialog(world: &mut World) {
     press_action(world, &Action::SessionNew);
     assert!(
         dialog_open(world),
-        "⌘N opened no picker:\n{}",
+        "the new-session key opened no picker:\n{}",
         world.screen()
     );
 }

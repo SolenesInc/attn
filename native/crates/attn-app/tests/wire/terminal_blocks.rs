@@ -136,10 +136,10 @@ fn the_copy_command_key_without_a_block_keeps_the_clipboard_and_passes_the_key_o
         assert_eq!(
             inputs(&world),
             [],
-            "⌘ chords never reach the program on macOS"
+            "command chords never reach the program on macOS"
         );
     } else {
-        assert_eq!(inputs(&world).len(), 1, "the program hears Ctrl+Alt+C");
+        assert_eq!(inputs(&world).len(), 1, "the program hears ctrl+alt+c");
     }
     assert!(world.runtime_is_at_rest());
 }

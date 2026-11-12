@@ -2565,8 +2565,11 @@ fn a_popped_tile_shows_alone_in_its_own_window_where_the_daemon_keeps_it() {
     let screen = world.tile_screen(&window.key);
     assert!(screen.find(Target::role("group").name("m.md")).is_some());
     assert_eq!(
-        screen.get(Target::key("tile.m.popout")).name.as_deref(),
-        Some("Bring back tile (Ctrl+Shift+O)")
+        screen.get(Target::key("tile.m.popout")).name,
+        Some(format!(
+            "Bring back tile ({})",
+            key_label(Action::TilePopOut)
+        ))
     );
     assert!(!shows(&world, "m.md"));
     assert!(world.runtime_is_at_rest() && world.tile_windows_are_at_rest());

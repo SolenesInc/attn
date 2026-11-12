@@ -142,7 +142,7 @@ fn no_linux_default_takes_a_ctrl_alt_chord_the_ubuntu_desktop_reserves() {
                 | ChordKey::Up
                 | ChordKey::Down
         );
-        assert!(!reserved, "{} takes a reserved Ctrl+Alt chord", action.id());
+        assert!(!reserved, "{} takes a reserved ctrl+alt chord", action.id());
     }
 }
 
