@@ -14,11 +14,11 @@ pub(crate) fn accelerator(mods: Mods) -> bool {
 }
 
 /// Where a terminal's session runs: its directory, which relative paths resolve against, and
-/// whether it runs on an outpost, whose files this machine cannot see.
+/// the outpost it runs on, whose files this machine cannot see.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(super) struct Place {
     pub cwd: Option<String>,
-    pub outpost: bool,
+    pub outpost: Option<String>,
 }
 
 /// Where the pointer rests, the cell under it as a screen row and column, and the link over
@@ -95,14 +95,27 @@ impl Terminals {
         self.pointing.as_deref()
     }
 
-    /// A ⌘- or Ctrl-click at `at` in terminal `id` ended: the link under it opens. True when
-    /// one did.
-    pub(crate) fn open_link_at(&mut self, id: &str, at: (f32, f32), tx: &mut Tx) -> bool {
+    /// A ⌘- or Ctrl-click at `at` in terminal `id` ended: the link under it opens. A file on
+    /// an outpost stays shut, and the refusal is what to tell the person.
+    pub(crate) fn open_link_at(
+        &mut self,
+        id: &str,
+        at: (f32, f32),
+        tx: &mut Tx,
+    ) -> Result<(), String> {
         let Some(target) = self.link_at(id, at) else {
-            return false;
+            return Ok(());
         };
-        open(&target, tx);
-        true
+        let outpost = self.panes.get(id).and_then(|t| t.place.outpost.as_deref());
+        match (target.open(), outpost) {
+            (Open::Path(path) | Open::Markdown(path), Some(host)) => Err(format!(
+                "{path} is on {host}; opening files on an outpost isn't supported yet"
+            )),
+            (opening, _) => {
+                open(opening, tx);
+                Ok(())
+            }
+        }
     }
 
     /// A press at `at` in terminal `id` with ⌘ or Ctrl held lands on a link, which it opens
@@ -170,8 +183,8 @@ impl Terminals {
 /// Opens `target` as the Tauri terminal's opener allows: a web, mail or phone link in its
 /// handler, a path with the system's opener. A markdown path opens there too until the app
 /// shows markdown itself.
-fn open(target: &Target, tx: &mut Tx) {
-    let _ = match target.open() {
+fn open(opening: Open, tx: &mut Tx) {
+    let _ = match opening {
         Open::Url(uri) if uri.starts_with("tel:") => tx.open_uri(&uri),
         Open::Url(uri) => tx.open_url(&uri),
         Open::Path(path) | Open::Markdown(path) => tx.open_uri(&links::file_url(&path)),
@@ -209,7 +222,7 @@ fn find(term: &mut Term, (row, col): (u32, u16), home: Option<&str>) -> Option<F
     if let Some(link) = links::hyperlink_at(&line, index).or_else(|| links::url_at(&line, index)) {
         return Some(found(link));
     }
-    if term.place.outpost {
+    if term.place.outpost.is_some() {
         return None;
     }
     let fragment = links::fragment_at(&line, index)?;

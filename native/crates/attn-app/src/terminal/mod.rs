@@ -235,7 +235,8 @@ impl Terminals {
                         .map(|s| s.directory.clone())
                         .filter(|d| !d.is_empty()),
                     outpost: session
-                        .is_some_and(|s| s.host.as_ref().is_some_and(|h| !h.is_empty())),
+                        .and_then(|s| s.host.clone())
+                        .filter(|h| !h.is_empty()),
                 };
                 (
                     pane.runtime_id.clone(),

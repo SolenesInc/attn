@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use attn_protocol::Session;
-use attn_testkit::{Daemon, World};
+use attn_testkit::{Daemon, Target, World};
 use rune::{Cursor, Mods, PhysicalInput};
 use serde_json::{Value, json};
 
@@ -289,6 +289,35 @@ fn a_session_on_an_outpost_links_its_urls_but_not_its_paths() {
     assert_eq!(underlines(&world), []);
     hover(&mut world, 12, 0);
     assert_eq!(underlines(&world), [(0, [8, 28])]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_file_link_on_an_outpost_stays_shut_and_says_why() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut world = World::start(in_directory(dir.path().to_str().unwrap(), Some("box")));
+    world.open_desktop();
+    output(
+        &world,
+        1,
+        b"\x1b]8;;file:///etc/hosts\x1b\\hosts\x1b]8;;\x1b\\ file:///etc/passwd\r\n",
+    );
+    world.settle();
+
+    accelerator(&mut world, true);
+    click(&mut world, 1, 0);
+    click(&mut world, 10, 0);
+    accelerator(&mut world, false);
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+    let notice = world
+        .screen()
+        .find(Target::key("notice.text"))
+        .and_then(|n| n.name);
+    assert_eq!(
+        notice.as_deref(),
+        Some("/etc/passwd is on box; opening files on an outpost isn't supported yet")
+    );
+    world.advance(Duration::from_secs(6));
     assert!(world.runtime_is_at_rest());
 }
 

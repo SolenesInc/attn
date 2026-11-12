@@ -919,7 +919,11 @@ fn terminal_slot(
                     match state.terminals.select_release(&pressing) {
                         Release::Copied(text) => tx.copy(text),
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
-                            state.terminals.open_link_at(&pressing, (d.x, d.y), tx);
+                            if let Err(refusal) =
+                                state.terminals.open_link_at(&pressing, (d.x, d.y), tx)
+                            {
+                                state.window.notify(refusal, tx);
+                            }
                         }
                         Release::Click if !d.cancelled() => {
                             state.terminals.click(&pressing, (d.x, d.y));
