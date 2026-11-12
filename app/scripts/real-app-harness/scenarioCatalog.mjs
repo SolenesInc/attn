@@ -1,5 +1,15 @@
 export const scenarioCatalog = [
   {
+    id: 'sigma',
+    runnerId: 'SIGMA',
+    label: 'A Sigma session runs, asks, detaches, reattaches and survives a daemon restart against the Sigma fork build',
+    command: ['node', 'scripts/real-app-harness/scenario-sigma.mjs'],
+    skipOn: {
+      linux: 'Needs the Sigma fork build, which runs only on a developer Mac',
+      darwin: { reason: 'Needs the Sigma fork build in ATTN_SCENARIO_SIGMA_EXECUTABLE', unlessEnv: 'ATTN_SCENARIO_SIGMA_EXECUTABLE' },
+    },
+  },
+  {
     id: 'browser-wait-navigation',
     runnerId: 'BROWSER-WAIT-NAVIGATION',
     label: 'Browser waits survive initial navigation, tile reopening and later navigation',

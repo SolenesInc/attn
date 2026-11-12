@@ -70,9 +70,9 @@ Preconditions:
 
 ## Tests
 
-- Wire: `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`.
+- Wire: `internal/daemon/plugin_wire_test.go`, `internal/daemon/plugins_wire_test.go`, `internal/daemon/plugins_install_wire_test.go`, `internal/daemon/plugin_driver_*wire_test.go`, `internal/daemon/plugin_restart_wire_test.go`, `internal/daemon/plugin_stop_owner_wire_test.go`, `internal/daemon/plugin_stalled_socket_wire_test.go`, `internal/daemon/plugin_launch_instructions_wire_test.go`, `internal/daemon/harness_models_claude_wire_test.go`, `internal/daemon/harness_models_plugin_wire_test.go`, `internal/daemon/agent_catalog_wire_test.go`, `internal/daemon/app_server_wire_test.go`, `internal/daemon/sigma_wire_test.go`.
 - Stack: `cmd/attnd/plugin_stack_test.go`, `cmd/attnd/plugin_runtime_stack_test.go`, `cmd/attnd/plugin_restart_stack_test.go`, `internal/daemon/plugin_driver_teardown_stack_test.go`, `internal/daemon/plugin_launch_conversation_stack_test.go`.
-- Scenario: `agent-settings`, `claude-shared-conversation`.
+- Scenario: `agent-settings`, `claude-shared-conversation`, `sigma` (macOS with the Sigma fork build in `ATTN_SCENARIO_SIGMA_EXECUTABLE`).
 - Kernel: `internal/plugins/*_test.go`, `internal/pty/harness_signals_test.go`, `internal/daemon/plugin_runtime_test.go`.
 - App: `app/src/components/Sidebar.harnessIcons.test.tsx`, `app/src/App.modelTierSettings.test.tsx`.
 
