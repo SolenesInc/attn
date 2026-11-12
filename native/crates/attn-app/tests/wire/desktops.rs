@@ -301,6 +301,28 @@ fn an_arrow_gives_the_keyboard_to_the_tile_it_shows_before_the_daemon_answers() 
 }
 
 #[test]
+fn a_palette_jump_and_a_sidebar_press_give_the_shown_agent_the_keyboard() {
+    let tree = row([pane("a"), pane("b")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    world.gesture(|app| app.click(Target::role("group").name("Agent a")));
+
+    press(&mut world, Action::UiActionMenu);
+    world.gesture(|app| app.click(Target::key("palette.row.agent:s-b")));
+    world.gesture(|app| app.type_text("x"));
+    world.gesture(|app| app.click(Target::key("sidebar.session.s-a")));
+    world.gesture(|app| app.type_text("y"));
+
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-b", "r-a"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_tile_column_takes_its_most_recently_used_tile_when_arrows_reach_it() {
     let tree = row([below(pane("a"), pane("b")), pane("c")]);
     let mut world = start(vec![desktop(1, "b", Some(tree.clone()))]);

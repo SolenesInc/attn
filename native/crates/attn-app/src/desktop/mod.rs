@@ -21,7 +21,7 @@ use rune::Tx;
 
 use crate::State;
 
-pub(crate) use actions::{escape, run, show_unseen};
+pub(crate) use actions::{escape, give_keyboard, run, show_unseen};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
