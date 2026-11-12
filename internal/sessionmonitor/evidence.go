@@ -227,6 +227,7 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool
 	return func(e *Evidence) {
 		if claim == sessionstate.ClaimBusy {
 			e.LastBusyAt = at
+			dropApprovalShownEarlierInTheSameRead(e, at)
 			if readBeforeVerdict(e, at) {
 				return
 			}
@@ -238,6 +239,12 @@ func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*Evidence), bool
 			ObservedAt: at,
 		}
 	}, true
+}
+
+func dropApprovalShownEarlierInTheSameRead(e *Evidence, read time.Time) {
+	if e.LastHarnessEvent != nil && e.LastHarnessEvent.Claim == sessionstate.ClaimApprovalPending && e.LastHarnessEvent.ObservedAt.Equal(read) {
+		e.LastHarnessEvent = nil
+	}
 }
 
 func (m *Monitor) Restart(launch Launch, fresh Evidence) {
