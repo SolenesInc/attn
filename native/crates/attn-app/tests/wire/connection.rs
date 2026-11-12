@@ -47,7 +47,7 @@ fn the_app_says_hello_with_its_token_and_shows_the_daemon_state() {
             .is_none(),
         "no connection status once connected:\n{screen}"
     );
-    assert!(screen.find(Target::role("main").name("Tiles")).is_some());
+    assert!(screen.find(Target::role("main").name("Home")).is_some());
     assert!(world.runtime_is_at_rest());
 }
 
@@ -70,7 +70,7 @@ fn a_lost_daemon_is_retried_from_one_second_up_to_five() {
     assert!(
         world
             .screen()
-            .find(Target::role("main").name("Tiles"))
+            .find(Target::role("main").name("Home"))
             .is_some(),
         "the last facts stay on screen while reconnecting"
     );

@@ -17,7 +17,7 @@ fn pane(id: &str) -> DesktopPane {
 }
 
 fn two_tiles() -> World {
-    World::start_sized(
+    let mut world = World::start_sized(
         Daemon::scripted().state(InitialStateMessage {
             selected_profile_id: Some("work".into()),
             profiles: Some(vec![Profile {
@@ -38,7 +38,9 @@ fn two_tiles() -> World {
             ..InitialStateMessage::new()
         }),
         TWO_TILES_FIT,
-    )
+    );
+    world.open_desktop();
+    world
 }
 
 fn keyboard(world: &mut World) -> serde_json::Value {

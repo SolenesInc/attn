@@ -241,6 +241,7 @@ fn a_focused_field_takes_typing_and_the_keys_it_keeps() {
 #[test]
 fn the_terminal_holding_the_keyboard_gets_what_the_keymap_does_not_take() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
 
     world.gesture(|app| {
         app.type_text("ls");
@@ -279,6 +280,7 @@ fn plain_ctrl_and_a_letter_belong_to_the_shell_on_linux() {
     let mut world = World::start(
         Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", rebound)])),
     );
+    world.open_desktop();
 
     world.gesture(|app| app.press("ctrl+c"));
 
@@ -314,6 +316,7 @@ fn close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop() {
 #[test]
 fn the_keyboard_stays_on_its_tile_when_the_active_tile_moves_elsewhere() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
     world.gesture(|app| app.type_text("a"));
 
     world.daemon.emit(ProfileArrangementChangedMessage {
@@ -359,6 +362,7 @@ fn the_keyboard_stays_on_its_tile_when_the_active_tile_moves_elsewhere() {
 #[test]
 fn closing_the_palette_gives_the_keyboard_back_to_its_tile() {
     let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
     press(&mut world, &Action::UiCommandPalette);
     world.gesture(|app| app.type_text("x"));
 
@@ -379,6 +383,7 @@ fn closing_the_palette_gives_the_keyboard_back_to_its_tile() {
 fn an_open_dialog_keeps_typing_from_the_terminal_behind_it() {
     for action in [Action::UiShowShortcuts, Action::UiOpenSettings] {
         let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+        world.open_desktop();
         press(&mut world, &action);
         world.gesture(|app| app.type_text("ls"));
         world.gesture(|app| {
@@ -440,6 +445,7 @@ fn a_sequence_lapses_after_its_timeout_and_the_next_key_types() {
     let mut world = World::start(
         Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", SEQUENCE)])),
     );
+    world.open_desktop();
 
     world.gesture(|app| app.press("mod+shift+y"));
     world.advance(Duration::from_millis(600));
@@ -456,6 +462,7 @@ fn escape_cancels_a_leader_and_the_leader_again_keeps_it_armed() {
     let mut world = World::start(
         Daemon::scripted().state(state(two_terminals(), &[("keybindings_config", SEQUENCE)])),
     );
+    world.open_desktop();
 
     world.gesture(|app| app.press("mod+shift+y"));
     world.gesture(|app| {

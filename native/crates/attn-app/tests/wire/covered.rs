@@ -10,7 +10,7 @@ use attn_client::{Clock, Link, LinkConfig, Pulse, Store, Subscription};
 use attn_protocol::{
     Desktop, DesktopPane, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
 };
-use attn_testkit::{CLIENT_TOKEN, Daemon, INSTANCE};
+use attn_testkit::{CLIENT_TOKEN, Daemon, INSTANCE, WALL_START_MS};
 use rune::Env;
 use serde_json::{Value, json};
 
@@ -97,6 +97,7 @@ impl App {
                 pulse: Pulse::default(),
                 terminals,
             },
+            WALL_START_MS,
             host.frames.clone(),
             move || {
                 let _ = wake.send(Work::Wake);

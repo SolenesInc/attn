@@ -20,6 +20,10 @@ use crate::screen::{Screen, Target};
 /// stuck, and the test says where.
 const STUCK: Duration = Duration::from_secs(10);
 const VIEWPORT: (f32, f32) = (960.0, 640.0);
+const FRAME: f64 = 1.0 / 60.0;
+
+/// The wall clock when every world starts: 2026-11-12T09:00:00Z.
+pub const WALL_START_MS: i64 = 1_794_474_000_000;
 
 /// The app on a windowless `Runtime`, with its real link connected to a scripted daemon over
 /// loopback. Time moves only when the test calls `advance`.
@@ -133,10 +137,16 @@ impl World {
         );
         let window = {
             let (inbox, pulse) = (inbox.clone(), pulse.clone());
-            attn_app::bind(&store, link.commands(), terminals.clone(), move |update| {
-                inbox.lock().unwrap().push(update);
-                pulse.beat();
-            })
+            attn_app::bind(
+                &store,
+                link.commands(),
+                terminals.clone(),
+                WALL_START_MS,
+                move |update| {
+                    inbox.lock().unwrap().push(update);
+                    pulse.beat();
+                },
+            )
         };
         let env = Env {
             system_dark: true,
@@ -258,6 +268,36 @@ impl World {
                 }
             }
         }
+    }
+
+    /// Leaves home for the current desktop the way a person does, by its sidebar row, then
+    /// takes the pointer out of the window and lets the row's hover fade out: the app opens on
+    /// home, as the Tauri app does.
+    pub fn open_desktop(&mut self) {
+        let profiles = self
+            .automate("state", serde_json::json!({"of": "profiles"}))
+            .unwrap_or_else(|why| panic!("{why}"));
+        let selected = profiles["selected"].as_str().unwrap_or_default();
+        let desktop = profiles["all"]
+            .as_array()
+            .and_then(|all| all.iter().find(|p| p["id"] == selected))
+            .and_then(|p| p["current_desktop_id"].as_str())
+            .unwrap_or_else(|| panic!("the selected profile has no current desktop: {profiles}"))
+            .to_owned();
+        self.gesture(|app| {
+            app.click(Target::key(format!("sidebar.desktop.{desktop}")));
+            app.runtime.pointer_leave();
+        });
+        let mut waited = 0.0;
+        while self.runtime.animating {
+            assert!(
+                waited < STUCK.as_secs_f64(),
+                "the window still animated {waited} s after opening the desktop"
+            );
+            self.runtime.frame(FRAME);
+            waited += FRAME;
+        }
+        self.settle();
     }
 
     pub fn screen(&self) -> Screen {

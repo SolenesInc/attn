@@ -1,10 +1,14 @@
+mod actions;
+mod chrome;
 mod model;
+mod queue;
+mod queue_view;
 
 use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use attn_protocol::{DesktopSetCurrentMessage, DesktopShowLeafMessage, DesktopShowSessionMessage};
+use attn_protocol::DesktopShowSessionMessage;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
@@ -17,10 +21,67 @@ use crate::State;
 use crate::shell::View;
 
 pub(crate) const WIDTH: f32 = 240.0;
-const ROW_HEIGHT: f32 = 28.0;
+pub(crate) const ROW_HEIGHT: f32 = 28.0;
 
 thread_local! {
     static ROWS_BUILT: Cell<usize> = const { Cell::new(0) };
+}
+
+pub(crate) use chrome::title_controls;
+
+/// The window's sidebar for its flow: the queue sidebar in queue flow, the desktop sidebar
+/// otherwise. Collapsed, desktop flow keeps the rail and queue flow keeps nothing here,
+/// since the queue bar moves into the title bar.
+pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
+    match (actions::queue_flow(state), state.window.sidebar_hidden) {
+        (true, false) => Some(queue_view::view(state, t)),
+        (true, true) => None,
+        (false, false) => Some(desktop_sidebar(state, t)),
+        (false, true) => Some(chrome::rail(state, t)),
+    }
+}
+
+/// What the title bar's middle holds for the sidebar: the queue bar, in queue flow with the
+/// sidebar collapsed.
+pub(crate) fn title_middle(state: &State, t: &Tokens) -> Option<El> {
+    (actions::queue_flow(state) && state.window.sidebar_hidden).then(|| {
+        let bands = queue::bands(&state.facts, state.window.now_ms);
+        chrome::queue_bar(state, &bands, t)
+    })
+}
+
+/// Runs the actions the sidebar, the queue and home own; false for any other.
+pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -> bool {
+    use crate::Action;
+    let queue = actions::queue_flow(state);
+    match action {
+        Action::SessionGoToDashboard => state.window.go_home(),
+        Action::OpenAgent { session } => open_agent(state, session, tx),
+        Action::SessionJumpToWaiting => actions::jump_to_waiting(state, tx),
+        Action::SidebarAgentList if queue && !state.window.sidebar_hidden => {
+            actions::toggle_agent_list(state, tx)
+        }
+        Action::SidebarAgentList => state.window.toggle_layer(
+            crate::shell::Layer::Palette(crate::shell::Palette::Agents),
+            tx,
+        ),
+        Action::SessionPrev if queue => actions::step(state, -1, tx),
+        Action::SessionNext if queue => actions::step(state, 1, tx),
+        _ => return false,
+    }
+    true
+}
+
+/// The next wall-clock moment a turn age the window shows reads differently.
+pub(crate) fn next_change(state: &State, now_ms: i64) -> Option<i64> {
+    if !actions::queue_flow(state) {
+        return None;
+    }
+    queue::bands(&state.facts, now_ms)
+        .turns
+        .iter()
+        .filter_map(|row| queue::next_age_change(row.session.turn_opened_at.as_deref(), now_ms))
+        .min()
 }
 
 /// How many sidebar rows this thread has built, memo misses only: a row whose model did not
@@ -34,7 +95,7 @@ fn request_id(cmd: &str) -> String {
     format!("{cmd}-native-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
-pub(crate) fn view(state: &State, t: &Tokens) -> El {
+fn desktop_sidebar(state: &State, t: &Tokens) -> El {
     let facts = &state.facts;
     let home = state.window.view == View::Home;
     let reads = (
@@ -86,7 +147,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
     })
 }
 
-fn home_row(home: bool, t: &Tokens) -> El {
+pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
     row()
         .key("sidebar.home")
         .role("button")
@@ -259,14 +320,12 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
         )
 }
 
-fn open_tile(state: &mut State, desktop: &str, leaf: &str, _: &mut Tx) {
-    state.window.view = View::Desktop;
-    let _ = state.daemon.send(&DesktopShowLeafMessage {
-        request_id: request_id("desktop_show_leaf"),
-        desktop_id: desktop.into(),
-        leaf_id: leaf.into(),
-        ..DesktopShowLeafMessage::new()
-    });
+pub(crate) fn open_tile(state: &mut State, desktop: &str, tile: &str, tx: &mut Tx) {
+    let action = crate::Action::OpenTile {
+        desktop: desktop.into(),
+        tile: tile.into(),
+    };
+    crate::dispatch(state, action, tx);
 }
 
 /// Shows the agent where it is, as a click on its row in the Tauri app does.
@@ -279,12 +338,9 @@ pub(crate) fn open_agent(state: &mut State, session: &str, _: &mut Tx) {
     });
 }
 
-fn open_desktop(state: &mut State, desktop: &str, _: &mut Tx) {
-    state.window.view = View::Desktop;
-    let _ = state.daemon.send(&DesktopSetCurrentMessage {
-        request_id: request_id("desktop_set_current"),
-        desktop_id: desktop.into(),
-        profile_id: state.facts.profiles.selected.clone(),
-        ..DesktopSetCurrentMessage::new()
-    });
+pub(crate) fn open_desktop(state: &mut State, desktop: &str, tx: &mut Tx) {
+    let action = crate::Action::GoToDesktop {
+        desktop: desktop.into(),
+    };
+    crate::dispatch(state, action, tx);
 }

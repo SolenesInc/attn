@@ -8,14 +8,14 @@ use attn_protocol::{
 use attn_testkit::{Daemon, Target, World, key_event};
 use rune::{KeyEvent, KeyPlatform};
 
-fn chord(action: Action) -> KeyEvent {
+pub(super) fn chord(action: Action) -> KeyEvent {
     match Keymap::from_setting(None, KeyPlatform::current()).binding(&action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
     }
 }
 
-fn session(id: &str, state: &str) -> Session {
+pub(super) fn session(id: &str, state: &str) -> Session {
     Session {
         id: id.into(),
         label: id.into(),
@@ -26,7 +26,7 @@ fn session(id: &str, state: &str) -> Session {
     }
 }
 
-fn pane(desktop: &str, pane: &str, session: &str) -> DesktopPane {
+pub(super) fn pane(desktop: &str, pane: &str, session: &str) -> DesktopPane {
     DesktopPane {
         desktop_id: desktop.into(),
         pane_id: pane.into(),
@@ -37,7 +37,7 @@ fn pane(desktop: &str, pane: &str, session: &str) -> DesktopPane {
 }
 
 /// A desktop whose layout holds `panes` side by side, in that order.
-fn desktop(id: &str, order: &str, name: &str, panes: Vec<DesktopPane>) -> Desktop {
+pub(super) fn desktop(id: &str, order: &str, name: &str, panes: Vec<DesktopPane>) -> Desktop {
     let leaves: Vec<String> = panes
         .iter()
         .map(|p| format!(r#"{{"type":"pane","pane_id":"{}"}}"#, p.pane_id))
@@ -64,7 +64,7 @@ fn desktop(id: &str, order: &str, name: &str, panes: Vec<DesktopPane>) -> Deskto
     }
 }
 
-fn state(sessions: Vec<Session>, desktops: Vec<Desktop>) -> InitialStateMessage {
+pub(super) fn state(sessions: Vec<Session>, desktops: Vec<Desktop>) -> InitialStateMessage {
     InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![Profile {
@@ -116,7 +116,8 @@ fn rows(world: &World) -> Vec<String> {
 
 #[test]
 fn the_desktop_sidebar_lists_each_desktop_with_its_agents_in_layout_order() {
-    let world = World::start(Daemon::scripted().state(two_desktops()));
+    let mut world = World::start(Daemon::scripted().state(two_desktops()));
+    world.open_desktop();
 
     assert_eq!(
         rows(&world),

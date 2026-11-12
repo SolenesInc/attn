@@ -47,7 +47,42 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
         ShelfMoreTiles => super::shelf::step_width(state, false, tx),
         _ => return false,
     }
+    if goes_to_a_desktop(action) {
+        state.window.view = crate::shell::View::Desktop;
+    }
     true
+}
+
+/// The actions that take the window to a desktop or a tile, which leave home.
+fn goes_to_a_desktop(action: &Action) -> bool {
+    use Action::*;
+    matches!(
+        action,
+        GoToDesktop { .. }
+            | OpenTile { .. }
+            | DesktopSelect1
+            | DesktopSelect2
+            | DesktopSelect3
+            | DesktopSelect4
+            | DesktopSelect5
+            | DesktopSelect6
+            | DesktopSelect7
+            | DesktopSelect8
+            | DesktopSelect9
+            | DesktopSend1
+            | DesktopSend2
+            | DesktopSend3
+            | DesktopSend4
+            | DesktopSend5
+            | DesktopSend6
+            | DesktopSend7
+            | DesktopSend8
+            | DesktopSend9
+            | SessionPrev
+            | SessionNext
+            | SessionHistoryBack
+            | SessionHistoryForward
+    )
 }
 
 fn slot_of(action: &Action) -> u32 {

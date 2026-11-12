@@ -138,6 +138,7 @@ fn row(world: &mut World, y: usize) -> String {
 #[test]
 fn a_drawn_terminal_sizes_its_pty_to_its_tile_then_attaches_and_shows_its_output() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
 
     assert_eq!(terminal_cmds(&world), ["pty_resize", "attach_session"]);
     let resize = &world.daemon.sent_of("pty_resize")[0];
@@ -177,6 +178,7 @@ fn a_snapshot_in_this_builds_format_restores_the_screen_and_the_stream_continues
         })
     });
     let mut world = World::start(daemon);
+    world.open_desktop();
     assert_eq!(row(&mut world, 0), "restored");
     assert_eq!(world.terminal_size("r1"), (30, 5));
 
@@ -199,6 +201,7 @@ fn a_snapshot_in_another_format_is_refused_and_output_draws_from_the_start() {
         })
     });
     let mut world = World::start(daemon);
+    world.open_desktop();
     assert_eq!(row(&mut world, 0), "");
 
     output(&world, 1, b"live");
@@ -212,6 +215,7 @@ fn a_snapshot_that_does_not_decode_keeps_the_output_that_raced_it_and_the_stream
     let daemon = one_terminal();
     daemon.answer_in_turn("attach_session", [Answer::Hold]);
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     output(&world, 9, b"raced\r\n");
     world.settle();
@@ -241,6 +245,7 @@ fn output_during_an_attach_waits_for_it_and_output_already_drawn_is_dropped() {
     let daemon = one_terminal();
     daemon.answer_in_turn("attach_session", [Answer::Hold]);
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     output(&world, 1, b"a");
     output(&world, 2, b"b");
@@ -266,6 +271,7 @@ fn typing_during_an_attach_reaches_the_pty_once_it_attaches() {
     let daemon = one_terminal();
     daemon.answer_in_turn("attach_session", [Answer::Hold]);
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     world.gesture(|app| app.type_text("ls"));
     assert_eq!(inputs(&world), []);
@@ -280,6 +286,7 @@ fn typing_during_an_attach_reaches_the_pty_once_it_attaches() {
 #[test]
 fn keys_reach_the_pty_encoded_for_the_modes_the_program_set() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let alt = Mods {
         alt: true,
         ..Mods::default()
@@ -314,6 +321,7 @@ fn keys_reach_the_pty_encoded_for_the_modes_the_program_set() {
 #[test]
 fn a_paste_is_bracketed_only_when_the_program_asked() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
 
     world.gesture(|app| app.runtime.paste("one\ntwo"));
     output(&world, 1, b"\x1b[?2004h");
@@ -329,6 +337,7 @@ fn a_paste_is_bracketed_only_when_the_program_asked() {
 #[test]
 fn an_input_method_commit_reaches_the_pty() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
 
     world.gesture(|app| {
         app.runtime.ime(Ime::Preedit("´".into(), None));
@@ -343,6 +352,7 @@ fn an_input_method_commit_reaches_the_pty() {
 #[test]
 fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let starts_at = |rect: [f32; 4], (x, y): (f32, f32)| {
         let metrics = Fonts::default().metrics(FONT_SIZE);
         (rect[0] - (x - metrics.cell_w / 2.0)).abs() < 0.5
@@ -394,6 +404,7 @@ fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
 #[test]
 fn a_composition_that_ends_while_a_field_has_focus_is_not_drawn_when_the_terminal_returns() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"$ ");
     world.settle();
     world.gesture(|app| app.runtime.ime(Ime::Preedit("にほ".into(), None)));
@@ -420,6 +431,7 @@ fn a_composition_that_ends_while_a_field_has_focus_is_not_drawn_when_the_termina
 #[test]
 fn the_terminal_answers_its_programs_queries_except_those_the_daemon_answers() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
 
     output(&world, 1, b"\x1b[5n\x1b[6n\x1b[c");
     world.settle();
@@ -451,6 +463,7 @@ fn the_screen_takes_the_size_the_daemon_gives_the_pty_without_answering_it() {
 #[test]
 fn resizing_the_tile_tells_the_daemon_at_most_every_quarter_second() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let first = sizes(&world)[0];
 
     world.gesture(|app| app.runtime.set_viewport((800.0, 600.0), 2.0));
@@ -477,6 +490,7 @@ fn resizing_the_tile_tells_the_daemon_at_most_every_quarter_second() {
 #[test]
 fn pty_output_draws_without_running_the_view() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let commits = world.runtime().stats.commits;
 
     for seq in 1..=50 {
@@ -500,6 +514,7 @@ fn a_failed_revive_says_why_on_the_screen_and_is_not_asked_again() {
         })
     });
     let mut world = World::start(daemon);
+    world.open_desktop();
     world.advance(Duration::from_secs(5));
 
     assert_eq!(
@@ -512,6 +527,7 @@ fn a_failed_revive_says_why_on_the_screen_and_is_not_asked_again() {
 #[test]
 fn an_ended_process_leaves_its_notice_on_the_screen() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"$ exit");
 
     world.daemon.emit(SessionExitedMessage {
@@ -543,6 +559,7 @@ fn an_ended_process_leaves_its_notice_on_the_screen() {
 #[test]
 fn a_replaced_stream_starts_the_screen_over_from_a_new_attach() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 7, b"old");
     world.settle();
 
@@ -571,6 +588,7 @@ fn a_replaced_stream_starts_the_screen_over_from_a_new_attach() {
 #[test]
 fn a_reconnect_attaches_the_drawn_terminals_again() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 3, b"before");
     world.settle();
 
@@ -590,6 +608,7 @@ fn a_reconnect_attaches_the_drawn_terminals_again() {
 #[test]
 fn a_new_daemon_starts_every_stream_over() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 3, b"before");
     world.settle();
 
@@ -606,6 +625,7 @@ fn a_new_daemon_starts_every_stream_over() {
 #[test]
 fn a_terminal_no_longer_drawn_is_detached() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
 
     world.daemon.emit(ProfileArrangementChangedMessage {
         profile: profile(),
@@ -647,7 +667,8 @@ fn a_daemon_attaching_at_another_size_is_told_the_tiles_size_again_without_pixel
             ..attached()
         })
     });
-    let world = World::start(daemon);
+    let mut world = World::start(daemon);
+    world.open_desktop();
 
     let resizes = world.daemon.sent_of("pty_resize");
     assert_eq!(resizes.len(), 2, "{resizes:?}");
@@ -664,6 +685,7 @@ fn a_tile_resized_during_the_attach_sends_only_its_latest_size_once_attached() {
     let daemon = one_terminal();
     daemon.answer_in_turn("attach_session", [Answer::Hold]);
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     world.gesture(|app| app.runtime.set_viewport((800.0, 600.0), 2.0));
     world.gesture(|app| app.runtime.set_viewport((700.0, 500.0), 2.0));
@@ -706,6 +728,7 @@ fn taking_the_keyboard_claims_the_ptys_size_for_this_tile() {
         )),
         (1600.0, 900.0),
     );
+    world.open_desktop();
     world.daemon.emit(PtyResizedMessage {
         id: "r2".into(),
         cols: 200,
@@ -743,6 +766,7 @@ fn an_attach_refused_while_the_worker_restarts_is_asked_again() {
         ],
     );
     let mut world = World::start(daemon);
+    world.open_desktop();
     assert_eq!(world.daemon.sent_of("attach_session").len(), 1);
 
     world.advance(Duration::from_millis(150));
@@ -807,6 +831,7 @@ fn a_terminal_whose_attach_failed_comes_back_when_its_runtime_is_replaced() {
         ],
     );
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     respawn(&mut world);
     output(&world, 1, b"back");
@@ -819,6 +844,7 @@ fn a_terminal_whose_attach_failed_comes_back_when_its_runtime_is_replaced() {
 #[test]
 fn a_reconnect_attaches_a_terminal_whose_process_ended() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     world.daemon.emit(SessionExitedMessage {
         id: "r1".into(),
         session_id: "s1".into(),
@@ -837,6 +863,7 @@ fn a_revive_carries_its_size_and_is_not_asked_again_for_the_runtime_it_revives()
     let daemon = recoverable();
     daemon.answer_in_turn("attach_session", [Answer::Hold]);
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     respawn(&mut world);
     assert_eq!(
@@ -864,6 +891,7 @@ fn an_ordinary_attach_in_flight_is_asked_again_when_its_runtime_is_replaced() {
         [Answer::Hold, Answer::Reply(message(attached()))],
     );
     let mut world = World::start(daemon);
+    world.open_desktop();
 
     respawn(&mut world);
     output(&world, 1, b"new");
@@ -876,6 +904,7 @@ fn an_ordinary_attach_in_flight_is_asked_again_when_its_runtime_is_replaced() {
 #[test]
 fn a_revived_terminal_reattaches_as_a_remount_sized_to_its_tile() {
     let mut world = World::start(recoverable());
+    world.open_desktop();
     respawn(&mut world);
     let before = terminal_cmds(&world).len();
 
@@ -937,6 +966,7 @@ fn pointed(data: &str) -> (String, String) {
 
 fn live_with_modes(modes: &[u8]) -> World {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, modes);
     world.settle();
     world
@@ -945,6 +975,7 @@ fn live_with_modes(modes: &[u8]) -> World {
 #[test]
 fn a_program_that_tracks_the_mouse_hears_presses_drags_and_releases_in_the_encoding_it_chose() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let (a, b) = (cell(&world, 2, 1), cell(&world, 4, 1));
     world.gesture(|app| {
         app.runtime.pointer_down(a.0, a.1);
@@ -1075,6 +1106,7 @@ fn a_terminal_that_goes_away_with_a_reported_press_releases_it() {
 #[test]
 fn the_wheel_reports_to_a_tracking_program_and_turns_into_arrow_keys_on_the_alternate_screen() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let a = cell(&world, 1, 0);
     let row = Fonts::default().metrics(FONT_SIZE).cell_h;
     let wheel = |world: &mut World, rows: f32| {
@@ -1114,6 +1146,7 @@ fn the_wheel_reports_to_a_tracking_program_and_turns_into_arrow_keys_on_the_alte
 #[test]
 fn pointer_motion_over_an_agent_tells_the_daemon_at_most_every_quarter_second_while_connected() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let (a, b) = (cell(&world, 0, 0), cell(&world, 1, 0));
     world.gesture(|app| {
         app.runtime.pointer_move(a.0, a.1);
@@ -1145,6 +1178,7 @@ fn pointer_motion_over_a_shell_tells_the_daemon_nothing() {
         ..pane("t1", "r1")
     };
     let mut world = World::start(Daemon::scripted().state(showing(vec![shell], "daemon-1")));
+    world.open_desktop();
     let a = cell(&world, 0, 0);
     world.gesture(|app| app.runtime.pointer_move(a.0, a.1));
 
@@ -1154,6 +1188,7 @@ fn pointer_motion_over_a_shell_tells_the_daemon_nothing() {
 #[test]
 fn a_key_draws_no_terminal_frame_until_its_echo_arrives() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"$ ");
     world.settle();
     let frames = world.terminal_frames();
@@ -1172,6 +1207,7 @@ fn a_key_draws_no_terminal_frame_until_its_echo_arrives() {
 fn an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_turns_clustering_off()
  {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     let family = "👨\u{200d}👩\u{200d}👧";
     let cluster_then_x = format!("{family}\x1b[1;3HX");
 
@@ -1213,6 +1249,7 @@ fn an_emoji_sequence_takes_one_cell_even_after_a_program_resets_the_terminal_or_
 #[test]
 fn automation_reads_the_terminal_screen_the_window_drew_and_waits_for_text_in_it() {
     let mut world = World::start(one_terminal());
+    world.open_desktop();
     output(&world, 1, b"$ echo hi\r\nhi");
     world.settle();
 

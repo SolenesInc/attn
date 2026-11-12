@@ -92,7 +92,9 @@ fn daemon(desktops: Vec<Desktop>) -> Daemon {
 }
 
 fn start(desktops: Vec<Desktop>) -> World {
-    World::start_sized(daemon(desktops), TWO_FIT)
+    let mut world = World::start_sized(daemon(desktops), TWO_FIT);
+    world.open_desktop();
+    world
 }
 
 /// The daemon tells the app the profile's desktops and its current desktop.
@@ -129,11 +131,14 @@ fn width(world: &World, leaf: &str) -> f32 {
 }
 
 /// Each command `cmd` the app sent, without its request id.
+/// What the app sent for `cmd` after `start` opened the current desktop from home.
 fn sent(world: &World, cmd: &str) -> Vec<Value> {
+    let opening = usize::from(cmd == "desktop_set_current");
     world
         .daemon
         .sent_of(cmd)
         .into_iter()
+        .skip(opening)
         .map(|mut r: Request| {
             r.as_object_mut().unwrap().remove("request_id");
             r.as_object_mut().unwrap().remove("cmd");
@@ -638,7 +643,8 @@ fn a_chip_says_when_its_agent_needs_you() {
         sessions: Some(sessions),
         ..InitialStateMessage::new()
     });
-    let world = World::start_sized(daemon, TWO_FIT);
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.open_desktop();
 
     assert_eq!(
         chip(&world, "d").unwrap().value.as_deref(),
@@ -946,6 +952,7 @@ fn shown(world: &World) -> Vec<String> {
 #[test]
 fn a_column_brought_from_before_the_screen_lands_beside_the_anchor_which_keeps_its_place() {
     let mut world = World::start_sized(daemon(vec![five_in_a_row("a")]), THREE_FIT);
+    world.open_desktop();
     arrange(&mut world, "work/desktop_1", vec![five_in_a_row("d")]);
     arrange(&mut world, "work/desktop_1", vec![five_in_a_row("c")]);
     assert_eq!(shown(&world), ["b", "c", "d"]);

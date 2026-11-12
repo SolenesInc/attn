@@ -31,13 +31,18 @@ pub struct Window {
     pub keyboard: Option<Holder>,
     pub(crate) desk: crate::desktop::Desk,
     palette_query: rune::TextEdit,
+    pub agent_list_open: bool,
+    pub(crate) agent_filter: rune::TextEdit,
+    /// Wall-clock milliseconds as of the last change the window shows by time: turn ages and
+    /// snooze deadlines read it, so it moves only when one of them would read differently.
+    pub now_ms: i64,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum View {
-    Home,
     #[default]
+    Home,
     Desktop,
 }
 
@@ -108,6 +113,20 @@ const PALETTE_FIELD: &str = "palette.field";
 impl Window {
     pub(crate) fn go_home(&mut self) {
         self.view = View::Home;
+    }
+
+    /// The agent the window shows: the active pane's agent of the current desktop.
+    pub(crate) fn on_screen(&self, facts: &Facts) -> Option<String> {
+        if self.view != View::Desktop {
+            return None;
+        }
+        let desktop = facts.current_desktop()?;
+        desktop
+            .panes
+            .iter()
+            .find(|p| p.pane_id == desktop.active_pane_id)
+            .map(|p| p.session_id.clone())
+            .filter(|id| !id.is_empty())
     }
 
     pub(crate) fn toggle_drawer(&mut self, drawer: Drawer) {
@@ -206,6 +225,18 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
 /// The band the window drags by, over which the window's own controls sit; what it holds
 /// comes with the queue bar and the title bar controls.
 fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
+    let connected = matches!(
+        state.facts.connection,
+        Connection::Connected | Connection::Reconnecting
+    );
+    let controls = if connected {
+        crate::sidebar::title_controls(state, t)
+    } else {
+        Vec::new()
+    };
+    let middle = connected
+        .then(|| crate::sidebar::title_middle(state, t))
+        .flatten();
     row()
         .key("titlebar")
         .role("banner")
@@ -216,6 +247,10 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
         .pr(cx.chrome_insets().trailing.max(8.0))
         .fill(t.bg_panel)
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
+        .items_center()
+        .gap(space::S2)
+        .children(controls)
+        .children(middle)
         .window_drag()
         .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
             if state.window.desk.window_w == Some(w) {
@@ -242,7 +277,7 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
         .key("regions")
         .w_full()
         .grow(1.0)
-        .children((!window.sidebar_hidden).then(|| crate::sidebar::view(state, t)))
+        .children(crate::sidebar::view(state, t))
         .child(match window.view {
             View::Home => crate::home::view(state, t),
             View::Desktop => crate::desktop::area(state, t, scale),

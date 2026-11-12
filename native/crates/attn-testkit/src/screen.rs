@@ -73,22 +73,42 @@ impl Screen {
             .collect()
     }
 
+    /// The element's own children in order, or a panic that prints the whole tree.
+    pub fn children(&self, target: Target) -> Vec<Node> {
+        self.values()
+            .into_iter()
+            .find(|value| target.matches(&node(value)))
+            .unwrap_or_else(|| panic!("no element matches {target:?} on this screen:\n{self}"))
+            .get("children")
+            .and_then(Value::as_array)
+            .map(|children| children.iter().map(node).collect())
+            .unwrap_or_default()
+    }
+
     fn nodes(&self) -> Vec<Node> {
-        let mut nodes = Vec::new();
+        self.values().into_iter().map(node).collect()
+    }
+
+    fn values(&self) -> Vec<&Value> {
+        let mut values = Vec::new();
         let mut stack = vec![&self.0];
         while let Some(value) = stack.pop() {
-            let field = |name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
-            nodes.push(Node {
-                role: field("role").unwrap_or_default(),
-                key: field("key"),
-                name: field("name"),
-                value: field("value"),
-            });
+            values.push(value);
             if let Some(children) = value.get("children").and_then(Value::as_array) {
                 stack.extend(children.iter().rev());
             }
         }
-        nodes
+        values
+    }
+}
+
+fn node(value: &Value) -> Node {
+    let field = |name: &str| value.get(name).and_then(Value::as_str).map(str::to_owned);
+    Node {
+        role: field("role").unwrap_or_default(),
+        key: field("key"),
+        name: field("name"),
+        value: field("value"),
     }
 }
 

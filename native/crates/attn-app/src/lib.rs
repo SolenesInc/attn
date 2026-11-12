@@ -12,6 +12,7 @@ mod keymap;
 mod keys;
 pub mod launch;
 pub mod screen;
+mod setting;
 mod shell;
 pub mod sidebar;
 #[cfg(target_os = "macos")]
@@ -42,6 +43,37 @@ pub struct State {
     pub window: Window,
     pub terminals: Terminals,
     daemon: Commands,
+    /// Wall-clock milliseconds when the runtime's clock read zero.
+    epoch_ms: i64,
+    /// The runtime time the window next wakes to move turn ages on.
+    age_wake: Option<f64>,
+}
+
+impl State {
+    fn wall_ms(&self, tx: &Tx) -> i64 {
+        self.epoch_ms + (tx.clock() * 1000.0) as i64
+    }
+
+    /// Reads the wall clock into the window and wakes it when the next age would change.
+    fn tick(&mut self, tx: &mut Tx) {
+        self.window.now_ms = self.wall_ms(tx);
+        self.age_wake = sidebar::next_change(self, self.window.now_ms)
+            .map(|at| (at - self.epoch_ms) as f64 / 1000.0);
+        if let Some(at) = self.age_wake {
+            tx.wake_at(at);
+        }
+    }
+}
+
+/// The wall clock's milliseconds since 1970, for `bind` in the app: tests pass their own.
+#[allow(
+    clippy::disallowed_methods,
+    reason = "the one read of the wall clock, at launch"
+)]
+pub fn wall_clock_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as i64)
 }
 
 const READS: Slices = Slices::ALL;
@@ -53,9 +85,11 @@ pub fn bind(
     store: &Store,
     daemon: Commands,
     terminals: TerminalInbox,
+    epoch_ms: i64,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
     deliver(Box::new(move |state, _| {
+        state.epoch_ms = epoch_ms;
         state.daemon = daemon;
         state.terminals.inbox = terminals;
     }));
@@ -72,6 +106,7 @@ pub fn bind(
             }
             state.window.follow(&state.facts);
             desktop::settle(state);
+            state.tick(tx);
             let keyboard = state.window.keyboard_terminal(&state.facts);
             state
                 .terminals
@@ -88,13 +123,14 @@ pub fn bind(
 pub fn connect(
     store: &Store,
     config: impl FnOnce(TerminalSink) -> LinkConfig,
+    epoch_ms: i64,
     changed: Pulse,
     wake: impl Fn() + Send + Sync + 'static,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> (Link, Subscription) {
     let terminals = TerminalInbox::beating(changed.clone());
     let link = Link::start(config(terminals.sink(wake)), store.clone());
-    let window = bind(store, link.commands(), terminals, move |update| {
+    let window = bind(store, link.commands(), terminals, epoch_ms, move |update| {
         let changed = changed.clone();
         deliver(Box::new(move |state, tx| {
             update(state, tx);
@@ -106,7 +142,11 @@ pub fn connect(
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     state.terminals.drain(tx, &state.daemon);
-    shell::expire(state, now, tx)
+    let aged = state.age_wake.is_some_and(|at| now >= at);
+    if aged {
+        state.tick(tx);
+    }
+    shell::expire(state, now, tx) || aged
 }
 
 /// The app as every window runs it, and as `App::headless_runtime` runs it in tests.

@@ -28,6 +28,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let (link, _window) = crate::connect(
         &store,
         link_config()?,
+        crate::wall_clock_ms(),
         host.frames().clone(),
         move || {
             let _ = wake.send(Work::Update(Box::new(|_, _| {})));

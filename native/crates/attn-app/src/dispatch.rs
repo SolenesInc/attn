@@ -7,13 +7,12 @@ use crate::shell::{Drawer, Layer, Palette};
 
 /// The one path every intent takes, from a key, the native menu or the palette.
 pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
-    if crate::desktop::run(state, &action, tx) {
-        record(state, action);
+    if crate::sidebar::dispatch(state, &action, tx) || crate::desktop::run(state, &action, tx) {
+        record(state, &action);
         return;
     }
     let window = &mut state.window;
     match action {
-        Action::SessionGoToDashboard => window.go_home(),
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => window.toggle_drawer(Drawer::Attention),
         Action::DockAsks => window.toggle_drawer(Drawer::Asks),
@@ -30,17 +29,11 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
             return;
         }
     }
-    record(state, action);
+    record(state, &action);
 }
 
-fn record(state: &State, action: Action) {
-    if state
-        .facts
-        .settings
-        .get("analytics.enabled")
-        .map(String::as_str)
-        != Some("true")
-    {
+fn record(state: &State, action: &Action) {
+    if !crate::setting::on(&state.facts.settings, "analytics.enabled") {
         return;
     }
     let _ = state.daemon.send(&RecordAnalyticsMessage {
