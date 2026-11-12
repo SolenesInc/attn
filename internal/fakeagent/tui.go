@@ -33,6 +33,8 @@ type terminal struct {
 	pasting bool
 	modal   *modal
 	answers chan string
+	out     sync.Mutex
+	held    *strings.Builder
 }
 
 func openTerminal(style composer) (*terminal, error) {
@@ -147,7 +149,34 @@ func (t *terminal) composer() string {
 }
 
 func (t *terminal) write(s string) {
+	t.out.Lock()
+	defer t.out.Unlock()
+	if t.held != nil {
+		t.held.WriteString(s)
+		return
+	}
 	_, _ = os.Stdout.WriteString(s)
+}
+
+func (t *terminal) holdScreen() error {
+	t.out.Lock()
+	defer t.out.Unlock()
+	if t.held != nil {
+		return fmt.Errorf("the screen is already held")
+	}
+	t.held = &strings.Builder{}
+	return nil
+}
+
+func (t *terminal) releaseScreen() error {
+	t.out.Lock()
+	defer t.out.Unlock()
+	if t.held == nil {
+		return fmt.Errorf("the screen is not held")
+	}
+	_, err := os.Stdout.WriteString(t.held.String())
+	t.held = nil
+	return err
 }
 
 func (t *terminal) awaitEnter() error {

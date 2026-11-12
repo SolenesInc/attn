@@ -234,6 +234,16 @@ func (r *Run) StopReadingTerminal() {
 	r.call(methodStopRead, struct{}{}, nil)
 }
 
+func (r *Run) HoldScreen() {
+	r.t.Helper()
+	r.call(methodHoldScreen, struct{}{}, nil)
+}
+
+func (r *Run) ReleaseScreen() {
+	r.t.Helper()
+	r.call(methodReleaseScreen, struct{}{}, nil)
+}
+
 func (r *Run) ProgramStatus(fields string) {
 	r.t.Helper()
 	r.call(methodStatus, textParams{Text: fields}, nil)

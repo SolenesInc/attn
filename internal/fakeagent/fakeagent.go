@@ -53,6 +53,8 @@ const (
 	methodHalt                 = "halt"
 	methodExit                 = "exit"
 	methodStopRead             = "stop_reading_terminal"
+	methodHoldScreen           = "hold_screen"
+	methodReleaseScreen        = "release_screen"
 	methodStatus               = "program_status"
 	methodSuggestion           = "claude_suggestion"
 	methodModNext              = "mod_next"
@@ -396,6 +398,10 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		return a.handleModal(method)
 	case methodStopRead:
 		return struct{}{}, a.term.stopReading()
+	case methodHoldScreen:
+		return struct{}{}, a.term.holdScreen()
+	case methodReleaseScreen:
+		return struct{}{}, a.term.releaseScreen()
 	case methodStatus:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {
