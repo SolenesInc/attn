@@ -232,6 +232,10 @@
   max-width: 1180px;
 }
 
+.md-reader--review .md-reader-card > :is(p, ul, ol, dl, blockquote, .md-alert, h1, h2, h3, h4, h5, h6) {
+  max-width: 68ch;
+}
+
 .md-reader--review .review-cursor {
   background: var(--review-cursor);
   box-shadow: inset 2px 0 0 var(--color-accent);
