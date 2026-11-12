@@ -1,4 +1,4 @@
-use attn_term::{Grid, KeyInput, OptionAsAlt, Vt, Width, mods};
+use attn_term::{Grid, Vt, Width};
 
 fn screen(vt: &mut Vt) -> Grid {
     let mut grid = Grid::default();
@@ -37,42 +37,6 @@ fn only_rows_that_changed_are_read_again() {
     assert_eq!(grid.row_text(2), "three");
     assert!(!grid.dirty[0], "the first row did not change");
     assert!(grid.dirty[2]);
-}
-
-#[test]
-fn a_device_status_query_is_answered_by_the_terminal() {
-    let mut vt = Vt::new(10, 3);
-    vt.write(b"ab\x1b[6n");
-    assert_eq!(vt.take_responses(), b"\x1b[1;3R");
-    assert!(vt.take_responses().is_empty());
-}
-
-#[test]
-fn keys_encode_in_the_modes_the_program_set() {
-    let mut vt = Vt::new(10, 3);
-    let up = KeyInput {
-        key: 78,
-        ..KeyInput::default()
-    };
-    assert_eq!(vt.encode_key(&up), b"\x1b[A");
-    vt.write(b"\x1b[?1h");
-    assert_eq!(vt.encode_key(&up), b"\x1bOA");
-    let alt_b = KeyInput {
-        key: 21,
-        mods: mods::ALT,
-        unshifted: 'b' as u32,
-        option_as_alt: OptionAsAlt::Both,
-        ..KeyInput::default()
-    };
-    assert_eq!(vt.encode_key(&alt_b), b"\x1bb");
-}
-
-#[test]
-fn a_paste_is_bracketed_only_when_the_program_asked() {
-    let mut vt = Vt::new(10, 3);
-    assert_eq!(vt.encode_paste("a\nb"), b"a\rb");
-    vt.write(b"\x1b[?2004h");
-    assert_eq!(vt.encode_paste("a\nb"), b"\x1b[200~a\rb\x1b[201~");
 }
 
 #[test]

@@ -1,5 +1,5 @@
-use attn_protocol::PtyInputMessage;
-use rune::{Key, KeyEvent, KeyPlatform, Tx};
+use attn_term::keys;
+use rune::{Ime, Key, KeyEvent, KeyPlatform, Tx};
 
 use crate::State;
 use crate::dispatch::dispatch;
@@ -42,7 +42,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         Some(_) => None,
     };
     if terminal.is_some() && is_shell_ctrl_letter(ev) {
-        return send_to_terminal(state, terminal, ev);
+        return send_to_terminal(state, terminal, ev, tx);
     }
     let focus = Focus {
         field,
@@ -63,7 +63,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             tx.wake_at(until);
             true
         }
-        Press::Unbound => send_to_terminal(state, terminal, ev),
+        Press::Unbound => send_to_terminal(state, terminal, ev, tx),
     }
 }
 
@@ -76,30 +76,49 @@ fn is_shell_ctrl_letter(ev: &KeyEvent) -> bool {
         && matches!(ev.key, Key::Command(c) if c.is_ascii_alphabetic())
 }
 
-fn send_to_terminal(state: &State, terminal: Option<String>, ev: &KeyEvent) -> bool {
-    let (Some(id), Some(data)) = (terminal, bytes(ev)) else {
+fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, tx: &Tx) -> bool {
+    let Some(id) = terminal else {
         return false;
     };
-    let _ = state.daemon.send(&PtyInputMessage {
-        id,
-        data,
-        ..PtyInputMessage::new()
-    });
-    true
+    let platform = KeyPlatform::current();
+    let bytes = match keys::press(ev, tx.physical_key(), tx.key_repeat(), platform) {
+        None => return false,
+        Some(keys::Press::Bytes(bytes)) => bytes.to_vec(),
+        Some(keys::Press::Encode(key)) => match state.terminals.encode_key(&id, &key) {
+            Some(bytes) => bytes,
+            None => return false,
+        },
+    };
+    if bytes.is_empty() {
+        return true;
+    }
+    state.terminals.input(&id, &bytes, &state.daemon)
 }
 
-/// The bytes a terminal reads for the keys that need no terminal modes to encode.
-fn bytes(ev: &KeyEvent) -> Option<String> {
-    let text = match &ev.key {
-        Key::Text(text) if !ev.mods.cmd => text.clone(),
-        Key::Command(c) if ev.mods.ctrl && c.is_ascii_alphabetic() => {
-            char::from(c.to_ascii_lowercase() as u8 - b'a' + 1).to_string()
-        }
-        Key::Enter => "\r".into(),
-        Key::Backspace => "\x7f".into(),
-        Key::Tab => "\t".into(),
-        Key::Escape => "\x1b".into(),
-        _ => return None,
+/// What an input method composed for the terminal holding the keyboard: a dead key's accent,
+/// a CJK conversion, the emoji picker, dictation.
+pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
+    let Ime::Commit(text) = ime else {
+        return false;
     };
-    Some(text)
+    if tx.focused().is_some() || text.is_empty() {
+        return false;
+    }
+    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+        return false;
+    };
+    state.terminals.input(&id, text.as_bytes(), &state.daemon)
+}
+
+/// A paste into the terminal holding the keyboard, bracketed when its program asked.
+pub(crate) fn on_paste(state: &mut State, text: &str, tx: &mut Tx) {
+    if tx.focused().is_some() {
+        return;
+    }
+    let Some(id) = state.window.keyboard_terminal(&state.facts) else {
+        return;
+    };
+    if let Some(bytes) = state.terminals.encode_paste(&id, text) {
+        state.terminals.input(&id, &bytes, &state.daemon);
+    }
 }

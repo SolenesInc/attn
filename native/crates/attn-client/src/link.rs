@@ -3,8 +3,10 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    ClientHelloMessage, CommandErrorMessage, InitialStateMessage, PROTOCOL_VERSION,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, SettingsUpdatedMessage, go_values,
+    AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
+    PROTOCOL_VERSION, ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage,
+    PtyResizedMessage, RuntimeRespawnedMessage, SessionExitedMessage, SettingsUpdatedMessage,
+    go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -35,8 +37,26 @@ pub struct LinkConfig {
     pub app_pid: u32,
     pub clock: Clock,
     pub pulse: Pulse,
-    /// PTY output and kitty images, on the link's thread, in arrival order.
-    pub frames: Box<dyn Fn(Frame) + Send + Sync>,
+    /// What the daemon says about terminals, on the link's thread, in arrival order.
+    pub terminals: Box<dyn Fn(TerminalEvent) + Send + Sync>,
+}
+
+/// A terminal's output and the daemon's answers about it, plus the connection's start and
+/// end: a terminal attachment lasts only as long as the connection that made it.
+#[derive(Debug, Clone)]
+pub enum TerminalEvent {
+    Frame(Frame),
+    Attached(Box<AttachResultMessage>),
+    Resized(PtyResizedMessage),
+    Desync(PtyDesyncMessage),
+    Respawned(RuntimeRespawnedMessage),
+    Exited(SessionExitedMessage),
+    /// The daemon has greeted this connection; a new `daemon_instance` means its terminals'
+    /// streams started over.
+    Connected {
+        daemon_instance: String,
+    },
+    Lost,
 }
 
 /// Where the link's thread waits, for a caller that needs to know the link has nothing left
@@ -227,6 +247,7 @@ impl Task {
                 _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
             };
             self.shared.close();
+            (self.config.terminals)(TerminalEvent::Lost);
             match ended {
                 Ended::Stopped => return,
                 Ended::Refused(refusal) => {
@@ -287,7 +308,7 @@ impl Task {
                         Some(Ok(Message::Text(text))) => self.apply(text.as_str(), &mut greeted),
                         Some(Ok(Message::Binary(bytes))) => {
                             match Frame::decode(&bytes) {
-                                Ok(frame) => (self.config.frames)(frame),
+                                Ok(frame) => (self.config.terminals)(TerminalEvent::Frame(frame)),
                                 Err(why) => eprintln!("attn-app: dropped {why}"),
                             }
                             None
@@ -356,7 +377,9 @@ impl Task {
                     }
                 };
                 *greeted = true;
+                let daemon_instance = state.daemon_instance_id.clone().unwrap_or_default();
                 self.store.apply_initial_state(state);
+                (self.config.terminals)(TerminalEvent::Connected { daemon_instance });
                 None
             }
             "settings_updated" => {
@@ -375,6 +398,27 @@ impl Task {
             "profiles_changed" => {
                 let message: ProfilesChangedMessage = parse(&header.event, text)?;
                 self.store.set_profiles(message.profiles);
+                None
+            }
+            "attach_result" => {
+                let message = parse(&header.event, text)?;
+                (self.config.terminals)(TerminalEvent::Attached(Box::new(message)));
+                None
+            }
+            "pty_resized" => {
+                (self.config.terminals)(TerminalEvent::Resized(parse(&header.event, text)?));
+                None
+            }
+            "pty_desync" => {
+                (self.config.terminals)(TerminalEvent::Desync(parse(&header.event, text)?));
+                None
+            }
+            "runtime_respawned" => {
+                (self.config.terminals)(TerminalEvent::Respawned(parse(&header.event, text)?));
+                None
+            }
+            "session_exited" => {
+                (self.config.terminals)(TerminalEvent::Exited(parse(&header.event, text)?));
                 None
             }
             "command_error" => {

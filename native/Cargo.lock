@@ -367,8 +367,10 @@ version = "0.0.0"
 dependencies = [
  "attn-client",
  "attn-protocol",
+ "attn-term",
  "attn-testkit",
  "attn-ui",
+ "base64",
  "libc",
  "rune",
  "rune-kit",

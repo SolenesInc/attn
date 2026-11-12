@@ -4,6 +4,7 @@ use std::time::Duration;
 use attn_app::State;
 use attn_client::{
     Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Pulse, Store, Subscription,
+    TerminalEvent,
 };
 use rune::{Chord, ChordKey, ChordMod, Env, Key, KeyEvent, KeyPlatform, Mods, Runtime, Tx};
 
@@ -24,6 +25,7 @@ pub struct World {
     _window: Subscription,
     inbox: Arc<Mutex<Vec<attn_app::Update>>>,
     frames: Arc<Mutex<Vec<Frame>>>,
+    terminals: attn_app::TerminalInbox,
     clock: ManualClock,
     pulse: Pulse,
 }
@@ -140,6 +142,11 @@ impl World {
         let frames: Arc<Mutex<Vec<Frame>>> = Arc::default();
         let clock = ManualClock::default();
         let received = frames.clone();
+        let terminals = attn_app::TerminalInbox::default();
+        let to_app = {
+            let pulse = pulse.clone();
+            terminals.sink(move || pulse.beat())
+        };
         let link = Link::start(
             LinkConfig {
                 daemon: daemon.address().to_string(),
@@ -151,13 +158,18 @@ impl World {
                 app_pid: std::process::id(),
                 clock: Clock::Manual(clock.clone()),
                 pulse: pulse.clone(),
-                frames: Box::new(move |frame| received.lock().unwrap().push(frame)),
+                terminals: Box::new(move |event| {
+                    if let TerminalEvent::Frame(frame) = &event {
+                        received.lock().unwrap().push(frame.clone());
+                    }
+                    to_app(event);
+                }),
             },
             store.clone(),
         );
         let window = {
             let (inbox, pulse) = (inbox.clone(), pulse.clone());
-            attn_app::bind(&store, link.commands(), move |update| {
+            attn_app::bind(&store, link.commands(), terminals.clone(), move |update| {
                 inbox.lock().unwrap().push(update);
                 pulse.beat();
             })
@@ -166,10 +178,7 @@ impl World {
             system_dark: true,
             scale: 2.0,
         };
-        let spec = attn_app::app();
-        let mut runtime = Runtime::new((spec.init)(), spec.view, VIEWPORT, env);
-        runtime.on_key = spec.on_key;
-        runtime.poll = spec.poll;
+        let runtime = attn_app::app().headless_runtime(VIEWPORT, env);
         let mut world = World {
             daemon,
             runtime,
@@ -177,6 +186,7 @@ impl World {
             _window: window,
             inbox,
             frames,
+            terminals,
             clock,
             pulse,
         };
@@ -208,7 +218,10 @@ impl World {
                 self.runtime.settle_all();
                 self.runtime.frame(0.0);
             }
-            if self.quiet() && self.inbox.lock().unwrap().is_empty() {
+            while self.runtime.has_pending_input() {
+                self.runtime.frame(0.0);
+            }
+            if self.quiet() && self.inbox.lock().unwrap().is_empty() && self.terminals.is_empty() {
                 return;
             }
             assert!(
@@ -264,6 +277,24 @@ impl World {
 
     pub fn runtime(&self) -> &Runtime<State> {
         &self.runtime
+    }
+
+    /// The text on a terminal's screen, by its runtime id, row by row.
+    pub fn terminal_text(&mut self, runtime_id: &str) -> Vec<String> {
+        self.runtime
+            .state
+            .terminals
+            .screen_text(runtime_id)
+            .unwrap_or_else(|| panic!("no terminal {runtime_id} is drawn"))
+    }
+
+    /// The size of a terminal's own screen, which follows its PTY.
+    pub fn terminal_size(&mut self, runtime_id: &str) -> (u16, u16) {
+        self.runtime
+            .state
+            .terminals
+            .screen_size(runtime_id)
+            .unwrap_or_else(|| panic!("no terminal {runtime_id} is drawn"))
     }
 
     /// The binary frames the link has handed on, oldest first, emptying the list.

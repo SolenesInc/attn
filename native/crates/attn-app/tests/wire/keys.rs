@@ -199,7 +199,8 @@ fn every_shortcut_runs_its_own_action(category: Category) {
             action.id()
         );
     }
-    assert!(with_terminal.runtime_is_at_rest() && without.runtime_is_at_rest());
+    rest(&mut with_terminal);
+    rest(&mut without);
 }
 
 #[test]

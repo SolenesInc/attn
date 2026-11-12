@@ -118,6 +118,8 @@ pub struct Daemon {
 }
 
 impl Daemon {
+    /// A daemon that answers the handshake and attaches every terminal with an empty screen at
+    /// the size the app last asked for, until a test scripts `attach_session` itself.
     pub fn scripted() -> Daemon {
         let shared = Arc::new(Shared {
             script: Mutex::new(Script {
@@ -151,18 +153,44 @@ impl Daemon {
                 runtime.block_on(serve(serving, listener, stopped));
             })
             .expect("the daemon's thread");
-        Daemon {
+        let daemon = Daemon {
             shared,
             address,
             stop,
             thread: Some(thread),
-        }
+        };
+        let sizes: Arc<Mutex<HashMap<String, (Value, Value)>>> = Arc::default();
+        let resized = sizes.clone();
+        daemon.on("pty_resize", move |request| {
+            let id = request["id"].as_str().unwrap_or_default().to_owned();
+            let size = (request["cols"].clone(), request["rows"].clone());
+            resized.lock().unwrap().insert(id, size);
+        });
+        daemon.on("attach_session", move |request| {
+            let size = sizes
+                .lock()
+                .unwrap()
+                .get(request["id"].as_str().unwrap_or_default())
+                .cloned()
+                .unwrap_or((json!(80), json!(24)));
+            json!({
+                "event": "attach_result", "id": request["id"], "success": true, "running": true,
+                "cols": size.0, "rows": size.1,
+            })
+        });
+        daemon
     }
 
     /// What `client_hello` answers with. A `protocol_version` left out is this build's.
     pub fn state(self, initial_state: InitialStateMessage) -> Daemon {
-        self.shared.script.lock().unwrap().initial_state = initial_state;
+        self.answer_hello_with(initial_state);
         self
+    }
+
+    /// What `client_hello` answers with from now on, as a daemon that restarted with another
+    /// state answers the next connection.
+    pub fn answer_hello_with(&self, initial_state: InitialStateMessage) {
+        self.shared.script.lock().unwrap().initial_state = initial_state;
     }
 
     /// The instance `/health` reports. The world's app belongs to `INSTANCE`.

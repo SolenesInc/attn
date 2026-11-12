@@ -1,0 +1,810 @@
+use std::time::Duration;
+
+use attn_protocol::{
+    AttachResultMessage, AttachSnapshot, Desktop, DesktopPane, InitialStateMessage, Profile,
+    ProfileArrangementChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
+    SessionExitedMessage,
+};
+use attn_term::{SNAPSHOT_FORMAT, Vt};
+use attn_testkit::{Answer, Daemon, World, message};
+use base64::Engine;
+use rune::{Ime, Key, KeyEvent, Mods};
+
+fn pane(id: &str, runtime: &str) -> DesktopPane {
+    DesktopPane {
+        desktop_id: "d1".into(),
+        pane_id: id.into(),
+        runtime_id: runtime.into(),
+        title: format!("Agent {id}"),
+        kind: "agent".into(),
+        ..DesktopPane::default()
+    }
+}
+
+fn desktop(panes: Vec<DesktopPane>) -> Desktop {
+    Desktop {
+        id: "d1".into(),
+        name: "d1".into(),
+        active_pane_id: panes.first().map(|p| p.pane_id.clone()).unwrap_or_default(),
+        panes,
+        profile_id: "work".into(),
+        ..Desktop::default()
+    }
+}
+
+fn profile() -> Profile {
+    Profile {
+        id: "work".into(),
+        name: "Work".into(),
+        current_desktop_id: "d1".into(),
+        ..Profile::default()
+    }
+}
+
+fn showing(panes: Vec<DesktopPane>, daemon_instance: &str) -> InitialStateMessage {
+    InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile()]),
+        desktops: Some(vec![desktop(panes)]),
+        daemon_instance_id: Some(daemon_instance.into()),
+        ..InitialStateMessage::new()
+    }
+}
+
+fn one_terminal() -> Daemon {
+    Daemon::scripted().state(showing(vec![pane("t1", "r1")], "daemon-1"))
+}
+
+fn output(world: &World, seq: u32, data: &[u8]) {
+    let mut frame = vec![0x01, 2];
+    frame.extend_from_slice(b"r1");
+    frame.extend_from_slice(&seq.to_be_bytes());
+    frame.extend_from_slice(data);
+    world.daemon.emit_frame(frame);
+}
+
+fn attached() -> AttachResultMessage {
+    AttachResultMessage {
+        id: "r1".into(),
+        success: true,
+        running: Some(true),
+        ..AttachResultMessage::new()
+    }
+}
+
+fn snapshot_of(text: &[u8], format: &str) -> AttachSnapshot {
+    let mut vt = Vt::new(30, 5);
+    vt.write(text);
+    let bytes = vt.snapshot().expect("a screen at rest encodes");
+    AttachSnapshot {
+        cols: 30,
+        rows: 5,
+        format: Some(format.into()),
+        snapshot_b64: base64::engine::general_purpose::STANDARD.encode(bytes),
+        ..AttachSnapshot::default()
+    }
+}
+
+/// What the app sent each terminal, with who produced it.
+fn inputs(world: &World) -> Vec<(String, String)> {
+    world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| {
+            (
+                r["data"].as_str().unwrap().to_owned(),
+                r["source"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn typed(data: &str) -> (String, String) {
+    (data.into(), "user".into())
+}
+
+fn sizes(world: &World) -> Vec<(i64, i64)> {
+    world
+        .daemon
+        .sent_of("pty_resize")
+        .iter()
+        .map(|r| (r["cols"].as_i64().unwrap(), r["rows"].as_i64().unwrap()))
+        .collect()
+}
+
+fn terminal_cmds(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent()
+        .iter()
+        .filter_map(|r| r["cmd"].as_str())
+        .filter(|c| ["pty_resize", "attach_session", "detach_session"].contains(c))
+        .map(str::to_owned)
+        .collect()
+}
+
+fn key(key: Key, mods: Mods) -> KeyEvent {
+    KeyEvent { key, mods }
+}
+
+fn row(world: &mut World, y: usize) -> String {
+    world.terminal_text("r1")[y].clone()
+}
+
+#[test]
+fn a_drawn_terminal_sizes_its_pty_to_its_tile_then_attaches_and_shows_its_output() {
+    let mut world = World::start(one_terminal());
+
+    assert_eq!(terminal_cmds(&world), ["pty_resize", "attach_session"]);
+    let resize = &world.daemon.sent_of("pty_resize")[0];
+    let (cols, rows) = (
+        resize["cols"].as_i64().unwrap(),
+        resize["rows"].as_i64().unwrap(),
+    );
+    assert!(
+        cols > 20 && rows > 10,
+        "a tile's grid, not a default: {cols}x{rows}"
+    );
+    assert!(resize["xpixel"].as_i64().unwrap() >= cols, "{resize}");
+    let attach = &world.daemon.sent_of("attach_session")[0];
+    assert_eq!(attach["id"], "r1");
+    assert_eq!(attach["attach_policy"], "same_app_remount");
+    assert!(
+        attach.get("cols").is_none(),
+        "only a revive carries its size"
+    );
+
+    output(&world, 1, b"hello\r\nworld");
+    world.settle();
+
+    assert_eq!(world.terminal_text("r1")[..2], ["hello", "world"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_snapshot_in_this_builds_format_restores_the_screen_and_the_stream_continues_after_it() {
+    let daemon = one_terminal();
+    daemon.on("attach_session", |request| {
+        message(AttachResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            last_seq: Some(5),
+            snapshot: Some(snapshot_of(b"restored", SNAPSHOT_FORMAT)),
+            ..attached()
+        })
+    });
+    let mut world = World::start(daemon);
+    assert_eq!(row(&mut world, 0), "restored");
+    assert_eq!(world.terminal_size("r1"), (30, 5));
+
+    output(&world, 5, b" again");
+    output(&world, 6, b"!");
+    world.settle();
+
+    assert_eq!(row(&mut world, 0), "restored!");
+}
+
+#[test]
+fn a_snapshot_in_another_format_is_refused_and_output_draws_from_the_start() {
+    let daemon = one_terminal();
+    daemon.on("attach_session", |request| {
+        message(AttachResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            last_seq: Some(5),
+            snapshot: Some(snapshot_of(b"restored", "a-format-from-another-build")),
+            ..attached()
+        })
+    });
+    let mut world = World::start(daemon);
+    assert_eq!(row(&mut world, 0), "");
+
+    output(&world, 1, b"live");
+    world.settle();
+
+    assert_eq!(row(&mut world, 0), "live");
+}
+
+#[test]
+fn a_snapshot_that_does_not_decode_keeps_the_output_that_raced_it_and_the_stream_continues() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn("attach_session", [Answer::Hold]);
+    let mut world = World::start(daemon);
+
+    output(&world, 9, b"raced\r\n");
+    world.settle();
+    let request = world.daemon.sent_of("attach_session")[0].clone();
+    let garbage = AttachSnapshot {
+        snapshot_b64: base64::engine::general_purpose::STANDARD.encode([1, 2, 3, 4]),
+        ..snapshot_of(b"", SNAPSHOT_FORMAT)
+    };
+    world.daemon.reply_to(
+        &request,
+        AttachResultMessage {
+            last_seq: Some(10),
+            snapshot: Some(garbage),
+            ..attached()
+        },
+    );
+    world.settle();
+    output(&world, 11, b"live");
+    world.settle();
+
+    assert_eq!(world.terminal_text("r1")[..2], ["raced", "live"]);
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 1);
+}
+
+#[test]
+fn output_during_an_attach_waits_for_it_and_output_already_drawn_is_dropped() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn("attach_session", [Answer::Hold]);
+    let mut world = World::start(daemon);
+
+    output(&world, 1, b"a");
+    output(&world, 2, b"b");
+    world.settle();
+    assert_eq!(
+        row(&mut world, 0),
+        "",
+        "nothing draws before the attach answers"
+    );
+
+    let request = world.daemon.sent_of("attach_session")[0].clone();
+    world.daemon.reply_to(&request, attached());
+    world.settle();
+    output(&world, 2, b"X");
+    output(&world, 3, b"c");
+    world.settle();
+
+    assert_eq!(row(&mut world, 0), "abc");
+}
+
+#[test]
+fn typing_during_an_attach_reaches_the_pty_once_it_attaches() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn("attach_session", [Answer::Hold]);
+    let mut world = World::start(daemon);
+
+    world.gesture(|app| app.type_text("ls"));
+    assert_eq!(inputs(&world), []);
+
+    let request = world.daemon.sent_of("attach_session")[0].clone();
+    world.daemon.reply_to(&request, attached());
+    world.settle();
+
+    assert_eq!(inputs(&world), [typed("l"), typed("s")]);
+}
+
+#[test]
+fn keys_reach_the_pty_encoded_for_the_modes_the_program_set() {
+    let mut world = World::start(one_terminal());
+    let alt = Mods {
+        alt: true,
+        ..Mods::default()
+    };
+    let shift = Mods {
+        shift: true,
+        ..Mods::default()
+    };
+
+    world.gesture(|app| app.key(key(Key::Up, Mods::default())));
+    output(&world, 1, b"\x1b[?1h");
+    world.settle();
+    world.gesture(|app| {
+        app.key(key(Key::Up, Mods::default()));
+        app.key(key(Key::Text("b".into()), alt));
+        app.key(key(Key::Tab, shift));
+        app.key(key(Key::Enter, shift));
+    });
+
+    assert_eq!(
+        inputs(&world),
+        [
+            typed("\x1b[A"),
+            typed("\x1bOA"),
+            typed("\x1bb"),
+            typed("\x1b[Z"),
+            typed("\n"),
+        ]
+    );
+}
+
+#[test]
+fn a_paste_is_bracketed_only_when_the_program_asked() {
+    let mut world = World::start(one_terminal());
+
+    world.gesture(|app| app.runtime.paste("one\ntwo"));
+    output(&world, 1, b"\x1b[?2004h");
+    world.settle();
+    world.gesture(|app| app.runtime.paste("three\r\nfour"));
+
+    assert_eq!(
+        inputs(&world),
+        [typed("one\rtwo"), typed("\x1b[200~three\rfour\x1b[201~")]
+    );
+}
+
+#[test]
+fn an_input_method_commit_reaches_the_pty() {
+    let mut world = World::start(one_terminal());
+
+    world.gesture(|app| {
+        app.runtime.ime(Ime::Preedit("´".into(), None));
+        app.runtime.ime(Ime::Commit("é".into()));
+        app.runtime.ime(Ime::Preedit("にほん".into(), None));
+        app.runtime.ime(Ime::Commit("日本".into()));
+    });
+
+    assert_eq!(inputs(&world), [typed("é"), typed("日本")]);
+}
+
+#[test]
+fn the_terminal_answers_its_programs_queries_except_those_the_daemon_answers() {
+    let mut world = World::start(one_terminal());
+
+    output(&world, 1, b"\x1b[5n\x1b[6n\x1b[c");
+    world.settle();
+
+    assert_eq!(inputs(&world), [("\x1b[0n".into(), "response".into())]);
+}
+
+#[test]
+fn the_screen_takes_the_size_the_daemon_gives_the_pty_without_answering_it() {
+    let mut world = World::start(one_terminal());
+    let asked = sizes(&world);
+
+    world.daemon.emit(PtyResizedMessage {
+        id: "r1".into(),
+        cols: 50,
+        rows: 12,
+        ..PtyResizedMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(world.terminal_size("r1"), (50, 12));
+    assert_eq!(
+        sizes(&world),
+        asked,
+        "the daemon owns the size it settled on"
+    );
+}
+
+#[test]
+fn resizing_the_tile_tells_the_daemon_at_most_every_quarter_second() {
+    let mut world = World::start(one_terminal());
+    let first = sizes(&world)[0];
+
+    world.gesture(|app| app.runtime.set_viewport((800.0, 600.0), 2.0));
+    world.gesture(|app| app.runtime.set_viewport((700.0, 500.0), 2.0));
+    let during = sizes(&world);
+    world.advance(Duration::from_millis(250));
+    let after = sizes(&world);
+
+    assert_eq!(
+        during.len(),
+        2,
+        "the first new size goes at once: {during:?}"
+    );
+    assert_ne!(during[1], first);
+    assert_eq!(
+        after.len(),
+        3,
+        "the last size follows the interval: {after:?}"
+    );
+    assert!(after[2].0 < during[1].0 && after[2].1 < during[1].1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn pty_output_draws_without_running_the_view() {
+    let mut world = World::start(one_terminal());
+    let commits = world.runtime().stats.commits;
+
+    for seq in 1..=50 {
+        output(&world, seq, format!("line {seq}\r\n").as_bytes());
+    }
+    world.settle();
+
+    assert!(world.terminal_text("r1").iter().any(|r| r == "line 50"));
+    assert_eq!(world.runtime().stats.commits, commits);
+}
+
+#[test]
+fn a_failed_revive_says_why_on_the_screen_and_is_not_asked_again() {
+    let daemon = recoverable();
+    daemon.on("attach_session", |request| {
+        message(AttachResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            success: false,
+            error: Some("runtime not found".into()),
+            ..AttachResultMessage::new()
+        })
+    });
+    let mut world = World::start(daemon);
+    world.advance(Duration::from_secs(5));
+
+    assert_eq!(
+        row(&mut world, 1),
+        "[Failed to attach PTY: runtime not found]"
+    );
+    assert_eq!(policies(&world), ["revive"]);
+}
+
+#[test]
+fn an_ended_process_leaves_its_notice_on_the_screen() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"$ exit");
+
+    world.daemon.emit(SessionExitedMessage {
+        id: "r1".into(),
+        session_id: "s1".into(),
+        exit_code: 2,
+        ..SessionExitedMessage::new()
+    });
+    world.settle();
+    world.daemon.emit(SessionExitedMessage {
+        id: "r1".into(),
+        session_id: "s1".into(),
+        exit_code: 143,
+        ..SessionExitedMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(
+        world.terminal_text("r1")[..4],
+        [
+            "$ exit",
+            "[Process exited with code 2]",
+            "",
+            "[Session ended]"
+        ]
+    );
+}
+
+#[test]
+fn a_replaced_stream_starts_the_screen_over_from_a_new_attach() {
+    let mut world = World::start(one_terminal());
+    output(&world, 7, b"old");
+    world.settle();
+
+    world.daemon.emit(RuntimeRespawnedMessage {
+        id: "r1".into(),
+        ..RuntimeRespawnedMessage::new()
+    });
+    world.settle();
+    assert_eq!(row(&mut world, 0), "");
+    output(&world, 1, b"new");
+    world.settle();
+    world.daemon.emit(PtyDesyncMessage {
+        id: "r1".into(),
+        reason: "gap".into(),
+        ..PtyDesyncMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(
+        policies(&world),
+        ["same_app_remount", "relaunch_restore", "none"]
+    );
+    assert_eq!(row(&mut world, 0), "");
+}
+
+#[test]
+fn a_reconnect_attaches_the_drawn_terminals_again() {
+    let mut world = World::start(one_terminal());
+    output(&world, 3, b"before");
+    world.settle();
+
+    world.reconnect();
+    output(&world, 3, b"X");
+    output(&world, 4, b"!");
+    world.settle();
+
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
+    assert_eq!(
+        row(&mut world, 0),
+        "before!",
+        "the stream continues from what was drawn"
+    );
+}
+
+#[test]
+fn a_new_daemon_starts_every_stream_over() {
+    let mut world = World::start(one_terminal());
+    output(&world, 3, b"before");
+    world.settle();
+
+    world
+        .daemon
+        .answer_hello_with(showing(vec![pane("t1", "r1")], "daemon-2"));
+    world.reconnect();
+    output(&world, 1, b" after");
+    world.settle();
+
+    assert_eq!(row(&mut world, 0), "before after");
+}
+
+#[test]
+fn a_terminal_no_longer_drawn_is_detached() {
+    let mut world = World::start(one_terminal());
+
+    world.daemon.emit(ProfileArrangementChangedMessage {
+        profile: profile(),
+        desktops: vec![desktop(vec![pane("t2", "r2")])],
+        ..ProfileArrangementChangedMessage::new()
+    });
+    world.settle();
+
+    let detached = world.daemon.sent_of("detach_session");
+    assert_eq!(detached.len(), 1);
+    assert_eq!(detached[0]["id"], "r1");
+    assert_eq!(world.daemon.sent_of("attach_session")[1]["id"], "r2");
+}
+
+#[test]
+fn the_daemon_hears_which_terminal_has_the_keyboard() {
+    let world = World::start(Daemon::scripted().state(showing(
+        vec![pane("t1", "r1"), pane("t2", "r2")],
+        "daemon-1",
+    )));
+
+    let focused: Vec<_> = world
+        .daemon
+        .sent_of("terminal_focus")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(focused, ["r1"]);
+}
+
+#[test]
+fn a_daemon_attaching_at_another_size_is_told_the_tiles_size_again_without_pixels() {
+    let daemon = one_terminal();
+    daemon.on("attach_session", |request| {
+        message(AttachResultMessage {
+            id: request["id"].as_str().unwrap().into(),
+            cols: Some(120),
+            rows: Some(40),
+            ..attached()
+        })
+    });
+    let world = World::start(daemon);
+
+    let resizes = world.daemon.sent_of("pty_resize");
+    assert_eq!(resizes.len(), 2, "{resizes:?}");
+    assert_eq!(
+        (&resizes[1]["cols"], &resizes[1]["rows"]),
+        (&resizes[0]["cols"], &resizes[0]["rows"])
+    );
+    assert!(resizes[0].get("xpixel").is_some());
+    assert!(resizes[1].get("xpixel").is_none() && resizes[1].get("ypixel").is_none());
+}
+
+#[test]
+fn a_tile_resized_during_the_attach_sends_only_its_latest_size_once_attached() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn("attach_session", [Answer::Hold]);
+    let mut world = World::start(daemon);
+
+    world.gesture(|app| app.runtime.set_viewport((800.0, 600.0), 2.0));
+    world.gesture(|app| app.runtime.set_viewport((700.0, 500.0), 2.0));
+    assert_eq!(sizes(&world).len(), 1, "held while the attach is in flight");
+
+    let first = sizes(&world)[0];
+    let request = world.daemon.sent_of("attach_session")[0].clone();
+    world.daemon.reply_to(
+        &request,
+        AttachResultMessage {
+            cols: Some(first.0),
+            rows: Some(first.1),
+            ..attached()
+        },
+    );
+    world.settle();
+
+    let after = sizes(&world);
+    assert_eq!(after.len(), 2, "{after:?}");
+    assert!(after[1].0 < first.0 && after[1].1 < first.1);
+}
+
+#[test]
+fn a_tile_laid_out_to_nothing_leaves_the_pty_its_size() {
+    let mut world = World::start(one_terminal());
+    let before = sizes(&world);
+
+    world.gesture(|app| app.runtime.set_viewport((0.0, 0.0), 2.0));
+    world.advance(Duration::from_secs(1));
+
+    assert_eq!(sizes(&world), before);
+}
+
+#[test]
+fn taking_the_keyboard_claims_the_ptys_size_for_this_tile() {
+    let mut world = World::start(Daemon::scripted().state(showing(
+        vec![pane("t1", "r1"), pane("t2", "r2")],
+        "daemon-1",
+    )));
+    world.daemon.emit(PtyResizedMessage {
+        id: "r2".into(),
+        cols: 200,
+        rows: 50,
+        ..PtyResizedMessage::new()
+    });
+    world.settle();
+    let before = world.daemon.sent_of("pty_resize").len();
+
+    world.gesture(|app| app.click(attn_testkit::Target::role("group").name("Agent t2")));
+
+    let resizes = world.daemon.sent_of("pty_resize");
+    assert_eq!(resizes.len(), before + 1);
+    assert_eq!(resizes[before]["id"], "r2");
+    assert_eq!(
+        world.daemon.sent_of("terminal_focus").last().unwrap()["id"],
+        "r2"
+    );
+}
+
+#[test]
+fn an_attach_refused_while_the_worker_restarts_is_asked_again() {
+    let daemon = one_terminal();
+    let refused = AttachResultMessage {
+        id: "r1".into(),
+        success: false,
+        error: Some("dial unix /tmp/worker.sock: connect: no such file or directory".into()),
+        ..AttachResultMessage::new()
+    };
+    daemon.answer_in_turn(
+        "attach_session",
+        [
+            Answer::Reply(message(refused.clone())),
+            Answer::Reply(message(attached())),
+        ],
+    );
+    let mut world = World::start(daemon);
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 1);
+
+    world.advance(Duration::from_millis(150));
+    output(&world, 1, b"up");
+    world.settle();
+
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
+    assert_eq!(row(&mut world, 0), "up");
+}
+
+fn recoverable() -> Daemon {
+    Daemon::scripted().state(session_in("recoverable"))
+}
+
+fn session_in(state_name: &str) -> InitialStateMessage {
+    let mut state = showing(
+        vec![DesktopPane {
+            session_id: "s1".into(),
+            ..pane("t1", "r1")
+        }],
+        "daemon-1",
+    );
+    state.sessions = Some(vec![attn_protocol::Session {
+        id: "s1".into(),
+        state: state_name.into(),
+        ..attn_protocol::Session::default()
+    }]);
+    state
+}
+
+fn policies(world: &World) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("attach_session")
+        .iter()
+        .map(|r| r["attach_policy"].as_str().unwrap_or("none").to_owned())
+        .collect()
+}
+
+fn respawn(world: &mut World) {
+    world.daemon.emit(RuntimeRespawnedMessage {
+        id: "r1".into(),
+        ..RuntimeRespawnedMessage::new()
+    });
+    world.settle();
+}
+
+#[test]
+fn a_terminal_whose_attach_failed_comes_back_when_its_runtime_is_replaced() {
+    let daemon = one_terminal();
+    let failed = AttachResultMessage {
+        id: "r1".into(),
+        success: false,
+        error: Some("runtime not found".into()),
+        ..AttachResultMessage::new()
+    };
+    daemon.answer_in_turn(
+        "attach_session",
+        [
+            Answer::Reply(message(failed)),
+            Answer::Reply(message(attached())),
+        ],
+    );
+    let mut world = World::start(daemon);
+
+    respawn(&mut world);
+    output(&world, 1, b"back");
+    world.settle();
+
+    assert_eq!(policies(&world), ["same_app_remount", "relaunch_restore"]);
+    assert_eq!(row(&mut world, 0), "back");
+}
+
+#[test]
+fn a_reconnect_attaches_a_terminal_whose_process_ended() {
+    let mut world = World::start(one_terminal());
+    world.daemon.emit(SessionExitedMessage {
+        id: "r1".into(),
+        session_id: "s1".into(),
+        exit_code: 0,
+        ..SessionExitedMessage::new()
+    });
+    world.settle();
+
+    world.reconnect();
+
+    assert_eq!(world.daemon.sent_of("attach_session").len(), 2);
+}
+
+#[test]
+fn a_revive_carries_its_size_and_is_not_asked_again_for_the_runtime_it_revives() {
+    let daemon = recoverable();
+    daemon.answer_in_turn("attach_session", [Answer::Hold]);
+    let mut world = World::start(daemon);
+
+    respawn(&mut world);
+    assert_eq!(
+        terminal_cmds(&world),
+        ["attach_session"],
+        "a revive sizes itself"
+    );
+    let attach = &world.daemon.sent_of("attach_session")[0];
+    assert!(attach["cols"].as_i64().unwrap() > 20 && attach["rows"].as_i64().unwrap() > 10);
+    let revive = world.daemon.sent_of("attach_session")[0].clone();
+    world.daemon.reply_to(&revive, attached());
+    world.settle();
+    output(&world, 1, b"revived");
+    world.settle();
+
+    assert_eq!(policies(&world), ["revive"]);
+    assert_eq!(row(&mut world, 0), "revived");
+}
+
+#[test]
+fn an_ordinary_attach_in_flight_is_asked_again_when_its_runtime_is_replaced() {
+    let daemon = one_terminal();
+    daemon.answer_in_turn(
+        "attach_session",
+        [Answer::Hold, Answer::Reply(message(attached()))],
+    );
+    let mut world = World::start(daemon);
+
+    respawn(&mut world);
+    output(&world, 1, b"new");
+    world.settle();
+
+    assert_eq!(policies(&world), ["same_app_remount", "relaunch_restore"]);
+    assert_eq!(row(&mut world, 0), "new");
+}
+
+#[test]
+fn a_revived_terminal_reattaches_as_a_remount_sized_to_its_tile() {
+    let mut world = World::start(recoverable());
+    respawn(&mut world);
+    let before = terminal_cmds(&world).len();
+
+    world.daemon.answer_hello_with(session_in("working"));
+    world.reconnect();
+
+    assert_eq!(
+        terminal_cmds(&world)[before..before + 2],
+        ["pty_resize", "attach_session"]
+    );
+    assert_eq!(
+        policies(&world).last().map(String::as_str),
+        Some("same_app_remount")
+    );
+}

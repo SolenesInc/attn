@@ -169,7 +169,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
     let connection = &state.facts.connection;
     let body = match connection {
-        Connection::Connected | Connection::Reconnecting => shell(state, &t),
+        Connection::Connected | Connection::Reconnecting => shell(state, &t, cx.env().scale),
         Connection::Connecting => centered(&t, connection::connecting(&t)),
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
     };
@@ -179,6 +179,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .w_full()
         .h_full()
         .fill(t.bg_app)
+        .on_paste(crate::keys::on_paste)
         .child(title_bar(cx, &t))
         .children(banner)
         .child(body)
@@ -210,14 +211,14 @@ fn centered(t: &Tokens, content: El) -> El {
         .child(content)
 }
 
-fn shell(state: &State, t: &Tokens) -> El {
+fn shell(state: &State, t: &Tokens, scale: f32) -> El {
     let window = &state.window;
     row()
         .key("regions")
         .w_full()
         .grow(1.0)
         .children((!window.sidebar_hidden).then(|| sidebar(&state.facts, t)))
-        .child(tiles(state, t))
+        .child(tiles(state, t, scale))
         .children(window.drawer.map(|drawer| self::drawer(drawer, t)))
 }
 
@@ -255,7 +256,7 @@ fn sidebar(facts: &Facts, t: &Tokens) -> El {
     })
 }
 
-fn tiles(state: &State, t: &Tokens) -> El {
+fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
     let facts = &state.facts;
     let desktop = facts.current_desktop();
     let holder = state.window.keyboard.clone();
@@ -264,6 +265,7 @@ fn tiles(state: &State, t: &Tokens) -> El {
         version(&facts.profiles),
         holder.clone(),
         *t,
+        scale.to_bits(),
     );
     let area = memo("tiles.area", reads, || {
         let Some(desktop) = desktop else {
@@ -297,6 +299,8 @@ fn tiles(state: &State, t: &Tokens) -> El {
                 .padding(space::S3)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                     state.window.take_keyboard(&desktop_id, &pane_id, tx);
+                    let keyboard = state.window.keyboard_terminal(&state.facts);
+                    state.terminals.focus(keyboard, &state.daemon);
                 })
                 .role("group")
                 .label(tile_name(&pane.title))
@@ -304,6 +308,10 @@ fn tiles(state: &State, t: &Tokens) -> El {
                     text(tile_name(&pane.title))
                         .font(type_::LABEL)
                         .color(t.text_secondary),
+                )
+                .children(
+                    (!pane.runtime_id.is_empty())
+                        .then(|| terminal_slot(&pane.runtime_id, held, scale)),
                 )
         });
         row()
@@ -320,6 +328,24 @@ fn tiles(state: &State, t: &Tokens) -> El {
         .grow(1.0)
         .h_full()
         .child(area)
+}
+
+/// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
+/// size the terminal asks its PTY for.
+fn terminal_slot(runtime_id: &str, held: bool, scale: f32) -> El {
+    let id = runtime_id.to_owned();
+    let slot = el()
+        .key(format!("terminal.{runtime_id}"))
+        .w_full()
+        .grow(1.0)
+        .effect(crate::terminal::mark(runtime_id))
+        .on_layout_tx(move |state: &mut State, [_, _, w, h], tx: &mut Tx| {
+            state
+                .terminals
+                .laid_out(&id, (w, h), scale, tx, &state.daemon);
+            tx.live_only();
+        });
+    if held { slot.ime_cursor() } else { slot }
 }
 
 fn tile_name(title: &str) -> String {
