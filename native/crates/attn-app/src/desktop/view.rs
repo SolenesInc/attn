@@ -44,7 +44,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         row_state,
         area_bits,
         dragging.clone(),
-        ratio_bits(&desk.ratios),
+        (ratio_bits(&desk.ratios), desk.peeks.unsent()),
         *t,
         scale.to_bits(),
     );
@@ -110,8 +110,10 @@ fn screen(
                 let view = desk.row(&desktop.id).view;
                 let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);
                 let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
+                let unsent = desk.peeks.unsent();
                 let cx = TileCx {
                     desktop,
+                    unsent: &unsent,
                     ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
                     dragging,
@@ -151,6 +153,8 @@ fn empty(t: &Tokens, message: &str) -> El {
 
 struct TileCx<'a> {
     desktop: &'a Desktop,
+    /// Replies a peek could not send, by terminal.
+    unsent: &'a [(String, String)],
     /// Splits this window shows at its own ratio, ahead of the daemon.
     ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
     /// Dividers drag only in the normal view.
@@ -241,7 +245,7 @@ pub(crate) fn leaf_title(desktop: &Desktop, leaf: &Leaf) -> String {
     }
 }
 
-fn tile_kind_label(kind: &str) -> &str {
+pub(crate) fn tile_kind_label(kind: &str) -> &str {
     match kind {
         "markdown" => "Markdown",
         "browser" => "Browser",
@@ -271,13 +275,22 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 .then(|| ime_caret(cx.terminals, &pane.runtime_id, t.dark))
                 .flatten();
             let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str());
-            terminal_slot(
+            let slot = terminal_slot(
                 &pane.runtime_id,
                 holder.clone(),
                 caret,
                 pointing_link,
                 (t.dark, cx.scale),
-            )
+            );
+            match cx.unsent.iter().find(|(r, _)| *r == pane.runtime_id) {
+                Some((runtime, reply)) => col()
+                    .w_full()
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .child(slot)
+                    .child(super::peek::unsent_strip(runtime, reply, t)),
+                None => slot,
+            }
         }
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
@@ -314,7 +327,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
 /// `el`, where a press takes the tile into `holder`.
 fn takes(el: El, holder: &Holder) -> El {
     let holder = holder.clone();
-    el.on_press_tx(move |state: &mut State, tx: &mut Tx| take_tile(state, &holder, tx))
+    el.on_press_tx(move |state: &mut State, tx: &mut Tx| press_tile(state, &holder, tx))
 }
 
 /// What dragging the header of the current desktop's tile `leaf` picks up. An agent alone on
@@ -449,7 +462,7 @@ fn terminal_slot(
             let mods = report_mods(tx.mods());
             match d.phase {
                 rune::Phase::Down => {
-                    take_tile(state, &tile, tx);
+                    press_tile(state, &tile, tx);
                     let button = match tx.button() {
                         PointerButton::Middle => mouse::MIDDLE,
                         PointerButton::Secondary => mouse::SECONDARY,
@@ -507,6 +520,12 @@ fn terminal_slot(
 }
 
 /// The window's keyboard goes to `tile`, which becomes the desktop's active tile.
+/// A press on a tile closes the peek and takes the tile into `tile`.
+fn press_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
+    super::peek::dismiss(state);
+    take_tile(state, tile, tx);
+}
+
 pub(crate) fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {
     state.window.take_keyboard(&tile.desktop, &tile.pane, tx);
     let keyboard = state.window.keyboard_terminal(&state.facts);

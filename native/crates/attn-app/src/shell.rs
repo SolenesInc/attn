@@ -384,6 +384,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         ));
     }
     layers.extend(crate::desktop::cap_menu(state, t));
+    layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));

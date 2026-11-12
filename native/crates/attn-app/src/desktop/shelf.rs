@@ -256,6 +256,14 @@ impl Shelf {
         &self.after[self.shown_after..]
     }
 
+    /// Whether `leaf` is off screen, on a chip or in a cap.
+    pub(crate) fn holds(&self, leaf: &str) -> bool {
+        self.before
+            .iter()
+            .chain(&self.after)
+            .any(|c| c.leaves.iter().any(|l| l == leaf))
+    }
+
     /// What dragging the chip of `column` picks up.
     pub(crate) fn chip_source(&self, column: &str) -> Option<Source> {
         let chip = self
@@ -316,6 +324,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .then(|| width_control(shelf.screen.len(), Desk::narrowest_cols(&state.facts), t)),
         );
     let drop = desk.drag.as_ref().and_then(|d| d.shelf_mark());
+    let peeked = super::peek::peeked(state, id);
     let menu = |side: Edge, columns: &[Chip]| {
         let marked = drop.as_ref().is_some_and(|(column, edge)| {
             *edge == side && columns.iter().any(|c| c.key == *column)
@@ -339,14 +348,14 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 shelf
                     .before_chips()
                     .iter()
-                    .map(|c| chip_button(c, mark(c), t)),
+                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), t)),
             )
             .child(dots)
             .children(
                 shelf
                     .after_chips()
                     .iter()
-                    .map(|c| chip_button(c, mark(c), t)),
+                    .map(|c| chip_button(c, id, peeked.as_deref(), mark(c), t)),
             )
             .children(menu(Edge::Right, shelf.after_cap())),
     )
@@ -399,14 +408,46 @@ pub(crate) fn slot(state: &State, t: &Tokens) -> El {
         .children(view(state, t))
 }
 
-fn chip_button(chip: &Chip, drop: Option<Edge>, t: &Tokens) -> El {
+/// A column's chip. The pointer resting on it peeks at the tile it brings, or at the tile whose
+/// mark it rests on; `peeked` is the tile the open peek shows.
+fn chip_button(
+    chip: &Chip,
+    desktop: &str,
+    peeked: Option<&str>,
+    drop: Option<Edge>,
+    t: &Tokens,
+) -> El {
     let key = format!("shelf.chip.{}", chip.key);
     let recorded = key.clone();
+    let stacked = chip.leaves.len() > 1;
     let marks = chip
         .members
         .iter()
+        .zip(&chip.leaves)
         .enumerate()
-        .map(|(i, m)| member_mark(&key, i, *m, chip.needs, t));
+        .map(|(i, (m, leaf))| {
+            let peeked = stacked && peeked == Some(leaf.as_str());
+            let (desktop, leaf, column) = (desktop.to_owned(), leaf.clone(), chip.key.clone());
+            row()
+                .key(format!("{key}.member.{i}"))
+                .pt(2.0)
+                .border_sides(
+                    [0.0, 0.0, 0.0, 2.0],
+                    if peeked {
+                        t.text_secondary
+                    } else {
+                        rune::Color::TRANSPARENT
+                    },
+                )
+                .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
+                    if inside {
+                        super::peek::hover_member(state, &desktop, &leaf, &column, tx);
+                    }
+                })
+                .child(member_mark(*m, chip.needs, t))
+        });
+    let moved = (desktop.to_owned(), chip.go.clone(), chip.key.clone());
+    let left = chip.key.clone();
     let state = [(chip.needs, "needs you"), (chip.arrival, "arrived")]
         .iter()
         .filter(|(on, _)| *on)
@@ -430,6 +471,15 @@ fn chip_button(chip: &Chip, drop: Option<Edge>, t: &Tokens) -> El {
         .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
             record(state, &recorded, rect, tx)
         })
+        .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
+            if !inside {
+                super::peek::leave_chip(state, &left, tx);
+            }
+        })
+        .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
+            let (desktop, leaf, column) = &moved;
+            super::peek::hover_chip(state, desktop, leaf, column, tx)
+        })
         .children(marks)
         .child(
             text(chip.label.clone())
@@ -448,8 +498,8 @@ fn chip_button(chip: &Chip, drop: Option<Edge>, t: &Tokens) -> El {
 
 /// A tile's mark on its chip: an agent's state dot, or a square, in the warning colour while
 /// the chip needs the person.
-fn member_mark(chip: &str, index: usize, member: Member, needs: bool, t: &Tokens) -> El {
-    let mark = rune::el().key(format!("{chip}.member.{index}"));
+fn member_mark(member: Member, needs: bool, t: &Tokens) -> El {
+    let mark = rune::el();
     match member {
         Member::Agent(state) => mark
             .w(7.0)
@@ -550,6 +600,7 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
     if held.is_empty() {
         return holding(state, Owner::Menu).then_some(layer);
     }
+    let peeked = super::peek::peeked(state, &shelf.desktop);
     let menu = col()
         .key(format!("shelf.menu.{name}"))
         .role("menu")
@@ -559,7 +610,10 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         .radius(6.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
-        .children(held.iter().map(|c| chip_button(c, None, t)));
+        .children(
+            held.iter()
+                .map(|c| chip_button(c, &shelf.desktop, peeked.as_deref(), None, t)),
+        );
     let place = row().w_full().padding(space::S2);
     let place = match side {
         Edge::Left => place,
@@ -958,6 +1012,7 @@ pub(crate) fn settle(state: &mut State, tx: &mut Tx) {
         .retain(|f| desktops.iter().any(|d| d.id == f.desktop));
     super::drag::settle_drag(state);
     super::divider::settle_ratios(state);
+    super::peek::settle(state);
 }
 
 fn settle_desktop(state: &mut State, id: &str, tx: &mut Tx) {

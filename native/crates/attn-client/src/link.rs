@@ -255,16 +255,20 @@ struct Header {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
+    probe_id: Option<String>,
+    #[serde(default)]
     protocol_version: Option<String>,
 }
 
 impl Header {
-    /// The request this message answers: its `request_id`, or for `spawn_result` and
-    /// `rename_result` the session id the request named. The arrangement a spawn changes
-    /// carries that id too, ahead of `spawn_result`, and answers nothing.
+    /// The request this message answers: its `request_id`, for `spawn_result` and
+    /// `rename_result` the session id the request named, and for `pty_input_probe_result` the
+    /// input's `probe_id`. The arrangement a spawn changes carries that id too, ahead of
+    /// `spawn_result`, and answers nothing.
     fn answers(&self) -> Option<String> {
         match self.event.as_str() {
             "spawn_result" | "rename_result" => self.id.clone(),
+            "pty_input_probe_result" => self.probe_id.clone(),
             "profile_arrangement_changed" => None,
             _ => self.request_id.clone(),
         }

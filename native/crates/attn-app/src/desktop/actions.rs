@@ -366,6 +366,9 @@ fn toggle_view(state: &mut State, focus: bool) {
 /// Escape ends a drag, closes a shelf cap's menu, or takes the current desktop out of focus
 /// mode, before anything else hears it; false when there is none of those to end.
 pub(crate) fn escape(state: &mut State) -> bool {
+    if super::peek::close(state) {
+        return true;
+    }
     let Some(desktop) = state.facts.current_desktop() else {
         return false;
     };

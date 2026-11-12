@@ -1778,3 +1778,307 @@ fn a_column_drag_that_shelves_the_first_column_follows_the_pointer_back_and_save
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }
+
+/// A daemon that shows each terminal's id as its screen, and confirms each input `confirm`
+/// answers for with that answer: success, or the error it carries.
+fn peeking(confirm: impl Fn(&str) -> Result<(), String> + Send + 'static) -> World {
+    let daemon = daemon(vec![four_in_a_row("a")]);
+    daemon.on("terminal_read_text", |request| {
+        attn_testkit::message(attn_protocol::TerminalReadTextResultMessage {
+            success: true,
+            text: Some(format!(
+                "screen of {}\n\n",
+                request["terminal_id"].as_str().unwrap()
+            )),
+            ..attn_protocol::TerminalReadTextResultMessage::new()
+        })
+    });
+    daemon.on("pty_input", move |request| {
+        let probe = request["probe_id"].as_str()?;
+        let answer = confirm(request["data"].as_str().unwrap());
+        Some(attn_testkit::message(
+            attn_protocol::PtyInputProbeResultMessage {
+                id: request["id"].as_str().unwrap().into(),
+                probe_id: probe.into(),
+                success: answer.is_ok(),
+                error: answer.err(),
+                ..attn_protocol::PtyInputProbeResultMessage::new()
+            },
+        ))
+    });
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.open_desktop();
+    world
+}
+
+fn peek(world: &World) -> Option<attn_testkit::Node> {
+    world.screen().find(Target::key("shelf.peek"))
+}
+
+fn peek_screen(world: &World) -> String {
+    world.screen().children(Target::key("shelf.peek.screen"))[0]
+        .name
+        .clone()
+        .unwrap_or_default()
+}
+
+fn rest_on(world: &mut World, key: &str) {
+    let at = middle(world, key);
+    world.gesture(|app| app.move_to(at));
+}
+
+fn enter(world: &mut World) {
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Enter,
+            mods: rune::Mods::default(),
+        })
+    });
+}
+
+fn escape(world: &mut World) {
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+}
+
+fn reply(world: &mut World, words: &str) {
+    let words = words.to_owned();
+    world.gesture(|app| {
+        app.click(Target::key("shelf.peek.c.field"));
+        app.type_text(&words);
+    });
+}
+
+/// What the app typed into the terminal `runtime` for the person, in order.
+fn typed(world: &World, runtime: &str) -> Vec<String> {
+    world
+        .daemon
+        .sent_of("pty_input")
+        .into_iter()
+        .filter(|input| input["id"] == runtime && input["source"] == "user")
+        .map(|input| input["data"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+#[test]
+fn resting_on_a_chip_peeks_at_its_terminal_and_a_reply_reaches_it_followed_by_return() {
+    let mut world = peeking(|_| Ok(()));
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(150));
+    assert!(peek(&world).is_none(), "the peek waits a moment");
+    world.advance(Duration::from_millis(50));
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+    assert_eq!(peek_screen(&world), "screen of r-c");
+    assert_eq!(shown(&world), ["a", "b"], "the layout stays");
+
+    reply(&mut world, "yes");
+    enter(&mut world);
+
+    assert_eq!(typed(&world, "r-c"), ["yes", "\r"]);
+    assert!(peek(&world).is_none(), "a sent reply closes the peek");
+    assert_eq!(shown(&world), ["a", "b"]);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_reply_the_terminal_did_not_take_stays_with_its_tile_to_copy_or_discard() {
+    let mut world = peeking(|data| match data {
+        "\r" => Ok(()),
+        _ => Err("the terminal is gone".to_owned()),
+    });
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    reply(&mut world, "yes");
+    enter(&mut world);
+    assert_eq!(typed(&world, "r-c"), ["yes"], "Return waits for the text");
+
+    rest_on(&mut world, "shelf.chip.d");
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("shelf.peek.notice"))
+            .name
+            .as_deref(),
+        Some(
+            "This reply may not have arrived: the terminal is gone. Check the screen; ↵ sends it again."
+        )
+    );
+
+    click(&mut world, "shelf.peek.open");
+    arrange(&mut world, "work/desktop_1", vec![four_in_a_row("c")]);
+    assert!(shows(&world, "Agent c"));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.unsent.r-c"))
+            .is_some(),
+        "the tile keeps the unsent reply"
+    );
+    click(&mut world, "tile.unsent.r-c.discard");
+    assert!(
+        world
+            .screen()
+            .find(Target::key("tile.unsent.r-c"))
+            .is_none()
+    );
+    world.advance(Duration::from_secs(7));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_peek_closes_when_the_pointer_leaves_and_escape_forgets_a_draft() {
+    let mut world = peeking(|_| Ok(()));
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    rest_on(&mut world, "tile.a");
+    world.advance(Duration::from_millis(200));
+    assert!(peek(&world).is_none(), "leaving the chip closes the peek");
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    reply(&mut world, "draft");
+    rest_on(&mut world, "tile.a");
+    world.advance(Duration::from_millis(200));
+    assert!(peek(&world).is_some(), "a peek being replied in stays");
+
+    escape(&mut world);
+    assert!(peek(&world).is_none());
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("shelf.peek.c.field"))
+            .value
+            .as_deref()
+            .unwrap_or(""),
+        "",
+        "Escape forgot the draft"
+    );
+    escape(&mut world);
+    assert!(typed(&world, "r-c").is_empty());
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn resting_on_a_tiles_mark_on_a_stacked_chip_peeks_at_that_tile() {
+    let tree = row([pane("a"), pane("b"), below(pane("c"), pane("e")), pane("d")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+
+    rest_on(&mut world, "shelf.chip.c.member.1");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent e"));
+
+    rest_on(&mut world, "shelf.chip.c.member.0");
+    world.advance(Duration::from_millis(60));
+    assert_eq!(
+        peek(&world).unwrap().name.as_deref(),
+        Some("Agent c"),
+        "a peek already open switches sooner"
+    );
+    escape(&mut world);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+fn confirm(world: &World, input: &attn_testkit::Request) {
+    world.daemon.reply_to(
+        input,
+        attn_protocol::PtyInputProbeResultMessage {
+            id: input["id"].as_str().unwrap().into(),
+            probe_id: input["probe_id"].as_str().unwrap().into(),
+            success: true,
+            ..attn_protocol::PtyInputProbeResultMessage::new()
+        },
+    );
+}
+
+#[test]
+fn a_peek_opened_while_its_reply_is_on_its_way_empties_once_it_arrives_and_sends_nothing_again() {
+    let daemon = daemon(vec![four_in_a_row("a")]);
+    daemon.answer_in_turn(
+        "pty_input",
+        [attn_testkit::Answer::Hold, attn_testkit::Answer::Hold],
+    );
+    let mut world = World::start_sized(daemon, TWO_FIT);
+    world.open_desktop();
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    reply(&mut world, "yes");
+    enter(&mut world);
+    rest_on(&mut world, "shelf.chip.d");
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("shelf.peek.notice"))
+            .name
+            .as_deref(),
+        Some("Sending…")
+    );
+
+    let text = world.daemon.sent_of("pty_input")[0].clone();
+    confirm(&world, &text);
+    world.settle();
+    let enter_key = world.daemon.sent_of("pty_input")[1].clone();
+    confirm(&world, &enter_key);
+    world.settle();
+
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("shelf.peek.c.field"))
+            .value
+            .as_deref()
+            .unwrap_or(""),
+        "",
+        "the field empties once the reply arrived"
+    );
+    world.gesture(|app| app.click(Target::key("shelf.peek.c.field")));
+    enter(&mut world);
+    assert_eq!(
+        typed(&world, "r-c"),
+        ["yes", "\r"],
+        "Return in the empty field sends nothing"
+    );
+    assert!(peek(&world).is_none(), "it opens the tile instead");
+    assert_eq!(sent(&world, "desktop_show_leaf").len(), 1);
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_peek_being_replied_in_stays_while_the_pointer_crosses_another_chip() {
+    let mut world = peeking(|_| Ok(()));
+
+    rest_on(&mut world, "shelf.chip.c");
+    world.advance(Duration::from_millis(200));
+    reply(&mut world, "for c");
+    rest_on(&mut world, "shelf.chip.d");
+    world.advance(Duration::from_millis(200));
+    assert_eq!(peek(&world).unwrap().name.as_deref(), Some("Agent c"));
+
+    world.gesture(|app| app.type_text(" too"));
+    enter(&mut world);
+    assert_eq!(typed(&world, "r-c"), ["for c too", "\r"]);
+    assert!(typed(&world, "r-d").is_empty());
+    assert!(
+        typed(&world, "r-a").is_empty(),
+        "nothing reaches the tile holding the keyboard"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}

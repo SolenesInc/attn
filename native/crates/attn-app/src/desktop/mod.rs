@@ -5,6 +5,7 @@ mod actions;
 mod divider;
 mod drag;
 pub mod layout;
+mod peek;
 mod shelf;
 mod view;
 
@@ -18,6 +19,7 @@ use crate::State;
 
 pub(crate) use actions::{escape, run, show_unseen};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
+pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
 pub(crate) use view::{area, take_tile};
 
@@ -58,6 +60,7 @@ pub struct Desk {
     pub(crate) drag: Option<drag::LeafDrag>,
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
+    pub(crate) peeks: peek::Peeks,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -127,11 +130,11 @@ impl History {
     }
 }
 
-/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, and the
-/// rest a drag takes on a sidebar desktop before the window switches to it. Returns whether
-/// anything changed.
+/// Lets the moments the desktops keep lapse when their time is up: chips' flashes, the rest a
+/// drag takes on a sidebar desktop before the window switches to it, and the peek's delays and
+/// reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
-    let switched = drag::expire(state, tx);
+    let switched = drag::expire(state, tx) | peek::expire(state, tx);
     let now = tx.clock();
     let flashes = &mut state.window.desk.flashes;
     let before = flashes.len();

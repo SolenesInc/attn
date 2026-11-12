@@ -236,6 +236,7 @@ pub(crate) fn gesture(state: &mut State, d: &mut Drag, tx: &mut Tx, owner: Owner
     match d.phase {
         Phase::Down => {
             state.window.desk.drag = None;
+            super::peek::dismiss(state);
             tx.live_only();
             tx.element_at_in(
                 owner.element(),
