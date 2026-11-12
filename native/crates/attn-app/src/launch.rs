@@ -20,7 +20,7 @@ pub fn prepare() -> Result<Launch, String> {
     daemon::ensure()?;
     let launch = Launch {
         client_token: instance.client_token()?,
-        host_token: instance.ensure_host_token()?,
+        host_token: crate::instance::ensure_host_token(&instance.data_dir)?,
         instance,
     };
     #[cfg(target_os = "macos")]

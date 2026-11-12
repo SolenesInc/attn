@@ -119,34 +119,35 @@ impl Instance {
         })?;
         Ok(token.trim().to_string())
     }
+}
 
-    /// The app's own credential: the daemon trusts a `native-app` hello that carries it.
-    pub fn ensure_host_token(&self) -> Result<String, String> {
-        let path = self.data_dir.join("browser-host-token");
-        if let Ok(token) = fs::read_to_string(&path) {
-            let token = token.trim();
-            if token.len() >= HOST_TOKEN_HEX_LEN {
-                return Ok(token.to_string());
-            }
+/// The app's own credential in `data_dir`, made on first use: the daemon trusts a `native-app`
+/// hello that carries it.
+pub fn ensure_host_token(data_dir: &Path) -> Result<String, String> {
+    let path = data_dir.join("browser-host-token");
+    if let Ok(token) = fs::read_to_string(&path) {
+        let token = token.trim();
+        if token.len() >= HOST_TOKEN_HEX_LEN {
+            return Ok(token.to_string());
         }
-        let mut random = [0_u8; HOST_TOKEN_HEX_LEN / 2];
-        File::open("/dev/urandom")
-            .and_then(|mut source| source.read_exact(&mut random))
-            .map_err(|error| format!("generate the host token: {error}"))?;
-        let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
-        let mut file = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .mode(0o600)
-            .open(&path)
-            .map_err(|error| format!("open {}: {error}", path.display()))?;
-        file.write_all(token.as_bytes())
-            .map_err(|error| format!("write {}: {error}", path.display()))?;
-        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
-            .map_err(|error| format!("secure {}: {error}", path.display()))?;
-        Ok(token)
     }
+    let mut random = [0_u8; HOST_TOKEN_HEX_LEN / 2];
+    File::open("/dev/urandom")
+        .and_then(|mut source| source.read_exact(&mut random))
+        .map_err(|error| format!("generate the host token: {error}"))?;
+    let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
+    let mut file = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| format!("open {}: {error}", path.display()))?;
+    file.write_all(token.as_bytes())
+        .map_err(|error| format!("write {}: {error}", path.display()))?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+        .map_err(|error| format!("secure {}: {error}", path.display()))?;
+    Ok(token)
 }
 
 fn acquire_shared_lock(path: &Path, wait: Duration) -> Result<File, String> {

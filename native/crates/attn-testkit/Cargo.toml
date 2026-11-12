@@ -6,6 +6,7 @@ publish = false
 
 [dependencies]
 attn-app = { path = "../attn-app" }
+attn-automation = { path = "../attn-automation" }
 attn-client = { path = "../attn-client" }
 attn-protocol = { path = "../../../cli/protocol" }
 futures-util = "0.3.34"

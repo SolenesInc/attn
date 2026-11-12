@@ -54,6 +54,47 @@ runs `make check-native` and every test of the workspace, as
 CI's `Native (macos-15)` and `Native (ubuntu-24.04)` jobs run the same checks
 when those paths change, and on every push to `main`.
 
+## Automation
+
+Tests, scenarios, `scripts/vm drive` and drive-attn drive the native app over
+one automation protocol, `attn-automation`. It speaks the Tauri app's wire
+format: newline-delimited JSON over loopback TCP, `{id, token, action, payload}`
+in and `{id, ok, result, error}` out, so one Node client drives both shells.
+
+A target names an element by its key, `{"key": "sidebar"}`, or by its role and
+accessible name, `{"role": "group", "name": "Agent t2"}`. Pointer actions wait
+for the element to appear and stop moving, scroll it into view, and reply with a
+receipt that says which element the press landed on.
+
+| Action | Payload | Does |
+| --- | --- | --- |
+| `ping` | | `{pong, frontendReady}`: ready once connected to the daemon |
+| `tree` | | the accessibility tree |
+| `find`, `wait` | `target`, and `gone` for `wait` | the element now, or once it shows and stops moving, or goes |
+| `press`, `hover` | `target`, `at` | a click or a pointer move at `at`, fractions of the box (center by default) |
+| `drag` | `target`, `at`, then `to` (a target) or `by` (points) | press, move, release |
+| `scroll` | `target`, `dy` | a wheel over the element |
+| `key` | `chord`, such as `mod+shift+k` | the key the keyboard sends for it on this platform |
+| `type` | `text`, `target` | focuses the target first, then types |
+| `run` | `name`, an action id such as `session.toggleSidebar` | dispatches the action |
+| `state` | `of`: `connection`, `sessions`, `desktops`, `profiles`, `window`, `build` | a slice of the store or the window |
+| `native_windows`, `shot` | `path` for `shot` | the window's platform id; a screenshot |
+
+A request that waits gives up after 30 s, or its payload's `timeout_ms`, and
+says what it waited for.
+
+Hosts run the protocol on the app's `Runtime`:
+
+- In a wire test, `World::automate` answers a request in the test, settling
+  between attempts.
+- `attn-app --automation-headless --manifest PATH` runs the app with no window
+  and no GPU against the daemon that `ATTN_WS_PORT`, `ATTN_DATA_DIR` and
+  `ATTN_INSTANCE` name, writes the manifest to `PATH`, and prints
+  `ready port=<port>`. Go stack tests start it with `Stack.StartNativeApp`,
+  which builds the workspace's debug `attn-app` unless `ATTN_NATIVE_APP_BIN`
+  names one. CI's Daemon jobs have no native toolchain and skip these tests;
+  `Native (ubuntu-24.04)` runs them.
+
 ## Build output
 
 `native/.cargo/config.toml` puts each checkout's intermediate build output

@@ -871,6 +871,42 @@ jobs:
       - name: Cargo test
         run: go tool test-history capture cargo -- --locked --no-fail-fast --workspace
 
+      - name: Ensure ghostty-vt artifacts
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/cache-ghostty-vt
+
+      - name: Ensure native VT library
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: ./scripts/build-libghostty-vt.sh
+
+      - name: Read the repository's Rust pin
+        if: runner.os == 'Linux'
+        id: root-rust
+        working-directory: .
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      # The attn CLI builds with the repository's pin, not the native workspace's.
+      - name: Ensure the attn CLI
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/cache-attn-cli
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
+        with:
+          out: ${{ runner.temp }}/attn-cli-out/attn
+
+      - name: Build the native app for stack tests
+        if: runner.os == 'Linux'
+        run: cargo build --locked -p attn-app
+
+      - name: Native app stack tests
+        if: runner.os == 'Linux'
+        working-directory: .
+        env:
+          RUSTUP_TOOLCHAIN: ${{ steps.root-rust.outputs.channel }}
+          ATTN_NATIVE_APP_BIN: ${{ github.workspace }}/native/target/debug/attn-app
+        run: ./scripts/test-go.sh --packages -run '^TestTheNativeApp' ./cmd/attnd
+
       - name: Upload test receipts
         if: always()
         uses: ./.github/actions/upload-test-receipts

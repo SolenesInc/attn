@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
+attn-automation = { path = "../attn-automation" }
 attn-client = { path = "../attn-client" }
 attn-protocol = { path = "../../../cli/protocol" }
 attn-term = { path = "../attn-term" }

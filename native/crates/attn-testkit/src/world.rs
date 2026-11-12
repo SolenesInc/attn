@@ -6,7 +6,11 @@ use attn_client::{
     Clock, Connection, Frame, Link, LinkConfig, ManualClock, Parked, Pulse, Store, Subscription,
     TerminalEvent,
 };
-use rune::{Chord, ChordKey, ChordMod, Env, Key, KeyEvent, KeyPlatform, Mods, Runtime, Tx};
+use rune::{Chord, Env, Key, KeyEvent, Mods, Runtime, Tx};
+
+use attn_app::automation::AppHooks;
+use attn_automation::Attempt;
+use serde_json::Value;
 
 use crate::daemon::{CLIENT_TOKEN, Daemon, INSTANCE};
 use crate::screen::{Screen, Target};
@@ -81,55 +85,7 @@ impl Driver<'_> {
 
 /// The key event the keyboard sends for `chord` on this platform.
 pub fn key_event(chord: &Chord) -> KeyEvent {
-    let platform = KeyPlatform::current();
-    let mut mods = Mods::default();
-    for m in chord.mods_on(platform) {
-        match m {
-            ChordMod::Primary => {
-                mods.cmd = true;
-                if platform == KeyPlatform::Mac {
-                    mods.logo = true;
-                } else {
-                    mods.ctrl = true;
-                }
-            }
-            ChordMod::Ctrl => mods.ctrl = true,
-            ChordMod::Alt => mods.alt = true,
-            ChordMod::Shift => mods.shift = true,
-            ChordMod::Super => mods.logo = true,
-        }
-    }
-    let key = match chord.key() {
-        ChordKey::Char(c) if mods.cmd || mods.ctrl => Key::Command(c),
-        ChordKey::Char(c) if mods.shift => Key::Text(shifted(c).to_string()),
-        ChordKey::Char(c) => Key::Text(c.to_string()),
-        ChordKey::Enter => Key::Enter,
-        ChordKey::Tab => Key::Tab,
-        ChordKey::Escape => Key::Escape,
-        ChordKey::Backspace => Key::Backspace,
-        ChordKey::Delete => Key::Delete,
-        ChordKey::Home => Key::Home,
-        ChordKey::End => Key::End,
-        ChordKey::PageUp => Key::PageUp,
-        ChordKey::PageDown => Key::PageDown,
-        ChordKey::Left => Key::Left,
-        ChordKey::Right => Key::Right,
-        ChordKey::Up => Key::Up,
-        ChordKey::Down => Key::Down,
-        ChordKey::Function(n) => Key::Function(n),
-        other => panic!("no key event for {other:?}"),
-    };
-    KeyEvent { key, mods }
-}
-
-/// What a US layout types for `c` with Shift.
-fn shifted(c: char) -> char {
-    let (plain, shifted) = ("`1234567890-=[]\\;',./", "~!@#$%^&*()_+{}|:\"<>?");
-    plain
-        .chars()
-        .position(|p| p == c)
-        .and_then(|i| shifted.chars().nth(i))
-        .unwrap_or(c.to_ascii_uppercase())
+    attn_automation::key_event(chord).unwrap_or_else(|why| panic!("{why}"))
 }
 
 impl World {
@@ -264,6 +220,30 @@ impl World {
 
     pub fn now(&self) -> Duration {
         self.clock.now()
+    }
+
+    /// Answers one automation request on this world's runtime, as the app's server would,
+    /// settling after each attempt. A request that waits again on a screen that did not
+    /// change fails with what it waited for: nothing in a quiet world would move it.
+    pub fn automate(&mut self, action: &str, payload: Value) -> Result<Value, String> {
+        let mut last = None;
+        loop {
+            let attempt = attn_automation::act(&mut self.runtime, &AppHooks, action, &payload);
+            self.settle();
+            match attempt {
+                Attempt::Done(value) => return Ok(value),
+                Attempt::Fail(why) => return Err(why),
+                Attempt::Wait(what) => {
+                    let screen = self.runtime.accessibility_json();
+                    if last.as_ref() == Some(&screen) {
+                        return Err(format!(
+                            "{action}: the world is quiet and still waits for {what}"
+                        ));
+                    }
+                    last = Some(screen);
+                }
+            }
+        }
     }
 
     pub fn screen(&self) -> Screen {

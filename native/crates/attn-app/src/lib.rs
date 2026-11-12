@@ -1,8 +1,10 @@
 mod action;
+pub mod automation;
 mod connection;
 pub mod daemon;
 mod dispatch;
 mod frame;
+pub mod headless;
 pub mod instance;
 mod keymap;
 mod keys;

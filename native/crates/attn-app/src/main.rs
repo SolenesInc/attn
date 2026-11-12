@@ -5,6 +5,16 @@ use attn_app::instance::remove_app_pid;
 use attn_client::{Link, Store};
 
 fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--automation-headless") {
+        return match attn_app::headless::run(&args) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(reason) => {
+                eprintln!("attn-app: {reason}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     rune_mac::launch();
     let launch = match attn_app::launch::prepare() {
         Ok(launch) => launch,

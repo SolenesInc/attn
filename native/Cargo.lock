@@ -365,6 +365,7 @@ dependencies = [
 name = "attn-app"
 version = "0.0.0"
 dependencies = [
+ "attn-automation",
  "attn-client",
  "attn-protocol",
  "attn-term",
@@ -383,6 +384,13 @@ dependencies = [
 [[package]]
 name = "attn-automation"
 version = "0.0.0"
+dependencies = [
+ "attn-client",
+ "libc",
+ "rune",
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "attn-client"
@@ -419,6 +427,7 @@ name = "attn-testkit"
 version = "0.0.0"
 dependencies = [
  "attn-app",
+ "attn-automation",
  "attn-client",
  "attn-protocol",
  "futures-util",
