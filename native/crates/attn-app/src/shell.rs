@@ -261,10 +261,18 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
     let facts = &state.facts;
     let desktop = facts.current_desktop();
     let holder = state.window.keyboard.clone();
+    let ime = state.window.keyboard_terminal(facts).map(|id| {
+        let caret = state.terminals.caret(&id);
+        (
+            caret.map(|([x, y, w, h], size)| [x, y, w, h, size].map(f32::to_bits)),
+            state.terminals.preedit(&id).map(str::to_owned),
+        )
+    });
     let reads = (
         version(&facts.desktops),
         version(&facts.profiles),
         holder.clone(),
+        ime,
         *t,
         scale.to_bits(),
     );
@@ -311,10 +319,12 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
                         .font(type_::LABEL)
                         .color(t.text_secondary),
                 )
-                .children(
-                    (!pane.runtime_id.is_empty())
-                        .then(|| terminal_slot(&pane.runtime_id, tile, held, t.dark, scale)),
-                )
+                .children((!pane.runtime_id.is_empty()).then(|| {
+                    let caret = held
+                        .then(|| ime_caret(&state.terminals, &pane.runtime_id, t.dark))
+                        .flatten();
+                    terminal_slot(&pane.runtime_id, tile, held, caret, t.dark, scale)
+                }))
         });
         row()
             .w_full()
@@ -332,9 +342,54 @@ fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
         .child(area)
 }
 
+/// The input method's caret in the terminal holding the keyboard: the cell text goes to
+/// next, where the candidate window opens, showing what the input method composes so far.
+fn ime_caret(terminals: &crate::terminal::Terminals, runtime_id: &str, dark: bool) -> Option<El> {
+    let ([x, y, w, h], size) = terminals.caret(runtime_id)?;
+    let caret = el()
+        .key(format!("terminal.{runtime_id}.caret"))
+        .absolute(x, y)
+        .ime_cursor();
+    let Some(preedit) = terminals.preedit(runtime_id) else {
+        return Some(caret.size(w, h));
+    };
+    let theme = attn_term::Theme::of(dark);
+    let color =
+        |rgb| rune::color::hex(&attn_term::Theme::hex(rgb)).expect("a theme color is #rrggbb");
+    let font = rune::TextStyle {
+        size,
+        line_height: h,
+        family: rune::Family::Mono,
+        ..type_::BODY
+    };
+    Some(
+        caret.fill(color(theme.bg)).child(
+            text(preedit)
+                .key(format!("terminal.{runtime_id}.preedit"))
+                .font(font)
+                .color(color(theme.fg))
+                .single_line()
+                .decorations(vec![rune::Span {
+                    start: 0,
+                    end: preedit.len() as u32,
+                    underline: Some(color(theme.fg)),
+                    ..rune::Span::default()
+                }]),
+        ),
+    )
+}
+
 /// Where a terminal draws: the renderer finds it by its mark, and its laid-out size is the
-/// size the terminal asks its PTY for.
-fn terminal_slot(runtime_id: &str, tile: Holder, held: bool, dark: bool, scale: f32) -> El {
+/// size the terminal asks its PTY for. While it holds the keyboard the input method's caret
+/// is `caret`, or the whole slot until the terminal is laid out.
+fn terminal_slot(
+    runtime_id: &str,
+    tile: Holder,
+    held: bool,
+    caret: Option<El>,
+    dark: bool,
+    scale: f32,
+) -> El {
     let id = runtime_id.to_owned();
     let (pointing, pressing, wheeling) = (id.clone(), id.clone(), id.clone());
     let bg = attn_term::Theme::hex(attn_term::Theme::of(dark).bg);
@@ -402,7 +457,11 @@ fn terminal_slot(runtime_id: &str, tile: Holder, held: bool, dark: bool, scale: 
                 .terminals
                 .wheel(&wheeling, e.dy, (e.x, e.y), &state.daemon)
         });
-    if held { slot.ime_cursor() } else { slot }
+    match caret {
+        Some(caret) => slot.child(caret),
+        None if held => slot.ime_cursor(),
+        None => slot,
+    }
 }
 
 fn take_tile(state: &mut State, tile: &Holder, tx: &mut Tx) {

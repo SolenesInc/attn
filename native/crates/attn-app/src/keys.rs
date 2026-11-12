@@ -98,16 +98,31 @@ fn send_to_terminal(state: &mut State, terminal: Option<String>, ev: &KeyEvent, 
 /// What an input method composed for the terminal holding the keyboard: a dead key's accent,
 /// a CJK conversion, the emoji picker, dictation.
 pub(crate) fn on_ime(state: &mut State, ime: &Ime, tx: &mut Tx) -> bool {
-    let Ime::Commit(text) = ime else {
-        return false;
+    let composing = match ime {
+        Ime::Preedit(text, _) if !text.is_empty() => Some(text),
+        _ => None,
     };
-    if tx.focused().is_some() || text.is_empty() {
+    if composing.is_none() {
+        state.terminals.end_composition();
+    }
+    if tx.focused().is_some() {
         return false;
     }
     let Some(id) = state.window.keyboard_terminal(&state.facts) else {
         return false;
     };
-    state.terminals.input(&id, text.as_bytes(), &state.daemon)
+    match ime {
+        Ime::Preedit(..) => {
+            if let Some(text) = composing {
+                state.terminals.compose(&id, text);
+            }
+            true
+        }
+        Ime::Commit(text) => {
+            !text.is_empty() && state.terminals.input(&id, text.as_bytes(), &state.daemon)
+        }
+        Ime::Enabled | Ime::Disabled => false,
+    }
 }
 
 /// A paste into the terminal holding the keyboard, bracketed when its program asked.

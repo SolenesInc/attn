@@ -338,6 +338,78 @@ fn an_input_method_commit_reaches_the_pty() {
 }
 
 #[test]
+fn an_input_method_composes_at_the_cursor_and_opens_its_candidates_there() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"$ ");
+    world.settle();
+    let starts_at = |rect: [f32; 4], (x, y): (f32, f32)| {
+        let metrics = Fonts::default().metrics(FONT_SIZE);
+        (rect[0] - (x - metrics.cell_w / 2.0)).abs() < 0.5
+            && (rect[1] - (y - metrics.cell_h / 2.0)).abs() < 0.5
+    };
+
+    world.gesture(|app| app.runtime.ime(Ime::Preedit("にほn".into(), None)));
+    assert!(inputs(&world).is_empty(), "a composition sends nothing");
+    let (drawn, _) = world
+        .runtime()
+        .presented("terminal.r1.preedit")
+        .expect("the composition is drawn");
+    assert!(
+        starts_at(drawn, cell(&world, 2, 0)),
+        "drawn at the cursor: {drawn:?}"
+    );
+    let area = world.runtime().ime_area.expect("the input method is on");
+    assert!(
+        starts_at(area, cell(&world, 2, 0)),
+        "candidates open at the cursor: {area:?}"
+    );
+
+    output(&world, 2, b"\x1b[?25l");
+    world.settle();
+    output(&world, 3, b"\x1b[1;4H");
+    world.settle();
+    world.gesture(|app| app.runtime.ime(Ime::Preedit("にほん".into(), None)));
+    let area = world.runtime().ime_area.expect("the input method is on");
+    assert!(
+        starts_at(area, cell(&world, 3, 0)),
+        "the caret follows the cursor, shown or hidden: {area:?}"
+    );
+
+    world.gesture(|app| app.runtime.ime(Ime::Commit("日本".into())));
+    assert_eq!(inputs(&world), [typed("日本")]);
+    assert!(
+        world.runtime().presented("terminal.r1.preedit").is_none(),
+        "a commit ends the composition"
+    );
+}
+
+#[test]
+fn a_composition_that_ends_while_a_field_has_focus_is_not_drawn_when_the_terminal_returns() {
+    let mut world = World::start(one_terminal());
+    output(&world, 1, b"$ ");
+    world.settle();
+    world.gesture(|app| app.runtime.ime(Ime::Preedit("にほ".into(), None)));
+    assert!(world.runtime().presented("terminal.r1.preedit").is_some());
+
+    world
+        .automate("run", serde_json::json!({"name": "ui.commandPalette"}))
+        .unwrap();
+    world.gesture(|app| app.runtime.ime(Ime::Commit("日本".into())));
+    world
+        .automate("run", serde_json::json!({"name": "ui.commandPalette"}))
+        .unwrap();
+
+    assert!(
+        world.runtime().presented("terminal.r1.preedit").is_none(),
+        "the composition ended while the palette had focus"
+    );
+    assert!(
+        inputs(&world).is_empty(),
+        "the commit went to the palette's field"
+    );
+}
+
+#[test]
 fn the_terminal_answers_its_programs_queries_except_those_the_daemon_answers() {
     let mut world = World::start(one_terminal());
 

@@ -52,6 +52,26 @@ impl Metrics {
         ))
     }
 
+    /// Where `cell` draws, as x, y, width and height in points from the slot's top-left, when a
+    /// `shape` grid draws in a `slot` at `scale`.
+    pub fn cell_rect(
+        &self,
+        (cols, rows): (u16, u16),
+        (w, h): (f32, f32),
+        scale: f32,
+        (col, row): (u16, u16),
+    ) -> [f32; 4] {
+        let (cw, ch) = self.device_cell(scale);
+        let fit = fit((cols, rows), (cw, ch), (w * scale, h * scale));
+        let (cw, ch) = (cw * fit.zoom, ch * fit.zoom);
+        [
+            (fit.offset[0] + f32::from(col) * cw) / scale,
+            (fit.offset[1] + f32::from(row) * ch) / scale,
+            cw / scale,
+            ch / scale,
+        ]
+    }
+
     /// The pixel size `cols`×`rows` cells take at `scale` device pixels per point.
     pub fn pixels(&self, (cols, rows): (u16, u16), scale: f32) -> (u32, u32) {
         let px = |n: u16, cell: f32| (f32::from(n) * cell * scale).round() as u32;

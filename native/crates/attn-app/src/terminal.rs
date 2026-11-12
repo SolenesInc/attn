@@ -68,6 +68,8 @@ pub struct Terminals {
     theme: Theme,
     /// A screen changed since the renderer last took the grids.
     undrawn: bool,
+    /// What an input method is composing, and for which terminal, until it commits.
+    preedit: Option<(String, String)>,
 }
 
 struct Term {
@@ -711,6 +713,35 @@ impl Terminals {
         let mut grid = Grid::default();
         term.vt.sync(&mut grid);
         Some(grid.text_lines())
+    }
+
+    /// An input method's composition for terminal `id` so far.
+    pub(crate) fn compose(&mut self, id: &str, text: &str) {
+        self.preedit = Some((id.to_owned(), text.to_owned()));
+    }
+
+    /// The input method committed or dropped its composition, wherever the keyboard is now.
+    pub(crate) fn end_composition(&mut self) {
+        self.preedit = None;
+    }
+
+    /// What an input method is composing for terminal `id`.
+    pub(crate) fn preedit(&self, id: &str) -> Option<&str> {
+        self.preedit
+            .as_ref()
+            .filter(|(composing, _)| composing == id)
+            .map(|(_, text)| text.as_str())
+    }
+
+    /// The cell text goes to next in terminal `id`, as x, y, width and height in points from
+    /// its slot's top-left, where the window last drew it, and the font size it draws at.
+    pub(crate) fn caret(&self, id: &str) -> Option<([f32; 4], f32)> {
+        let metrics = self.metrics?;
+        let term = self.panes.get(id)?;
+        let (slot, scale) = term.slot?;
+        let grid = &term.grid;
+        let rect = metrics.cell_rect((grid.cols, grid.rows), slot, scale, grid.caret);
+        Some((rect, FONT_SIZE * rect[3] / metrics.cell_h))
     }
 
     /// The text of a terminal's screen as the window last drew it, row by row.

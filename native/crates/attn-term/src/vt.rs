@@ -300,7 +300,8 @@ impl Vt {
             color: frame.has_cursor_color.then_some(frame.cursor_color),
         });
         let cursor_moved = cursor != grid.cursor;
-        if frame.dirty == DIRTY_FALSE && !reshaped && !cursor_moved {
+        let caret = (frame.cursor_x, frame.cursor_y);
+        if frame.dirty == DIRTY_FALSE && !reshaped && !cursor_moved && caret == grid.caret {
             return false;
         }
         if reshaped {
@@ -343,6 +344,7 @@ impl Vt {
             }
             grid.cursor = cursor;
         }
+        grid.caret = caret;
         unsafe { attn_term_frame_done(t) };
         true
     }
