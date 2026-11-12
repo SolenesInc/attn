@@ -2,7 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-work="$(mktemp -d "${TMPDIR:-/tmp}/attn-native-build-clean-test.XXXXXX")"
+work="$(cd "$(mktemp -d "${TMPDIR:-/tmp}/attn-native-build-clean-test.XXXXXX")" && pwd)"
 holder=""
 release_lock() {
   [ -n "$holder" ] || return 0
