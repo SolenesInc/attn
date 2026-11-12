@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { loadShiki } from '../Markdown/shiki';
 
 export interface CodeToken {
@@ -78,4 +78,149 @@ export function useTokens(lines: readonly string[], path: string): TokenLine[] |
     return () => { cancelled = true; };
   }, [key]);
   return state?.key === key ? state.tokens : null;
+}
+
+/** The most lines a reader keeps tokens for across the files it has opened.
+ * Measured on the change of seed s-gt54ef: internal/daemon/daemon.go is 4,257
+ * lines (19,575 tokens), and the five files its stops show are 7,476 lines
+ * (33,877 tokens), about 7 MB in V8. */
+export const TOKEN_CACHE_MAX_LINES = 25_000;
+
+/** A file's tokens for one content hash as far as they are made, from line 1,
+ * and the colors of its previous content by line text until they are whole. */
+export interface FileTokens {
+  readonly tokens: readonly (TokenLine | undefined)[];
+  readonly earlier?: ReadonlyMap<string, TokenLine>;
+}
+
+const NO_TOKENS: FileTokens = { tokens: [] };
+
+interface CachedFile {
+  hash: string;
+  lines: readonly string[];
+  filled: (TokenLine | undefined)[];
+  started: boolean;
+  done: boolean;
+  whole: Promise<void>;
+  shown: FileTokens;
+  asEarlier?: FileTokens;
+}
+
+function byText(file: CachedFile): Map<string, TokenLine> {
+  const known = new Map(file.shown.earlier);
+  file.filled.forEach((tokens, index) => { if (tokens) known.set(file.lines[index], tokens); });
+  return known;
+}
+
+/** The tokens of the files one reader shows, one content hash per path. Each
+ * (path, hash) is tokenized once; a full cache forgets the least recently
+ * opened file. Files warmed ahead of their first open are tokenized one at a
+ * time and count as opened before every file the user opened. */
+export class TokenCache {
+  private files = new Map<string, CachedFile>();
+  private readonly listeners = new Set<() => void>();
+  private warming = Promise.resolve();
+
+  constructor(private readonly maxLines = TOKEN_CACHE_MAX_LINES) {}
+
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
+
+  /** What to draw for path at hash now: its tokens, or the colors of the
+   * path's previous content while hash has none yet. */
+  shown(path: string, hash: string | undefined): FileTokens {
+    const file = this.files.get(path);
+    if (!file || hash === undefined) return NO_TOKENS;
+    if (file.hash === hash) return file.shown;
+    file.asEarlier ??= { tokens: [], earlier: byText(file) };
+    return file.asEarlier;
+  }
+
+  has(path: string, hash: string): boolean {
+    return this.files.get(path)?.hash === hash;
+  }
+
+  /** Whether a file of this many lines fits beside the files kept and queued now. */
+  fits(lines: number): boolean {
+    let total = lines;
+    for (const file of this.files.values()) total += file.lines.length;
+    return total <= this.maxLines;
+  }
+
+  /** Queues path at hash to be tokenized after the files warmed before it. */
+  warm(path: string, hash: string, lines: readonly string[]): Promise<void> {
+    if (this.has(path, hash)) return this.files.get(path)!.whole;
+    const file = this.add(path, hash, lines, false);
+    file.whole = this.warming.then(() => this.start(path, file));
+    this.warming = file.whole;
+    return file.whole;
+  }
+
+  /** Tokenizes path at hash now unless it is kept, and marks it the most
+   * recently opened. Resolves once its tokens are whole or it cannot be colored. */
+  open(path: string, hash: string, lines: readonly string[]): Promise<void> {
+    const kept = this.files.get(path);
+    if (kept?.hash === hash) {
+      this.files.delete(path);
+      this.files.set(path, kept);
+      return kept.started ? kept.whole : this.start(path, kept);
+    }
+    const file = this.add(path, hash, lines, true);
+    file.whole = this.start(path, file);
+    return file.whole;
+  }
+
+  private add(path: string, hash: string, lines: readonly string[], recent: boolean): CachedFile {
+    const kept = this.files.get(path);
+    this.files.delete(path);
+    const file: CachedFile = { hash, lines, filled: Array.from({ length: lines.length }), started: false, done: false, whole: Promise.resolve(), shown: { tokens: [], earlier: kept ? byText(kept) : undefined } };
+    if (recent) this.files.set(path, file);
+    else this.files = new Map([[path, file], ...this.files]);
+    return file;
+  }
+
+  private async start(path: string, file: CachedFile): Promise<void> {
+    const current = () => this.files.get(path) === file;
+    if (file.started || !current()) return;
+    file.started = true;
+    const colored = await tokenizeLines(file.lines, path, (start, chunk) => {
+      chunk.forEach((line, index) => { file.filled[start + index] = line; });
+      file.shown = { tokens: file.filled.slice(), earlier: file.shown.earlier };
+      file.asEarlier = undefined;
+      this.notify();
+    }, () => !current());
+    if (!current()) return;
+    file.done = true;
+    if (!colored) return;
+    file.shown = { tokens: file.shown.tokens };
+    this.notify();
+    this.fit();
+  }
+
+  private fit() {
+    let total = 0;
+    for (const file of this.files.values()) total += file.lines.length;
+    const newest = [...this.files.keys()].pop();
+    for (const [path, file] of this.files) {
+      if (total <= this.maxLines) return;
+      if (!file.done || path === newest) continue;
+      this.files.delete(path);
+      total -= file.lines.length;
+    }
+  }
+
+  private notify() {
+    this.listeners.forEach((listener) => listener());
+  }
+}
+
+/** The tokens to draw for a file's rows, from the reader's cache, which
+ * tokenizes them when it does not keep them. */
+export function useCachedTokens(cache: TokenCache, path: string, hash: string | undefined, lines: readonly string[] | null): FileTokens {
+  useEffect(() => {
+    if (hash !== undefined && lines && lines.length > 0) void cache.open(path, hash, lines);
+  }, [cache, hash, lines, path]);
+  return useSyncExternalStore(cache.subscribe, () => cache.shown(path, hash));
 }

@@ -15,6 +15,7 @@ import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
 import { CURSOR_CLASS, expansionKey, ReviewReaderContext, type FileTarget, type ReviewReaderContextValue, type RowLabels, type StopExpansion } from './reviewContext';
 import { SearchPanel } from './SearchPanel';
+import { TokenCache } from './tokenize';
 import { stopTarget } from './StopBlock';
 import { fileAnchorPlace, type Annotation } from '../MarkdownReader/annotations/types';
 import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, placeFileMark, SendSheet, verdictForKey, type MarkKind, type MarkPlace, type MarkTarget, type ReviewMarks, type ReviewVerdict } from './ReviewMarks';
@@ -309,7 +310,7 @@ export function ReviewReader({
   const cursorIndexRef = useRef(0);
   const scrolledKeyRef = useRef<string | null>(null);
   const scrollModeRef = useRef<ScrollLogicalPosition>('nearest');
-  const fileRowsRef = useRef(new Map<string, Promise<ReviewRow[]>>());
+  const fileReadsRef = useRef(new Map<string, Promise<ReviewFileResultMessage>>());
   const fileIdRef = useRef(0);
   const readsRef = useRef(new Map<number, number>());
   const openFileView = files.length > 0 ? files[files.length - 1] : null;
@@ -358,22 +359,25 @@ export function ReviewReader({
     return sendReviewFile(host, document, path);
   }, [document, host, sendReviewFile]);
 
-  const wholeFile = useCallback((path: string): Promise<ReviewRow[]> => {
-    let rows = fileRowsRef.current.get(path);
-    if (!rows) {
-      rows = readFile(path).then((answer) => answer.rows ?? []);
-      rows.catch(() => fileRowsRef.current.delete(path));
-      fileRowsRef.current.set(path, rows);
+  /** The file as this bundle found it, read once for every use but the file view. */
+  const readOnce = useCallback((path: string): Promise<ReviewFileResultMessage> => {
+    let read = fileReadsRef.current.get(path);
+    if (!read) {
+      read = readFile(path);
+      read.catch(() => fileReadsRef.current.delete(path));
+      fileReadsRef.current.set(path, read);
     }
-    return rows;
+    return read;
   }, [readFile]);
+
+  const wholeFile = useCallback((path: string): Promise<ReviewRow[]> => readOnce(path).then((answer) => answer.rows ?? []), [readOnce]);
 
   const readBundleRef = useRef(bundle);
   useEffect(() => {
     const was = readBundleRef.current;
     if (was === bundle) return;
     readBundleRef.current = bundle;
-    fileRowsRef.current.clear();
+    fileReadsRef.current.clear();
     setMarkFiles(new Map());
     const stopAt = (stops: readonly ReviewStop[], key: string) => stops.find((stop) => expansionKey(stop) === key);
     const changed = [...expansionsRef.current].flatMap(([key, expansion]) => {
@@ -399,6 +403,28 @@ export function ReviewReader({
     });
   }, [bundle, wholeFile]);
 
+  const tokenCache = useMemo(() => new TokenCache(), [bundle.repository, bundle.base]);
+
+  const stopFiles = useMemo(
+    () => [...new Map(bundle.stops.map((stop) => [stop.path, stop.file_hash])).entries()].map(([path, hash]) => `${path}\0${hash}`).join('\n'),
+    [bundle.stops],
+  );
+  useEffect(() => {
+    let current = true;
+    void (async () => {
+      for (const [path, hash] of stopFiles.split('\n').filter(Boolean).map((entry) => entry.split('\0'))) {
+        if (!current) return;
+        if (tokenCache.has(path, hash)) continue;
+        const answer = await readOnce(path).catch(() => null);
+        if (!current) return;
+        if (!answer?.rows || answer.hash === undefined) continue;
+        if (!tokenCache.fits(answer.rows.length)) return;
+        void tokenCache.warm(path, answer.hash, answer.rows.map((row) => row.text));
+      }
+    })();
+    return () => { current = false; };
+  }, [readOnce, stopFiles, tokenCache]);
+
   /** Reads a file into the stack entry `id`. A newer read of the same entry
    * replaces an older one. The entry's edited line, when it has one, places the
    * cursor; otherwise `place` picks the row from the entry as it is when the
@@ -416,7 +442,7 @@ export function ReviewReader({
         const rows = answer.rows ?? [];
         settle((open) => {
           const edited = open.edited === undefined ? -1 : rows.findIndex((row) => row.now === open.edited);
-          return { rows, problem: answer.problem, error: undefined, cursor: edited >= 0 ? edited : place(rows, open), edited: undefined };
+          return { rows, hash: answer.hash, problem: answer.problem, error: undefined, cursor: edited >= 0 ? edited : place(rows, open), edited: undefined };
         });
       },
       (error: unknown) => settle(() => ({ rows: null, error: error instanceof Error ? error.message : String(error) })),
@@ -425,7 +451,7 @@ export function ReviewReader({
 
   /** Reads a file the reader wrote again, for the marks and every open view of it. */
   const refreshFile = useCallback((path: string) => {
-    fileRowsRef.current.delete(path);
+    fileReadsRef.current.delete(path);
     void wholeFile(path).then((rows) => setMarkFiles((known) => new Map(known).set(path, rows)), () => undefined);
     filesRef.current.forEach((file) => {
       if (file.target.path === path) loadFile(file.id, path, rowIndexAfterRefresh);
@@ -468,7 +494,7 @@ export function ReviewReader({
       const previous = stack[0]?.target.path === stop.path ? stack[0] : undefined;
       const stage = refresh && previous
         ? { ...previous, id, target }
-        : { id, target, rows: previous?.rows ?? null, cursor: previous?.rows ? rowIndexOf(previous.rows, target.line) : 0 };
+        : { id, target, rows: previous?.rows ?? null, hash: previous?.hash, cursor: previous?.rows ? rowIndexOf(previous.rows, target.line) : 0 };
       return refresh ? [stage, ...stack.slice(1)] : [stage];
     });
     loadFile(id, stop.path, (rows, open) => (refresh ? rowIndexAfterRefresh(rows, open) : rowIndexOf(rows, target.line)));
@@ -1299,6 +1325,7 @@ export function ReviewReader({
         {frame === 'walkthrough' && openFileView ? (
           <FileView
             file={openFileView}
+            tokenCache={tokenCache}
             filled={filled}
             stage
             canGoBack={files.length > 1}
@@ -1324,6 +1351,7 @@ export function ReviewReader({
       {frame !== 'walkthrough' && openFileView ? (
         <FileView
           file={openFileView}
+          tokenCache={tokenCache}
           filled={filled}
           canGoBack={files.length > 1}
           onBack={back}

@@ -68,8 +68,8 @@ function serveFiles(daemon: ScriptedDaemon) {
   }));
 }
 
-async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })], host?: string) {
-  const view = await openMarkdownTiles('', { path: DOC, host, script: serveFiles, initialState: { sessions } });
+async function openReview(review = bundleWith(), sessions = [daemonSession('s1', { state: 'idle' })], host?: string, script?: (daemon: ScriptedDaemon) => void) {
+  const view = await openMarkdownTiles('', { path: DOC, host, script: (daemon) => { serveFiles(daemon); script?.(daemon); }, initialState: { sessions } });
   const show = async (shown: ReviewBundle) => {
     view.daemon.emit({ event: 'desktop_tile_content', desktop_id: view.daemon.arrangement.profile.current_desktop_id, tile_id: 'tile-a', tile_kind: 'markdown', path: DOC, content: DOCUMENT, review: shown, ...(host ? { host } : {}) });
     await view.daemon.idle();
@@ -315,11 +315,12 @@ describe('App review navigation', () => {
   });
 
   it('keeps expanded lines, reading no file when only a language server’s state changes and the file again when it changes', async () => {
-    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]));
-    daemon.on('review_file', ({ path }) => ({
-      event: 'review_file_result', success: true, path, hash: 'h1',
-      rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
-    }));
+    const { tileElement, daemon, press, show, reader } = await openReview(bundleWith([{ language: 'go', state: 'starting', file: 'calc.go' }]), undefined, undefined, (scripted) => {
+      scripted.on('review_file', ({ path }) => ({
+        event: 'review_file_result', success: true, path, hash: 'h1',
+        rows: [row(' ', 1, 1, 'package calc'), row(' ', 2, 2, ''), ...CALC_ROWS, row(' ', 6, 7, ''), row(' ', 7, 8, 'func Sub(a, b int) int {')],
+      }));
+    });
     const rows = () => tileElement.querySelectorAll('.review-stop[data-path="calc.go"] [data-review-cursor="row"]').length;
     await press('ArrowRight');
     await press('e');

@@ -1,10 +1,10 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
 import { PathLabel } from './StopBlock';
 import { useResizeWatch } from '../../tileWindow';
-import { tokenizeLines, type TokenLine } from './tokenize';
+import { useCachedTokens, type TokenCache } from './tokenize';
 import { useReviewReader } from './reviewContext';
 import { MarkRow, markKey } from './ReviewMarks';
 
@@ -15,6 +15,8 @@ export interface OpenFile {
   id: number;
   target: FileTarget;
   rows: ReviewRow[] | null;
+  /** The content hash of the file the rows were read from. */
+  hash?: string;
   error?: string;
   problem?: string;
   cursor: number;
@@ -70,22 +72,6 @@ export function changeStarts(rows: readonly ReviewRow[]): number[] {
   return starts;
 }
 
-function useFileTokens(rows: ReviewRow[] | null, path: string): readonly (TokenLine | undefined)[] {
-  const [tokens, setTokens] = useState<readonly (TokenLine | undefined)[]>([]);
-  useEffect(() => {
-    setTokens([]);
-    if (!rows || rows.length === 0) return undefined;
-    let cancelled = false;
-    const filled: (TokenLine | undefined)[] = Array.from({ length: rows.length });
-    void tokenizeLines(rows.map((row) => row.text), path, (start, chunk) => {
-      chunk.forEach((line, index) => { filled[start + index] = line; });
-      setTokens(filled.slice());
-    }, () => cancelled);
-    return () => { cancelled = true; };
-  }, [path, rows]);
-  return tokens;
-}
-
 /** The lines agent notes point at, and whether any of them is the place to look. */
 function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
   const noted = new Map<number, boolean>();
@@ -98,6 +84,7 @@ function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
 
 export function FileView({
   file,
+  tokenCache,
   filled,
   stage = false,
   canGoBack,
@@ -106,6 +93,7 @@ export function FileView({
   onPick,
 }: {
   file: OpenFile;
+  tokenCache: TokenCache;
   filled: boolean;
   stage?: boolean;
   canGoBack: boolean;
@@ -116,7 +104,8 @@ export function FileView({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState({ top: 0, height: 0 });
   const rows = file.rows;
-  const tokens = useFileTokens(rows, file.target.path);
+  const lines = useMemo(() => rows?.map((row) => row.text) ?? null, [rows]);
+  const { tokens, earlier } = useCachedTokens(tokenCache, file.target.path, file.hash, lines);
   const range = file.target.range;
   const notes = file.target.notes;
   const noted = useMemo(() => notedLines(notes), [notes]);
@@ -188,7 +177,7 @@ export function FileView({
                 >
                   <CodeRow
                     row={row}
-                    tokens={tokens[index]}
+                    tokens={tokens[index] ?? earlier?.get(row.text)}
                     path={file.target.path}
                     inRange={range !== undefined && row.now !== undefined && row.now >= range[0] && row.now <= range[1]}
                     labels={labels && 'fileId' in labels.at && labels.at.fileId === file.id && labels.at.row === index ? labels.names : undefined}
