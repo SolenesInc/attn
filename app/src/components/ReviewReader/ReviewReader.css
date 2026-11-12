@@ -27,10 +27,6 @@
   overflow-y: visible;
 }
 
-.review-frame > .review-doc[hidden] {
-  display: none;
-}
-
 .review-frame--walkthrough > .review-doc {
   flex: 0 0 min(440px, 38%);
   border-right: 1px solid var(--color-border);
@@ -85,17 +81,80 @@
   box-shadow: inset 3px 0 0 var(--color-warning, var(--color-accent));
 }
 
+.review-frame.review-frame--map {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "diagrams arrow"
+    "diagrams doc";
+}
+
+.review-frame--map > .review-doc {
+  grid-area: doc;
+}
+
+.review-frame--map > .review-doc [data-review-outside] {
+  display: none;
+}
+
+.review-frame--map > .review-doc::after {
+  content: '';
+  display: block;
+  height: calc(100% - 3rem);
+}
+
 .review-map {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+  display: contents;
 }
 
 .review-map-diagrams {
-  flex: 0 0 44%;
+  grid-area: diagrams;
+  min-height: 0;
   overflow: auto;
   padding: 0.75rem;
   border-right: 1px solid var(--color-border);
+}
+
+.review-map-message {
+  grid-area: arrow;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+
+.review-map-message .review-kicker {
+  flex-basis: 100%;
+}
+
+.review-map-arrow {
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text-primary, inherit);
+}
+
+.review-map-route {
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.review-map-empty {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.review-map-not-shown {
+  margin-top: 1.25rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 60%, transparent);
+}
+
+.review-map-not-shown h3 {
+  margin: 0;
+  font-size: 0.8125rem;
 }
 
 .review-map-sides {
@@ -123,30 +182,72 @@
   color: var(--color-text-primary, inherit);
 }
 
-.review-map-detail {
-  flex: 1;
-  min-width: 0;
-  overflow: auto;
-  padding: 0.75rem 1rem;
+.review-frame.review-frame--map-stacked {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: fit-content(50%) auto minmax(0, 1fr);
+  grid-template-areas:
+    "diagrams"
+    "arrow"
+    "doc";
 }
 
-.review-map-message h2 {
-  margin: 0.25rem 0;
-  font-size: 1.05rem;
+.review-frame--map-stacked .review-map-diagrams {
+  border-right: 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.review-map-route {
-  display: block;
-  margin-bottom: 0.75rem;
-  color: var(--color-text-muted);
-  font-size: 0.75rem;
+.review-seq-figure {
+  margin: 0 0 1rem;
+}
+
+.review-seq-caption-text {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
+  color: var(--color-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
 .review-seq {
   display: block;
   width: 100%;
   height: auto;
+  margin: 0 auto;
   font-size: 12px;
+}
+
+.review-seq-participant .review-seq-participant-second {
+  fill: var(--color-text-muted);
+  font-family: 'JetBrains Mono', 'SF Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.review-seq-caption {
+  fill: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.review-seq-group rect {
+  fill: color-mix(in srgb, var(--color-accent) 5%, transparent);
+  stroke: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  stroke-dasharray: 3 3;
+}
+
+.review-seq-group--rect rect {
+  stroke: none;
+  fill: color-mix(in srgb, var(--color-text-muted) 10%, transparent);
+}
+
+.review-seq-divider line {
+  stroke: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  stroke-dasharray: 3 3;
+}
+
+.review-seq-group-label {
+  fill: var(--color-accent);
+  font-size: 11px;
 }
 
 .review-seq-participant rect {
@@ -219,6 +320,11 @@
 
 .review-seq-message--current .review-seq-head {
   fill: var(--color-accent);
+}
+
+.review-seq-message--lost .review-seq-line,
+.review-seq-message--lost .review-seq-open {
+  stroke: var(--color-warning);
 }
 
 .review-frames {

@@ -77,9 +77,11 @@ One review has three frames. The agent picks the one that suits the change, and
   dimmed. `z` hides the explanation, and ⇧← and ⇧→ scroll the file sideways.
 - **Map** (`3`) draws the change as a sequence diagram: the parts of the
   system, the calls between them with the agent's caption under each, and boxes
-  around a transaction, a loop or a branch. ← and → step through its messages,
-  each beside the code that sends it. When the review has a
-  diagram before and after the change, `b` switches between them.
+  around a transaction, a loop or a branch. ← and → step through its arrows.
+  Beside the diagram is the step that explains the current arrow, with its
+  stops, and under the diagram the files the review leaves out. In a narrow
+  tile the diagram sits above the step. When the review has a diagram before
+  and after the change, `b` switches between them.
 
 A frame the review cannot fill, such as Map for a review with no diagram, is
 left out.

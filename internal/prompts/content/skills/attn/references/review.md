@@ -85,7 +85,7 @@ A stop on a markdown file renders as a document, block by block, with the change
 
 `frame:` in the frontmatter picks how the review opens. The user can switch.
 
-- `map` when the change is a flow across components. Write a mermaid `sequenceDiagram` and put `%% stop: path:from-to` on the line after each message that a stop shows. The Map steps through those messages with the code of each beside the diagram. To show the flow before and after the change, open one fence with `` ```mermaid before `` and one with `` ```mermaid after ``.
+- `map` when the change is a flow across components. Write a mermaid `sequenceDiagram` and put `%% stop: path:from-to` on the line after each message that a stop shows. The Map steps through those messages and shows, beside the diagram, the `##` step that holds each message's stop: its heading, its prose and its stops. Write that prose so it explains the arrow. To show the flow before and after the change, open one fence with `` ```mermaid before `` and one with `` ```mermaid after ``.
 - `walkthrough` when the change sits in one or two files. The user steps through the stops with your prose beside the file.
 - `brief` otherwise. The user reads the document top to bottom. `attn review start` writes `brief` when the document picks no frame.
 

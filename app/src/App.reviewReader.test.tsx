@@ -508,8 +508,10 @@ const script = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review
 const stageStop = (scope: HTMLElement) => script(scope)?.querySelector('.review-stop--current')?.getAttribute('data-path');
 const diagrams = (scope: HTMLElement) => Array.from(scope.querySelectorAll('.review-map [data-review-flow]')).map((svg) => svg.getAttribute('data-review-flow'));
 const currentMessage = (scope: HTMLElement) => scope.querySelector('.review-map [aria-current="true"][data-review-message]')?.getAttribute('data-review-message');
-const mapDetail = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-map-detail');
+const arrowLine = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-map-message');
+const mapDetail = (scope: HTMLElement) => scope.querySelector<HTMLElement>('.review-frame--map > .review-doc');
 const mapCursor = (scope: HTMLElement) => mapDetail(scope)?.querySelector<HTMLElement>('.review-cursor');
+const cursorStop = (scope: HTMLElement) => mapCursor(scope)?.closest('.review-stop')?.getAttribute('data-path');
 
 describe('App review reader frames', () => {
   it('opens in the Walkthrough the document picks: the stops as a script beside the file of the current stop', async () => {
@@ -576,14 +578,14 @@ describe('App review reader frames', () => {
     expect(fileCursorText(tileElement)).toBe('2+func helper() {}');
   });
 
-  it('opens in the Map the document picks and walks the messages tied to stops, with the code of each beside the diagram', async () => {
+  it('opens in the Map the document picks and walks the messages tied to stops, with the step of each beside the diagram', async () => {
     const { tileElement, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
 
     expect(frameTabs(tileElement)).toEqual(['1Brief', '2Walkthrough', '3Map *']);
     expect(diagrams(tileElement)).toEqual(['39']);
     expect(currentMessage(tileElement)).toBe('44');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 2 · after the change');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'calc.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 2 · after the change');
+    expect(cursorStop(tileElement)).toBe('calc.go');
     expect(mapCursor(tileElement)).toHaveAttribute('data-line', '3');
 
     await press('ArrowDown');
@@ -592,8 +594,8 @@ describe('App review reader frames', () => {
 
     await press('ArrowRight');
     expect(currentMessage(tileElement)).toBe('46');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()Calc → Util');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()Calc → Util');
+    expect(cursorStop(tileElement)).toBe('util.go');
     await press('ArrowRight');
     expect(currentMessage(tileElement)).toBe('46');
 
@@ -604,7 +606,7 @@ describe('App review reader frames', () => {
     await press('b');
     expect(diagrams(tileElement)).toEqual(['31']);
     expect(currentMessage(tileElement)).toBe('35');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1 · before the change');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1 · before the change');
     await press('b');
     expect(diagrams(tileElement)).toEqual(['39']);
     expect(currentMessage(tileElement)).toBe('44');
@@ -613,8 +615,8 @@ describe('App review reader frames', () => {
   it('keeps the Map on its message when the agent adds or removes a message before it', async () => {
     const { tileElement, daemon, press } = await openReview({ review: MAP_BUNDLE, content: MAP_DOCUMENT });
     await press('ArrowRight');
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 2 of 2');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 2 of 2');
+    expect(cursorStop(tileElement)).toBe('util.go');
 
     const [before, after, undrawn] = MAP_BUNDLE.flows;
     const show = (messages: typeof after.messages) => act(() => daemon.emit({
@@ -623,14 +625,14 @@ describe('App review reader frames', () => {
     }));
     show([message(42, 'poll', 'calc', 'Sum(a, b)', 15), ...after.messages.map((entry) => ({ ...entry, line: entry.line + 2 }))]);
     await daemon.idle();
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 3 of 3');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
-    expect(mapDetail(tileElement)?.querySelector('.review-stop')).toHaveAttribute('data-path', 'util.go');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 3 of 3');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()');
+    expect(cursorStop(tileElement)).toBe('util.go');
 
     show(after.messages.slice(1));
     await daemon.idle();
-    expect(mapDetail(tileElement)).toHaveTextContent('Message 1 of 1');
-    expect(mapDetail(tileElement)).toHaveTextContent('helper()');
+    expect(arrowLine(tileElement)).toHaveTextContent('Arrow 1 of 1');
+    expect(arrowLine(tileElement)).toHaveTextContent('helper()');
   });
 
   it('switches with b to a before diagram that ties no message to a stop, and back', async () => {
@@ -641,7 +643,7 @@ describe('App review reader frames', () => {
 
     await press('b');
     expect(diagrams(tileElement)).toEqual(['31']);
-    expect(mapDetail(tileElement)).toHaveTextContent('No message in this diagram is tied to a stop.');
+    expect(arrowLine(tileElement)).toHaveTextContent('No arrow in this diagram is tied to a stop.');
     await press('ArrowRight');
     expect(diagrams(tileElement)).toEqual(['31']);
     await press('b');

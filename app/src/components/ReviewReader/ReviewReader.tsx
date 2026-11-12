@@ -9,7 +9,7 @@ import { isDomInstance } from '../../utils/realm';
 import { rowKey } from './CodeRows';
 import { changeStarts, FileView, rowIndexAfterRefresh, rowIndexOf, type OpenFile } from './FileView';
 import { FRAME_KEYS, hasSides, mapFlows, mapIndexOf, mapPlaceOf, mapStops, offeredFrames, openingFrame, type Frame, type MapPlace, type Side } from './frames';
-import { MapFrame } from './MapFrame';
+import { MAP_COLUMNS, MapFrame, mapFitsBeside } from './MapFrame';
 import { isOwnDefinition, labelNames, LATE_ANSWER_MS, namesOn, OFFER_MS, offerText, type LabeledName, type NavAnswer, type NavKind, type NavLine, type Picking } from './navigation';
 import { NavPanel } from './NavPanel';
 import { languageToSetUp, ReviewKeyLine, ReviewKeySheet, type ReviewSetup } from './ReviewKeys';
@@ -22,6 +22,7 @@ import { fileRowsAnchor, MarkComposer, MarkRow, marksByLine as marksAtLines, pla
 import { findEditUnit } from './editUnit';
 import { docBlocks } from './docBlocks';
 import { showLeadIn } from './leadIn';
+import { blocksOutsideStep, isOutsideStep, OUTSIDE_STEP } from './mapStep';
 import { isDocumentPath } from './DocStop';
 import { EditBox, editStart, editText, fileLines, placeEdit, whereEditStands, type OpenEdit } from './ReviewEdits';
 import './ReviewReader.css';
@@ -122,6 +123,22 @@ function useFocusAround(rootRef: RefObject<HTMLElement | null>, tileWindow: Wind
   return focused;
 }
 
+/** Whether the Map's frame is wide enough for the diagram beside the step,
+ * kept current as the frame resizes; false outside the Map. */
+function useMapBeside(ref: RefObject<HTMLElement | null>, tileWindow: Window, bundle: ReviewBundle, map: boolean): boolean {
+  const [beside, setBeside] = useState(false);
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!map || !element) return undefined;
+    const measure = () => setBeside(mapFitsBeside(bundle, element.getBoundingClientRect().width));
+    measure();
+    const observer = new tileWindow.ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [bundle, map, ref, tileWindow]);
+  return map && beside;
+}
+
 function cursorKeyOf(element: Element): string {
   const key = element.getAttribute('data-cursor-key');
   return key ?? `block:${element.getAttribute('data-block-id')}`;
@@ -168,14 +185,16 @@ function stopOfStage(bundle: ReviewBundle, key: StageKey | null): ReviewStop | u
 function documentTargets(doc: HTMLElement | null): HTMLElement[] {
   if (!doc) return [];
   return Array.from(doc.querySelectorAll<HTMLElement>('[data-review-cursor], [data-block-id]')).filter((element) => (
-    element.hasAttribute('data-review-cursor') || element.querySelector('[data-block-id]') === null
+    (element.hasAttribute('data-review-cursor') || element.querySelector('[data-block-id]') === null) && !isOutsideStep(element)
   ));
 }
 
 function findTarget(doc: HTMLElement | null, key: string | null): HTMLElement | null {
   if (!doc || !key) return null;
-  if (key.startsWith('block:')) return doc.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(key.slice(6))}"]`);
-  return doc.querySelector<HTMLElement>(`[data-cursor-key="${CSS.escape(key)}"]`);
+  const element = key.startsWith('block:')
+    ? doc.querySelector<HTMLElement>(`[data-block-id="${CSS.escape(key.slice(6))}"]`)
+    : doc.querySelector<HTMLElement>(`[data-cursor-key="${CSS.escape(key)}"]`);
+  return element && !isOutsideStep(element) ? element : null;
 }
 
 function rowText(element: Element): string {
@@ -270,7 +289,7 @@ export function ReviewReader({
   const sendCodeNav = daemon?.sendCodeNav;
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
-  const detailRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const fileBodyRef = useRef<HTMLDivElement | null>(null);
   const offered = useMemo(() => offeredFrames(bundle), [bundle]);
   const [chosenFrame, setChosenFrame] = useState<Frame>(() => openingFrame(bundle));
@@ -358,10 +377,7 @@ export function ReviewReader({
   const marksByLine = useMemo(() => marksAtLines(annotations, markPlaces), [annotations, markPlaces]);
   const movedMarks = useMemo(() => annotations.filter((annotation) => markPlaces.get(annotation.id) === 'moved'), [annotations, markPlaces]);
 
-  const scope = useCallback((): HTMLElement | null => {
-    if (frame === 'map') return detailRef.current;
-    return frame === 'brief' ? docRef.current : null;
-  }, [frame]);
+  const scope = useCallback((): HTMLElement | null => (frame === 'walkthrough' ? null : docRef.current), [frame]);
 
   const readFile = useCallback((path: string): Promise<ReviewFileResultMessage> => {
     if (!sendReviewFile) return Promise.reject(new Error('Not connected to the daemon'));
@@ -559,6 +575,18 @@ export function ReviewReader({
     setCursorKey(cursorKeyOf(element));
   }, []);
 
+  const mapStopLine = frame === 'map' ? messageStops[mapIndex]?.stopLine ?? null : undefined;
+  const drawnLines = useMemo(() => new Set(bundle.flows.filter((flow) => flow.drawn).map((flow) => flow.line)), [bundle]);
+  useLayoutEffect(() => {
+    const card = docRef.current?.querySelector('.md-reader-card');
+    if (mapStopLine === undefined || !card) return undefined;
+    const outside = blocksOutsideStep(card, mapStopLine, drawnLines);
+    for (const block of outside) block.setAttribute(OUTSIDE_STEP, '');
+    return () => {
+      for (const block of outside) block.removeAttribute(OUTSIDE_STEP);
+    };
+  }, [content, drawnLines, mapStopLine]);
+
   useLayoutEffect(() => {
     cursorElementRef.current?.classList.remove(CURSOR_CLASS);
     cursorElementRef.current = null;
@@ -687,7 +715,7 @@ export function ReviewReader({
     );
   }, [currentTarget, expansions, stopOf, wholeFile]);
 
-  const showCursorAt = useCallback((stop: ReviewStop, line?: number, scroll: ScrollLogicalPosition = 'start') => {
+  const showCursorAt = useCallback((stop: ReviewStop, line?: number, scroll: CursorScroll = 'start') => {
     scrolledKeyRef.current = null;
     scrollModeRef.current = scroll;
     setCursorKey(stopCursorKey(stop, line));
@@ -697,7 +725,7 @@ export function ReviewReader({
     const at = list[index];
     setMapPlace(mapPlaceOf(bundle, list, index));
     const stop = at ? bundle.stops.find((candidate) => candidate.heading_line === at.stopLine) : undefined;
-    if (stop) showCursorAt(stop, line);
+    if (stop) showCursorAt(stop, line, 'lead-in');
   }, [bundle, messageStops, showCursorAt]);
 
   const pickMessage = useCallback((message: ReviewFlowMessage) => {
@@ -1147,6 +1175,7 @@ export function ReviewReader({
   }, [rootRef, searchOpen]);
 
   const focused = useFocusAround(rootRef, tileWindow);
+  const mapBeside = useMapBeside(frameRef, tileWindow, bundle, frame === 'map');
   const selecting = selectFrom !== null || openFileView?.selectFrom !== undefined;
   const escapes = !focused ? null
     : editing ? 'editor'
@@ -1338,8 +1367,12 @@ export function ReviewReader({
 
   return (
     <ReviewReaderContext.Provider value={context}>
-      <div className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}`}>
-        <div className="review-doc" ref={docRef} onClick={onScopeClick} hidden={frame === 'map'}>
+      <div
+        ref={frameRef}
+        className={`review-frame review-frame--${frame}${frame === 'walkthrough' && filled ? ' review-frame--script-hidden' : ''}${frame === 'map' && !mapBeside ? ' review-frame--map-stacked' : ''}`}
+        style={mapBeside ? { gridTemplateColumns: MAP_COLUMNS } : undefined}
+      >
+        <div className="review-doc" ref={docRef} onClick={onScopeClick}>
           {children}
           {movedMarks.length > 0 ? (
             <section className="review-marks-moved" aria-label="Moved notes">
@@ -1374,10 +1407,8 @@ export function ReviewReader({
             at={mapIndex}
             side={side}
             sides={sides}
-            detailRef={detailRef}
             onPick={pickMessage}
             onSide={switchSide}
-            onDetailClick={onScopeClick}
           />
         ) : null}
         {frame !== 'walkthrough' && openFileView ? (

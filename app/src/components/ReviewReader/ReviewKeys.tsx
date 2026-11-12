@@ -22,7 +22,7 @@ const WALKTHROUGH_KEYS: Array<[string[], string]> = [
 
 const MAP_KEYS: Array<[string[], string]> = [
   [['↑', '↓'], 'line'],
-  [['←', '→'], 'message'],
+  [['←', '→'], 'arrow'],
   [['↵'], 'open the file'],
   [['e'], 'more lines'],
   [['/'], 'search'],
@@ -196,7 +196,7 @@ export function ReviewKeyLine({
 }
 
 const allKeys = (): Array<[string[], string]> => [
-  [['1', '2', '3'], 'Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the code of each message. A frame the document cannot fill is left out.'],
+  [['1', '2', '3'], 'Brief: the document top to bottom. Walkthrough: the stops as a script beside the file. Map: the sequence diagram beside the step of the review that explains the current arrow. A frame the document cannot fill is left out.'],
   [['↑', '↓'], 'Move by line in code, by block in prose. In the file view, by line; PageUp and PageDown move a page.'],
   [['⇧↑', '⇧↓'], 'Select several lines of code, so a note or question covers them.'],
   [['c'], 'Write a note on the line, the selected lines or the paragraph. It waits for the send.'],
@@ -204,7 +204,7 @@ const allKeys = (): Array<[string[], string]> => [
   [['i'], 'Edit what the cursor is on: the selected lines, else a whole string or comment of several lines, else the line; in a document, the paragraph or block as markdown. ⌥↑ and ⌥↓ take in a line. Saving writes the file and lists the edit in the review.'],
   [['u'], 'Undo your edit where the cursor is: the file gets its old text back and the edit leaves the review.'],
   [[sendKey()], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
-  [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
+  [['←', '→'], 'The previous or next stop; in the Map, the previous or next arrow with a stop. In the file view opened from Brief or Map, the previous or next change.'],
   [['⇧←', '⇧→'], 'Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
   [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.'],

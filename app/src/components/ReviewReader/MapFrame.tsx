@@ -1,13 +1,28 @@
-import type { RefObject } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { ReviewBundle, ReviewFlow, ReviewFlowMessage } from '../../types/generated';
 import type { MapStop, Side } from './frames';
-import { SequenceDiagram } from './SequenceDiagram';
-import { StopBlock } from './StopBlock';
+import { ReviewNotShown } from './ReviewLists';
+import { SequenceDiagram, smallestDiagramWidth } from './SequenceDiagram';
 
-function participantLabel(flow: ReviewFlow, id: string): string {
-  return flow.participants.find((participant) => participant.id === id)?.label ?? id;
+const DIAGRAM_SHARE = 0.44;
+const DIAGRAM_PADDING = 25;
+
+/** Whether the Map's diagram column, beside the step, holds the widest of the
+ * document's diagrams at its smallest scale. */
+export function mapFitsBeside(bundle: ReviewBundle, frameWidth: number): boolean {
+  const widest = Math.max(0, ...bundle.flows.filter((flow) => flow.drawn).map(smallestDiagramWidth));
+  return frameWidth * DIAGRAM_SHARE - DIAGRAM_PADDING >= widest;
 }
 
+export const MAP_COLUMNS = `minmax(0, ${DIAGRAM_SHARE * 100}%) minmax(0, 1fr)`;
+
+function participantLabel(flow: ReviewFlow, id: string): string {
+  const label = flow.participants.find((participant) => participant.id === id)?.label ?? id;
+  return label.split(/<br\s*\/?>/i)[0].trim();
+}
+
+/** The Map's diagrams, the Not shown list under them, and the line that says
+ * which arrow the document beside them is narrowed to. */
 export function MapFrame({
   bundle,
   flows,
@@ -15,10 +30,8 @@ export function MapFrame({
   at,
   side,
   sides,
-  detailRef,
   onPick,
   onSide,
-  onDetailClick,
 }: {
   bundle: ReviewBundle;
   flows: readonly ReviewFlow[];
@@ -26,16 +39,18 @@ export function MapFrame({
   at: number;
   side: Side;
   sides: boolean;
-  detailRef: RefObject<HTMLDivElement | null>;
   onPick: (message: ReviewFlowMessage) => void;
   onSide: (side: Side) => void;
-  onDetailClick: (event: React.MouseEvent) => void;
 }) {
   const current = stops[at];
-  const stop = current ? bundle.stops.find((candidate) => candidate.heading_line === current.stopLine) : undefined;
+  const diagramsRef = useRef<HTMLElement | null>(null);
+  const currentLine = current?.message.line;
+  useLayoutEffect(() => {
+    diagramsRef.current?.querySelector('[aria-current="true"][data-review-message]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [currentLine, side]);
   return (
     <div className="review-map">
-      <section className="review-map-diagrams" aria-label="Map">
+      <section className="review-map-diagrams" ref={diagramsRef} aria-label="Map">
         {sides ? (
           <div className="review-map-sides">
             {(['before', 'after'] as const).map((value) => (
@@ -49,23 +64,28 @@ export function MapFrame({
         {flows.map((flow) => (
           <SequenceDiagram key={flow.line} flow={flow} current={current?.flow === flow ? current.message.line : null} onPick={onPick} />
         ))}
+        {bundle.not_shown.length > 0 ? (
+          <section className="review-map-not-shown" aria-label="Not shown">
+            <h3>Not shown</h3>
+            <ReviewNotShown bundle={bundle} />
+          </section>
+        ) : null}
       </section>
-      <section className="review-map-detail" ref={detailRef} onClick={onDetailClick} aria-label="The message's code">
+      <header className="review-map-message" aria-label="The arrow">
         {current ? (
-          <header className="review-map-message">
+          <>
             <span className="review-kicker">
-              Message {at + 1} of {stops.length}{sides ? ` · ${side} the change` : ''}
+              Arrow {at + 1} of {stops.length}{sides ? ` · ${side} the change` : ''}
             </span>
-            <h2>{current.message.text}</h2>
+            <span className="review-map-arrow">{current.message.text}</span>
             <span className="review-map-route">
               {participantLabel(current.flow, current.message.from)} → {participantLabel(current.flow, current.message.to)}
             </span>
-          </header>
+          </>
         ) : (
-          <p className="review-map-empty">No message in this diagram is tied to a stop.</p>
+          <p className="review-map-empty">No arrow in this diagram is tied to a stop.</p>
         )}
-        {stop ? <StopBlock stop={stop} /> : null}
-      </section>
+      </header>
     </div>
   );
 }

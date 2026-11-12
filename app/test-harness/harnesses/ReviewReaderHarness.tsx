@@ -76,6 +76,7 @@ function bundle(navigation: ReviewNavigation[]): ReviewBundle {
       line: 19, drawn: true,
       participants: [{ id: 'poll', label: 'Poll', actor: false }, { id: 'store', label: 'Store', actor: false }],
       messages: [{ line: 23, from: 'poll', to: 'store', arrow: '->>', text: 'ReplacePRsOfHosts(prsByHost)', stop_line: 15 }],
+      groups: [],
     }],
     not_shown: [],
     navigation,
