@@ -126,8 +126,10 @@ async function relaunch() {
   await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
 }
 
+const guestProofDir = fs.mkdtempSync(path.join(project, '.attn-sigma-targets-'));
+const guestProof = path.join(guestProofDir, 'guest-proof.txt');
 runner.registerCleanup('remove_sigma_home', () => fs.rmSync(sigmaHome, { recursive: true, force: true }));
-runner.registerCleanup('remove_guest_proof', () => fs.rmSync(path.join(project, 'guest-proof.txt'), { force: true }));
+runner.registerCleanup('remove_guest_proof', () => fs.rmSync(guestProofDir, { recursive: true, force: true }));
 runner.registerCleanup('stop_sigma_server', () => {
   const lock = path.join(sigmaHome, 'server.lock');
   const pid = fs.existsSync(lock) ? Number(fs.readFileSync(lock, 'utf8')) : 0;
@@ -163,8 +165,8 @@ try {
     await awaitState(onVm, ['idle', 'waiting_input'], 'the DevVM session is ready');
     await shows(onVm, `target: DevVM ${vm} (mounted`, 'devvm-launch');
     await shows(onVm, 'edits appear in the host worktree', 'devvm-launch');
-    await run(onVm, 'echo "guest-$(uname -s)" | tee guest-proof.txt', 'guest-Linux', 'devvm');
-    runner.assert(fs.readFileSync(path.join(project, 'guest-proof.txt'), 'utf8').trim() === 'guest-Linux', 'the guest write appears in the host folder');
+    await run(onVm, `echo "guest-$(uname -s)" | tee ${path.basename(guestProofDir)}/guest-proof.txt`, 'guest-Linux', 'devvm');
+    runner.assert(fs.readFileSync(guestProof, 'utf8').trim() === 'guest-Linux', 'the guest write appears in the host folder');
   });
 
   await runner.step('reattach_after_a_restart_keeps_the_target', async () => {
