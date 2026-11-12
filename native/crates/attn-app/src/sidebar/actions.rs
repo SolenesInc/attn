@@ -136,10 +136,8 @@ pub(crate) fn snooze_on_screen(state: &mut State, tx: &mut Tx) {
 /// The cancel-countdown key: stops every countdown on the desktop shown, or, with none
 /// running, keeps the next turn of the agent shown from settling on its own.
 pub(crate) fn cancel_countdown(state: &State) {
-    let on_screen: Vec<String> = match (state.window.view, state.facts.current_desktop()) {
-        (View::Desktop, Some(desktop)) => {
-            desktop.panes.iter().map(|p| p.session_id.clone()).collect()
-        }
+    let on_screen = match state.window.view {
+        View::Desktop => crate::desktop::on_screen_sessions(state),
         _ => Vec::new(),
     };
     let counting: Vec<&String> = on_screen

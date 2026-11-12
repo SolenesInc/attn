@@ -876,6 +876,32 @@ fn the_cancel_countdown_key_stops_the_countdowns_on_screen_or_keeps_the_next_tur
 }
 
 #[test]
+fn the_cancel_countdown_key_leaves_a_countdown_off_screen_and_keeps_the_next_turn_of_the_agent_shown()
+ {
+    use attn_testkit::tree;
+    let mut two = desktop(
+        "d1",
+        "a",
+        "",
+        vec![pane("d1", "p0", "a"), pane("d1", "p1", "b")],
+    );
+    two.tree_json = tree::row([tree::pane("p0"), tree::pane("p1")]).to_string();
+    two.active_pane_id = "p0".into();
+    let sessions = vec![turn("a", 5), turn("b", 5)];
+    let mut world = World::start(Daemon::scripted().state(state(sessions, vec![slotted(two, 1)])));
+    world.open_desktop();
+    world.gesture(|app| app.key(chord(Action::TerminalToggleMaximize)));
+    changes(&mut world, settling("b", 1));
+
+    world.gesture(|app| app.key(chord(Action::SessionCancelCountdown)));
+    assert_eq!(
+        sent_ids(&world, "cancel_countdown"),
+        ["a"],
+        "b counts down off screen, so a, shown alone, keeps its next turn"
+    );
+}
+
+#[test]
 fn a_countdown_that_leaves_the_screen_drains_only_the_time_it_has_left() {
     let mut world = World::start(Daemon::scripted().state(one_desktop(vec![turn("a", 5)])));
     world.open_desktop();
