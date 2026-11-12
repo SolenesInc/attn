@@ -46,7 +46,8 @@ folder you picked.
 
 The ID is yours to choose: lowercase letters, numbers, hyphens and underscores,
 starting with a letter or number. The built-in names `claude`, `codex`, `shell`,
-`nisse` and `sigma` are taken. Two plugins cannot register one ID.
+`nisse` and `sigma` are taken, as are `codex-app`, `codex-server`, and IDs
+starting with `codex-server-`. Two plugins cannot register one ID.
 
 ## What the plugin declares
 
@@ -184,7 +185,7 @@ server: {
   defaultHome: ".sample-server",
   socketName: "sample-server.sock",
   initialize: { server: "sigma", protocol: { exact: 1 } },
-  callerConversationEnv: "SAMPLE_SERVER_CONVERSATION",
+  callerConversationEnv: "SAMPLE_SERVER_ROOT_CONVERSATION",
   onClose: "leave-running",
   recovery: "numbered-completions",
   targets: true,
@@ -201,10 +202,13 @@ last owning session closes, or `"leave-running"` to leave the server's run going
 The executable, optional executable override, home variable and default home
 resolve in the daemon's machine and login environment. `socketName` is a filename
 inside that home. `callerConversationEnv` names the variable the server sets
-on its shell tools, including tools of a server started outside Attn. The Go and
-Rust CLIs discover that variable through the catalog when no terminal or Codex
-identity exists. They send the declared variable name and native conversation ID, never the
-whole environment. Commands keep the owning session's profile.
+on its shell tools, including tools of a server started outside Attn. Its name
+must end in `_ROOT_CONVERSATION`, with a nonempty prefix. Without terminal or
+Codex identity, the Go and Rust CLIs scan their own environment for that suffix.
+They send the variable name and native conversation ID. The daemon matches both
+to the owning session, whose profile the command keeps. If more than one
+nonempty root variable exists, commands needing a caller refuse with the
+conflicting names; keep only the current server's root variable.
 
 `spawn` and `resume` receive `conversation_id`, the exact native conversation
 that the view must open, and optional `execution_target`. Keep that ID on every

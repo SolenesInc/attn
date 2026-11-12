@@ -55,6 +55,9 @@ func (p *pluginServerDeclaration) validate() error {
 	if !validEnvironmentName(p.HomeEnv) || !validEnvironmentName(p.CallerConversationEnv) || (p.ExecutableEnv != "" && !validEnvironmentName(p.ExecutableEnv)) {
 		return fmt.Errorf("server environment names must be valid variable names")
 	}
+	if !strings.HasSuffix(p.CallerConversationEnv, "_ROOT_CONVERSATION") || len(p.CallerConversationEnv) == len("_ROOT_CONVERSATION") {
+		return fmt.Errorf("server caller_conversation_env must be named <NAME>_ROOT_CONVERSATION")
+	}
 	home := filepath.Clean(p.DefaultHome)
 	if p.DefaultHome == "" || filepath.IsAbs(home) || home == ".." || strings.HasPrefix(home, ".."+string(filepath.Separator)) {
 		return fmt.Errorf("server default_home must be relative to the user's home")
@@ -75,29 +78,25 @@ func (p *pluginServerDeclaration) validate() error {
 	return nil
 }
 
-func (p *pluginServerDeclaration) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, error) {
+func (p *pluginServerDeclaration) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
 	c, err := effectrpc.Dial(ctx, socket, p.Initialize.Server)
 	if err != nil {
-		return nil, err
+		return nil, effectrpc.ServerInfo{}, err
 	}
 	requested := p.Initialize.Protocol.Exact
 	if requested == 0 {
 		requested = p.Initialize.Protocol.Min
 	}
-	var hello struct {
-		Server   string `json:"server"`
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}
+	var hello effectrpc.ServerInfo
 	err = c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": requested}, &hello)
-	if err == nil && ((p.Initialize.Server != "" && hello.Server != p.Initialize.Server) || (p.Initialize.Protocol.Exact > 0 && hello.Protocol != requested) || hello.Protocol < requested) {
-		err = &effectrpc.Error{Server: p.Initialize.Server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires identity %q and protocol %+v", socket, hello.Server, hello.Version, hello.Protocol, p.Initialize.Server, p.Initialize.Protocol)}
+	if err == nil {
+		err = p.validateServerInfo(hello, socket)
 	}
 	if err != nil {
 		c.Close()
-		return nil, err
+		return nil, hello, err
 	}
-	return c, nil
+	return c, hello, nil
 }
 
 func pluginServerBinding(agent, owner string) *serverBinding {
@@ -120,8 +119,9 @@ func (d *Daemon) restorePluginServerOwners() error {
 		d.serverLinks = make(map[string]*serverLink)
 	}
 	for agent, owner := range owners {
-		if agentdriver.Get(agent) != nil {
-			return fmt.Errorf("plugin %q claims reserved agent %q", owner, agent)
+		if reservedPluginAgent(agent) {
+			d.logf("skip plugin server ownership: plugin %q claims reserved agent %q", owner, agent)
+			continue
 		}
 		d.serverLinks[agent] = newServerLink(d, pluginServerBinding(agent, owner))
 	}
@@ -143,7 +143,7 @@ func (d *Daemon) registerPluginDriver(plugin *pluginConnection, params pluginDri
 	} else if params.Capabilities["server_binding"] {
 		return fmt.Errorf("server_binding requires a server declaration")
 	}
-	if agent == "" || agent == "shell" || agentdriver.Get(agent) != nil {
+	if reservedPluginAgent(agent) {
 		return fmt.Errorf("agent %q is invalid or reserved by attn", agent)
 	}
 	if _, err := validatePluginDriverCapabilities(params.Capabilities); err != nil {
@@ -202,4 +202,20 @@ func (d *Daemon) pluginServerSessions(plugin string) int {
 func (l *serverLink) hasTargets() bool {
 	p := l.b.declaration.Load()
 	return p != nil && p.Targets
+}
+
+func reservedPluginAgent(agent string) bool {
+	kind := agent + "-server"
+	return agent == "" || agent == "shell" || agentdriver.Get(agent) != nil || kind == codexLinkKind || strings.HasPrefix(kind, codexServerTerminalPrefix)
+}
+
+func (p *pluginServerDeclaration) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
+	requested := p.Initialize.Protocol.Exact
+	if requested == 0 {
+		requested = p.Initialize.Protocol.Min
+	}
+	if (p.Initialize.Server != "" && hello.Server != p.Initialize.Server) || (p.Initialize.Protocol.Exact > 0 && hello.Protocol != requested) || hello.Protocol < requested {
+		return &effectrpc.Error{Server: p.Initialize.Server, Method: "initialize", Message: fmt.Sprintf("server at %s is %q %s speaking protocol %d; binding requires identity %q and protocol %+v", socket, hello.Server, hello.Version, hello.Protocol, p.Initialize.Server, p.Initialize.Protocol)}
+	}
+	return nil
 }

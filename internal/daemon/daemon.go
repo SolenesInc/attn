@@ -216,6 +216,7 @@ type Daemon struct {
 	codexSharedState         *codexShared
 	serverLinksMu            sync.Mutex
 	serverLinks              map[string]*serverLink
+	serverConnections        map[string]*serverConnection
 	quickCaptureAssetMu      sync.Mutex
 	inboxMu                  sync.Mutex
 	inboxStates              map[who.Address]*inboxDeliveryState

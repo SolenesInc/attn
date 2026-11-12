@@ -44,6 +44,12 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 		}
 		terminal = view
 	}
+	link, linkedServer := d.linkOf(d.sessionInTerminal(terminal)).(*serverLink)
+	if observation.TranscriptPath == "" && (!linkedServer || link.b.plugin == "") {
+		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
+		d.sendOK(conn)
+		return
+	}
 	if session := d.store.Get(d.sessionInTerminal(terminal)); session != nil {
 		if l, server := d.linkOf(session.ID).(*serverLink); server {
 			if err := l.admit(session.ProfileID, observation.NativeID); err != nil {
@@ -51,11 +57,6 @@ func (d *Daemon) handleObserveAgentConversation(ctx context.Context, conn net.Co
 				return
 			}
 		}
-	}
-	if observation.TranscriptPath == "" && d.linkOf(d.sessionInTerminal(terminal)) == nil {
-		d.logf("agent conversation: ignored pathless observation terminal=%s native=%s", terminal, observation.NativeID)
-		d.sendOK(conn)
-		return
 	}
 	if held := d.store.GetSessionConversation(d.sessionInTerminal(terminal)).NativeID; held != "" && held != observation.NativeID {
 		pausepoint.At(pausepoint.ConversationObserved)

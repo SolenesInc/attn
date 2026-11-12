@@ -3,7 +3,7 @@ use crate::commands::{
     instance_env, instance_resolve, journal, nav, open, pr, print_stdout, refine, review, seed,
     send, settings, terminal, ticket, top_level, worktree,
 };
-use crate::hooks::{COMMANDS, Failure, Hook, resolve_terminal, terminal_from_env};
+use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
 use crate::invocation::{self, Invocation};
 use std::ffi::OsString;
@@ -150,11 +150,6 @@ fn route_command(argv: Vec<OsString>) -> ExitCode {
         let _ = writeln!(io::stderr(), "{message}");
         return finish(&paths, "attn", String::new(), None, 1, &terminal);
     }
-    let terminal = if terminal.is_empty() {
-        resolve_terminal(&getenv, &paths)
-    } else {
-        terminal
-    };
     let mut run = Run {
         paths: &paths,
         terminal: terminal.clone(),
@@ -227,22 +222,10 @@ fn run_hook(name: &str, argv: &[OsString]) -> ExitCode {
         return finish(&paths, "attn", String::new(), None, 1, &env_terminal);
     }
 
-    let resolved = if env_terminal.is_empty() {
-        resolve_terminal(&getenv, &paths)
-    } else {
-        env_terminal.clone()
-    };
-    let hook_env = |name: &str| {
-        if name == "ATTN_TERMINAL_ID" && !resolved.is_empty() {
-            resolved.clone()
-        } else {
-            getenv(name)
-        }
-    };
     let mut hook = Hook {
         argv: &arguments,
         paths: &paths,
-        getenv: &hook_env,
+        getenv: &getenv,
         caller: String::new(),
     };
     let (code, refusal) = match hook.run(name) {

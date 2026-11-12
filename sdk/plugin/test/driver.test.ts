@@ -83,7 +83,7 @@ describe("AttnPluginClient driver", () => {
         protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
         homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
-        callerConversationEnv: "SAMPLE_CONVERSATION", onClose: "leave-running",
+        callerConversationEnv: "SAMPLE_ROOT_CONVERSATION", onClose: "leave-running",
         recovery: "numbered-completions", targets: true,
       },
     };
@@ -96,7 +96,7 @@ describe("AttnPluginClient driver", () => {
         protocol: "attn-app-server-v1", executable: "sample", serve_args: ["serve"],
         home_env: "SAMPLE_HOME", default_home: ".sample", socket_name: "sample.sock",
         initialize: { server: "sample", protocol: { exact: 1 } },
-        caller_conversation_env: "SAMPLE_CONVERSATION", on_close: "leave-running",
+        caller_conversation_env: "SAMPLE_ROOT_CONVERSATION", on_close: "leave-running",
         recovery: "numbered-completions", targets: true,
       },
     });
@@ -107,7 +107,7 @@ describe("AttnPluginClient driver", () => {
     expect(() => connectable(daemon).driver({ ...baseDriver, server: {
       protocol: "attn-app-server-v1", executable: "sample", serveArgs: ["serve"],
       homeEnv: "SAMPLE_HOME", defaultHome: ".sample", socketName: "sample.sock",
-      initialize: { protocol: { min: 7 } }, callerConversationEnv: "SAMPLE_ROOT",
+      initialize: { protocol: { min: 7 } }, callerConversationEnv: "SAMPLE_ROOT_CONVERSATION",
       onClose: "interrupt", recovery: "last-run",
     }, deliver: () => accepted() })).toThrow("server binding supplies");
   });

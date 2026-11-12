@@ -108,14 +108,18 @@ func (d *Daemon) uninstallPlugin(client *wsClient, name, action string) {
 		return
 	}
 	d.stopAndUnregisterPlugin(name)
+	var removed []*serverLink
 	d.serverLinksMu.Lock()
 	for agent, l := range d.serverLinks {
 		if l.b.plugin == name {
-			l.releaseUnlessUsed()
+			removed = append(removed, l)
 			delete(d.serverLinks, agent)
 		}
 	}
 	d.serverLinksMu.Unlock()
+	for _, l := range removed {
+		l.releaseUnlessUsed()
+	}
 
 	d.publishFact(FactPluginUninstalled, name, nil)
 	d.sendPluginActionResult(client, action, name, true, "")

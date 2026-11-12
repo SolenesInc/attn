@@ -130,6 +130,7 @@ func TestAPluginServerDeclarationRejectsUnknownProtocolsCapabilitiesAndOwners(t 
 		{"protocol", "another-protocol", "unsupported server binding protocol"},
 		{"on_close", "forget", "unsupported server on_close"},
 		{"recovery", "guess", "unsupported server recovery"},
+		{"caller_conversation_env", "SAMPLE_CONVERSATION", "<NAME>_ROOT_CONVERSATION"},
 	} {
 		before := declaration[bad.key]
 		declaration[bad.key] = bad.value
@@ -201,4 +202,61 @@ func TestAnAppServerConversationHasOneHarnessAndProfileOwnerAcrossAliases(t *tes
 		t.Fatalf("refused native switch changed the view owner: %s %v", owner, err)
 	}
 
+}
+
+func TestAPluginServerCannotClaimABuiltInLinkName(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	d := dialDriver(t, w, "reserved")
+	for _, agent := range []string{"codex-app", "codex-server", "codex-server-alias"} {
+		for _, server := range []bool{false, true} {
+			params := map[string]any{"agent": agent, "capabilities": map[string]bool{}}
+			if server {
+				params["server"] = serverDriverDeclaration(w)
+				params["capabilities"] = map[string]bool{"server_binding": true}
+			}
+			if err := d.call("driver.register", params, nil); err == nil || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("%s server=%t: %v", agent, server, err)
+			}
+		}
+	}
+}
+
+func TestAPluginServerAliasSharesOneControlConnectionAndStatusWatch(t *testing.T) {
+	w := newWorld(t, fakeagent.Sigma)
+	app := w.App()
+	setSetting(t, app, "sigma_enabled", "true")
+	driver := registerServerDriver(t, w, "alias", serverDriverDeclaration(w))
+	awaitDriverAvailable(app, serverPluginAgent)
+	if err := os.MkdirAll(w.Path("shop"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	original := uuid.NewString()
+	app.Send(protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: protocol.SessionID(original), Agent: "sigma", Cwd: w.Path("shop"), ProfileID: app.SelectedProfile(), Cols: 80, Rows: 24})
+	alias, view := spawnPluginServerView(w, app, driver)
+	started := testworld.Await(app, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return string(r.ID) == original })
+	if !started.Success {
+		t.Fatalf("concurrent built-in view: %+v", started)
+	}
+	native, server := w.Launched(original), w.AppServer(fakeagent.Sigma)
+	for _, run := range []struct {
+		session      string
+		conversation string
+	}{{original, native.ConversationID}, {alias, view.ConversationID}} {
+		if r := submitSessionAnnotationFeedbackAs(app, run.session, uuid.NewString(), "shared connection"); !r.Success {
+			t.Fatalf("submit: %+v", r)
+		}
+		server.Prompted(run.conversation)
+		testworld.AwaitSession(app, run.session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	}
+	initializes, watches := server.ControlCounts()
+	if initializes != 1 || watches != 1 {
+		t.Fatalf("shared endpoint initialized %d control connections and %d watches, want one each", initializes, watches)
+	}
+	if n := w.AppServers(fakeagent.Sigma); n != 1 {
+		t.Fatalf("started %d shared servers", n)
+	}
+	server.Reply(native.ConversationID, "First done. <!-- attn:state=idle -->")
+	server.Reply(view.ConversationID, "Second done. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, original, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, alias, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }

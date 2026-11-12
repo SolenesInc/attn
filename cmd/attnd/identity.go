@@ -7,17 +7,21 @@ import (
 	"syscall"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func ownTerminalID() protocol.TerminalID {
-	return protocol.TrimID(client.TerminalFromEnv())
+	return protocol.TrimID(harness.TerminalFromEnv())
 }
 
 var errNoCurrentSession = errors.New("not showing a session")
 
 func currentSession(c *client.Client) (protocol.SessionID, error) {
-	terminalID := ownTerminalID()
+	terminalID, err := harness.ResolveTerminalFromEnv()
+	if err != nil {
+		return "", err
+	}
 	if terminalID == "" {
 		return "", nil
 	}

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -30,7 +31,7 @@ type serverBinding struct {
 	homeVariable      string
 	homeDir           string
 	socket            func(home string) string
-	connect           func(ctx context.Context, socket, client, version string) (*effectrpc.Client, error)
+	connect           func(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error)
 	conversationOf    func(harness.TerminalID) (string, bool)
 	tracksCompletions bool
 	closeLeavesRun    bool
@@ -178,11 +179,11 @@ func (l *serverLink) socketPath() string {
 	return l.b.socket(l.home())
 }
 
-func (l *serverLink) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, error) {
+func (l *serverLink) connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
 	if l.b.plugin != "" {
 		p := l.b.declaration.Load()
 		if p == nil {
-			return nil, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
+			return nil, effectrpc.ServerInfo{}, &effectrpc.Error{Server: l.b.agent, Method: "initialize", Message: "server binding unavailable until plugin " + l.b.plugin + " registers"}
 		}
 		return p.connect(ctx, socket, client, version)
 	}
@@ -194,4 +195,17 @@ func (l *serverLink) callerConversationEnv() string {
 		return p.CallerConversationEnv
 	}
 	return l.b.callerVariable
+}
+
+func (l *serverLink) validateServerInfo(hello effectrpc.ServerInfo, socket string) error {
+	if p := l.b.declaration.Load(); p != nil {
+		return p.validateServerInfo(hello, socket)
+	}
+	if l.b == nisseBinding {
+		return nisse.Validate(hello, socket)
+	}
+	if l.b == sigmaBinding {
+		return sigma.Validate(hello, socket)
+	}
+	return fmt.Errorf("server binding unavailable until plugin %s registers", l.b.plugin)
 }

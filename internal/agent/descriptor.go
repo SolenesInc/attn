@@ -1,14 +1,13 @@
 package agent
 
 type Descriptor struct {
-	CallerConversationEnv string `json:"caller_conversation_env,omitempty"`
-	Name                  string `json:"name"`
-	Plugin                string `json:"plugin,omitempty"`
-	Executable            string `json:"executable,omitempty"`
-	Health                string `json:"health"`
-	Detail                string `json:"detail,omitempty"`
-	ModelPin              bool   `json:"model_pin"`
-	EffortPin             bool   `json:"effort_pin"`
+	Name       string `json:"name"`
+	Plugin     string `json:"plugin,omitempty"`
+	Executable string `json:"executable,omitempty"`
+	Health     string `json:"health"`
+	Detail     string `json:"detail,omitempty"`
+	ModelPin   bool   `json:"model_pin"`
+	EffortPin  bool   `json:"effort_pin"`
 }
 
 const (

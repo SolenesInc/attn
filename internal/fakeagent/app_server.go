@@ -44,7 +44,7 @@ type appServerFlavor struct {
 	homeDir      string
 	rootVariable string
 	socket       func(home string) string
-	connect      func(ctx context.Context, socket, client, version string) (*effectrpc.Client, error)
+	connect      func(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error)
 	hello        map[string]any
 	completions  bool
 }
@@ -104,7 +104,7 @@ func (n *serverView) begin(*terminal) error {
 	socket := n.flavor.socket(os.Getenv(n.flavor.homeVariable))
 	deadline := time.Now().Add(HangGuard)
 	for {
-		client, err := n.flavor.connect(context.Background(), socket, string(n.flavor.harness)+"-tui", "fake")
+		client, _, err := n.flavor.connect(context.Background(), socket, string(n.flavor.harness)+"-tui", "fake")
 		if err == nil {
 			n.client = client
 			break
@@ -216,6 +216,8 @@ type appServer struct {
 	control     *rpcPeer
 	listener    net.Listener
 	mu          sync.Mutex
+	initializes int
+	watches     int
 	seq         int
 	conns       map[*appServerConn]bool
 	convs       map[string]*ServerConversation
@@ -358,6 +360,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 	case "initialize":
 		s.mu.Lock()
 		c.client = p.Client
+		if p.Client == "attn" {
+			s.initializes++
+		}
 		offline := s.offline
 		s.mu.Unlock()
 		if offline != nil && c.client == "attn" {
@@ -446,6 +451,9 @@ func (s *appServer) handle(c *appServerConn, id uint64, method string, raw json.
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		c.watch = &id
+		if c.client == "attn" {
+			s.watches++
+		}
 		trees := []any{}
 		for _, conv := range s.convs {
 			if conv.Status != "idle" {
@@ -532,6 +540,10 @@ func (s *appServer) handleKit(_ *rpcPeer, method string, raw json.RawMessage) (a
 		return nil, err
 	}
 	switch method {
+	case "control-counts":
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return []int{s.initializes, s.watches}, nil
 	case methodPrompted:
 		select {
 		case submitted := <-s.submissionsOf(p.ThreadID):
@@ -725,3 +737,12 @@ func targetAvailable(id, cwd string) bool {
 	}
 	return false
 }
+
+func (s *AppServer) ControlCounts() (initializes, watches int) {
+	s.t.Helper()
+	var counts []int
+	s.call("control-counts", nil, &counts)
+	return counts[0], counts[1]
+}
+
+func (s *AppServer) PID() int { return s.fake.Pid }

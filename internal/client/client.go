@@ -165,11 +165,9 @@ func New(socketPath string) *Client {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath()
 	}
-	c := NewWithDial(socketPath, func() (net.Conn, error) {
+	return NewWithDial(socketPath, func() (net.Conn, error) {
 		return net.Dial("unix", socketPath)
 	})
-	c.callerTerminal = protocol.TrimID(TerminalFromEnv())
-	return c
 }
 
 func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {

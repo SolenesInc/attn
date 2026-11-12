@@ -4,9 +4,8 @@ pub mod input;
 use crate::client::{Client, SendError, read_json_value};
 use crate::instance::Paths;
 use attn_protocol::go_values::{
-    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, MAX_SOCKET_FRAME_BYTES, STATE_IDLE,
-    STATE_LAUNCHING, STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT,
-    STATE_WORKING,
+    CODEX_SHARED_PROFILE_ENV, CODEX_THREAD_PREFIX, STATE_IDLE, STATE_LAUNCHING,
+    STATE_PENDING_APPROVAL, STATE_SCHEDULED, STATE_UNKNOWN, STATE_WAITING_INPUT, STATE_WORKING,
 };
 use attn_protocol::{
     FilesEditedMessage, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage,
@@ -40,52 +39,34 @@ pub fn terminal_from_env(getenv: &dyn Fn(&str) -> String) -> String {
     if !profile.is_empty() {
         return codex_thread_terminal(&profile, &getenv("CODEX_THREAD_ID"));
     }
-    getenv("ATTN_SESSION_ID")
-}
-
-pub fn resolve_terminal(getenv: &dyn Fn(&str) -> String, paths: &Paths<'_>) -> String {
-    let terminal = terminal_from_env(getenv);
-    if !terminal.is_empty() {
-        return terminal;
+    let legacy = getenv("ATTN_SESSION_ID");
+    if !legacy.is_empty() {
+        return legacy;
     }
-    server_caller(getenv, &paths.ws_port()).unwrap_or_default()
+    server_caller_from_env().unwrap_or_default()
 }
 
-fn server_caller(getenv: &dyn Fn(&str) -> String, port: &str) -> Option<String> {
-    use std::io::Read;
-    use std::net::{SocketAddr, TcpStream};
-    use std::time::Duration;
-    let address: SocketAddr = format!("127.0.0.1:{port}").parse().ok()?;
-    let mut connection = TcpStream::connect_timeout(&address, Duration::from_secs(1)).ok()?;
-    connection
-        .set_read_timeout(Some(Duration::from_secs(1)))
-        .ok()?;
-    connection
-        .set_write_timeout(Some(Duration::from_secs(1)))
-        .ok()?;
-    connection
-        .write_all(b"GET /agents HTTP/1.0\r\nHost: localhost\r\n\r\n")
-        .ok()?;
-    let mut reply = String::new();
-    connection
-        .take(MAX_SOCKET_FRAME_BYTES as u64)
-        .read_to_string(&mut reply)
-        .ok()?;
-    let (_, body) = reply.split_once("\r\n\r\n")?;
-    let catalog: serde_json::Value = serde_json::from_str(body).ok()?;
-    for agent in catalog.get("agents")?.as_array()? {
-        let Some(variable) = agent
-            .get("caller_conversation_env")
-            .and_then(|v| v.as_str())
-        else {
-            continue;
-        };
-        let conversation = getenv(variable);
-        if !conversation.is_empty() {
-            return Some(format!("server-env:{variable}:{conversation}"));
+pub fn server_caller_from_env() -> Result<String, String> {
+    let mut names = Vec::new();
+    let mut caller = String::new();
+    for (name, value) in std::env::vars_os() {
+        let name = name.to_string_lossy();
+        if name.len() > "_ROOT_CONVERSATION".len()
+            && name.ends_with("_ROOT_CONVERSATION")
+            && !value.is_empty()
+        {
+            names.push(name.to_string());
+            caller = format!("server-env:{name}:{}", value.to_string_lossy());
         }
     }
-    None
+    if names.len() > 1 {
+        names.sort();
+        return Err(format!(
+            "conflicting caller variables: {}; keep only the current server's root conversation",
+            names.join(", ")
+        ));
+    }
+    Ok(caller)
 }
 
 fn codex_thread_terminal(profile: &str, thread: &str) -> String {

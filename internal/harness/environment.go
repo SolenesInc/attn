@@ -1,7 +1,9 @@
 package harness
 
 import (
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -63,11 +65,32 @@ func parseConversationTerminal(prefix string, t TerminalID) (conversation string
 
 // TerminalFromEnv reads the terminal identity, including the spelling used by older launches.
 func TerminalFromEnv() TerminalID {
+	id, _ := ResolveTerminalFromEnv()
+	return id
+}
+
+func ResolveTerminalFromEnv() (TerminalID, error) {
 	if id := os.Getenv("ATTN_TERMINAL_ID"); id != "" {
-		return TerminalID(id)
+		return TerminalID(id), nil
 	}
 	if profile := os.Getenv(CodexSharedProfileEnv); profile != "" {
-		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID"))
+		return CodexThreadTerminal(profile, os.Getenv("CODEX_THREAD_ID")), nil
 	}
-	return TerminalID(os.Getenv("ATTN_SESSION_ID"))
+	if id := os.Getenv("ATTN_SESSION_ID"); id != "" {
+		return TerminalID(id), nil
+	}
+	var names []string
+	var caller TerminalID
+	for _, entry := range os.Environ() {
+		name, conversation, ok := strings.Cut(entry, "=")
+		if ok && conversation != "" && len(name) > len("_ROOT_CONVERSATION") && strings.HasSuffix(name, "_ROOT_CONVERSATION") {
+			names = append(names, name)
+			caller = TerminalID("server-env:" + name + ":" + conversation)
+		}
+	}
+	if len(names) > 1 {
+		slices.Sort(names)
+		return "", fmt.Errorf("conflicting caller variables: %s; keep only the current server's root conversation", strings.Join(names, ", "))
+	}
+	return caller, nil
 }

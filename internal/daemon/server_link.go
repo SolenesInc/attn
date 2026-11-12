@@ -2,15 +2,12 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/effectrpc"
 	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/protocol"
@@ -27,14 +24,8 @@ const (
 )
 
 type serverLink struct {
-	d        *Daemon
-	b        *serverBinding
-	ensureMu sync.Mutex
-	mu       sync.Mutex
-	control  *effectrpc.Client
-	ended    map[string]serverEnded
-	busy     map[string]string
-	events   linkEvents
+	d *Daemon
+	b *serverBinding
 }
 
 type serverTree struct {
@@ -52,16 +43,7 @@ type serverEnded struct {
 	Said       string `json:"said"`
 }
 
-func newServerLink(d *Daemon, b *serverBinding) *serverLink {
-	l := &serverLink{d: d, b: b, ended: make(map[string]serverEnded)}
-	d.life.Go(b.agent+"Stop", func() {
-		<-d.life.Done()
-		if c := l.client(); c != nil {
-			c.Close()
-		}
-	})
-	return l
-}
+func newServerLink(d *Daemon, b *serverBinding) *serverLink { return &serverLink{d: d, b: b} }
 
 func (l *serverLink) logf(format string, args ...any) {
 	l.d.logf(l.b.agent+": "+format, args...)
@@ -126,7 +108,16 @@ func (l *serverLink) resolveCaller(t protocol.TerminalID) (protocol.SessionID, h
 
 func (l *serverLink) runsLink(t harness.TerminalID) bool { return t == l.b.terminal }
 
-func (l *serverLink) serverTerminal(string) harness.TerminalID { return l.b.terminal }
+func (l *serverLink) serverTerminal(string) harness.TerminalID {
+	if p, err := l.connection(); err == nil {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		if p.terminal != "" {
+			return p.terminal
+		}
+	}
+	return l.b.terminal
+}
 
 func (l *serverLink) renamed(protocol.SessionID, string) {}
 
@@ -165,11 +156,15 @@ type serverProviderModels struct {
 }
 
 func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error) {
-	c, err := l.ensureServer(ctx, nil)
+	p, err := l.connection()
 	if err != nil {
 		return nil, err
 	}
-	defer l.releaseUnlessUsed()
+	c, release, err := p.borrow(ctx, l, true)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	var providers []serverProviderModels
 	if err := c.Call(ctx, "models/list", map[string]any{}, &providers); err != nil {
 		return nil, err
@@ -188,22 +183,20 @@ func (l *serverLink) models(ctx context.Context) ([]protocol.HarnessModel, error
 }
 
 func (l *serverLink) targets(ctx context.Context, cwd string) ([]protocol.ExecutionTarget, error) {
-	c, err := l.ensureServer(ctx, nil)
+	p, err := l.connection()
 	if err != nil {
 		return nil, err
 	}
-	defer l.releaseUnlessUsed()
+	c, release, err := p.borrow(ctx, l, true)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	targets := []protocol.ExecutionTarget{}
 	if err := c.Call(ctx, "targets/list", map[string]any{"cwd": cwd}, &targets); err != nil {
 		return nil, err
 	}
 	return targets, nil
-}
-
-func (l *serverLink) client() *effectrpc.Client {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return l.control
 }
 
 func (l *serverLink) sessions() []protocol.SessionID {
@@ -226,44 +219,14 @@ func (l *serverLink) holder(conversation string) protocol.SessionID {
 }
 
 func (l *serverLink) ensureServer(ctx context.Context, opts *ptybackend.SpawnOptions) (*effectrpc.Client, error) {
-	l.ensureMu.Lock()
-	defer l.ensureMu.Unlock()
-	if c := l.client(); c != nil {
-		return c, nil
+	p, err := l.connection()
+	if err != nil {
+		return nil, err
 	}
-	socket := l.socketPath()
-	deadline := time.Now().Add(serverStartLimit)
-	started := false
-	for {
-		attempt, cancel := context.WithTimeout(ctx, serverCallLimit)
-		c, err := l.connect(attempt, socket, "attn", buildinfo.Version)
-		cancel()
-		if err == nil {
-			l.hold(c)
-			return c, nil
-		}
-		var refused *effectrpc.Error
-		if errors.As(err, &refused) || ctx.Err() != nil {
-			return nil, err
-		}
-		if !started {
-			if err := l.startServer(ctx, opts); err != nil {
-				return nil, err
-			}
-			started = true
-		} else if time.Now().After(deadline) {
-			return nil, fmt.Errorf("the %s server at %s did not answer within %s: %w", l.b.name, socket, serverStartLimit, err)
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(25 * time.Millisecond):
-		}
-	}
+	return p.ensure(ctx, l, opts, true)
 }
 
-func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptions) error {
-	terminal := l.b.terminal
+func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOptions, terminal harness.TerminalID) error {
 	if _, live := l.d.liveTerminals(ctx)[terminal]; live {
 		if err := l.d.ptyBackend.Remove(ctx, terminal); err != nil && !errors.Is(err, pty.ErrSessionNotFound) && !errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("clear the exited %s server: %w", l.b.name, err)
@@ -284,7 +247,7 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 	}
 	argv, env := append([]string{executable}, args...), append(append([]string(nil), serverEnv...), homeVariable+"="+home)
 	spawn := ptybackend.SpawnOptions{
-		ID: terminal, Agent: l.b.kind, Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
+		ID: terminal, Agent: string(terminal), Label: l.b.name + " server", CWD: home, Cols: 80, Rows: 24,
 		Executable:    resolvedBinary(executable),
 		AgentArgv:     argv,
 		AgentEnv:      env,
@@ -298,124 +261,18 @@ func (l *serverLink) startServer(ctx context.Context, opts *ptybackend.SpawnOpti
 	return nil
 }
 
-func (l *serverLink) hold(c *effectrpc.Client) {
-	l.mu.Lock()
-	l.control = c
-	l.mu.Unlock()
-	if !l.d.life.Go(l.b.agent+"Status", func() { l.watch(c) }) {
-		c.Close()
-	}
-}
-
-func (l *serverLink) watch(c *effectrpc.Client) {
-	err := c.Stream(l.d.life.Context(), "status/watch", l.statusWatchParams(), func(item json.RawMessage) {
-		var tree serverTree
-		if json.Unmarshal(item, &tree) == nil {
-			l.events.run(l.d, func() { l.apply(c, tree) })
-		}
-	})
-	c.Close()
-	l.mu.Lock()
-	current := l.control == c
-	if current {
-		l.control = nil
-	}
-	l.mu.Unlock()
-	if !current || l.d.life.Context().Err() != nil {
-		return
-	}
-	l.logf("lost the status of the %s server: %v", l.b.name, err)
-	if len(l.sessions()) == 0 {
-		return
-	}
-	if _, err := l.ensureServer(l.d.life.Context(), nil); err != nil {
-		l.logf("reconnecting to the %s server: %v", l.b.name, err)
-	}
-}
-
-func (l *serverLink) statusWatchParams() any {
-	numbered := l.b.tracksCompletions
+func (l *serverLink) tracksCompletions() bool {
 	if p := l.b.declaration.Load(); p != nil {
-		numbered = p.Recovery == "numbered-completions"
+		return p.Recovery == "numbered-completions"
 	}
-	if !numbered {
-		return nil
-	}
-	after := map[string]int64{}
-	for _, sessionID := range l.sessions() {
-		if conversation := l.d.linkConversation(sessionID); conversation != "" {
-			after[conversation] = l.d.store.SessionRuntimeRecords(sessionID).ServerCompletion
-		}
-	}
-	return map[string]any{"after": after}
+	return l.b.tracksCompletions
 }
 
-func (l *serverLink) apply(c *effectrpc.Client, tree serverTree) {
-	if tree.Tag == "trees" {
-		l.busy = make(map[string]string, len(tree.Trees))
-		for _, t := range tree.Trees {
-			l.busy[t.Conversation] = t.Status
-		}
-		var lastRuns map[string]*serverEnded
-		for _, sessionID := range l.sessions() {
-			conversation := l.d.linkConversation(sessionID)
-			if status, ok := l.busy[conversation]; ok {
-				l.observe(sessionID, status, nil)
-				continue
-			}
-			if !l.settlesOnServer(sessionID) {
-				continue
-			}
-			if lastRuns == nil {
-				lastRuns = l.lastRuns(c)
-			}
-			l.observe(sessionID, "idle", l.unseen(sessionID, lastRuns[conversation]))
-		}
-		return
+func (l *serverLink) launchStarted(id protocol.SessionID) {
+	p, err := l.connection()
+	if err == nil {
+		p.reconcile(l, []protocol.SessionID{id})
 	}
-	if tree.Ended != nil && tree.Status != "idle" {
-		l.ended[tree.Conversation] = *tree.Ended
-		return
-	}
-	ended := tree.Ended
-	if remembered, ok := l.ended[tree.Conversation]; ok && tree.Status == "idle" {
-		if ended == nil {
-			ended = &remembered
-		}
-		delete(l.ended, tree.Conversation)
-	}
-	if tree.Status == "idle" {
-		delete(l.busy, tree.Conversation)
-	} else {
-		if l.busy == nil {
-			l.busy = make(map[string]string)
-		}
-		l.busy[tree.Conversation] = tree.Status
-	}
-	holder := l.holder(tree.Conversation)
-	ended = l.unseen(holder, ended)
-	if ended != nil && tree.Status == "idle" {
-		l.d.sessionMonitor(holder).RecordRunAnswer(ended.Said)
-	}
-	l.observe(holder, tree.Status, ended)
-}
-
-func (l *serverLink) launchStarted(sessionID protocol.SessionID) {
-	l.events.run(l.d, func() {
-		conversation := l.d.linkConversation(sessionID)
-		if status, busy := l.busy[conversation]; busy {
-			l.observe(sessionID, status, nil)
-			return
-		}
-		if l.remembersItsLastRun(sessionID) {
-			return
-		}
-		var ended *serverEnded
-		if c := l.client(); c != nil {
-			ended = l.unseen(sessionID, l.lastRuns(c)[conversation])
-		}
-		l.observe(sessionID, "idle", ended)
-	})
 }
 
 func (l *serverLink) remembersItsLastRun(sessionID protocol.SessionID) bool {
@@ -544,11 +401,15 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conve
 	}
 	ctx, cancel := context.WithTimeout(l.d.life.Context(), serverCallLimit)
 	defer cancel()
-	c, err := l.connect(ctx, l.socketPath(), "attn", buildinfo.Version)
+	p, err := l.connection()
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	c, release, err := p.borrow(ctx, l, false)
+	if err != nil {
+		return
+	}
+	defer release()
 	if err := c.Call(ctx, "conversation/interrupt", map[string]any{"conversation": conversation}, nil); err != nil {
 		l.logf("interrupting conversation %s of closed session %s: %v", conversation, sessionID, err)
 	}
@@ -557,18 +418,8 @@ func (l *serverLink) sessionClosed(sessionID protocol.SessionID, _ string, conve
 func (l *serverLink) profileReleased(string) { l.releaseUnlessUsed() }
 
 func (l *serverLink) releaseUnlessUsed() {
-	l.ensureMu.Lock()
-	defer l.ensureMu.Unlock()
-	if len(l.sessions()) > 0 {
-		return
-	}
-	l.mu.Lock()
-	c := l.control
-	l.control = nil
-	l.mu.Unlock()
-	if c != nil {
-		c.Close()
-		l.logf("let go of the %s server; no session uses it", l.b.name)
+	if p, err := l.connection(); err == nil {
+		p.releaseUnlessUsed()
 	}
 }
 
@@ -590,6 +441,10 @@ func (l *serverLink) recoverProcesses(ctx context.Context) {
 	l.d.life.Go(l.b.agent+"Reconnect", func() {
 		if _, err := l.ensureServer(ctx, nil); err != nil {
 			l.logf("reconnect to the %s server: %v", l.b.name, err)
+			return
+		}
+		if p, err := l.connection(); err == nil {
+			p.reconcile(l, l.sessions())
 		}
 	})
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/daemonctl"
 	"github.com/victorarias/attn/internal/garden"
+	"github.com/victorarias/attn/internal/harness"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/probetui"
 	"github.com/victorarias/attn/internal/prompts"
@@ -380,11 +381,16 @@ func runList() {
 	}
 }
 
-func detectPresence() (sessionID string, present bool) {
-	if os.Getenv("ATTN_INSIDE_APP") != "1" && !strings.HasPrefix(string(ownTerminalID()), "server-env:") {
-		return "", false
+func detectPresence() (sessionID string, present bool, err error) {
+	terminal, err := harness.ResolveTerminalFromEnv()
+	if err != nil {
+		return "", false, err
 	}
-	return string(currentSessionOrExit()), true
+	if os.Getenv("ATTN_INSIDE_APP") != "1" && !strings.HasPrefix(string(terminal), "server-env:") {
+		return "", false, nil
+	}
+	session, err := currentSession(client.New(""))
+	return string(session), true, err
 }
 
 func runPresence() {
@@ -397,7 +403,12 @@ func runPresence() {
 		exit(2)
 	}
 	warnIfDaemonVersionMismatch()
-	sessionID, present := detectPresence()
+	sessionID, present, err := detectPresence()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "attn: resolve current session: %v\n", err)
+		exit(1)
+		return
+	}
 	switch {
 	case *bareSessionID:
 		printLinesOrExit([]string{sessionID})

@@ -21,7 +21,7 @@ export type ServerBinding = {
  defaultHome: string;
  socketName: string;
  initialize: { server?: string; protocol: { exact: number; min?: never } | { min: number; exact?: never } };
- callerConversationEnv: string;
+ callerConversationEnv: `${string}_ROOT_CONVERSATION`;
  onClose: "interrupt" | "leave-running";
  recovery: "last-run" | "numbered-completions";
  targets?: boolean;
@@ -218,6 +218,9 @@ export function driverCapabilities(definition: DriverDefinition): Record<string,
   }
   if (resumeAvailable && !resume) {
     throw new Error("driver resumeAvailable requires resume");
+  }
+  if (server && (!server.callerConversationEnv.endsWith("_ROOT_CONVERSATION") || server.callerConversationEnv === "_ROOT_CONVERSATION")) {
+    throw new Error("server callerConversationEnv must be named <NAME>_ROOT_CONVERSATION");
   }
   const capabilities: Record<string, boolean> = {
     server_binding: !!server,

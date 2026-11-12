@@ -100,7 +100,8 @@ func (d *Daemon) linkProcess(t harness.TerminalID) bool {
 			return true
 		}
 	}
-	return false
+	_, server := d.appServerProcess(d.life.Context(), t)
+	return server
 }
 
 func (d *Daemon) linkConversation(sessionID protocol.SessionID) string {
@@ -169,6 +170,12 @@ func (d *Daemon) linkTerminalDropped(t harness.TerminalID) {
 }
 
 func (d *Daemon) linkTerminalExited(t harness.TerminalID) {
+	if _, server := d.appServerProcess(d.life.Context(), t); server {
+		if err := d.removePTYSession(t); err != nil {
+			d.logf("remove app-server terminal %s: %v", t, err)
+		}
+		return
+	}
 	for _, l := range d.links() {
 		l.terminalExited(t)
 	}

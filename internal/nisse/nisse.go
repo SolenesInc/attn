@@ -12,22 +12,26 @@ const Protocol = 7
 
 func Socket(home string) string { return filepath.Join(home, "nisse.sock") }
 
-func Connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, error) {
+func Connect(ctx context.Context, socket, client, version string) (*effectrpc.Client, effectrpc.ServerInfo, error) {
 	c, err := effectrpc.Dial(ctx, socket, "nisse")
 	if err != nil {
-		return nil, err
+		return nil, effectrpc.ServerInfo{}, err
 	}
-	var hello struct {
-		Version  string `json:"version"`
-		Protocol int    `json:"protocol"`
-	}
+	var hello effectrpc.ServerInfo
 	if err := c.Call(ctx, "initialize", map[string]any{"client": client, "version": version, "protocol": Protocol}, &hello); err != nil {
 		c.Close()
-		return nil, err
+		return nil, effectrpc.ServerInfo{}, err
 	}
-	if hello.Protocol < Protocol {
+	if err := Validate(hello, socket); err != nil {
 		c.Close()
-		return nil, fmt.Errorf("nisse %s speaks protocol %d; attn needs %d or later", hello.Version, hello.Protocol, Protocol)
+		return nil, hello, err
 	}
-	return c, nil
+	return c, hello, nil
+}
+
+func Validate(hello effectrpc.ServerInfo, _ string) error {
+	if hello.Protocol < Protocol {
+		return fmt.Errorf("nisse %s speaks protocol %d; attn needs %d or later", hello.Version, hello.Protocol, Protocol)
+	}
+	return nil
 }
