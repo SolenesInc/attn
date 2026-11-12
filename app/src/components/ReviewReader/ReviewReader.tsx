@@ -266,6 +266,7 @@ export function ReviewReader({
   const tileWindow = useTileWindow();
   const docRef = useRef<HTMLDivElement | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
+  const fileBodyRef = useRef<HTMLDivElement | null>(null);
   const offered = useMemo(() => offeredFrames(bundle), [bundle]);
   const [chosenFrame, setChosenFrame] = useState<Frame>(() => openingFrame(bundle));
   const frame: Frame = offered.includes(chosenFrame) ? chosenFrame : 'brief';
@@ -1246,6 +1247,11 @@ export function ReviewReader({
       const fileRows = openFileView?.rows;
       if (frame === 'walkthrough' || openFileView) {
         const stage = frame === 'walkthrough';
+        if (event.shiftKey && (event.key === 'ArrowRight' || event.key === 'ArrowLeft')) {
+          const body = fileBodyRef.current;
+          body?.scrollBy({ left: (event.key === 'ArrowRight' ? 1 : -1) * body.clientWidth / 2 });
+          return true;
+        }
         switch (event.key) {
           case 'ArrowDown': moveFileCursor((file) => file.cursor + 1, event.shiftKey); return true;
           case 'ArrowUp': moveFileCursor((file) => file.cursor - 1, event.shiftKey); return true;
@@ -1327,6 +1333,7 @@ export function ReviewReader({
             file={openFileView}
             tokenCache={tokenCache}
             filled={filled}
+            bodyRef={fileBodyRef}
             stage
             canGoBack={files.length > 1}
             onBack={back}
@@ -1347,26 +1354,27 @@ export function ReviewReader({
             onDetailClick={onScopeClick}
           />
         ) : null}
+        {frame !== 'walkthrough' && openFileView ? (
+          <FileView
+            file={openFileView}
+            tokenCache={tokenCache}
+            filled={filled}
+            bodyRef={fileBodyRef}
+            canGoBack={files.length > 1}
+            onBack={back}
+            onClose={closeFileView}
+            onPick={(index) => moveFileCursor(() => index)}
+          />
+        ) : null}
+        {notice ? <div className="review-notice" role="status">{notice}</div> : null}
+        {composer && marks ? (
+          <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
+        ) : null}
       </div>
-      {frame !== 'walkthrough' && openFileView ? (
-        <FileView
-          file={openFileView}
-          tokenCache={tokenCache}
-          filled={filled}
-          canGoBack={files.length > 1}
-          onBack={back}
-          onClose={closeFileView}
-          onPick={(index) => moveFileCursor(() => index)}
-        />
-      ) : null}
       {search ? <SearchPanel initialQuery={search.query} search={searchRepository} onPick={(target) => openFile(target)} /> : null}
       {help ? <ReviewKeySheet readOnly={openFileView?.target.outside === true} /> : null}
       {editing ? <EditBox key={`${editing.path}:${editing.hash}`} edit={editing} onSave={saveEdit} onTakeLine={takeLine} /> : null}
-      {notice ? <div className="review-notice" role="status">{notice}</div> : null}
       {navPanel ? <NavPanel answer={navPanel} onPick={(index) => { const location = navPanel.locations[index]; if (location) follow(location); }} /> : null}
-      {composer && marks ? (
-        <MarkComposer kind={composer.kind} target={composer.target} destination={marks.destination} onSave={saveMark} />
-      ) : null}
       {sending && marks ? (
         <SendSheet marks={annotations} verdict={sending.verdict} destination={marks.destination} onPick={(verdict) => setSending({ verdict })} onSend={sendReview} />
       ) : null}

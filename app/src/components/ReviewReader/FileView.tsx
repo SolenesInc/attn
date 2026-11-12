@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject } from 'react';
 import type { ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
@@ -10,6 +10,17 @@ import { MarkRow, markKey } from './ReviewMarks';
 
 export const FILE_ROW_HEIGHT = 20;
 const OVERSCAN_ROWS = 30;
+const TAB_SIZE = 8;
+
+function columnsOf(text: string): number {
+  let columns = 0;
+  for (const character of text) columns = character === '\t' ? columns + TAB_SIZE - (columns % TAB_SIZE) : columns + 1;
+  return columns;
+}
+
+function widestLine(rows: readonly ReviewRow[]): number {
+  return rows.reduce((widest, row) => Math.max(widest, columnsOf(row.text)), 0);
+}
 
 export interface OpenFile {
   id: number;
@@ -86,6 +97,7 @@ export function FileView({
   file,
   tokenCache,
   filled,
+  bodyRef,
   stage = false,
   canGoBack,
   onBack,
@@ -95,13 +107,13 @@ export function FileView({
   file: OpenFile;
   tokenCache: TokenCache;
   filled: boolean;
+  bodyRef: RefObject<HTMLDivElement | null>;
   stage?: boolean;
   canGoBack: boolean;
   onBack: () => void;
   onClose?: () => void;
   onPick: (index: number) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const [view, setView] = useState({ top: 0, height: 0 });
   const rows = file.rows;
   const lines = useMemo(() => rows?.map((row) => row.text) ?? null, [rows]);
@@ -109,6 +121,7 @@ export function FileView({
   const range = file.target.range;
   const notes = file.target.notes;
   const noted = useMemo(() => notedLines(notes), [notes]);
+  const widest = useMemo(() => (rows ? widestLine(rows) : 0), [rows]);
   const resizeWatch = useResizeWatch();
   const reader = useReviewReader();
   const labels = reader?.labels;
@@ -121,16 +134,16 @@ export function FileView({
   const selectTo = Math.max(file.selectFrom ?? file.cursor, file.cursor);
 
   useLayoutEffect(() => {
-    const element = scrollRef.current;
+    const element = bodyRef.current;
     if (!element) return undefined;
     const measure = () => setView({ top: element.scrollTop, height: element.clientHeight });
     measure();
     resizeWatch.observe(element, measure);
     return () => resizeWatch.disconnect();
-  }, [resizeWatch]);
+  }, [bodyRef, resizeWatch]);
 
   useLayoutEffect(() => {
-    const element = scrollRef.current;
+    const element = bodyRef.current;
     if (!element || !rows) return;
     const rowTop = file.cursor * FILE_ROW_HEIGHT;
     const height = element.clientHeight;
@@ -138,7 +151,7 @@ export function FileView({
       element.scrollTop = Math.max(0, rowTop - height / 3);
       setView({ top: element.scrollTop, height });
     }
-  }, [file.cursor, rows]);
+  }, [bodyRef, file.cursor, rows]);
 
   const first = Math.max(0, Math.floor(view.top / FILE_ROW_HEIGHT) - OVERSCAN_ROWS);
   const last = rows ? Math.min(rows.length, Math.ceil((view.top + view.height) / FILE_ROW_HEIGHT) + OVERSCAN_ROWS) : 0;
@@ -158,11 +171,11 @@ export function FileView({
         {onClose ? <button type="button" tabIndex={-1} onClick={onClose}>close <kbd>esc</kbd></button> : null}
       </header>
       {file.problem ? <div className="review-file-view-problem" role="status">{file.problem}</div> : null}
-      <div className="review-file-view-body" ref={scrollRef} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
+      <div className="review-file-view-body" ref={bodyRef} onScroll={(event) => setView({ top: event.currentTarget.scrollTop, height: event.currentTarget.clientHeight })}>
         {file.error ? <div className="review-file-view-message" role="alert">{file.error}</div> : null}
         {!rows && !file.error ? <div className="review-file-view-message">Reading {file.target.path}…</div> : null}
         {rows ? (
-          <div className="review-file-view-rows" style={{ height: rows.length * FILE_ROW_HEIGHT }}>
+          <div className="review-file-view-rows" style={{ height: rows.length * FILE_ROW_HEIGHT, '--review-file-columns': widest } as CSSProperties}>
             {rows.slice(first, last).map((row, offset) => {
               const index = first + offset;
               const look = row.now === undefined ? undefined : noted.get(row.now);

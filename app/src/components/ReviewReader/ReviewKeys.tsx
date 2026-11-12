@@ -14,6 +14,7 @@ const DOCUMENT_KEYS: Array<[string[], string]> = [
 const WALKTHROUGH_KEYS: Array<[string[], string]> = [
   [['↑', '↓'], 'line'],
   [['←', '→'], 'stop'],
+  [['⇧←', '⇧→'], 'sideways'],
   [['z'], 'hide the script'],
   [['/'], 'search'],
 ];
@@ -29,6 +30,7 @@ const MAP_KEYS: Array<[string[], string]> = [
 const FILE_KEYS: Array<[string[], string]> = [
   [['↑', '↓'], 'line'],
   [['←', '→'], 'change'],
+  [['⇧←', '⇧→'], 'sideways'],
   [['z'], 'fill the tile'],
   [['/'], 'search'],
   [['⌃o'], 'back'],
@@ -196,6 +198,7 @@ const ALL_KEYS: Array<[string[], string]> = [
   [['u'], 'Undo your edit where the cursor is: the file gets its old text back and the edit leaves the review.'],
   [['⌘↵'], 'Send the review: see the notes and edits it carries, pick a verdict (a approve, r request changes, c comment), then ↵.'],
   [['←', '→'], 'The previous or next stop; in the Map, the previous or next message. In the file view opened from Brief or Map, the previous or next change.'],
+  [['⇧←', '⇧→'], 'Scroll the file sideways by half its width, in the file view and in the Walkthrough, to read the rest of a long line. A long line wraps in a stop.'],
   [['b'], 'In the Map, switch between the diagrams before and after the change, when the document has both.'],
   [['f'], 'Go to the definition of a name on the line: each name gets a label, type it. On a definition, list its uses. An answer that comes after you moved on is offered in one line above the keys: ↵ takes it, esc drops it, and every other key keeps working. The line asked about is marked … until the answer comes.'],
   [['r'], 'List the uses of a name on the line; ↑↓ pick one, ↵ opens it.'],
