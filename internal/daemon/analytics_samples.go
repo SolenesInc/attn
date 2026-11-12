@@ -66,18 +66,25 @@ func (d *Daemon) analyticsSampleHandler(ctx context.Context, _ *jobs.Job) (any, 
 }
 
 type connectedApps struct {
-	pids  []int
-	drawn map[protocol.TerminalID]struct{}
+	processes []appProcess
+	drawn     map[protocol.TerminalID]struct{}
+}
+
+type appProcess struct {
+	pid   int
+	shell appShell
 }
 
 func (d *Daemon) connectedApps() connectedApps {
 	apps := connectedApps{drawn: map[protocol.TerminalID]struct{}{}}
 	d.wsHub.ForEachClient(func(client *wsClient) {
-		if !client.isApp() {
+		shell := client.appShell()
+		if shell == shellNone {
 			return
 		}
-		if pid := client.processID(); pid > 0 && !slices.Contains(apps.pids, pid) {
-			apps.pids = append(apps.pids, pid)
+		app := appProcess{pid: client.processID(), shell: shell}
+		if app.pid > 0 && !slices.Contains(apps.processes, app) {
+			apps.processes = append(apps.processes, app)
 		}
 		for _, terminal := range client.attachedTerminals() {
 			apps.drawn[terminal] = struct{}{}
@@ -121,11 +128,11 @@ func (d *Daemon) sampleProcessMemory(ctx context.Context, apps connectedApps) []
 			roles.Add(ptyProcessRole(process), process)
 		}
 	}
-	for _, pid := range apps.pids {
-		if app, ok := diag.ReadProcess(pid); ok {
-			roles.Add(diag.RoleApp, app)
+	for _, app := range apps.processes {
+		if process, ok := diag.ReadProcess(app.pid); ok {
+			roles.AddApp(string(app.shell), process)
 		}
-		roles.AddWebKitProcesses(pid)
+		roles.AddWebKitProcesses(app.pid)
 	}
 	if err := roles.SplitWebContent(ctx); err != nil {
 		d.logf("analytics: splitting WebContent memory: %v", err)

@@ -23,6 +23,7 @@ pub const CHECK_REJECTED: &str = "rejected";
 pub const CHECK_VERB_ADD: &str = "add";
 pub const CHECK_VERB_EDIT: &str = "edit";
 pub const CHECK_VERB_REPORT: &str = "report";
+pub const CLIENT_KIND_NATIVE_APP: &str = "native-app";
 pub const ERROR_CODE_CONFLICT: &str = "conflict";
 pub const ERROR_CODE_SUBSCRIPTION_LIMIT: &str = "subscription_limit";
 pub const ERROR_CODE_UNAUTHORIZED_CLIENT: &str = "unauthorized_client";

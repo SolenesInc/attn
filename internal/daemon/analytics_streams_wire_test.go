@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"io"
+	"os"
 	"runtime"
 	"strings"
 	"testing"
@@ -152,6 +153,7 @@ type processSampleProps struct {
 	} `json:"workload"`
 	Processes []struct {
 		Role           string `json:"role"`
+		Shell          string `json:"shell"`
 		Count          int    `json:"count"`
 		ResidentBytes  uint64 `json:"resident_bytes"`
 		FootprintBytes uint64 `json:"footprint_bytes"`
@@ -173,6 +175,15 @@ func newestProcessSample(t *testing.T, app *testworld.Peer) processSampleProps {
 	}
 	t.Fatalf("the outbox holds no process sample among %d sample records", len(records))
 	return processSampleProps{}
+}
+
+func (p processSampleProps) appShell() string {
+	for _, process := range p.Processes {
+		if process.Role == "app" {
+			return process.Shell
+		}
+	}
+	return ""
 }
 
 func (p processSampleProps) roleCount(role string) int {
@@ -211,6 +222,9 @@ func TestASampleCarriesItsWorkloadAndTheMemoryOfTheConnectedAppByRole(t *testing
 		if sample.roleCount("daemon") != 1 || sample.roleCount("app") != 1 {
 			t.Errorf("sample processes = %+v, want the daemon and the connected app", sample.Processes)
 		}
+		if shell := sample.appShell(); shell != "tauri" {
+			t.Errorf("the Tauri app's sample entry has shell %q, want tauri", shell)
+		}
 
 		observer := w.Connect(helloWithToken(protocol.Ptr(config.ClientToken())), nil)
 		app.Close()
@@ -219,6 +233,27 @@ func TestASampleCarriesItsWorkloadAndTheMemoryOfTheConnectedAppByRole(t *testing
 		after := newestProcessSample(t, observer)
 		if after.roleCount("app") != 0 || after.Workload.PanesDrawn != 0 {
 			t.Errorf("after the app left the sample has processes %+v and %d panes drawn, want neither", after.Processes, after.Workload.PanesDrawn)
+		}
+	})
+}
+
+func TestASampleNamesTheNativeAppsShell(t *testing.T) {
+	inBubbleWithAgents(t, func(t *testing.T, w *world) {
+		observer := w.App()
+		setAnalyticsEnabled(observer, "true")
+		observer.Close()
+		hello := helloWithToken(protocol.Ptr(config.ClientToken()))
+		hello.ClientKind = protocol.ClientKindNativeApp
+		hello.AppPid = protocol.Ptr(os.Getpid())
+		native := w.Connect(hello, nil)
+		testworld.Await[protocol.InitialStateMessage](native, protocol.EventInitialState, nil)
+		synctest.Wait()
+
+		w.advance(sampleInterval)
+		sample := newestProcessSample(t, native)
+
+		if sample.roleCount("app") != 1 || sample.appShell() != "native" {
+			t.Errorf("sample processes = %+v, want one app entry with shell native", sample.Processes)
 		}
 	})
 }

@@ -24,6 +24,7 @@ type Process struct {
 
 type RoleMemory struct {
 	Role           string           `json:"role"`
+	Shell          string           `json:"shell,omitempty"`
 	Count          int              `json:"count"`
 	ResidentBytes  uint64           `json:"resident_bytes"`
 	FootprintBytes uint64           `json:"footprint_bytes,omitempty"`
@@ -53,6 +54,11 @@ func (r RoleMemories) Add(role string, process Process) {
 		r[role] = memory
 	}
 	memory.add(process)
+}
+
+func (r RoleMemories) AddApp(shell string, process Process) {
+	r.Add(RoleApp, process)
+	r[RoleApp].Shell = shell
 }
 
 func (r RoleMemories) Sorted() []RoleMemory {

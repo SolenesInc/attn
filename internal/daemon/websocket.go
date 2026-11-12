@@ -41,7 +41,7 @@ type wsClient struct {
 	closeReason  string
 	connectedAt  time.Time
 
-	trustedTauriOrigin       bool
+	webOrigin                string
 	browserHostAuthenticated bool
 
 	pid             int
@@ -85,10 +85,7 @@ func (c *wsClient) IsBrowserHost() bool {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
 	_, capable := c.capabilities[protocol.CapabilityBrowserHost]
-	return c.trustedTauriOrigin &&
-		c.browserHostAuthenticated &&
-		c.clientKind == "tauri-app" &&
-		capable
+	return c.trustedAppLocked() && capable
 }
 
 func (c *wsClient) setBrowserHostAuthenticated(authenticated bool) {
@@ -100,12 +97,25 @@ func (c *wsClient) setBrowserHostAuthenticated(authenticated bool) {
 func (c *wsClient) isTrustedAppClient() bool {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
-	return c.trustedTauriOrigin && c.browserHostAuthenticated && c.clientKind == "tauri-app"
+	return c.trustedAppLocked()
+}
+
+func (c *wsClient) trustedAppLocked() bool {
+	if !c.browserHostAuthenticated {
+		return false
+	}
+	switch appShellOf(c.clientKind) {
+	case shellTauri:
+		return isTrustedTauriOrigin(c.webOrigin)
+	case shellNative:
+		return c.webOrigin == ""
+	}
+	return false
 }
 
 func websocketReadLimit(client *wsClient) int64 {
-	if client.IsBrowserHost() {
-		return maxBrowserHostWebSocketReadBytes
+	if client.isTrustedAppClient() {
+		return maxTrustedAppWebSocketReadBytes
 	}
 	return defaultWebSocketReadBytes
 }
@@ -146,10 +156,10 @@ func (c *wsClient) processID() int {
 	return c.pid
 }
 
-func (c *wsClient) isApp() bool {
+func (c *wsClient) appShell() appShell {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
-	return c.clientKind == "tauri-app"
+	return appShellOf(c.clientKind)
 }
 
 func (c *wsClient) attachedTerminals() []protocol.TerminalID {
@@ -285,14 +295,14 @@ type wsHub struct {
 }
 
 const (
-	streamQueueSlots                 = 256
-	controlQueueSlots                = 256
-	slowClientCloseReason            = "client too slow"
-	maxPTYDimValue                   = 65535
-	maxPTYPixelValue                 = 65535
-	defaultWebSocketReadBytes        = protocol.MaxSocketFrameBytes
-	maxBrowserHostWebSocketReadBytes = 32 << 20
-	ptyOutputSendWait                = 1 * time.Second
+	streamQueueSlots                = 256
+	controlQueueSlots               = 256
+	slowClientCloseReason           = "client too slow"
+	maxPTYDimValue                  = 65535
+	maxPTYPixelValue                = 65535
+	defaultWebSocketReadBytes       = protocol.MaxSocketFrameBytes
+	maxTrustedAppWebSocketReadBytes = 32 << 20
+	ptyOutputSendWait               = 1 * time.Second
 )
 
 func newWSHub() *wsHub {
@@ -535,16 +545,16 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 	conn.SetReadLimit(defaultWebSocketReadBytes)
 
 	client := &wsClient{
-		conn:               conn,
-		rawConn:            rawConnFrom(r.Context()),
-		send:               make(chan outboundMessage, streamQueueSlots+controlQueueSlots),
-		streamSlots:        make(chan struct{}, streamQueueSlots),
-		controlSlots:       make(chan struct{}, controlQueueSlots),
-		recv:               make(chan []byte, 256),
-		gone:               make(chan struct{}),
-		connectedAt:        time.Now(),
-		trustedTauriOrigin: isTrustedTauriOrigin(origin),
-		attachedStreams:    make(map[protocol.TerminalID]ptybackend.Stream),
+		conn:            conn,
+		rawConn:         rawConnFrom(r.Context()),
+		send:            make(chan outboundMessage, streamQueueSlots+controlQueueSlots),
+		streamSlots:     make(chan struct{}, streamQueueSlots),
+		controlSlots:    make(chan struct{}, controlQueueSlots),
+		recv:            make(chan []byte, 256),
+		gone:            make(chan struct{}),
+		connectedAt:     time.Now(),
+		webOrigin:       origin,
+		attachedStreams: make(map[protocol.TerminalID]ptybackend.Stream),
 	}
 	release, held := d.life.Hold("handleWS")
 	if !held {

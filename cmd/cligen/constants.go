@@ -45,6 +45,7 @@ func writeConstants(out *strings.Builder) {
 		{"CHECK_VERB_ADD", string(garden.CheckVerbAdd)},
 		{"CHECK_VERB_EDIT", string(garden.CheckVerbEdit)},
 		{"CHECK_VERB_REPORT", string(garden.CheckVerbReport)},
+		{"CLIENT_KIND_NATIVE_APP", protocol.ClientKindNativeApp},
 		{"ERROR_CODE_CONFLICT", protocol.ErrorCodeConflict},
 		{"ERROR_CODE_SUBSCRIPTION_LIMIT", protocol.ErrorCodeSubscriptionLimit},
 		{"ERROR_CODE_UNAUTHORIZED_CLIENT", protocol.ErrorCodeUnauthorizedClient},

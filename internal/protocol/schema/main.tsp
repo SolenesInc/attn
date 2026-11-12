@@ -587,7 +587,10 @@ model Desktop {
 //
 model ClientHelloMessage {
   cmd: "client_hello";
-  client_kind: string;          // e.g. "tauri-app"
+  // "tauri-app" or "native-app" for attn's own app; any other kind is a plain
+  // client. The daemon trusts an app that proves browser_host_token: the Tauri
+  // app from its Tauri web origin, the native app with no web origin at all.
+  client_kind: string;
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
   // Per-instance credential from <data-dir>/client-token, minted by the daemon.
@@ -595,7 +598,7 @@ model ClientHelloMessage {
   // local client proves before the daemon records its identity, registers it
   // for broadcasts, or sends it initial_state.
   client_token?: string;
-  browser_host_token?: string;  // secret available only to the trusted Tauri main webview
+  browser_host_token?: string;  // <data-dir>/browser-host-token, which the app mints and sends
   // Stable for as long as the client process lives, new on every restart. It is
   // what lets the daemon tell a reconnecting client why it was hung up on
   // (client_eviction_notice); a client that omits it simply gets no notice.
@@ -609,8 +612,8 @@ model ClientHelloMessage {
   // cask, dmg). Analytics batches carry them in their build block.
   app_version?: string;
   app_channel?: string;
-  // The app's own process id, which roots the daemon's memory sample of the app
-  // and its WebKit processes while this client stays connected.
+  // The app's own process id, which roots the daemon's memory sample of the app,
+  // by shell, and its WebKit processes while this client stays connected.
   app_pid?: int32;
 }
 
