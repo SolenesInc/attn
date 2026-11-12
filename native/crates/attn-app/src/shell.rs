@@ -16,13 +16,13 @@ pub(crate) const LEADER_TIMEOUT: f64 = 0.6;
 /// How long a notice stays, as the Tauri app's toast does.
 const NOTICE_SECONDS: f64 = 6.0;
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 32.0;
-const SIDEBAR_WIDTH: f32 = 240.0;
 const DRAWER_WIDTH: f32 = 360.0;
 
 /// What one window shows and where its keyboard is. Desktops, the active tile and the current
 /// desktop are the daemon's; this is the window's own.
 #[derive(Default)]
 pub struct Window {
+    pub view: View,
     pub sidebar_hidden: bool,
     pub drawer: Option<Drawer>,
     pub layer: Option<Layer>,
@@ -33,6 +33,14 @@ pub struct Window {
     /// taking this window's keyboard.
     pub keyboard: Option<Holder>,
     palette_query: rune::TextEdit,
+}
+
+/// What the window's main area shows: home, or the current desktop's tiles.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum View {
+    Home,
+    #[default]
+    Desktop,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -100,6 +108,10 @@ pub(crate) struct Leader {
 const PALETTE_FIELD: &str = "palette.field";
 
 impl Window {
+    pub(crate) fn go_home(&mut self) {
+        self.view = View::Home;
+    }
+
     pub(crate) fn toggle_drawer(&mut self, drawer: Drawer) {
         self.drawer = (self.drawer != Some(drawer)).then_some(drawer);
     }
@@ -218,43 +230,16 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
         .key("regions")
         .w_full()
         .grow(1.0)
-        .children((!window.sidebar_hidden).then(|| sidebar(&state.facts, t)))
-        .child(tiles(state, t, scale))
+        .children((!window.sidebar_hidden).then(|| crate::sidebar::view(state, t)))
+        .child(match window.view {
+            View::Home => crate::home::view(state, t),
+            View::Desktop => tiles(state, t, scale),
+        })
         .children(window.drawer.map(|drawer| self::drawer(drawer, t)))
 }
 
 fn version<T>(arc: &Arc<T>) -> usize {
     Arc::as_ptr(arc) as usize
-}
-
-fn sidebar(facts: &Facts, t: &Tokens) -> El {
-    let reads = (version(&facts.sessions), version(&facts.desktops), *t);
-    memo("sidebar", reads, || {
-        let sessions = facts.sessions.iter().map(|session| {
-            row_text(&session.label, t)
-                .key(format!("sidebar.session.{}", session.id))
-                .role("listitem")
-                .label(session.label.clone())
-        });
-        col()
-            .key("sidebar")
-            .role("navigation")
-            .label("Sidebar")
-            .w(SIDEBAR_WIDTH)
-            .h_full()
-            .fill(t.bg_panel)
-            .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
-            .padding(space::S2)
-            .gap(space::S1)
-            .child(section_title("Sessions", t))
-            .child(
-                col()
-                    .role("list")
-                    .label("Sessions")
-                    .gap(2.0)
-                    .children(sessions),
-            )
-    })
 }
 
 fn tiles(state: &State, t: &Tokens, scale: f32) -> El {
@@ -698,12 +683,4 @@ fn floating_status(key: &str, message: String, t: &Tokens) -> El {
 
 fn section_title(title: &str, t: &Tokens) -> El {
     text(title).font(type_::SECTION).color(t.text_tertiary)
-}
-
-fn row_text(label: &str, t: &Tokens) -> El {
-    row()
-        .w_full()
-        .padding(space::S1)
-        .radius(4.0)
-        .child(text(label).font(type_::BODY).color(t.text_secondary))
 }

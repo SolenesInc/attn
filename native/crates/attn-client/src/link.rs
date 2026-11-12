@@ -5,8 +5,8 @@ use std::time::Duration;
 use attn_protocol::{
     AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
     PROTOCOL_VERSION, ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage,
-    PtyResizedMessage, RuntimeRespawnedMessage, SessionExitedMessage, SettingsUpdatedMessage,
-    go_values,
+    PtyResizedMessage, RuntimeRespawnedMessage, SessionExitedMessage, SessionRegisteredMessage,
+    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -389,6 +389,22 @@ impl Task {
             "profiles_changed" => {
                 let message: ProfilesChangedMessage = parse(&header.event, text)?;
                 self.store.set_profiles(message.profiles);
+                None
+            }
+            "session_registered" | "session_state_changed" => {
+                let message: SessionRegisteredMessage = parse(&header.event, text)?;
+                self.store.upsert_session(message.session);
+                None
+            }
+            "session_unregistered" => {
+                let message: SessionUnregisteredMessage = parse(&header.event, text)?;
+                self.store.remove_session(&message.session.id);
+                None
+            }
+            "sessions_updated" => {
+                let message: SessionsUpdatedMessage = parse(&header.event, text)?;
+                self.store
+                    .set_sessions(message.sessions.unwrap_or_default());
                 None
             }
             "attach_result" => {

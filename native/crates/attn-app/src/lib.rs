@@ -5,12 +5,14 @@ pub mod daemon;
 mod dispatch;
 mod frame;
 pub mod headless;
+mod home;
 pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
 pub mod screen;
 mod shell;
+pub mod sidebar;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
 mod terminal;
@@ -24,7 +26,7 @@ use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 pub use action::{Action, Category};
 pub use dispatch::dispatch;
 pub use keymap::{Binding, Keymap};
-pub use shell::{Drawer, Holder, Layer, Window};
+pub use shell::{Drawer, Holder, Layer, View, Window};
 pub use terminal::{TerminalInbox, Terminals};
 
 /// A change for a window's state, made on the link's thread and run on the UI thread.

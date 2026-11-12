@@ -39,6 +39,7 @@ impl Hooks<State> for AppHooks {
             "desktops" => json!(*facts.desktops),
             "profiles" => json!({"selected": facts.profiles.selected, "all": facts.profiles.all}),
             "window" => json!({
+                "view": format!("{:?}", window.view),
                 "sidebar_hidden": window.sidebar_hidden,
                 "drawer": window.drawer.map(|d| format!("{d:?}")),
                 "layer": window.layer.map(|l| format!("{l:?}")),

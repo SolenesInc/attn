@@ -210,6 +210,49 @@ impl Store {
         });
     }
 
+    /// A session the daemon registered or changed takes its place, or joins at the end.
+    pub(crate) fn upsert_session(&self, session: Session) {
+        self.change(|facts| {
+            let mut sessions = (*facts.sessions).clone();
+            match sessions.iter_mut().find(|s| s.id == session.id) {
+                Some(known) => *known = session,
+                None => sessions.push(session),
+            }
+            facts.sessions = Arc::new(sessions);
+            Slices::SESSIONS
+        });
+    }
+
+    pub(crate) fn remove_session(&self, id: &str) {
+        self.change(|facts| {
+            if !facts.sessions.iter().any(|s| s.id == id) {
+                return Slices::NONE;
+            }
+            facts.sessions = Arc::new(
+                facts
+                    .sessions
+                    .iter()
+                    .filter(|s| s.id != id)
+                    .cloned()
+                    .collect(),
+            );
+            Slices::SESSIONS
+        });
+    }
+
+    /// The daemon's whole list, each session once.
+    pub(crate) fn set_sessions(&self, sessions: Vec<Session>) {
+        self.change(|facts| {
+            let mut seen = std::collections::HashSet::new();
+            let sessions = sessions
+                .into_iter()
+                .filter(|s| seen.insert(s.id.clone()))
+                .collect();
+            facts.sessions = Arc::new(sessions);
+            Slices::SESSIONS
+        });
+    }
+
     pub(crate) fn set_profiles(&self, all: Vec<Profile>) {
         self.change(|facts| {
             let selected = facts.profiles.selected.clone();

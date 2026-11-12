@@ -3,5 +3,6 @@ mod wire {
     mod connection;
     mod keys;
     mod profile;
+    mod sidebar;
     mod terminal;
 }

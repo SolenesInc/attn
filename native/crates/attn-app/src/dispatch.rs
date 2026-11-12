@@ -9,6 +9,7 @@ use crate::shell::{Drawer, Layer, Palette};
 pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) {
     let window = &mut state.window;
     match action {
+        Action::SessionGoToDashboard => window.go_home(),
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => window.toggle_drawer(Drawer::Attention),
         Action::DockAsks => window.toggle_drawer(Drawer::Asks),
