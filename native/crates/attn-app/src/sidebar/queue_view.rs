@@ -258,6 +258,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
         window.agent_filter.text.to_owned(),
         window.now_ms,
         crate::desktop::on_screen_sessions(state),
+        super::width::of(state).to_bits(),
         *t,
     );
     memo("sidebar", reads, || {
@@ -269,7 +270,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> El {
             .key("sidebar")
             .role("navigation")
             .label("Sidebar")
-            .w(super::WIDTH)
+            .w(super::width::of(state))
             .h_full()
             .fill(t.bg_panel)
             .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)

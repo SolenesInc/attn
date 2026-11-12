@@ -763,7 +763,7 @@ fn the_snooze_menu_closes_when_its_agent_goes_away() {
     assert!(world.screen().find(Target::role("menu")).is_none());
 }
 
-fn plain(key: rune::Key) -> rune::KeyEvent {
+pub(super) fn plain(key: rune::Key) -> rune::KeyEvent {
     rune::KeyEvent {
         key,
         mods: rune::Mods::default(),

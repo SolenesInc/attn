@@ -49,6 +49,7 @@ pub struct Window {
     pub(crate) launching: crate::picker::Launching,
     /// Links opened before the current desktop arrived, in the order they came.
     pub(crate) links: Vec<crate::deep_link::Link>,
+    pub(crate) width: crate::sidebar::width::Width,
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
 }
 
@@ -219,7 +220,12 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
         .width_label
         .take_if(|l| now >= l.until)
         .is_some();
-    notice || leader || label
+    let sidebar_label = window
+        .width
+        .label_until
+        .take_if(|until| now >= *until)
+        .is_some();
+    notice || leader || label || sidebar_label
 }
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
@@ -300,6 +306,13 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
         .key("regions")
         .w_full()
         .grow(1.0)
+        .on_layout_tx(|state: &mut State, [_, _, w, _], tx: &mut Tx| {
+            if state.window.width.window == w {
+                tx.live_only();
+                return;
+            }
+            state.window.width.window = w;
+        })
         .children(crate::sidebar::view(state, t))
         .child(match window.view {
             View::Home => crate::home::view(state, t),

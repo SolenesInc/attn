@@ -11,5 +11,6 @@ mod wire {
     mod profile;
     mod queue;
     mod sidebar;
+    mod sidebar_width;
     mod terminal;
 }

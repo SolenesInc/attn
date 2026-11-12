@@ -5,6 +5,7 @@ pub(crate) mod queue;
 mod queue_view;
 pub(crate) mod session_menu;
 pub(crate) mod snooze;
+pub(crate) mod width;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -22,7 +23,6 @@ pub(crate) use model::{display_name, tile_title};
 use crate::State;
 use crate::shell::View;
 
-pub(crate) const WIDTH: f32 = 240.0;
 pub(crate) const ROW_HEIGHT: f32 = 28.0;
 
 thread_local! {
@@ -35,12 +35,20 @@ pub(crate) use chrome::title_controls;
 /// otherwise. Collapsed, desktop flow keeps the rail and queue flow keeps nothing here,
 /// since the queue bar moves into the title bar.
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
-    match (actions::queue_flow(state), state.window.sidebar_hidden) {
-        (true, false) => Some(queue_view::view(state, t)),
-        (true, true) => None,
-        (false, false) => Some(desktop_sidebar(state, t)),
-        (false, true) => Some(chrome::rail(state, t)),
-    }
+    let sidebar = match (actions::queue_flow(state), state.window.sidebar_hidden) {
+        (true, false) => queue_view::view(state, t),
+        (true, true) => return None,
+        (false, false) => desktop_sidebar(state, t),
+        (false, true) => return Some(chrome::rail(state, t)),
+    };
+    Some(
+        row()
+            .key("sidebar.frame")
+            .h_full()
+            .child(sidebar)
+            .child(width::handle(t))
+            .children(width::label_view(state, t)),
+    )
 }
 
 /// What the title bar's middle holds for the sidebar: the queue bar, in queue flow with the
@@ -68,6 +76,8 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SessionPriority => actions::toggle_priority_on_screen(state),
         Action::SessionSnooze => actions::snooze_on_screen(state, tx),
         Action::SessionCancelCountdown => actions::cancel_countdown(state),
+        Action::SidebarWider => width::step_by_key(state, true, tx),
+        Action::SidebarNarrower => width::step_by_key(state, false, tx),
         Action::SessionPrev if queue => actions::step(state, -1, tx),
         Action::SessionNext if queue => actions::step(state, 1, tx),
         _ => return false,
@@ -110,6 +120,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
         std::sync::Arc::as_ptr(&facts.profiles) as usize,
         home,
         on_screen.clone(),
+        width::of(state).to_bits(),
         *t,
     );
     memo("sidebar", reads, || {
@@ -120,7 +131,7 @@ fn desktop_sidebar(state: &State, t: &Tokens) -> El {
             .key("sidebar")
             .role("navigation")
             .label("Sidebar")
-            .w(WIDTH)
+            .w(width::of(state))
             .h_full()
             .fill(t.bg_panel)
             .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
