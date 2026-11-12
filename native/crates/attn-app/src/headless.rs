@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use attn_automation::{Headless, Server, Work};
-use attn_client::{Clock, Link, LinkConfig, Pulse, Store, TerminalEvent};
+use attn_automation::{Headless, Host, Server, Work};
+use attn_client::{Clock, LinkConfig, Pulse, Store, TerminalSink};
 use rune::Env;
 
+use crate::State;
 use crate::automation::AppHooks;
-use crate::{State, TerminalInbox};
 
 /// The window's size for a windowless run: what a scenario's parked window shows.
 const VIEWPORT: (f32, f32) = (1200.0, 800.0);
@@ -24,18 +24,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .ok_or("--automation-headless needs --manifest PATH")?;
     let store = Store::default();
     let (host, inbox) = Headless::<State>::new();
-    let terminals = TerminalInbox::default();
-    let wake = host.updates();
-    let link = Link::start(
-        link_config(terminals.sink(move || {
+    let (wake, updates) = (host.updates(), host.updates());
+    let (link, _window) = crate::connect(
+        &store,
+        link_config()?,
+        host.frames().clone(),
+        move || {
             let _ = wake.send(Work::Update(Box::new(|_, _| {})));
-        }))?,
-        store.clone(),
+        },
+        move |update| {
+            let _ = updates.send(Work::Update(update));
+        },
     );
-    let updates = host.updates();
-    let _window = crate::bind(&store, link.commands(), terminals, move |update| {
-        let _ = updates.send(Work::Update(update));
-    });
     let host = Arc::new(host);
     let server = Server::start(host.clone(), Arc::new(AppHooks), &manifest)?;
     println!("ready port={}", server.manifest.port);
@@ -48,7 +48,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     unreachable!("the windowless host runs for the process's life")
 }
 
-fn link_config(terminals: Box<dyn Fn(TerminalEvent) + Send + Sync>) -> Result<LinkConfig, String> {
+fn link_config() -> Result<impl FnOnce(TerminalSink) -> LinkConfig, String> {
     let var =
         |name: &str| std::env::var(name).map_err(|_| format!("--automation-headless needs {name}"));
     let port = var("ATTN_WS_PORT")?;
@@ -62,10 +62,14 @@ fn link_config(terminals: Box<dyn Fn(TerminalEvent) + Send + Sync>) -> Result<Li
     let instance = std::env::var("ATTN_INSTANCE")
         .ok()
         .filter(|i| !i.is_empty());
-    Ok(LinkConfig {
+    let (client_token, host_token) = (
+        read("client-token")?,
+        crate::instance::ensure_host_token(&data_dir)?,
+    );
+    Ok(move |terminals| LinkConfig {
         daemon: format!("127.0.0.1:{port}"),
-        client_token: read("client-token")?,
-        host_token: Some(crate::instance::ensure_host_token(&data_dir)?),
+        client_token,
+        host_token: Some(host_token),
         instance: instance.unwrap_or_else(|| "default".into()),
         profile_id: None,
         client_id: format!("native-headless-{}", std::process::id()),

@@ -1,17 +1,53 @@
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::time::Duration;
 
 use attn_automation::{Host, Inspection, WindowInfo};
-use attn_client::Pulse;
-use rune::AppHandle;
+use attn_client::{Clock, Pulse};
+use rune::{AppHandle, Runtime};
 
 use crate::State;
 
 /// The automation host for the app's window: inspections run on the UI thread through
-/// `AppHandle::inspect`, and `frames` beats from the app's `on_frame_encoded`.
+/// `AppHandle::inspect`. `frames` beats from the app's `on_frame_encoded` and
+/// `on_frame_drawn`, and from `attn_app::connect`; `drawn` is the runtime's commit count as
+/// its last drawn frame presented it.
 pub struct WindowHost {
     pub handle: AppHandle<State>,
     pub frames: Pulse,
+    pub drawn: Arc<AtomicU64>,
+}
+
+impl WindowHost {
+    fn read<T: Send + 'static>(
+        &self,
+        f: impl FnOnce(&Runtime<State>) -> T + Send + 'static,
+    ) -> Option<T> {
+        let (reply, answer) = mpsc::channel();
+        self.handle.inspect(move |rt| {
+            let _ = reply.send(f(rt));
+        });
+        answer.recv().ok()
+    }
+
+    fn draws(&self, commits: u64, wait: Duration) -> Result<(), String> {
+        let clock = Clock::system();
+        loop {
+            let seen = self.frames.count();
+            if self.drawn.load(Ordering::Acquire) >= commits {
+                return Ok(());
+            }
+            let left = wait.saturating_sub(clock.now());
+            if left.is_zero() || !self.frames.wait_past(seen, left) {
+                return Err(format!(
+                    "shot: waited {} ms (timeout_ms) for the window to draw its latest view; a covered or minimised window draws nothing until it shows",
+                    wait.as_millis()
+                ));
+            }
+        }
+    }
 }
 
 impl Host<State> for WindowHost {
@@ -24,17 +60,15 @@ impl Host<State> for WindowHost {
     }
 
     fn window(&self) -> Option<WindowInfo> {
-        let (reply, answer) = mpsc::channel();
-        self.handle.inspect(move |_| {
-            let _ = reply.send(crate::frame::main_window());
-        });
-        answer.recv().ok().flatten()
+        self.read(|_| crate::frame::main_window()).flatten()
     }
 
-    fn shot(&self, path: &str) -> Result<(), String> {
-        let window = self
-            .window()
-            .ok_or("shot: the app has no window open to capture")?;
+    fn shot(&self, path: &str, wait: Duration) -> Result<(), String> {
+        let (window, commits) = self
+            .read(|rt| (crate::frame::main_window(), rt.stats.commits))
+            .ok_or("shot: the app closed before it answered")?;
+        let window = window.ok_or("shot: the app has no window open to capture")?;
+        self.draws(commits, wait)?;
         if let Some(dir) = std::path::Path::new(path).parent() {
             std::fs::create_dir_all(dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
         }

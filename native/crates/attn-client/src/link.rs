@@ -22,6 +22,9 @@ const FIRST_RETRY: Duration = Duration::from_secs(1);
 const LAST_RETRY: Duration = Duration::from_secs(5);
 const CAPABILITIES: [&str; 2] = ["binary_pty_output", "kitty_images"];
 
+/// Where the link hands what it hears about terminals.
+pub type TerminalSink = Box<dyn Fn(TerminalEvent) + Send + Sync>;
+
 pub struct LinkConfig {
     /// The daemon's `host:port`; the link speaks WebSocket on `/ws` and reads `/health`.
     pub daemon: String,
@@ -38,7 +41,7 @@ pub struct LinkConfig {
     pub clock: Clock,
     pub pulse: Pulse,
     /// What the daemon says about terminals, on the link's thread, in arrival order.
-    pub terminals: Box<dyn Fn(TerminalEvent) + Send + Sync>,
+    pub terminals: TerminalSink,
 }
 
 /// A terminal's output and the daemon's answers about it, plus the connection's start and

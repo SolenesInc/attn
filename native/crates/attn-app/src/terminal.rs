@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
 use std::sync::{Arc, Mutex};
 
-use attn_client::{Commands, Connection, Facts, Frame, TerminalEvent};
+use attn_client::{Commands, Connection, Facts, Frame, Pulse, TerminalEvent, TerminalSink};
 use attn_protocol::{
     AttachResultMessage, AttachSessionMessage, DetachSessionMessage, PtyInputMessage,
     PtyResizeMessage, SetTerminalThemeMessage, TerminalFocusMessage,
@@ -30,15 +30,23 @@ const POINTER_ACTIVITY_INTERVAL: f64 = 0.25;
 
 /// What the link hears about terminals, waiting for the window's next frame.
 #[derive(Clone, Default)]
-pub struct TerminalInbox(Arc<Mutex<Vec<TerminalEvent>>>);
+pub struct TerminalInbox {
+    queue: Arc<Mutex<Vec<TerminalEvent>>>,
+    taken: Pulse,
+}
 
 impl TerminalInbox {
+    /// An inbox that beats `taken` each time the window has applied what it took.
+    pub fn beating(taken: Pulse) -> TerminalInbox {
+        TerminalInbox {
+            queue: Arc::default(),
+            taken,
+        }
+    }
+
     /// The link's terminal sink: queues each event and calls `wake` so the window takes it.
-    pub fn sink(
-        &self,
-        wake: impl Fn() + Send + Sync + 'static,
-    ) -> Box<dyn Fn(TerminalEvent) + Send + Sync> {
-        let queue = self.0.clone();
+    pub fn sink(&self, wake: impl Fn() + Send + Sync + 'static) -> TerminalSink {
+        let queue = self.queue.clone();
         Box::new(move |event| {
             queue.lock().unwrap().push(event);
             wake();
@@ -47,11 +55,11 @@ impl TerminalInbox {
 
     /// Whether the window has taken everything the link handed on.
     pub fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
+        self.queue.lock().unwrap().is_empty()
     }
 
     fn take(&self) -> Vec<TerminalEvent> {
-        std::mem::take(&mut *self.0.lock().unwrap())
+        std::mem::take(&mut *self.queue.lock().unwrap())
     }
 }
 
@@ -380,6 +388,9 @@ impl Terminals {
             self.panes
                 .values_mut()
                 .for_each(|term| place_caret(term, &metrics));
+        }
+        if heard {
+            self.inbox.taken.beat();
         }
         let now = tx.clock();
         for (id, term) in &mut self.panes {

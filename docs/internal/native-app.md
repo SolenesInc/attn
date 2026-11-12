@@ -68,7 +68,9 @@ actions are the native app's own.
 A target names an element by its key, `{"key": "sidebar"}`, or by its role and
 accessible name, `{"role": "group", "name": "Agent t2"}`. Pointer actions wait
 for the element to appear and stop moving, scroll it into view, and reply with a
-receipt that says which element the press landed on.
+receipt that says which element the press landed on. Every reply comes after the
+app handled the request's input: its handlers ran, and the commands they sent
+are on their way to the daemon.
 
 | Action | Payload | Does |
 | --- | --- | --- |
@@ -104,9 +106,11 @@ Hosts run the protocol on the app's `Runtime`:
   Requests run on the window's runtime between frames, so they work while the
   window is parked or in the background. A covered window holds its motion
   until it shows, so a request waiting for an element to stop moving waits
-  for that too. `shot` captures the window
-  in-process, which macOS refuses to an app without Screen Recording
-  permission; a driver that has it captures the id `native_windows` reports.
+  for that too; a change from the daemon wakes a waiting request whether or not
+  the window draws it. `shot` waits until the window drew what the app last
+  built, then captures it in-process, which macOS refuses to an app without
+  Screen Recording permission; a driver that has it captures the id
+  `native_windows` reports.
 
 ### Scenarios and the VM
 

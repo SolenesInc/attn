@@ -21,7 +21,9 @@ pub mod window_host;
 
 use std::sync::Arc;
 
-use attn_client::{Commands, Facts, Slices, Store, Subscription};
+use attn_client::{
+    Commands, Facts, Link, LinkConfig, Pulse, Slices, Store, Subscription, TerminalSink,
+};
 use rune::{AppSpec, KeyPlatform, MenuItem, Shortcut, Titlebar, Tx};
 
 pub use action::{Action, Category};
@@ -75,6 +77,30 @@ pub fn bind(
                 .follow(&state.facts, keyboard, tx.clock(), &state.daemon);
         }));
     })
+}
+
+/// Connects a window to the daemon: the link starts from what `config` makes of the terminal
+/// sink, which calls `wake` for each terminal event, and the store's changes reach the state
+/// through `deliver`. `changed` beats once each change the link hears is in the state, a
+/// terminal's output once the window took it, so a request waiting for the screen wakes for it
+/// even in a covered window, which draws no frame.
+pub fn connect(
+    store: &Store,
+    config: impl FnOnce(TerminalSink) -> LinkConfig,
+    changed: Pulse,
+    wake: impl Fn() + Send + Sync + 'static,
+    deliver: impl Fn(Update) + Send + Sync + 'static,
+) -> (Link, Subscription) {
+    let terminals = TerminalInbox::beating(changed.clone());
+    let link = Link::start(config(terminals.sink(wake)), store.clone());
+    let window = bind(store, link.commands(), terminals, move |update| {
+        let changed = changed.clone();
+        deliver(Box::new(move |state, tx| {
+            update(state, tx);
+            changed.beat();
+        }));
+    });
+    (link, window)
 }
 
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
