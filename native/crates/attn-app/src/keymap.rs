@@ -237,13 +237,24 @@ fn field_keeps(action: Action, platform: KeyPlatform) -> bool {
     }
 }
 
-fn defaults(platform: KeyPlatform) -> BTreeMap<Action, Binding> {
-    let table = if platform == KeyPlatform::Mac {
+/// The chord `action` is bound to on `platform` before any rebind, as `Chord::parse` reads it.
+pub(crate) fn default_chord(action: Action, platform: KeyPlatform) -> Option<&'static str> {
+    table(platform)
+        .iter()
+        .find(|&&(a, _)| a == action)
+        .map(|&(_, spec)| spec)
+}
+
+fn table(platform: KeyPlatform) -> &'static [(Action, &'static str)] {
+    if platform == KeyPlatform::Mac {
         MAC
     } else {
         LINUX
-    };
-    table
+    }
+}
+
+fn defaults(platform: KeyPlatform) -> BTreeMap<Action, Binding> {
+    table(platform)
         .iter()
         .map(|&(action, spec)| {
             let chord = Chord::parse(spec)
