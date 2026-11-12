@@ -1,7 +1,0 @@
-kind: added
-area: website
-change: >
-  attn.codes has a one-minute video of queue flow at /queue-flow/, and the
-  queue flow guide links to it. It shows five agents: you answer and settle
-  the ones waiting, land on Home when nobody is, and attn brings you the next
-  agent that asks.

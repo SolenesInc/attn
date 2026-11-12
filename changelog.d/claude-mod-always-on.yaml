@@ -1,4 +1,0 @@
-kind: changed
-area: agents
-change: Every new Claude session now loads attn's Claude Code mod, so messages reach Claude without typing into the terminal, and standby and compacting closes work without turning anything on.
-notes: The claude_mod_enabled setting is gone. A Claude session already running when you upgrade keeps being typed into until you reload it. If a Claude Code update breaks the mod, attn names the version in the daemon log and in a blocked wake.
