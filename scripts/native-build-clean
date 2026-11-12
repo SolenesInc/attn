@@ -17,8 +17,20 @@ stale_days=3
 
 [ -d "$root" ] || exit 0
 
+tolerating_vanished_paths() {
+  local errors status=0
+  errors="$(mktemp "${TMPDIR:-/tmp}/native-build-clean.XXXXXX")"
+  "$@" 2>"$errors" || status=$?
+  if [ "$status" -ne 0 ] && grep -qv 'No such file or directory' "$errors"; then
+    cat "$errors" >&2
+    rm -f "$errors"
+    return "$status"
+  fi
+  rm -f "$errors"
+}
+
 remove_unless_building() {
-  find "$1" -maxdepth 3 \( -name .cargo-build-lock -o -name .cargo-lock \) -print0 | perl -MFcntl=:flock -0 -e '
+  tolerating_vanished_paths find "$1" -maxdepth 3 \( -name .cargo-build-lock -o -name .cargo-lock \) -print0 | perl -MFcntl=:flock -0 -e '
     my $build = shift;
     my @held;
     while (my $path = <STDIN>) {
@@ -32,13 +44,13 @@ remove_unless_building() {
 }
 
 newest_change() {
-  find "$1" -print0 | perl -0 -ne 'chomp; my $m = (lstat)[9]; $n = $m if $m > $n; END { print $n + 0 }'
+  tolerating_vanished_paths find "$1" -print0 | perl -0 -ne 'chomp; my $m = (lstat)[9]; $n = $m if $m > $n; END { print $n + 0 }'
 }
 
-kib() { du -sk "$1" | cut -f1; }
+kib() { tolerating_vanished_paths du -sk "$1" | cut -f1; }
 gib() { awk -v kib="$1" 'BEGIN { printf "%.1f GiB", kib / 1048576 }'; }
 
-builds="$(find "$root" -name CACHEDIR.TAG | sed 's#/CACHEDIR.TAG$##' | sort)"
+builds="$(tolerating_vanished_paths find "$root" -name CACHEDIR.TAG | sed 's#/CACHEDIR.TAG$##' | sort)"
 [ -n "$builds" ] || exit 0
 now="$(date +%s)"
 before="$(kib "$root")"
