@@ -46,7 +46,7 @@ function noteRange(note: ReviewNote): string {
   return from === to ? `L${from}` : `L${from}–${to}`;
 }
 
-function NoteRow({ note }: { note: ReviewNote }) {
+export function NoteRow({ note }: { note: ReviewNote }) {
   return (
     <div className={`review-note${note.look ? ' review-note--look' : ''}`} data-review-note={note.line}>
       <span className="review-note-who">{note.look ? 'look here' : 'agent'}</span>

@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useState, type CSSProperties, type RefObject 
 import type { ReviewRow } from '../../types/generated';
 import { CodeRow, rowKey } from './CodeRows';
 import type { FileTarget } from './reviewContext';
-import { PathLabel } from './StopBlock';
+import { NoteRow, PathLabel } from './StopBlock';
 import { useResizeWatch } from '../../tileWindow';
 import { useCachedTokens, type TokenCache } from './tokenize';
 import { useReviewReader } from './reviewContext';
@@ -93,6 +93,24 @@ function notedLines(notes: FileTarget['notes']): ReadonlyMap<number, boolean> {
   return noted;
 }
 
+/** Which rows stand inside a range of lines now: a removed row stands
+ * inside when a line next to it does. */
+function rowsInside(rows: readonly ReviewRow[], range: [number, number]): boolean[] {
+  const inside = (line: number | undefined) => line !== undefined && line >= range[0] && line <= range[1];
+  const result = rows.map((row) => inside(row.now));
+  let previous: number | undefined;
+  rows.forEach((row, index) => {
+    if (row.now !== undefined) previous = row.now;
+    else if (inside(previous)) result[index] = true;
+  });
+  let next: number | undefined;
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    if (rows[index].now !== undefined) next = rows[index].now;
+    else if (inside(next)) result[index] = true;
+  }
+  return result;
+}
+
 export function FileView({
   file,
   tokenCache,
@@ -121,6 +139,7 @@ export function FileView({
   const range = file.target.range;
   const notes = file.target.notes;
   const noted = useMemo(() => notedLines(notes), [notes]);
+  const inside = useMemo(() => (stage && range && rows ? rowsInside(rows, range) : null), [range, rows, stage]);
   const widest = useMemo(() => (rows ? widestLine(rows) : 0), [rows]);
   const resizeWatch = useResizeWatch();
   const reader = useReviewReader();
@@ -130,6 +149,7 @@ export function FileView({
   const marked = (row: ReviewRow) => row.now !== undefined && (reader?.marksByLine.has(markKey(path, row.now)) ?? false);
   const cursorLine = rows?.[file.cursor]?.now;
   const cursorMarks = cursorLine !== undefined ? reader?.marksByLine.get(markKey(path, cursorLine)) ?? [] : [];
+  const cursorNotes = cursorLine !== undefined ? (notes ?? []).filter((note) => note.now_from > 0 && cursorLine >= note.now_from && cursorLine <= note.now_to) : [];
   const selectFrom = Math.min(file.selectFrom ?? file.cursor, file.cursor);
   const selectTo = Math.max(file.selectFrom ?? file.cursor, file.cursor);
 
@@ -183,7 +203,7 @@ export function FileView({
               return (
                 <div
                   key={rowKey(row)}
-                  className={`review-file-view-row${mark}${index === file.cursor ? ' review-cursor' : ''}${file.selectFrom !== undefined && index >= selectFrom && index <= selectTo ? ' review-selected' : ''}${marked(row) ? ' review-file-view-row--marked' : ''}`}
+                  className={`review-file-view-row${mark}${index === file.cursor ? ' review-cursor' : ''}${file.selectFrom !== undefined && index >= selectFrom && index <= selectTo ? ' review-selected' : ''}${marked(row) ? ' review-file-view-row--marked' : ''}${inside && !inside[index] ? ' review-file-view-row--outside' : ''}`}
                   style={{ top: index * FILE_ROW_HEIGHT, height: FILE_ROW_HEIGHT }}
                   data-row-index={index}
                   onClick={() => onPick(index)}
@@ -202,8 +222,9 @@ export function FileView({
           </div>
         ) : null}
       </div>
-      {cursorMarks.length > 0 ? (
+      {cursorNotes.length > 0 || cursorMarks.length > 0 ? (
         <div className="review-file-view-marks" aria-label="Marks on this line">
+          {cursorNotes.map((note) => <NoteRow key={note.line} note={note} />)}
           {cursorMarks.map((mark) => (
             <MarkRow key={mark.id} mark={mark} asking={reader?.asking.get(mark.id)} onRemove={reader?.removeMark ? () => reader.removeMark?.(mark.id) : undefined} />
           ))}

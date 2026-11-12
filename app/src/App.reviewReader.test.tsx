@@ -523,10 +523,17 @@ describe('App review reader frames', () => {
     expect(fileCursorText(tileElement)).toBe('4+\tsum := a + b');
     expect(fileView(tileElement)?.querySelector('.review-file-view-row--look')?.textContent).toBe('4+\tsum := a + b');
     expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('The sum gets a name.');
+    const dimmed = Array.from(fileView(tileElement)!.querySelectorAll('.review-file-view-row--outside .review-row'))
+      .map((element) => `${element.getAttribute('data-old') ?? ''}:${element.getAttribute('data-line') ?? ''}`);
+    expect(dimmed).toEqual(['1:1', '2:2', '6:7', '7:8', '8:', ':9', '9:10']);
+    const strip = () => fileView(tileElement)?.querySelector('[aria-label="Marks on this line"]');
+    expect(strip()).toHaveTextContent('look hereL4The sum gets a name.');
 
     await press('ArrowDown');
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
     expect(script(tileElement)?.querySelector('.review-note-at')).toHaveTextContent('Then it is returned.');
+    expect(strip()).toHaveTextContent('agentL5Then it is returned.');
+    expect(strip()).not.toHaveTextContent('The sum gets a name.');
     fireEvent.click(script(tileElement)!.querySelector('.review-stop--current .review-note')!);
     expect(fileCursorText(tileElement)).toBe('5+\treturn sum');
 

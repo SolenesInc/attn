@@ -756,8 +756,13 @@
   padding: 0.25rem 0;
 }
 
-.review-file-view-marks .review-mark {
+.review-file-view-marks .review-mark,
+.review-file-view-marks .review-note {
   margin-left: 0.5rem;
+}
+
+.review-file-view-row--outside:not(.review-cursor) .review-row {
+  opacity: 0.45;
 }
 
 .review-composer,
