@@ -1220,3 +1220,36 @@ fn an_automation_scroll_right_after_another_goes_to_its_own_target() {
         "the sidebar's turn did not reach the terminal"
     );
 }
+
+#[test]
+fn a_right_button_press_and_its_release_reach_a_program_that_tracks_the_mouse() {
+    let mut world = live_with_modes(b"\x1b[?1000h\x1b[?1006h");
+    let a = cell(&world, 2, 3);
+    world.gesture(|app| {
+        app.runtime.pointer_move(a.0, a.1);
+        app.runtime.button_down(a.0, a.1, PointerButton::Secondary);
+        app.runtime.button_up(a.0, a.1, PointerButton::Secondary);
+    });
+
+    assert_eq!(
+        inputs(&world),
+        [pointed("\x1b[<2;3;4M"), pointed("\x1b[<3;3;4m")]
+    );
+}
+
+#[test]
+fn a_drag_that_began_outside_the_terminal_is_not_reported_as_motion() {
+    let mut world = live_with_modes(b"\x1b[?1003h\x1b[?1006h");
+    let (tile, _) = world.runtime().presented("tile.t1").expect("t1 is drawn");
+    let title = (tile[0] + 20.0, tile[1] + 12.0);
+    let (a, b) = (cell(&world, 0, 0), cell(&world, 1, 0));
+    world.gesture(|app| {
+        app.runtime.pointer_move(title.0, title.1);
+        app.runtime.pointer_down(title.0, title.1);
+        app.runtime.pointer_move(a.0, a.1);
+        app.runtime.pointer_up(a.0, a.1);
+        app.runtime.pointer_move(b.0, b.1);
+    });
+
+    assert_eq!(inputs(&world), [pointed("\x1b[<35;2;1M")]);
+}

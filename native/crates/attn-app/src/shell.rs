@@ -353,9 +353,10 @@ fn terminal_slot(runtime_id: &str, tile: Holder, held: bool, dark: bool, scale: 
         .on_pointer_move_local(move |state: &mut State, p, tx: &mut Tx| {
             let mods = report_mods(tx.mods());
             let now = tx.clock();
+            let held = tx.pointer_held();
             state
                 .terminals
-                .pointer_moved(&pointing, (p.x, p.y), mods, now, &state.daemon);
+                .pointer_moved(&pointing, (p.x, p.y), held, mods, now, &state.daemon);
             tx.live_only();
         })
         .pointer_buttons([PointerButton::Middle, PointerButton::Secondary])

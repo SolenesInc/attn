@@ -94,8 +94,6 @@ struct Term {
 
 #[derive(Debug)]
 struct Pointer {
-    /// A button is down on the terminal.
-    held: bool,
     /// The button whose press the program heard, owed its release.
     reported: Option<u8>,
     /// The cell of the last report, where a release off the grid lands.
@@ -109,7 +107,6 @@ struct Pointer {
 impl Default for Pointer {
     fn default() -> Pointer {
         Pointer {
-            held: false,
             reported: None,
             cell: None,
             at: None,
@@ -600,11 +597,13 @@ impl Terminals {
         Some(self.panes.get_mut(id)?.vt.encode_paste(text))
     }
 
-    /// The pointer moved to `at` over a terminal's slot, in its points.
+    /// The pointer moved to `at` over a terminal's slot, in its points, with a button `held`
+    /// on this terminal or anywhere else.
     pub(crate) fn pointer_moved(
         &mut self,
         id: &str,
         at: (f32, f32),
+        held: bool,
         mods: u8,
         now: f64,
         daemon: &Commands,
@@ -628,8 +627,7 @@ impl Terminals {
         let Some(cell) = cell_at(term, &metrics, at) else {
             return;
         };
-        if !modes.tracking || !mouse::reports_move(modes, term.pointer.reported, term.pointer.held)
-        {
+        if !modes.tracking || !mouse::reports_move(modes, term.pointer.reported, held) {
             return;
         }
         let report = mouse::report(Action::Move, term.pointer.reported, cell, modes.sgr, mods);
@@ -651,7 +649,6 @@ impl Terminals {
         let Some(term) = self.panes.get_mut(id) else {
             return;
         };
-        term.pointer.held = true;
         let alt = mods & mouse::modifiers(false, true, false) != 0;
         if alt && button != mouse::SECONDARY {
             return;
@@ -774,7 +771,6 @@ fn cell_at(term: &mut Term, metrics: &Metrics, at: (f32, f32)) -> Option<(u16, u
 /// Sends the release a program is owed for the press it heard, at `cell` or where it last
 /// heard the pointer.
 fn release(id: &str, term: &mut Term, cell: Option<(u16, u16)>, mods: u8, daemon: &Commands) {
-    term.pointer.held = false;
     if term.pointer.reported.take().is_none() {
         return;
     }
