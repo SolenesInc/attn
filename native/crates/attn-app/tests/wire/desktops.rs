@@ -478,6 +478,110 @@ fn a_tile_goes_by_its_sessions_name_as_renamed_and_a_document_by_its_file() {
     assert!(world.runtime_is_at_rest());
 }
 
+fn key_label(action: Action) -> String {
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+    keymap.label(keymap.binding(&action).expect("the action has a key"))
+}
+
+fn header_label(world: &World, key: &str) -> Option<String> {
+    world.screen().find(Target::key(key)).and_then(|n| n.name)
+}
+
+#[test]
+fn an_agents_header_shows_its_state_beside_its_name_and_its_pencil_renames_the_session() {
+    let mut world = start(vec![desktop(1, "a", Some(pane("a")))]);
+    world.daemon.emit(SessionStateChangedMessage {
+        session: Session {
+            state: "waiting_input".into(),
+            agent: "claude".into(),
+            ..session("a")
+        },
+        ..SessionStateChangedMessage::new()
+    });
+    world.settle();
+    let state = world.screen().get(Target::key("tile.a.state"));
+    assert_eq!(state.value.as_deref(), Some("waiting_input"));
+
+    assert_eq!(
+        header_label(&world, "tile.a.rename").as_deref(),
+        Some("Rename session Agent a")
+    );
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    let field = world.screen().get(Target::key("session.rename.field"));
+    assert_eq!(field.value.as_deref(), Some("Agent a"));
+    world.gesture(|app| app.type_text("ledger sweep"));
+    world.gesture(|app| app.press("enter"));
+    let renamed: Vec<_> = sent(&world, "rename_session");
+    assert_eq!(
+        renamed,
+        [json(r#"{"session_id":"s-a","label":"ledger sweep"}"#)]
+    );
+}
+
+#[test]
+fn the_header_focuses_its_agent_until_return_to_row_and_leaving_the_desktop_ends_focus() {
+    let tree = row([pane("a"), pane("b")]);
+    let both = || {
+        vec![
+            desktop(1, "a", Some(row([pane("a"), pane("b")]))),
+            desktop(2, "c", Some(pane("c"))),
+        ]
+    };
+    let mut world = start(vec![
+        desktop(1, "a", Some(tree)),
+        desktop(2, "c", Some(pane("c"))),
+    ]);
+    assert_eq!(
+        header_label(&world, "tile.b.focus").as_deref(),
+        Some(
+            format!(
+                "Focus agent Agent b ({})",
+                key_label(Action::TerminalToggleMaximize)
+            )
+            .as_str()
+        )
+    );
+
+    world.gesture(|app| app.click(Target::key("tile.b.focus")));
+    assert!(shows(&world, "Agent b") && !shows(&world, "Agent a"));
+    assert_eq!(
+        sent(&world, "desktop_show_leaf")[0]["leaf_id"],
+        "b",
+        "the focused agent becomes the active tile"
+    );
+    let keyboard = world
+        .automate("state", serde_json::json!({"of": "window"}))
+        .unwrap()["keyboard"]["pane"]
+        .clone();
+    assert_eq!(keyboard, "b", "the focused agent takes the keyboard");
+    assert!(header_label(&world, "tile.b.focus").is_none());
+    world.gesture(|app| app.click(Target::key("tile.b.return")));
+    assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
+    assert!(header_label(&world, "tile.b.return").is_none());
+
+    world.gesture(|app| app.click(Target::key("tile.a.focus")));
+    arrange(&mut world, "work/desktop_2", both());
+    arrange(&mut world, "work/desktop_1", both());
+    assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
+    assert!(header_label(&world, "tile.a.focus").is_some());
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn an_agents_header_shows_its_short_session_id_and_copies_the_whole_id() {
+    let mut world = start(vec![desktop(1, "a1b2c3d4e5", Some(pane("a1b2c3d4e5")))]);
+    let id = world.screen().get(Target::key("tile.a1b2c3d4e5.id"));
+    assert_eq!(id.name.as_deref(), Some("Copy session id s-a1b2c3"));
+
+    world.gesture(|app| app.click(Target::key("tile.a1b2c3d4e5.id")));
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some("s-a1b2c3d4e5")
+    );
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn close_removes_a_document_tile_and_ends_a_terminal_tile() {
     let tree = row([pane("a"), tile("m", "markdown")]);

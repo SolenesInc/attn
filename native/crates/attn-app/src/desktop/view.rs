@@ -12,6 +12,9 @@ use crate::terminal::{Release, Terminals, accelerator};
 
 const GAP: f32 = 6.0;
 const HEADER_PX: f32 = 2.0 * space::S1 + 18.0;
+const SUBLINE_PX: f32 = 15.0;
+const AGENT_HEADER_PX: f32 = HEADER_PX + SUBLINE_PX;
+const SUBLINE_TYPE: rune::TextStyle = rune::TextStyle::new(11.0, 400.0);
 const SETTLING_TRACK_PX: f32 = 2.0;
 
 /// What an agent's header says about its turn settling on its own.
@@ -74,12 +77,12 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     );
     let settles = desktop.map_or_else(Vec::new, |d| settles(d, &facts.sessions));
     let keys = header_keys(state);
-    let names: Vec<String> = desktop
+    let names: Vec<crate::sidebar::AgentRow> = desktop
         .map(|d| {
             d.panes
                 .iter()
                 .filter_map(|p| facts.sessions.iter().find(|s| s.id == p.session_id))
-                .map(crate::sidebar::display_name)
+                .map(|s| crate::sidebar::AgentRow::of(s, false))
                 .collect()
         })
         .unwrap_or_default();
@@ -93,7 +96,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop,
                 desk,
                 facts,
-                (&settles, keys.0.as_deref(), keys.1.as_deref()),
+                (&settles, &keys),
                 holder.as_ref(),
                 &state.terminals,
                 (t, scale),
@@ -139,15 +142,30 @@ fn settles(desktop: &Desktop, sessions: &[Session]) -> Vec<(String, Settle)> {
         .collect()
 }
 
-/// The keys a tile header names: the one that keeps a turn, and the one that pops a tile out.
-fn header_keys(state: &State) -> (Option<String>, Option<String>) {
+/// The keys a tile header names beside the buttons that do the same.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+struct HeaderKeys {
+    keep: Option<String>,
+    pop_out: Option<String>,
+    focus: Option<String>,
+}
+
+fn header_keys(state: &State) -> HeaderKeys {
     let key_of = |action: &crate::action::Action| {
         state.keymap.binding(action).map(|b| state.keymap.label(b))
     };
-    (
-        key_of(&crate::action::Action::SessionCancelCountdown),
-        key_of(&crate::action::Action::TilePopOut),
-    )
+    HeaderKeys {
+        keep: key_of(&crate::action::Action::SessionCancelCountdown),
+        pop_out: key_of(&crate::action::Action::TilePopOut),
+        focus: key_of(&crate::action::Action::TerminalToggleMaximize),
+    }
+}
+
+fn with_key(label: &str, key: Option<&String>) -> String {
+    match key {
+        Some(key) => format!("{label} ({key})"),
+        None => label.to_owned(),
+    }
 }
 
 /// `leaf` alone, filling a window of its own.
@@ -160,8 +178,8 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         sessions: &state.facts.sessions,
         unsent: &unsent,
         settles: &settles,
-        keep_key: keys.0.as_deref(),
-        pop_out_key: keys.1.as_deref(),
+        keys: &keys,
+        focused: None,
         drains: &state.window.desk.settling,
         ratios: &state.window.desk.ratios,
         dividers: false,
@@ -178,7 +196,7 @@ fn screen(
     desktop: Option<&Desktop>,
     desk: &super::Desk,
     facts: &attn_client::Facts,
-    (settles, keep_key, pop_out_key): (&[(String, Settle)], Option<&str>, Option<&str>),
+    (settles, keys): (&[(String, Settle)], &HeaderKeys),
     holder: Option<&Holder>,
     terminals: &Terminals,
     (t, scale): (&Tokens, f32),
@@ -198,8 +216,11 @@ fn screen(
                     sessions: &facts.sessions,
                     unsent: &unsent,
                     settles,
-                    keep_key,
-                    pop_out_key,
+                    keys,
+                    focused: match &view {
+                        super::layout::View::Focused(leaf) => Some(leaf.as_str()),
+                        _ => None,
+                    },
                     drains: &desk.settling,
                     ratios: &desk.ratios,
                     dividers: view == super::layout::View::Normal,
@@ -245,10 +266,9 @@ struct TileCx<'a> {
     unsent: &'a [(String, String)],
     /// How each agent's turn settles, by leaf.
     settles: &'a [(String, Settle)],
-    /// The keys that keep a turn from settling.
-    keep_key: Option<&'a str>,
-    /// The keys that pop a tile out or bring it back.
-    pop_out_key: Option<&'a str>,
+    keys: &'a HeaderKeys,
+    /// The leaf this desktop shows alone.
+    focused: Option<&'a str>,
     drains: &'a std::collections::HashMap<String, crate::sidebar::Countdown>,
     /// Splits this window shows at its own ratio, ahead of the daemon.
     ratios: &'a std::collections::HashMap<String, super::divider::RatioOverride>,
@@ -455,41 +475,166 @@ pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::So
     })
 }
 
-/// A tile's header, which the tile area drags the tile by.
+/// A tile's header, which the tile area drags the tile by. An agent's header carries a second
+/// line under its name.
 fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
     let t = cx.t;
+    let key = format!("tile.{}", leaf.id);
     let settle = cx
         .settles
         .iter()
         .find(|(l, _)| *l == leaf.id)
         .map(|(_, s)| s);
-    let session = pane_of(cx.desktop, &leaf.id).map(|p| p.session_id.clone());
-    let drain = session.as_ref().and_then(|s| cx.drains.get(s));
-    let header = row()
-        .key(format!("tile.{}.header", leaf.id))
-        .w_full()
-        .h(HEADER_PX)
+    let pane = pane_of(cx.desktop, &leaf.id);
+    let session = pane.and_then(|p| cx.sessions.iter().find(|s| s.id == p.session_id));
+    let focused = cx.focused == Some(leaf.id.as_str());
+    let popped = leaf.window.is_some();
+    let actions = row()
+        .key(format!("{key}.actions"))
+        .pin(None, Some(0.0), Some(0.0), Some(0.0))
         .items_center()
-        .gap(space::S2)
-        .px(space::S2)
-        .child(
-            text(title.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_secondary)
-                .single_line()
-                .truncate()
-                .grow(1.0),
+        .gap(2.0)
+        .pl(space::S1)
+        .fill(t.bg_tile)
+        .group_opacity(0.0, 1.0)
+        .children(session.map(|s| rename_button(&key, s, title, t)))
+        .children(
+            (pane.is_some() && !focused && !popped)
+                .then(|| focus_button(&key, &cx.desktop.id, &leaf.id, title, cx)),
         );
-    let header = match (settle, session) {
-        (Some(settle), Some(session)) => header
-            .child(settling_chip(&leaf.id, settle, &session, cx.keep_key))
-            .children(settling_track(&leaf.id, settle, drain)),
-        _ => header,
+    let headline =
+        row()
+            .w_full()
+            .h(HEADER_PX)
+            .items_center()
+            .gap(space::S2)
+            .px(space::S2)
+            .children(session.map(|s| {
+                crate::sidebar::state_mark(&key, &crate::sidebar::AgentRow::of(s, false), t)
+            }))
+            .child(
+                row()
+                    .grow(1.0)
+                    .min_w(0.0)
+                    .h_full()
+                    .items_center()
+                    .child(
+                        text(title.to_owned())
+                            .font(type_::LABEL)
+                            .color(t.text_secondary)
+                            .single_line()
+                            .truncate()
+                            .grow(1.0),
+                    )
+                    .child(actions),
+            );
+    let headline = match (settle, pane) {
+        (Some(settle), Some(pane)) => headline.child(settling_chip(
+            &leaf.id,
+            settle,
+            &pane.session_id,
+            cx.keys.keep.as_deref(),
+        )),
+        _ => headline,
     };
     let pops_out = matches!(leaf.kind, LeafKind::Tile { .. });
-    header.children(
-        pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, leaf.window.is_some(), cx)),
+    let headline = headline
+        .children(pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
+        .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)));
+    let height = if pane.is_some() {
+        AGENT_HEADER_PX
+    } else {
+        HEADER_PX
+    };
+    let track = match (settle, pane) {
+        (Some(settle), Some(pane)) => {
+            settling_track(&leaf.id, settle, cx.drains.get(&pane.session_id), height)
+        }
+        _ => None,
+    };
+    col()
+        .key(format!("{key}.header"))
+        .w_full()
+        .h(height)
+        .hover_group()
+        .child(headline)
+        .children(pane.map(|pane| subline(&key, &pane.session_id, t)))
+        .children(track)
+}
+
+/// The agent header's second line: the session's short id, which copies the whole id.
+fn subline(key: &str, session: &str, t: &Tokens) -> El {
+    let short: String = session.chars().take(8).collect();
+    let id = session.to_owned();
+    row()
+        .key(format!("{key}.subline"))
+        .w_full()
+        .h(SUBLINE_PX)
+        .items_center()
+        .gap(10.0)
+        .pl(24.0)
+        .pr(10.0)
+        .child(
+            text(short.clone())
+                .key(format!("{key}.id"))
+                .role("button")
+                .label(format!("Copy session id {short}"))
+                .font(SUBLINE_TYPE)
+                .color(t.text_tertiary)
+                .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone())),
+        )
+}
+
+/// The header's pencil, which renames the agent's session.
+fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
+    let (id, under) = (session.id.clone(), format!("{key}.rename"));
+    header_button(
+        under.clone(),
+        format!("Rename session {title}"),
+        attn_ui::icon::PENCIL,
+        t,
     )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        crate::sidebar::session_menu::rename_session(state, &id, under.clone(), tx)
+    })
+}
+
+/// The header's button that shows this tile alone on its desktop.
+fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) -> El {
+    let (desktop, leaf) = (desktop.to_owned(), leaf.to_owned());
+    header_button(
+        format!("{key}.focus"),
+        with_key(&format!("Focus agent {title}"), cx.keys.focus.as_ref()),
+        attn_ui::icon::EXPAND,
+        cx.t,
+    )
+    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+        super::actions::focus_leaf(state, &desktop, &leaf, tx)
+    })
+}
+
+/// The header's button that puts the tile shown alone back in its row.
+fn return_to_row(key: &str, desktop: &str, cx: &TileCx) -> El {
+    let desktop = desktop.to_owned();
+    header_button(
+        format!("{key}.return"),
+        with_key("Return to row", cx.keys.focus.as_ref()),
+        attn_ui::icon::COMPRESS,
+        cx.t,
+    )
+    .on_press(move |state: &mut State| super::actions::return_to_row(state, &desktop))
+}
+
+fn header_button(key: String, label: String, glyph: &'static str, t: &Tokens) -> El {
+    text(glyph)
+        .key(key)
+        .role("button")
+        .label(label)
+        .font(type_::LABEL)
+        .color(t.text_secondary)
+        .hover(t.bg_elevated)
+        .radius(4.0)
+        .px(space::S1)
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.
@@ -503,10 +648,7 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
     text(glyph)
         .key(format!("tile.{leaf}.popout"))
         .role("button")
-        .label(match cx.pop_out_key {
-            Some(key) => format!("{label} ({key})"),
-            None => label.to_owned(),
-        })
+        .label(with_key(label, cx.keys.pop_out.as_ref()))
         .font(type_::LABEL)
         .color(cx.t.text_secondary)
         .px(space::S1)
@@ -599,6 +741,7 @@ fn settling_track(
     leaf: &str,
     settle: &Settle,
     drain: Option<&crate::sidebar::Countdown>,
+    header: f32,
 ) -> Option<El> {
     if *settle == Settle::Kept {
         return None;
@@ -619,7 +762,7 @@ fn settling_track(
         _ => fill.opacity(0.45),
     };
     Some(
-        el().absolute(0.0, HEADER_PX - SETTLING_TRACK_PX)
+        el().absolute(0.0, header - SETTLING_TRACK_PX)
             .w_full()
             .h(SETTLING_TRACK_PX)
             .fill(settling(0.16))

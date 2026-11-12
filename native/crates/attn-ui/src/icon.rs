@@ -15,3 +15,5 @@ pub const FLAG: &str = "\u{f024}";
 pub const PENCIL: &str = "\u{f040}";
 pub const POP_OUT: &str = "\u{f08e}";
 pub const BRING_BACK: &str = "\u{f090}";
+pub const EXPAND: &str = "\u{f065}";
+pub const COMPRESS: &str = "\u{f066}";

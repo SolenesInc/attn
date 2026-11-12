@@ -356,6 +356,22 @@ pub(super) fn split_at(
     state.window.desk.split = Some(id);
 }
 
+/// The person asked to see `leaf` alone: it takes the keyboard and becomes the active tile,
+/// shown alone, with zoom off.
+pub(super) fn focus_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
+    let tile = crate::shell::Holder {
+        desktop: desktop.to_owned(),
+        pane: leaf.to_owned(),
+    };
+    super::view::take_tile(state, &tile, tx);
+    state.window.desk.row_mut(desktop).view = View::Focused(leaf.to_owned());
+}
+
+/// The tile `desktop` shows alone goes back to its row.
+pub(super) fn return_to_row(state: &mut State, desktop: &str) {
+    state.window.desk.row_mut(desktop).view = View::Normal;
+}
+
 /// Zoom gives the active tile most of the room and follows the active tile; focus shows the
 /// active tile alone. Each turns the other off.
 fn toggle_view(state: &mut State, focus: bool) {

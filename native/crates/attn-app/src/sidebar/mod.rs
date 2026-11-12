@@ -18,8 +18,8 @@ use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, el, memo, row, text};
 
 pub use model::AgentState;
-use model::{AgentRow, DesktopHeader, TileRow};
-pub(crate) use model::{Line, display_name, tile_title};
+pub(crate) use model::{AgentRow, Line, display_name, tile_title};
+use model::{DesktopHeader, TileRow};
 
 use crate::State;
 use crate::desktop::DesktopMark;

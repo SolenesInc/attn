@@ -213,7 +213,8 @@ impl Desk {
     }
 
     /// The current desktop the window last saw becomes the previous desktop when the profile
-    /// moves to another one; a previous desktop that went, or that is current again, is gone.
+    /// moves to another one, and stops showing a tile alone; a previous desktop that went, or
+    /// that is current again, is gone.
     fn follow_current(&mut self, facts: &Facts) {
         let profile = facts.profiles.selected.clone();
         let current = facts.current_desktop().map(|d| d.id.clone());
@@ -222,6 +223,11 @@ impl Desk {
             && was != now
         {
             self.previous_desktop = (*was_profile == profile).then(|| was.clone());
+            if let Some(left) = self.rows.get_mut(was)
+                && matches!(left.view, View::Focused(_))
+            {
+                left.view = View::Normal;
+            }
         }
         if self.shown.as_ref().is_some_and(|(p, _)| *p != profile) {
             self.previous_desktop = None;
