@@ -1708,6 +1708,16 @@ fn new_session_on_an_empty_desktop_focuses_its_launcher_instead_of_the_dialog() 
     press(&mut world, Key::Escape);
     assert!(launcher_focused(&world));
 
+    for close in [Some(Key::Escape), None] {
+        press_action(&mut world, &Action::FileOpen);
+        assert!(!launcher_focused(&world));
+        match close {
+            Some(key) => press(&mut world, key),
+            None => press_action(&mut world, &Action::FileOpen),
+        }
+        assert!(launcher_focused(&world));
+    }
+
     world.gesture(|app| app.click(Target::key("launcher.agent.shell")));
     press_action(&mut world, &Action::SessionNew);
 

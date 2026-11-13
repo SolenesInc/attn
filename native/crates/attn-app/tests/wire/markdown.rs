@@ -1,9 +1,11 @@
+use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage,
     OpenMarkdownResultMessage, OutpostInfo, Profile, Session, TileAssetReadResultMessage,
 };
 use attn_testkit::tree::{pane, row, tile};
-use attn_testkit::{Daemon, Target, World};
+use attn_testkit::{Daemon, Target, World, key_event};
+use rune::KeyPlatform;
 use serde_json::json;
 
 const DESKTOP: &str = "work/desktop_1";
@@ -378,6 +380,55 @@ fn a_link_in_a_document_on_an_outpost_opens_its_markdown_there_and_says_why_it_c
         Some("Could not open /far/next.md from far: far is unreachable; this needs it now")
     );
     assert!(world.opened_links().is_empty());
+    rest(&mut world);
+}
+
+fn escape(world: &mut World) {
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+}
+
+fn previewing(world: &World) -> bool {
+    world
+        .screen()
+        .find(Target::key("image-preview.picture"))
+        .is_some()
+}
+
+#[test]
+fn escape_closes_the_opener_over_an_open_image_and_the_next_escape_closes_the_image() {
+    let mut world = start();
+    world.daemon.on("tile_asset_read", |r| {
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{RED}")),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content("![chart](chart.png)"));
+    world.settle();
+    world.gesture(|app| app.click(Target::role("image").name("chart")));
+    let open_file =
+        match Keymap::from_setting(None, KeyPlatform::current()).binding(&Action::FileOpen) {
+            Some(Binding::Chord(chord)) => key_event(&chord),
+            other => panic!("the opener has no single chord: {other:?}"),
+        };
+    world.gesture(|app| app.key(open_file));
+    let opener = Target::role("dialog").name("Open a markdown file");
+    assert!(world.screen().find(opener.clone()).is_some());
+
+    escape(&mut world);
+    assert!(world.screen().find(opener).is_none());
+    assert!(previewing(&world));
+
+    escape(&mut world);
+    assert!(!previewing(&world));
     rest(&mut world);
 }
 

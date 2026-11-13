@@ -33,3 +33,5 @@ item	statement	native_test	reason
 36	A secondary window gains focus after load so its content is not blank		n/a: native windows draw their content on their first frame, with no webview load that leaves one blank until it takes focus
 37	Window commands resolve the calling window: the pop-out key and close pressed in a tile window bring that tile back	attn-app/tests/wire/desktops.rs::the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back	
 47	A divider drag that ends in a terminal paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_divider_drag_that_ends_in_the_terminal_selects_nothing_in_it	
+33	⌘P (Ctrl+Shift+P on Linux) opens the markdown opener on the folder of the agent behind the screen	attn-app/tests/wire/opener.rs::the_opener_lists_recent_files_at_once_relative_to_the_agents_folder_and_takes_the_keyboard	
+33	⌘P reaches the markdown opener through AppKit in the packaged bundle, with no menu item taking it		gap: s-h7a9kz

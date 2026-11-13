@@ -11,6 +11,7 @@ mod wire {
     mod home;
     mod keys;
     mod markdown;
+    mod opener;
     mod palette;
     mod picker;
     mod profile;

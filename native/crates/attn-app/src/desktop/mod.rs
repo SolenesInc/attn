@@ -43,7 +43,7 @@ pub(crate) use host::outpost_name;
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};
-pub(crate) use view::area;
+pub(crate) use view::{area, session_of_leaf};
 pub use windows::{
     Deliver, Opened, Opener, Placement, Setup, TileWindow, on_close as tile_window_closed,
     on_quit as tile_window_quits, tile_window_leaf,

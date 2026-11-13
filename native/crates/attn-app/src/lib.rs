@@ -16,6 +16,7 @@ mod keymap;
 mod keys;
 pub mod launch;
 mod markdown;
+mod opener;
 mod palette;
 mod picker;
 pub mod prompts;
@@ -54,6 +55,7 @@ pub struct State {
     pub window: Window,
     pub terminals: Terminals,
     pub pictures: markdown::Pictures,
+    pub opener: opener::Opener,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -227,6 +229,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
     let browsed = picker::browse_due(state, tx);
     let launched = picker::follow(state, tx);
+    let browsed = browsed | opener::browse_due(state, tx);
     let pictured = markdown::follow_images(state, now, tx);
     let aged = state.age_wake.is_some_and(|at| now >= at);
     if aged {

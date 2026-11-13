@@ -635,6 +635,20 @@ pub(crate) fn pane_of<'a>(desktop: &'a Desktop, id: &str) -> Option<&'a DesktopP
     desktop.panes.iter().find(|p| p.pane_id == id)
 }
 
+/// The session behind leaf `id`: its pane's agent, or the agent its tile was opened for.
+pub(crate) fn session_of_leaf(desktop: &Desktop, id: &str) -> Option<String> {
+    if let Some(pane) = pane_of(desktop, id).filter(|p| !p.session_id.is_empty()) {
+        return Some(pane.session_id.clone());
+    }
+    match Node::parse(&desktop.tree_json)?.find_leaf(id)? {
+        Node::Leaf(Leaf {
+            kind: LeafKind::Tile { session, .. },
+            ..
+        }) => session.clone(),
+        _ => None,
+    }
+}
+
 fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let t = cx.t;
     let desktop = cx.desktop;

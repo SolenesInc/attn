@@ -333,9 +333,9 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
         .children(banner)
-        .child(body)
-        .children(layers(state, &t));
+        .child(body);
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
+        .children(layers(state, &t))
 }
 
 /// The band the window drags by, over which the window's own controls sit; what it holds
@@ -446,6 +446,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     let mut layers = Vec::new();
     match window.layer {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
+        Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),
         Some(Layer::Palette(palette)) => {
             layers.push(self::palette(palette, &window.search.query, t))
         }

@@ -29,7 +29,10 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
         Action::BoardOpen => crate::garden::toggle_frame(state, tx),
         Action::UiActionMenu => crate::palette::open(state, Face::Agents, tx),
         Action::UiCommandPalette => crate::palette::open(state, Face::Commands, tx),
-        Action::FileOpen => window.toggle_layer(Layer::Palette(Palette::Files), tx),
+        Action::FileOpen if window.layer == Some(Layer::Palette(Palette::Files)) => {
+            crate::opener::close(state, tx)
+        }
+        Action::FileOpen => crate::opener::open(state, tx),
         Action::SessionsOpen => window.toggle_layer(Layer::Palette(Palette::Sessions), tx),
         Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),

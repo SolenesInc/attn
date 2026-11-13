@@ -16,6 +16,7 @@ use rune::{Chord, Key, KeyEvent, KeyPlatform, TextEdit, Tx};
 
 use crate::State;
 pub(crate) use agents::{Agents, TERMINAL};
+pub(crate) use paths::display as display_path;
 pub(crate) use view::{dialog, inline, worktree_setup};
 
 /// How long typing settles before the picker browses the typed folder, as in the Tauri app.
