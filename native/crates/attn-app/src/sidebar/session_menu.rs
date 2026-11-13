@@ -3,7 +3,7 @@ use attn_protocol::{
 };
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Side, TextEdit, Tx, col, text, text_input};
+use rune::{El, TextEdit, Tx, col, text, text_input};
 use rune_kit::{MenuItem, Placement};
 
 use crate::State;
@@ -227,9 +227,18 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Vec<El> {
     };
     match &menu.rename {
         Some(edit) => vec![
-            rename_popover(edit, menu.refused.as_deref(), t)
-                .anchored(menu.under.clone(), Side::Bottom, rune::Align::End, 4.0)
-                .focus_return(menu.under.clone()),
+            rune_kit::popover::anchored(
+                attn_ui::kit(t),
+                rune_kit::popover::raised(
+                    attn_ui::kit(t),
+                    rename_popover(edit, menu.refused.as_deref(), t),
+                    6.0,
+                ),
+                &menu.under,
+                Placement::BottomEnd,
+                4.0,
+            )
+            .focus_return(menu.under.clone()),
         ],
         None => actions(state, menu, t),
     }
@@ -288,9 +297,6 @@ fn rename_popover(edit: &TextEdit, refused: Option<&str>, t: &Tokens) -> El {
         .w(240.0)
         .padding(space::S2)
         .gap(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .modal_tx(true, |state: &mut State, _: &mut Tx| {
             state.window.session_menu = None
         })

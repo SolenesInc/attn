@@ -2,6 +2,8 @@ use attn_client::{Connection, Facts};
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
 use rune::{Chord, Cx, El, Tx, col, el, row, text};
+use rune_kit::popover::raised;
+use rune_kit::{Button, ButtonVariant};
 
 use crate::action::{Action, Category};
 use crate::keymap::Keymap;
@@ -654,42 +656,29 @@ fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {
 /// and then says it is done. The pointer resting on it keeps it.
 fn offering(notice: &Notice, offer: &Offer, t: &Tokens) -> El {
     let said = if offer.done { "✓ Done" } else { offer.label };
-    let button = row()
-        .key("notice.offer")
-        .role("button")
-        .label(format!("{} {said}", notice.text))
+    let face = notice.text.clone();
+    let (ink, said_ink) = (
+        t.text_primary,
+        if offer.done { t.text_muted } else { t.accent },
+    );
+    let button = Button::new(format!("{} {said}", notice.text))
+        .variant(ButtonVariant::Ghost)
         .disabled(offer.done)
-        .items_center()
-        .gap(space::S3)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .radius(6.0)
-        .padding(space::S2)
-        .child(
-            text(notice.text.clone())
-                .font(type_::BODY)
-                .color(t.text_primary),
-        )
-        .child(text(said).font(type_::LABEL).color(if offer.done {
-            t.text_muted
-        } else {
-            t.accent
-        }))
-        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx))
-        .on_press_tx(|state: &mut State, tx: &mut Tx| take_offer(state, tx));
-    el().key("notice")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(
-            col()
-                .w_full()
-                .h_full()
+        .on_press_tx(|state: &mut State, tx: &mut Tx| take_offer(state, tx))
+        .label_with(move |_, _| {
+            row()
                 .items_center()
-                .justify_end()
-                .padding(space::S6)
-                .child(button),
-        )
+                .gap(space::S3)
+                .child(text(face).font(type_::BODY).color(ink))
+                .child(text(said).font(type_::LABEL).color(said_ink))
+        })
+        .build(attn_ui::kit(t))
+        .key("notice.offer")
+        .h(type_::BODY.line_px() + 2.0 * space::S2)
+        .px(space::S2);
+    let surface = raised(attn_ui::kit(t), button, 6.0)
+        .on_hover_change(|state: &mut State, inside, tx: &mut Tx| hold_notice(state, inside, tx));
+    floating("notice", surface)
 }
 
 fn hold_notice(state: &mut State, inside: bool, tx: &mut Tx) {
@@ -716,31 +705,26 @@ fn take_offer(state: &mut State, tx: &mut Tx) {
 }
 
 fn floating_status(key: &str, message: String, t: &Tokens) -> El {
-    el().key(key)
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .inert()
-        .child(
-            col()
-                .w_full()
-                .h_full()
-                .items_center()
-                .justify_end()
-                .padding(space::S6)
-                .child(
-                    text(message.clone())
-                        .key(format!("{key}.text"))
-                        .role("status")
-                        .label(message)
-                        .font(type_::BODY)
-                        .color(t.text_primary)
-                        .fill(t.bg_elevated)
-                        .border(1.0, t.border)
-                        .radius(6.0)
-                        .padding(space::S2),
-                ),
-        )
+    let status = text(message.clone())
+        .key(format!("{key}.text"))
+        .role("status")
+        .label(message)
+        .font(type_::BODY)
+        .color(t.text_primary)
+        .padding(space::S2);
+    floating(key, raised(attn_ui::kit(t), status, 6.0)).inert()
+}
+
+fn floating(key: &str, surface: El) -> El {
+    el().key(key).absolute(0.0, 0.0).w_full().h_full().child(
+        col()
+            .w_full()
+            .h_full()
+            .items_center()
+            .justify_end()
+            .padding(space::S6)
+            .child(surface),
+    )
 }
 
 fn section_title(title: &str, t: &Tokens) -> El {

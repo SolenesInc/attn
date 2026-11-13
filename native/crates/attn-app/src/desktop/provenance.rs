@@ -1,8 +1,8 @@
 use attn_protocol::{AutomationProvenance, Session, SessionPullRequest};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, row, text};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, Key, KeyEvent, TextStyle, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant, Placement};
 
 use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
@@ -472,9 +472,6 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .w(320.0)
         .padding(space::S2)
         .gap(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
@@ -501,7 +498,13 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     } else {
         surface
     };
-    Some(surface.anchored(pop.anchor(), Side::Bottom, rune::Align::Start, 4.0))
+    Some(rune_kit::popover::anchored(
+        attn_ui::kit(t),
+        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        &pop.anchor(),
+        Placement::BottomStart,
+        4.0,
+    ))
 }
 
 fn details_key(state: &mut State, urls: &[String], ev: &KeyEvent, tx: &mut Tx) -> bool {

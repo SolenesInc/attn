@@ -742,9 +742,6 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
         .label(format!("{shown} tile{}", if shown == 1 { "" } else { "s" }))
         .padding(space::S2)
         .gap(space::S1)
-        .radius(6.0)
-        .fill(t.bg_panel)
-        .border(1.0, t.border)
         .child(
             text(format!("{shown} tile{}", if shown == 1 { "" } else { "s" }))
                 .font(type_::LABEL)
@@ -757,6 +754,7 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
         )
         .children(cleared.map(|c| text(c).font(type_::LABEL).color(t.text_secondary)))
         .child(text(steps).font(type_::LABEL).color(t.text_tertiary));
+    let card = rune_kit::popover::raised(attn_ui::kit(t), card, 6.0);
     Some(
         rune::el()
             .key("shelf.width.layer")

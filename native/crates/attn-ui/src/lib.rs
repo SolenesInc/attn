@@ -142,6 +142,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.bg_base = t.bg_panel;
     p.bg_deep = t.bg_app;
     p.layer_01 = t.bg_elevated;
+    p.surface_raised = t.bg_elevated;
     p.bg_button_neutral = t.bg_button;
     p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
@@ -154,6 +155,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.icon_faint = t.text_muted;
     p.border_muted = t.border_subtle;
     p.border_base = t.border;
+    p.std_border = t.border;
     p.border_strong = t.border_hover;
     p.border_focus = t.border_focus;
     p.hover = t.bg_elevated;
@@ -161,6 +163,7 @@ fn painted(t: &Tokens) -> rune_kit::Kit {
     p.scrim = t.bg_overlay;
     kit.elevation.button_neutral = Vec::new();
     kit.elevation.floating = vec![popover_shadow()];
+    kit.elevation.md = vec![popover_shadow()];
     kit.elevation.overlay = vec![popover_shadow()];
     kit
 }
