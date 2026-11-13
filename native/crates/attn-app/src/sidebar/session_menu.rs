@@ -207,10 +207,17 @@ fn close(state: &mut State, tx: &mut Tx) {
         return;
     }
     let shown = state.window.on_screen(&state.facts).as_deref() == Some(session.id.as_str());
-    let _ = state.daemon.send(&UnregisterMessage {
+    let sent = state.daemon.send(&UnregisterMessage {
         id: session.id.clone(),
         ..UnregisterMessage::new()
     });
+    if sent.is_err() {
+        state.window.notify(
+            "Could not close that session: not connected to the daemon".into(),
+            tx,
+        );
+        return;
+    }
     if shown && session.agent != "shell" {
         super::actions::move_on_from(state, &session.id, tx);
     }

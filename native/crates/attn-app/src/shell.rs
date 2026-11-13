@@ -44,6 +44,9 @@ pub struct Window {
     pub(crate) queue_turns: Vec<String>,
     /// Home follows the next turn to open, as it does after the last turn closed.
     pub follow_next_turn: bool,
+    /// How many agents the window has asked the daemon to show, so only the latest refused show
+    /// undoes what the window did ahead of it.
+    pub(crate) shows_asked: u64,
     /// The home screen lists its snoozed agents, not only their count.
     pub home_snoozed_open: bool,
     /// The drain of each running auto-settle countdown whose agent is off screen, by agent.

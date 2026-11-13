@@ -95,10 +95,10 @@ pub struct Requests {
     sent: u64,
 }
 
-/// A request waiting for its answer, with its command, so a `command_error` that names only the
-/// command answers the oldest one.
+/// A request waiting for its answer, with the command it sent, so a `command_error` that names
+/// only the command answers the oldest one.
 struct Waiting {
-    cmd: String,
+    command: serde_json::Value,
     sent: u64,
     then: Then,
 }
@@ -130,12 +130,8 @@ impl State {
         match self.daemon.send(command) {
             Ok(()) => {
                 self.requests.sent += 1;
-                let cmd = serde_json::to_value(command)
-                    .ok()
-                    .and_then(|c| Some(c.get("cmd")?.as_str()?.to_owned()))
-                    .unwrap_or_default();
                 let waiting = Waiting {
-                    cmd,
+                    command: serde_json::to_value(command).unwrap_or_default(),
                     sent: self.requests.sent,
                     then: Box::new(then),
                 };
@@ -186,6 +182,13 @@ impl State {
     }
 }
 
+impl Requests {
+    /// Whether a request whose command `asks` is true of still waits for its answer.
+    pub(crate) fn waits_for(&self, asks: impl Fn(&serde_json::Value) -> bool) -> bool {
+        self.waiting.values().any(|w| asks(&w.command))
+    }
+}
+
 /// Runs the answer of each reply that came in. A `command_error` answers the oldest request
 /// waiting with its command, and shows in the window's notice when none waits. Returns whether
 /// any reply did either.
@@ -216,7 +219,7 @@ fn oldest_waiting(requests: &Requests, cmd: &str) -> Option<String> {
     requests
         .waiting
         .iter()
-        .filter(|(_, w)| !cmd.is_empty() && w.cmd == cmd)
+        .filter(|(_, w)| !cmd.is_empty() && w.command["cmd"] == cmd)
         .min_by_key(|(_, w)| w.sent)
         .map(|(id, _)| id.clone())
 }

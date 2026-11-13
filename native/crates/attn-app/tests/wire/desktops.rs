@@ -228,16 +228,25 @@ fn a_digit_goes_to_its_desktop_creates_a_missing_one_and_goes_back_from_the_curr
         "the current desktop's digit goes back"
     );
 
-    world.daemon.on("desktop_create", done);
+    world
+        .daemon
+        .answer_in_turn("desktop_create", [attn_testkit::Answer::Hold]);
+    press(&mut world, Action::DesktopSelect4);
     press(&mut world, Action::DesktopSelect4);
     assert_eq!(
         sent(&world, "desktop_create"),
-        [json(r#"{"profile_id":"work","shortcut_slot":4}"#)]
+        [json(r#"{"profile_id":"work","shortcut_slot":4}"#)],
+        "a second press while the desktop is being made asks for nothing more"
     );
+    let create = world.daemon.sent_of("desktop_create")[0].clone();
+    world.daemon.reply_to(&create, done(&create));
+    world.settle();
     assert_eq!(
-        sent(&world, "desktop_set_current")[2]["desktop_id"],
-        "work/desktop_4"
+        sent(&world, "desktop_set_current").len(),
+        2,
+        "the daemon makes the new desktop current"
     );
+    assert_eq!(notice(&world), None);
     assert!(world.runtime_is_at_rest());
 }
 

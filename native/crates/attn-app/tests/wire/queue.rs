@@ -1030,6 +1030,16 @@ fn a_close_or_reload_the_daemon_refuses_shows_its_reason_in_the_notice() {
         notice(&world).as_deref(),
         Some("Failed to reload session: the harness is not installed")
     );
+
+    world.daemon.refuse_connections(true);
+    world.daemon.disconnect();
+    world.settle();
+    actions_for(&mut world, "queue-turn.b");
+    world.gesture(|app| app.click(Target::key("session.menu.close")));
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not close that session: not connected to the daemon")
+    );
 }
 
 #[test]
@@ -1353,8 +1363,7 @@ fn a_show_the_daemon_refuses_says_why_and_leaves_the_window_where_it_was() {
         message
     };
     let mut world = World::start(Daemon::scripted().state(with_terminals("p0")));
-    world.daemon.on("desktop_show_session", |r| {
-        let refused = r["session_id"] == "b";
+    let answer = |r: &serde_json::Value, refused: bool| {
         serde_json::json!({
             "event": "profile_action_result",
             "request_id": r["request_id"],
@@ -1362,6 +1371,9 @@ fn a_show_the_daemon_refuses_says_why_and_leaves_the_window_where_it_was() {
             "success": !refused,
             "error": if refused { "the daemon is shutting down" } else { "" },
         })
+    };
+    world.daemon.on("desktop_show_session", move |r| {
+        answer(r, r["session_id"] == "b")
     });
     let notice = |world: &World| {
         world
@@ -1396,6 +1408,24 @@ fn a_show_the_daemon_refuses_says_why_and_leaves_the_window_where_it_was() {
         typed,
         ["r-a"],
         "the keyboard goes back to the agent on screen"
+    );
+
+    world.gesture(|app| app.key(chord(Action::SessionGoToDashboard)));
+    assert!(home(&world));
+    world.daemon.answer_in_turn(
+        "desktop_show_session",
+        [attn_testkit::Answer::Hold, attn_testkit::Answer::Hold],
+    );
+    world.gesture(|app| app.click(Target::key("queue-turn.b")));
+    world.gesture(|app| app.click(Target::key("queue-turn.a")));
+    let asked = world.daemon.sent_of("desktop_show_session");
+    let (b, a) = (&asked[asked.len() - 2], &asked[asked.len() - 1]);
+    world.daemon.reply_to(a, answer(a, false));
+    world.daemon.reply_to(b, answer(b, true));
+    world.settle();
+    assert!(
+        !home(&world),
+        "a refusal that arrives after a later show leaves that show alone"
     );
 }
 

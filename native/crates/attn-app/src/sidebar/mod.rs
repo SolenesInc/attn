@@ -609,14 +609,17 @@ pub(crate) fn open_agent(state: &mut State, session: &str, tx: &mut Tx) {
 }
 
 /// Shows the agent where it is and leaves the keyboard where it was. A show the daemon refuses
-/// says why and undoes what the window did ahead of it: the window goes back home when it came
-/// from there, and the keyboard back to the agent on screen when it went to this one.
+/// says why and, when no later show was asked for, undoes what the window did ahead of it: the
+/// window goes back home when it came from there, and the keyboard back to the agent on screen
+/// when it went to this one.
 pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
     let shown = pane_of(state, session);
     if let Some((desktop, leaf)) = &shown {
         state.window.desk.pick(desktop, leaf);
     }
     let from_home = state.window.view == View::Home;
+    state.window.shows_asked += 1;
+    let this_show = state.window.shows_asked;
     state.window.view = View::Desktop;
     state.window.follow_next_turn = false;
     let session_id = session.to_owned();
@@ -633,6 +636,9 @@ pub(crate) fn show_agent(state: &mut State, session: &str, tx: &mut Tx) {
             state
                 .window
                 .notify(format!("Could not show that agent: {reason}"), tx);
+            if state.window.shows_asked != this_show {
+                return;
+            }
             if from_home && state.window.view == View::Desktop {
                 state.window.go_home();
             }

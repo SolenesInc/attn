@@ -146,18 +146,22 @@ fn select_slot(state: &mut State, slot: u32, tx: &mut Tx) {
         .iter()
         .find(|d| d.shortcut_slot == Some(slot as i64))
     else {
-        let made = slot_desktop_id(&profile_id, slot);
-        state.act(
-            |request_id| DesktopCreateMessage {
-                request_id,
-                profile_id,
-                shortcut_slot: Some(slot as i64),
-                ..DesktopCreateMessage::new()
-            },
-            Refused::Bare,
-            move |state, _, tx| set_current(state, &made, Refused::Bare, tx),
-            tx,
-        );
+        let creating = state.requests.waits_for(|command| {
+            command["cmd"] == "desktop_create" && command["shortcut_slot"] == slot
+        });
+        if !creating {
+            state.act(
+                |request_id| DesktopCreateMessage {
+                    request_id,
+                    profile_id,
+                    shortcut_slot: Some(slot as i64),
+                    ..DesktopCreateMessage::new()
+                },
+                Refused::Bare,
+                |_, _, _| {},
+                tx,
+            );
+        }
         return;
     };
     let current = facts.current_desktop().map(|d| d.id.as_str());
