@@ -22,6 +22,7 @@ mod notifications;
 mod opener;
 mod palette;
 mod picker;
+mod profile_switcher;
 pub mod prompts;
 mod requests;
 pub mod screen;

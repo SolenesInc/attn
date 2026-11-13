@@ -178,6 +178,25 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
     }
     commands.push(
         Command::new(
+            "switch-profile",
+            "Switch profile",
+            &["profile", "setup"],
+            Action::ProfileSwitch,
+        )
+        .shortcut(Some(Action::ProfileSwitch)),
+    );
+    for other in facts.profiles.all.iter().filter(|p| &p.id != profile) {
+        commands.push(Command::new(
+            &format!("profile-{}", other.id),
+            &format!("Switch to {}", other.name),
+            &["profile", "setup"],
+            Action::SwitchToProfile {
+                profile: other.id.clone(),
+            },
+        ));
+    }
+    commands.push(
+        Command::new(
             "garden-frame",
             match crate::garden::mode(state) {
                 crate::garden::Mode::Full => "Move the garden to the sidebar",

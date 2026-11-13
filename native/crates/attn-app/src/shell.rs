@@ -67,6 +67,7 @@ pub struct Window {
     pub(crate) notifications: crate::notifications::Panel,
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
+    pub(crate) profile_switcher: crate::profile_switcher::Switcher,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -109,6 +110,8 @@ pub enum Layer {
     Ledger,
     /// The notifications panel; `Window::notifications` holds it.
     Notifications,
+    /// The profile switcher under the title bar's pill; `Window::profile_switcher` holds it.
+    ProfileSwitcher,
     /// The confirmation before closing a desktop that holds tiles; `Window::closing_desktop`
     /// holds it.
     CloseDesktop,
@@ -441,6 +444,7 @@ fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
                 .then(|| crate::asks::title_button(state, t))
                 .flatten(),
         )
+        .children(connected.then(|| crate::profile_switcher::pill(state, t)))
 }
 
 fn centered(t: &Tokens, content: El) -> El {
@@ -523,6 +527,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             cheat_sheet(&state.keymap, t),
         )),
         Some(Layer::ShortcutEditor) => crate::shortcut_editor::view(state, t, &mut layers),
+        Some(Layer::ProfileSwitcher) => layers.extend(crate::profile_switcher::view(state, t)),
         None => {}
     }
     if let Some(leader) = &window.leader {

@@ -614,21 +614,25 @@ impl Store {
         });
     }
 
-    /// A profile's desktops and its current desktop, as one arrangement. Another profile's
-    /// arrangement changes only its record.
+    /// A profile's desktops and its current desktop, as one arrangement. The daemon sends a
+    /// connection only the arrangement of the profile it scoped the connection to, so the
+    /// arrangement's profile becomes the selected one, as after a switch or after the daemon
+    /// deleted the profile this window showed. The previous profile's asks and vents go with it.
     pub(crate) fn apply_arrangement(&self, profile: Profile, desktops: Vec<Desktop>) {
         self.change(|facts| {
-            let shown = profile.id == facts.profiles.selected;
+            let mut changed = Slices::PROFILES | Slices::DESKTOPS;
             let mut profiles = (*facts.profiles).clone();
+            if profiles.selected != profile.id {
+                profiles.selected = profile.id.clone();
+                facts.asks = Arc::default();
+                facts.vents = Arc::default();
+                changed |= Slices::ASKS | Slices::VENTS;
+            }
             match profiles.all.iter_mut().find(|p| p.id == profile.id) {
                 Some(known) => *known = profile,
                 None => profiles.all.push(profile),
             }
             facts.profiles = Arc::new(profiles);
-            if !shown {
-                return Slices::PROFILES;
-            }
-            let mut changed = Slices::PROFILES | Slices::DESKTOPS;
             if let Some(kept) = facts.tile_contents.held_by(&desktops) {
                 facts.tile_contents = Arc::new(kept);
                 changed |= Slices::TILE_CONTENTS;
