@@ -273,7 +273,7 @@ app/src/utils/terminalLinks.test.ts	resolveDetectedPath > expands ~ against home
 app/src/utils/terminalLinks.test.ts	resolveDetectedPath > refuses relative paths without cwd and escapes above root	attn-term/src/links.rs::a_path_resolves_against_the_cwd_and_home	
 app/src/utils/terminalLinks.test.ts	isMarkdownPath > matches .md and .markdown case-insensitively	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
 app/src/utils/terminalLinks.test.ts	isMarkdownPath > rejects other extensions and lookalikes	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
-app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes markdown path links to the in-app tile	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
+app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes markdown path links to the in-app tile	attn-app/tests/wire/terminal_links.rs::a_markdown_link_opens_in_a_tile_for_the_terminals_agent_and_with_the_system_when_the_daemon_cannot	
 app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes non-markdown paths to the OS opener	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
 app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > routes web urls to the browser	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	
 app/src/utils/terminalLinks.test.ts	terminalLinkOpenAction > treats file:// uris as paths, including markdown routing and decoding	attn-term/src/links.rs::opening_routes_markdown_paths_and_file_urls_as_the_tauri_terminal_does	

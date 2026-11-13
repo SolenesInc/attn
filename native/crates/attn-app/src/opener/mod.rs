@@ -361,8 +361,19 @@ fn pick(state: &mut State, row: Row, tx: &mut Tx) {
         return;
     }
     close(state, tx);
-    let (path, host) = (row.target, row.host);
     let session = state.opener.session.clone();
+    open_markdown(state, row.target, row.host, session, tx);
+}
+
+/// Shows the markdown file at `path`, on outpost `host`, in a tile opened for `session`; the
+/// system's opener opens a local file the daemon could not.
+pub(crate) fn open_markdown(
+    state: &mut State,
+    path: String,
+    host: Option<String>,
+    session: Option<String>,
+    tx: &mut Tx,
+) {
     let asked = (path.clone(), host.clone());
     state.ask(
         |id| OpenMarkdownMessage {

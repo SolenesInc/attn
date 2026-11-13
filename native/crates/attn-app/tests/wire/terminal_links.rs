@@ -255,19 +255,63 @@ fn a_path_that_exists_under_the_sessions_directory_opens_and_one_that_does_not_i
     accelerator(&mut world, true);
     click(&mut world, 5, 0);
     assert_eq!(opened(&mut world), [format!("file://{root}/src/main.go")]);
+    assert!(world.runtime_is_at_rest());
+}
 
+#[test]
+fn a_markdown_link_opens_in_a_tile_for_the_terminals_agent_and_with_the_system_when_the_daemon_cannot()
+ {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("my notes.md"), "").unwrap();
+    std::fs::write(dir.path().join("plan.md"), "").unwrap();
+    let root = dir.path().to_str().unwrap().to_owned();
+    let daemon = in_directory(&root, None);
+    daemon.on("open_markdown", |r| {
+        let found = r["path"]
+            .as_str()
+            .is_some_and(|p| p.ends_with("my notes.md"));
+        json!({
+            "event": "open_markdown_result",
+            "request_id": r["request_id"],
+            "success": found,
+            "path": r["path"],
+            "desktop_id": found.then_some("d1"),
+            "tile_id": found.then_some("tile-opened"),
+            "error": (!found).then_some("no desktop to show it on"),
+        })
+    });
+    daemon.on("desktop_show_leaf", |r| {
+        json!({"event": "desktop_show_leaf_result", "request_id": r["request_id"], "success": true})
+    });
+    let mut world = World::start(daemon);
+    world.open_desktop();
     output(
         &world,
-        3,
-        format!("\x1b]8;;file://{root}/my%20notes.md\x1b\\notes\x1b]8;;\x1b\\").as_bytes(),
+        1,
+        format!("\x1b]8;;file://{root}/my%20notes.md\x1b\\notes\x1b]8;;\x1b\\ plan.md\r\n")
+            .as_bytes(),
     );
     world.settle();
-    click(&mut world, 1, 2);
+
+    accelerator(&mut world, true);
+    click(&mut world, 1, 0);
+    let asked: Vec<Value> = world.daemon.sent_of("open_markdown");
     assert_eq!(
-        opened(&mut world),
-        [format!("file://{root}/my%20notes.md")],
-        "a markdown path opens with the system until the app shows markdown"
+        (&asked[0]["path"], &asked[0]["session_id"]),
+        (&json!(format!("{root}/my notes.md")), &json!("s1"))
     );
+    assert_eq!(
+        world.daemon.sent_of("desktop_show_leaf")[0]["leaf_id"],
+        "tile-opened"
+    );
+    assert_eq!(opened(&mut world), Vec::<String>::new());
+
+    click(&mut world, 8, 0);
+    assert_eq!(
+        world.daemon.sent_of("open_markdown")[1]["path"],
+        json!(format!("{root}/plan.md"))
+    );
+    assert_eq!(opened(&mut world), [format!("file://{root}/plan.md")]);
     assert!(world.runtime_is_at_rest());
 }
 

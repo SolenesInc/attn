@@ -95,25 +95,27 @@ impl Terminals {
         self.pointing.as_deref()
     }
 
-    /// A ⌘- or Ctrl-click at `at` in terminal `id` ended: the link under it opens. A file on
-    /// an outpost stays shut, and the refusal is what to tell the person.
+    /// A ⌘- or Ctrl-click at `at` in terminal `id` ended: the link under it opens, except a
+    /// markdown file, which comes back for the app to show. A file on an outpost stays shut,
+    /// and the refusal is what to tell the person.
     pub(crate) fn open_link_at(
         &mut self,
         id: &str,
         at: (f32, f32),
         tx: &mut Tx,
-    ) -> Result<(), String> {
+    ) -> Result<Option<String>, String> {
         let Some(target) = self.link_at(id, at) else {
-            return Ok(());
+            return Ok(None);
         };
         let outpost = self.panes.get(id).and_then(|t| t.place.outpost.as_deref());
         match (target.open(), outpost) {
             (Open::Path(path) | Open::Markdown(path), Some(host)) => Err(format!(
                 "{path} is on {host}; opening files on an outpost isn't supported yet"
             )),
+            (Open::Markdown(path), None) => Ok(Some(path)),
             (opening, _) => {
                 open(opening, tx);
-                Ok(())
+                Ok(None)
             }
         }
     }
@@ -181,8 +183,7 @@ impl Terminals {
 }
 
 /// Opens `target` as the Tauri terminal's opener allows: a web, mail or phone link in its
-/// handler, a path with the system's opener. A markdown path opens there too until the app
-/// shows markdown itself.
+/// handler, a path with the system's opener.
 fn open(opening: Open, tx: &mut Tx) {
     let _ = match opening {
         Open::Url(uri) if uri.starts_with("tel:") => tx.open_uri(&uri),

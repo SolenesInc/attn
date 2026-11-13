@@ -1443,10 +1443,20 @@ fn terminal_slot(
                             }
                         }
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
-                            if let Err(refusal) =
-                                state.terminals.open_link_at(&pressing, (d.x, d.y), tx)
-                            {
-                                state.window.notify(refusal, tx);
+                            match state.terminals.open_link_at(&pressing, (d.x, d.y), tx) {
+                                Ok(Some(markdown)) => {
+                                    let session = state
+                                        .facts
+                                        .desktops
+                                        .iter()
+                                        .find(|desktop| desktop.id == tile.desktop)
+                                        .and_then(|desktop| session_of_leaf(desktop, &tile.pane));
+                                    crate::opener::open_markdown(
+                                        state, markdown, None, session, tx,
+                                    );
+                                }
+                                Ok(None) => {}
+                                Err(refusal) => state.window.notify(refusal, tx),
                             }
                         }
                         Release::Click if !d.cancelled() => {
