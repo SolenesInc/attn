@@ -362,7 +362,7 @@ try {
     await driver.state('window', { includes: 'so it moved beside instead' });
     await shot('stack-beside-a-short-tile');
 
-    await driver.setWindowBounds({ ...WINDOW, height: 1300 });
+    await driver.setWindowBounds({ ...WINDOW, height: 1040 });
     const tall = await dropOnTopEdge();
     runner.assert(tall.anchorHeight >= 960, 'the tall tile has room for the stack', tall);
     await observer.waitFor(() => {

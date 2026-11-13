@@ -373,6 +373,28 @@ fn fewer_and_more_tiles_step_to_each_width_that_changes_how_many_tiles_fit_and_t
 }
 
 #[test]
+fn a_press_on_a_tile_header_under_the_width_label_lands_on_the_header() {
+    let mut world = start(
+        FOUR_FIT,
+        Some("66"),
+        vec![tiles("a", panes(["a", "b", "c", "d", "e"]))],
+    );
+    press(&mut world, Action::ShelfFewerTiles);
+    assert_eq!(width_label(&world).as_deref(), Some("2 tiles"));
+
+    let receipt = world
+        .automate(
+            "press",
+            serde_json::json!({"target": {"key": "tile.b.header"}}),
+        )
+        .unwrap();
+
+    assert_eq!(receipt["matched"], true, "{receipt}");
+    assert_eq!(keyboard(&mut world), "b", "the press took the keyboard");
+    rest(&mut world);
+}
+
+#[test]
 fn more_tiles_names_the_width_in_force_when_the_setting_is_not_a_step() {
     let mut world = start(
         FOUR_FIT,

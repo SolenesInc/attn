@@ -745,6 +745,7 @@ pub(crate) fn width_label(state: &State, t: &Tokens) -> Option<El> {
     Some(
         rune::el()
             .key("shelf.width.layer")
+            .inert()
             .absolute(0.0, crate::shell::TITLE_BAR_HEIGHT)
             .w_full()
             .child(
