@@ -457,9 +457,11 @@ func TestAnUpdateFromTheReleaseWithTheSettingOnAndNoHostLeavesTerminalsOnWorkers
 	skipUnlessAMachineCanHaveNoHost(t)
 	u := startTheRelease(t)
 	app := u.ReleaseApp()
+	setSetting(t, app, upgradeSharedHostEnabled, "false")
 	live := u.spawnAgent(app, fakeagent.Claude)
+	u.assertNoSharedHost(app.Terminal(live.session))
 	u.turn(app, live, "before-update")
-	setSetting(t, app, upgradeSharedHostEnabled, "true")
+	turnOnTheSharedHost(t, app)
 	if got := u.Attn("daemon", "stop"); got.Code != 0 {
 		t.Fatalf("attn daemon stop: %+v", got)
 	}
