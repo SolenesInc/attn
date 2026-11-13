@@ -1,4 +1,7 @@
 item	statement	native_test	reason
+6	On macOS the bundle registers its instance's link scheme (attn-palmac://), not production's attn://, and a link in it reaches that bundle	live:s-fmcb34/palmac-proof.tgz	
+6	On Linux the instance's desktop entry handles its own scheme, not production's attn://	live:s-fmcb34/c36-linux.tgz	
+31	Option-modified letter shortcuts (⌥⌘N, the new session dialog's ⌥T, ⌥Q and ⌥1–⌥9) fire through AppKit despite macOS dead-key reporting		gap: s-70656g
 41	A terminal whose pane is no longer drawn detaches from its stream	attn-app/tests/wire/terminal.rs::a_terminal_no_longer_drawn_is_detached	
 41	Hidden tiles release GPU memory and return with one repaint; many tiles never fail		gap: s-gjttf8
 42	Cell metrics give the same rows and cols as the Tauri build for the same window and font size		gap: s-rzb1xd
@@ -16,3 +19,7 @@ item	statement	native_test	reason
 47	A drag that starts outside the terminal, on its tile's header, paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal	
 54	A program's OSC 52 write reaches the clipboard without a gesture	attn-app/tests/wire/terminal_view.rs::a_program_writes_the_clipboard_with_osc_52_and_a_query_reads_nothing	
 54	The terminal's copy and paste reach the system clipboard from the packaged bundle		gap: s-9d54yh
+54	A spawn link reaches the packaged macOS bundle warm and cold, and starts and shows its agent	live:s-fmcb34/palmac-proof.tgz	
+54	A spawn link reaches the native app on Linux		gap: s-vmre0j
+55	On macOS a link sent while the app runs reaches the running app: a second link for the same folder starts no agent and shows the first	live:s-fmcb34/palmac-proof.tgz	
+55	On Linux a link sent while the app runs reaches the running app instead of starting a second one		gap: s-vmre0j
