@@ -741,3 +741,33 @@ fn a_code_blocks_copy_button_copies_its_code_and_says_so_a_while() {
         (0, 2)
     );
 }
+
+#[test]
+fn a_diagram_that_cannot_draw_says_so_above_its_source() {
+    let mut world = start();
+    world.daemon.emit(content(
+        "```mermaid\nflowchart LR\n  A --> B\n```\n\n```mermaid\nkanban\n  Todo\n```\n",
+    ));
+    world.settle();
+    let shown = shown(&world);
+    assert!(
+        shown.iter().any(|t| t == "B"),
+        "the flowchart draws: {shown:?}"
+    );
+    let said: Vec<_> = shown
+        .iter()
+        .skip_while(|t| *t != "Diagram failed to render")
+        .take(2)
+        .collect();
+    assert!(
+        said.len() == 2 && said[1].starts_with("kanban"),
+        "the note sits right above the source it could not draw: {shown:?}"
+    );
+    assert_eq!(
+        shown
+            .iter()
+            .filter(|t| *t == "Diagram failed to render")
+            .count(),
+        1
+    );
+}

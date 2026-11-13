@@ -193,6 +193,10 @@ pub(crate) fn reader(
             let t = *t;
             move |card, frame| leaves_out(card, frame, &t)
         })
+        .diagram_source_frame({
+            let t = *t;
+            move |source, _| not_drawn(source, &t)
+        })
         .code_frame({
             let (t, view, copied) = (*t, copied_in, kept.copied);
             move |card, frame| with_copy(card, frame, &view, copied, &t)
@@ -286,6 +290,19 @@ fn with_copy(card: El, frame: &CodeFrame<'_>, view: &str, copied: Option<usize>,
         button.group_opacity(0.0, 1.0)
     };
     col().w_full().hover_group().child(card).child(button)
+}
+
+/// A diagram that cannot draw, shown as its source under a note that says so.
+fn not_drawn(source: El, t: &Tokens) -> El {
+    col()
+        .w_full()
+        .gap(space::S1)
+        .child(
+            text("Diagram failed to render")
+                .font(type_::LABEL)
+                .color(t.error),
+        )
+        .child(source)
 }
 
 /// A drawn diagram, with what it leaves out because it cannot read it said under it.
