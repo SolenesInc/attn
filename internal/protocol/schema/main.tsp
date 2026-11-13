@@ -7656,6 +7656,7 @@ model Response {
   paired_sender_token?: PairedSenderToken;
   paired_senders?: PairedSender[];
   sender_sessions?: SenderSession[];
+  sender_refine_result?: SenderRefineResult;
   agent_inbox_result?: AgentPeerMessage;
   agent_inbox_item_result?: AgentInboxItem;
   agent_inbox_batch_result?: AgentInboxBatchResult;
@@ -9282,6 +9283,29 @@ model SenderUnpairMessage {
 model SenderSessionsMessage {
   cmd: "sender_sessions";
   sender_token: string;
+}
+
+// Refines one dictated transcript the way dictation_refine does, under the
+// paired sender's profile. The daemon answers once; closing the connection
+// first cancels the refinement.
+@extension("x-on", #{ home: true })
+model SenderRefineMessage {
+  cmd: "sender_refine";
+  sender_token: string;
+  raw_text: string;
+  recording_duration_ms: safeint;
+  format: DictationTextFormat;
+}
+
+// The fields of dictation_refine_result for a sender_refine: profile_id is the
+// sender's profile, and limit_ms is set when the refinement did not answer
+// within its limit.
+model SenderRefineResult {
+  profile_id: string;
+  success: boolean;
+  refined_text?: string;
+  error?: string;
+  limit_ms?: safeint;
 }
 
 model SenderSession {

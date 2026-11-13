@@ -74,14 +74,17 @@ unpair <name|id>
 
   --profile <name|id> chooses the profile for senders and unpair. It defaults
   to the calling session's profile inside attn, or the only profile.
+
+A paired sender can also clean up dictated text with attn refine; see
+attn refine --help.
 ";
 
-fn usage(line: &str) -> Stop {
+pub(super) fn usage(line: &str) -> Stop {
     eprintln!("{line}");
     Stop(2)
 }
 
-fn failed(run: &mut Run<'_>, label: &str, error: &SendError) -> Stop {
+pub(super) fn failed(run: &mut Run<'_>, label: &str, error: &SendError) -> Stop {
     run.refusal.clone_from(&error.refusal);
     eprintln!("{label}: {}", daemon_message(error));
     Stop(1)
@@ -114,7 +117,7 @@ pub fn run(run: &mut Run<'_>, args: &[String]) -> Result<(), Stop> {
     }
 }
 
-fn read_sender_token(command: &str) -> Result<String, Stop> {
+pub(super) fn read_sender_token(command: &str) -> Result<String, Stop> {
     let mut line = Vec::new();
     let read = io::stdin().lock().read_until(b'\n', &mut line);
     let token = String::from_utf8_lossy(&line).trim().to_string();

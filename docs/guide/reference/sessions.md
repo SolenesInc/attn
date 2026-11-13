@@ -118,7 +118,8 @@ current session, and naming a member between sessions starts nothing. Attn never
 ## Send files to an agent from outside Attn
 
 A program on the computer that runs Attn can send files and a message to a
-running agent of one profile, local or on an outpost. The agent receives them
+running agent of one profile, local or on an outpost, and can refine dictated
+text. The agent receives them
 as a message from you, so only a program you paired can send.
 
 Pair a program once:
@@ -146,6 +147,22 @@ focused it in Attn. Repeat `--file` to send more files. Attn types the message i
 conversation as yours. For each file, the message has an
 `attn agent attachment … --out <path>` command that saves the file where the
 agent runs, including on an outpost.
+
+A paired program can also clean up dictated text with the same refinement
+Attn's own dictation uses. Give the token on the first line of stdin and the
+raw transcript after it:
+
+```sh
+printf '%s\n%s' "$TOKEN" "$TRANSCRIPT" | attn refine --token-stdin --duration-ms 7616 --json
+```
+
+The command prints the refined text and exits 0. When the refinement fails or
+takes longer than 15 seconds plus a quarter of the recording, it prints the
+error, exits 1, and the program keeps its raw text; with `--json`, the error
+past that limit comes with `limit_ms`. `--format markdown` asks for paragraphs
+and lists for an editor that takes Markdown. Stopping the command cancels the
+refinement. The `dictation.refinement_agent` setting chooses the harness, and
+headless tasks must be on. Run `attn refine --help` for the details.
 
 To see a profile's paired programs, open the **Paired senders** list in
 Settings or run `attn send senders`. To stop a program sending, click

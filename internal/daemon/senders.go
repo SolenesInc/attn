@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -287,6 +288,32 @@ func (d *Daemon) handleSenderSessions(conn net.Conn, msg *protocol.SenderSession
 		sessions = append(sessions, listed)
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderSessions: sessions})
+}
+
+func (d *Daemon) handleSenderRefine(conn net.Conn, msg *protocol.SenderRefineMessage) {
+	sender, err := d.requirePairedSender(msg.SenderToken)
+	var request dictationRefineRequest
+	if err == nil {
+		request, err = newDictationRefineRequest(sender.ProfileID, msg.RawText, msg.RecordingDurationMs, msg.Format)
+	}
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	ctx, cancel := context.WithCancel(d.life.Context())
+	defer cancel()
+	goTransport(func() {
+		_, _ = io.Copy(io.Discard, conn)
+		cancel()
+	})
+	answer := d.refineWithinLimit(ctx, request)
+	if ctx.Err() != nil {
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SenderRefineResult: &protocol.SenderRefineResult{
+		ProfileID: sender.ProfileID, Success: answer.err == nil,
+		RefinedText: answer.refinedText(), Error: answer.errorText(), LimitMs: answer.limitMs,
+	}})
 }
 
 func (d *Daemon) noteTerminalFocus(terminal protocol.TerminalID) {

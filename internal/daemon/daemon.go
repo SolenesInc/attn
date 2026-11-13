@@ -3070,6 +3070,8 @@ func (d *Daemon) handleConnectionContext(ctx context.Context, conn net.Conn) {
 		d.handleSenderUnpair(conn, msg.(*protocol.SenderUnpairMessage), caller)
 	case protocol.CmdSenderSessions:
 		d.handleSenderSessions(conn, msg.(*protocol.SenderSessionsMessage))
+	case protocol.CmdSenderRefine:
+		d.handleSenderRefine(conn, msg.(*protocol.SenderRefineMessage))
 	case protocol.CmdQuickCaptureGet, protocol.CmdQuickCaptureList:
 		d.sendError(conn, "quick capture history is app-only; use the authenticated app WebSocket channel")
 	case protocol.CmdAgentInbox:

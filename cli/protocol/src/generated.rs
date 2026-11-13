@@ -5,7 +5,7 @@
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
-pub const PROTOCOL_VERSION: &str = "9765419fc6c7";
+pub const PROTOCOL_VERSION: &str = "1a3bde36a0c6";
 
 pub trait ResponseField {
     const FIELD: &'static str;
@@ -9277,6 +9277,8 @@ pub struct Response {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_pairing: Option<SenderPairingRequest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sender_refine_result: Option<SenderRefineResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sender_sessions: Option<Vec<SenderSession>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_instructions_result: Option<SessionInstructionsResult>,
@@ -11346,6 +11348,35 @@ pub struct SenderPairingRequest {
     pub id: String,
     pub name: String,
     pub requested_at: String,
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderRefineMessage {
+    pub cmd: String,
+    pub format: DictationTextFormat,
+    pub raw_text: String,
+    pub recording_duration_ms: i64,
+    pub sender_token: String,
+}
+
+impl SenderRefineMessage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            cmd: "sender_refine".to_string(),
+            ..Self::default()
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SenderRefineResult {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit_ms: Option<i64>,
+    pub profile_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refined_text: Option<String>,
+    pub success: bool,
 }
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SenderSession {
@@ -14857,6 +14888,9 @@ impl ResponseField for SeedTransitionResult {
 }
 impl ResponseField for SeedWatchResult {
     const FIELD: &'static str = "seed_watch_result";
+}
+impl ResponseField for SenderRefineResult {
+    const FIELD: &'static str = "sender_refine_result";
 }
 impl ResponseField for SessionInstructionsResult {
     const FIELD: &'static str = "session_instructions_result";

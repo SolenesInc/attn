@@ -1,7 +1,7 @@
 use crate::commands::{
     Run, Stop, automation, browser, callout, codex, conversation, crew, doc, enrollment,
-    instance_env, instance_resolve, journal, nav, open, pr, print_stdout, review, seed, send,
-    settings, terminal, ticket, top_level, worktree,
+    instance_env, instance_resolve, journal, nav, open, pr, print_stdout, refine, review, seed,
+    send, settings, terminal, ticket, top_level, worktree,
 };
 use crate::hooks::{COMMANDS, Failure, Hook, terminal_from_env};
 use crate::instance::Paths;
@@ -77,6 +77,10 @@ fn native_command(name: &str, verb: Option<&str>, argv: &[OsString]) -> Option<N
         },
         ("callout", _) => native(callout::run, false),
         ("send", _) => native(send::run, true),
+        ("refine", _) => Native {
+            help: Some(refine::HELP),
+            ..native(refine::run, true)
+        },
         ("conversation", _) => native(conversation::run, true),
         ("worktree", _) => native(worktree::run, true),
         ("codex", _) => native(codex::run, true),

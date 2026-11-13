@@ -247,6 +247,13 @@ func (r *Running) await(stream string, buf *bytes.Buffer, text string, count int
 	}
 }
 
+// Kill ends the command at once, without letting it clean up, and waits for it to exit.
+func (r *Running) Kill() {
+	r.t.Helper()
+	_ = r.process.Kill()
+	<-r.done
+}
+
 func (r *Running) interrupt() {
 	r.t.Helper()
 	_ = r.process.Signal(syscall.SIGINT)

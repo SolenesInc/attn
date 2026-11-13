@@ -9820,6 +9820,9 @@ type Response struct {
 	// SenderPairing corresponds to the JSON schema field "sender_pairing".
 	SenderPairing *SenderPairingRequest `json:"sender_pairing,omitempty,omitzero"`
 
+	// SenderRefineResult corresponds to the JSON schema field "sender_refine_result".
+	SenderRefineResult *SenderRefineResult `json:"sender_refine_result,omitempty,omitzero"`
+
 	// SenderSessions corresponds to the JSON schema field "sender_sessions".
 	SenderSessions []SenderSession `json:"sender_sessions,omitempty,omitzero"`
 
@@ -12340,6 +12343,41 @@ type SenderPairingRequest struct {
 
 	// RequestedAt corresponds to the JSON schema field "requested_at".
 	RequestedAt string `json:"requested_at"`
+}
+
+type SenderRefineMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Format corresponds to the JSON schema field "format".
+	Format DictationTextFormat `json:"format"`
+
+	// RawText corresponds to the JSON schema field "raw_text".
+	RawText string `json:"raw_text"`
+
+	// RecordingDurationMs corresponds to the JSON schema field
+	// "recording_duration_ms".
+	RecordingDurationMs int `json:"recording_duration_ms"`
+
+	// SenderToken corresponds to the JSON schema field "sender_token".
+	SenderToken string `json:"sender_token"`
+}
+
+type SenderRefineResult struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// LimitMs corresponds to the JSON schema field "limit_ms".
+	LimitMs *int `json:"limit_ms,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RefinedText corresponds to the JSON schema field "refined_text".
+	RefinedText *string `json:"refined_text,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SenderSession struct {

@@ -87,6 +87,7 @@ const (
 	CmdSenderList                    = "sender_list"
 	CmdSenderUnpair                  = "sender_unpair"
 	CmdSenderSessions                = "sender_sessions"
+	CmdSenderRefine                  = "sender_refine"
 	CmdSendersGet                    = "senders_get"
 	CmdSenderPairDecide              = "sender_pair_decide"
 	CmdPlantVentSeed                 = "plant_vent_seed"

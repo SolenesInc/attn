@@ -57,6 +57,11 @@ const LISTED: &[Listed] = &[
         summary: "send files and a message to a session as the user; pair, senders, unpair",
     },
     Listed {
+        name: "refine",
+        args: "--token-stdin",
+        summary: "clean up dictated text as a paired sender",
+    },
+    Listed {
         name: "list",
         args: "",
         summary: "list sessions and profiles",
