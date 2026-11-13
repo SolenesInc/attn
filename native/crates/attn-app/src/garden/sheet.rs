@@ -18,6 +18,7 @@ pub(super) struct Sheet<'a> {
     pub(super) names: &'a SessionNames,
     pub(super) garden: &'a super::Garden,
     pub(super) seeds: &'a [Arc<Seed>],
+    pub(super) chief: bool,
     pub(super) readings: &'a crate::markdown::Readings,
     pub(super) now_ms: i64,
     pub(super) t: &'a Tokens,

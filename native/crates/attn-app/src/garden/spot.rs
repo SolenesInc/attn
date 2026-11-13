@@ -12,6 +12,14 @@ pub(crate) struct Edit {
     failure: Option<String>,
 }
 
+/// The chord that sends a field's words: Return, where Shift+Return starts a new line, or
+/// ⌘Return in a field where Return starts one.
+#[derive(Clone, Copy)]
+pub(super) enum Sends {
+    Return,
+    CmdReturn,
+}
+
 /// A part of a seed page: its sheet, its seed and its own name on the page.
 #[derive(Clone, PartialEq)]
 pub(super) struct Spot {
@@ -71,20 +79,24 @@ impl Spot {
         tx.focus(self.field(), true);
     }
 
-    /// Return sends the words through `commit`; Escape puts them away and gives the keyboard
-    /// to `home`. Neither acts while the words sent last wait for their answer.
+    /// The chord that `sends` sends the words through `commit`; Escape puts them away and gives
+    /// the keyboard to `home`. Neither acts while the words sent last wait for their answer.
     pub(super) fn field_key(
         &self,
         state: &mut State,
         ev: &KeyEvent,
-        home: &str,
+        (home, sends): (&str, Sends),
         commit: impl FnOnce(&mut State, String, &mut Tx),
         tx: &mut Tx,
     ) -> bool {
         let answer_due = self.edit(state).is_some_and(|e| e.busy);
+        let send = match sends {
+            Sends::Return => !ev.mods.shift,
+            Sends::CmdReturn => ev.mods.cmd,
+        };
         match ev.key {
             Key::Enter | Key::Escape if answer_due => true,
-            Key::Enter if !ev.mods.shift => {
+            Key::Enter if send => {
                 let words = state.window.garden.words.text.trim().to_owned();
                 commit(state, words, tx);
                 true
@@ -104,6 +116,11 @@ impl Spot {
             edit.failure = Some(reason);
         }
         garden.revision += 1;
+    }
+
+    /// Puts the part's words away and gives the keyboard to `home`.
+    pub(super) fn put_away(&self, state: &mut State, home: &str, tx: &mut Tx) {
+        self.close(state, home, true, tx);
     }
 
     fn close(&self, state: &mut State, home: &str, ring: bool, tx: &mut Tx) {

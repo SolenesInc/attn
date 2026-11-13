@@ -310,3 +310,10 @@ pub(crate) fn ago(iso: &str, now_ms: i64) -> String {
         format!("{}d ago", (seconds as f64 / 86_400.0).round() as i64)
     }
 }
+
+/// Whether the profile `profile` has a Chief to send seeds to.
+pub(crate) fn has_chief(sessions: &[Session], profile: &str) -> bool {
+    sessions
+        .iter()
+        .any(|s| s.chief_of_staff == Some(true) && s.profile_id == profile)
+}

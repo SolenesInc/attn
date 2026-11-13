@@ -125,6 +125,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop
                     .is_some_and(holds_a_seed)
                     .then_some(state.window.now_ms / 60_000),
+                crate::garden::model::has_chief(&facts.sessions, &facts.profiles.selected),
             ),
             (state.drafts.revision, state.readings.revision),
         ),
@@ -835,6 +836,10 @@ fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
         sessions: &state.facts.sessions,
         readings: &state.readings,
         now_ms: state.window.now_ms,
+        chief: crate::garden::model::has_chief(
+            &state.facts.sessions,
+            &state.facts.profiles.selected,
+        ),
     }
 }
 

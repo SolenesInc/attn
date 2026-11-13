@@ -13,6 +13,7 @@ use serde_json::Value;
 mod authorization;
 mod board;
 mod checks;
+mod continuation;
 mod tile;
 
 const PROFILE: &str = "work";

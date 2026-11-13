@@ -288,3 +288,31 @@ fn a_seed_tile_judges_its_checks_and_shows_the_reason_as_it_is_typed() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_seed_tile_offers_send_to_chief_once_a_chief_starts() {
+    let mut world = start("s-cache1", vec![cache()], |r| {
+        document(r, cache(), Vec::new(), &[])
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("seed-tile.t.chief.open"))
+            .is_none()
+    );
+
+    world.daemon.emit(attn_protocol::SessionRegisteredMessage {
+        session: Session {
+            chief_of_staff: Some(true),
+            ..session("chief1", "Chief")
+        },
+        ..attn_protocol::SessionRegisteredMessage::new()
+    });
+    world.settle();
+
+    assert_eq!(
+        titled(&world, "seed-tile.t.chief.open").as_deref(),
+        Some("Send to Chief")
+    );
+    assert!(world.runtime_is_at_rest());
+}

@@ -5,7 +5,7 @@ use rune::{El, KeyEvent, Tx, col, row, text, text_input};
 
 use super::model::{self, SessionNames};
 use super::sheet::{Sheet, meta_word};
-use super::spot::Spot;
+use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
 
@@ -241,7 +241,13 @@ impl Sheet<'_> {
                     })
                     .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
                         let home = typed.key("box");
-                        typed.field_key(state, ev, &home, |s, w, tx| reject(&typed, s, w, tx), tx)
+                        typed.field_key(
+                            state,
+                            ev,
+                            (&home, Sends::Return),
+                            |s, w, tx| reject(&typed, s, w, tx),
+                            tx,
+                        )
                     })
                     .w_full()
                     .color(t.text_primary)

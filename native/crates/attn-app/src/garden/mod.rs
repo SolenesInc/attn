@@ -1,6 +1,7 @@
 mod authorization;
 mod board;
 mod checks;
+mod continuation;
 pub(crate) mod model;
 pub(crate) mod search;
 mod sheet;

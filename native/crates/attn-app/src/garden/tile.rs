@@ -3,7 +3,7 @@ use std::sync::Arc;
 use attn_protocol::{Seed, Session};
 use attn_ui::Tokens;
 use rune::tok::space;
-use rune::{El, Tx, col};
+use rune::{El, Tx, col, row};
 
 use super::Garden;
 use super::model::{self, Index, Relation};
@@ -17,6 +17,7 @@ pub(crate) struct Reads<'a> {
     pub(crate) sessions: &'a [Session],
     pub(crate) readings: &'a crate::markdown::Readings,
     pub(crate) now_ms: i64,
+    pub(crate) chief: bool,
 }
 
 /// The seed a tile holds, as the garden's page shows it: the garden's copy when the daemon's
@@ -37,6 +38,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         names: &names,
         garden: reads.garden,
         seeds: reads.seeds,
+        chief: reads.chief,
         readings: reads.readings,
         now_ms: reads.now_ms,
         t,
@@ -86,7 +88,16 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         .padding(space::S3)
         .gap(space::S2)
         .children(back)
-        .child(sheet.head(here, to_garden))
+        .child(
+            sheet.head(
+                here,
+                row()
+                    .gap(space::S1)
+                    .child(to_garden)
+                    .children(sheet.continuation(held.map(|s| s.as_ref()), document)),
+            ),
+        )
+        .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here))

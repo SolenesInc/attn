@@ -4,7 +4,7 @@ use rune::{El, KeyEvent, Tx, col, row, text, text_input};
 
 use super::model;
 use super::sheet::{Sheet, meta_word};
-use super::spot::Spot;
+use super::spot::{Sends, Spot};
 use super::view::kit_button;
 use crate::State;
 
@@ -109,7 +109,7 @@ impl Sheet<'_> {
                             typed.field_key(
                                 state,
                                 ev,
-                                &home,
+                                (&home, Sends::Return),
                                 |state, words, tx| commit(&typed, state, words, had, tx),
                                 tx,
                             )

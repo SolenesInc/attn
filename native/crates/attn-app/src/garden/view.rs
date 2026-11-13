@@ -1056,6 +1056,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         names: &place.names,
         garden: &state.window.garden,
         seeds: super::seeds(state),
+        chief: model::has_chief(&state.facts.sessions, &state.facts.profiles.selected),
         readings: &state.readings,
         now_ms: state.window.now_ms,
         t,
@@ -1064,7 +1065,16 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         .w_full()
         .padding(space::S3)
         .gap(space::S2)
-        .child(sheet.head(here, open_as_tile(&here.id, t)))
+        .child(
+            sheet.head(
+                here,
+                row()
+                    .gap(space::S1)
+                    .child(open_as_tile(&here.id, t))
+                    .children(sheet.continuation(Some(here), document)),
+            ),
+        )
+        .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here));
