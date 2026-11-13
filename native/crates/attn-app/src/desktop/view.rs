@@ -93,6 +93,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         names,
         state.terminals.find_bars(),
         state.terminals.filter_panels(),
+        state.terminals.annotation_layers(),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -381,7 +382,8 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             let caret = held
                 .then(|| ime_caret(cx.terminals, &pane.runtime_id, t.dark))
                 .flatten();
-            let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str());
+            let pointing_link = cx.terminals.pointing_link() == Some(pane.runtime_id.as_str())
+                || cx.terminals.pointing_mark(&pane.runtime_id);
             let slot = terminal_slot(
                 &pane.runtime_id,
                 holder.clone(),
@@ -398,6 +400,15 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     &pane.runtime_id,
                     filtering,
                     cx.terminals.filter_results_height(&pane.runtime_id),
+                    t,
+                )),
+                None => slot,
+            };
+            let slot = match cx.terminals.marking(&pane.runtime_id) {
+                Some(marking) => slot.children(super::annotation_popup::layers(
+                    &pane.runtime_id,
+                    marking,
+                    cx.terminals.slot_size(&pane.runtime_id).unwrap_or_default(),
                     t,
                 )),
                 None => slot,
@@ -877,12 +888,15 @@ fn terminal_slot(
                 now,
                 &state.daemon,
             );
-            if !pointing_changed {
+            let over_mark = (tx.mods().alt && !held).then_some((p.x, p.y));
+            let mark_changed = state.terminals.hover_mark(&pointing, over_mark);
+            if !pointing_changed && !mark_changed {
                 tx.live_only();
             }
         })
         .on_hover_change(move |state: &mut State, inside, tx: &mut Tx| {
-            if inside || !state.terminals.pointer_left(&leaving) {
+            let mark_changed = !inside && state.terminals.hover_mark(&leaving, None);
+            if (inside || !state.terminals.pointer_left(&leaving)) && !mark_changed {
                 tx.live_only();
             }
         })
@@ -896,6 +910,7 @@ fn terminal_slot(
             let mods = report_mods(tx.mods());
             match d.phase {
                 rune::Phase::Down => {
+                    crate::annotations::draft::pressed_anywhere(state, tx);
                     press_tile(state, &tile, tx);
                     let button = match tx.button() {
                         PointerButton::Middle => mouse::MIDDLE,
@@ -915,10 +930,12 @@ fn terminal_slot(
                         );
                     if !reported
                         && button == mouse::PRIMARY
-                        && let Some(text) =
-                            state
-                                .terminals
-                                .select_press(&pressing, (d.x, d.y), d.clicks)
+                        && let Some(text) = state.terminals.select_press(
+                            &pressing,
+                            (d.x, d.y),
+                            d.clicks,
+                            tx.mods().alt,
+                        )
                     {
                         tx.copy(text);
                     }
@@ -933,8 +950,23 @@ fn terminal_slot(
                     state
                         .terminals
                         .pointer_released(&pressing, at, mods, &state.daemon);
+                    let at = (d.x, d.y);
                     match state.terminals.select_release(&pressing) {
                         Release::Copied(text) => tx.copy(text),
+                        Release::Opened(mark) if !d.cancelled() => {
+                            crate::annotations::draft::opened(state, &pressing, &mark, at, tx);
+                        }
+                        Release::Anchored(anchor) if !d.cancelled() => {
+                            crate::annotations::draft::anchored(state, &pressing, &anchor, at, tx);
+                        }
+                        Release::Missed(miss, text) => {
+                            if !d.cancelled() {
+                                crate::annotations::draft::missed(state, &pressing, miss, at, tx);
+                            }
+                            if let Some(text) = text {
+                                tx.copy(text);
+                            }
+                        }
                         Release::Click if !d.cancelled() && accelerator(tx.mods()) => {
                             if let Err(refusal) =
                                 state.terminals.open_link_at(&pressing, (d.x, d.y), tx)

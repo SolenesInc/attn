@@ -13,6 +13,7 @@ use attn_term::mouse::{self, Action, WheelRows};
 use attn_term::{FONT_SIZE, Fonts, Grid, KeyInput, Metrics, SNAPSHOT_FORMAT, Theme, Vt, responses};
 use rune::{Live, Tx};
 
+mod annotating;
 mod blocks;
 mod filter;
 mod find;
@@ -20,6 +21,7 @@ mod kitty;
 mod links;
 mod selection;
 
+pub(crate) use annotating::{Anchor, Annotation, Marking, Miss, Notice, Popup, Transcript};
 pub(crate) use blocks::Part;
 pub(crate) use filter::{Filtered, Filtering, filter_field_key};
 pub(crate) use find::{Finding, Toward, find_field_key};
@@ -97,6 +99,8 @@ pub struct Terminals {
     finds: HashMap<String, Finding>,
     images: kitty::Images,
     filters: HashMap<String, Filtering>,
+    /// What a comment box edits once its popup has closed.
+    unshown_comment: rune::TextEdit,
 }
 
 struct Term {
@@ -128,6 +132,8 @@ struct Term {
     placements: attn_term::kitty::Placements,
     /// How far back the view was scrolled when the window last drew it.
     scrolled_back: u32,
+    /// An agent terminal's annotations, once its session is known.
+    marking: Option<annotating::Marking>,
 }
 
 #[derive(Debug)]
@@ -208,6 +214,7 @@ impl Term {
             blocks: Default::default(),
             placements: Default::default(),
             scrolled_back: 0,
+            marking: None,
         }
     }
 }
@@ -228,7 +235,7 @@ impl Terminals {
     ) {
         self.follow_connection(facts, daemon);
         self.undrawn = true;
-        let drawn: Vec<(String, bool, bool, links::Place)> = facts
+        let drawn: Vec<(String, Option<String>, bool, links::Place)> = facts
             .current_desktop()
             .into_iter()
             .flat_map(|desktop| &desktop.panes)
@@ -245,12 +252,8 @@ impl Terminals {
                         .and_then(|s| s.host.clone())
                         .filter(|h| !h.is_empty()),
                 };
-                (
-                    pane.runtime_id.clone(),
-                    pane.kind == "agent",
-                    recoverable,
-                    place,
-                )
+                let agent = (pane.kind == "agent").then(|| pane.session_id.clone());
+                (pane.runtime_id.clone(), agent, recoverable, place)
             })
             .collect();
         let gone: Vec<String> = self
@@ -281,9 +284,13 @@ impl Terminals {
             let term = self
                 .panes
                 .entry(id)
-                .or_insert_with(|| Term::new(agent, &self.theme));
+                .or_insert_with(|| Term::new(agent.is_some(), &self.theme));
             term.recoverable = recoverable;
             term.place = place;
+            let session = agent.filter(|s| !s.is_empty());
+            if term.marking.as_ref().map(|m| &m.session) != session.as_ref() {
+                term.marking = session.map(annotating::Marking::new);
+            }
         }
         self.attach_waiting(now, daemon);
         self.focus(keyboard, daemon);
@@ -304,6 +311,7 @@ impl Terminals {
             }
             return;
         }
+        self.refetch_markings();
         if facts.daemon_instance != self.daemon_instance {
             self.daemon_instance.clone_from(&facts.daemon_instance);
             for term in self.panes.values_mut() {
@@ -508,6 +516,9 @@ impl Terminals {
                 if let Some(term) = self.panes.get_mut(&resized.id) {
                     let size = (clamp(resized.cols), clamp(resized.rows));
                     term.vt.resize(size.0, size.1, cell_pixels(&metrics));
+                    if let Some(marking) = term.marking.as_mut() {
+                        marking.reflowed();
+                    }
                     Terminals::hover_moved(term);
                 }
             }
@@ -518,6 +529,7 @@ impl Terminals {
                 tx.clock(),
                 daemon,
             ),
+            TerminalEvent::MessagesChanged(changed) => self.messages_changed(&changed.session_id),
             TerminalEvent::Exited(exited) => {
                 if let Some(term) = self.panes.get_mut(&exited.id) {
                     term.phase = Phase::Stopped;
@@ -656,6 +668,9 @@ impl Terminals {
         }
         if let Some((cols, rows)) = restore.size {
             term.vt.resize(cols, rows, cell);
+            if let Some(marking) = term.marking.as_mut() {
+                marking.reflowed();
+            }
             Terminals::hover_moved(term);
         }
         if restore.snapshot.is_some() && !decoded {

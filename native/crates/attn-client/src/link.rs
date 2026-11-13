@@ -6,8 +6,9 @@ use attn_protocol::{
     AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
     KittyImageResultMessage, KittyPlacementsMessage, PROTOCOL_VERSION,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    RuntimeRespawnedMessage, SessionExitedMessage, SessionRegisteredMessage,
-    SessionUnregisteredMessage, SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
+    RuntimeRespawnedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
+    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
+    SettingsUpdatedMessage, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -79,6 +80,8 @@ pub enum TerminalEvent {
     Desync(PtyDesyncMessage),
     Respawned(RuntimeRespawnedMessage),
     Exited(SessionExitedMessage),
+    /// The agent's messages changed, so marks on them are found again.
+    MessagesChanged(SessionMessagesChangedMessage),
 }
 
 /// Where the link's thread waits, for a caller that needs to know the link has nothing left
@@ -489,6 +492,13 @@ impl Task {
             }
             "runtime_respawned" => {
                 (self.config.terminals)(TerminalEvent::Respawned(parse(&header.event, text)?));
+                None
+            }
+            "session_messages_changed" => {
+                (self.config.terminals)(TerminalEvent::MessagesChanged(parse(
+                    &header.event,
+                    text,
+                )?));
                 None
             }
             "session_exited" => {

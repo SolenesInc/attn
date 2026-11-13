@@ -2,6 +2,7 @@ use attn_term::markdown::{Line, styled_markdown};
 use attn_term::selection::{Anchor, Point, Selection, clean_lines, word_at};
 use attn_term::{Mark, Overlay, OverlayKind, Rgb, Theme, Vt};
 
+use super::annotating::Miss;
 use super::{Term, Terminals};
 
 /// The light blue the Tauri terminal washes a selection in, by theme.
@@ -76,18 +77,35 @@ pub(crate) enum Release {
     /// The press selected no text: a click, which opens a link under it with ⌘ or Ctrl held.
     Click,
     Copied(String),
+    /// A ⌥-click on a mark, which opens it.
+    Opened(String),
+    /// A ⌥-drag over an agent's message, which marks it.
+    Anchored(super::annotating::Anchor),
+    /// A ⌥-drag that covered none of the agent's messages, which copies what it selected.
+    Missed(super::annotating::Miss, Option<String>),
 }
 
 pub(super) struct Selecting {
     from: (f32, f32),
     dragged: bool,
+    /// ⌥ held the press on an agent terminal: a drag marks what it covers.
+    annotating: bool,
+    /// The mark a ⌥-press landed on, which a click opens.
+    on_mark: Option<String>,
 }
 
 impl Terminals {
     /// The primary button went down at `at` on terminal `id`'s slot, the `clicks`th press of a
     /// run, and no program heard it. A second press selects the word and a third the row, which
-    /// the clipboard then holds; any other starts a selection.
-    pub(crate) fn select_press(&mut self, id: &str, at: (f32, f32), clicks: u32) -> Option<String> {
+    /// the clipboard then holds; any other starts a selection, which marks text when `alt` held
+    /// it on an agent terminal.
+    pub(crate) fn select_press(
+        &mut self,
+        id: &str,
+        at: (f32, f32),
+        clicks: u32,
+        alt: bool,
+    ) -> Option<String> {
         let metrics = self.metrics();
         let term = self.panes.get_mut(id)?;
         let (col, row) = selection_cell(term, &metrics, at)?;
@@ -102,10 +120,18 @@ impl Terminals {
             }
             3 => Selection::at(row, 0, cols),
             _ => {
+                let annotating = alt && term.marking.is_some();
+                let on_mark = term
+                    .marking
+                    .as_mut()
+                    .filter(|_| alt)
+                    .and_then(|m| m.mark_at(&mut term.vt, row, col));
                 term.view.selected = None;
                 term.view.selecting = Some(Selecting {
                     from: at,
                     dragged: false,
+                    annotating,
+                    on_mark,
                 });
                 term.view
                     .select(Some(Selection::at(row, col, col)), &mut term.vt);
@@ -161,17 +187,30 @@ impl Terminals {
         if !selecting.dragged {
             term.view.select(None, &mut term.vt);
             self.undrawn = true;
-            return Release::Click;
+            return selecting.on_mark.map_or(Release::Click, Release::Opened);
         }
         let Some(selection) = term.view.selection() else {
             return Release::Nothing;
         };
+        let miss = match term.marking.as_mut().filter(|_| selecting.annotating) {
+            Some(marking) => match marking.anchor(&mut term.vt, selection) {
+                Some(anchor) => {
+                    term.view.select(None, &mut term.vt);
+                    term.view.selected = None;
+                    self.undrawn = true;
+                    return Release::Anchored(anchor);
+                }
+                None if marking.has_messages() => Some(Miss::OutsideMessages),
+                None => Some(Miss::NoMessages),
+            },
+            None => None,
+        };
         let text = text_of(term, selection);
         term.view.selected = (!text.is_empty()).then(|| text.clone());
-        if text.is_empty() {
-            Release::Click
-        } else {
-            Release::Copied(text)
+        match miss {
+            Some(miss) => Release::Missed(miss, term.view.selected.clone()),
+            None if text.is_empty() => Release::Click,
+            None => Release::Copied(text),
         }
     }
 
@@ -218,6 +257,7 @@ impl Terminals {
             "scrolled_back": term.scrolled_back,
             "copies": term.view.selected,
             "block": term.view.block,
+            "annotations": term.marking.as_ref().map(super::annotating::Marking::state),
         }))
     }
 
@@ -301,6 +341,9 @@ impl Terminals {
     /// Output moved the text: the hover reads it again, the shell's command steps make
     /// blocks, and a selection that follows its text finds it again on the screen.
     pub(super) fn wrote(term: &mut Term) {
+        if let Some(marking) = term.marking.as_mut() {
+            marking.wrote();
+        }
         Terminals::hover_moved(term);
         Terminals::read_prompts(term);
         let Some(anchor) = &term.view.anchor else {
@@ -321,6 +364,9 @@ impl Terminals {
         term.view = View::default();
         term.blocks = Default::default();
         term.placements = Default::default();
+        if let Some(marking) = term.marking.as_mut() {
+            marking.forget_rows();
+        }
     }
 
     /// What lies over terminal `id`'s view: its selection, and the hovered link's underline.
@@ -333,6 +379,7 @@ impl Terminals {
         overlays.extend(Terminals::find_overlays(term, finding));
         overlays.extend(Terminals::selection_overlays(term, theme));
         overlays.extend(Terminals::link_overlays(term, theme));
+        overlays.extend(Terminals::annotation_overlays(term));
         overlays
     }
 

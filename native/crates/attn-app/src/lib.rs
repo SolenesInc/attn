@@ -154,6 +154,7 @@ pub fn bind(
                 state
                     .terminals
                     .follow(&state.facts, keyboard, tx.clock(), &state.daemon);
+                annotations::draft::follow(state, tx);
             }
         }));
     })
@@ -204,6 +205,8 @@ pub fn connect(
 fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let recounted = state.terminals.drain(tx, &state.daemon);
     let answered = requests::drain(state, tx);
+    annotations::draft::follow(state, tx);
+    let expired = annotations::draft::expire(state, now);
     let browsed = picker::browse_due(state, tx);
     let launched = picker::follow(state, tx);
     let aged = state.age_wake.is_some_and(|at| now >= at);
@@ -212,7 +215,14 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
-    shell::expire(state, now, tx) || recounted || aged || answered || browsed || launched || drains
+    shell::expire(state, now, tx)
+        || recounted
+        || aged
+        || answered
+        || browsed
+        || launched
+        || drains
+        || expired
 }
 
 /// The app as every window runs it, and as `App::headless_runtime` runs it in tests.

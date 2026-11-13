@@ -5,6 +5,8 @@ use serde::Serialize;
 
 use crate::prompts;
 
+pub(crate) mod draft;
+
 /// A one-tap verdict on a marked passage. `tip` is what the agent is told to do with it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct QuickLabel {
@@ -83,6 +85,35 @@ pub fn labels() -> Vec<QuickLabel> {
 
 pub fn label_by_id(id: &str) -> Option<QuickLabel> {
     labels().into_iter().find(|l| l.id == id)
+}
+
+/// The label an older draft named by its emoji.
+pub fn label_by_emoji(emoji: &str) -> Option<QuickLabel> {
+    labels().into_iter().find(|l| l.emoji == emoji)
+}
+
+/// The labels a popup offers at once, before the list of the rest.
+const PROMOTED: [&str; 3] = ["i-agree", "this-is-wrong", "clarify-this"];
+
+pub fn promoted_labels() -> Vec<QuickLabel> {
+    PROMOTED
+        .iter()
+        .map(|id| label_by_id(id).expect("each promoted label is a label"))
+        .collect()
+}
+
+/// The rest of the labels, in the groups the list shows them in.
+pub fn picker_groups() -> Vec<Vec<QuickLabel>> {
+    label_groups()
+        .into_iter()
+        .map(|group| {
+            group
+                .into_iter()
+                .filter(|l| !PROMOTED.contains(&l.id))
+                .collect::<Vec<_>>()
+        })
+        .filter(|group| !group.is_empty())
+        .collect()
 }
 
 /// One mark as the feedback quotes it.

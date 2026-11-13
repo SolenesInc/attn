@@ -42,6 +42,22 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let field = tx
         .focused()
         .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX));
+    if ev.key == Key::Escape
+        && tx.focused().is_none()
+        && crate::annotations::draft::escape(state, tx)
+    {
+        return true;
+    }
+    if let Key::Text(typed) = &ev.key
+        && tx.focused().is_none()
+        && !ev.mods.cmd
+        && !ev.mods.ctrl
+        && let Some(digit) = typed.chars().next().and_then(|c| c.to_digit(10))
+        && typed.chars().count() == 1
+        && crate::annotations::draft::digit(state, digit, tx)
+    {
+        return true;
+    }
     if ev.key == Key::Escape && tx.focused().is_none() && crate::desktop::escape(state, tx) {
         return true;
     }
