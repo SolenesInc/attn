@@ -120,7 +120,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`, `native/crates/attn-app/src/asks/`) has the drawer with each question type, the note, Send, Accept all recommended, Replied, Snooze or Wake and Open agent; the keys ⌘⇧R, ⌘↩, j, k, r, a, o, s, g and Escape; the palette's "Open asks"; the title bar's asks button; the Asks group on home; the tile header chip with its preview; and the markers on sidebar rows, shelf chips and rail desktops. An ask about a seed waits on whoever the Garden says tends it, and "Open in Garden" (`asks.open-seed`) or `g` opens the seed in the Garden beside the drawer. Ask images and links to mentioned seeds drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`, `native/crates/attn-app/src/asks/`) has the drawer with each question type, the note, Send, Accept all recommended, Replied, Snooze or Wake and Open agent; the keys ⌘⇧R, ⌘↩, j, k, r, a, o, s, g and Escape; the palette's "Open asks"; the title bar's asks button; the Asks group on home; the tile header chip with its preview; and the markers on sidebar rows, shelf chips and rail desktops. An ask about a seed waits on whoever the Garden says tends it, and "Open in Garden" (`asks.open-seed`) or `g` opens the seed in the Garden beside the drawer, or in a tile when the Garden's window of seeds does not hold it. Ask images and links to mentioned seeds drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 

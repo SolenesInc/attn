@@ -294,7 +294,6 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
         .children(item.holder.map(|s| open_agent(s, &item.from, t)))
         .children(snoozable.map(|_| snooze_button(snoozed, &item.from, t)));
     let seed = ask.seed_id.as_ref().map(|seed| {
-        let known = super::known_seed(state, seed).is_some();
         let id = seed.clone();
         row()
             .key("asks.seed")
@@ -315,7 +314,7 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     .single_line()
                     .truncate(),
             )
-            .children(known.then(|| {
+            .child(
                 small_button(
                     OPEN_SEED,
                     "Open in Garden",
@@ -323,9 +322,9 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     t,
                 )
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    crate::garden::open_seed(state, &id, tx)
-                })
-            }))
+                    super::open_seed(state, &id, tx)
+                }),
+            )
     });
     let draft = state.window.asks.drafts.get(&ask.id);
     let reply_answers = ask.reply.as_ref().map(|r| r.answers.as_slice());
@@ -855,12 +854,8 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
             None => return false,
         },
         "s" if holder.is_some() => super::toggle_snooze(state, tx),
-        "g" => match ask
-            .as_ref()
-            .and_then(|a| a.seed_id.clone())
-            .filter(|seed| super::known_seed(state, seed).is_some())
-        {
-            Some(seed) => crate::garden::open_seed(state, &seed, tx),
+        "g" => match ask.as_ref().and_then(|a| a.seed_id.clone()) {
+            Some(seed) => super::open_seed(state, &seed, tx),
             None => return false,
         },
         _ => return false,

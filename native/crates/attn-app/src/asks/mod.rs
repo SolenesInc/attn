@@ -156,12 +156,23 @@ impl<'a> Lists<'a> {
     }
 }
 
-/// The seed of the selected profile's garden with this id.
-pub(crate) fn known_seed<'a>(state: &'a State, id: &str) -> Option<&'a attn_protocol::Seed> {
-    crate::garden::seeds(state)
-        .iter()
-        .find(|s| s.id == id)
-        .map(|s| s.as_ref())
+/// Opens an ask's seed in the garden beside the drawer, or in a tile when the garden's window
+/// of seeds does not hold it.
+pub(crate) fn open_seed(state: &mut State, id: &str, tx: &mut Tx) {
+    if crate::garden::seeds(state).iter().any(|s| s.id == id) {
+        crate::garden::open_seed(state, id, tx);
+        return;
+    }
+    state.act(
+        |request_id| attn_protocol::OpenSeedMessage {
+            seed_id: id.to_owned(),
+            request_id: Some(request_id),
+            ..attn_protocol::OpenSeedMessage::new()
+        },
+        crate::requests::Refused::Prefixed("Could not open the seed"),
+        |_, _, _| {},
+        tx,
+    );
 }
 
 /// The agent an ask waits on: whoever the garden says tends its seed, its crew member's

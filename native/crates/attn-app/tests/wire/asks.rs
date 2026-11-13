@@ -606,11 +606,35 @@ fn an_ask_about_a_seed_waits_on_the_agent_whose_stake_it_is_and_names_the_seed()
     let seed = seed_words(&world);
     assert!(seed.contains(&"cache-migration".to_owned()));
     assert!(seed.contains(&"Cache store migration".to_owned()));
-    assert!(!has(&world, "asks.open-seed"));
 
     click(&mut world, "asks.open-agent");
     let shows = world.daemon.sent_of("desktop_show_session");
     assert_eq!(shows.last().unwrap()["session_id"], "successor");
+}
+
+#[test]
+fn a_seed_the_garden_does_not_hold_opens_in_a_tile_from_the_button_and_g() {
+    let mut world = start(vec![landing()], vec![api_working()]);
+    open_drawer(&mut world);
+
+    click(&mut world, "asks.open-seed");
+    assert_eq!(garden_heading(&world), None);
+    let opened = world.daemon.sent_of("open_seed");
+    assert_eq!(opened.len(), 1);
+    assert_eq!(opened[0]["seed_id"], "s-cache1");
+
+    world.daemon.reply_to(
+        &opened[0],
+        serde_json::json!({
+            "event": "open_seed_result",
+            "request_id": opened[0]["request_id"],
+            "success": true,
+        }),
+    );
+    world.settle();
+    click(&mut world, "asks.from");
+    letter(&mut world, "g");
+    assert_eq!(world.daemon.sent_of("open_seed").len(), 2);
 }
 
 #[test]
