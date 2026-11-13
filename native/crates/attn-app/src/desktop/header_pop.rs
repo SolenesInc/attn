@@ -41,6 +41,13 @@ impl What {
         }
     }
 
+    /// Scrolls a popover listing several things to the row it picks.
+    fn reveal(self, pop: &Pop, picked: usize, tx: &mut Tx) {
+        if self == What::Chain {
+            super::chain::reveal(pop, picked, tx);
+        }
+    }
+
     /// How long the pointer rests before the popover opens, and how long it may be away
     /// before the popover closes, in seconds.
     fn delays(self) -> (f64, f64) {
@@ -135,6 +142,7 @@ fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
         0.0 => {
             pop.timer = None;
             pop.picked = first;
+            what.reveal(&opening, first, tx);
             pop.open = Some(opening);
         }
         delay => {
@@ -194,6 +202,7 @@ fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx)
         pinned: true,
     };
     tx.focus(open.surface(), true);
+    what.reveal(&open, first, tx);
     pop.open = Some(open);
 }
 

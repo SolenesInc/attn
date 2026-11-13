@@ -1130,3 +1130,70 @@ fn the_command_palette_pins_the_delegation_chain_of_the_agent_on_screen() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_chain_taller_than_the_window_fits_it_and_scrolls_to_the_agent_it_picks() {
+    let mut sessions = vec![
+        delegate_of("a", "ledger sweep", "d59"),
+        session("b", "docs", None),
+        session("root", "root session", None),
+    ];
+    sessions
+        .extend((0..60).map(|i| delegate_of(&format!("d{i}"), &format!("delegate {i}"), "root")));
+    let mut world = start_with(sessions);
+    world.gesture(|app| app.click(Target::key("tile.a.role")));
+    world.settle();
+    let drawn = |world: &World, key: &str| {
+        world
+            .runtime()
+            .presented(key)
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+            .0
+    };
+    let [_, card_y, _, card_h] = drawn(&world, "tile.a.role.popover");
+    assert!(
+        card_y >= 0.0 && card_y + card_h <= SIZE.1,
+        "the card fits the window: {card_y} + {card_h}"
+    );
+    let shows = |world: &World, row: usize| {
+        let [_, top, _, h] = drawn(world, "tile.a.role.popover.agents");
+        let [_, y, _, rh] = drawn(world, &format!("tile.a.role.popover.agent.{row}"));
+        y >= top - 0.5 && y + rh <= top + h + 0.5
+    };
+    let current = 61;
+    assert_eq!(chain_levels(&world)[current].0, "ledger sweep");
+    assert!(
+        shows(&world, current),
+        "the chain opens scrolled to its agent"
+    );
+    assert!(!shows(&world, 0), "the root is out of view");
+
+    let resting = middle(&world, "tile.a.role.popover.agent.58");
+    world.gesture(|app| app.move_to(resting));
+    let picked = |world: &World| {
+        (0..62).find(|i| {
+            world
+                .screen()
+                .find(Target::key(format!("tile.a.role.popover.agent.{i}")))
+                .is_some_and(|n| n.is("selected"))
+        })
+    };
+    assert_eq!(
+        picked(&world),
+        Some(58),
+        "moving the pointer picks the row under it"
+    );
+
+    key(&mut world, Key::Home);
+    world.settle();
+    assert!(shows(&world, 0), "Home brings the root into view");
+    assert_eq!(
+        picked(&world),
+        Some(0),
+        "the row the scroll brings under the still pointer leaves the pick to the keys"
+    );
+    key(&mut world, Key::End);
+    world.settle();
+    assert!(shows(&world, current), "End brings the last agent back");
+    rest(&mut world);
+}

@@ -172,9 +172,15 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .child(close);
     let ids: Vec<String> = rows.iter().map(|(s, _)| s.id.clone()).collect();
     let agents = col()
+        .key(agents_key(pop))
         .role("tree")
         .label("Agents in delegation chain")
         .w_full()
+        .scroll(rune::ScrollSpec {
+            stick_bottom: false,
+        })
+        .shrink()
+        .min_h(0.0)
         .gap(2.0)
         .children(
             rows.iter()
@@ -191,6 +197,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .radius(6.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
+        .min_h(0.0)
         .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
@@ -223,7 +230,20 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     } else {
         surface
     };
-    Some(surface.anchored(pop.anchor(), Side::Bottom, rune::Align::Start, 4.0))
+    Some(surface.anchored_fit(pop.anchor(), Side::Bottom, rune::Align::Start, 4.0))
+}
+
+fn agents_key(pop: &Pop) -> String {
+    format!("{}.agents", pop.surface())
+}
+
+fn row_key(pop: &Pop, i: usize) -> String {
+    format!("{}.agent.{i}", pop.surface())
+}
+
+/// Keeps the picked agent of the open chain in view.
+pub(crate) fn reveal(pop: &Pop, picked: usize, tx: &mut Tx) {
+    tx.scroll_into_view_in(agents_key(pop), row_key(pop, picked));
 }
 
 fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool, t: &Tokens) -> El {
@@ -237,7 +257,7 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
     let label = format!("{name} · {kind}{}", if current { " · current" } else { "" });
     let id = session.id.clone();
     row()
-        .key(format!("{}.agent.{i}", pop.surface()))
+        .key(row_key(pop, i))
         .role("treeitem")
         .label(label)
         .focus_selected(picked)
@@ -276,9 +296,12 @@ fn agent_row(pop: &Pop, i: usize, session: &Session, depth: usize, picked: bool,
                     t,
                 )),
         )
-        .on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
-            if inside {
-                state.window.desk.header_pop.picked = i;
+        .on_pointer_move_local(move |state: &mut State, _, tx: &mut Tx| {
+            let pop = &mut state.window.desk.header_pop;
+            if pop.picked == i {
+                tx.live_only();
+            } else {
+                pop.picked = i;
             }
         })
         .on_press_tx(move |state: &mut State, tx: &mut Tx| select(state, &id, tx))
@@ -298,6 +321,9 @@ fn chain_key(state: &mut State, ids: &[String], ev: &KeyEvent, tx: &mut Tx) -> b
             }
         }
         _ => return false,
+    }
+    if let Some(open) = &state.window.desk.header_pop.open {
+        reveal(open, state.window.desk.header_pop.picked, tx);
     }
     true
 }
