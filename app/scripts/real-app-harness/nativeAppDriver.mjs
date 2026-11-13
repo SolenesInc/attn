@@ -27,9 +27,16 @@ export class NativeAppDriver {
     return this.#pointer('hover', { target, ...(opts.at ? { at: opts.at } : {}) }, opts);
   }
 
-  drag(fromTarget, to, opts = {}) {
-    const end = to?.by ? { by: to.by } : { to };
+  async drag(fromTarget, to, opts = {}) {
+    const end = to?.by ? { by: to.by } : to?.at ? { by: await this.#offsetTo(fromTarget, opts.at, to) } : { to };
     return this.#pointer('drag', { target: fromTarget, ...end, ...(opts.at ? { at: opts.at } : {}) }, opts);
+  }
+
+  async #offsetTo(fromTarget, fromAt = [0.5, 0.5], { target, at }) {
+    const point = ({ rect: [x, y, w, h] }, [fx, fy]) => [x + w * fx, y + h * fy];
+    const [sx, sy] = point(await this.waitFor(fromTarget), fromAt);
+    const [ex, ey] = point(await this.waitFor(target), at);
+    return [ex - sx, ey - sy];
   }
 
   scroll(target, dy) {

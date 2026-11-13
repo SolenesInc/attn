@@ -64,7 +64,7 @@ try {
   await runner.step('an_empty_desktop_shows_the_launcher', async () => {
     const before = observer.currentDesktopId();
     desktop = await observer.createDesktop();
-    if (before) runner.registerCleanup('restore_current_desktop', () => observer.setCurrentDesktop(before));
+    if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     const receipt = await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     runner.assert(receipt.matched, 'the press lands on the new desktop\'s row', receipt);
     await driver.waitFor({ key: 'launcher.path.field' });

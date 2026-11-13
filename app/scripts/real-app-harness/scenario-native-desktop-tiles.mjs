@@ -47,7 +47,7 @@ try {
       const left = observer.desktop(desktop.id);
       return left && observer.profileCommand('desktop_close', { desktop_id: left.id, expected_revision: left.revision });
     });
-    if (before) runner.registerCleanup('restore_current_desktop', () => observer.setCurrentDesktop(before));
+    if (before) runner.registerCleanup('restore_current_desktop', () => observer.returnToDesktop(before));
     await driver.click({ key: `sidebar.desktop.${desktop.id}` });
     await driver.waitFor({ key: 'launcher.path.field' });
   });
