@@ -36,7 +36,9 @@ Do not open issues, pull requests or discussions on `anomalyco/rune`.
 3. Write the change with a test that fails without it. Put tests in the sibling
    test file Rune's `AGENTS.md` names; overlay tests of fork patches go in
    `crates/rune/src/overlay/fork_tests.rs`.
-4. Run `cargo test -p rune -p rune-kit` for the areas you touched. A test that
+4. Run `cargo test -p rune -p rune-kit --features rune-kit/markdown,rune-kit/mermaid`
+   for the areas you touched; `scripts/rune-bump` runs the ledger with the same
+   features. A test that
    runs only on macOS runs in the fork's `fork macOS tests` workflow
    (`.github/workflows/fork-macos.yml`), on each push to `attn` and on request.
 5. Add the patch's line to `FORK.md`. Name each test in the Test column by its

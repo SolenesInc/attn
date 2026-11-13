@@ -37,6 +37,7 @@ setup() {
 pub use api::*;'
   printf '%s\n' "$api" >"$up/crates/rune/src/api.rs"
   write_crate "$up" rune-kit 'pub fn kit() -> u32 { 1 }'
+  printf '\n[features]\nmarkdown = []\nmermaid = ["markdown"]\n' >>"$up/crates/rune-kit/Cargo.toml"
   mkdir -p "$up/vendor/winit/src"
   printf '[package]\nname = "winit"\nversion = "0.30.0"\nedition = "2021"\n' >"$up/vendor/winit/Cargo.toml"
   : >"$up/vendor/winit/src/lib.rs"
@@ -65,13 +66,16 @@ EOF
 mod tests {
     #[test]
     fn the_kit_holds() { assert_eq!(super::kit(), 1); }
+    #[cfg(feature = "mermaid")]
+    #[test]
+    fn a_diagram_draws() {}
 }
 EOF
   cat >"$patch/FORK.md" <<'EOF'
 | Patch | Why the app cannot do it | Test |
 |---|---|---|
 | The answer stays 42 (`rune/src/lib.rs`) | The answer is Rune's | `tests::the_answer_holds`, `tests::a_wrong_answer_panics` |
-| The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS) |
+| The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS), `tests::a_diagram_draws` |
 EOF
   commit "$patch" "Patch the answer"
   git -C "$patch" push -q origin attn
