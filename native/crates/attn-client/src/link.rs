@@ -28,6 +28,9 @@ const CAPABILITIES: [&str; 2] = ["binary_pty_output", "kitty_images"];
 /// Where the link hands what it hears about terminals.
 pub type TerminalSink = Box<dyn Fn(TerminalEvent) + Send + Sync>;
 pub type ReplySink = Box<dyn Fn(Reply) + Send + Sync>;
+/// Starts the daemon when it is not running, and returns once it answers, or says why it could
+/// not start.
+pub type StartDaemon = Arc<dyn Fn() -> Result<(), String> + Send + Sync>;
 
 pub struct LinkConfig {
     /// The daemon's `host:port`; the link speaks WebSocket on `/ws` and reads `/health`.
@@ -49,6 +52,10 @@ pub struct LinkConfig {
     /// Every message that answers a request by its `request_id`, and every `command_error`, on
     /// the link's thread.
     pub replies: ReplySink,
+    /// Run before every connection, the first included, so a stopped daemon comes back. Its
+    /// failure is shown and retried, and no connection is tried. `None` leaves starting the
+    /// daemon to whoever runs it.
+    pub start_daemon: Option<StartDaemon>,
 }
 
 /// A daemon message that names the request it answers.
@@ -296,26 +303,33 @@ impl Task {
         let mut stopped = self.stopped.clone();
         let mut retry = FIRST_RETRY;
         loop {
-            let ended = tokio::select! {
-                ended = self.session() => ended,
-                _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
+            let start_failed = tokio::select! {
+                failed = self.start_daemon() => failed,
+                _ = stopped.wait_for(|stop| *stop) => return,
             };
-            self.shared.close();
-            match ended {
-                Ended::Stopped => return,
-                Ended::Refused(refusal) => {
-                    self.store.set_connection(Connection::Refused(refusal));
-                    self.park(Parked::Stopped);
-                    let _ = stopped.wait_for(|stop| *stop).await;
-                    return;
-                }
-                Ended::Lost { greeted } => {
-                    if greeted {
-                        retry = FIRST_RETRY;
+            if start_failed.is_none() {
+                let ended = tokio::select! {
+                    ended = self.session() => ended,
+                    _ = stopped.wait_for(|stop| *stop) => Ended::Stopped,
+                };
+                self.shared.close();
+                match ended {
+                    Ended::Stopped => return,
+                    Ended::Refused(refusal) => {
+                        self.store.set_connection(Connection::Refused(refusal));
+                        self.park(Parked::Stopped);
+                        let _ = stopped.wait_for(|stop| *stop).await;
+                        return;
+                    }
+                    Ended::Lost { greeted } => {
+                        if greeted {
+                            retry = FIRST_RETRY;
+                        }
                     }
                 }
             }
-            self.store.set_connection(Connection::Reconnecting);
+            self.store
+                .set_connection(Connection::Reconnecting { start_failed });
             let at = self.config.clock.now() + retry;
             self.park(Parked::Until(at));
             tokio::select! {
@@ -325,6 +339,23 @@ impl Task {
             self.park(Parked::Busy);
             retry = (retry * 3 / 2).min(LAST_RETRY);
         }
+    }
+
+    /// Why the daemon could not be started, when it could not. The start runs on a thread of
+    /// its own, so a link stopped meanwhile does not wait for it.
+    async fn start_daemon(&self) -> Option<String> {
+        let start = self.config.start_daemon.clone()?;
+        let (started, result) = tokio::sync::oneshot::channel();
+        std::thread::Builder::new()
+            .name("attn-daemon-start".into())
+            .spawn(move || {
+                let _ = started.send(start());
+            })
+            .expect("the daemon start's thread");
+        result
+            .await
+            .unwrap_or_else(|_| Err("starting the daemon panicked".into()))
+            .err()
     }
 
     fn park(&self, parked: Parked) {

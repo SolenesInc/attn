@@ -109,25 +109,25 @@ impl Instance {
         Ok(())
     }
 
-    pub fn client_token(&self) -> Result<String, String> {
-        let path = self.data_dir.join("client-token");
-        let token = fs::read_to_string(&path).map_err(|error| {
-            format!(
-                "read the daemon's client token at {}: {error}",
-                path.display()
-            )
-        })?;
-        Ok(token.trim().to_string())
+    /// The token every client of the daemon presents, made on first use as the daemon makes
+    /// it, so the app holds it before the daemon has ever started.
+    pub fn ensure_client_token(&self) -> Result<String, String> {
+        fs::create_dir_all(&self.data_dir)
+            .map_err(|error| format!("create {}: {error}", self.data_dir.display()))?;
+        ensure_token(&self.data_dir.join("client-token"), 1)
     }
 }
 
 /// The app's own credential in `data_dir`, made on first use: the daemon trusts a `native-app`
 /// hello that carries it.
 pub fn ensure_host_token(data_dir: &Path) -> Result<String, String> {
-    let path = data_dir.join("browser-host-token");
-    if let Ok(token) = fs::read_to_string(&path) {
+    ensure_token(&data_dir.join("browser-host-token"), HOST_TOKEN_HEX_LEN)
+}
+
+fn ensure_token(path: &Path, shortest: usize) -> Result<String, String> {
+    if let Ok(token) = fs::read_to_string(path) {
         let token = token.trim();
-        if token.len() >= HOST_TOKEN_HEX_LEN {
+        if token.len() >= shortest {
             return Ok(token.to_string());
         }
     }
@@ -141,11 +141,11 @@ pub fn ensure_host_token(data_dir: &Path) -> Result<String, String> {
         .truncate(true)
         .write(true)
         .mode(0o600)
-        .open(&path)
+        .open(path)
         .map_err(|error| format!("open {}: {error}", path.display()))?;
     file.write_all(token.as_bytes())
         .map_err(|error| format!("write {}: {error}", path.display()))?;
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
         .map_err(|error| format!("secure {}: {error}", path.display()))?;
     Ok(token)
 }

@@ -1,4 +1,5 @@
 use std::hash::{BuildHasher, Hasher};
+use std::sync::Arc;
 
 use attn_client::{Clock, LinkConfig, Pulse, ReplySink, TerminalSink};
 
@@ -11,15 +12,15 @@ pub struct Launch {
     pub host_token: String,
 }
 
-/// Everything the app needs before its first window: the baked instance, its lock, its
-/// daemon and the two credentials its hello carries. Call from `main` before any thread starts.
+/// Everything the app needs before its first window: the baked instance, its lock and the two
+/// credentials its hello carries. The link starts the daemon. Call from `main` before any
+/// thread starts.
 pub fn prepare() -> Result<Launch, String> {
     let instance = Instance::baked()?;
     instance.route_environment();
     instance.hold_app_lock()?;
-    daemon::ensure()?;
     let launch = Launch {
-        client_token: instance.client_token()?,
+        client_token: instance.ensure_client_token()?,
         host_token: crate::instance::ensure_host_token(&instance.data_dir)?,
         instance,
     };
@@ -60,6 +61,7 @@ impl Launch {
             pulse: Pulse::default(),
             terminals,
             replies,
+            start_daemon: Some(Arc::new(daemon::ensure)),
         }
     }
 }

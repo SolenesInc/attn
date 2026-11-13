@@ -14,7 +14,7 @@ const VIEWPORT: (f32, f32) = (1200.0, 800.0);
 /// `attn-app --automation-headless --manifest PATH`: the app with no window and no GPU,
 /// against the daemon the environment names (`ATTN_WS_PORT`, `ATTN_DATA_DIR`, and
 /// `ATTN_INSTANCE`), driven over the automation protocol. A stack test starts the daemon; this
-/// mode never starts one. Prints `ready` once the manifest is written.
+/// mode never starts one, not even after losing it. Prints `ready` once the manifest is written.
 pub fn run(args: &[String]) -> Result<(), String> {
     let manifest = args
         .iter()
@@ -79,5 +79,6 @@ fn link_config() -> Result<impl FnOnce(TerminalSink, ReplySink) -> LinkConfig, S
         pulse: Pulse::default(),
         terminals,
         replies,
+        start_daemon: None,
     })
 }

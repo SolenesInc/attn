@@ -88,6 +88,8 @@ struct Script {
     instance: String,
     client_token: String,
     refusing: bool,
+    stopped: bool,
+    start_fails: Option<String>,
     handlers: HashMap<String, Handler>,
     in_turn: HashMap<String, VecDeque<Answer>>,
 }
@@ -97,6 +99,7 @@ struct Log {
     requests: Vec<(usize, Request)>,
     traffic: Traffic,
     attempts: usize,
+    starts: usize,
     connections: Vec<Connection>,
     opened: usize,
     violations: Vec<String>,
@@ -127,6 +130,8 @@ impl Daemon {
                 instance: INSTANCE.into(),
                 client_token: CLIENT_TOKEN.into(),
                 refusing: false,
+                stopped: false,
+                start_fails: None,
                 handlers: HashMap::new(),
                 in_turn: HashMap::new(),
             }),
@@ -302,6 +307,37 @@ impl Daemon {
         self.shared.script.lock().unwrap().refusing = refusing;
     }
 
+    /// Stops, as `attn daemon stop` does: hangs up, and refuses connections until the app
+    /// starts the daemon again.
+    pub fn stop(&self) {
+        self.shared.script.lock().unwrap().stopped = true;
+        self.disconnect();
+    }
+
+    /// While set, the app's tries to start the daemon fail with `reason`.
+    pub fn fail_starts(&self, reason: Option<&str>) {
+        self.shared.script.lock().unwrap().start_fails = reason.map(str::to_owned);
+    }
+
+    /// What the app runs to start this daemon, as `attnd daemon ensure` starts the real one.
+    pub fn starter(&self) -> attn_client::StartDaemon {
+        let shared = self.shared.clone();
+        Arc::new(move || {
+            shared.log.lock().unwrap().starts += 1;
+            let mut script = shared.script.lock().unwrap();
+            if let Some(reason) = &script.start_fails {
+                return Err(reason.clone());
+            }
+            script.stopped = false;
+            Ok(())
+        })
+    }
+
+    /// Times the app tried to start the daemon.
+    pub fn starts(&self) -> usize {
+        self.shared.log.lock().unwrap().starts
+    }
+
     /// Every command the app sent, in order, across connections.
     pub fn sent(&self) -> Vec<Request> {
         self.shared
@@ -396,7 +432,7 @@ async fn connection(shared: Arc<Shared>, mut stream: TcpStream) {
     };
     let (instance, refusing) = {
         let script = shared.script.lock().unwrap();
-        (script.instance.clone(), script.refusing)
+        (script.instance.clone(), script.refusing || script.stopped)
     };
     if head.starts_with(b"GET /health ") {
         if refusing {

@@ -146,8 +146,11 @@ pub enum Connection {
     #[default]
     Connecting,
     Connected,
-    /// The link lost the daemon, or never reached it, and retries on its own.
-    Reconnecting,
+    /// The link lost the daemon, or never reached it, and retries on its own. `start_failed`
+    /// says why the last try to start the daemon failed.
+    Reconnecting {
+        start_failed: Option<String>,
+    },
     /// The link stopped and will not retry: the user has to act.
     Refused(Refusal),
 }

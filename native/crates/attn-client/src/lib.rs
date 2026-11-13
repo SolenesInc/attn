@@ -7,7 +7,7 @@ mod store;
 pub use clock::{Clock, ManualClock};
 pub use frame::{Frame, KittyFormat};
 pub use link::{
-    Commands, Link, LinkConfig, NotConnected, Parked, Reply, ReplySink, TerminalEvent,
+    Commands, Link, LinkConfig, NotConnected, Parked, Reply, ReplySink, StartDaemon, TerminalEvent,
     TerminalSink, Traffic,
 };
 pub use pulse::Pulse;

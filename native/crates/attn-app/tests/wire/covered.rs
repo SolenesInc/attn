@@ -97,6 +97,7 @@ impl App {
                 pulse: Pulse::default(),
                 terminals,
                 replies,
+                start_daemon: None,
             },
             WALL_START_MS,
             host.frames.clone(),

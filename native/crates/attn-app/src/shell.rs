@@ -350,11 +350,16 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
     let connection = &state.facts.connection;
     let body = match connection {
-        Connection::Connected | Connection::Reconnecting => shell(state, &t, cx.env().scale),
+        Connection::Connected | Connection::Reconnecting { .. } => shell(state, &t, cx.env().scale),
         Connection::Connecting => centered(&t, connection::connecting(&t)),
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
     };
-    let banner = (*connection == Connection::Reconnecting).then(|| connection::reconnecting(&t));
+    let banner = match connection {
+        Connection::Reconnecting { start_failed } => {
+            Some(connection::reconnecting(&t, start_failed.as_deref()))
+        }
+        _ => None,
+    };
     let root = col()
         .key("window")
         .w_full()
@@ -373,7 +378,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
 fn title_bar(state: &State, cx: &Cx<State>, t: &Tokens) -> El {
     let connected = matches!(
         state.facts.connection,
-        Connection::Connected | Connection::Reconnecting
+        Connection::Connected | Connection::Reconnecting { .. }
     );
     let controls = if connected {
         crate::sidebar::title_controls(state, t)

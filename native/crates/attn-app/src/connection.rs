@@ -11,10 +11,17 @@ pub(crate) fn connecting(t: &Tokens) -> El {
         .color(t.text_secondary)
 }
 
-pub(crate) fn reconnecting(t: &Tokens) -> El {
-    text("The daemon is not answering. Reconnecting.")
+pub(crate) fn reconnecting(t: &Tokens, start_failed: Option<&str>) -> El {
+    let status = match start_failed {
+        None => "The daemon is not answering. Reconnecting.".to_string(),
+        Some(reason) => {
+            format!("The daemon is not answering, and starting it failed: {reason}. Retrying.")
+        }
+    };
+    text(status)
         .key("connection.reconnecting")
         .role("status")
+        .wrap()
         .font(type_::BODY)
         .color(t.text_secondary)
         .padding(space::S2)

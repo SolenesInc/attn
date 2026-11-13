@@ -101,6 +101,85 @@ fn a_lost_daemon_is_retried_from_one_second_up_to_five() {
     assert!(world.runtime_is_at_rest());
 }
 
+fn reconnecting(world: &World) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key("connection.reconnecting"))
+        .map(|status| status.name.unwrap_or_default())
+}
+
+#[test]
+fn a_stopped_daemon_is_started_again_before_the_first_retry() {
+    let mut world = World::start(Daemon::scripted());
+    assert_eq!(
+        world.daemon.starts(),
+        1,
+        "the app starts the daemon before connecting"
+    );
+
+    world.daemon.stop();
+    world.settle();
+    assert!(reconnecting(&world).is_some(), "{}", world.screen());
+    world.advance(ms(999));
+    assert_eq!(world.daemon.starts(), 1, "nothing starts before the retry");
+    world.advance(ms(1));
+
+    assert_eq!(world.daemon.starts(), 2);
+    assert_eq!(world.daemon.sent_of("client_hello").len(), 2);
+    assert_eq!(reconnecting(&world), None, "{}", world.screen());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_daemon_that_will_not_start_at_launch_says_why_and_is_started_once_it_can() {
+    let daemon = Daemon::scripted();
+    daemon.fail_starts(Some(
+        "no attnd beside /Applications/attn.app/Contents/MacOS/attn-app",
+    ));
+    let mut world = World::start(daemon);
+
+    let status = reconnecting(&world).expect("the window says the daemon is not answering");
+    assert!(
+        status.contains("starting it failed: no attnd beside /Applications/attn.app"),
+        "{status}"
+    );
+    assert_eq!(
+        world.daemon.attempts(),
+        0,
+        "no socket while the daemon cannot start"
+    );
+    world.daemon.fail_starts(None);
+    world.advance(ms(1000));
+
+    assert_eq!(world.daemon.sent_of("client_hello").len(), 1);
+    assert_eq!(reconnecting(&world), None, "{}", world.screen());
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_daemon_that_fails_to_restart_says_why_and_is_started_at_the_next_retry() {
+    let mut world = World::start(Daemon::scripted());
+    world
+        .daemon
+        .fail_starts(Some("the database migration failed"));
+
+    world.daemon.stop();
+    world.settle();
+    world.advance(ms(1000));
+
+    let status = reconnecting(&world).expect("the app says it is reconnecting");
+    assert!(
+        status.contains("starting it failed: the database migration failed"),
+        "{status}"
+    );
+    world.daemon.fail_starts(None);
+    world.advance(ms(1500));
+
+    assert_eq!(world.daemon.starts(), 3);
+    assert_eq!(reconnecting(&world), None, "{}", world.screen());
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn a_reconnect_after_a_handshake_starts_over_at_one_second() {
     let mut world = World::start(Daemon::scripted());
@@ -141,6 +220,11 @@ fn a_daemon_on_another_protocol_stops_the_app_with_both_versions() {
     );
     world.advance(Duration::from_secs(60));
     assert_eq!(world.daemon.connections(), 1, "a mismatch is not retried");
+    assert_eq!(
+        world.daemon.starts(),
+        1,
+        "the daemon is not started again after a mismatch"
+    );
     assert!(world.runtime_is_at_rest());
 }
 

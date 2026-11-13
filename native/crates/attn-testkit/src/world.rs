@@ -207,6 +207,7 @@ impl World {
                     to_app(event);
                 }),
                 replies: answers,
+                start_daemon: Some(daemon.starter()),
             },
             store.clone(),
         );
