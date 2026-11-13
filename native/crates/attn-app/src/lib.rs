@@ -2,6 +2,7 @@ mod action;
 pub mod annotations;
 mod asks;
 pub mod automation;
+mod calendar;
 mod connection;
 pub mod daemon;
 mod deep_link;
@@ -15,6 +16,7 @@ pub mod instance;
 mod keymap;
 mod keys;
 pub mod launch;
+mod ledger;
 mod markdown;
 mod opener;
 mod palette;
@@ -162,6 +164,7 @@ pub fn bind(
             sidebar::width::follow(state);
             palette::follow(state);
             asks::follow(state, tx);
+            ledger::follow(state, was, tx);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {

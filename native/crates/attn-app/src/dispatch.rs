@@ -33,7 +33,7 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
             crate::opener::close(state, tx)
         }
         Action::FileOpen => crate::opener::open(state, tx),
-        Action::SessionsOpen => window.toggle_layer(Layer::Palette(Palette::Sessions), tx),
+        Action::SessionsOpen => crate::ledger::toggle(state, tx),
         Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),

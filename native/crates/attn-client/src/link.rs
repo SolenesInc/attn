@@ -7,9 +7,9 @@ use attn_protocol::{
     GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, InitialStateMessage,
     KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    RuntimeRespawnedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
-    SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, go_values,
+    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
+    SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -493,6 +493,11 @@ impl Task {
             "session_registered" | "session_state_changed" => {
                 let message: SessionRegisteredMessage = parse(&header.event, text)?;
                 self.store.upsert_session(message.session);
+                None
+            }
+            "session_closed" => {
+                let message: SessionClosedMessage = parse(&header.event, text)?;
+                self.store.add_close(message.session_ledger_entry);
                 None
             }
             "session_unregistered" => {

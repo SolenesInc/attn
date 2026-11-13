@@ -1,11 +1,10 @@
 use attn_client::{Connection, Facts};
 use attn_ui::{Appearance, Tokens};
 use rune::tok::{space, type_};
-use rune::{Chord, Cx, El, Tx, col, el, row, text, text_input};
+use rune::{Chord, Cx, El, Tx, col, el, row, text};
 
 use crate::action::{Action, Category};
 use crate::keymap::Keymap;
-use crate::keys::FIELD_KEY_SUFFIX;
 use crate::{State, connection};
 
 /// A sequence's second key must follow its leader within this long, as in the Tauri app.
@@ -64,6 +63,7 @@ pub struct Window {
     pub(crate) tile: Option<crate::desktop::TileWindow>,
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
+    pub(crate) ledger: crate::ledger::Ledger,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -100,6 +100,8 @@ pub enum Layer {
     Shortcuts,
     /// The desktop overview.
     Overview,
+    /// The ledger of sessions; `Window::ledger` holds it.
+    Ledger,
     /// The confirmation before closing a desktop that holds tiles; `Window::closing_desktop`
     /// holds it.
     CloseDesktop,
@@ -110,17 +112,6 @@ pub enum Palette {
     /// Agents, or commands behind a leading `>`.
     Search,
     Files,
-    Sessions,
-}
-
-impl Palette {
-    fn label(self) -> &'static str {
-        match self {
-            Palette::Search => "Search",
-            Palette::Files => "Files",
-            Palette::Sessions => "Sessions",
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -489,11 +480,9 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     match window.layer {
         Some(Layer::Palette(Palette::Search)) => layers.push(crate::palette::view(state, t)),
         Some(Layer::Palette(Palette::Files)) => layers.push(crate::opener::view(state, t)),
-        Some(Layer::Palette(palette)) => {
-            layers.push(self::palette(palette, &window.search.query, t))
-        }
         Some(Layer::NewSession) => layers.extend(crate::picker::dialog(state, t)),
         Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
+        Some(Layer::Ledger) => layers.push(crate::ledger::view(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
         Some(Layer::Settings) => layers.push(dialog(
             "settings",
@@ -596,39 +585,6 @@ fn dialog(key: &str, title: &str, t: &Tokens, body: Vec<El>) -> El {
                 .center()
                 .child(panel),
         )
-}
-
-fn palette(palette: Palette, query: &rune::TextEdit, t: &Tokens) -> El {
-    let field = text_input(query, type_::BODY)
-        .key(PALETTE_FIELD)
-        .single_line()
-        .label(palette.label())
-        .placeholder(
-            format!("Search {}", palette.label().to_lowercase()),
-            t.text_muted,
-        )
-        .on_edit(|state: &mut State| &mut state.window.search.query)
-        .w_full()
-        .color(t.text_primary);
-    debug_assert!(PALETTE_FIELD.ends_with(FIELD_KEY_SUFFIX));
-    let panel = col()
-        .key("palette.dialog")
-        .role("dialog")
-        .label(palette.label())
-        .modal_tx(true, close_layer)
-        .w_full()
-        .max_w(640.0)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
-        .padding(space::S3)
-        .child(field);
-    el().key("palette")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .child(scrim("palette", t))
-        .child(col().w_full().h_full().pt(80.0).items_center().child(panel))
 }
 
 fn cheat_sheet(keymap: &Keymap, t: &Tokens) -> Vec<El> {

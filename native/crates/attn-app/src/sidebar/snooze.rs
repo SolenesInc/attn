@@ -1,16 +1,16 @@
 use attn_protocol::{SnoozeTurnMessage, StandbySessionMessage};
 use attn_ui::Tokens;
-use rune::time::LocalTime;
 use rune::tok::{space, type_};
 use rune::{El, Side, Tx, col, row, text};
 
 use crate::State;
+use crate::calendar::{clock, iso};
+use crate::calendar::{local_day, local_instant, weekday};
 
 /// The hour a day-named snooze ends at, as in the Tauri app.
 const WAKE_HOUR: i64 = 9;
 const MINUTE_MS: i64 = 60_000;
 const HOUR_MS: i64 = 60 * MINUTE_MS;
-const DAY_S: i64 = 86_400;
 const SATURDAY: i64 = 6;
 const MONDAY: i64 = 1;
 
@@ -97,22 +97,9 @@ impl Choice {
 
 const WEEKDAYS: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/// Days since 1970-01-01 on the user's calendar at `ms`.
-fn local_day(ms: i64) -> i64 {
-    (ms.div_euclid(1000) + i64::from(LocalTime::at(ms).offset)).div_euclid(DAY_S)
-}
-
-/// 0 for Sunday: 1970-01-01 was a Thursday.
-fn weekday(day: i64) -> i64 {
-    (day + 4).rem_euclid(7)
-}
-
 /// The instant the user's clock reads the wake hour on calendar day `day`.
 fn wake_hour_on(day: i64) -> i64 {
-    let local_s = day * DAY_S + WAKE_HOUR * 3600;
-    let guess = local_s * 1000;
-    let first = (local_s - i64::from(LocalTime::at(guess).offset)) * 1000;
-    (local_s - i64::from(LocalTime::at(first).offset)) * 1000
+    local_instant(day, WAKE_HOUR * 3600)
 }
 
 /// The wake hour on the next `target` weekday strictly after `now_ms`.
@@ -125,26 +112,6 @@ fn next_weekday(now_ms: i64, target: i64) -> i64 {
     } else {
         wake_hour_on(today + ahead + 7)
     }
-}
-
-pub fn clock(ms: i64) -> String {
-    let local = LocalTime::at(ms);
-    format!("{}:{:02}", local.hour, local.minute)
-}
-
-/// `ms` as the Tauri app sends an instant, `Date.toISOString`: UTC to the millisecond.
-pub fn iso(ms: i64) -> String {
-    let t = LocalTime::at_offset(ms, 0);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        t.year,
-        t.month,
-        t.day,
-        t.hour,
-        t.minute,
-        t.second,
-        ms.rem_euclid(1000)
-    )
 }
 
 /// An open snooze menu: whose, where it opened, and the moment its times were read, so the
@@ -324,7 +291,7 @@ mod tests {
             for choice in CHOICES {
                 let at = choice.until(now);
                 assert!(at > now, "{choice:?} at {now}");
-                let local = LocalTime::at(at);
+                let local = rune::time::LocalTime::at(at);
                 let day = local_day(at);
                 let days_ahead = day - local_day(now);
                 match choice {

@@ -200,7 +200,7 @@ fn activity(session: &Session, now_ms: i64, stale_ms: i64) -> Option<Activity> {
         line: line.to_owned(),
         stale_since: activity_at(session)
             .filter(|at| now_ms - at > stale_ms)
-            .map(crate::sidebar::snooze::clock),
+            .map(crate::calendar::clock),
     })
 }
 

@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
     Ask, Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Seed,
-    Session,
+    Session, SessionLedgerEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -25,6 +25,33 @@ pub struct Facts {
     pub garden: Arc<Garden>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
+    pub closes: Arc<Closes>,
+}
+
+/// The sessions the daemon said closed, newest last, as their ledger rows.
+#[derive(Clone, Default)]
+pub struct Closes {
+    /// How many closes this process has heard of; the last of `recent` is close number `seq`.
+    pub seq: u64,
+    /// The last [`CLOSES_KEPT`] closes. A reader that missed more than these reads the ledger
+    /// again.
+    pub recent: Vec<SessionLedgerEntry>,
+}
+
+/// Far past the closes that arrive between two frames, even when a desktop of agents closes at
+/// once; a reader that falls further behind reads its page again rather than losing one.
+pub const CLOSES_KEPT: usize = 64;
+
+impl Closes {
+    /// The closes after close number `seen`, oldest first, or `None` when some of them are no
+    /// longer kept.
+    pub fn since(&self, seen: u64) -> Option<&[SessionLedgerEntry]> {
+        let missed = usize::try_from(self.seq.saturating_sub(seen)).ok()?;
+        self.recent
+            .len()
+            .checked_sub(missed)
+            .map(|from| &self.recent[from..])
+    }
 }
 
 /// Document tiles' contents by desktop and tile.
@@ -147,7 +174,8 @@ impl Slices {
     pub const TILE_CONTENTS: Slices = Slices(1 << 6);
     pub const GARDEN: Slices = Slices(1 << 7);
     pub const ASKS: Slices = Slices(1 << 8);
-    pub const ALL: Slices = Slices((1 << 9) - 1);
+    pub const CLOSES: Slices = Slices(1 << 9);
+    pub const ALL: Slices = Slices((1 << 10) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -369,6 +397,18 @@ impl Store {
             }
             facts.asks = Arc::new(asks);
             Slices::ASKS
+        });
+    }
+
+    pub(crate) fn add_close(&self, entry: SessionLedgerEntry) {
+        self.change(|facts| {
+            let mut closes = (*facts.closes).clone();
+            closes.seq += 1;
+            closes.recent.push(entry);
+            let over = closes.recent.len().saturating_sub(CLOSES_KEPT);
+            closes.recent.drain(..over);
+            facts.closes = Arc::new(closes);
+            Slices::CLOSES
         });
     }
 

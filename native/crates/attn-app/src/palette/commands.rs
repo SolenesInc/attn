@@ -198,6 +198,16 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
         .describe("Seeds and plots, the trail beside what you are reading")
         .shortcut(Some(Action::BoardOpen)),
     );
+    commands.push(
+        Command::new(
+            "sessions",
+            "Open the sessions list",
+            &["sessions", "ledger", "closed", "history", "reopen", "past"],
+            Action::SessionsOpen,
+        )
+        .describe("Every session this machine ran, live and closed, with reopen")
+        .shortcut(Some(Action::SessionsOpen)),
+    );
     commands.push(Command::new(
         "toggle-sidebar",
         if state.window.sidebar_hidden {

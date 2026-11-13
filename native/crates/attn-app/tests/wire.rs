@@ -10,6 +10,7 @@ mod wire {
     mod garden;
     mod home;
     mod keys;
+    mod ledger;
     mod markdown;
     mod opener;
     mod palette;
