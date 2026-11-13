@@ -110,6 +110,15 @@ pub(crate) fn piece(
     header_pop::hovers(badge, leaf, session, What::Usage)
 }
 
+/// The badge's width in `font`.
+pub(super) fn width(badge: &Badge, font: rune::TextStyle) -> super::fit::Widths {
+    super::fit::Widths {
+        full: super::fit::text_w(&badge.text, font),
+        short: None,
+        icon: None,
+    }
+}
+
 /// The breakdown of the open usage popover, under its badge.
 pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let session = state.facts.sessions.iter().find(|s| s.id == pop.session)?;

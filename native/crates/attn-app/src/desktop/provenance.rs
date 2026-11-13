@@ -3,6 +3,7 @@ use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, row, text};
 
+use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
 use crate::State;
 
@@ -171,58 +172,125 @@ fn status(pr: &SessionPullRequest) -> Said {
     }
 }
 
-/// The provenance pieces in the header of `leaf`.
-pub(crate) fn piece(leaf: &str, session: &str, line: &Line, font: TextStyle, t: &Tokens) -> El {
-    let part = |s: String| text(s).font(font).color(t.text_tertiary).single_line();
-    let title = |s: &String| {
-        text(s.clone())
-            .font(font)
-            .color(t.text_secondary)
-            .single_line()
-            .truncate()
-    };
-    let mut parts: Vec<El> = Vec::new();
+/// One part of the provenance line, and the glyph it keeps when the line shrinks to its icons.
+struct Part<'a> {
+    text: String,
+    icon: Option<&'static str>,
+    does: Does<'a>,
+}
+
+enum Does<'a> {
+    Say,
+    Title,
+    Status(Tone),
+    OpenTarget(&'a str),
+    ShowDetails,
+}
+
+fn parts(line: &Line) -> Vec<Part<'_>> {
+    let part = |text: String, icon, does| Part { text, icon, does };
+    let mut parts = Vec::new();
     if let Some(automation) = &line.automation {
-        parts.push(part("⚡ Automation".into()));
-        parts.push(part(automation.definition.clone()));
+        let kind_icon = automation.target.is_none().then_some("⚡");
+        parts.push(part("⚡ Automation".into(), kind_icon, Does::Say));
+        parts.push(part(automation.definition.clone(), None, Does::Say));
         if automation.superseded {
-            parts.push(part("Superseded session".into()));
+            parts.push(part("Superseded session".into(), None, Does::Say));
         }
         if let Some(target) = &automation.target {
-            let url = target.url.clone();
-            parts.push(
-                part(format!("{} ↗", target.name))
-                    .key(format!("tile.{leaf}.automation.target"))
-                    .role("button")
-                    .label(format!("Open pull request {}", target.name))
-                    .color(t.text_secondary)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx)),
-            );
-            parts.extend(target.title.as_ref().map(title));
+            parts.push(part(
+                format!("{} ↗", target.name),
+                Some("⚡"),
+                Does::OpenTarget(&target.url),
+            ));
+            parts.extend(target.title.clone().map(|t| part(t, None, Does::Title)));
         }
     }
     if let Some(pr) = &line.pull_request {
-        let pressed = (leaf.to_owned(), session.to_owned());
-        let details = part(format!("{} ↗", pr.name))
-            .key(header_pop::anchor(leaf, What::Details))
-            .role("button")
-            .label(format!("Pull request {} details", pr.name))
-            .color(t.text_secondary)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                header_pop::press(state, &pressed.0, &pressed.1, What::Details, tx)
-            });
-        parts.push(part("⎇ PR".into()));
-        parts.push(header_pop::hovers(details, leaf, session, What::Details));
-        parts.push(part(pr.status.0.into()).color(pr.status.1.color(t)));
-        parts.extend(pr.title.as_ref().map(title));
+        parts.push(part("⎇ PR".into(), None, Does::Say));
+        parts.push(part(format!("{} ↗", pr.name), Some("⎇"), Does::ShowDetails));
+        parts.push(part(pr.status.0.into(), None, Does::Status(pr.status.1)));
+        parts.extend(pr.title.clone().map(|t| part(t, None, Does::Title)));
     }
+    parts
+}
+
+/// The provenance line in the header of `leaf`, in full or as its icons alone.
+pub(super) fn piece(
+    leaf: &str,
+    session: &str,
+    line: &Line,
+    level: Level,
+    font: TextStyle,
+    t: &Tokens,
+) -> El {
+    let icons = level == Level::Icon;
+    let pr_name = line.pull_request.as_ref().map(|pr| pr.name.as_str());
+    let target_name = line
+        .automation
+        .as_ref()
+        .and_then(|a| a.target.as_ref())
+        .map(|t| t.name.as_str());
+    let shown = parts(line).into_iter().filter_map(|part| {
+        let content = if icons {
+            part.icon?.to_owned()
+        } else {
+            part.text
+        };
+        let said = text(content).font(font).single_line();
+        let accent = if icons { t.accent } else { t.text_secondary };
+        Some(match part.does {
+            Does::Say => said.color(t.text_tertiary),
+            Does::Title => said.color(t.text_secondary),
+            Does::Status(tone) => said.color(tone.color(t)),
+            Does::OpenTarget(url) => {
+                let url = url.to_owned();
+                said.key(format!("tile.{leaf}.automation.target"))
+                    .role("button")
+                    .label(format!(
+                        "Open pull request {}",
+                        target_name.unwrap_or_default()
+                    ))
+                    .color(accent)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
+            }
+            Does::ShowDetails => {
+                let pressed = (leaf.to_owned(), session.to_owned());
+                let details = said
+                    .key(header_pop::anchor(leaf, What::Details))
+                    .role("button")
+                    .label(format!(
+                        "Pull request {} details",
+                        pr_name.unwrap_or_default()
+                    ))
+                    .color(accent)
+                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                        header_pop::press(state, &pressed.0, &pressed.1, What::Details, tx)
+                    });
+                header_pop::hovers(details, leaf, session, What::Details)
+            }
+        })
+    });
     row()
         .key(format!("tile.{leaf}.provenance"))
-        .min_w(0.0)
-        .shrink()
         .items_center()
         .gap(space::S1)
-        .children(parts)
+        .children(shown)
+}
+
+/// The provenance line's width in full, and as its icons alone.
+pub(super) fn widths(line: &Line, font: TextStyle) -> Widths {
+    let run = |texts: Vec<&str>| {
+        texts.iter().map(|s| text_w(s, font)).sum::<f32>()
+            + space::S1 * texts.len().saturating_sub(1) as f32
+    };
+    let parts = parts(line);
+    let icons: Vec<&str> = parts.iter().filter_map(|p| p.icon).collect();
+    Widths {
+        full: run(parts.iter().map(|p| p.text.as_str()).collect()),
+        short: None,
+        icon: (!icons.is_empty()).then(|| run(icons)),
+    }
 }
 
 fn checks(pr: &SessionPullRequest) -> Said {

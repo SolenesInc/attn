@@ -543,6 +543,7 @@ fn an_automations_header_names_its_definition_and_the_pull_request_it_reviews_an
         ..session("a", "feed-nexus-web#101 · gpt-5.6-sol", Some(priced(2.61)))
     };
     let mut world = start(reviewing, session("b", "docs", None));
+    world.resize((2200.0, SIZE.1));
     let shown = texts(&world, "tile.a.provenance");
     for piece in [
         "⚡ Automation",
@@ -1396,4 +1397,129 @@ fn a_remote_tile_names_its_outpost_only_in_its_header_and_its_split_opens_on_tha
     assert_eq!(spawned[0]["host"], "studio-id");
     assert_eq!(spawned[0]["cwd"], "/work/a");
     assert_eq!(spawned[0]["agent"], "shell");
+}
+
+/// A desktop that shows tile `a` alone, as wide as the window leaves it.
+fn alone() -> Desktop {
+    Desktop {
+        tree_json: pane("a").to_string(),
+        panes: vec![agent_pane("a")],
+        ..desktop("a")
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct Fitted {
+    role: Option<bool>,
+    host: Option<String>,
+    usage: bool,
+    provenance: Option<bool>,
+    id: bool,
+}
+
+fn fitted(world: &World) -> Fitted {
+    let shown = |key: &str| world.screen().find(Target::key(key)).is_some();
+    Fitted {
+        role: shown("tile.a.role")
+            .then(|| texts(world, "tile.a.role").iter().any(|t| t == "Builder")),
+        host: shown("tile.a.host").then(|| texts(world, "tile.a.host").join("")),
+        usage: shown("tile.a.usage"),
+        provenance: shown("tile.a.provenance").then(|| {
+            texts(world, "tile.a.provenance")
+                .iter()
+                .any(|t| t == "⎇ PR")
+        }),
+        id: shown("tile.a.id"),
+    }
+}
+
+fn overflow(world: &World) -> Option<String> {
+    let rect = |key: &str| world.runtime().presented(key).map(|(r, ..)| r);
+    let [x, _, w, _] = rect("tile.a.subline")?;
+    let inner = x + w - 10.0;
+    ["role", "host", "usage", "provenance", "id"]
+        .into_iter()
+        .filter_map(|piece| Some((piece, rect(&format!("tile.a.{piece}"))?)))
+        .find(|(_, [px, _, pw, _])| px + pw > inner + 0.5)
+        .map(|(piece, [px, _, pw, _])| format!("{piece} ends at {} past {inner}", px + pw))
+}
+
+#[test]
+fn a_narrowing_header_shrinks_then_hides_its_pieces_in_order_and_never_runs_past_its_tile() {
+    let builder = Session {
+        host: Some("gpu-box-2".into()),
+        delegation_role: Some(SessionDelegationRole {
+            builtin: Some("builder".into()),
+            name: "Builder".into(),
+            ..SessionDelegationRole::default()
+        }),
+        usage: Some(priced(2.61)),
+        ..with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")])
+    };
+    let mut world = start_on(vec![builder], vec![alone()]);
+
+    let mut steps: Vec<Fitted> = Vec::new();
+    for width in (40..=1200).rev().step_by(2) {
+        world.resize((width as f32, SIZE.1));
+        if let Some(why) = overflow(&world) {
+            panic!("at {width}: {why}");
+        }
+        let now = fitted(&world);
+        if steps.last() != Some(&now) {
+            steps.push(now);
+        }
+    }
+    let at = |role, host: Option<&str>, usage, provenance, id| Fitted {
+        role,
+        host: host.map(str::to_owned),
+        usage,
+        provenance,
+        id,
+    };
+    assert_eq!(
+        steps,
+        [
+            at(Some(true), Some("gpu-box-2"), true, Some(true), true),
+            at(Some(true), Some("gpu-box-2"), false, Some(true), true),
+            at(Some(true), Some("gpu-box-2"), false, Some(true), false),
+            at(Some(true), Some("gpu-box-2"), false, Some(false), false),
+            at(Some(true), Some("gb2"), false, Some(false), false),
+            at(Some(false), Some("gb2"), false, Some(false), false),
+            at(Some(false), Some("gb2"), false, None, false),
+            at(None, Some("gb2"), false, None, false),
+            at(None, None, false, None, false),
+        ]
+    );
+
+    world.resize((1200.0, SIZE.1));
+    assert_eq!(
+        fitted(&world),
+        at(Some(true), Some("gpu-box-2"), true, Some(true), true),
+        "widening brings every piece back in full"
+    );
+}
+
+#[test]
+fn a_pinned_usage_keeps_its_badge_in_a_header_too_narrow_for_it() {
+    let mut titled = pull_request(71, "open", "2026-08-30T12:00:00Z");
+    titled.title = Some("Move the whole release pipeline onto the native app".into());
+    let busy = Session {
+        usage: Some(priced(0.42)),
+        ..with_pull_requests(vec![titled])
+    };
+    let mut world = start_on(vec![busy], vec![alone()]);
+    let badge_drawn = |world: &World| world.runtime().presented("tile.a.usage").is_some();
+    world.gesture(|app| app.click(Target::key("tile.a.usage")));
+    world.resize((300.0, SIZE.1));
+    assert!(breakdown(&world, "a").is_some());
+    assert!(
+        badge_drawn(&world),
+        "the badge the breakdown hangs from stays"
+    );
+    key(&mut world, Key::Escape);
+    assert!(
+        !badge_drawn(&world),
+        "once it closes, the badge gives up its room"
+    );
+    rest(&mut world);
 }

@@ -5,7 +5,9 @@ use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, el, row, text};
 
+use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
+use super::role_icon::Mark;
 use crate::State;
 use crate::sidebar::model::{AgentState, display_name, harness_label};
 
@@ -15,7 +17,13 @@ use crate::sidebar::model::{AgentState, display_name, harness_label};
 pub(crate) struct Trigger {
     text: String,
     label: String,
+    mark: Mark,
+    leads: bool,
 }
+
+const MARK_PX: f32 = 14.0;
+const MARK_GAP: f32 = 5.0;
+const TRIGGER_PAD: f32 = 4.0;
 
 fn dispatched_by_party(session: &Session) -> bool {
     session
@@ -40,12 +48,15 @@ pub(crate) fn trigger(session: &Session, sessions: &[Session]) -> Option<Trigger
     }
     let role = session.delegation_role.as_ref().map(|r| r.name.clone());
     let chain = format!("Show delegation chain for {}", display_name(session));
+    let role_of = session.delegation_role.as_ref();
     Some(Trigger {
         label: match &role {
             Some(role) => format!("{role} · {chain}"),
             None => chain,
         },
         text: role.unwrap_or_else(|| "Delegation chain".into()),
+        mark: Mark::of(role_of),
+        leads: role_of.and_then(|r| r.builtin.as_deref()) == Some("orchestrator"),
     })
 }
 
@@ -129,21 +140,45 @@ pub(crate) fn piece(
     leaf: &str,
     session: &str,
     trigger: &Trigger,
+    level: Level,
     font: TextStyle,
     t: &Tokens,
 ) -> El {
     let pressed = (leaf.to_owned(), session.to_owned());
-    let role = text(trigger.text.clone())
+    let color = if trigger.leads {
+        t.accent
+    } else {
+        t.text_tertiary
+    };
+    let label = (level == Level::Full).then(|| {
+        text(trigger.text.clone())
+            .font(font)
+            .color(color)
+            .single_line()
+    });
+    let role = row()
         .key(header_pop::anchor(leaf, What::Chain))
         .role("button")
         .label(trigger.label.clone())
-        .font(font)
-        .color(t.text_tertiary)
-        .single_line()
+        .items_center()
+        .gap(MARK_GAP)
+        .px(TRIGGER_PAD)
+        .child(trigger.mark.el(MARK_PX, font, color))
+        .children(label)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::press(state, &pressed.0, &pressed.1, What::Chain, tx)
         });
     header_pop::hovers(role, leaf, session, What::Chain)
+}
+
+/// The role's width with its name, and as its mark alone.
+pub(super) fn widths(trigger: &Trigger, font: TextStyle) -> Widths {
+    let mark = trigger.mark.width(MARK_PX, font);
+    Widths {
+        full: TRIGGER_PAD * 2.0 + mark + MARK_GAP + text_w(&trigger.text, font),
+        short: None,
+        icon: Some(TRIGGER_PAD * 2.0 + mark),
+    }
 }
 
 /// The open delegation chain, under its role.

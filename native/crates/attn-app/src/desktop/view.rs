@@ -1,10 +1,12 @@
-use attn_protocol::{Desktop, DesktopPane, OutpostInfo, Session};
+use attn_protocol::{Desktop, DesktopPane, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text};
 
 use super::Area;
+use super::fit::{Level, Piece, Row, Widths, fit};
+use super::header_pop::What;
 use super::layout::{Direction, Leaf, LeafKind, Node};
 use crate::State;
 use crate::shell::Holder;
@@ -64,6 +66,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .as_ref()
         .and_then(|d| d.dragging())
         .map(str::to_owned);
+    let sublines = desktop.map_or_else(Vec::new, |d| sublines(d, facts, desk));
     let reads = (
         version(&facts.desktops),
         version(&facts.profiles),
@@ -77,7 +80,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         (
             ratio_bits(&desk.ratios),
             desk.peeks.unsent(),
-            subline_reads(desktop, &facts.sessions, &facts.outposts),
+            sublines.clone(),
         ),
         *t,
         scale.to_bits(),
@@ -119,7 +122,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 desktop,
                 desk,
                 facts,
-                (&settles, &keys),
+                (&settles, &keys, &sublines),
                 holder.as_ref(),
                 &state.terminals,
                 (t, scale),
@@ -154,31 +157,113 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .child(content)
 }
 
-type SublineReads = (
-    Option<super::chain::Trigger>,
-    Option<String>,
-    Option<super::usage::Badge>,
-    Option<super::provenance::Line>,
-);
+/// What an agent header's second line shows, each piece at the level its tile's width leaves
+/// it.
+#[derive(Clone, Debug, PartialEq, Hash)]
+struct Subline {
+    role: Option<super::chain::Trigger>,
+    host: Option<String>,
+    usage: Option<super::usage::Badge>,
+    provenance: Option<super::provenance::Line>,
+    levels: Vec<(Piece, Level)>,
+}
 
-fn subline_reads(
-    desktop: Option<&Desktop>,
-    sessions: &[Session],
-    outposts: &[OutpostInfo],
-) -> Vec<SublineReads> {
+impl Subline {
+    fn level(&self, piece: Piece) -> Level {
+        self.levels
+            .iter()
+            .find(|(p, _)| *p == piece)
+            .map_or(Level::Full, |(_, level)| *level)
+    }
+
+    fn shows(&self, piece: Piece) -> Option<Level> {
+        Some(self.level(piece)).filter(|level| *level != Level::Hidden)
+    }
+}
+
+const SUBLINE_GAP: f32 = 10.0;
+const SUBLINE_LEFT: f32 = 24.0;
+const SUBLINE_RIGHT: f32 = 10.0;
+
+/// Each agent pane's subline, fitted to its tile's width. A piece whose popover is open keeps
+/// its place, so the popover keeps its anchor.
+fn sublines(
+    desktop: &Desktop,
+    facts: &attn_client::Facts,
+    desk: &super::Desk,
+) -> Vec<(String, Subline)> {
     desktop
-        .into_iter()
-        .flat_map(|d| &d.panes)
-        .filter_map(|p| sessions.iter().find(|s| s.id == p.session_id))
-        .map(|s| {
-            (
-                super::chain::trigger(s, sessions),
-                super::host::name(s, outposts),
-                super::usage::badge(s),
-                super::provenance::line(s),
-            )
+        .panes
+        .iter()
+        .filter_map(|p| {
+            let s = facts.sessions.iter().find(|s| s.id == p.session_id)?;
+            let mut sub = Subline {
+                role: super::chain::trigger(s, &facts.sessions),
+                host: super::host::name(s, &facts.outposts),
+                usage: super::usage::badge(s),
+                provenance: super::provenance::line(s),
+                levels: Vec::new(),
+            };
+            let available = desk
+                .rects
+                .get(&format!("tile.{}", p.pane_id))
+                .map(|[_, _, w, _]| w - SUBLINE_LEFT - SUBLINE_RIGHT);
+            if let Some(available) = available {
+                let pieces: Vec<(Piece, Widths)> = [
+                    sub.role
+                        .as_ref()
+                        .map(|r| (Piece::Role, super::chain::widths(r, SUBLINE_TYPE))),
+                    sub.host
+                        .as_deref()
+                        .map(|h| (Piece::Host, super::host::widths(h))),
+                    sub.usage
+                        .as_ref()
+                        .map(|u| (Piece::Usage, super::usage::width(u, SUBLINE_TYPE))),
+                    sub.provenance.as_ref().map(|l| {
+                        (
+                            Piece::Provenance,
+                            super::provenance::widths(l, SUBLINE_TYPE),
+                        )
+                    }),
+                    Some((Piece::Id, id_width(&s.id))),
+                ]
+                .into_iter()
+                .flatten()
+                .collect();
+                let keep: Vec<Piece> = desk
+                    .header_pop
+                    .open
+                    .as_ref()
+                    .filter(|pop| pop.leaf == p.pane_id)
+                    .map(|pop| match pop.what {
+                        What::Usage => Piece::Usage,
+                        What::Details => Piece::Provenance,
+                        What::Chain => Piece::Role,
+                    })
+                    .into_iter()
+                    .collect();
+                sub.levels = fit(&Row {
+                    available,
+                    gap: SUBLINE_GAP,
+                    pieces: &pieces,
+                    keep: &keep,
+                });
+            }
+            Some((p.pane_id.clone(), sub))
         })
         .collect()
+}
+
+fn short_id(session: &str) -> String {
+    session.chars().take(8).collect()
+}
+
+fn id_width(session: &str) -> Widths {
+    Widths {
+        full: super::fit::text_w(&short_id(session), SUBLINE_TYPE),
+        short: None,
+        icon: None,
+    }
 }
 
 fn settles(desktop: &Desktop, sessions: &[Session]) -> Vec<(String, Settle)> {
@@ -225,10 +310,11 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
     let settles = settles(desktop, &state.facts.sessions);
     let keys = header_keys(state);
     let unsent = state.window.desk.peeks.unsent();
+    let sublines = sublines(desktop, &state.facts, &state.window.desk);
     let cx = TileCx {
         desktop,
         sessions: &state.facts.sessions,
-        outposts: &state.facts.outposts,
+        sublines: &sublines,
         unsent: &unsent,
         settles: &settles,
         keys: &keys,
@@ -257,11 +343,19 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
     tile(leaf, &cx).w_full().h_full()
 }
 
+/// What every tile header on a screen reads: how each turn settles, the keys the header
+/// names, and each agent's second line.
+type HeaderReads<'a> = (
+    &'a [(String, Settle)],
+    &'a HeaderKeys,
+    &'a [(String, Subline)],
+);
+
 fn screen(
     desktop: Option<&Desktop>,
     desk: &super::Desk,
     facts: &attn_client::Facts,
-    (settles, keys): (&[(String, Settle)], &HeaderKeys),
+    (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
     terminals: &Terminals,
     (t, scale): (&Tokens, f32),
@@ -285,7 +379,7 @@ fn screen(
                 let cx = TileCx {
                     desktop,
                     sessions: &facts.sessions,
-                    outposts: &facts.outposts,
+                    sublines,
                     unsent: &unsent,
                     settles,
                     keys,
@@ -355,7 +449,8 @@ fn empty(t: &Tokens, message: &str) -> El {
 struct TileCx<'a> {
     desktop: &'a Desktop,
     sessions: &'a [Session],
-    outposts: &'a [OutpostInfo],
+    /// Each agent pane's second header line, by pane.
+    sublines: &'a [(String, Subline)],
     /// Replies a peek could not send, by terminal.
     unsent: &'a [(String, String)],
     /// How each agent's turn settles, by leaf.
@@ -725,8 +820,10 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
                 &key,
                 &leaf.id,
                 &pane.session_id,
-                session,
-                (cx.sessions, cx.outposts),
+                cx.sublines
+                    .iter()
+                    .find(|(pane, _)| *pane == leaf.id)
+                    .map(|(_, sub)| sub),
                 t,
             )
             .opacity(look.subline_opacity())
@@ -736,49 +833,69 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
 
 /// The agent header's second line: its delegation role, the machine it runs on, its usage, where
 /// it came from, and its short id, which copies the whole id.
-fn subline(
-    key: &str,
-    leaf: &str,
-    session: &str,
-    facts: Option<&Session>,
-    (sessions, outposts): (&[Session], &[OutpostInfo]),
-    t: &Tokens,
-) -> El {
-    let short: String = session.chars().take(8).collect();
+fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Tokens) -> El {
+    let short = short_id(session);
     let id = session.to_owned();
-    let role = facts
-        .and_then(|s| super::chain::trigger(s, sessions))
-        .map(|trigger| super::chain::piece(leaf, session, &trigger, SUBLINE_TYPE, t));
-    let host = facts
-        .and_then(|s| super::host::name(s, outposts))
-        .map(|name| super::host::piece(leaf, &name, t));
-    let usage = facts
-        .and_then(super::usage::badge)
-        .map(|badge| super::usage::piece(leaf, session, &badge, SUBLINE_TYPE, t));
-    let provenance = facts
-        .and_then(super::provenance::line)
-        .map(|line| super::provenance::piece(leaf, session, &line, SUBLINE_TYPE, t));
+    let at = |piece| sub.and_then(|sub| sub.shows(piece));
+    let role = sub.and_then(|sub| {
+        let level = at(Piece::Role)?;
+        Some(super::chain::piece(
+            leaf,
+            session,
+            sub.role.as_ref()?,
+            level,
+            SUBLINE_TYPE,
+            t,
+        ))
+    });
+    let host = sub.and_then(|sub| {
+        let level = at(Piece::Host)?;
+        Some(super::host::piece(leaf, sub.host.as_ref()?, level, t))
+    });
+    let usage = sub.and_then(|sub| {
+        at(Piece::Usage)?;
+        Some(super::usage::piece(
+            leaf,
+            session,
+            sub.usage.as_ref()?,
+            SUBLINE_TYPE,
+            t,
+        ))
+    });
+    let provenance = sub.and_then(|sub| {
+        let level = at(Piece::Provenance)?;
+        Some(super::provenance::piece(
+            leaf,
+            session,
+            sub.provenance.as_ref()?,
+            level,
+            SUBLINE_TYPE,
+            t,
+        ))
+    });
+    let shows_id = sub.is_none_or(|sub| sub.shows(Piece::Id).is_some());
     row()
         .key(format!("{key}.subline"))
         .w_full()
         .h(SUBLINE_PX)
+        .clip_rounded(0.0)
         .items_center()
-        .gap(10.0)
-        .pl(24.0)
-        .pr(10.0)
+        .gap(SUBLINE_GAP)
+        .pl(SUBLINE_LEFT)
+        .pr(SUBLINE_RIGHT)
         .children(role)
         .children(host)
         .children(usage)
         .children(provenance)
-        .child(
+        .children(shows_id.then(|| {
             text(short.clone())
                 .key(format!("{key}.id"))
                 .role("button")
                 .label(format!("Copy session id {short}"))
                 .font(SUBLINE_TYPE)
                 .color(t.text_tertiary)
-                .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone())),
-        )
+                .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone()))
+        }))
 }
 
 /// The header's pencil, which renames the agent's session.
