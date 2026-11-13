@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet};
 use attn_protocol::{ActorView, Session};
 use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, el, row, text};
-use rune_kit::{Button, ButtonVariant};
+use rune::{El, Key, KeyEvent, TextStyle, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant, Placement};
 
 use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
@@ -237,9 +237,6 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .w(300.0)
         .padding(space::S2)
         .gap(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .min_h(0.0)
         .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
@@ -274,7 +271,13 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     } else {
         surface
     };
-    Some(surface.anchored_fit(pop.anchor(), Side::Bottom, rune::Align::Start, 4.0))
+    Some(rune_kit::popover::anchored(
+        attn_ui::kit(t),
+        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        &pop.anchor(),
+        Placement::BottomStart,
+        4.0,
+    ))
 }
 
 fn agents_key(pop: &Pop) -> String {

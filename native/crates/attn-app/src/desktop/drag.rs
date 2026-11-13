@@ -878,9 +878,6 @@ pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
         .absolute(drag.at[0] + 12.0, drag.at[1] + 12.0)
         .px(space::S2)
         .py(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .child(
             text(drag.source.label().to_owned())
                 .font(type_::LABEL)
@@ -910,6 +907,7 @@ pub(crate) fn overlay(state: &State, t: &Tokens) -> Vec<El> {
         ),
         _ => None,
     };
+    let ghost = rune_kit::popover::raised(attn_ui::kit(t), ghost, 6.0);
     mark.into_iter().chain([ghost]).collect()
 }
 

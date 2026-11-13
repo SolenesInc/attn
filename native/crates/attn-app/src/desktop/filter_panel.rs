@@ -58,16 +58,17 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
         t,
         |state, id, tx| state.terminals.close_filter(id, tx),
     );
-    let bar = boxed(row(), t)
+    let bar = row()
         .key(format!("terminal.{id}.filter"))
         .items_center()
         .gap(4.0)
         .px(6.0)
         .py(4.0)
         .children([field, case, count, close]);
+    let bar = surface(bar, t);
     let mut panel = col().items_end().gap(4.0).max_w(640.0).child(bar);
     if let Some(lines) = filtering.lines() {
-        panel = panel.child(results(id, lines, results_height, t));
+        panel = panel.child(surface(results(id, lines, results_height, t), t));
     }
     el().absolute(0.0, 6.0)
         .w_full()
@@ -77,7 +78,7 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
 }
 
 fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
-    let list = boxed(col(), t)
+    let list = col()
         .key(format!("terminal.{id}.filter.results"))
         .padding(4.0)
         .max_h(max_height)
@@ -121,8 +122,8 @@ fn results(id: &str, lines: &[Filtered], max_height: f32, t: &Tokens) -> El {
     }))
 }
 
-fn boxed(el: El, t: &Tokens) -> El {
-    el.radius(6.0).fill(t.bg_elevated).border(1.0, t.border)
+fn surface(el: El, t: &Tokens) -> El {
+    rune_kit::popover::raised(attn_ui::kit(t), el, 6.0)
 }
 
 fn filter_button(

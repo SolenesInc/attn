@@ -1,7 +1,8 @@
 use attn_protocol::{Session, SessionUsage, SessionUsageModel};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, Side, Tx, col, row, text};
+use rune::{El, Tx, col, row, text};
+use rune_kit::Placement;
 
 use super::header_pop::{self, Pop, What};
 use crate::State;
@@ -153,9 +154,6 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .w(300.0)
         .padding(space::S2)
         .gap(space::S2)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .focusable(true)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             header_pop::hover_popover(state, inside, tx)
@@ -175,7 +173,13 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     } else {
         surface
     };
-    Some(surface.anchored(pop.anchor(), Side::Bottom, rune::Align::End, 4.0))
+    Some(rune_kit::popover::anchored(
+        attn_ui::kit(t),
+        rune_kit::popover::raised(attn_ui::kit(t), surface, 6.0),
+        &pop.anchor(),
+        Placement::BottomEnd,
+        4.0,
+    ))
 }
 
 fn model(model: &SessionUsageModel, t: &Tokens) -> El {

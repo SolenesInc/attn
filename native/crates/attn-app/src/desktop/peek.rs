@@ -780,9 +780,6 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
         .label(title)
         .absolute(area.x + x, area.y + y)
         .w(width)
-        .radius(8.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .clip_rounded(8.0)
         .on_hover_change(|state: &mut State, inside, tx: &mut Tx| {
             if inside {
@@ -795,7 +792,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     if let (Some(runtime), Some(h)) = (&open.runtime, height) {
         panel = panel.h(h).children(terminal(state, open, runtime, t));
     }
-    Some(panel)
+    Some(rune_kit::popover::raised(attn_ui::kit(t), panel, 8.0))
 }
 
 fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {

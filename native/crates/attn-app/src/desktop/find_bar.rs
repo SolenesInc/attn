@@ -69,10 +69,8 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
         .gap(4.0)
         .px(6.0)
         .py(4.0)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .children([field, case, count, older, newer, close]);
+    let bar = rune_kit::popover::raised(attn_ui::kit(t), bar, 6.0);
     el().absolute(0.0, 6.0)
         .w_full()
         .pr(14.0)
