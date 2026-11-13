@@ -2,6 +2,7 @@ mod authorization;
 mod board;
 mod checks;
 mod continuation;
+mod handover;
 pub(crate) mod model;
 pub(crate) mod search;
 mod sheet;
@@ -66,6 +67,7 @@ pub(crate) struct Garden {
     /// What one part of a seed page is doing, and the words being written for it.
     edit: Option<spot::Edit>,
     words: TextEdit,
+    handover: Option<handover::Handover>,
     /// The folds open on seed pages, by the key of the control that opens each.
     folds: HashSet<String>,
     pub(crate) board_walk: board::Board,

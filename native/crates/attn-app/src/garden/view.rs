@@ -1074,6 +1074,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
                     .children(sheet.continuation(Some(here), document)),
             ),
         )
+        .children(sheet.handover_form(document))
         .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))

@@ -2,6 +2,7 @@ use rune::{Key, KeyEvent, TextEdit, Tx};
 use serde::Serialize;
 
 use crate::State;
+use crate::requests::Answer;
 
 /// What one part of one seed page is doing: words being written for it, a move sent and not
 /// answered yet, or why the last move was refused. One part at a time.
@@ -140,6 +141,20 @@ impl Spot {
         home: String,
         tx: &mut Tx,
     ) {
+        self.send_as(state, None, build, home, |_, _, _| {}, tx);
+    }
+
+    /// As `send`, under request `id` when given, and running `after` with the answer first; an
+    /// `after` that puts the edit away keeps the keyboard where it put it.
+    pub(super) fn send_as<M: Serialize>(
+        &self,
+        state: &mut State,
+        id: Option<String>,
+        build: impl FnOnce(String) -> M,
+        home: String,
+        after: impl FnOnce(&mut State, &Answer, &mut Tx) + 'static,
+        tx: &mut Tx,
+    ) {
         if Spot::busy(state) {
             return;
         }
@@ -153,9 +168,13 @@ impl Spot {
         });
         garden.revision += 1;
         let spot = self.clone();
-        state.ask(
-            build,
+        let id = id.unwrap_or_else(|| state.next_request_id());
+        let command = build(id.clone());
+        state.ask_as(
+            id,
+            &command,
             move |state, answer, tx| {
+                after(state, &answer, tx);
                 if state
                     .window
                     .garden

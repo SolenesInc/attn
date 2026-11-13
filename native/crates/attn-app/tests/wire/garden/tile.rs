@@ -316,3 +316,55 @@ fn a_seed_tile_offers_send_to_chief_once_a_chief_starts() {
     );
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_seed_tile_hands_its_seed_over_and_leaves_the_keyboard_with_the_agent() {
+    let held = with(cache(), |s| {
+        s.continuation = Some(attn_protocol::SeedContinuation {
+            agent: "claude".into(),
+            cwd: "/tmp/placed".into(),
+            handover_placement: "reuse_cwd".into(),
+            directory_state: "present".into(),
+            ..attn_protocol::SeedContinuation::default()
+        })
+    });
+    let read = held.clone();
+    let mut world = start("s-cache1", vec![held], move |r| {
+        document(r, read.clone(), Vec::new(), &[])
+    });
+    world.daemon.on("delegate", |r| {
+        message(attn_protocol::DelegateResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            result: Some(attn_protocol::DelegateResult {
+                session_id: "agent".into(),
+                ..attn_protocol::DelegateResult::default()
+            }),
+            ..attn_protocol::DelegateResultMessage::new()
+        })
+    });
+
+    world.gesture(|app| app.click(Target::key("seed-tile.t.handover.open")));
+    world.gesture(|app| app.type_text("Pick up the cache work."));
+    key_with(
+        &mut world,
+        Key::Enter,
+        Mods {
+            cmd: true,
+            ..Mods::default()
+        },
+    );
+
+    assert_eq!(world.daemon.sent_of("delegate").len(), 1);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("seed-tile.t.handover.form"))
+            .is_none()
+    );
+    assert_ne!(
+        focused(&world).and_then(|n| n.key).as_deref(),
+        Some("seed-tile.t.handover.open")
+    );
+    assert!(rests(&mut world));
+}

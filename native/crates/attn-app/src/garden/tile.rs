@@ -97,6 +97,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
                     .children(sheet.continuation(held.map(|s| s.as_ref()), document)),
             ),
         )
+        .children(sheet.handover_form(document))
         .children(sheet.chief_form(document))
         .child(sheet.authorization(here))
         .child(sheet.plan(here))

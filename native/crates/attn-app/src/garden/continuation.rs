@@ -16,9 +16,11 @@ impl Sheet<'_> {
         Spot::new(&self.prefix, &here.id, "chief")
     }
 
-    /// Resume and Send to Chief, while the seed is open and the daemon's reading of it is the
+    /// Resume, Handover and Send to Chief, while the seed is open and the daemon's reading of it is the
     /// seed the garden holds: Resume when the seed's agent can come back, naming the outpost it
-    /// runs on, and Send to Chief while the profile has a Chief and no note to it is open.
+    /// runs on, Handover when its last agent left a continuation, and Send to Chief while the
+    /// profile has a Chief; neither of the last two while a note to the next agent or the Chief
+    /// is being written.
     pub(super) fn continuation(
         &self,
         held: Option<&Seed>,
@@ -61,8 +63,12 @@ impl Sheet<'_> {
                 );
             }
         }
+        if self.composing(seed) {
+            return actions;
+        }
+        actions.extend(self.handover_button(seed));
         let chief = self.chief_spot(seed);
-        if self.chief && !self.garden.shown(&chief).writing {
+        if self.chief {
             let opened = chief.clone();
             actions.push(
                 kit_button("Send to Chief")

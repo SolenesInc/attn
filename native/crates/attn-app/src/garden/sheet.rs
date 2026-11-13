@@ -74,6 +74,7 @@ impl Sheet<'_> {
         let mut head = col().key(self.key("head")).w_full().gap(space::S1).child(
             row()
                 .w_full()
+                .flex_wrap()
                 .items_center()
                 .gap(space::S2)
                 .child(
@@ -83,9 +84,10 @@ impl Sheet<'_> {
                         .label(here.title.clone())
                         .font(type_::TITLE)
                         .color(t.text_primary)
+                        .wrap()
                         .grow(1.0),
                 )
-                .child(action),
+                .child(action.flex_wrap()),
         );
         let mut meta = row()
             .key(self.key("head.meta"))

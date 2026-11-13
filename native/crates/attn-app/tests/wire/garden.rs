@@ -14,6 +14,7 @@ mod authorization;
 mod board;
 mod checks;
 mod continuation;
+mod handover;
 mod tile;
 
 const PROFILE: &str = "work";
