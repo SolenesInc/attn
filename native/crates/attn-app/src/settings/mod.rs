@@ -7,6 +7,7 @@ mod bus;
 mod pages;
 mod sections;
 mod tasks;
+mod updates;
 mod view;
 
 use rune::{TextEdit, Tx};
@@ -34,6 +35,7 @@ pub(crate) struct Dialog {
     pub(crate) autosave: autosave::Autosave,
     tasks: tasks::Tasks,
     analytics: analytics::Analytics,
+    updates: updates::Updates,
     bus: bus::Bus,
     /// The text field the focus was in at the last frame.
     editing: Option<String>,
@@ -88,6 +90,7 @@ fn arrive(state: &mut State, tx: &mut Tx) {
     tasks::arrive(state, tx);
     bus::arrive(state, tx);
     analytics::arrive(state, tx);
+    updates::arrive(state);
 }
 
 /// Closes the dialog once every field has landed; a refused field keeps it open, showing why.

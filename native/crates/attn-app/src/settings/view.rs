@@ -5,7 +5,7 @@ use rune_kit::{IconButton, IconButtonVariant};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
-use super::{analytics, appearance, bus, pages, tasks};
+use super::{analytics, appearance, bus, pages, tasks, updates};
 use crate::State;
 use crate::keys::FIELD_KEY_SUFFIX;
 use crate::setting;
@@ -268,6 +268,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::BackgroundTasks => tasks::page(state, state.window.now_ms, t),
         Section::EventBus => bus::page(state, state.window.now_ms, t),
         Section::Analytics => analytics::page(state, t),
+        Section::Updates => updates::page(state, t),
         other => pages::not_yet(other.item().label, t),
     }
 }

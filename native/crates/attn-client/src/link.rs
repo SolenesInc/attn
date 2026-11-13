@@ -11,7 +11,8 @@ use attn_protocol::{
     ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage, RuntimeRespawnedMessage,
     SessionClosedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
     SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
-    SettingsUpdatedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent, WorktreeSweptEvent, go_values,
+    SettingsUpdatedMessage, UpdateChangedMessage, VentsUpdatedMessage, WorktreeStateChangedEvent,
+    WorktreeSweptEvent, go_values,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -561,6 +562,11 @@ impl Task {
             "vents_updated" => {
                 let message: VentsUpdatedMessage = parse(&header.event, text)?;
                 self.store.set_vents(&message.profile_id, message.vents);
+                None
+            }
+            "update_changed" => {
+                let message: UpdateChangedMessage = parse(&header.event, text)?;
+                self.store.set_update_run(message.run);
                 None
             }
             "tasks_changed" => {

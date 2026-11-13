@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
     Ask, Desktop, DesktopTileContentMessage, GitOperation, InitialStateMessage, OutpostInfo,
-    Profile, Seed, Session, SessionLedgerEntry, Vent, Worktree, WorktreeSweepEntry,
+    Profile, Seed, Session, SessionLedgerEntry, UpdateRun, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -37,6 +37,8 @@ pub struct Facts {
     /// The paths git operations run on now, by operation id.
     pub git_running: Arc<BTreeMap<String, String>>,
     pub notifications: Notifications,
+    /// The latest update run, open or finished, when the home has had one.
+    pub update_run: Arc<Option<UpdateRun>>,
 }
 
 /// The selected profile's unread notifications, as counted by the daemon's last list answer
@@ -260,7 +262,8 @@ impl Slices {
     pub const TASKS: Slices = Slices(1 << 14);
     pub const NOTIFICATIONS: Slices = Slices(1 << 15);
     pub const VENTS: Slices = Slices(1 << 16);
-    pub const ALL: Slices = Slices((1 << 17) - 1);
+    pub const UPDATE_RUN: Slices = Slices(1 << 17);
+    pub const ALL: Slices = Slices((1 << 18) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -388,6 +391,7 @@ impl Store {
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
             facts.vents = Arc::new(state.vents.unwrap_or_default());
+            facts.update_run = Arc::new(state.update_run);
             facts.github = Arc::new(GitHub {
                 hosts: state.github_hosts.unwrap_or_default(),
                 polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
@@ -532,6 +536,13 @@ impl Store {
             }
             facts.vents = Arc::new(vents);
             Slices::VENTS
+        });
+    }
+
+    pub(crate) fn set_update_run(&self, run: UpdateRun) {
+        self.change(|facts| {
+            facts.update_run = Arc::new(Some(run));
+            Slices::UPDATE_RUN
         });
     }
 

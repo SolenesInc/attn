@@ -14,6 +14,7 @@ use serde_json::{Value, json};
 mod analytics;
 mod bus;
 mod tasks;
+mod updates;
 
 type Settings = Arc<Mutex<BTreeMap<String, String>>>;
 
