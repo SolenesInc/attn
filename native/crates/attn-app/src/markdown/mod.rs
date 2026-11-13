@@ -76,14 +76,7 @@ pub(crate) fn body(
         (marks.clone(), folds.clone()),
         *t,
     );
-    memo(view.clone(), version, || {
-        let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
-        let document = links::Document {
-            path: content.path.clone(),
-            session: session.map(str::to_owned),
-            outpost,
-            view: view.clone(),
-        };
+    let scroll = |card: El| {
         col()
             .key(view.clone())
             .role("document")
@@ -96,28 +89,47 @@ pub(crate) fn body(
             })
             .padding(space::S3)
             .items_center()
-            .child(
-                col()
-                    .w_full()
-                    .max_w(CARD_MAX_WIDTH)
-                    .padding(CARD_PADDING)
-                    .radius(radius::LG)
-                    .fill(t.bg_panel)
-                    .border(1.0, t.border.alpha(0.5))
-                    .child(reader(
-                        &content.content,
-                        document,
-                        pictures,
-                        folds,
-                        annotates.then(|| Marking {
-                            tile: tile.to_owned(),
-                            uri,
-                            highlights: marks,
-                        }),
-                        t,
-                    )),
-            )
-    })
+            .child(card)
+    };
+    let card = |reading: El| {
+        col()
+            .w_full()
+            .max_w(CARD_MAX_WIDTH)
+            .padding(CARD_PADDING)
+            .radius(radius::LG)
+            .fill(t.bg_panel)
+            .border(1.0, t.border.alpha(0.5))
+            .child(reading)
+    };
+    let read = |marking: Option<Marking>| {
+        let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
+        let document = links::Document {
+            path: content.path.clone(),
+            session: session.map(str::to_owned),
+            outpost: outpost.clone(),
+            view: view.clone(),
+        };
+        reader(
+            &content.content,
+            document,
+            pictures,
+            folds.clone(),
+            marking,
+            t,
+        )
+    };
+    if !annotates {
+        return memo(view.clone(), version, || scroll(card(read(None))));
+    }
+    let root = annotating::root_key(tile);
+    let reading = memo(root.clone(), version, || {
+        read(Some(Marking {
+            tile: tile.to_owned(),
+            uri,
+            highlights: marks,
+        }))
+    });
+    scroll(card(reading).children(annotating::in_document(readings, tile, CARD_PADDING, t)))
 }
 
 /// The marks a reader in tile `tile` paints over document `uri`, and where its selections go.

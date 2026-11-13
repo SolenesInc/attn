@@ -389,6 +389,21 @@ fn delete_strikes_exactly_the_selected_words_and_a_selection_loses_the_whitespac
         (Some(10), Some(21))
     );
     assert!(marks[0].get("text").is_none_or(Value::is_null));
+    let struck: Vec<_> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| !e.strikes.is_empty())
+        .map(|e| (e.text.unwrap_or_default(), e.strikes))
+        .collect();
+    assert_eq!(
+        struck,
+        [(
+            "Cache the tile layout before the first paint.".to_owned(),
+            vec![[10, 21]]
+        )],
+        "a line runs through the deleted words"
+    );
 
     select(&mut world, "b1", 9..10);
     assert!(!toolbar(&world), "whitespace alone opens nothing");
@@ -1211,4 +1226,38 @@ fn a_comment_box_stays_with_its_document_when_the_desktop_changes() {
     );
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_toolbar_and_the_comment_box_move_with_their_passage_when_the_document_scrolls() {
+    let doc = format!("{DOC}\n{}", "A paragraph that takes room.\n\n".repeat(60));
+    let (mut world, _kept) = start_with(&doc, Kept::default());
+    select(&mut world, "b6", 2..11);
+    let document = Target::key("tile.m.document");
+    let moved = |world: &mut World, part: &str| {
+        let shown = Target::key(format!("tile.m.document.{part}"));
+        let screen = world.screen();
+        let [x, y, w, h] = screen.bounds(document.clone()).unwrap();
+        let (offset, before) = (
+            screen.scrolled(document.clone()).unwrap(),
+            screen.bounds(shown.clone()).unwrap(),
+        );
+        world.gesture(|app| app.runtime.wheel(x + w / 2.0, y + h / 2.0, -40.0));
+        world.settle();
+        let screen = world.screen();
+        let scrolled = screen.scrolled(document.clone()).unwrap() - offset;
+        let after = screen.bounds(shown).unwrap();
+        assert!(
+            scrolled > 10.0,
+            "the document scrolled {scrolled} under the {part}"
+        );
+        assert!(
+            (before[1] - after[1] - scrolled).abs() < 1.0,
+            "the {part} moved {} as the document scrolled {scrolled}",
+            before[1] - after[1]
+        );
+    };
+    moved(&mut world, "toolbar");
+    click(&mut world, "toolbar.comment");
+    moved(&mut world, "composer");
 }

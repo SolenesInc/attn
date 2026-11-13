@@ -156,9 +156,14 @@ pub(crate) fn highlights(
                 (false, true) => t.error.alpha(0.2),
                 (false, false) => t.warning.alpha(0.28),
             };
+            let highlight = Highlight::new().bg(bg).key(mark_key(tile, &painted.id));
             out.push((
                 painted.source.clone(),
-                Highlight::new().bg(bg).key(mark_key(tile, &painted.id)),
+                if painted.deletion {
+                    highlight.strike()
+                } else {
+                    highlight
+                },
             ));
         }
     }
@@ -423,30 +428,57 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-/// The toolbar or the comment box of the tile that has one open, over the window.
+/// The comment box of an overall note, over the window under the header's button.
 pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
     let Some(tile) = open(state) else {
         return Vec::new();
     };
-    let reading = &state.readings.tiles[&tile];
-    let window = cx.layout("window").unwrap_or([0.0, 0.0, 1200.0, 800.0]);
-    if let Some(composer) = &reading.composer {
-        let around = match composer.about {
-            Some(_) => cx.layout(&key(&tile, "pending")),
-            None => cx.layout(&key(&tile, "overall")),
-        };
-        return vec![composer_box(&tile, composer, around, window, t)];
-    }
-    let Some(around) = cx.layout(&key(&tile, "pending")) else {
+    let Some(composer) = state.readings.tiles[&tile]
+        .composer
+        .as_ref()
+        .filter(|c| c.about.is_none())
+    else {
         return Vec::new();
     };
-    let size = cx
-        .layout(&key(&tile, "toolbar"))
-        .unwrap_or([0.0, 0.0, 260.0, 36.0]);
+    let window = cx.layout("window").unwrap_or([0.0, 0.0, 1200.0, 800.0]);
+    let around = cx.layout(&key(&tile, "overall"));
+    vec![composer_box(&tile, composer, around, window, t)]
+}
+
+/// The toolbar, or the comment box on a passage, of tile `tile`, placed beside their passage in
+/// the card that holds its reader `inset` points in, so they scroll with it.
+pub(crate) fn in_document(readings: &Readings, tile: &str, inset: f32, t: &Tokens) -> Vec<El> {
+    let Some(reading) = readings.tiles.get(tile) else {
+        return Vec::new();
+    };
+    let shown =
+        reading.pending.is_some() || reading.composer.as_ref().is_some_and(|c| c.about.is_some());
+    let (Some(reader), Some(passage)) = (
+        shown.then(|| rune::memo::layout(&root_key(tile))).flatten(),
+        rune::memo::layout(&key(tile, "pending")),
+    ) else {
+        return Vec::new();
+    };
+    let around = [
+        passage[0] - reader[0] + inset,
+        passage[1] - reader[1] + inset,
+        passage[2],
+        passage[3],
+    ];
+    let frame = [0.0, 0.0, reader[2] + 2.0 * inset, reader[3] + 2.0 * inset];
+    if let Some(composer) = &reading.composer {
+        return vec![composer_box(tile, composer, Some(around), frame, t)];
+    }
+    let size = rune::memo::layout(&key(tile, "toolbar")).unwrap_or([0.0, 0.0, 260.0, 36.0]);
     let left = (around[0] + around[2] / 2.0 - size[2] / 2.0)
-        .clamp(EDGE, (window[2] - size[2] - EDGE).max(EDGE));
-    let top = (around[1] - TOOLBAR_ABOVE).max(EDGE);
-    vec![toolbar(&tile, reading.picking, t).absolute(left, top)]
+        .clamp(EDGE, (frame[2] - size[2] - EDGE).max(EDGE));
+    let above = around[1] - TOOLBAR_ABOVE;
+    let top = if above >= 0.0 {
+        above
+    } else {
+        around[1] + around[3] + TOOLBAR_ABOVE - size[3]
+    };
+    vec![toolbar(tile, reading.picking, t).absolute(left, top)]
 }
 
 fn button(tile: &str, part: &str, glyph: &str, label: &str, t: &Tokens) -> El {
