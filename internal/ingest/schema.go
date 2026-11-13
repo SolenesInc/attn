@@ -48,5 +48,13 @@ func (c *clickHouse) applySchema(ctx context.Context) error {
 			return err
 		}
 	}
+	for _, view := range views {
+		if err := c.exec(ctx, "DROP VIEW IF EXISTS "+view.name, nil); err != nil {
+			return err
+		}
+		if err := c.exec(ctx, "CREATE VIEW "+view.name+" DEFINER = CURRENT_USER SQL SECURITY DEFINER AS "+view.query, nil); err != nil {
+			return err
+		}
+	}
 	return nil
 }

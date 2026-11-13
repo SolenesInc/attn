@@ -98,7 +98,8 @@ go ./cmd/attn-ingest TestOneAddressRegistersAtMostTwentyInstallsAnHour
 go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
 go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
-go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes"
+go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
+go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView"
 
 # ./cmd/attnd's stack tests wait on real processes, one after another in one test
 # binary: 20s of a go test step that used 19 CPU-s (2026-11-04). Each shard links

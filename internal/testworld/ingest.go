@@ -32,7 +32,9 @@ const (
 )
 
 type ClickHouse struct {
-	URL string
+	URL      string
+	server   string
+	database string
 }
 
 func NewClickHouse(t testing.TB) ClickHouse {
@@ -59,7 +61,7 @@ func NewClickHouse(t testing.TB) ClickHouse {
 	values := target.Query()
 	values.Set("database", database)
 	target.RawQuery = values.Encode()
-	return ClickHouse{URL: target.String()}
+	return ClickHouse{URL: target.String(), server: server, database: database}
 }
 
 func (c ClickHouse) Query(t testing.TB, query string) string {
@@ -67,7 +69,41 @@ func (c ClickHouse) Query(t testing.TB, query string) string {
 	return clickHouseQuery(t, c.URL, query)
 }
 
+func (c ClickHouse) Refuses(t testing.TB, query string) bool {
+	t.Helper()
+	status, _ := clickHouseAnswer(t, c.URL, query)
+	return status != http.StatusOK
+}
+
+func (c ClickHouse) User(t testing.TB, grants ...string) ClickHouse {
+	t.Helper()
+	name, password := "attn_test_user_"+randomHex(t, 8), randomHex(t, 16)
+	clickHouseQuery(t, c.server, fmt.Sprintf("CREATE USER %s IDENTIFIED BY '%s'", name, password))
+	t.Cleanup(func() {
+		clickHouseQuery(t, c.server, "DROP DATABASE IF EXISTS "+c.database)
+		clickHouseQuery(t, c.server, "DROP USER IF EXISTS "+name)
+	})
+	for _, grant := range grants {
+		c.Query(t, fmt.Sprintf("GRANT %s TO %s", grant, name))
+	}
+	target, err := url.Parse(c.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target.User = url.UserPassword(name, password)
+	return ClickHouse{URL: target.String(), server: c.server, database: c.database}
+}
+
 func clickHouseQuery(t testing.TB, server, query string) string {
+	t.Helper()
+	status, body := clickHouseAnswer(t, server, query)
+	if status != http.StatusOK {
+		t.Fatalf("clickhouse %q: %d: %s", query, status, body)
+	}
+	return body
+}
+
+func clickHouseAnswer(t testing.TB, server, query string) (int, string) {
 	t.Helper()
 	resp, err := oneShotHTTP.Post(server, "text/plain", strings.NewReader(query))
 	if err != nil {
@@ -75,10 +111,7 @@ func clickHouseQuery(t testing.TB, server, query string) string {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("clickhouse %q: %s: %s", query, resp.Status, body)
-	}
-	return strings.TrimSpace(string(body))
+	return resp.StatusCode, strings.TrimSpace(string(body))
 }
 
 var oneShotHTTP = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}

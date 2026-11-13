@@ -36,6 +36,45 @@ line and the field.
 A record is stored once per install, stream, and seq. The service answers a
 retried batch with its records counted as `duplicates` and adds no rows.
 
+## Views
+
+`events` keeps each record's fields as JSON in `props`. On start, the service
+also creates one view per kind of record, with a typed column for each field
+that [Telemetry](../guide/reference/telemetry.md) lists for the record, under
+the field's own name. A nested field takes its last name (`session.harness` is
+`harness`), except `tokens`, whose fields are `tokens_input`, `tokens_output`,
+`tokens_cache_read` and `tokens_cache_write`. Query the views. Read `events`
+for a record no view covers, such as bus facts, and for the fields no view
+carries, such as the daemon's own memory, goroutines and database size in a
+`process` sample.
+
+Every view has `install_id`, `at` and the build's columns: `build_version`,
+`build_commit`, `build_channel`, `build_time`, `build_fingerprint`,
+`build_protocol`, `build_os`, `build_arch`, `build_dirty`, `app_version` and
+`app_channel`. Every view except `app_actions` has `outpost`, the outpost's hash
+for a record made on an outpost, and empty on the home.
+
+A column is `NULL` only where a missing field means "unknown": `usd`, the
+`tokens_*` columns, `user_input_ms`, `wait_ms`, `footprint_bytes`, the three
+`split` columns of `process_samples`, and `daemon_uptime_s`. Any other missing
+field reads as an empty string, `0` or `false`, so a session with no `model`
+yet has `model = ''`.
+
+| View | One row per | Columns besides `install_id`, `at`, `outpost` and the build columns |
+|---|---|---|
+| `runs` | agent run | `session`, `started_by`, `duration_ms`, `ended`, `opened_turn`, `quiet_stop`, `turn_requested`, `turn_after_stop`, `user_input_ms`, `approvals`, `usage`, `tokens_input`, `tokens_output`, `tokens_cache_read`, `tokens_cache_write`, `usd`, `harness`, `model`, `model_requested`, `launch` |
+| `quiet_stops` | quiet stop verdict, with its run's fields | `session`, `verdict`, `failure`, `turn_after_stop`, `turn_requested`, `started_by`, `harness`, `model`, `launch` |
+| `cli_commands` | `attn` command since 2026-11-02, when commands began to be named by their typed path | `session`, `command` (hooks start with `_`), `caller`, `harness`, `ok`, `exit_code`, `error_kind`, `refusal` |
+| `process_samples` | process role in a `process` sample | `daemon_run`, `daemon_uptime_s` (`NULL` without the run's `daemon_start`), `role`, `shell`, `count`, `resident_bytes`, `footprint_bytes`, `webkit_malloc_bytes`, `owned_graphics_bytes`, `gigacage_bytes`, and the workload: `sessions`, `agents`, `terminals`, `panes_drawn`, `desktops`, `seeds` |
+| `daemon_starts` | daemon start | `daemon_run`, `previous_end`, `stop_reason`, `previous_run` |
+| `app_actions` | app action | `action` (the record's name), `id`, `section`, `reason`, `to`, `wait_ms`, `kind` |
+
+A change to a record's fields changes its view in the same commit, and the
+service drops and recreates the views on every start, so the ClickHouse user
+needs `CREATE VIEW` and `DROP VIEW`. The views run with the service's rights
+(`SQL SECURITY DEFINER`), so a user granted `SELECT` on the views reads them
+without any grant on `events`.
+
 ## Limits
 
 Every refusal names the limit, gives the limit's value, and gives the value that
@@ -87,7 +126,7 @@ DELETE FROM events WHERE install_id IN (SELECT install_id FROM quarantine WHERE 
 
 | Variable | Meaning |
 |---|---|
-| `ATTN_INGEST_CLICKHOUSE_URL` | Required. ClickHouse's HTTP interface with credentials and the database, such as `http://user:password@clickhouse:8123/?database=attn`. The service creates its tables there on start. |
+| `ATTN_INGEST_CLICKHOUSE_URL` | Required. ClickHouse's HTTP interface with credentials and the database, such as `http://user:password@clickhouse:8123/?database=attn`. The service creates its tables and views there on start. |
 | `ATTN_INGEST_IP_SECRET` | Required, at least 32 bytes. Rotating it stops new rows' address hashes from matching older ones. |
 | `ATTN_INGEST_LISTEN` | Listen address, `:8080` by default. |
 | `ATTN_INGEST_BYTES_PER_DAY` | The `bytes_per_day` limit in bytes, `2147483648` (2 GiB) by default. |

@@ -122,7 +122,7 @@ group cli-help ^cli/|^internal/prompttest/
 go ./cmd/attnd TestPRWaitReadyReportsEachActionableUpdateOnceAcrossInvocations
 go ./cmd/attnd TestSettingsCLIDiscoversReadsAndSavesDaemonSettings
 
-group clickhouse ^internal/daemon/analytics|^internal/analytics/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
+group clickhouse ^internal/daemon/analytics|^internal/analytics/|^internal/ingest/|^cmd/attn-ingest/|^internal/testworld/ingest\.go$|^scripts/ingest-clickhouse\.sh$
 go ./internal/daemon TestSharingUploadsTheOutboxToAttnIngestUntilTheUserForgetsTheInstall
 go ./internal/daemon TestForgettingWhileAttnIngestIsUnreachableChangesNothing
 go ./internal/daemon TestTurningSharingOffDuringTheFirstRegistrationSendsNothing
@@ -135,6 +135,7 @@ go ./cmd/attn-ingest TestOversizedRequestsAreRefusedNamingTheLimit
 go ./cmd/attn-ingest TestAQuarantinedInstallIsRefusedWithTheReason
 go ./cmd/attn-ingest TestTheSameBatchSentConcurrentlyIsStoredOnce
 go ./cmd/attn-ingest TestABatchSpanningThousandsOfStreamsStoresOnlyTheNewOnes
+go ./cmd/attn-ingest TestEachRecordKindReadsBackAsTypedColumnsThroughItsView
 
 group app ^app/
 vitest .
