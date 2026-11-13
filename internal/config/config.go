@@ -159,6 +159,13 @@ func AppExecutableInTree(appPath string) string {
 	return filepath.Join(appPath, "Contents", "MacOS", "app")
 }
 
+func BuildIdentityInTree(appPath string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(appPath, "Contents", "Resources", "build-identity.json")
+	}
+	return filepath.Join(appPath, "resources", "build-identity.json")
+}
+
 func AppDaemonBinaryForInstance(instance string) string {
 	return AppDaemonBinaryInTree(AppPathForInstance(instance))
 }
