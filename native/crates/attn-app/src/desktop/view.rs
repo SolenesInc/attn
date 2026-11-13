@@ -149,14 +149,24 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .child(content)
 }
 
-type SublineReads = (Option<super::usage::Badge>, Option<super::provenance::Line>);
+type SublineReads = (
+    Option<super::chain::Trigger>,
+    Option<super::usage::Badge>,
+    Option<super::provenance::Line>,
+);
 
 fn subline_reads(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<SublineReads> {
     desktop
         .into_iter()
         .flat_map(|d| &d.panes)
         .filter_map(|p| sessions.iter().find(|s| s.id == p.session_id))
-        .map(|s| (super::usage::badge(s), super::provenance::line(s)))
+        .map(|s| {
+            (
+                super::chain::trigger(s, sessions),
+                super::usage::badge(s),
+                super::provenance::line(s),
+            )
+        })
         .collect()
 }
 
@@ -669,16 +679,27 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .hover_group()
         .child(headline)
         .children(pane.map(|pane| {
-            subline(&key, &leaf.id, &pane.session_id, session, t).opacity(look.subline_opacity())
+            subline(&key, &leaf.id, &pane.session_id, session, cx.sessions, t)
+                .opacity(look.subline_opacity())
         }))
         .children(track)
 }
 
 /// The agent header's second line: the session's usage, where it came from, and its short id,
 /// which copies the whole id.
-fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &Tokens) -> El {
+fn subline(
+    key: &str,
+    leaf: &str,
+    session: &str,
+    facts: Option<&Session>,
+    sessions: &[Session],
+    t: &Tokens,
+) -> El {
     let short: String = session.chars().take(8).collect();
     let id = session.to_owned();
+    let role = facts
+        .and_then(|s| super::chain::trigger(s, sessions))
+        .map(|trigger| super::chain::piece(leaf, session, &trigger, SUBLINE_TYPE, t));
     let usage = facts
         .and_then(super::usage::badge)
         .map(|badge| super::usage::piece(leaf, session, &badge, SUBLINE_TYPE, t));
@@ -693,6 +714,7 @@ fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &To
         .gap(10.0)
         .pl(24.0)
         .pr(10.0)
+        .children(role)
         .children(usage)
         .children(provenance)
         .child(

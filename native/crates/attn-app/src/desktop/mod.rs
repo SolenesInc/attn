@@ -4,6 +4,7 @@
 mod actions;
 mod annotating;
 pub(crate) mod arrival;
+mod chain;
 mod divider;
 mod drag;
 mod filter_panel;
@@ -177,6 +178,7 @@ pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune:
     match pop.what {
         header_pop::What::Usage => usage::popover(state, pop, t),
         header_pop::What::Details => provenance::popover(state, pop, t),
+        header_pop::What::Chain => chain::popover(state, pop, t),
     }
 }
 

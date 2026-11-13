@@ -51,6 +51,8 @@ pub struct Node {
     pub name: Option<String>,
     pub value: Option<String>,
     pub description: Option<String>,
+    /// An outline row's depth, 1 at the top.
+    pub level: Option<u64>,
     /// What assistive technology hears about the element's state: `focused`, `disabled`,
     /// `checked`, `selected` and the like.
     pub states: Vec<String>,
@@ -136,6 +138,7 @@ fn node(value: &Value) -> Node {
         name: field("name"),
         value: field("value"),
         description: field("description"),
+        level: value.get("level").and_then(Value::as_u64),
         states: value
             .get("states")
             .and_then(Value::as_array)

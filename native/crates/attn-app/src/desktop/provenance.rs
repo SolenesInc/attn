@@ -350,6 +350,8 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         );
     let list = (all.len() > 1).then(|| {
         col()
+            .role("list")
+            .label("Pull requests from this session")
             .w_full()
             .gap(2.0)
             .children(all.iter().enumerate().map(|(i, pr)| {

@@ -8,6 +8,8 @@ pub(crate) enum What {
     Usage,
     /// The details of the session's pull requests.
     Details,
+    /// The delegation chain the session sits in.
+    Chain,
 }
 
 impl What {
@@ -15,13 +17,27 @@ impl What {
         match self {
             What::Usage => "usage",
             What::Details => "details",
+            What::Chain => "role",
         }
     }
 
-    fn shown_for(self, session: &attn_protocol::Session) -> bool {
+    fn shown_for(
+        self,
+        session: &attn_protocol::Session,
+        sessions: &[attn_protocol::Session],
+    ) -> bool {
         match self {
             What::Usage => super::usage::shown(session).is_some(),
             What::Details => super::provenance::pull_request(session).is_some(),
+            What::Chain => super::chain::shown(session, sessions),
+        }
+    }
+
+    /// The row a popover listing several things picks first.
+    fn first_pick(self, session: &str, sessions: &[attn_protocol::Session]) -> usize {
+        match self {
+            What::Chain => super::chain::current_row(session, sessions),
+            What::Usage | What::Details => 0,
         }
     }
 
@@ -30,7 +46,7 @@ impl What {
     fn delays(self) -> (f64, f64) {
         match self {
             What::Usage => (0.16, 0.24),
-            What::Details => (0.0, 0.12),
+            What::Details | What::Chain => (0.0, 0.12),
         }
     }
 }
@@ -61,7 +77,7 @@ pub(crate) fn anchor(leaf: &str, what: What) -> String {
 }
 
 enum Timer {
-    Open(Pop, f64),
+    Open(Pop, usize, f64),
     Close(f64),
 }
 
@@ -92,6 +108,7 @@ pub(crate) fn hovers(piece: El, leaf: &str, session: &str, what: What) -> El {
 }
 
 fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+    let first = what.first_pick(session, &state.facts.sessions);
     let pop = &mut state.window.desk.header_pop;
     let here = |p: &Pop| p.leaf == leaf && p.what == what;
     if pop.open.as_ref().is_some_and(here) {
@@ -103,7 +120,7 @@ fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
         return;
     }
     if pop.open.as_ref().is_some_and(|p| p.pinned)
-        || matches!(&pop.timer, Some(Timer::Open(p, _)) if here(p))
+        || matches!(&pop.timer, Some(Timer::Open(p, ..)) if here(p))
     {
         tx.live_only();
         return;
@@ -117,12 +134,12 @@ fn rest(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
     match what.delays().0 {
         0.0 => {
             pop.timer = None;
-            pop.picked = 0;
+            pop.picked = first;
             pop.open = Some(opening);
         }
         delay => {
             let at = tx.clock() + delay;
-            pop.timer = Some(Timer::Open(opening, at));
+            pop.timer = Some(Timer::Open(opening, first, at));
             tx.wake_at(at);
         }
     }
@@ -166,9 +183,10 @@ pub(crate) fn press(state: &mut State, leaf: &str, session: &str, what: What, tx
 }
 
 fn pinned(state: &mut State, leaf: &str, session: &str, what: What, tx: &mut Tx) {
+    let first = what.first_pick(session, &state.facts.sessions);
     let pop = &mut state.window.desk.header_pop;
     pop.timer = None;
-    pop.picked = 0;
+    pop.picked = first;
     let open = Pop {
         leaf: leaf.to_owned(),
         session: session.to_owned(),
@@ -209,12 +227,12 @@ impl HeaderPop {
                     .sessions
                     .iter()
                     .find(|s| s.id == pop.session)
-                    .is_some_and(|s| pop.what.shown_for(s))
+                    .is_some_and(|s| pop.what.shown_for(s, &facts.sessions))
         };
         if self.open.as_ref().is_some_and(|p| !stands(p)) {
             self.open = None;
         }
-        if matches!(&self.timer, Some(Timer::Open(pop, _)) if !stands(pop)) {
+        if matches!(&self.timer, Some(Timer::Open(pop, ..)) if !stands(pop)) {
             self.timer = None;
         }
     }
@@ -224,15 +242,15 @@ impl HeaderPop {
 pub(crate) fn expire(state: &mut State, now: f64) -> bool {
     let pop = &mut state.window.desk.header_pop;
     let due = match &pop.timer {
-        Some(Timer::Open(_, at) | Timer::Close(at)) => *at <= now,
+        Some(Timer::Open(.., at) | Timer::Close(at)) => *at <= now,
         None => false,
     };
     if !due {
         return false;
     }
     pop.open = match pop.timer.take() {
-        Some(Timer::Open(open, _)) => {
-            pop.picked = 0;
+        Some(Timer::Open(open, first, _)) => {
+            pop.picked = first;
             Some(open)
         }
         _ => None,
