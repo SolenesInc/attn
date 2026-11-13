@@ -12,6 +12,7 @@ type Saved = ((i32, i32), (u32, u32), bool, bool);
 
 thread_local! {
     static MAIN: RefCell<Option<(Prefs, WindowHandle)>> = const { RefCell::new(None) };
+    static TILES: RefCell<Vec<WindowHandle>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Opens the main window where it was when it last closed, from the instance's own prefs
@@ -80,6 +81,22 @@ pub(crate) fn main_window() -> Option<WindowInfo> {
             id: platform_id(window)?,
             mapped: true,
         })
+    })
+}
+
+/// Keeps `window`, a tile window, for drivers outside the process to find. Call it on the
+/// UI thread.
+pub(crate) fn tile_window_opened(window: &WindowHandle) {
+    TILES.with_borrow_mut(|tiles| tiles.push(window.clone()));
+}
+
+/// The tile windows that exist, by their keys and platform ids. Call it on the UI thread.
+pub(crate) fn tile_windows() -> Vec<(String, u64)> {
+    TILES.with_borrow(|tiles| {
+        tiles
+            .iter()
+            .filter_map(|window| Some((window.key().to_owned(), platform_id(window)?)))
+            .collect()
     })
 }
 

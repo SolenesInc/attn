@@ -88,6 +88,19 @@ export class NativeAppDriver {
     return this.window.parkPointerBeside(...args);
   }
 
+  async waitForTileWindow({ shown, timeoutMs = 10_000, pollIntervalMs = 100 }) {
+    const deadline = Date.now() + timeoutMs;
+    let last = [];
+    while (Date.now() < deadline) {
+      const { windows } = await this.client.request('native_windows', {});
+      const visible = new Set(await this.window.shownWindowIds());
+      last = windows.filter((w) => w.label !== 'main').map((w) => ({ ...w, shown: visible.has(w.id) }));
+      if (last.length === 1 && last[0].shown === shown) return last[0];
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+    throw new Error(`waited ${timeoutMs} ms for one tile window ${shown ? 'shown' : 'hidden'}; the app has ${JSON.stringify(last)}`);
+  }
+
   async screenshot(outputPath) {
     const windowId = await this.mainWindowId();
     if (!windowId) {

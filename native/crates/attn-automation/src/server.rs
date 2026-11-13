@@ -111,7 +111,12 @@ pub(crate) fn answer<S: 'static>(
         "native_windows" => {
             return Ok(json!({
                 "pid": std::process::id(),
-                "windows": host.window().map(|w| json!({"label": "main", "title": "attn", "id": w.id, "mapped": w.mapped})).into_iter().collect::<Vec<_>>(),
+                "windows": host
+                    .window()
+                    .map(|w| json!({"label": "main", "title": "attn", "id": w.id, "mapped": w.mapped}))
+                    .into_iter()
+                    .chain(host.tile_windows().into_iter().map(|(key, id)| json!({"label": key, "id": id})))
+                    .collect::<Vec<_>>(),
             }));
         }
         "shot" => {

@@ -64,6 +64,11 @@ impl Host<State> for WindowHost {
         self.read(|_| crate::frame::main_window()).flatten()
     }
 
+    fn tile_windows(&self) -> Vec<(String, u64)> {
+        self.read(|_| crate::frame::tile_windows())
+            .unwrap_or_default()
+    }
+
     fn shot(&self, path: &str, wait: Duration) -> Result<(), String> {
         let (window, commits) = self
             .read(|rt| (crate::frame::main_window(), rt.stats.commits))
@@ -141,6 +146,7 @@ impl crate::desktop::Opener for NativeOpener {
             })
             .on_created(move |window| place(&window, &created));
         let window = rune::open_window(spec);
+        crate::frame::tile_window_opened(&window);
         let placed = window.clone();
         handle.update(setup.into_update(Box::new(move || content_frame(&placed))));
         let bound = crate::bind(

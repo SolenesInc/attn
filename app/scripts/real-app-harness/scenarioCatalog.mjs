@@ -244,6 +244,13 @@ export const scenarioCatalog = [
     app: 'native',
   },
   {
+    id: 'native-tile-windows',
+    runnerId: 'NATIVE-TILE-WINDOWS',
+    label: 'A document tile in the native app pops out into its own window, which hides when the tile comes back and shows again for the next pop-out',
+    command: ['node', 'scripts/real-app-harness/scenario-native-tile-windows.mjs'],
+    app: 'native',
+  },
+  {
     id: 'native-terminal-features',
     runnerId: 'NATIVE-TERMINAL-FEATURES',
     label: 'A shell in the native app scrolls, selects and copies, selects a command block, finds through its history and draws a kitty image',

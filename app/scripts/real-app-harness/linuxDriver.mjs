@@ -192,6 +192,12 @@ export class LinuxDriver extends TargetedWindowDriver {
     return selectOwnedWindow(await this.ownedWindows(), opts)?.id ?? null;
   }
 
+  async shownWindowIds() {
+    const { pid } = await this.ownedWindows();
+    const found = await this.runXdotoolCapture(['search', '--onlyvisible', '--pid', String(pid)]).catch(() => '');
+    return found.split(/\s+/).filter(Boolean).map(Number);
+  }
+
   async waitForMainWindow(timeoutMs = 10_000, pollIntervalMs = 150, opts = {}) {
     const deadline = Date.now() + timeoutMs;
     let lastError = null;

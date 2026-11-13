@@ -24,6 +24,12 @@ pub trait Host<S: 'static>: Send + Sync + 'static {
         None
     }
 
+    /// The windows popped-out tiles show in beside the main one, by their keys, with their
+    /// platform ids as [`WindowInfo::id`]. Whether one shows is the platform's to say.
+    fn tile_windows(&self) -> Vec<(String, u64)> {
+        Vec::new()
+    }
+
     /// Writes a screenshot of the window to `path` once it has drawn what the runtime last
     /// built, waiting up to `wait` for that frame.
     fn shot(&self, _path: &str, _wait: Duration) -> Result<(), String> {
