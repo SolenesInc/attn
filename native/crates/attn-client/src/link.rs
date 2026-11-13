@@ -536,6 +536,10 @@ impl Task {
                 self.store.upsert_session(message.session);
                 None
             }
+            "tasks_changed" => {
+                self.store.tasks_changed();
+                None
+            }
             "kept_conversations_changed" => {
                 self.store.kept_conversations_changed();
                 None

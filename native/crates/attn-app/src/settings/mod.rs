@@ -2,8 +2,10 @@
 
 mod appearance;
 pub(crate) mod autosave;
+mod bus;
 mod pages;
 mod sections;
+mod tasks;
 mod view;
 
 use rune::{TextEdit, Tx};
@@ -29,6 +31,8 @@ pub(crate) struct Dialog {
     pub(crate) section: Section,
     pub(crate) search: TextEdit,
     pub(crate) autosave: autosave::Autosave,
+    tasks: tasks::Tasks,
+    bus: bus::Bus,
     /// The text field the focus was in at the last frame.
     editing: Option<String>,
     /// What waits for the fields to land: the dialog closing, or another page.
@@ -74,6 +78,13 @@ pub(crate) fn open(state: &mut State, tx: &mut Tx) {
     state.window.settings.after_flush = None;
     state.window.layer = Some(Layer::Settings);
     tx.blur();
+    arrive(state, tx);
+}
+
+/// Reads what the page just shown lists from the daemon.
+fn arrive(state: &mut State, tx: &mut Tx) {
+    tasks::arrive(state, tx);
+    bus::arrive(state, tx);
 }
 
 /// Closes the dialog once every field has landed; a refused field keeps it open, showing why.
@@ -128,17 +139,24 @@ fn go(state: &mut State, to: Leave, tx: &mut Tx) {
                 crate::picker::refocus_inline(state, tx);
             }
         }
-        Leave::Show(section) => state.window.settings.section = section,
+        Leave::Show(section) if section != state.window.settings.section => {
+            state.window.settings.section = section;
+            arrive(state, tx);
+        }
+        Leave::Show(_) => {}
     }
 }
 
-/// Takes the daemon's settings into the fields the user has not changed.
-pub(crate) fn follow(state: &mut State) {
+/// Takes the daemon's settings into the fields the user has not changed, and reads the tasks
+/// again when they changed under the Task runner page.
+pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
     let settings = state.facts.settings.clone();
     state.window.settings.autosave.sync(&settings);
+    tasks::follow(state, tx);
 }
 
-/// Before each frame: commits a text field the focus just left, and lets Saved marks go.
+/// Before each frame: commits a text field the focus just left, reads the event bus when its
+/// refresh is due, and lets Saved marks go.
 pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let focused = tx
         .focused()
@@ -153,6 +171,7 @@ pub(crate) fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     if let Some(key) = left {
         autosave::commit_on_leave(state, &key, tx);
     }
+    bus::poll(state, now, tx);
     state.window.settings.autosave.expire(now)
 }
 

@@ -28,6 +28,8 @@ pub struct Facts {
     pub closes: Arc<Closes>,
     /// Rises each time the daemon says attn's kept conversations changed.
     pub kept_conversations: u64,
+    /// Rises each time the daemon says its background tasks changed.
+    pub tasks_changed: u64,
     pub github: Arc<GitHub>,
     pub worktrees: Arc<WorktreePushes>,
     /// The paths git operations run on now, by operation id.
@@ -240,7 +242,8 @@ impl Slices {
     pub const GITHUB: Slices = Slices(1 << 11);
     pub const WORKTREES: Slices = Slices(1 << 12);
     pub const GIT_OPERATIONS: Slices = Slices(1 << 13);
-    pub const ALL: Slices = Slices((1 << 14) - 1);
+    pub const TASKS: Slices = Slices(1 << 14);
+    pub const ALL: Slices = Slices((1 << 15) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -477,6 +480,13 @@ impl Store {
             }
             facts.asks = Arc::new(asks);
             Slices::ASKS
+        });
+    }
+
+    pub(crate) fn tasks_changed(&self) {
+        self.change(|facts| {
+            facts.tasks_changed += 1;
+            Slices::TASKS
         });
     }
 

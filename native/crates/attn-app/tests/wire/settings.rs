@@ -11,6 +11,9 @@ use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
+mod bus;
+mod tasks;
+
 type Settings = Arc<Mutex<BTreeMap<String, String>>>;
 
 /// A daemon that keeps settings as the real one does: a write it accepts is answered, then
@@ -177,8 +180,12 @@ fn nav(world: &World) -> Vec<String> {
         .collect()
 }
 
+/// Past the last timer a settings page sets: a Saved mark's few seconds, and the Event bus
+/// page's next read, which still wakes the window once after the page is left.
+const LAST_TIMER: Duration = Duration::from_secs(31);
+
 fn rest(world: &mut World) {
-    world.advance(Duration::from_secs(7));
+    world.advance(LAST_TIMER);
     assert!(world.runtime_is_at_rest());
 }
 

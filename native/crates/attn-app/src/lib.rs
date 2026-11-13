@@ -168,7 +168,7 @@ pub fn bind(
             palette::follow(state);
             asks::follow(state, tx);
             ledger::follow(state, was, tx);
-            settings::follow(state);
+            settings::follow(state, tx);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {
