@@ -1,14 +1,22 @@
 //! A markdown tile's body: the document the daemon reads from disk, rendered.
 
 mod anchors;
+mod images;
 mod links;
+
+use std::collections::HashMap;
+use std::rc::Rc;
 
 use attn_ui::Tokens;
 use rune::tok::{radius, space, type_};
-use rune::{El, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
-use rune_kit::Markdown;
+use rune::{El, Image, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
+use rune_kit::{ImageFrame, Markdown};
 
 use crate::State;
+
+pub use images::Pictures;
+pub(crate) use images::{follow as follow_images, over as with_image_preview};
+pub(crate) use links::Document;
 
 /// The reading column's width, as the Tauri reader's card caps it.
 const CARD_MAX_WIDTH: f32 = 832.0;
@@ -22,6 +30,7 @@ pub(crate) fn body(
     session: Option<&str>,
     content: Option<&attn_client::TileContent>,
     outposts: &[attn_protocol::OutpostInfo],
+    pictures: &Pictures,
     t: &Tokens,
 ) -> El {
     let Some(attn_client::TileContent {
@@ -47,9 +56,11 @@ pub(crate) fn body(
         title,
         session,
         outpost.as_ref().map(|o| o.name.clone()),
+        pictures.revision,
         *t,
     );
     memo(view.clone(), version, || {
+        let pictures = pictures.of(outpost.as_ref().map(|o| o.host.as_str()));
         let document = links::Document {
             path: content.path.clone(),
             session: session.map(str::to_owned),
@@ -76,12 +87,21 @@ pub(crate) fn body(
                     .radius(radius::LG)
                     .fill(t.bg_panel)
                     .border(1.0, t.border.alpha(0.5))
-                    .child(markdown(&content.content, document, t)),
+                    .child(reader(&content.content, document, pictures, t)),
             )
     })
 }
 
-fn markdown(source: &str, document: links::Document, t: &Tokens) -> El {
+/// `source` as a document at `document.path` reads: its links go where the reader sends them,
+/// its headings are keyed by their slugs for `#fragment` links, and its local images show the
+/// ready `pictures` by the paths they resolve to, opening larger on a press.
+pub(crate) fn reader(
+    source: &str,
+    document: Document,
+    pictures: Rc<HashMap<String, Image>>,
+    t: &Tokens,
+) -> El {
+    let path = document.path.clone();
     let verdict = {
         let path = document.path.clone();
         let outpost = document.outpost.as_ref().map(|o| o.name.clone());
@@ -97,6 +117,16 @@ fn markdown(source: &str, document: links::Document, t: &Tokens) -> El {
             links::follow(state, &document, href, tx)
         })
         .link_help(move |href| help(href).help)
+        .images(move |src| match links::resolve(&path, src) {
+            Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
+            _ => None,
+        })
+        .image_frame(|shown: El, frame: &ImageFrame<'_>| {
+            let (image, alt) = (frame.image.clone(), frame.alt.to_owned());
+            shown.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                images::show(state, image.clone(), &alt, tx)
+            })
+        })
         .link_style(move |href| {
             (!plain(href).follows).then(|| {
                 (

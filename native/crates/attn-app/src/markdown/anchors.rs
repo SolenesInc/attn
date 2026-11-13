@@ -5,21 +5,23 @@ use std::collections::HashMap;
 
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
+/// The extensions rune-kit's Markdown parses with, so blocks found here are the blocks it draws.
+pub(super) const OPTIONS: Options = Options::ENABLE_TABLES
+    .union(Options::ENABLE_TASKLISTS)
+    .union(Options::ENABLE_STRIKETHROUGH)
+    .union(Options::ENABLE_GFM)
+    .union(Options::ENABLE_YAML_STYLE_METADATA_BLOCKS);
+
 /// `(source offset, slug)` for each top-level heading of `source`, the offset at the start of
 /// its first line, as `Markdown::block_keys` takes them. Slugs count every heading, nested ones
 /// too, so the second `## Setup` is `setup-1` wherever the first one sits.
 pub(crate) fn heading_keys(source: &str) -> Vec<(usize, String)> {
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_GFM
-        | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
     let mut slugs = Slugger::default();
     let mut keys = Vec::new();
     let mut depth = 0usize;
     let mut heading: Option<(usize, bool, String)> = None;
     let mut images = 0usize;
-    for (event, range) in Parser::new_ext(source, options).into_offset_iter() {
+    for (event, range) in Parser::new_ext(source, OPTIONS).into_offset_iter() {
         match event {
             Event::Start(Tag::Heading { .. }) => {
                 let line = source[..range.start].rfind('\n').map_or(0, |at| at + 1);

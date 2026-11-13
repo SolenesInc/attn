@@ -370,6 +370,7 @@ impl World {
                 && self.inbox.lock().unwrap().is_empty()
                 && self.terminals.is_empty()
                 && self.replies.is_empty()
+                && !self.runtime.state.pictures.decoding()
             {
                 return;
             }

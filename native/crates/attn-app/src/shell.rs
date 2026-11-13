@@ -324,7 +324,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         Connection::Refused(refusal) => centered(&t, connection::refused(&t, refusal)),
     };
     let banner = (*connection == Connection::Reconnecting).then(|| connection::reconnecting(&t));
-    col()
+    let root = col()
         .key("window")
         .w_full()
         .h_full()
@@ -333,7 +333,8 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .child(title_bar(state, cx, &t))
         .children(banner)
         .child(body)
-        .children(layers(state, &t))
+        .children(layers(state, &t));
+    crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
 }
 
 /// The band the window drags by, over which the window's own controls sit; what it holds

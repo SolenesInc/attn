@@ -115,7 +115,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         desk.held_split().map(str::to_owned),
         super::arrival::keys(&desk.rings),
         facts.tile_contents.revision,
-        outpost_names(&facts.outposts),
+        (outpost_names(&facts.outposts), state.pictures.revision),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -128,7 +128,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 facts,
                 (&settles, &keys, &sublines),
                 holder.as_ref(),
-                &state.terminals,
+                (&state.terminals, &state.pictures),
                 (t, scale),
             ))
         })
@@ -330,6 +330,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         terminals: &state.terminals,
         contents: &state.facts.tile_contents,
         outposts: &state.facts.outposts,
+        pictures: &state.pictures,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
@@ -356,7 +357,7 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    terminals: &Terminals,
+    (terminals, pictures): (&Terminals, &crate::markdown::Pictures),
     (t, scale): (&Tokens, f32),
 ) -> El {
     match desktop {
@@ -400,6 +401,7 @@ fn screen(
                     terminals,
                     contents: &facts.tile_contents,
                     outposts: &facts.outposts,
+                    pictures,
                     stale: &stale,
                     shared: &shared,
                     t,
@@ -470,6 +472,7 @@ struct TileCx<'a> {
     terminals: &'a Terminals,
     contents: &'a attn_client::TileContents,
     outposts: &'a [attn_protocol::OutpostInfo],
+    pictures: &'a crate::markdown::Pictures,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
@@ -678,6 +681,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     session.as_deref(),
                     cx.contents.get(&key),
                     cx.outposts,
+                    cx.pictures,
                     t,
                 ),
                 &holder,

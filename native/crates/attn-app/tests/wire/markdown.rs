@@ -1,6 +1,6 @@
 use attn_protocol::{
     Desktop, DesktopPane, DesktopTileContentMessage, InitialStateMessage,
-    OpenMarkdownResultMessage, OutpostInfo, Profile, Session,
+    OpenMarkdownResultMessage, OutpostInfo, Profile, Session, TileAssetReadResultMessage,
 };
 use attn_testkit::tree::{pane, row, tile};
 use attn_testkit::{Daemon, Target, World};
@@ -378,5 +378,76 @@ fn a_link_in_a_document_on_an_outpost_opens_its_markdown_there_and_says_why_it_c
         Some("Could not open /far/next.md from far: far is unreachable; this needs it now")
     );
     assert!(world.opened_links().is_empty());
+    rest(&mut world);
+}
+
+/// A 4×3 red PNG.
+const RED: &str = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAADCAYAAAC09K7GAAAAEklEQVR4nGP4z8DwHxkzEBQAAGHtF+mRbBMEAAAAAElFTkSuQmCC";
+
+#[test]
+fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
+    let mut world = start();
+    world.daemon.on("tile_asset_read", |r| {
+        let found = r["path"] == "/work/a/img/chart.png";
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: found,
+            data_uri: found.then(|| format!("data:image/png;base64,{RED}")),
+            error: (!found).then(|| "no such file".to_owned()),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    world.daemon.emit(content(
+        "![chart](img/chart.png)\n\n![gone](img/gone.png)\n\n![script](run.command)\n\n\
+         ![remote](https://example.test/x.png)",
+    ));
+    world.settle();
+
+    let mut read: Vec<String> = world
+        .daemon
+        .sent_of("tile_asset_read")
+        .iter()
+        .map(|r| r["path"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    read.sort();
+    assert_eq!(read, ["/work/a/img/chart.png", "/work/a/img/gone.png"]);
+    let pictures: Vec<_> = world
+        .screen()
+        .descendants(Target::key("tile.m.document"))
+        .into_iter()
+        .filter(|n| n.role == "image")
+        .map(|n| n.name.unwrap_or_default())
+        .collect();
+    assert_eq!(pictures, ["chart", "gone", "script", "remote"]);
+
+    world.gesture(|app| app.click(Target::role("image").name("gone")));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+
+    world.gesture(|app| app.click(Target::role("image").name("chart")));
+    let preview = world.screen().get(Target::key("image-preview.picture"));
+    assert_eq!(preview.name.as_deref(), Some("chart"));
+
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Escape,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert!(
+        world
+            .screen()
+            .find(Target::key("image-preview.picture"))
+            .is_none()
+    );
+
+    world.daemon.emit(content("# No pictures now"));
+    world.settle();
+    assert_eq!(world.daemon.sent_of("tile_asset_read").len(), 2);
     rest(&mut world);
 }

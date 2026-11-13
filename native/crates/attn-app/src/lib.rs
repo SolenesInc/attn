@@ -52,6 +52,7 @@ pub struct State {
     pub keymap: Arc<Keymap>,
     pub window: Window,
     pub terminals: Terminals,
+    pub pictures: markdown::Pictures,
     daemon: Commands,
     requests: requests::Requests,
     /// Wall-clock milliseconds when the runtime's clock read zero.
@@ -107,7 +108,11 @@ pub fn bind(
     epoch_ms: i64,
     deliver: impl Fn(Update) + Send + Sync + 'static,
 ) -> Subscription {
+    let deliver = Arc::new(deliver);
+    let woken = deliver.clone();
+    let wake: rune::Waker = Arc::new(move || woken(Box::new(|_, _| {})));
     deliver(Box::new(move |state, _| {
+        state.pictures.start(wake);
         state.epoch_ms = epoch_ms;
         state.daemon = daemon;
         state.terminals.inbox = terminals;
@@ -219,6 +224,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let expired = annotations::draft::expire(state, now) | annotations::draft::due(state, now, tx);
     let browsed = picker::browse_due(state, tx);
     let launched = picker::follow(state, tx);
+    let pictured = markdown::follow_images(state, now, tx);
     let aged = state.age_wake.is_some_and(|at| now >= at);
     if aged {
         state.tick(tx);
@@ -232,6 +238,7 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         || answered
         || browsed
         || launched
+        || pictured
         || drains
         || expired
 }

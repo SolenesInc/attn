@@ -191,6 +191,6 @@ impl TileRuntime {
     }
 
     pub(crate) fn idle(&self) -> bool {
-        self.inbox.lock().unwrap().is_empty()
+        self.inbox.lock().unwrap().is_empty() && !self.runtime.state.pictures.decoding()
     }
 }

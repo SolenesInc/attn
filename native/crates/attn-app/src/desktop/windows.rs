@@ -358,13 +358,14 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
         };
         Some(super::view::lone(state, desktop, leaf, &t, cx.env().scale))
     });
-    col()
+    let root = col()
         .key("window")
         .w_full()
         .h_full()
         .padding(4.0)
         .fill(t.bg_app)
-        .children(shown)
+        .children(shown);
+    crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
 }
 
 /// Names the tile window after its leaf, as the leaf's header does.

@@ -59,6 +59,10 @@ pub(crate) fn is_safe_local(path: &str) -> bool {
         .is_some_and(|e| SAFE_DOCUMENTS.contains(&e.as_str()) || SAFE_IMAGES.contains(&e.as_str()))
 }
 
+pub(crate) fn is_image(path: &str) -> bool {
+    extension(path).is_some_and(|e| SAFE_IMAGES.contains(&e.as_str()))
+}
+
 pub(crate) fn is_markdown(path: &str) -> bool {
     extension(path).is_some_and(|e| e == "md" || e == "markdown")
 }
