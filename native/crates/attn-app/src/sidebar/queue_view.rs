@@ -596,9 +596,7 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             format!("Snooze {name}"),
             attn_ui::icon::MOON,
             t,
-            move |state, tx| {
-                super::snooze::open(state, &id, name.clone(), Some(under.clone()), true, tx)
-            },
+            move |state, tx| super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx),
         )
     });
     Some(

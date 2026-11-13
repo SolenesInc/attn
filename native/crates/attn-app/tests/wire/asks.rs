@@ -805,7 +805,7 @@ fn the_drawer_snoozes_the_asking_agent_and_wakes_it_again() {
     let sent = world.daemon.sent_of("snooze_turn");
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0]["session_id"], "api");
-    assert_eq!(focused(&world).as_deref(), Some("asks.snooze"));
+    assert_eq!(focused(&world).as_deref(), Some("asks.q.q1.choice.0"));
 
     let until = sent[0]["until"].as_str().unwrap().to_owned();
     changes(

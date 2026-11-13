@@ -642,13 +642,11 @@ pub(crate) fn cap_menu(state: &State, t: &Tokens) -> Option<El> {
         .label(format!("{} more this way", held.len()))
         .padding(space::S1)
         .gap(space::S1)
-        .radius(6.0)
-        .fill(t.bg_elevated)
-        .border(1.0, t.border)
         .children(
             held.iter()
                 .map(|c| chip_button(c, &shelf.desktop, peeked.as_deref(), None, t)),
         );
+    let menu = rune_kit::popover::raised(attn_ui::kit(t), menu, 6.0);
     let place = row().w_full().padding(space::S2);
     let place = match side {
         Edge::Left => place,
