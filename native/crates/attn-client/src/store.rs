@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
-use attn_protocol::{Desktop, InitialStateMessage, Profile, Session};
+use attn_protocol::{Desktop, InitialStateMessage, OutpostInfo, Profile, Session};
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
 /// so a slice that did not change keeps its pointer and a view's `memo` can key on it.
@@ -15,6 +15,8 @@ pub struct Facts {
     pub profiles: Arc<Profiles>,
     pub desktops: Arc<Vec<Desktop>>,
     pub settings: Arc<BTreeMap<String, String>>,
+    /// The machines that host remote sessions, by the id a session's `host` names.
+    pub outposts: Arc<Vec<OutpostInfo>>,
 }
 
 impl Facts {
@@ -66,7 +68,8 @@ impl Slices {
     pub const PROFILES: Slices = Slices(1 << 2);
     pub const DESKTOPS: Slices = Slices(1 << 3);
     pub const SETTINGS: Slices = Slices(1 << 4);
-    pub const ALL: Slices = Slices((1 << 5) - 1);
+    pub const OUTPOSTS: Slices = Slices(1 << 5);
+    pub const ALL: Slices = Slices((1 << 6) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -177,6 +180,7 @@ impl Store {
             });
             facts.desktops = Arc::new(state.desktops.unwrap_or_default());
             facts.settings = Arc::new(state.settings.unwrap_or_default());
+            facts.outposts = Arc::new(state.outposts.unwrap_or_default());
             Slices::ALL
         });
     }
@@ -188,6 +192,13 @@ impl Store {
             }
             facts.settings = Arc::new(settings);
             Slices::SETTINGS
+        });
+    }
+
+    pub(crate) fn set_outposts(&self, outposts: Vec<OutpostInfo>) {
+        self.change(|facts| {
+            facts.outposts = Arc::new(outposts);
+            Slices::OUTPOSTS
         });
     }
 

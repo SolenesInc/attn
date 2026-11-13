@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use attn_protocol::{
     AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, PROTOCOL_VERSION,
+    KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
     RuntimeRespawnedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
     SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
@@ -448,6 +448,11 @@ impl Task {
                 let message: ProfileArrangementChangedMessage = parse(&header.event, text)?;
                 self.store
                     .apply_arrangement(message.profile, message.desktops);
+                None
+            }
+            "outposts_updated" => {
+                let message: OutpostsUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_outposts(message.outposts);
                 None
             }
             "profiles_changed" => {

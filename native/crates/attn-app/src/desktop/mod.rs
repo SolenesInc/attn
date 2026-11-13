@@ -10,6 +10,7 @@ mod drag;
 mod filter_panel;
 mod find_bar;
 mod header_pop;
+mod host;
 pub mod layout;
 mod overview;
 mod peek;

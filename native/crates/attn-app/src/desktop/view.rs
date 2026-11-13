@@ -1,4 +1,4 @@
-use attn_protocol::{Desktop, DesktopPane, Session};
+use attn_protocol::{Desktop, DesktopPane, OutpostInfo, Session};
 use attn_term::mouse;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
@@ -77,7 +77,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         (
             ratio_bits(&desk.ratios),
             desk.peeks.unsent(),
-            subline_reads(desktop, &facts.sessions),
+            subline_reads(desktop, &facts.sessions, &facts.outposts),
         ),
         *t,
         scale.to_bits(),
@@ -156,11 +156,16 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
 
 type SublineReads = (
     Option<super::chain::Trigger>,
+    Option<String>,
     Option<super::usage::Badge>,
     Option<super::provenance::Line>,
 );
 
-fn subline_reads(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<SublineReads> {
+fn subline_reads(
+    desktop: Option<&Desktop>,
+    sessions: &[Session],
+    outposts: &[OutpostInfo],
+) -> Vec<SublineReads> {
     desktop
         .into_iter()
         .flat_map(|d| &d.panes)
@@ -168,6 +173,7 @@ fn subline_reads(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<Subline
         .map(|s| {
             (
                 super::chain::trigger(s, sessions),
+                super::host::name(s, outposts),
                 super::usage::badge(s),
                 super::provenance::line(s),
             )
@@ -222,6 +228,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
     let cx = TileCx {
         desktop,
         sessions: &state.facts.sessions,
+        outposts: &state.facts.outposts,
         unsent: &unsent,
         settles: &settles,
         keys: &keys,
@@ -278,6 +285,7 @@ fn screen(
                 let cx = TileCx {
                     desktop,
                     sessions: &facts.sessions,
+                    outposts: &facts.outposts,
                     unsent: &unsent,
                     settles,
                     keys,
@@ -347,6 +355,7 @@ fn empty(t: &Tokens, message: &str) -> El {
 struct TileCx<'a> {
     desktop: &'a Desktop,
     sessions: &'a [Session],
+    outposts: &'a [OutpostInfo],
     /// Replies a peek could not send, by terminal.
     unsent: &'a [(String, String)],
     /// How each agent's turn settles, by leaf.
@@ -712,20 +721,27 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
         .hover_group()
         .child(headline)
         .children(pane.map(|pane| {
-            subline(&key, &leaf.id, &pane.session_id, session, cx.sessions, t)
-                .opacity(look.subline_opacity())
+            subline(
+                &key,
+                &leaf.id,
+                &pane.session_id,
+                session,
+                (cx.sessions, cx.outposts),
+                t,
+            )
+            .opacity(look.subline_opacity())
         }))
         .children(track)
 }
 
-/// The agent header's second line: the session's usage, where it came from, and its short id,
-/// which copies the whole id.
+/// The agent header's second line: its delegation role, the machine it runs on, its usage, where
+/// it came from, and its short id, which copies the whole id.
 fn subline(
     key: &str,
     leaf: &str,
     session: &str,
     facts: Option<&Session>,
-    sessions: &[Session],
+    (sessions, outposts): (&[Session], &[OutpostInfo]),
     t: &Tokens,
 ) -> El {
     let short: String = session.chars().take(8).collect();
@@ -733,6 +749,9 @@ fn subline(
     let role = facts
         .and_then(|s| super::chain::trigger(s, sessions))
         .map(|trigger| super::chain::piece(leaf, session, &trigger, SUBLINE_TYPE, t));
+    let host = facts
+        .and_then(|s| super::host::name(s, outposts))
+        .map(|name| super::host::piece(leaf, &name, t));
     let usage = facts
         .and_then(super::usage::badge)
         .map(|badge| super::usage::piece(leaf, session, &badge, SUBLINE_TYPE, t));
@@ -748,6 +767,7 @@ fn subline(
         .pl(24.0)
         .pr(10.0)
         .children(role)
+        .children(host)
         .children(usage)
         .children(provenance)
         .child(

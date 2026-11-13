@@ -3,9 +3,10 @@ use std::time::Duration;
 use attn_app::{Action, Binding, Keymap};
 use attn_protocol::{
     ActorView, AutomationProvenance, CommandUsage, Desktop, DesktopPane,
-    GetCommandUsageResultMessage, InitialStateMessage, Profile, ProfileArrangementChangedMessage,
-    PullRequestProvenance, RecordCommandUsageResultMessage, Session, SessionDelegationRole,
-    SessionPullRequest, SessionStateChangedMessage, SessionUsage, SessionUsageModel,
+    GetCommandUsageResultMessage, InitialStateMessage, OutpostInfo, OutpostsUpdatedMessage,
+    Profile, ProfileArrangementChangedMessage, PullRequestProvenance,
+    RecordCommandUsageResultMessage, Session, SessionDelegationRole, SessionPullRequest,
+    SessionStateChangedMessage, SessionUsage, SessionUsageModel,
 };
 use attn_testkit::tree::{pane, row};
 use attn_testkit::{Daemon, Target, World, key_event, message};
@@ -101,12 +102,18 @@ fn start_with(sessions: Vec<Session>) -> World {
 }
 
 fn start_on(sessions: Vec<Session>, desktops: Vec<Desktop>) -> World {
-    let daemon = Daemon::scripted().state(InitialStateMessage {
-        selected_profile_id: Some("work".into()),
-        profiles: Some(vec![profile()]),
+    start_from(InitialStateMessage {
         desktops: Some(desktops),
         sessions: Some(sessions),
         ..InitialStateMessage::new()
+    })
+}
+
+fn start_from(state: InitialStateMessage) -> World {
+    let daemon = Daemon::scripted().state(InitialStateMessage {
+        selected_profile_id: Some("work".into()),
+        profiles: Some(vec![profile()]),
+        ..state
     });
     daemon
         .on("get_command_usage", |r| {
@@ -1313,4 +1320,80 @@ fn a_header_warns_while_another_terminal_has_its_conversation_open_naming_where_
     changes(&mut world, session("a", "ledger sweep", None));
     assert_eq!(notice(&world), None);
     rest(&mut world);
+}
+
+fn studio(name: &str) -> OutpostInfo {
+    OutpostInfo {
+        id: "studio-id".into(),
+        name: name.into(),
+        destination: "studio:2200".into(),
+        state: "connected".into(),
+        reach: "reachable".into(),
+        state_since: "2026-10-18T18:00:00Z".into(),
+        ..OutpostInfo::default()
+    }
+}
+
+fn outposts(world: &mut World, outposts: Vec<OutpostInfo>) {
+    world.daemon.emit(OutpostsUpdatedMessage {
+        outposts,
+        ..OutpostsUpdatedMessage::new()
+    });
+    world.settle();
+}
+
+fn host_mark(world: &World, leaf: &str) -> Option<String> {
+    let key = format!("tile.{leaf}.host");
+    world.screen().find(Target::key(&key))?;
+    Some(texts(world, &key).join(""))
+}
+
+#[test]
+fn a_remote_tile_names_its_outpost_only_in_its_header_and_its_split_opens_on_that_outpost() {
+    let remote = Session {
+        agent: "shell".into(),
+        host: Some("studio-id".into()),
+        ..session("a", "Remote", None)
+    };
+    let mut world = start_from(InitialStateMessage {
+        desktops: Some(vec![desktop("a")]),
+        sessions: Some(vec![remote, session("b", "Local", None)]),
+        outposts: Some(vec![studio("studio")]),
+        ..InitialStateMessage::new()
+    });
+
+    assert_eq!(host_mark(&world, "a").as_deref(), Some("studio"));
+    assert_eq!(
+        host_mark(&world, "b"),
+        None,
+        "a local tile names no machine"
+    );
+    let row = texts(&world, "sidebar.session.s-a");
+    assert!(row.iter().any(|t| t.contains("Remote")), "{row:?}");
+    assert!(
+        !row.iter().any(|t| t.contains("studio")),
+        "the sidebar row leaves the machine to the header"
+    );
+
+    outposts(&mut world, vec![studio("Studio Mac")]);
+    assert_eq!(host_mark(&world, "a").as_deref(), Some("Studio Mac"));
+    outposts(&mut world, vec![]);
+    assert_eq!(
+        host_mark(&world, "a").as_deref(),
+        Some("studio-id"),
+        "a host no outpost row names goes by its id"
+    );
+
+    let split = match Keymap::from_setting(None, KeyPlatform::current())
+        .binding(&Action::TerminalSplitVertical)
+    {
+        Some(Binding::Chord(chord)) => key_event(&chord),
+        other => panic!("the split has no single chord: {other:?}"),
+    };
+    world.gesture(|app| app.key(split));
+    let spawned = world.daemon.sent_of("spawn_session");
+    assert_eq!(spawned.len(), 1);
+    assert_eq!(spawned[0]["host"], "studio-id");
+    assert_eq!(spawned[0]["cwd"], "/work/a");
+    assert_eq!(spawned[0]["agent"], "shell");
 }
