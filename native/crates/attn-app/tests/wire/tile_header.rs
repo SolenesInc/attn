@@ -480,11 +480,16 @@ fn a_press_outside_a_pinned_breakdown_closes_it() {
         session("a", "ledger sweep", Some(priced(0.42))),
         session("b", "docs", None),
     );
+    let id = middle(&world, "tile.b.id");
     world.gesture(|app| app.click(Target::key("tile.a.usage")));
     assert!(breakdown(&world, "a").is_some());
-    let at = middle(&world, "tile.b");
-    world.gesture(|app| app.click_at(at));
+    world.gesture(|app| app.click_at(id));
     assert_eq!(breakdown(&world, "a"), None);
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some("s-b"),
+        "the press that closed the breakdown also pressed what it landed on"
+    );
     rest(&mut world);
 }
 
@@ -1520,6 +1525,43 @@ fn a_pinned_usage_keeps_its_badge_in_a_header_too_narrow_for_it() {
     assert!(
         !badge_drawn(&world),
         "once it closes, the badge gives up its room"
+    );
+    rest(&mut world);
+}
+
+#[test]
+fn a_press_hands_the_open_popover_between_the_delegation_chain_and_the_pull_request_details() {
+    let mut world = start_with(vec![
+        with_pull_requests(vec![pull_request(71, "open", "2026-08-30T12:00:00Z")]),
+        session("b", "docs", None),
+        delegate_of("delegate", "glossary rework", "a"),
+    ]);
+
+    let (role, entry) = (
+        middle(&world, "tile.a.role"),
+        middle(&world, "tile.a.details"),
+    );
+    world.gesture(|app| app.click_at(role));
+    world.gesture(|app| app.move_to(entry));
+    rest(&mut world);
+    assert!(
+        chain(&world).is_some(),
+        "resting on the details leaves the pinned chain up"
+    );
+    assert_eq!(details(&world), None);
+
+    world.gesture(|app| app.click_at(entry));
+    assert_eq!(chain(&world), None);
+    assert!(
+        details(&world).is_some(),
+        "the press on the details took over"
+    );
+
+    world.gesture(|app| app.click_at(role));
+    assert_eq!(details(&world), None);
+    assert!(
+        chain(&world).is_some(),
+        "the press on the role took it back"
     );
     rest(&mut world);
 }

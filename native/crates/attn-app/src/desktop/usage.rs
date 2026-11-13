@@ -168,9 +168,11 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
                 .then(|| text("esc close").font(type_::LABEL).color(t.text_muted)),
         );
     let surface = if pop.pinned {
-        surface.modal_tx(true, |state: &mut State, _: &mut Tx| {
-            header_pop::close(state)
-        })
+        surface
+            .modal_tx(true, |state: &mut State, _: &mut Tx| {
+                header_pop::close(state)
+            })
+            .modal_press_through(true)
     } else {
         surface
     };

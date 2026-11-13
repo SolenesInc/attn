@@ -262,6 +262,7 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
             .modal_tx(true, |state: &mut State, _: &mut Tx| {
                 header_pop::close(state)
             })
+            .modal_press_through(true)
     } else {
         surface
     };
