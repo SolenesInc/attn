@@ -530,21 +530,26 @@ pub(crate) fn send(state: &mut State, id: &str, tx: &mut Tx) {
     if sending_now {
         return;
     }
-    flush_note(state, id, tx);
     let marking = state.terminals.marking_mut(id).expect("checked above");
+    let mut edited = false;
     if let Some(popup) = marking.popup.take().filter(|p| p.writing) {
         let comment = popup.comment.text.trim().to_owned();
         if let Some(mark) = marking.mark_mut(&popup.mark) {
+            edited = mark.comment != comment;
             mark.comment = comment;
             if mark.comment.is_empty() && mark.label.is_empty() {
                 marking.remove(&popup.mark);
+                edited = true;
             }
         }
     }
+    if marking.note_due.take().is_some() || edited {
+        persist(state, id, tx);
+    }
     tx.blur();
+    let marking = state.terminals.marking_mut(id).expect("checked above");
     let sending = marking.marks.clone();
     if sending.is_empty() {
-        persist(state, id, tx);
         return;
     }
     let note = marking.note.text.trim().to_owned();

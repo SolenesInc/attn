@@ -624,6 +624,30 @@ fn a_session_waiting_on_an_approval_keeps_the_marks_and_says_why() {
 }
 
 #[test]
+fn a_comment_being_written_when_a_send_is_refused_is_saved_with_the_draft() {
+    let daemon = agent(&[("m1", MESSAGE)], "ready");
+    submit_answers(&daemon, false, "skipped_pending_approval");
+    let mut world = started(daemon);
+    mark_on_cache(&mut world);
+    click(&mut world, "terminal.r1.annotation.label.this-is-wrong");
+    alt_click(&mut world, (10, 0));
+    click(&mut world, "terminal.r1.annotation.write");
+    world.gesture(|app| app.type_text("Rows go after a minute"));
+
+    click(&mut world, "terminal.r1.annotation.send");
+    let state = annotations(&world);
+    assert_eq!(state["outcome"], json!({"kind": "skipped"}));
+    assert_eq!(state["marks"][0]["comment"], "Rows go after a minute");
+    let last = saves(&world).pop().unwrap();
+    assert_eq!(
+        last["annotations"][0]["comment"], "Rows go after a minute",
+        "the daemon holds the comment, so a relaunch or another terminal reads it back"
+    );
+    assert_eq!(submitted(&world).len(), 1);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_session_that_did_not_take_the_feedback_keeps_the_marks() {
     let daemon = agent(&[("m1", MESSAGE)], "ready");
     submit_answers(&daemon, true, "error");
