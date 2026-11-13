@@ -424,11 +424,11 @@ To land a fix, name its seed: ATTN_FREEZE_EXCEPTION=<seed id> scripts/land.sh"
 }
 
 refuse_commits_by_another_author() {
-  local identity others
-  identity="$(git config --global --includes --get user.email || true)"
-  [ -n "$identity" ] || return 0
-  others="$(git log --format='  %h %ae %s' origin/main..HEAD | awk -v identity="$identity" '$2 != identity')"
-  [ -z "$others" ] || fail "these commits are not authored by your global git identity, $identity:
+  local author others
+  author="$(git config --global --includes --get user.email || true)"
+  [ -n "$author" ] || return 0
+  others="$(git log --format='  %h %ae %s' origin/main..HEAD | awk -v author="$author" '$2 != author')"
+  [ -z "$others" ] || fail "these commits are not authored by your global git identity, $author:
 $others
 See which config set the identity with git config --show-origin user.email. If it is not yours, remove it. Then fix these commits with git rebase origin/main --exec 'git commit --amend --no-edit --reset-author' and run scripts/land.sh again."
 }
