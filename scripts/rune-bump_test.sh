@@ -38,6 +38,7 @@ pub use api::*;'
   printf '%s\n' "$api" >"$up/crates/rune/src/api.rs"
   write_crate "$up" rune-kit 'pub fn kit() -> u32 { 1 }'
   printf '\n[features]\nmarkdown = []\nmermaid = ["markdown"]\n' >>"$up/crates/rune-kit/Cargo.toml"
+  write_crate "$up" rune-mermaid 'pub fn shapes() -> u32 { 3 }'
   mkdir -p "$up/vendor/winit/src"
   printf '[package]\nname = "winit"\nversion = "0.30.0"\nedition = "2021"\n' >"$up/vendor/winit/Cargo.toml"
   : >"$up/vendor/winit/src/lib.rs"
@@ -71,11 +72,19 @@ mod tests {
     fn a_diagram_draws() {}
 }
 EOF
+  cat >>"$patch/crates/rune-mermaid/src/lib.rs" <<'EOF'
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_shapes_hold() { assert_eq!(super::shapes(), 3); }
+}
+EOF
   cat >"$patch/FORK.md" <<'EOF'
 | Patch | Why the app cannot do it | Test |
 |---|---|---|
 | The answer stays 42 (`rune/src/lib.rs`) | The answer is Rune's | `tests::the_answer_holds`, `tests::a_wrong_answer_panics` |
 | The kit holds | Inside `Kit \| Menu` | `tests::the_kit_holds`, `tests::only_on_macos` (macOS), `tests::a_diagram_draws` |
+| The shapes hold | Inside the diagram parser | `tests::the_shapes_hold` (rune-mermaid) |
 EOF
   commit "$patch" "Patch the answer"
   git -C "$patch" push -q origin attn
@@ -130,6 +139,7 @@ grep -qF "$(fork_rev attn)" "$work/attn/native/Cargo.lock" || fail "did not move
 grep -qF "ok tests::the_answer_holds" "$work/out" || fail "did not run the patch tests FORK.md lists"
 grep -qF "ok tests::the_kit_holds" "$work/out" || fail "did not run every test of a patch FORK.md lists"
 grep -qF "ok tests::a_wrong_answer_panics" "$work/out" || fail "missed a should_panic test FORK.md lists"
+grep -qF "ok tests::the_shapes_hold" "$work/out" || fail "missed a rune-mermaid test FORK.md lists"
 if [ "$(uname -s)" = Darwin ]; then
   grep -qF "ok tests::only_on_macos" "$work/out" || fail "skipped a macOS test on macOS"
 else

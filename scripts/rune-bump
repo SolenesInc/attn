@@ -112,7 +112,7 @@ resolve the merge by hand as docs/internal/rune-fork.md says, then run scripts/r
     }' "$worktree/FORK.md")"
   [ -n "$ledger" ] || die "FORK.md lists no tests"
   # shellcheck disable=SC2086
-  (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit --features rune-kit/markdown,rune-kit/mermaid --lib -- $ledger)
+  (cd "$worktree" && run env CARGO_TARGET_DIR="$clone/target" cargo test -p rune -p rune-kit -p rune-mermaid --features rune-kit/markdown,rune-kit/mermaid --lib -- $ledger)
   missing=""
   while IFS= read -r test; do
     grep -qxF -e "test $test ... ok" -e "test $test - should panic ... ok" "$log" && say "  ok $test" || missing+=" $test"
