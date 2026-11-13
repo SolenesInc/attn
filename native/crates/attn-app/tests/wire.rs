@@ -18,6 +18,7 @@ mod wire {
     mod picker;
     mod profile;
     mod queue;
+    mod settings;
     mod shelf_drags;
     mod shelf_layout;
     mod shelf_peek;

@@ -291,6 +291,12 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             },
         )
     }));
+    commands.push(Command::new(
+        "settings",
+        "Settings",
+        &["settings", "preferences"],
+        Action::UiOpenSettings,
+    ));
     let settings = &facts.settings;
     let queue_on = setting::on(settings, queue::QUEUE_MODE);
     let crew_on = setting::on(settings, queue::QUEUE_CREW);

@@ -56,7 +56,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) has the agent palette with its queue keys and snooze choices, the command palette with its order, pins and the daemon's history, `>` to switch, and the title bar's Commands button and the queue bar's pill. The commands a native feature lacks show only in the Tauri app: profile switching, Settings, drawers and the shared Codex commands among them. Crew members between sessions, the chief setup row and offline agents wait for the native crew and outpost units. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) has the agent palette with its queue keys and snooze choices, the command palette with its order, pins and the daemon's history, `>` to switch, and the title bar's Commands button and the queue bar's pill. The commands a native feature lacks show only in the Tauri app: profile switching, drawers and the shared Codex commands among them. Crew members between sessions, the chief setup row and offline agents wait for the native crew and outpost units. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 

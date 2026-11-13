@@ -64,6 +64,7 @@ pub struct Window {
     pub(crate) garden: crate::garden::Garden,
     pub(crate) asks: crate::asks::Asks,
     pub(crate) ledger: crate::ledger::Ledger,
+    pub(crate) settings: crate::settings::Dialog,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -361,6 +362,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
     let appearance =
         Appearance::from_setting(state.facts.settings.get("theme").map(String::as_str));
     let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
+    cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let connection = &state.facts.connection;
     let body = match connection {
         Connection::Connected | Connection::Reconnecting { .. } => shell(state, &t, cx.env().scale),
@@ -504,16 +506,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
         Some(Layer::Overview) => layers.extend(crate::desktop::overview(state, t)),
         Some(Layer::Ledger) => layers.push(crate::ledger::view(state, t)),
         Some(Layer::CloseDesktop) => layers.extend(crate::desktop::close_confirmation(state, t)),
-        Some(Layer::Settings) => layers.push(dialog(
-            "settings",
-            "Settings",
-            t,
-            vec![
-                text("Settings are not in the native app yet.")
-                    .font(type_::BODY)
-                    .color(t.text_secondary),
-            ],
-        )),
+        Some(Layer::Settings) => layers.extend(crate::settings::dialog(state, t)),
         Some(Layer::Shortcuts) => layers.push(dialog(
             "shortcuts",
             "Keyboard shortcuts",

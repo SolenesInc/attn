@@ -42,7 +42,10 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
             Outcome::Unavailable
         };
     }
-    if crate::sidebar::dispatch(state, &action, tx) || crate::desktop::run(state, &action, tx) {
+    if crate::sidebar::dispatch(state, &action, tx)
+        || crate::desktop::run(state, &action, tx)
+        || crate::settings::dispatch(state, &action, tx)
+    {
         return Outcome::Ran;
     }
     let window = &mut state.window;
@@ -63,7 +66,6 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
         }
         Action::FileOpen => crate::opener::open(state, tx),
         Action::SessionsOpen => crate::ledger::toggle(state, tx),
-        Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
         Action::SetSetting { key, value } => {

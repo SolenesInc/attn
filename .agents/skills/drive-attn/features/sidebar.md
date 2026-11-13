@@ -70,7 +70,7 @@ Preconditions:
 
 ### In the native app
 
-The native app (`native/`) draws both sidebars, the rail, the queue bar, the agent list and its filter, each row's actions menu, the resize edge and the width keys, and drags desktops into a new order. The palette, Settings, notifications, the title bar's feature buttons and resizing beside a browser tile drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
+The native app (`native/`) draws both sidebars, the rail, the queue bar, the agent list and its filter, each row's actions menu, the resize edge, the width keys and Settings → Appearance's width field, and drags desktops into a new order. Notifications, the title bar's feature buttons and resizing beside a browser tile drive only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).
 
 Preconditions:
 

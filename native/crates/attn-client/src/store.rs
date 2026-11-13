@@ -28,6 +28,14 @@ pub struct Facts {
     pub closes: Arc<Closes>,
     /// Rises each time the daemon says attn's kept conversations changed.
     pub kept_conversations: u64,
+    pub github: Arc<GitHub>,
+}
+
+/// The GitHub hosts the daemon found signed in, or why it does not look for pull requests.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GitHub {
+    pub hosts: Vec<String>,
+    pub polling_off_reason: Option<String>,
 }
 
 /// The sessions the daemon said closed, newest last, as their ledger rows.
@@ -181,7 +189,8 @@ impl Slices {
     pub const ASKS: Slices = Slices(1 << 8);
     pub const CLOSES: Slices = Slices(1 << 9);
     pub const KEPT_CONVERSATIONS: Slices = Slices(1 << 10);
-    pub const ALL: Slices = Slices((1 << 11) - 1);
+    pub const GITHUB: Slices = Slices(1 << 11);
+    pub const ALL: Slices = Slices((1 << 12) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -308,6 +317,10 @@ impl Store {
                 seeds,
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
+            facts.github = Arc::new(GitHub {
+                hosts: state.github_hosts.unwrap_or_default(),
+                polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
+            });
             Slices::ALL
         });
     }
@@ -319,6 +332,16 @@ impl Store {
             }
             facts.settings = Arc::new(settings);
             Slices::SETTINGS
+        });
+    }
+
+    pub(crate) fn set_github(&self, github: GitHub) {
+        self.change(|facts| {
+            if *facts.github == github {
+                return Slices::NONE;
+            }
+            facts.github = Arc::new(github);
+            Slices::GITHUB
         });
     }
 

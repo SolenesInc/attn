@@ -130,7 +130,7 @@ func writeConstants(out *strings.Builder) {
 
 func writeSettings(out *strings.Builder) {
 	out.WriteString("pub struct Setting {\n    pub key: &'static str,\n    pub machine: bool,\n    pub default_on: bool,\n}\n\n")
-	out.WriteString("pub struct Feature {\n    pub key: &'static str,\n    pub name: &'static str,\n    pub stage: &'static str,\n    pub applies: &'static str,\n    pub search: &'static str,\n}\n\n")
+	out.WriteString("pub struct Feature {\n    pub key: &'static str,\n    pub name: &'static str,\n    pub summary: &'static str,\n    pub note: &'static str,\n    pub group: &'static str,\n    pub timing: &'static str,\n    pub stage: &'static str,\n    pub applies: &'static str,\n    pub search: &'static str,\n}\n\n")
 	out.WriteString("pub const SETTINGS: &[Setting] = &[\n")
 	for _, s := range setting.All() {
 		fmt.Fprintf(out, "    Setting { key: %s, machine: %t, default_on: %t },\n",
@@ -138,8 +138,8 @@ func writeSettings(out *strings.Builder) {
 	}
 	out.WriteString("];\n\npub const FEATURES: &[Feature] = &[\n")
 	for _, s := range setting.Features() {
-		fmt.Fprintf(out, "    Feature { key: %s, name: %s, stage: %s, applies: %s, search: %s },\n",
-			rustString(s.Key), rustString(s.Name), rustString(s.Stage.String()), rustString(string(s.Applies)), rustString(s.Search))
+		fmt.Fprintf(out, "    Feature { key: %s, name: %s, summary: %s, note: %s, group: %s, timing: %s, stage: %s, applies: %s, search: %s },\n",
+			rustString(s.Key), rustString(s.Name), rustString(s.Summary), rustString(s.Note), rustString(string(s.Group)), rustString(s.Applies.Timing()), rustString(s.Stage.String()), rustString(string(s.Applies)), rustString(s.Search))
 	}
 	out.WriteString("];\n\n")
 }

@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use attn_protocol::{
     AsksUpdatedMessage, AttachResultMessage, ClientHelloMessage, CommandErrorMessage,
-    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, InitialStateMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
-    ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
-    RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
+    GardenSeedsChangedMessage, GardenSeedsUpdatedMessage, GitHubHostsUpdatedMessage,
+    InitialStateMessage, KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage,
+    PROTOCOL_VERSION, ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage,
+    PtyResizedMessage, RuntimeRespawnedMessage, SessionClosedMessage, SessionExitedMessage,
     SessionMessagesChangedMessage, SessionRegisteredMessage, SessionUnregisteredMessage,
     SessionsUpdatedMessage, SettingsUpdatedMessage, go_values,
 };
@@ -504,6 +504,14 @@ impl Task {
                     message.seeds,
                     message.total,
                 );
+                None
+            }
+            "github_hosts_updated" => {
+                let message: GitHubHostsUpdatedMessage = parse(&header.event, text)?;
+                self.store.set_github(crate::store::GitHub {
+                    hosts: message.github_hosts,
+                    polling_off_reason: message.github_polling_off_reason.filter(|r| !r.is_empty()),
+                });
                 None
             }
             "outposts_updated" => {
