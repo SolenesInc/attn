@@ -14,6 +14,7 @@ pub mod layout;
 mod overview;
 mod peek;
 mod provenance;
+mod shared_conversation;
 mod shelf;
 mod spotlight;
 mod stale_build;

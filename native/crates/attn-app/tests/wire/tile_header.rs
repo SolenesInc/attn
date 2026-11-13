@@ -97,10 +97,14 @@ fn start(a: Session, b: Session) -> World {
 
 /// The two tiles show the first two of `sessions`; the rest run off screen.
 fn start_with(sessions: Vec<Session>) -> World {
+    start_on(sessions, vec![desktop("a")])
+}
+
+fn start_on(sessions: Vec<Session>, desktops: Vec<Desktop>) -> World {
     let daemon = Daemon::scripted().state(InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile()]),
-        desktops: Some(vec![desktop("a")]),
+        desktops: Some(desktops),
         sessions: Some(sessions),
         ..InitialStateMessage::new()
     });
@@ -1195,5 +1199,118 @@ fn a_chain_taller_than_the_window_fits_it_and_scrolls_to_the_agent_it_picks() {
     key(&mut world, Key::End);
     world.settle();
     assert!(shows(&world, current), "End brings the last agent back");
+    rest(&mut world);
+}
+
+#[test]
+fn a_header_without_a_label_goes_by_its_harness() {
+    let mut world = start(
+        Session {
+            agent: "claude".into(),
+            ..session("a", "ledger sweep", None)
+        },
+        session("b", "docs", None),
+    );
+    changes(
+        &mut world,
+        Session {
+            agent: "claude".into(),
+            ..session("a", "", None)
+        },
+    );
+    let rename = world.screen().get(Target::key("tile.a.rename"));
+    assert_eq!(rename.name.as_deref(), Some("Rename session Claude"));
+    rest(&mut world);
+}
+
+#[test]
+fn renaming_from_the_header_sends_nothing_for_the_same_name_or_escape_and_refuses_an_empty_one() {
+    let mut world = start(
+        Session {
+            agent: "claude".into(),
+            ..session("a", "ledger sweep", None)
+        },
+        session("b", "docs", None),
+    );
+    let dialog = |world: &World| {
+        world
+            .screen()
+            .find(Target::role("dialog").name("Rename session"))
+            .is_some()
+    };
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    key(&mut world, Key::Enter);
+    assert!(!dialog(&world), "the same name only closes");
+
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    key(&mut world, Key::Escape);
+    assert!(!dialog(&world));
+
+    world.gesture(|app| app.click(Target::key("tile.a.rename")));
+    world.gesture(|app| app.type_text("   "));
+    key(&mut world, Key::Enter);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("session.rename.refused"))
+            .and_then(|n| n.name)
+            .as_deref(),
+        Some("An agent name cannot be empty; only shell terminals have automatic titles")
+    );
+    assert!(world.daemon.sent_of("rename_session").is_empty());
+    rest(&mut world);
+}
+
+#[test]
+fn a_header_warns_while_another_terminal_has_its_conversation_open_naming_where_until_it_closes() {
+    let reviews = Desktop {
+        id: "work/desktop_2".into(),
+        name: "Reviews".into(),
+        shortcut_slot: Some(2),
+        order_key: "2".into(),
+        tree_json: pane("peer").to_string(),
+        active_pane_id: "peer".into(),
+        panes: vec![DesktopPane {
+            desktop_id: "work/desktop_2".into(),
+            ..agent_pane("peer")
+        }],
+        ..desktop("a")
+    };
+    let mut world = start_on(
+        vec![
+            Session {
+                conversation_shared_with: Some(vec!["s-peer".into()]),
+                ..session("a", "ledger sweep", None)
+            },
+            session("b", "docs", None),
+            Session {
+                conversation_shared_with: Some(vec!["s-a".into()]),
+                ..session("peer", "ledger sweep, again", None)
+            },
+        ],
+        vec![desktop("a"), reviews],
+    );
+    let notice = |world: &World| {
+        world
+            .screen()
+            .find(Target::key("session.s-a.shared-conversation"))
+            .map(|_| texts(world, "session.s-a.shared-conversation"))
+    };
+    assert_eq!(
+        notice(&world).expect("the notice is up"),
+        [
+            "This conversation is also open in “ledger sweep, again” on Reviews.",
+            "Two agent processes on one conversation split its history. Close one of them.",
+        ]
+    );
+    assert!(
+        world
+            .screen()
+            .find(Target::key("session.s-b.shared-conversation"))
+            .is_none()
+    );
+
+    changes(&mut world, session("a", "ledger sweep", None));
+    assert_eq!(notice(&world), None);
     rest(&mut world);
 }

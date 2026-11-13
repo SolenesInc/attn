@@ -60,11 +60,7 @@ pub(super) fn notice(session: &str, t: &Tokens) -> El {
         .fill(t.bg_panel)
         .border(1.0, t.border)
         .children([reload_hint(t), body, dismiss]);
-    el().absolute(0.0, 12.0)
-        .w_full()
-        .px(12.0)
-        .justify_center()
-        .child(card)
+    el().pt(12.0).w_full().px(12.0).justify_center().child(card)
 }
 
 /// A sketch of the sidebar row whose ••• menu holds Reload session.

@@ -101,7 +101,12 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.find_bars(),
         state.terminals.filter_panels(),
         state.terminals.annotation_layers(),
-        stale_builds(&facts.sessions, desk),
+        (
+            stale_builds(&facts.sessions, desk),
+            desktop.map(|d| {
+                super::shared_conversation::notices(&facts.sessions, &facts.desktops, &d.id)
+            }),
+        ),
         desk.held_split().map(str::to_owned),
         super::arrival::keys(&desk.rings),
     );
@@ -234,6 +239,11 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
+        shared: &super::shared_conversation::notices(
+            &state.facts.sessions,
+            &state.facts.desktops,
+            &desktop.id,
+        ),
         t,
         scale,
     };
@@ -260,6 +270,11 @@ fn screen(
                 let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
                 let unsent = desk.peeks.unsent();
                 let stale = stale_builds(&facts.sessions, desk);
+                let shared = super::shared_conversation::notices(
+                    &facts.sessions,
+                    &facts.desktops,
+                    &desktop.id,
+                );
                 let cx = TileCx {
                     desktop,
                     sessions: &facts.sessions,
@@ -283,6 +298,7 @@ fn screen(
                     holder,
                     terminals,
                     stale: &stale,
+                    shared: &shared,
                     t,
                     scale,
                 };
@@ -349,6 +365,8 @@ struct TileCx<'a> {
     terminals: &'a Terminals,
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
+    /// Sessions whose conversation another terminal also has open, with where it is.
+    shared: &'a [(String, String)],
     t: &'a Tokens,
     scale: f32,
 }
@@ -486,8 +504,23 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 )),
                 None => slot,
             };
-            let slot = if cx.stale.contains(&pane.session_id) {
-                slot.child(super::stale_build::notice(&pane.session_id, t))
+            let shared = cx
+                .shared
+                .iter()
+                .find(|(s, _)| *s == pane.session_id)
+                .map(|(s, lead)| super::shared_conversation::notice(s, lead, t));
+            let stale = cx
+                .stale
+                .contains(&pane.session_id)
+                .then(|| super::stale_build::notice(&pane.session_id, t));
+            let slot = if shared.is_some() || stale.is_some() {
+                slot.child(
+                    col()
+                        .absolute(0.0, 0.0)
+                        .w_full()
+                        .children(shared)
+                        .children(stale),
+                )
             } else {
                 slot
             };
