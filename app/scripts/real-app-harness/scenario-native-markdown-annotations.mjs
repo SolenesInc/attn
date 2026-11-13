@@ -101,7 +101,7 @@ try {
   await runner.step('send_delivers_both_marks_to_the_bound_agent', async () => {
     await driver.waitFor({ role: 'button', name: 'Send 2 to reader' });
     await driver.click(part('send'));
-    await driver.waitFor({ role: 'status', name: 'Sent ✓' });
+    await driver.waitFor({ role: 'button', name: 'Sent ✓' });
     await driver.state(`terminal:${agent.runtimeId}`, { includes: COMMENT, timeoutMs: 30_000 });
     await driver.state(`terminal:${agent.runtimeId}`, { includes: 'got document feedback', timeoutMs: 30_000 });
     const draft = await stored();

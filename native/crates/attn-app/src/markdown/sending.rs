@@ -144,16 +144,6 @@ pub(crate) fn controls(
         Some(Sent::Warning(why) | Sent::Failed(why)) => Some(why.clone()),
         Some(Sent::Sending) | None => None,
     };
-    parts.extend(status.map(|s| {
-        text(s)
-            .key(key(tile, "send.status"))
-            .role("status")
-            .font(type_::LABEL)
-            .color(t.text_tertiary)
-            .single_line()
-            .truncate()
-            .max_w(220.0)
-    }));
     let caret = |label: &str| {
         let tile = tile.to_owned();
         place(
@@ -201,6 +191,7 @@ pub(crate) fn controls(
             .map(|chord| format!(" ({chord})"))
             .unwrap_or_default();
         let title = match (kind, to) {
+            _ if problem => status.clone().unwrap_or_default(),
             (
                 Kind::Seed {
                     tender: Some(_), ..
@@ -219,7 +210,7 @@ pub(crate) fn controls(
         let disabled = matches!(sent, Some(Sent::Sending)) || count == 0 || nowhere;
         let send_tile = tile.to_owned();
         let face = label.clone();
-        parts.push(place(
+        let button = place(
             Button::new(label)
                 .variant(ButtonVariant::Outline)
                 .label_with(move |_, ink| text(face).font(type_::LABEL).color(ink))
@@ -227,7 +218,12 @@ pub(crate) fn controls(
                 .disabled(disabled)
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &send_tile, tx)),
             "send",
-        ));
+        )
+        .live_region(rune::LiveRegion::Polite);
+        parts.push(match status {
+            Some(status) => button.description(status),
+            None => button,
+        });
         match kind {
             Kind::File { .. } if any => parts.push(caret("Change annotation destination")),
             Kind::Seed {

@@ -385,6 +385,13 @@ fn label_of(world: &World, part: &str) -> Option<String> {
         .and_then(|n| n.name)
 }
 
+fn description_of(world: &World, part: &str) -> Option<String> {
+    world
+        .screen()
+        .find(Target::key(format!("tile.m.document.{part}")))
+        .and_then(|n| n.description)
+}
+
 fn ctrl_enter() -> rune::KeyEvent {
     rune::KeyEvent {
         key: rune::Key::Enter,
@@ -967,7 +974,7 @@ fn a_send_the_session_could_not_take_keeps_the_marks_and_says_why() {
         click(&mut world, "send");
         assert_eq!(label_of(&world, "send").as_deref(), Some(label), "{status}");
         assert_eq!(
-            label_of(&world, "send.status").as_deref(),
+            description_of(&world, "send").as_deref(),
             Some(status_line),
             "{status}"
         );
@@ -1363,6 +1370,16 @@ fn a_seeds_marks_go_to_its_tender_or_onto_the_seed_as_a_note() {
         (Some("s-plan"), None)
     );
     assert_eq!(label_of(&world, "send").as_deref(), Some("Noted ✓"));
+    assert_eq!(
+        world
+            .screen()
+            .descendants(Target::key("tile.m"))
+            .iter()
+            .filter(|n| n.name.as_deref() == Some("Noted ✓"))
+            .count(),
+        1,
+        "the header says it once"
+    );
 
     let (mut world, _) = start_with(
         DOC,
