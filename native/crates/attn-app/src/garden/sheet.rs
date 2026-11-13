@@ -134,10 +134,10 @@ impl Sheet<'_> {
         let view = self.view.clone();
         let key = self.key("plan");
         let t = *self.t;
-        let folds = self.readings.folds(&view);
+        let kept = self.readings.kept(&view);
         memo(
             self.key(&format!("plan.{}", here.id)),
-            (body.clone(), view.clone(), folds.clone(), t),
+            (body.clone(), view.clone(), kept.clone(), t),
             move || {
                 col()
                     .key(key)
@@ -153,7 +153,7 @@ impl Sheet<'_> {
                             view,
                         },
                         std::rc::Rc::default(),
-                        folds,
+                        kept,
                         None,
                         &t,
                     ))

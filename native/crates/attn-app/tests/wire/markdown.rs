@@ -713,3 +713,31 @@ fn a_diagram_that_draws_without_a_statement_it_cannot_read_says_which() {
     );
     rest(&mut world);
 }
+
+#[test]
+fn a_code_blocks_copy_button_copies_its_code_and_says_so_a_while() {
+    let mut world = start();
+    world.daemon.emit(content(
+        "Run it:\n\n```sh\nmake check\n```\n\n```rust\nfn main() {}\n```\n",
+    ));
+    world.settle();
+    let buttons =
+        |world: &World, name: &str| world.screen().all(Target::role("button").name(name)).len();
+    assert_eq!(buttons(&world, "Copy code"), 2, "one on each code block");
+    world.gesture(|app| app.click(Target::role("button").name("Copy code")));
+    world.settle();
+    assert_eq!(
+        world.clipboard.text().map(|t| t.to_string()).as_deref(),
+        Some("make check")
+    );
+    assert_eq!(
+        (buttons(&world, "Copied!"), buttons(&world, "Copy code")),
+        (1, 1)
+    );
+    world.advance(std::time::Duration::from_secs(3));
+    world.settle();
+    assert_eq!(
+        (buttons(&world, "Copied!"), buttons(&world, "Copy code")),
+        (0, 2)
+    );
+}

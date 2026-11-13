@@ -64,6 +64,17 @@ pub(crate) struct Reading {
     pub(crate) clearing: Option<f64>,
 }
 
+/// What people did to a document: the `<details>` blocks they opened or closed, by the source
+/// byte each block's tag starts at, and the code block that says it was just copied.
+#[derive(Clone, Default, PartialEq, Hash)]
+pub(crate) struct Kept {
+    pub(crate) folds: BTreeMap<usize, bool>,
+    pub(crate) copied: Option<usize>,
+}
+
+/// How long a copied code block says "Copied!", as the Tauri reader does.
+const COPIED_SECONDS: f64 = 2.0;
+
 /// Each document tile's reading, by tile, and the comments written and not yet saved, by the
 /// passage they are about.
 #[derive(Default)]
@@ -75,14 +86,32 @@ pub struct Readings {
     /// Which `<details>` blocks people opened or closed, by the scroll view their document
     /// reads in and the source byte each block's tag starts at.
     folds: HashMap<String, BTreeMap<usize, bool>>,
+    /// The code block last copied, by the scroll view its document reads in and its place among
+    /// the fences, until it stops saying so.
+    copied: Option<(String, usize, f64)>,
     /// Moves with every change, so views that show them build again.
     pub(crate) revision: u64,
 }
 
 impl Readings {
-    /// The `<details>` blocks people opened or closed in the document `view` scrolls.
-    pub(crate) fn folds(&self, view: &str) -> BTreeMap<usize, bool> {
-        self.folds.get(view).cloned().unwrap_or_default()
+    /// What people did to the document `view` scrolls.
+    pub(crate) fn kept(&self, view: &str) -> Kept {
+        Kept {
+            folds: self.folds.get(view).cloned().unwrap_or_default(),
+            copied: self
+                .copied
+                .as_ref()
+                .filter(|(at, _, _)| at == view)
+                .map(|(_, index, _)| *index),
+        }
+    }
+
+    /// Code block `index` of the document `view` scrolls was copied: it says so a while.
+    pub(crate) fn copied(&mut self, view: &str, index: usize, tx: &mut Tx) {
+        let until = tx.clock() + COPIED_SECONDS;
+        tx.wake_at(until);
+        self.copied = Some((view.to_owned(), index, until));
+        self.revision += 1;
     }
 
     pub(crate) fn fold(&mut self, view: &str, at: usize, open: bool) {
@@ -725,6 +754,15 @@ fn composer_text<'a>(state: &'a mut State, tile: &str) -> &'a mut TextEdit {
 /// Lets each glow whose time is up go. True when one went.
 pub(crate) fn expire(state: &mut State, now: f64) -> bool {
     let mut went = false;
+    if state
+        .readings
+        .copied
+        .as_ref()
+        .is_some_and(|(_, _, until)| *until <= now)
+    {
+        state.readings.copied = None;
+        went = true;
+    }
     for reading in state.readings.tiles.values_mut() {
         if reading
             .focus

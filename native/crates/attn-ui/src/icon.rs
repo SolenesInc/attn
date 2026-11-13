@@ -12,6 +12,7 @@ pub const SEARCH: &str = "\u{f002}";
 pub const MOON: &str = "\u{f186}";
 pub const SETTINGS: &str = "\u{f013}";
 pub const CHECKED: &str = "\u{f046}";
+pub const CHECK: &str = "\u{f00c}";
 pub const UNCHECKED: &str = "\u{f096}";
 pub const FLAG: &str = "\u{f024}";
 pub const PENCIL: &str = "\u{f040}";

@@ -11,13 +11,13 @@ mod marks;
 mod passages;
 pub(crate) mod sending;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::rc::Rc;
 
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{radius, space, type_};
 use rune::{El, Image, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
-use rune_kit::{ImageFrame, Markdown};
+use rune_kit::{CodeFrame, ImageFrame, Markdown};
 
 use crate::State;
 
@@ -66,14 +66,14 @@ pub(crate) fn body(
     }
     .uri();
     let marks = annotating::highlights(drafts.get(&uri), readings.tiles.get(tile), tile, t);
-    let folds = readings.folds(&view);
+    let kept = readings.kept(&view);
     let version = (
         *revision,
         title,
         session,
         outpost.as_ref().map(|o| o.name.clone()),
         pictures.revision,
-        (marks.clone(), folds.clone()),
+        (marks.clone(), kept.clone()),
         *t,
     );
     let scroll = |card: El| {
@@ -113,7 +113,7 @@ pub(crate) fn body(
             &content.content,
             document,
             pictures,
-            folds.clone(),
+            kept.clone(),
             marking,
             t,
         )
@@ -149,12 +149,13 @@ pub(crate) fn reader(
     source: &str,
     document: Document,
     pictures: Rc<HashMap<String, Image>>,
-    folds: BTreeMap<usize, bool>,
+    kept: annotating::Kept,
     marking: Option<Marking>,
     t: &Tokens,
 ) -> El {
     let mut document = document;
     let folded = document.view.clone();
+    let copied_in = document.view.clone();
     let nth = details_order(source);
     let root = marking.as_ref().map(|m| annotating::root_key(&m.tile));
     if let Some(root) = &root {
@@ -173,6 +174,7 @@ pub(crate) fn reader(
         .details(
             {
                 let nth = nth.clone();
+                let folds = kept.folds;
                 move |at, tag| folds.get(&nth(at)).copied().unwrap_or(tag)
             },
             move |state: &mut State, at, open, _: &mut Tx| {
@@ -190,6 +192,10 @@ pub(crate) fn reader(
         .diagram_frame({
             let t = *t;
             move |card, frame| leaves_out(card, frame, &t)
+        })
+        .code_frame({
+            let (t, view, copied) = (*t, copied_in, kept.copied);
+            move |card, frame| with_copy(card, frame, &view, copied, &t)
         })
         .front_matter_frame({
             let t = *t;
@@ -250,6 +256,36 @@ fn read_as(source: &str) -> Markdown {
         .selectable(true)
         .smart_punctuation(true)
         .block_keys(anchors::heading_keys(source))
+}
+
+/// A code block's card with a button that copies its code, shown while the pointer is over the
+/// card, and saying "Copied!" a while after a copy.
+fn with_copy(card: El, frame: &CodeFrame<'_>, view: &str, copied: Option<usize>, t: &Tokens) -> El {
+    if frame.open {
+        return card;
+    }
+    let done = copied == Some(frame.index);
+    let (glyph, label) = if done {
+        (icon::CHECK, "Copied!")
+    } else {
+        (icon::COPY, "Copy code")
+    };
+    let (code, view, index) = (frame.source.to_owned(), view.to_owned(), frame.index);
+    let button = GlyphButton::new(glyph, label)
+        .help(label)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            tx.copy(code.clone());
+            state.readings.copied(&view, index, tx);
+        })
+        .build(attn_ui::kit(t))
+        .key("copy")
+        .pin(None, Some(space::S2), Some(space::S2), None);
+    let button = if done {
+        button.color(t.success)
+    } else {
+        button.group_opacity(0.0, 1.0)
+    };
+    col().w_full().hover_group().child(card).child(button)
 }
 
 /// A drawn diagram, with what it leaves out because it cannot read it said under it.
