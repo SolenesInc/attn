@@ -118,7 +118,7 @@ Preconditions:
 The native app (`native/crates/attn-app/src/ledger/`) has three lists, which `[` and `]` walk:
 
 - Sessions: Live, Closed and All, the typed query with its chips (`repo:`, `profile:`, `dir:`, ranges and words), older pages, a row's verbs and its menu, the inspector, Reopen and the actions a refusal offers, Focus, a tended seed, Show worktree on a worktree session at the home, and Keep conversation on a Claude row at the home.
-- Worktrees: [worktrees.md](worktrees.md) drives it.
+- Worktrees: [worktrees.md](worktrees.md) drives the list and a session row's Show worktree.
 - Conversations: attn's copies with their totals, Show deleted, Keep forever or Unkeep, and Forget… with its confirmation, which names the crew letters that lose their transcript.
 
 The keys are j, k, arrows, Home, End, Enter, `.`, `/`, `?`, `y`, digits and Escape. The ledger opens on Sessions with the shortcut and the palette's "Open the sessions list", and on Worktrees with the palette's "Open worktrees". The sidebar's "Open Ledger" drives only in the Tauri app. `bridge` reaches the native app's own automation actions (`docs/internal/native-app.md`, Automation).

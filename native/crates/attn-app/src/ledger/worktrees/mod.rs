@@ -300,14 +300,22 @@ pub(crate) fn selected_key(state: &State) -> Option<String> {
 /// Shows the list afresh, on `path` when a session asked to see its worktree.
 pub(crate) fn enter(state: &mut State, path: Option<String>, tx: &mut Tx) {
     let ledger = &mut state.window.ledger.worktrees;
-    *ledger = Worktrees {
-        registry: ledger.registry.take(),
-        epoch: ledger.epoch,
-        log_epoch: ledger.log_epoch,
-        selected: path,
-        ..Worktrees::default()
-    };
+    *ledger = ledger.reset(path);
     read(state, tx);
+}
+
+impl Worktrees {
+    /// The list as it shows afresh: the rows last read stay until the next read answers, and
+    /// the selection, query, scope and notes start over.
+    pub(super) fn reset(&mut self, selected: Option<String>) -> Worktrees {
+        Worktrees {
+            registry: self.registry.take(),
+            epoch: self.epoch,
+            log_epoch: self.log_epoch,
+            selected,
+            ..Worktrees::default()
+        }
+    }
 }
 
 /// Reads the registry, and the removals while Removed shows.
@@ -500,7 +508,9 @@ pub(crate) fn run(state: &mut State, path: &str, verb: Verb, tx: &mut Tx) {
     let ledger = &mut state.window.ledger.worktrees;
     ledger.selected = Some(path.to_owned());
     ledger.menu = None;
-    let busy = matches!(ledger.notes.get(path), Some(Note::Busy(_)));
+    if matches!(ledger.notes.get(path), Some(Note::Busy(_))) {
+        return;
+    }
     match verb {
         Verb::SessionsHere => super::show_sessions_in(state, path, tx),
         Verb::GoTo { id, .. } => {
@@ -509,13 +519,12 @@ pub(crate) fn run(state: &mut State, path: &str, verb: Verb, tx: &mut Tx) {
         }
         Verb::Delete => ledger.confirming = Some(path.to_owned()),
         Verb::Cancel => ledger.confirming = None,
-        Verb::Keep(keep) if !busy => keep_worktree(state, worktree, keep, tx),
-        Verb::DeleteNow { losing_changes } if !busy => {
+        Verb::Keep(keep) => keep_worktree(state, worktree, keep, tx),
+        Verb::DeleteNow { losing_changes } => {
             if ledger.confirming.take().as_deref() == Some(path) {
                 delete(state, worktree.path, losing_changes, tx);
             }
         }
-        Verb::Keep(_) | Verb::DeleteNow { .. } => {}
     }
 }
 

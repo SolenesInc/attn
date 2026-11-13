@@ -165,9 +165,7 @@ pub(crate) fn open(state: &mut State, tab: Tab, tx: &mut Tx) {
     let epoch = state.window.ledger.epoch;
     let mut conversations = conversations::Kept::default();
     conversations.epoch = state.window.ledger.conversations.epoch;
-    let mut worktrees = worktrees::Worktrees::default();
-    worktrees.epoch = state.window.ledger.worktrees.epoch;
-    worktrees.log_epoch = state.window.ledger.worktrees.log_epoch;
+    let worktrees = state.window.ledger.worktrees.reset(None);
     state.window.ledger = Ledger {
         tab,
         conversations,
