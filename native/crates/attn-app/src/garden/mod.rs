@@ -1,8 +1,11 @@
 mod board;
 pub(crate) mod model;
 pub(crate) mod search;
+mod sheet;
+mod tile;
 mod view;
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use attn_protocol::{Seed, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage};
@@ -11,6 +14,7 @@ use rune::{Key, KeyEvent, TextEdit, Tx};
 use crate::State;
 use crate::shell::Drawer;
 
+pub(crate) use tile::{Reads as TileReads, body as tile_body, climb as climb_tile};
 pub(crate) use view::{frame_layer, panel};
 
 /// How many garden rows this thread has built, memo misses only: a row whose seed and look did
@@ -50,17 +54,20 @@ pub(crate) struct Garden {
     pub(crate) walked: (String, usize),
     /// The folded trail is open.
     pub(crate) trail_open: bool,
-    pub(crate) reading: Reading,
+    /// Each shown seed's document, by seed.
+    readings: HashMap<String, Reading>,
+    /// Rises with every answer a reading takes, for the views that show readings.
+    pub(crate) revision: u64,
     pub(crate) board_walk: board::Board,
 }
 
-/// The opened seed's document as the daemon last answered it.
+/// A seed's document as the daemon last answered it.
 #[derive(Default)]
-pub(crate) struct Reading {
-    /// What the latest read asked for: the seed, the garden push it followed, and its request.
-    asked: Option<(String, usize, String)>,
-    pub(crate) document: Option<Arc<SeedDocument>>,
-    pub(crate) error: Option<String>,
+struct Reading {
+    /// The garden push the latest read followed, and its request.
+    asked: Option<(usize, String)>,
+    document: Option<Arc<SeedDocument>>,
+    error: Option<String>,
 }
 
 pub(crate) fn mode(state: &State) -> Mode {
@@ -175,37 +182,59 @@ pub(crate) fn living_trail(state: &State) -> Vec<String> {
         .collect()
 }
 
-/// Reads the opened seed's document whenever the seed or the garden around it changes, as
-/// the Tauri panel reads it on every garden push. Only the latest read's answer counts.
+/// The seeds on screen: the one the garden opened and each seed tile's.
+fn shown_seeds(state: &State) -> HashSet<String> {
+    let mut shown: HashSet<String> = state
+        .facts
+        .desktops
+        .iter()
+        .flat_map(|d| crate::sidebar::model::leaves(&d.tree_json))
+        .filter_map(|leaf| match leaf {
+            crate::sidebar::model::Leaf::Tile { kind, params, .. }
+                if kind == "seed" && !params.is_empty() =>
+            {
+                Some(params)
+            }
+            _ => None,
+        })
+        .collect();
+    if mode(state) != Mode::Closed {
+        shown.extend(living_trail(state).pop());
+    }
+    shown
+}
+
+/// Reads each shown seed's document whenever the seed or the garden around it changes, as
+/// the Tauri app reads it on every garden push. Only a seed's latest read counts.
 pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
-    let open = mode(state) != Mode::Closed && !state.window.garden.trail.is_empty();
-    let here = if open {
-        living_trail(state).pop()
-    } else {
-        None
-    };
+    let shown = shown_seeds(state);
     let push = Arc::as_ptr(&state.facts.garden) as usize;
-    let reading = &mut state.window.garden.reading;
-    let Some(here) = here else {
-        *reading = Reading::default();
-        return;
-    };
-    if reading
-        .asked
-        .as_ref()
-        .is_some_and(|(seed, at, _)| *seed == here && *at == push)
-    {
-        return;
+    let readings = &mut state.window.garden.readings;
+    let before = readings.len();
+    readings.retain(|id, _| shown.contains(id));
+    if readings.len() != before {
+        state.window.garden.revision += 1;
     }
-    if reading.document.as_ref().is_some_and(|d| d.seed.id != here) {
-        reading.document = None;
+    for id in shown {
+        if state
+            .window
+            .garden
+            .readings
+            .get(&id)
+            .is_some_and(|r| r.asked.as_ref().is_some_and(|(at, _)| *at == push))
+        {
+            continue;
+        }
+        read(state, id, push, tx);
     }
-    reading.error = None;
+}
+
+fn read(state: &mut State, id: String, push: usize, tx: &mut Tx) {
     let request_id = state.next_request_id();
-    let reading = &mut state.window.garden.reading;
-    reading.asked = Some((here.clone(), push, request_id.clone()));
+    let reading = state.window.garden.readings.entry(id.clone()).or_default();
+    reading.asked = Some((push, request_id.clone()));
     let command = SeedDocumentGetMessage {
-        seed_id: here.clone(),
+        seed_id: id.clone(),
         request_id: request_id.clone(),
         ..SeedDocumentGetMessage::new()
     };
@@ -213,14 +242,14 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
         request_id.clone(),
         &command,
         move |state, answer, _| {
-            let reading = &mut state.window.garden.reading;
-            if reading
-                .asked
-                .as_ref()
-                .is_none_or(|(_, _, id)| *id != request_id)
-            {
+            let garden = &mut state.window.garden;
+            let Some(reading) = garden.readings.get_mut(&id).filter(|r| {
+                r.asked
+                    .as_ref()
+                    .is_some_and(|(_, asked)| *asked == request_id)
+            }) else {
                 return;
-            }
+            };
             match answer.parse::<SeedDocumentGetResultMessage>() {
                 Some(reply) if reply.success => {
                     reading.document = reply.document.map(Arc::new);
@@ -230,14 +259,29 @@ pub(crate) fn follow(state: &mut State, tx: &mut Tx) {
                     reading.error = Some(
                         reply
                             .error
-                            .unwrap_or_else(|| format!("Could not read {here}")),
+                            .unwrap_or_else(|| format!("Could not read {id}")),
                     );
                 }
-                None => reading.error = Some(format!("Could not read {here}")),
+                None => reading.error = Some(format!("Could not read {id}")),
             }
+            garden.revision += 1;
         },
         tx,
     );
+}
+
+/// The shown seed's document as the daemon last answered it, and the error of its last read.
+pub(crate) fn reading<'a>(
+    garden: &'a Garden,
+    id: &str,
+) -> (Option<&'a SeedDocument>, Option<&'a str>) {
+    let Some(reading) = garden.readings.get(id) else {
+        return (None, None);
+    };
+    (
+        reading.document.as_deref().filter(|d| d.seed.id == id),
+        reading.error.as_deref(),
+    )
 }
 
 /// Drops the walk into a plot or seed, and reads it.

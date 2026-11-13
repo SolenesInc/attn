@@ -115,7 +115,17 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         desk.held_split().map(str::to_owned),
         super::arrival::keys(&desk.rings),
         facts.tile_contents.revision,
-        (outpost_names(&facts.outposts), state.pictures.revision),
+        (
+            outpost_names(&facts.outposts),
+            state.pictures.revision,
+            (
+                std::sync::Arc::as_ptr(&facts.garden) as usize,
+                state.window.garden.revision,
+                desktop
+                    .is_some_and(holds_a_seed)
+                    .then_some(state.window.now_ms / 60_000),
+            ),
+        ),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -128,7 +138,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
                 facts,
                 (&settles, &keys, &sublines),
                 holder.as_ref(),
-                (&state.terminals, &state.pictures),
+                (&state.terminals, &state.pictures, &seed_reads(state)),
                 (t, scale),
             ))
         })
@@ -353,8 +363,10 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
     let keys = header_keys(state);
     let unsent = state.window.desk.peeks.unsent();
     let sublines = sublines(desktop, &state.facts, &state.window.desk);
+    let seeds = seed_reads(state);
     let cx = TileCx {
         desktop,
+        seeds: &seeds,
         sessions: &state.facts.sessions,
         sublines: &sublines,
         unsent: &unsent,
@@ -402,7 +414,11 @@ fn screen(
     facts: &attn_client::Facts,
     (settles, keys, sublines): HeaderReads,
     holder: Option<&Holder>,
-    (terminals, pictures): (&Terminals, &crate::markdown::Pictures),
+    (terminals, pictures, seeds): (
+        &Terminals,
+        &crate::markdown::Pictures,
+        &crate::garden::TileReads,
+    ),
     (t, scale): (&Tokens, f32),
 ) -> El {
     match desktop {
@@ -423,6 +439,7 @@ fn screen(
                 );
                 let cx = TileCx {
                     desktop,
+                    seeds,
                     sessions: &facts.sessions,
                     sublines,
                     unsent: &unsent,
@@ -496,6 +513,7 @@ fn empty(t: &Tokens, message: &str) -> El {
 
 struct TileCx<'a> {
     desktop: &'a Desktop,
+    seeds: &'a crate::garden::TileReads<'a>,
     sessions: &'a [Session],
     /// Each agent pane's second header line, by pane.
     sublines: &'a [(String, Subline)],
@@ -597,6 +615,7 @@ pub(crate) fn leaf_title(
     desktop: &Desktop,
     sessions: &[Session],
     contents: &attn_client::TileContents,
+    seeds: &[std::sync::Arc<attn_protocol::Seed>],
     leaf: &Leaf,
 ) -> String {
     match &leaf.kind {
@@ -609,6 +628,7 @@ pub(crate) fn leaf_title(
                 kind,
                 params.as_deref().unwrap_or(""),
                 contents.get(&key).map(|c| &*c.message),
+                seeds,
             )
         }
         LeafKind::Pane => {
@@ -654,7 +674,7 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
     let desktop = cx.desktop;
     let active = leaf.id == desktop.active_pane_id;
     let held = cx.holder.is_some_and(|h| h.pane == leaf.id);
-    let title = leaf_title(desktop, cx.sessions, cx.contents, leaf);
+    let title = leaf_title(desktop, cx.sessions, cx.contents, cx.seeds.seeds, leaf);
     let holder = Holder {
         desktop: desktop.id.clone(),
         pane: leaf.id.clone(),
@@ -746,6 +766,16 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                 &holder,
             )
         }
+        (LeafKind::Tile { kind, params, .. }, _) if kind == "seed" => takes(
+            crate::garden::tile_body(
+                &desktop.id,
+                &leaf.id,
+                params.as_deref().unwrap_or(""),
+                cx.seeds,
+                t,
+            ),
+            &holder,
+        ),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
     let look = super::spotlight::Look::of(
@@ -779,6 +809,21 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         .children(look.veil(&key, below, t))
         .children(look.marks(&key, t))
         .children(super::arrival::overlay(cx.rings, &leaf.id, t))
+}
+
+fn seed_reads(state: &State) -> crate::garden::TileReads<'_> {
+    crate::garden::TileReads {
+        garden: &state.window.garden,
+        seeds: crate::garden::seeds(state),
+        sessions: &state.facts.sessions,
+        now_ms: state.window.now_ms,
+    }
+}
+
+fn holds_a_seed(desktop: &Desktop) -> bool {
+    crate::sidebar::model::leaves(&desktop.tree_json)
+        .iter()
+        .any(|l| matches!(l, crate::sidebar::model::Leaf::Tile { kind, .. } if kind == "seed"))
 }
 
 fn header_height(agent: bool) -> f32 {

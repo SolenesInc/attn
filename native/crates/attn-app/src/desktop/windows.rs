@@ -385,6 +385,7 @@ pub(crate) fn follow_title(state: &mut State, tx: &mut Tx) {
                     d,
                     &state.facts.sessions,
                     &state.facts.tile_contents,
+                    crate::garden::seeds(state),
                     leaf,
                 )),
                 Node::Split(_) => None,

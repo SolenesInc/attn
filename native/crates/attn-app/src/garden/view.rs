@@ -2,13 +2,14 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use attn_protocol::{OpenSeedMessage, Seed, SeedDocument};
+use attn_protocol::{OpenSeedMessage, Seed};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Span, Tx, col, el, memo, rich, row, text, text_input};
 
 use super::model::{self, Index, SessionNames};
 use super::search::{self, Lookups, Match, Partial, Query};
+use super::sheet::{Go, Sheet, note, section};
 use super::{BODY, Mode, SEARCH_FIELD};
 use crate::State;
 use crate::requests::Refused;
@@ -831,17 +832,6 @@ fn seed_row(spec: &RowSpec, t: &Tokens) -> El {
     })
 }
 
-fn note(key: &str, words: impl Into<String>, t: &Tokens) -> El {
-    let words = words.into();
-    text(words.clone())
-        .key(key.to_owned())
-        .role("note")
-        .label(words)
-        .font(type_::BODY)
-        .color(t.text_secondary)
-        .padding(space::S2)
-}
-
 fn capped(state: &State, place: &Place, t: &Tokens) -> Option<El> {
     let shown = super::seeds(state).len() as i64;
     let total = state.facts.garden.total_of(&state.facts.profiles.selected);
@@ -928,7 +918,7 @@ fn results(state: &State, place: &Place, t: &Tokens) -> El {
     list("garden.results", "listbox", "Results", specs, t)
 }
 
-fn scroll(key: &str, content: El) -> El {
+pub(super) fn scroll(key: &str, content: El) -> El {
     col()
         .key(key.to_owned())
         .w_full()
@@ -1060,169 +1050,36 @@ fn columns_view(state: &State, place: &Place, t: &Tokens) -> El {
     columns
 }
 
-fn section(key: &str, title: &str, t: &Tokens) -> El {
-    col()
-        .key(key.to_owned())
-        .role("region")
-        .label(title.to_owned())
-        .w_full()
-        .gap(space::S1)
-        .pt(space::S3)
-        .child(
-            text(title.to_owned())
-                .role("heading")
-                .label(title.to_owned())
-                .font(type_::SECTION)
-                .color(t.text_tertiary),
-        )
-}
-
-fn meta_word(words: impl Into<String>, t: &Tokens) -> El {
-    text(words.into())
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-}
-
 /// The opened seed: its state and who tends it, why it closed, its plot's progress, its plan,
 /// its checks, its plot's children while the walk stacks, its relations, artifacts and log.
 fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Tokens) -> El {
-    let reading = &state.window.garden.reading;
-    let document: Option<&SeedDocument> =
-        reading.document.as_deref().filter(|d| d.seed.id == here.id);
-    let mut head = col().key("garden.head").w_full().gap(space::S1).child(
-        row()
-            .w_full()
-            .items_center()
-            .gap(space::S2)
-            .child(
-                text(here.title.clone())
-                    .key("garden.head.title")
-                    .role("heading")
-                    .label(here.title.clone())
-                    .font(type_::TITLE)
-                    .color(t.text_primary)
-                    .grow(1.0),
-            )
-            .child(open_as_tile(&here.id, t)),
-    );
-    let mut meta = row()
-        .key("garden.head.meta")
-        .gap(space::S2)
-        .child(meta_word(here.status.clone(), t));
-    if let Some((sentence, _)) = model::harvest_when(here) {
-        meta = meta.child(meta_word(sentence, t));
-    }
-    let tender = model::tender_of(here, &place.names);
-    if !tender.is_empty() {
-        meta = meta.child(meta_word(format!("tended by {tender}"), t));
-    }
-    if here.planter.r#ref.starts_with("member:") {
-        meta = meta.child(meta_word(format!("by {}", here.planter.name), t));
-    }
-    if !model::is_plot(here)
-        && let Some(tally) = model::check_tally(here)
-    {
-        meta = meta.child(meta_word(model::tally_words(&tally), t));
-    }
-    meta = meta
-        .child(meta_word(
-            model::ago(&here.created_at, state.window.now_ms),
-            t,
-        ))
-        .child(
-            text(here.id.clone())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_tertiary),
-        );
-    head = head.child(meta);
-    if let Some(reason) = here.reason.as_ref().filter(|r| !r.is_empty()) {
-        head = head.child(note("garden.head.reason", reason.clone(), t));
-    }
-    if model::is_plot(here) {
-        head = head.child(note("garden.head.progress", model::progress_words(here), t));
-    }
+    let (document, error) = super::reading(&state.window.garden, &here.id);
+    let sheet = Sheet {
+        prefix: "garden".into(),
+        view: if stacked {
+            "garden.viewport"
+        } else {
+            "garden.reader"
+        }
+        .into(),
+        go: Go::Garden,
+        names: &place.names,
+        now_ms: state.window.now_ms,
+        t,
+    };
     let mut page = col()
         .w_full()
         .padding(space::S3)
         .gap(space::S2)
-        .child(head)
-        .child(plan(
-            here,
-            if stacked {
-                "garden.viewport"
-            } else {
-                "garden.reader"
-            },
-            t,
-        ));
-    let checks: Vec<_> = here
-        .checks
-        .iter()
-        .flatten()
-        .filter(|c| !c.removed)
-        .collect();
-    if !checks.is_empty() {
-        let mut list = section("garden.checks", "Checks", t);
-        for check in checks {
-            let words = format!("{} {} · {}", check.id, check.text, check.state);
-            list = list.child(
-                text(words.clone())
-                    .key(format!("garden.check.{}", check.id))
-                    .role("listitem")
-                    .label(words)
-                    .font(type_::BODY)
-                    .color(t.text_primary),
-            );
-        }
-        page = page.child(list);
-    }
+        .child(sheet.head(here, open_as_tile(&here.id, t)))
+        .child(sheet.plan(here))
+        .children(sheet.checks(here));
     if stacked && model::is_plot(here) {
         page = page.child(plot_children(place, here, t));
     }
-    let relations = place.index.relations(&here.id);
-    if !relations.is_empty() {
-        let mut related = section("garden.related", "Related", t);
-        for relation in relations {
-            let other = relation.seed.clone();
-            related = related.child(
-                row()
-                    .gap(space::S2)
-                    .items_center()
-                    .child(meta_word(relation.label, t))
-                    .child(
-                        button(
-                            format!("garden.related.{}.{}", relation.label, other.id),
-                            other.title.clone(),
-                            t,
-                        )
-                        .on_press_tx(
-                            move |state: &mut State, tx: &mut Tx| {
-                                super::drill(state, &other.id, tx)
-                            },
-                        ),
-                    )
-                    .child(meta_word(relation.seed.status.clone(), t)),
-            );
-        }
-        page = page.child(related);
-    }
-    if let Some(document) = document
-        && !(document.artifacts.is_empty() && document.references.is_empty())
-    {
-        let mut artifacts = section("garden.artifacts", "Artifacts", t);
-        for artifact in &document.artifacts {
-            artifacts = artifacts.child(
-                text(artifact.filename.clone())
-                    .key(format!("garden.artifact.{}", artifact.filename))
-                    .role("listitem")
-                    .label(artifact.filename.clone())
-                    .font(type_::BODY)
-                    .color(t.text_primary),
-            );
-        }
-        page = page.child(artifacts);
-    }
-    page.child(log(reading.error.as_deref(), document, place, state, t))
+    page.children(sheet.seeds("related", "Related", place.index.relations(&here.id)))
+        .children(sheet.artifacts(document))
+        .child(sheet.log(document, error))
 }
 
 fn open_as_tile(id: &str, t: &Tokens) -> El {
@@ -1240,40 +1097,6 @@ fn open_as_tile(id: &str, t: &Tokens) -> El {
                 |_, _, _| {},
                 tx,
             );
-        },
-    )
-}
-
-/// The seed's body, read where `view` scrolls it.
-fn plan(here: &Seed, view: &'static str, t: &Tokens) -> El {
-    if here.body.trim().is_empty() {
-        return note(
-            "garden.body.empty",
-            "No body — the title is the whole seed.",
-            t,
-        );
-    }
-    let body = here.body.clone();
-    memo(
-        format!("garden.plan.{}", here.id),
-        (body.clone(), view, *t),
-        || {
-            col()
-                .key("garden.plan")
-                .role("document")
-                .label("Plan")
-                .w_full()
-                .child(crate::markdown::reader(
-                    &body,
-                    crate::markdown::Document {
-                        path: String::new(),
-                        session: None,
-                        outpost: None,
-                        view: view.to_owned(),
-                    },
-                    std::rc::Rc::default(),
-                    t,
-                ))
         },
     )
 }
@@ -1303,72 +1126,4 @@ fn plot_children(place: &Place, here: &Arc<Seed>, t: &Tokens) -> El {
         row_specs(&open, place, Pick::Drill, "", None),
         t,
     ))
-}
-
-fn log(
-    error: Option<&str>,
-    document: Option<&SeedDocument>,
-    place: &Place,
-    state: &State,
-    t: &Tokens,
-) -> El {
-    let mut log = section("garden.log", "Log", t);
-    if let Some(error) = error {
-        return log.child(note("garden.log.error", error.to_owned(), t));
-    }
-    let Some(document) = document else {
-        return log;
-    };
-    if document.notes.is_empty() {
-        log = log.child(note(
-            "garden.log.empty",
-            "Nothing on this seed’s log yet.",
-            t,
-        ));
-    }
-    let spoken = document
-        .notes
-        .iter()
-        .filter(|n| n.kind != "attach" && n.kind != "detach");
-    for entry in spoken {
-        let who = model::who_name(&entry.author.r#ref, &entry.author.name, &place.names);
-        let mut head = row()
-            .gap(space::S2)
-            .child(text(who).font(type_::LABEL).color(t.text_primary));
-        if entry.kind != "note" {
-            head = head.child(meta_word(entry.kind.clone(), t));
-        }
-        head = head.child(meta_word(
-            model::ago(&entry.created_at, state.window.now_ms),
-            t,
-        ));
-        let mut item = col()
-            .key(format!("garden.log.{}", entry.id))
-            .role("listitem")
-            .label(entry.body.clone())
-            .w_full()
-            .gap(2.0)
-            .child(head);
-        if !entry.body.is_empty() {
-            item = item.child(
-                text(entry.body.clone())
-                    .font(type_::BODY)
-                    .color(t.text_secondary)
-                    .wrap(),
-            );
-        }
-        log = log.child(item);
-    }
-    let withheld = (document.notes_total - document.notes.len() as i64).max(0);
-    if withheld > 0 {
-        log = log.child(note(
-            "garden.log.withheld",
-            format!(
-                "{withheld} more {} on the log.",
-                if withheld == 1 { "entry" } else { "entries" }
-            ),
-            t,
-        ));
-    }
-    log
 }

@@ -96,9 +96,13 @@ pub(crate) fn title(
     leaf: &str,
 ) -> String {
     match tree.find_leaf(leaf) {
-        Some(Node::Leaf(l)) => {
-            super::view::leaf_title(desktop, &facts.sessions, &facts.tile_contents, l)
-        }
+        Some(Node::Leaf(l)) => super::view::leaf_title(
+            desktop,
+            &facts.sessions,
+            &facts.tile_contents,
+            facts.garden.of(&facts.profiles.selected),
+            l,
+        ),
         _ => "Terminal".into(),
     }
 }

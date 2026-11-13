@@ -60,6 +60,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.key == Key::Escape && tx.focused().is_none() && crate::desktop::escape(state, tx) {
         return true;
     }
+    if ev.key == Key::Escape && crate::garden::climb_tile(state, tx) {
+        return true;
+    }
     let terminal = match tx.focused() {
         None => state.window.keyboard_terminal(&state.facts),
         Some(_) => None,

@@ -167,11 +167,12 @@ impl TileRow {
 
 /// A tile's name from what its layout leaf holds and, for a document, what the daemon sent of
 /// it: the document's heading or first line, else the file's name. A browser goes by its host
-/// and a seed by its id.
+/// and a seed by its title when the garden holds it, else by its id.
 pub fn tile_title(
     kind: &str,
     params: &str,
     content: Option<&attn_protocol::DesktopTileContentMessage>,
+    seeds: &[std::sync::Arc<attn_protocol::Seed>],
 ) -> String {
     let readable = content.filter(|c| c.error.as_deref().is_none_or(str::is_empty));
     if kind == "markdown"
@@ -195,7 +196,10 @@ pub fn tile_title(
             .unwrap_or_else(|| params.to_owned())
     };
     match kind {
-        "seed" if !params.is_empty() => params.to_owned(),
+        "seed" if !params.is_empty() => seeds
+            .iter()
+            .find(|s| s.id == params)
+            .map_or_else(|| params.to_owned(), |s| s.title.clone()),
         "seed" => "seed".into(),
         "browser" if !params.is_empty() => params
             .split_once("://")
@@ -535,6 +539,7 @@ pub fn desktop_lines(facts: &Facts, home: bool, on_screen: &[String]) -> Vec<Lin
                                 tile: id.clone(),
                             })
                             .map(|c| &*c.message),
+                        facts.garden.of(&facts.profiles.selected),
                     ),
                     id,
                     kind,
