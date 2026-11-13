@@ -38,4 +38,5 @@ mod wire {
     mod terminal_stale_build;
     mod terminal_view;
     mod tile_header;
+    mod update_run;
 }

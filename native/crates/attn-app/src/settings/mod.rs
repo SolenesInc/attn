@@ -17,6 +17,7 @@ use crate::action::Action;
 use crate::shell::Layer;
 pub(crate) use appearance::{garden_scale, text_scale};
 pub(crate) use sections::Section;
+pub(crate) use updates::updatable;
 pub(crate) use view::dialog;
 
 /// The text fields the dialog shows, each the daemon setting it edits, and whether its value

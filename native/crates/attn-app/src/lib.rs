@@ -34,6 +34,7 @@ pub mod sidebar;
 #[cfg(target_os = "macos")]
 pub mod tauri_settings;
 mod terminal;
+mod update_run;
 pub mod window_host;
 
 use std::sync::Arc;
@@ -180,6 +181,7 @@ pub fn bind(
             asks::follow(state, tx);
             ledger::follow(state, was, tx);
             notifications::follow(state, was, tx);
+            update_run::follow(state, tx);
             settings::follow(state, tx);
             shortcut_editor::follow(state);
             sidebar::advance(state, tx);
@@ -262,8 +264,10 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
         | desktop::follow_settling(state, state.wall_ms(tx));
     let settings = settings::poll(state, now, tx);
     shortcut_editor::focus_recording(state, tx);
+    let updating = update_run::poll(state, now, tx);
     shell::expire(state, now, tx)
         || settings
+        || updating
         || recounted
         || told
         || aged

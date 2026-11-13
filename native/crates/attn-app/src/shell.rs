@@ -67,6 +67,7 @@ pub struct Window {
     pub(crate) asks: crate::asks::Asks,
     pub(crate) ledger: crate::ledger::Ledger,
     pub(crate) notifications: crate::notifications::Panel,
+    pub(crate) update_run: crate::update_run::Banner,
     pub(crate) settings: crate::settings::Dialog,
     pub(crate) shortcut_editor: crate::shortcut_editor::Editor,
     pub(crate) profile_switcher: crate::profile_switcher::Switcher,
@@ -387,6 +388,12 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         }
         _ => None,
     };
+    let update_run = matches!(
+        connection,
+        Connection::Connected | Connection::Reconnecting { .. }
+    )
+    .then(|| crate::update_run::banner(state, &t))
+    .flatten();
     let root = col()
         .key("window")
         .w_full()
@@ -395,6 +402,7 @@ pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
         .on_paste_content(crate::keys::on_paste)
         .child(title_bar(state, cx, &t))
         .children(banner)
+        .children(update_run)
         .child(body);
     crate::markdown::with_image_preview(root, state, cx.is_reduced_motion(), &t)
         .children(layers(state, &t))

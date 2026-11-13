@@ -67,6 +67,8 @@ macro_rules! actions {
             ToggleNotifications,
             /// Open the editor that rebinds shortcuts.
             OpenShortcutEditor,
+            /// Ask the daemon to update attn.
+            StartUpdate,
         }
 
         impl Action {
@@ -96,6 +98,7 @@ macro_rules! actions {
                     Action::OpenWorktrees => "ledger.worktrees",
                     Action::ToggleNotifications => "notifications.toggle",
                     Action::OpenShortcutEditor => "shortcuts.edit",
+                    Action::StartUpdate => "update.start",
                 }
             }
 
@@ -122,6 +125,7 @@ macro_rules! actions {
                     Action::OpenWorktrees => "Open worktrees",
                     Action::ToggleNotifications => "Show or hide notifications",
                     Action::OpenShortcutEditor => "Customize keyboard shortcuts",
+                    Action::StartUpdate => "Update attn",
                 }
             }
 
