@@ -414,7 +414,6 @@ const DIGITS: [&str; 10] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
 const MAC: &[(Action, &str)] = &[
     (Action::AppQuit, "mod+q"),
     (Action::TerminalOpen, "mod+`"),
-    (Action::TerminalCollapse, "shift+~"),
     (Action::TerminalSplitVertical, "mod+d"),
     (Action::TerminalSplitHorizontal, "mod+shift+d"),
     (Action::TerminalToggleZoom, "mod+shift+z"),
@@ -504,7 +503,6 @@ const MAC: &[(Action, &str)] = &[
 const LINUX: &[(Action, &str)] = &[
     (Action::AppQuit, "mod+shift+q"),
     (Action::TerminalOpen, "mod+shift+`"),
-    (Action::TerminalCollapse, "mod+alt+`"),
     (Action::TerminalSplitVertical, "mod+shift+d"),
     (Action::TerminalSplitHorizontal, "mod+alt+d"),
     (Action::TerminalToggleZoom, "mod+alt+z"),

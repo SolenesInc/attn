@@ -184,7 +184,6 @@ actions! {
     DesktopSendStay9 = "desktop.sendStay9", Sessions, "Move this to desktop 9";
 
     TerminalOpen = "terminal.open", Panes, "Focus utility terminal";
-    TerminalCollapse = "terminal.collapse", Panes, "Collapse utility terminal";
     TerminalSplitVertical = "terminal.splitVertical", Panes, "New shell beside";
     TerminalSplitHorizontal = "terminal.splitHorizontal", Panes, "New shell below";
     TerminalToggleZoom = "terminal.toggleZoom", Panes, "Zoom active pane";

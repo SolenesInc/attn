@@ -89,7 +89,6 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'desktop.sendStay9': { label: 'Move this to desktop 9', category: 'sessions' },
 
   'terminal.open': { label: 'Focus utility terminal', category: 'panes', requiresTerminal: true },
-  'terminal.collapse': { label: 'Collapse utility terminal', category: 'panes' },
   'terminal.splitVertical': { label: 'New shell beside', category: 'panes', dockLabel: 'split v', requiresTerminal: true },
   'terminal.splitHorizontal': { label: 'New shell below', category: 'panes', dockLabel: 'split h', requiresTerminal: true },
   'terminal.toggleZoom': { label: 'Zoom active pane', category: 'panes', dockLabel: 'zoom', requiresTerminal: true },
