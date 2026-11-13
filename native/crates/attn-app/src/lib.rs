@@ -299,6 +299,25 @@ fn quit(state: &mut State, tx: &mut Tx) {
     instance::remove_app_pid();
 }
 
+/// The person closed the main window. On macOS it hides while a tile window shows, and comes
+/// back when the app is reopened or the last tile window goes; otherwise the app quits.
+fn main_closed(state: &mut State, tx: &mut Tx) {
+    let windows = &mut state.window.desk.windows;
+    if cfg!(target_os = "macos") && windows.shows_a_window() {
+        windows.main_hidden = true;
+    } else {
+        tx.quit();
+    }
+}
+
+/// The app was reopened (its Dock icon clicked, or opened again): the main window comes
+/// forward, whether or not a tile window shows.
+fn main_reopened(state: &mut State, _: bool, _: &mut Tx) -> bool {
+    state.window.desk.windows.main_hidden = false;
+    frame::open_main();
+    true
+}
+
 /// The app with its window, reopened where it last closed in the prefs `bundle_id` names, and
 /// the items it adds to the macOS menu bar. Each item runs an action; AppKit takes ⌘. before
 /// any view, so Stop Countdown's item is how its keys arrive.
@@ -310,6 +329,9 @@ pub fn native_app(bundle_id: &str) -> rune::App<State> {
         .compositor(screen::Screens::default())
         .playground(attn_ui::playground());
     frame::restored(app, bundle_id)
+        .keep_running()
+        .on_close(main_closed)
+        .on_reopen(main_reopened)
         .on_quit(quit)
         .menu_item(
             MenuItem::new("Stop Countdown", |state, tx| {

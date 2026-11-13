@@ -37,3 +37,10 @@ item	statement	native_test	reason
 47	A divider drag that ends in a terminal paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_divider_drag_that_ends_in_the_terminal_selects_nothing_in_it	
 33	⌘P (Ctrl+Shift+P on Linux) opens the markdown opener on the folder of the agent behind the screen	attn-app/tests/wire/opener.rs::the_opener_lists_recent_files_at_once_relative_to_the_agents_folder_and_takes_the_keyboard	
 33	⌘P reaches the markdown opener through AppKit in the packaged bundle, with no menu item taking it		gap: s-h7a9kz
+12	The app starts its daemon before every connection, at launch and after the daemon stops, and reconnects to it	attn-app/tests/wire/connection.rs::a_stopped_daemon_is_started_again_before_the_first_retry	
+12	A daemon that cannot start leaves the app's window open, saying why, and is started again once it can	attn-app/tests/wire/connection.rs::a_daemon_that_will_not_start_at_launch_says_why_and_is_started_once_it_can	
+12	On macOS, after attn daemon stop the packaged app starts a new daemon and reconnects within seconds	live:s-nacrpp/p2-daemon-restart.txt	
+12	On macOS, a bundle with no attnd beside it opens its window and says why the daemon did not start	live:s-nacrpp/p26-no-attnd.txt	
+35	On macOS, closing the main window while a tile window shows hides it, and reopening the app shows it again, as in the Tauri app	live:s-nacrpp/p15-ab-r3.txt	
+35	Closing the main window with no tile window showing quits the app; off macOS it always quits, an improvement on the Tauri app, which hides a main window nothing there can reopen	live:s-nacrpp/p15-c-r3.txt	
+35	On macOS, a main window hidden while a tile window showed comes back when the last tile window closes, as in the Tauri app	live:s-nacrpp/p15-d-r3.txt	

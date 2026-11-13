@@ -179,8 +179,18 @@ pub struct Pool {
     pub opener: Option<Arc<dyn Opener>>,
     /// Hands a tile window's changes to the main window.
     pub main: Option<Deliver>,
+    /// The person closed the main window while a tile window showed, so it hid; it shows again
+    /// once no tile window does.
+    pub main_hidden: bool,
     windows: Vec<Pooled>,
     opened: usize,
+}
+
+impl Pool {
+    /// A tile window is on the desktop, holding a popped-out leaf.
+    pub(crate) fn shows_a_window(&self) -> bool {
+        self.windows.iter().any(|w| w.held.is_some() && !w.closed)
+    }
 }
 
 struct Pooled {
@@ -199,7 +209,8 @@ struct Held {
 }
 
 /// Keeps a window on each popped-out leaf of the profile's desktops, where the daemon says
-/// it is, and hides the windows of leaves that came back.
+/// it is, hides the windows of leaves that came back, and shows the main window it hid once no
+/// tile window shows.
 pub(crate) fn follow(state: &mut State) {
     if state.window.tile.is_some() {
         return;
@@ -292,6 +303,10 @@ pub(crate) fn follow(state: &mut State) {
                 });
             }
         }
+    }
+    if pool.main_hidden && !pool.shows_a_window() {
+        pool.main_hidden = false;
+        crate::frame::open_main();
     }
 }
 

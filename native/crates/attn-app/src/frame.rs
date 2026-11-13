@@ -50,6 +50,15 @@ pub(crate) fn save(_: &mut State, _: &mut Tx) {
     });
 }
 
+/// Shows the main window, restored and in front.
+pub(crate) fn open_main() {
+    MAIN.with_borrow(|main| {
+        if let Some((_, window)) = main {
+            window.open();
+        }
+    });
+}
+
 /// The app's own setting `key`, as a string, from the main window's prefs.
 pub(crate) fn pref_string(key: &str) -> Option<String> {
     MAIN.with_borrow(|main| main.as_ref()?.0.get::<String>(key))
