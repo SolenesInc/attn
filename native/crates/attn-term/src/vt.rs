@@ -153,6 +153,14 @@ unsafe extern "C" {
     ) -> usize;
     fn attn_term_row_continues(t: *mut AttnTerm, row: u32) -> bool;
     fn attn_term_row_links(t: *mut AttnTerm, row: u32) -> bool;
+    fn attn_term_screen_row_cells(
+        t: *mut AttnTerm,
+        row: u32,
+        cols: u16,
+        out: *mut u32,
+        cap: usize,
+        lens: *mut u8,
+    ) -> usize;
     fn attn_term_cell_uri(t: *mut AttnTerm, row: u32, col: u16, out: *mut u8, cap: usize) -> usize;
     fn attn_term_snapshot(t: *mut AttnTerm, len: *mut usize) -> *mut u8;
     fn attn_term_bytes_free(data: *mut u8);
@@ -552,12 +560,46 @@ impl Vt {
     /// spacer as empty, and each cell's OSC 8 hyperlink.
     pub fn link_row(&mut self, row: u32) -> LinkRow {
         let cols = self.size().0;
-        let cells = (0..cols).map(|c| self.row_text(row, c..c + 1)).collect();
+        let cells = self.row_cells(row);
         let links = unsafe { attn_term_row_links(self.raw.as_ptr(), row) };
         let uris = (0..cols)
             .map(|col| links.then(|| self.cell_uri(row, col)).flatten())
             .collect();
         LinkRow { cells, uris }
+    }
+
+    /// Each cell of screen row `row`: its text, an empty cell as a space and the tail of a wide
+    /// character as nothing.
+    pub fn row_cells(&mut self, row: u32) -> Vec<String> {
+        let cols = self.size().0;
+        let mut lens = vec![0u8; usize::from(cols)];
+        let mut buf = vec![0u32; usize::from(cols) * 2];
+        loop {
+            let needed = unsafe {
+                attn_term_screen_row_cells(
+                    self.raw.as_ptr(),
+                    row,
+                    cols,
+                    buf.as_mut_ptr(),
+                    buf.len(),
+                    lens.as_mut_ptr(),
+                )
+            };
+            if needed <= buf.len() {
+                break;
+            }
+            buf.resize(needed, 0);
+        }
+        let mut points = buf.into_iter();
+        lens.into_iter()
+            .map(|len| {
+                points
+                    .by_ref()
+                    .take(usize::from(len))
+                    .filter_map(char::from_u32)
+                    .collect()
+            })
+            .collect()
     }
 
     /// Columns `cols` of screen row `row` as Markdown reads them: each cell's text and look, a

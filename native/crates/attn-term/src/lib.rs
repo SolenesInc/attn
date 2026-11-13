@@ -1,3 +1,4 @@
+pub mod align;
 pub mod attach;
 pub mod blocks;
 mod font;

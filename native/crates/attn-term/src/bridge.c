@@ -305,6 +305,35 @@ size_t attn_term_row_text(AttnTerm *t, uint32_t row, uint16_t start, uint16_t en
   return n;
 }
 
+size_t attn_term_screen_row_cells(AttnTerm *t, uint32_t row, uint16_t cols, uint32_t *out,
+                                  size_t cap, uint8_t *lens) {
+  size_t n = 0;
+  for (uint16_t x = 0; x < cols; x++) {
+    lens[x] = 0;
+    GhosttyPoint point = {.tag = GHOSTTY_POINT_TAG_SCREEN,
+                          .value = {.coordinate = {.x = x, .y = row}}};
+    GhosttyGridRef ref = {0};
+    if (ghostty_terminal_grid_ref(t->terminal, point, &ref) != GHOSTTY_SUCCESS) continue;
+    GhosttyCell cell = 0;
+    ghostty_grid_ref_cell(&ref, &cell);
+    GhosttyCellWide wide = GHOSTTY_CELL_WIDE_NARROW;
+    ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide);
+    if (wide == GHOSTTY_CELL_WIDE_SPACER_TAIL) continue;
+    uint32_t cluster[16];
+    size_t len = 0;
+    if (ghostty_grid_ref_graphemes(&ref, cluster, 16, &len) != GHOSTTY_SUCCESS) len = 0;
+    if (len == 0) {
+      cluster[0] = ' ';
+      len = 1;
+    }
+    lens[x] = (uint8_t)len;
+    for (size_t i = 0; i < len; i++, n++) {
+      if (n < cap) out[n] = cluster[i];
+    }
+  }
+  return n;
+}
+
 typedef struct {
   uint16_t flags;
   bool colored;
