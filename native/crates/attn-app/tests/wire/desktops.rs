@@ -162,6 +162,13 @@ fn json(text: &str) -> Value {
     serde_json::from_str(text).unwrap()
 }
 
+fn keyboard(world: &mut World) -> Value {
+    world
+        .automate("state", serde_json::json!({"of": "window"}))
+        .unwrap()["keyboard"]["pane"]
+        .clone()
+}
+
 fn notice(world: &World) -> Option<String> {
     world
         .screen()
@@ -298,6 +305,50 @@ fn arrows_show_the_neighbouring_tile_and_leave_the_desktop_past_the_row_end() {
         [json(
             r#"{"profile_id":"work","desktop_id":"work/desktop_2"}"#
         )]
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn the_row_keys_walk_off_an_empty_desktop_while_its_launcher_holds_the_keyboard() {
+    let desktops = || {
+        vec![
+            desktop(1, "b", Some(row([pane("a"), pane("b")]))),
+            desktop(2, "", None),
+            desktop(3, "", None),
+        ]
+    };
+    let mut world = start(desktops());
+    press(&mut world, Action::TerminalFocusRight);
+    arrange(&mut world, "work/desktop_2", desktops());
+    let launcher = world.screen().find(Target::key("launcher.path.field"));
+    assert!(launcher.is_some_and(|n| n.is("focused")));
+
+    let mut walked = Vec::new();
+    for action in [
+        Action::TerminalFocusRight,
+        Action::TerminalFocusLeft,
+        Action::TerminalFocusUp,
+        Action::TerminalFocusDown,
+    ] {
+        press(&mut world, action);
+        walked.extend(
+            sent(&world, "desktop_set_current")
+                .iter()
+                .skip(1 + walked.len())
+                .map(|r| r["desktop_id"].as_str().unwrap().to_owned()),
+        );
+        arrange(&mut world, "work/desktop_2", desktops());
+    }
+    assert_eq!(
+        walked,
+        [
+            "work/desktop_3",
+            "work/desktop_1",
+            "work/desktop_1",
+            "work/desktop_3"
+        ]
     );
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
@@ -1778,6 +1829,11 @@ fn a_chip_dragged_onto_a_tiles_edge_brings_its_whole_column_and_lands_beside_a_t
         "a stack of two needs 960px over b"
     );
     assert_eq!(moves[0]["whole_column"], true);
+    assert_eq!(
+        keyboard(&mut world),
+        "c",
+        "the brought tile takes the keyboard"
+    );
     let said = notice(&world).unwrap();
     assert!(
         said.starts_with(
@@ -1802,6 +1858,11 @@ fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips
 
     let to = in_tile(&world, "b", 0.5, 0.5);
     drag(&mut world, "shelf.chip.d", to);
+    assert_eq!(
+        keyboard(&mut world),
+        "d",
+        "the chip's tile takes the keyboard with the slot"
+    );
     assert_eq!(
         sent(&world, "desktop_move_leaf"),
         [
@@ -1838,6 +1899,15 @@ fn a_chip_dropped_in_a_tiles_middle_takes_its_place_and_the_tile_takes_the_chips
         chip(&world, "b").is_some(),
         "b is back on the shelf where d was"
     );
+    assert_eq!(keyboard(&mut world), "d");
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-d"], "what is typed goes to the chip's tile");
     world.advance(Duration::from_secs(1));
     assert!(world.runtime_is_at_rest());
 }

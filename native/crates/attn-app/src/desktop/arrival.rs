@@ -185,6 +185,7 @@ pub(crate) fn overlay(rings: &[Ring], leaf: &str, t: &Tokens) -> Option<El> {
         el().key(format!("tile.{leaf}.arrival.{}", ring.until.to_bits()))
             .pin(Some(0.0), Some(0.0), Some(0.0), Some(0.0))
             .paint_order(2)
+            .inert()
             .border(RING_PX, t.brand.alpha(RING_ALPHA))
             .transition(rune::Transition::none())
             .sequence(Sequence::new(FADE)),

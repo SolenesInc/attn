@@ -338,8 +338,22 @@ fn drag_divider(world: &mut World, split: &str, by: f32) {
     });
 }
 
+/// The daemon answers the held move it made, after the arrangement it sent for it, as the
+/// daemon does.
+fn answer_move(world: &mut World) {
+    let held = world.daemon.sent_of("desktop_move_leaf")[0].clone();
+    let done = message(ProfileActionResultMessage {
+        action: held["cmd"].as_str().unwrap().into(),
+        request_id: held["request_id"].as_str().unwrap().into(),
+        success: true,
+        ..ProfileActionResultMessage::new()
+    });
+    world.daemon.reply_to(&held, done);
+    world.settle();
+}
+
 /// The answer to a command the daemon refused with `error`.
-fn refused(r: &Request, error: &str) -> Value {
+pub(super) fn refused(r: &Request, error: &str) -> Value {
     message(ProfileActionResultMessage {
         action: r["cmd"].as_str().unwrap().into(),
         request_id: r["request_id"].as_str().unwrap().into(),
@@ -694,6 +708,11 @@ fn a_refused_swap_keeps_the_slots_tile_and_sends_no_second_move() {
         Some("Could not put that tile in the slot: refused")
     );
     assert_eq!(screen(&world), ["a", "b", "c"]);
+    assert_eq!(
+        keyboard(&mut world),
+        "a",
+        "the keyboard goes back to the slot's tile"
+    );
     rest(&mut world);
 }
 
@@ -713,6 +732,9 @@ fn a_stacks_chip_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
         [pane("a"), pane("b"), pane("c"), below(pane("d"), pane("e"))],
     );
     let mut world = start(THREE_FIT, None, vec![first, other()]);
+    world
+        .daemon
+        .answer_in_turn("desktop_move_leaf", [Answer::Hold]);
 
     let to = in_sidebar(&world, 2);
     drag(&mut world, "shelf.chip.d", to);
@@ -723,6 +745,20 @@ fn a_stacks_chip_dropped_on_a_sidebar_desktop_moves_its_whole_column_there() {
             r#"{"source_desktop_id":"work/desktop_1","target_desktop_id":"work/desktop_2","leaf_id":"d",
                 "edge":"left","leaf_share":0.32,"whole_column":true}"#
         )]
+    );
+    let opened = tiles(
+        "a",
+        [pane("a"), pane("b"), pane("c"), below(pane("d"), pane("e"))],
+    );
+    arrange(&mut world, "work/desktop_2", vec![opened, other()]);
+    let landed = desktop(2, "d", row([below(pane("d"), pane("e")), pane("x")]));
+    let left = tiles("a", panes(["a", "b", "c"]));
+    arrange(&mut world, "work/desktop_2", vec![left, landed]);
+    answer_move(&mut world);
+    assert_eq!(
+        keyboard(&mut world),
+        "d",
+        "the column's tile takes the keyboard on the desktop it lands on"
     );
     world.advance(Duration::from_secs(1));
     rest(&mut world);
@@ -1001,6 +1037,9 @@ fn a_stack_chip_carried_to_another_desktop_too_short_for_it_lands_beside_and_say
 #[test]
 fn a_chip_carried_to_another_desktop_by_resting_on_it_lands_beside_a_tile_without_replacing_it() {
     let mut world = start(TWO_FIT, None, vec![four("a"), other()]);
+    world
+        .daemon
+        .answer_in_turn("desktop_move_leaf", [Answer::Hold]);
 
     let over = in_sidebar(&world, 2);
     world.gesture(|app| app.drag_over(Target::key("shelf.chip.d"), over));
@@ -1027,5 +1066,14 @@ fn a_chip_carried_to_another_desktop_by_resting_on_it_lands_beside_a_tile_withou
     assert_eq!(sent_moves[0]["leaf_id"], "d");
     assert_eq!(sent_moves[0]["anchor_id"], "x");
     assert_eq!(sent_moves[0]["whole_column"], true);
+    let landed = desktop(2, "d", row([pane("x"), pane("d")]));
+    let left = tiles("a", panes(["a", "b", "c"]));
+    arrange(&mut world, "work/desktop_2", vec![left, landed]);
+    answer_move(&mut world);
+    assert_eq!(
+        keyboard(&mut world),
+        "d",
+        "the brought tile takes the keyboard"
+    );
     rest(&mut world);
 }

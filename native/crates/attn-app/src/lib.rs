@@ -249,21 +249,16 @@ pub fn app() -> rune::App<State> {
     .on_modifiers(keys::on_modifiers)
 }
 
-/// The app of a window that shows one popped-out tile; `desktop::Setup` makes a bound
-/// window of it a tile window.
-pub fn tile_window_app() -> rune::App<State> {
+/// The app of a window that shows one popped-out tile, `size` points large;
+/// `desktop::Setup` makes a bound window of it a tile window.
+pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
     rune::App::new(AppSpec {
         on_key: Some(keys::on_key),
         poll: Some(poll),
         fonts: attn_ui::FONTS,
         families: attn_ui::FAMILIES,
         min_size: Some((320.0, 200.0)),
-        ..AppSpec::new(
-            "attn",
-            (640.0, 480.0),
-            State::default,
-            desktop::windows_view,
-        )
+        ..AppSpec::new("attn", size, State::default, desktop::windows_view)
     })
     .on_ime(keys::on_ime)
     .on_focus(desktop::window_focus)

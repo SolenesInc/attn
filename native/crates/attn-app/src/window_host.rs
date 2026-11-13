@@ -135,7 +135,7 @@ impl crate::desktop::Opener for NativeOpener {
         frame: &Frame,
         setup: crate::desktop::Setup,
     ) -> Box<dyn crate::desktop::Opened> {
-        let app = crate::tile_window_app();
+        let app = crate::tile_window_app((frame.width as f32, frame.height as f32));
         let handle = app.handle();
         let created = *frame;
         let spec = rune::WindowSpec::from_app(key, app)

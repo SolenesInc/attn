@@ -682,6 +682,50 @@ fn sending_the_last_tile_of_the_row_to_the_shelf_moves_it_to_the_row_start() {
 }
 
 #[test]
+fn sending_the_right_tile_to_the_shelf_leaves_focus_in_its_slot() {
+    let before = |active: &str| tiles(active, panes(["a", "b", "c", "d", "e"]));
+    let mut world = start(TWO_FIT, Some("66"), vec![before("a")]);
+    press(&mut world, Action::TerminalFocusRight);
+    becomes(&mut world, before("b"));
+    press(&mut world, Action::TerminalFocusRight);
+    becomes(&mut world, before("c"));
+    assert_eq!(screen(&world), ["b", "c"]);
+
+    press(&mut world, Action::ShelfSendToShelf);
+    let send = &sent(&world, "desktop_move_leaf")[0];
+    assert_eq!(
+        (&send["leaf_id"], &send["anchor_id"], &send["edge"]),
+        (&"c".into(), &"e".into(), &"right".into())
+    );
+    assert_eq!(shown_leaf(&world), ["b", "c", "d"]);
+    becomes(&mut world, before("d"));
+    assert_eq!(screen(&world), ["b", "d"]);
+    becomes(&mut world, tiles("d", panes(["a", "b", "d", "e", "c"])));
+    assert_eq!(screen(&world), ["b", "d"]);
+    rest(&mut world);
+}
+
+#[test]
+fn a_refused_send_to_the_shelf_brings_the_tile_back_and_names_the_failure() {
+    let row = |active: &str| tiles(active, panes(["a", "b", "c", "d", "e"]));
+    let mut world = start(TWO_FIT, Some("66"), vec![row("c")]);
+    world.daemon.on("desktop_move_leaf", |r| {
+        super::shelf_drags::refused(r, "refused")
+    });
+    assert_eq!(screen(&world), ["b", "c"]);
+
+    press(&mut world, Action::ShelfSendToShelf);
+    world.settle();
+    assert_eq!(
+        notice(&world).as_deref(),
+        Some("Could not send that tile to the shelf: refused")
+    );
+    becomes(&mut world, row("d"));
+    assert_eq!(screen(&world), ["c", "d"]);
+    rest(&mut world);
+}
+
+#[test]
 fn a_held_column_is_skipped_by_arrows_and_its_chip_brings_it_back() {
     let abc = |active: &str| tiles(active, panes(["a", "b", "c"]));
     let mut world = start(THREE_FIT, None, vec![abc("a")]);

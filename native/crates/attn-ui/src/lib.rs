@@ -162,11 +162,13 @@ pub const FONTS: &[&[u8]] = &[
 ];
 
 /// The sans and mono families, as `AppSpec::families` takes them. Mono is the Tauri app's
-/// terminal chain: the installed Iosevka, then Menlo and the other system monospaces, with
-/// the bundled symbols last for icons no other face has.
+/// terminal chain: the installed Iosevka, then Menlo and the other named monospaces, then
+/// whatever monospace the system has (Rune's `ui-monospace`, which loads its file, where the
+/// Tauri app's `monospace` needs none), and the bundled symbols last for icons no other face
+/// has.
 pub const FAMILIES: (&str, &str) = (
     "Inter",
-    "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, Symbols Nerd Font Mono",
+    "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",
 );
 
 pub mod icon;

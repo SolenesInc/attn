@@ -777,13 +777,7 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     if let (Some(runtime), Some(h)) = (&open.runtime, height) {
         panel = panel.h(h).children(terminal(state, open, runtime, t));
     }
-    Some(
-        el().key("shelf.peek.layer")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .child(panel),
-    )
+    Some(panel)
 }
 
 fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {

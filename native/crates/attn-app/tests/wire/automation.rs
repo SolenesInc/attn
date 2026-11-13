@@ -73,6 +73,21 @@ fn a_press_aimed_by_role_and_name_lands_on_that_element_and_says_so() {
 }
 
 #[test]
+fn a_press_through_the_veil_on_an_inactive_agent_lands_on_its_terminal() {
+    let mut world = two_tiles();
+    assert_eq!(keyboard(&mut world), "t1");
+
+    let receipt = world
+        .automate("press", json!({"target": {"key": "terminal.r-t2"}}))
+        .unwrap();
+
+    assert_eq!(receipt["matched"], true, "{receipt}");
+    assert_eq!(receipt["landed"], "terminal.r-t2", "{receipt}");
+    assert_eq!(keyboard(&mut world), "t2", "the press took the keyboard");
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
 fn a_chord_and_an_action_id_reach_the_same_action() {
     let mut world = two_tiles();
     let sidebar = json!({"target": {"role": "navigation", "name": "Sidebar"}});

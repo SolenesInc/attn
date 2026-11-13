@@ -781,12 +781,12 @@ pub(crate) fn send_move(
         whole_column,
         activate,
         what,
-        |_, _| {},
+        |_, _, _| {},
         tx,
     );
 }
 
-/// [`send_move`], running `then` once the daemon made the move.
+/// [`send_move`], running `then` once the daemon answers, told whether it made the move.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn send_move_then(
     state: &mut State,
@@ -795,7 +795,7 @@ pub(crate) fn send_move_then(
     whole_column: bool,
     activate: bool,
     what: &'static str,
-    then: impl FnOnce(&mut State, &mut Tx) + 'static,
+    then: impl FnOnce(&mut State, bool, &mut Tx) + 'static,
     tx: &mut Tx,
 ) {
     let (desktop, moved) = (source.to_owned(), leaf.to_owned());
@@ -813,8 +813,11 @@ pub(crate) fn send_move_then(
             ..DesktopMoveLeafMessage::new()
         },
         move |state: &mut State, answer, tx: &mut Tx| match answer.outcome() {
-            Err(error) => refused_move(state, &desktop, &moved, what, &error, tx),
-            Ok(_) => then(state, tx),
+            Err(error) => {
+                refused_move(state, &desktop, &moved, what, &error, tx);
+                then(state, false, tx);
+            }
+            Ok(_) => then(state, true, tx),
         },
         tx,
     );
@@ -1126,15 +1129,23 @@ pub(crate) fn send_to_shelf(state: &mut State, tx: &mut Tx) {
             next,
         } => {
             actions::show_leaf(state, &id, &next, tx);
-            move_leaf(
+            state.window.desk.row_mut(&id).held.push(leaf.clone());
+            let (row_of, released) = (id.clone(), leaf.clone());
+            send_move_then(
                 state,
-                &id,
-                &leaf,
-                &anchor,
-                edge,
+                (&id, &id, &leaf, &anchor, edge.as_str()),
+                None,
                 true,
                 false,
                 "send that tile to the shelf",
+                move |state: &mut State, _, _| {
+                    state
+                        .window
+                        .desk
+                        .row_mut(&row_of)
+                        .held
+                        .retain(|held| *held != released);
+                },
                 tx,
             );
         }

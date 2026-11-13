@@ -113,6 +113,7 @@ impl Look {
             el().key(format!("{key}.veil"))
                 .pin(Some(0.0), Some(below), Some(0.0), Some(0.0))
                 .paint_order(1)
+                .inert()
                 .fill(t.bg_tile)
                 .opacity(strength)
                 .opacity_motion(fade())
@@ -128,6 +129,7 @@ impl Look {
         let line = |side: &str, el: El| {
             el.key(format!("{key}.spotlight.{side}"))
                 .paint_order(2)
+                .inert()
                 .fill(t.brand)
         };
         let (start, end) = (Some(0.0), Some(0.0));

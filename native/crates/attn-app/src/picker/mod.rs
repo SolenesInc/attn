@@ -564,10 +564,10 @@ fn browse(state: &mut State, which: Which, tx: &mut Tx) {
     );
 }
 
-/// Keys a picker hears while it, or a control in it, has focus. Returns whether it took the
-/// key.
+/// Keys a picker hears while it, or a control in it, has focus, after the agent keys and the
+/// keymap's shortcuts. Returns whether it took the key.
 pub(crate) fn on_key(state: &mut State, which: Which, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if agent_key(state, which, ev, tx) {
+    if agent_key(state, which, ev, tx) || crate::keys::shortcut_before_field(state, ev, tx) {
         return true;
     }
     let Some(picker) = state.window.launching.picker(which) else {

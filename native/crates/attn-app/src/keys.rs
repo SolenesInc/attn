@@ -19,9 +19,7 @@ pub(crate) const FIELD_KEY_SUFFIX: &str = ".field";
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
 /// the shell's own Ctrl keys on Linux; then the keymap; then the terminal; then nothing.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if matches!(ev.key, Key::Modifier { .. })
-        || state.window.layer == Some(crate::shell::Layer::NewSession)
-    {
+    if !keymap_hears(state, ev) {
         return false;
     }
     if let Some(leader) = state.window.leader.take().filter(|l| tx.clock() < l.until) {
@@ -39,9 +37,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    let field = tx
-        .focused()
-        .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX));
+    let field = in_field(tx);
     if ev.key == Key::Escape
         && tx.focused().is_none()
         && crate::annotations::draft::escape(state, tx)
@@ -253,6 +249,37 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
     if let Some(bytes) = bytes {
         state.terminals.input(&id, &bytes, &state.daemon);
     }
+}
+
+/// The keymap's turn ahead of a focused field's editor, as the Tauri app's shortcuts run
+/// before an input hears the key: a ⌘ or Ctrl chord bound to an action the field does not keep
+/// runs it. The editor would otherwise take the bound chords on the keys it moves the caret
+/// with, such as the row keys on the arrows.
+pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if !keymap_hears(state, ev) || !(ev.mods.cmd || ev.mods.ctrl) {
+        return false;
+    }
+    let focus = Focus {
+        field: in_field(tx),
+        terminal: false,
+    };
+    match state.keymap.press(ev, tx, focus) {
+        Press::Action(action) => {
+            run_shortcut(state, action, tx);
+            true
+        }
+        Press::Leader { .. } | Press::Unbound => false,
+    }
+}
+
+fn keymap_hears(state: &State, ev: &KeyEvent) -> bool {
+    !matches!(ev.key, Key::Modifier { .. })
+        && state.window.layer != Some(crate::shell::Layer::NewSession)
+}
+
+fn in_field(tx: &Tx) -> bool {
+    tx.focused()
+        .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX))
 }
 
 fn run_shortcut(state: &mut State, action: Action, tx: &mut Tx) {

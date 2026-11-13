@@ -294,6 +294,13 @@ fn pointer<S: 'static>(
     let Some(point) = found.point(aimed.at) else {
         return scroll_into_view(rt, &found);
     };
+    if !rt.contains(
+        found.key.as_deref().unwrap_or(&found.path),
+        point.0,
+        point.1,
+    ) {
+        return Attempt::Wait(format!("{:?} to show", aimed.target));
+    }
     let (landed, matched) = Target::landed(rt, &found, point);
     input(rt, point);
     Attempt::Done(json!({

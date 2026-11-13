@@ -756,6 +756,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 tree: sent_on,
                 moves,
             });
+            actions::give_keyboard(state, &source, &leaf, tx);
             let (from, slot) = (source.clone(), dock.anchor.clone());
             super::shelf::send_move_then(
                 state,
@@ -764,8 +765,8 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
                 true,
                 true,
                 "put that tile in the slot",
-                move |state: &mut State, tx: &mut Tx| {
-                    if let Some((anchor, edge)) = back {
+                move |state: &mut State, moved, tx: &mut Tx| {
+                    if moved && let Some((anchor, edge)) = back {
                         super::shelf::send_move(
                             state,
                             &from,
@@ -791,17 +792,23 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
             let Some(current) = state.facts.current_desktop().map(|d| d.id.clone()) else {
                 return;
             };
-            super::shelf::send_move(
+            let already_there = current == source;
+            if already_there {
+                actions::give_keyboard(state, &current, &leaf, tx);
+            }
+            let (landed_on, landed) = (current.clone(), leaf.clone());
+            super::shelf::send_move_then(
                 state,
-                &source,
-                &current,
-                &leaf,
-                &dock.anchor,
-                dock.side.as_str(),
+                (&source, &current, &leaf, &dock.anchor, dock.side.as_str()),
                 Some(dock.ratio),
                 chip.is_some(),
                 true,
                 "move that tile",
+                move |state: &mut State, moved, tx: &mut Tx| {
+                    if moved && !already_there {
+                        actions::give_keyboard(state, &landed_on, &landed, tx);
+                    }
+                },
                 tx,
             );
         }
@@ -809,7 +816,7 @@ fn drop(state: &mut State, drag: &LeafDrag, with_delegates: bool, tx: &mut Tx) {
 }
 
 /// Moves `leaf` to the left of desktop `target`, or of a new desktop, as a drop on the
-/// sidebar does, then shows a new desktop.
+/// sidebar does, then gives `leaf` the keyboard on `target` or shows the new desktop.
 fn to_desktop(
     state: &mut State,
     source: &str,
@@ -820,7 +827,7 @@ fn to_desktop(
     tx: &mut Tx,
 ) {
     let new = target.is_none();
-    let from = source.to_owned();
+    let (from, landing, moved) = (source.to_owned(), target.clone(), leaf.to_owned());
     state.ask(
         |id| DesktopMoveLeafMessage {
             request_id: id,
@@ -834,14 +841,17 @@ fn to_desktop(
             ..DesktopMoveLeafMessage::new()
         },
         move |state: &mut State, answer, tx: &mut Tx| match answer.outcome() {
-            Ok(reply) => {
-                let made = reply
-                    .parse::<ProfileActionResultMessage>()
-                    .and_then(|r| r.desktops?.into_iter().find(|d| d.id != from));
-                if let Some(desktop) = made.filter(|_| new) {
-                    crate::sidebar::open_desktop(state, &desktop.id, tx);
+            Ok(reply) => match landing {
+                Some(desktop) => actions::give_keyboard(state, &desktop, &moved, tx),
+                None => {
+                    let made = reply
+                        .parse::<ProfileActionResultMessage>()
+                        .and_then(|r| r.desktops?.into_iter().find(|d| d.id != from));
+                    if let Some(desktop) = made {
+                        crate::sidebar::open_desktop(state, &desktop.id, tx);
+                    }
                 }
-            }
+            },
             Err(error) => {
                 let what = if new {
                     "Could not move that pane to a new desktop"

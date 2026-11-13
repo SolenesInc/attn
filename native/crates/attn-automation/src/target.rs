@@ -75,7 +75,9 @@ impl Target {
     }
 
     /// Which element the pointer at `(x, y)` lands on, by key or path, and whether that is
-    /// the found element or inside it, as a press on a button's label presses the button.
+    /// the found element or inside it, as a press on a button's label presses the button. An
+    /// inert decoration drawn over its siblings, such as a ring over a tile, passes the
+    /// pointer through to the found element among them.
     pub(crate) fn landed<S>(
         rt: &Runtime<S>,
         found: &Found,
@@ -84,6 +86,22 @@ impl Target {
         let Some(picked) = rt.element_at(x, y) else {
             return (None, false);
         };
+        let over_found = rt
+            .elements()
+            .iter()
+            .any(|e| e.path == picked.path() && e.inert)
+            && picked.path().rsplit_once('/').is_some_and(|(parent, _)| {
+                found
+                    .path
+                    .strip_prefix(parent)
+                    .is_some_and(|rest| rest.starts_with('/'))
+            });
+        if over_found && rt.contains(found.key.as_deref().unwrap_or(&found.path), x, y) {
+            return (
+                Some(found.key.clone().unwrap_or_else(|| found.path.clone())),
+                true,
+            );
+        }
         let inside = picked.path() == found.path
             || picked
                 .path()
