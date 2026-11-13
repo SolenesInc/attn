@@ -933,3 +933,34 @@ fn a_window_the_daemon_cannot_read_says_no_transcript_could_be_read() {
     world.advance(Duration::from_secs(5));
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_mark_whose_message_was_not_yet_drawn_draws_once_the_agent_prints_it_under_long_output() {
+    let daemon = Daemon::scripted().state(showing(vec![agent_pane()], "daemon-1"));
+    daemon
+        .on("session_messages_get", |_| {
+            message(messages_result(&[("m1", MESSAGE)], "ready"))
+        })
+        .on("session_annotations_get", |_| {
+            draft_result(vec![stored_mark("i-agree")], 1)
+        });
+    let mut world = World::start(daemon);
+    world.open_desktop();
+    let lines: Vec<u8> = (0..300)
+        .flat_map(|n| format!("build step {n}\r\n").into_bytes())
+        .collect();
+    output(&world, 1, &lines);
+    world.settle();
+    assert_eq!(violet(&world), [], "the message is not on the rows yet");
+
+    output(&world, 2, b"more output\r\n");
+    world.settle();
+    output(&world, 3, format!("{MESSAGE}\r\n").as_bytes());
+    world.settle();
+    assert_eq!(
+        violet(&world).len(),
+        2,
+        "the mark draws on the message once printed"
+    );
+    assert!(world.runtime_is_at_rest());
+}

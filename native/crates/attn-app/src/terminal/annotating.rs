@@ -173,6 +173,14 @@ pub(crate) struct Shown {
     moved: Option<Bits>,
 }
 
+/// Where a message was last looked for: found on rows `first..=last`, or missed in the newest
+/// `SEARCH_ROWS`, after which only rows that output can have changed are searched.
+#[derive(Clone, Copy)]
+enum Seen {
+    At(u32, u32),
+    Missed,
+}
+
 struct Cached {
     alignment: Alignment,
     writes: u64,
@@ -198,7 +206,7 @@ pub(crate) struct Marking {
     pub(crate) messages_asked: u64,
     aligned: HashMap<String, Cached>,
     /// Where each message was last found, kept across output to search near it first.
-    spans: HashMap<String, ((u32, u32), u16, u64)>,
+    spans: HashMap<String, (Seen, u16, u64)>,
     writes: u64,
     geometry: u64,
     /// The mark ⌥ holds the pointer over.
@@ -395,21 +403,17 @@ impl Marking {
                 && c.total == total
         });
         if !fresh {
-            let near = self
+            let seen = self
                 .spans
                 .get(key)
                 .filter(|(_, at_cols, geometry)| *at_cols == cols && *geometry == self.geometry)
-                .map(|(span, ..)| *span);
-            let alignment = find(markdown, vt, near, total);
-            match alignment.span {
-                Some(span) => {
-                    self.spans
-                        .insert(key.to_owned(), (span, cols, self.geometry));
-                }
-                None => {
-                    self.spans.remove(key);
-                }
-            }
+                .map(|(seen, ..)| *seen);
+            let alignment = find(markdown, vt, seen, total);
+            let seen = alignment
+                .span
+                .map_or(Seen::Missed, |(first, last)| Seen::At(first, last));
+            self.spans
+                .insert(key.to_owned(), (seen, cols, self.geometry));
             self.aligned.insert(
                 key.to_owned(),
                 Cached {
@@ -490,23 +494,47 @@ impl Marking {
     }
 }
 
-/// Finds `markdown` near `near`, the rows it was last found on, or else in the newest
-/// `SEARCH_ROWS`: a find near the old place that misses or touches its window's edge searches
-/// the newest rows instead.
-fn find(markdown: &str, vt: &mut Vt, near: Option<(u32, u32)>, total: u32) -> Alignment {
+/// Finds `markdown` near where it was `seen` last, or else in the newest `SEARCH_ROWS`: a find
+/// near the old place that misses or touches its window's edge searches the newest rows instead.
+/// A message the newest rows missed is looked for again only where output can have drawn it
+/// since: the screen and, above it, the rows the message would take.
+fn find(markdown: &str, vt: &mut Vt, seen: Option<Seen>, total: u32) -> Alignment {
     let newest = (total.saturating_sub(SEARCH_ROWS), total);
-    let (base, end) = near.map_or(newest, |(first, last)| {
-        let half = LOCAL_MARGIN.max(last - first + 1);
-        (first.saturating_sub(half), total.min(last + half + 1))
-    });
+    let (base, end) = match seen {
+        None => newest,
+        Some(Seen::At(first, last)) => {
+            let half = LOCAL_MARGIN.max(last - first + 1);
+            (first.saturating_sub(half), total.min(last + half + 1))
+        }
+        Some(Seen::Missed) => {
+            let (cols, screen) = vt.size();
+            let tall = rows_tall(markdown, cols) + u32::from(screen) + LOCAL_MARGIN;
+            (total.saturating_sub(tall.min(SEARCH_ROWS)), total)
+        }
+    };
     let alignment = align_rows(markdown, vt, base, end);
     let edge = alignment.span.is_some_and(|(first, last)| {
         (first <= base + 1 && base > 0) || (last + 2 >= end && end < total)
     });
-    if near.is_some() && (alignment.span.is_none() || edge) {
+    let retry = match seen {
+        None => false,
+        Some(Seen::At(..)) => alignment.span.is_none() || edge,
+        Some(Seen::Missed) => edge,
+    };
+    if retry {
         return align_rows(markdown, vt, newest.0, newest.1);
     }
     alignment
+}
+
+/// The most rows `markdown` can take at `cols` columns: each line, wrapped.
+fn rows_tall(markdown: &str, cols: u16) -> u32 {
+    let cols = usize::from(cols.max(1));
+    let rows: usize = markdown
+        .lines()
+        .map(|line| line.chars().count().div_ceil(cols).max(1))
+        .sum();
+    u32::try_from(rows).unwrap_or(u32::MAX)
 }
 
 fn align_rows(markdown: &str, vt: &mut Vt, base: u32, end: u32) -> Alignment {

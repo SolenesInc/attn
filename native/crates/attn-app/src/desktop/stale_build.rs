@@ -85,7 +85,7 @@ fn reload_hint(t: &Tokens) -> El {
         .child(text("•••").font(type_::SECTION).color(t.text_secondary));
     let menu = col()
         .gap(5.0)
-        .w(89.0)
+        .min_w(89.0)
         .padding(6.0)
         .radius(6.0)
         .fill(t.bg_elevated)
