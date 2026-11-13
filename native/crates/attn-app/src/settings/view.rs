@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text, text_input};
+use rune_kit::{IconButton, IconButtonVariant};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
@@ -65,6 +66,7 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
 }
 
 fn header(state: &State, t: &Tokens) -> El {
+    let kit = attn_ui::kit(t);
     let search = text_input(&state.window.settings.search, type_::BODY)
         .key(SEARCH_FIELD)
         .single_line()
@@ -95,22 +97,12 @@ fn header(state: &State, t: &Tokens) -> El {
         )
         .child(search)
         .child(
-            row()
-                .key("settings.close")
-                .role("button")
+            IconButton::new(kit.glyph.close)
+                .variant(IconButtonVariant::Ghost)
                 .label("Close settings")
-                .focusable(true)
-                .w(24.0)
-                .h(24.0)
-                .center()
-                .radius(4.0)
-                .hover(t.bg_selected)
-                .child(
-                    text(attn_ui::icon::CLOSE)
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .on_press_tx(super::close),
+                .on_press_tx(super::close)
+                .build(&kit)
+                .key("settings.close"),
         )
 }
 

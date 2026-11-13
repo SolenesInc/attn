@@ -133,6 +133,7 @@ pub fn kit(t: &Tokens) -> rune_kit::Kit {
     p.bg_deep = t.bg_app;
     p.layer_01 = t.bg_elevated;
     p.bg_button_neutral = t.bg_button;
+    p.layer_04 = t.border_hover;
     p.bg_accent = t.accent;
     p.text_base = t.text_primary;
     p.text_muted = t.text_secondary;

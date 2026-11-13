@@ -129,6 +129,8 @@ fn scale_control(
 
 type Press = fn(&mut State, &mut Tx);
 
+const THEMES: &[(&str, &str)] = &[("dark", "Dark"), ("light", "Light"), ("system", "System")];
+
 fn reset_ui_scale(state: &mut State, tx: &mut Tx) {
     run(state, Action::UiResetFontSize, tx);
 }
@@ -182,7 +184,7 @@ pub(super) fn page(state: &State, t: &Tokens) -> Vec<El> {
             vec![segmented(
                 THEME,
                 "Theme preference",
-                &[("dark", "Dark"), ("light", "Light"), ("system", "System")],
+                THEMES,
                 theme,
                 t,
                 choose_theme,

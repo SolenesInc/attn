@@ -4,6 +4,7 @@ use attn_protocol::go_values::FEATURES;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, row, text, text_input};
+use rune_kit::{Button, ControlSize, SegmentedControl, Switch};
 
 use super::autosave;
 use crate::State;
@@ -84,24 +85,11 @@ pub(super) fn named_button(
     t: &Tokens,
     press: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    row()
-        .key(key)
-        .role("button")
-        .label(label.to_owned())
-        .focusable(true)
-        .px(space::S2)
-        .h(24.0)
-        .items_center()
-        .radius(4.0)
-        .fill(t.bg_button)
-        .border(1.0, t.border)
-        .hover(t.bg_selected)
-        .child(
-            text(shown.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_primary),
-        )
+    Button::new(shown)
         .on_press_tx(press)
+        .build(&attn_ui::kit(t))
+        .key(key)
+        .label(label.to_owned())
 }
 
 /// A switch that reads On or Off when `show_state` asks for it.
@@ -113,34 +101,23 @@ pub(super) fn switch(
     t: &Tokens,
     toggle: impl Fn(&mut State, &mut Tx) + 'static,
 ) -> El {
-    let mut track = row()
-        .w(32.0)
-        .h(18.0)
-        .radius(9.0)
-        .padding(2.0)
-        .fill(if on { t.accent } else { t.bg_button })
-        .border(1.0, t.border)
-        .child(rune::el().w(12.0).h(12.0).radius(6.0).fill(t.text_primary))
-        .a11y_hidden();
-    if on {
-        track = track.justify_end();
-    }
+    let switch = Switch::new(on)
+        .label(label)
+        .hide_label()
+        .control_size(ControlSize::Mini)
+        .on_toggle_tx(toggle)
+        .build(&attn_ui::kit(t))
+        .key(key);
     row()
-        .key(key)
-        .role("switch")
-        .label(label.to_owned())
-        .checked(on)
-        .focusable(true)
         .gap(space::S2)
         .items_center()
-        .child(track)
+        .child(switch)
         .children(show_state.then(|| {
             text(if on { "On" } else { "Off" })
                 .font(type_::LABEL)
                 .color(t.text_secondary)
                 .a11y_hidden()
         }))
-        .on_press_tx(toggle)
 }
 
 /// A field that edits the setting `key`: it saves on Enter and when the focus leaves it, and
@@ -225,45 +202,24 @@ pub(super) fn refusal_row(key: String, reason: &str, t: &Tokens) -> El {
         ))
 }
 
-/// The choice among `options` for the setting `key`, saved when one is pressed.
+/// The choice among `options` for the setting `key`, saved when one is picked.
 pub(super) fn segmented(
     key: &str,
     label: &str,
-    options: &[(&'static str, &'static str)],
+    options: &'static [(&'static str, &'static str)],
     chosen: &str,
     t: &Tokens,
     choose: fn(&mut State, &'static str, &mut Tx),
 ) -> El {
-    row()
-        .key(format!("settings.choice.{key}"))
-        .role("group")
-        .label(label.to_owned())
-        .gap(2.0)
-        .padding(2.0)
-        .radius(6.0)
-        .fill(t.bg_input)
-        .border(1.0, t.border)
-        .children(options.iter().map(|&(value, name)| {
-            let on = value == chosen;
-            row()
-                .key(format!("settings.choice.{key}.{value}"))
-                .role("button")
-                .label(name)
-                .checked(on)
-                .focusable(true)
-                .px(space::S3)
-                .h(24.0)
-                .items_center()
-                .radius(4.0)
-                .fill(if on { t.bg_selected } else { t.bg_input })
-                .hover(t.bg_elevated)
-                .child(text(name).font(type_::LABEL).color(if on {
-                    t.text_primary
-                } else {
-                    t.text_secondary
-                }))
-                .on_press_tx(move |state: &mut State, tx: &mut Tx| choose(state, value, tx))
-        }))
+    let names: Vec<&str> = options.iter().map(|&(_, name)| name).collect();
+    let selected = options.iter().position(|&(value, _)| value == chosen);
+    let control = SegmentedControl::new(&names, selected)
+        .label(label)
+        .fit()
+        .on_pick(move |state: &mut State, i: usize, tx: &mut Tx| choose(state, options[i].0, tx))
+        .build(&attn_ui::kit(t))
+        .key(format!("settings.choice.{key}"));
+    row().child(control)
 }
 
 /// The switch in a feature page's head, which turns the feature on and off.

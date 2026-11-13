@@ -7,7 +7,7 @@ use attn_protocol::go_values::FEATURES;
 use attn_protocol::{
     GitHubHostsUpdatedMessage, InitialStateMessage, Profile, SettingsUpdatedMessage,
 };
-use attn_testkit::{Daemon, Request, Target, World, key_event, message};
+use attn_testkit::{Daemon, Node, Request, Target, World, key_event, message};
 use rune::{Key, KeyEvent, KeyPlatform, Mods};
 use serde_json::{Value, json};
 
@@ -391,20 +391,28 @@ fn a_theme_click_saves_the_theme_and_the_window_follows_it() {
     open(&mut world);
     click(&mut world, "settings.nav.general");
     assert_eq!(state(&mut world)["activeSection"], "general");
-    let dark = world
-        .screen()
-        .get(Target::key("settings.choice.theme.dark"));
-    assert!(dark.is("checked"));
+    assert!(theme(&world, "Dark").is("checked"));
 
-    click(&mut world, "settings.choice.theme.light");
+    world
+        .automate(
+            "press",
+            json!({"target": {"role": "radio", "name": "Light"}}),
+        )
+        .unwrap();
 
     assert_eq!(writes(&world), [("theme".to_owned(), "light".to_owned())]);
     assert_eq!(stored.lock().unwrap()["theme"], "light");
-    let light = world
-        .screen()
-        .get(Target::key("settings.choice.theme.light"));
-    assert!(light.is("checked"));
+    assert!(theme(&world, "Light").is("checked"));
     rest(&mut world);
+}
+
+fn theme(world: &World, name: &str) -> Node {
+    world
+        .screen()
+        .descendants(Target::key("settings.choice.theme"))
+        .into_iter()
+        .find(|node| node.role == "radio-button" && node.name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("no {name} theme choice"))
 }
 
 #[test]
