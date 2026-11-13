@@ -41,6 +41,8 @@ macro_rules! actions {
             SwitchToProfile { profile: String },
             /// Rename an agent, in the rename popover over its tile.
             RenameSession { session: String },
+            /// Pin the usage breakdown in an agent's tile header.
+            ShowSessionUsage { session: String },
             /// Restart an agent in its pane.
             ReloadSession { session: String },
             /// End an agent's snooze.
@@ -66,6 +68,7 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "profile.switchTo",
                     Action::RenameSession { .. } => "session.rename",
                     Action::ReloadSession { .. } => "session.reload",
+                    Action::ShowSessionUsage { .. } => "session.showUsage",
                     Action::WakeSession { .. } => "session.wake",
                     Action::SetSetting { .. } => "setting.set",
                     Action::ClearDraggedWidths { .. } => "shelf.clearDraggedWidths",
@@ -83,6 +86,7 @@ macro_rules! actions {
                     Action::SwitchToProfile { .. } => "Switch to a profile",
                     Action::RenameSession { .. } => "Rename an agent",
                     Action::ReloadSession { .. } => "Reload an agent",
+                    Action::ShowSessionUsage { .. } => "Show an agent's usage",
                     Action::WakeSession { .. } => "Unsnooze an agent",
                     Action::SetSetting { .. } => "Change a setting",
                     Action::ClearDraggedWidths { .. } => "Clear dragged widths",

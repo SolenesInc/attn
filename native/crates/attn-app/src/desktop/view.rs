@@ -74,7 +74,11 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         row_state,
         area_bits,
         dragging.clone(),
-        (ratio_bits(&desk.ratios), desk.peeks.unsent()),
+        (
+            ratio_bits(&desk.ratios),
+            desk.peeks.unsent(),
+            usage_badges(desktop, &facts.sessions),
+        ),
         *t,
         scale.to_bits(),
     );
@@ -142,6 +146,15 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             super::settle(state, tx);
         })
         .child(content)
+}
+
+fn usage_badges(desktop: Option<&Desktop>, sessions: &[Session]) -> Vec<super::usage::Badge> {
+    desktop
+        .into_iter()
+        .flat_map(|d| &d.panes)
+        .filter_map(|p| sessions.iter().find(|s| s.id == p.session_id))
+        .filter_map(super::usage::badge)
+        .collect()
 }
 
 fn settles(desktop: &Desktop, sessions: &[Session]) -> Vec<(String, Settle)> {
@@ -637,14 +650,18 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
         .h(height)
         .hover_group()
         .child(headline)
-        .children(pane.map(|pane| subline(&key, &pane.session_id, t)))
+        .children(pane.map(|pane| subline(&key, &leaf.id, &pane.session_id, session, t)))
         .children(track)
 }
 
-/// The agent header's second line: the session's short id, which copies the whole id.
-fn subline(key: &str, session: &str, t: &Tokens) -> El {
+/// The agent header's second line: the session's usage, and its short id, which copies the
+/// whole id.
+fn subline(key: &str, leaf: &str, session: &str, facts: Option<&Session>, t: &Tokens) -> El {
     let short: String = session.chars().take(8).collect();
     let id = session.to_owned();
+    let usage = facts
+        .and_then(super::usage::badge)
+        .map(|badge| super::usage::piece(leaf, session, &badge, SUBLINE_TYPE, t));
     row()
         .key(format!("{key}.subline"))
         .w_full()
@@ -662,6 +679,7 @@ fn subline(key: &str, session: &str, t: &Tokens) -> El {
                 .color(t.text_tertiary)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone())),
         )
+        .children(usage)
 }
 
 /// The header's pencil, which renames the agent's session.

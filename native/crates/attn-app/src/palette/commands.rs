@@ -314,6 +314,20 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .describe("Change its name in the sidebar and tile")
             .pin(),
         );
+        if crate::desktop::shows_usage(session) {
+            commands.push(
+                Command::new(
+                    "show-session-usage",
+                    &format!("Show {name}'s usage"),
+                    &["usage", "tokens", "cost", "models", "agent", "session"],
+                    Action::ShowSessionUsage {
+                        session: session.id.clone(),
+                    },
+                )
+                .describe("Token and cost totals for each model in this session")
+                .pin(),
+            );
+        }
     }
     let snoozed = on_screen.filter(|s| {
         queue_on

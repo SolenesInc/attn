@@ -95,6 +95,17 @@ impl Screen {
             .unwrap_or_default()
     }
 
+    /// Every element under the element, in reading order, or a panic that prints the whole
+    /// tree.
+    pub fn descendants(&self, target: Target) -> Vec<Node> {
+        let top = self
+            .values()
+            .into_iter()
+            .find(|value| target.matches(&node(value)))
+            .unwrap_or_else(|| panic!("no element matches {target:?} on this screen:\n{self}"));
+        Screen(top.clone()).nodes().into_iter().skip(1).collect()
+    }
+
     /// The element that has the keyboard, if any.
     pub fn focused(&self) -> Option<Node> {
         self.nodes().into_iter().find(|node| node.is("focused"))

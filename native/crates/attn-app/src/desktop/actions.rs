@@ -17,6 +17,9 @@ pub(crate) fn run(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
     use Action::*;
     match action {
         GoToDesktop { desktop } => set_current(state, desktop, Refused::Quiet, tx),
+        ShowSessionUsage { session } => {
+            super::header_pop::pin(state, session, super::header_pop::What::Usage)
+        }
         OpenTile { desktop, tile } => show_leaf(state, desktop, tile, tx),
         ClearDraggedWidths { desktop } => super::shelf::clear_dragged_widths(state, desktop, tx),
         MoveWithDelegates { desktop } => move_with_delegates(state, desktop, tx),

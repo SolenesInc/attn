@@ -7,12 +7,14 @@ mod divider;
 mod drag;
 mod filter_panel;
 mod find_bar;
+mod header_pop;
 pub mod layout;
 mod overview;
 mod peek;
 mod shelf;
 mod stale_build;
 mod terminal_menu;
+mod usage;
 mod view;
 mod windows;
 
@@ -79,6 +81,7 @@ pub struct Desk {
     /// Where shelf chips, caps and the shelf are in the window, by element key, for drops.
     pub(crate) rects: HashMap<String, [f32; 4]>,
     pub(crate) peeks: peek::Peeks,
+    pub(crate) header_pop: header_pop::HeaderPop,
     /// The desktop the overview's keys act on.
     pub(crate) overview_focus: Option<String>,
     /// The drain under each tile header whose agent's turn counts down to settling, by session.
@@ -156,12 +159,26 @@ impl History {
     }
 }
 
+/// Whether `session`'s tile header shows its usage.
+pub(crate) fn shows_usage(session: &attn_protocol::Session) -> bool {
+    usage::shown(session).is_some()
+}
+
+/// The open tile header popover.
+pub(crate) fn header_popover(state: &State, t: &attn_ui::Tokens) -> Option<rune::El> {
+    let pop = state.window.desk.header_pop.open.as_ref()?;
+    match pop.what {
+        header_pop::What::Usage => usage::popover(state, pop, t),
+    }
+}
+
 /// Lets the moments the desktops keep lapse when their time is up: chips' flashes, the rest a
-/// drag takes on a sidebar desktop before the window switches to it, and the peek's delays and
-/// reads. Returns whether anything changed.
+/// drag takes on a sidebar desktop before the window switches to it, the delays of the peek
+/// and the header popover, and the peek's reads. Returns whether anything changed.
 pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
-    let switched = drag::expire(state, tx) | peek::expire(state, tx);
     let now = tx.clock();
+    let switched =
+        drag::expire(state, tx) | peek::expire(state, tx) | header_pop::expire(state, now);
     let flashes = &mut state.window.desk.flashes;
     let before = flashes.len();
     flashes.retain(|f| f.until > now);
@@ -260,6 +277,7 @@ impl Desk {
             }
         }
         self.follow_current(facts);
+        self.header_pop.follow(facts);
         if let Some(desktop) = facts.current_desktop()
             && !desktop.active_pane_id.is_empty()
         {

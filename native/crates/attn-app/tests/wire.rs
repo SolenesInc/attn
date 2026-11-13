@@ -24,4 +24,5 @@ mod wire {
     mod terminal_links;
     mod terminal_stale_build;
     mod terminal_view;
+    mod tile_header;
 }

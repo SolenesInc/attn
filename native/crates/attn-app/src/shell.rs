@@ -140,12 +140,14 @@ const PALETTE_FIELD: &str = "palette.field";
 impl Window {
     pub(crate) fn go_home(&mut self) {
         self.view = View::Home;
+        self.desk.header_pop = Default::default();
         self.follow_next_turn = false;
     }
 
     /// Home after the last turn closed, ready to open the next one that opens.
     pub(crate) fn go_home_following(&mut self) {
         self.view = View::Home;
+        self.desk.header_pop = Default::default();
         self.follow_next_turn = true;
     }
 
@@ -422,6 +424,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
     }
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::desktop::peek(state, t));
+    layers.extend(crate::desktop::header_popover(state, t));
     layers.extend(crate::sidebar::snooze::view(state, t));
     layers.extend(crate::sidebar::session_menu::view(state, t));
     layers.extend(crate::desktop::width_label(state, t));
