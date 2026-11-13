@@ -28,3 +28,8 @@ item	statement	native_test	reason
 49	A terminal mark paints a violet wash and underline over the text it quotes, and only while the rows still read as its quote	attn-app/tests/wire/terminal_annotations.rs::a_stored_draft_draws_on_its_message_and_a_mark_whose_text_left_the_screen_is_not_drawn	
 49	A terminal mark brightens while ⌥ is held over it	attn-app/tests/wire/terminal_annotations.rs::alt_over_a_mark_brightens_it	
 49	Terminal marks paint in the packaged app on Linux	live:s-9d54yh/annotations-native-panel.png	
+27	⌘W closes the active tile, not the window	attn-app/tests/wire/keys.rs::close_ends_the_active_terminal_and_on_an_empty_desktop_closes_the_desktop	
+35	A tile window brought back hides, and the next pop-out reuses it (the Present window, re-derived to tile windows)	attn-app/tests/wire/desktops.rs::a_tile_brought_back_hides_its_window_and_the_next_pop_out_reuses_it	
+36	A secondary window gains focus after load so its content is not blank		n/a: native windows draw their content on their first frame, with no webview load that leaves one blank until it takes focus
+37	Window commands resolve the calling window: the pop-out key and close pressed in a tile window bring that tile back	attn-app/tests/wire/desktops.rs::the_pop_out_key_and_close_pressed_in_a_tile_window_bring_its_tile_back	
+47	A divider drag that ends in a terminal paints no selection in it	attn-app/tests/wire/terminal_view.rs::a_divider_drag_that_ends_in_the_terminal_selects_nothing_in_it	

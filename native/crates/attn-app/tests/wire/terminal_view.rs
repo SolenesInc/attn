@@ -4,7 +4,9 @@ use attn_testkit::{World, message};
 use rune::{Key, KeyEvent, Mods, PhysicalInput, WheelEvent};
 use serde_json::{Value, json};
 
-use super::terminal::{attached, cell, inputs, one_terminal, output, pointed, snapshot_of, typed};
+use super::terminal::{
+    attached, cell, inputs, one_terminal, output, pane, pointed, showing, snapshot_of, typed,
+};
 
 /// The terminal's copy key: ⌘C on macOS, Ctrl+Shift+C elsewhere, where Ctrl+C is the shell's.
 pub(crate) const COPY: &str = if cfg!(target_os = "macos") {
@@ -499,6 +501,34 @@ fn a_drag_that_starts_on_the_tile_header_selects_nothing_in_the_terminal() {
     assert_eq!(washes(&mut world), []);
     assert_eq!(copied(&mut world), None);
     assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_divider_drag_that_ends_in_the_terminal_selects_nothing_in_it() {
+    let panes = vec![pane("t1", "r1"), pane("t2", "r2")];
+    let mut world =
+        World::start(attn_testkit::Daemon::scripted().state(showing(panes, "daemon-1")));
+    world.resize((1600.0, 1000.0));
+    world.open_desktop();
+    output(&world, 1, b"alpha beta\r\n");
+    world.settle();
+    let divider = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .find_map(|e| e.key.filter(|k| k.starts_with("divider.")))
+        .expect("the two terminals have a divider between them");
+    let (strip, _) = world.runtime().presented(&divider).unwrap();
+    let over_the_terminal = (strip[0] + 1.0, strip[1] + strip[3] / 2.0);
+    let inside = cell(&world, 6, 0);
+    world.gesture(|app| {
+        app.runtime
+            .pointer_down(over_the_terminal.0, over_the_terminal.1);
+        app.runtime.pointer_move(inside.0, inside.1);
+        app.runtime.pointer_up(inside.0, inside.1);
+    });
+    assert_eq!(washes(&mut world), []);
+    assert_eq!(copied(&mut world), None);
 }
 
 #[test]
