@@ -565,6 +565,39 @@ fn a_reopened_document_shows_its_image_as_the_file_is_now() {
 }
 
 #[test]
+fn an_edited_document_shows_its_image_as_the_file_is_now() {
+    let mut world = start();
+    let file = std::sync::Arc::new(std::sync::Mutex::new(RED));
+    let on_disk = file.clone();
+    world.daemon.on("tile_asset_read", move |r| {
+        serde_json::to_value(TileAssetReadResultMessage {
+            request_id: r["request_id"].as_str().map(str::to_owned),
+            success: true,
+            data_uri: Some(format!("data:image/png;base64,{}", on_disk.lock().unwrap())),
+            ..TileAssetReadResultMessage::new()
+        })
+        .unwrap()
+    });
+    let chart_shape = |world: &World| {
+        let [_, _, w, h] = world
+            .screen()
+            .bounds(Target::role("image").name("chart"))
+            .unwrap();
+        w / h
+    };
+    world.daemon.emit(content("![chart](chart.png)"));
+    world.settle();
+    assert_eq!(chart_shape(&world), 4.0 / 3.0);
+
+    *file.lock().unwrap() = GREEN;
+    world.daemon.emit(content("# Chart\n\n![chart](chart.png)"));
+    world.settle();
+
+    assert_eq!(chart_shape(&world), 4.0);
+    rest(&mut world);
+}
+
+#[test]
 fn a_documents_front_matter_shows_as_a_card_of_its_top_level_fields() {
     let mut world = start();
     world.daemon.emit(content(

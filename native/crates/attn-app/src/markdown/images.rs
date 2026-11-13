@@ -11,6 +11,8 @@ use rune::{El, Image, ImageCache, Tx, el};
 use rune_kit::{ImageZoom, Preview, image_zoom};
 
 use super::links::{self, Target};
+use attn_client::TileKey;
+
 use crate::State;
 use crate::requests::Answer;
 
@@ -21,11 +23,23 @@ struct Source {
     path: String,
 }
 
+/// A picture's read, with the picture read before it, shown until this one is ready.
 enum Load {
-    Asked,
-    Decoding(Image),
+    Asked(Option<Image>),
+    Decoding(Image, Option<Image>),
     Ready(Image),
     Failed,
+}
+
+impl Load {
+    fn shown(&self) -> Option<&Image> {
+        match self {
+            Load::Ready(image) | Load::Asked(Some(image)) | Load::Decoding(_, Some(image)) => {
+                Some(image)
+            }
+            _ => None,
+        }
+    }
 }
 
 /// The window's pictures for the documents its tiles show, and the one open larger.
@@ -37,6 +51,9 @@ pub struct Pictures {
     pub(crate) revision: u64,
     /// The tile contents revision the loads follow.
     followed: Option<u64>,
+    /// Each shown document's content as last followed, whose images are read again when it
+    /// changes.
+    documents: HashMap<TileKey, u64>,
     shown: Option<Shown>,
     zoom: ImageZoom,
     /// The window's size in points, which the open image fits in.
@@ -56,7 +73,7 @@ impl Pictures {
 
     /// Whether a picture is still decoding, which will wake the window when it is done.
     pub fn decoding(&self) -> bool {
-        self.loads.values().any(|l| matches!(l, Load::Decoding(_)))
+        self.loads.values().any(|l| matches!(l, Load::Decoding(..)))
     }
 
     /// The ready pictures of a document on `host`, by the paths its images resolve to.
@@ -65,10 +82,7 @@ impl Pictures {
             self.loads
                 .iter()
                 .filter(|(source, _)| source.host.as_deref() == host)
-                .filter_map(|(source, load)| match load {
-                    Load::Ready(image) => Some((source.path.clone(), image.clone())),
-                    _ => None,
-                })
+                .filter_map(|(source, load)| Some((source.path.clone(), load.shown()?.clone())))
                 .collect(),
         )
     }
@@ -95,33 +109,44 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     let contents = state.facts.tile_contents.clone();
     if state.pictures.followed != Some(contents.revision) {
         state.pictures.followed = Some(contents.revision);
-        let wanted: HashSet<Source> = contents
-            .tiles
-            .values()
-            .filter(|c| c.message.error.as_deref().is_none_or(str::is_empty))
-            .flat_map(|c| {
-                let host = c.message.host.clone().filter(|h| !h.is_empty());
-                images_in(&c.message.path, &c.message.content)
-                    .into_iter()
-                    .map(move |path| Source {
-                        host: host.clone(),
-                        path,
-                    })
-            })
-            .collect();
+        let mut wanted = HashSet::new();
+        let mut changed = HashSet::new();
+        let mut documents = HashMap::new();
+        for (key, c) in &contents.tiles {
+            let c = &c.message;
+            if c.error.as_deref().is_some_and(|e| !e.is_empty()) {
+                continue;
+            }
+            let host = c.host.clone().filter(|h| !h.is_empty());
+            let read = hash(&(&c.path, &host, &c.content));
+            let fresh = state.pictures.documents.get(key) != Some(&read);
+            documents.insert(key.clone(), read);
+            for path in images_in(&c.path, &c.content) {
+                let source = Source {
+                    host: host.clone(),
+                    path,
+                };
+                if fresh {
+                    changed.insert(source.clone());
+                }
+                wanted.insert(source);
+            }
+        }
+        state.pictures.documents = documents;
         state
             .pictures
             .loads
             .retain(|source, _| wanted.contains(source));
         for source in wanted {
-            if matches!(state.pictures.loads.get(&source), None | Some(Load::Failed)) {
+            let unread = matches!(state.pictures.loads.get(&source), None | Some(Load::Failed));
+            if unread || changed.contains(&source) {
                 read(state, source, tx);
             }
         }
     }
     let mut changed = false;
     for load in state.pictures.loads.values_mut() {
-        if let Load::Decoding(image) = load
+        if let Load::Decoding(image, _) = load
             && image.is_ready()
         {
             *load = match image.error() {
@@ -138,7 +163,12 @@ pub(crate) fn follow(state: &mut State, now: f64, tx: &mut Tx) -> bool {
 }
 
 fn read(state: &mut State, source: Source, tx: &mut Tx) {
-    state.pictures.loads.insert(source.clone(), Load::Asked);
+    let before = state.pictures.loads.remove(&source);
+    let previous = before.as_ref().and_then(Load::shown).cloned();
+    state
+        .pictures
+        .loads
+        .insert(source.clone(), Load::Asked(previous));
     let asked = source.clone();
     state.ask(
         |id| TileAssetReadMessage {
@@ -148,9 +178,10 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
             ..TileAssetReadMessage::new()
         },
         move |state, answer: Answer, _| {
-            let Some(Load::Asked) = state.pictures.loads.get(&source) else {
+            let Some(Load::Asked(previous)) = state.pictures.loads.get(&source) else {
                 return;
             };
+            let previous = previous.clone();
             let bytes = answer
                 .outcome()
                 .ok()
@@ -158,7 +189,7 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
                 .and_then(|result| result.data_uri)
                 .and_then(|uri| decoded(&uri));
             let load = match (bytes, &state.pictures.cache) {
-                (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes)),
+                (Some(bytes), Some(cache)) => Load::Decoding(cache.load(bytes), previous),
                 _ => Load::Failed,
             };
             if matches!(load, Load::Failed) {
@@ -168,6 +199,11 @@ fn read(state: &mut State, source: Source, tx: &mut Tx) {
         },
         tx,
     );
+}
+
+fn hash(value: &impl std::hash::Hash) -> u64 {
+    use std::hash::{BuildHasher, BuildHasherDefault, DefaultHasher};
+    BuildHasherDefault::<DefaultHasher>::default().hash_one(value)
 }
 
 fn decoded(data_uri: &str) -> Option<Vec<u8>> {

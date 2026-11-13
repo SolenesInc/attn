@@ -44,3 +44,4 @@ item	statement	native_test	reason
 35	On macOS, closing the main window while a tile window shows hides it, and reopening the app shows it again, as in the Tauri app	live:s-nacrpp/p15-ab-r3.txt	
 35	Closing the main window with no tile window showing quits the app; off macOS it always quits, an improvement on the Tauri app, which hides a main window nothing there can reopen	live:s-nacrpp/p15-c-r3.txt	
 35	On macOS, a main window hidden while a tile window showed comes back when the last tile window closes, as in the Tauri app	live:s-nacrpp/p15-d-r3.txt	
+50	A markdown tile reads its local images again when its document changes, so a picture changed on disk shows as the file is now	attn-app/tests/wire/markdown.rs::an_edited_document_shows_its_image_as_the_file_is_now	
