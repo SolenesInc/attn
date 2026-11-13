@@ -320,7 +320,8 @@ fn forget(state: &mut State, key: &str) {
 }
 
 /// Runs `action`, pressed in a tile window, in the main window: the tile's own actions act on
-/// it, the row's do nothing, and the rest run as if pressed in the main window.
+/// it, the row's do nothing, and the rest run as if pressed in the main window, which comes to
+/// the front when one ran.
 pub(crate) fn forward(state: &mut State, action: Action) -> bool {
     let Some(tile) = &state.window.tile else {
         return false;
@@ -354,8 +355,9 @@ fn run_from(state: &mut State, desktop: &str, leaf: &str, action: Action, tx: &m
         | TerminalFocusUp
         | TerminalFocusDown => {}
         action => {
-            crate::frame::raise_main();
-            crate::dispatch::dispatch(state, action, tx);
+            if crate::dispatch::run(state, action, tx) == crate::dispatch::Outcome::Ran {
+                crate::frame::raise_main();
+            }
         }
     }
 }

@@ -3341,3 +3341,32 @@ fn a_desktop_holding_only_a_document_shows_the_document_and_not_the_launcher() {
         header(&world)
     );
 }
+
+#[test]
+fn a_key_pressed_in_a_tile_window_whose_action_does_not_run_says_nothing_in_the_main_window() {
+    let mut world = start(vec![with_document(Some(OUT))]);
+    let key = only_window(&world).key;
+    let keymap = Keymap::from_setting(None, KeyPlatform::current());
+
+    for action in Action::ALL {
+        let Some(Binding::Chord(chord)) = keymap.binding(action) else {
+            continue;
+        };
+        world.tile_gesture(&key, |app| app.key(key_event(&chord)));
+        let said = notice(&world);
+        assert!(
+            !said
+                .as_deref()
+                .is_some_and(|n| n.starts_with("Not in the native app yet")),
+            "{}: {said:?}",
+            action.id()
+        );
+        world.advance(Duration::from_secs(6));
+        world.tile_gesture(&key, |app| {
+            app.key(rune::KeyEvent {
+                key: rune::Key::Escape,
+                mods: rune::Mods::default(),
+            })
+        });
+    }
+}
