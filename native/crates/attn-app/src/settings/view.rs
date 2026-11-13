@@ -5,7 +5,7 @@ use rune_kit::{IconButton, IconButtonVariant};
 
 use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
-use super::{appearance, bus, pages, tasks};
+use super::{analytics, appearance, bus, pages, tasks};
 use crate::State;
 use crate::keys::FIELD_KEY_SUFFIX;
 use crate::setting;
@@ -38,7 +38,8 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
                 .min_h(0.0)
                 .child(nav(state, t))
                 .child(body(state, t)),
-        );
+        )
+        .children(analytics::toast(state, t));
     Some(
         el().key("settings")
             .absolute(0.0, 0.0)
@@ -266,6 +267,7 @@ fn page(state: &State, section: Section, t: &Tokens) -> Vec<El> {
         Section::Experimental => pages::experimental(state, t),
         Section::BackgroundTasks => tasks::page(state, state.window.now_ms, t),
         Section::EventBus => bus::page(state, state.window.now_ms, t),
+        Section::Analytics => analytics::page(state, t),
         other => pages::not_yet(other.item().label, t),
     }
 }

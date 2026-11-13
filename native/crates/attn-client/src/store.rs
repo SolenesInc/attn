@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
     Ask, Desktop, DesktopTileContentMessage, GitOperation, InitialStateMessage, OutpostInfo,
-    Profile, Seed, Session, SessionLedgerEntry, Worktree, WorktreeSweepEntry,
+    Profile, Seed, Session, SessionLedgerEntry, Vent, Worktree, WorktreeSweepEntry,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -25,6 +25,8 @@ pub struct Facts {
     pub garden: Arc<Garden>,
     /// The selected profile's open asks, then the ones answered in the last day.
     pub asks: Arc<Vec<Ask>>,
+    /// The selected profile's vents: what its agents said got in their way.
+    pub vents: Arc<Vec<Vent>>,
     pub closes: Arc<Closes>,
     /// Rises each time the daemon says attn's kept conversations changed.
     pub kept_conversations: u64,
@@ -257,7 +259,8 @@ impl Slices {
     pub const GIT_OPERATIONS: Slices = Slices(1 << 13);
     pub const TASKS: Slices = Slices(1 << 14);
     pub const NOTIFICATIONS: Slices = Slices(1 << 15);
-    pub const ALL: Slices = Slices((1 << 16) - 1);
+    pub const VENTS: Slices = Slices(1 << 16);
+    pub const ALL: Slices = Slices((1 << 17) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -384,6 +387,7 @@ impl Store {
                 seeds,
             });
             facts.asks = Arc::new(state.asks.unwrap_or_default());
+            facts.vents = Arc::new(state.vents.unwrap_or_default());
             facts.github = Arc::new(GitHub {
                 hosts: state.github_hosts.unwrap_or_default(),
                 polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
@@ -517,6 +521,17 @@ impl Store {
             }
             facts.asks = Arc::new(asks);
             Slices::ASKS
+        });
+    }
+
+    /// A profile's vents; another profile's change nothing here.
+    pub(crate) fn set_vents(&self, profile: &str, vents: Vec<Vent>) {
+        self.change(|facts| {
+            if profile != facts.profiles.selected {
+                return Slices::NONE;
+            }
+            facts.vents = Arc::new(vents);
+            Slices::VENTS
         });
     }
 

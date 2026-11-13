@@ -511,7 +511,7 @@ fn marks(c: &BusConsumerStatus, status: &BusStatusResultMessage) -> Vec<(String,
     marks
 }
 
-fn count(n: i64) -> String {
+pub(super) fn count(n: i64) -> String {
     let digits = n.unsigned_abs().to_string();
     let mut grouped = String::new();
     for (i, d) in digits.chars().enumerate() {
@@ -527,7 +527,7 @@ fn count(n: i64) -> String {
     }
 }
 
-fn bytes(n: i64) -> String {
+pub(super) fn bytes(n: i64) -> String {
     const KB: i64 = 1 << 10;
     const MB: i64 = 1 << 20;
     if n >= MB {
