@@ -510,6 +510,93 @@ fn resetting_onto_a_default_another_action_now_holds_asks_first() {
     assert!(world.runtime_is_at_rest());
 }
 
+/// Two chords led by `leader`: Agents with G and Desktop overview with H.
+fn chords_led_by(leader: Chord) -> Value {
+    json!({
+        "ui.actionMenu": {"leader": stored(leader), "then": {"key": "g"}},
+        "desktop.overview": {"leader": stored(leader), "then": {"key": "h"}},
+    })
+}
+
+#[test]
+fn taking_the_leader_of_several_chords_unbinds_every_one() {
+    let leader = chord("mod+alt+y");
+    let mut world = start(Some(chords_led_by(leader)));
+    open_editor(&mut world);
+
+    record(&mut world, &Action::SessionNew, &leader.to_string());
+    assert_eq!(
+        pending(&world),
+        Some(format!(
+            "{} is “{}” and “{}”.",
+            label(Binding::Chord(leader)),
+            Action::DesktopOverview.label(),
+            Action::UiActionMenu.label(),
+        ))
+    );
+    click(&mut world, "shortcut-editor.reassign");
+
+    assert_eq!(
+        saved_binding(&world, &Action::SessionNew),
+        Some(Binding::Chord(leader))
+    );
+    for freed in [Action::UiActionMenu, Action::DesktopOverview] {
+        assert_eq!(saved_binding(&world, &freed), None, "{}", freed.id());
+        assert!(!row_has(&world, &freed, "unbind"), "{}", freed.id());
+    }
+    click(&mut world, "shortcut-editor.done");
+    world.gesture(|app| app.press(&leader.to_string()));
+    assert!(new_session_dialog(&world));
+}
+
+#[test]
+fn resetting_onto_the_leader_of_several_chords_unbinds_every_one_and_keeps_the_default() {
+    let new_session = default_chord(&Action::SessionNew);
+    let mut setting = chords_led_by(new_session);
+    setting["session.new"] = json!({"key": "j", "meta": true, "alt": true});
+    let mut world = start(Some(setting));
+    open_editor(&mut world);
+
+    click(&mut world, "shortcut-editor.reset.session.new");
+    click(&mut world, "shortcut-editor.reassign");
+
+    assert_eq!(
+        overrides(&world),
+        json!({"ui.actionMenu": null, "desktop.overview": null})
+    );
+    assert_eq!(
+        saved_binding(&world, &Action::SessionNew),
+        Some(Binding::Chord(new_session))
+    );
+    assert_eq!(
+        shown(&world, &Action::SessionNew),
+        keycaps(Binding::Chord(new_session))
+    );
+}
+
+#[test]
+fn a_modifier_the_keymap_cannot_match_is_refused_rather_than_dropped() {
+    let (spec, refused) = if platform() == KeyPlatform::Mac {
+        ("mod+ctrl+y", "Control")
+    } else {
+        ("mod+super+y", "Super")
+    };
+    let mut world = start(None);
+    open_editor(&mut world);
+    let before = shown(&world, &Action::TilePopOut);
+
+    record(&mut world, &Action::TilePopOut, spec);
+
+    let alert = alert(&world).unwrap_or_default();
+    assert!(
+        alert.starts_with(&format!("{refused} isn’t available as a shortcut modifier")),
+        "{alert}"
+    );
+    assert!(writes(&world).is_empty());
+    hit(&mut world, PhysicalKeyCode::Escape, Mods::default());
+    assert_eq!(shown(&world, &Action::TilePopOut), before);
+}
+
 #[test]
 fn close_session_keeps_the_keys_it_shares_with_closing_a_pane() {
     let mut world = start(Some(

@@ -8,7 +8,10 @@ use std::collections::BTreeMap;
 use attn_protocol::SetSettingMessage;
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
-use rune::{El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, el, row, text};
+use rune::{
+    Chord, ChordKey, ChordMod, El, KeyPlatform, Shortcut, ShortcutError, TextEdit, Tx, col, el,
+    row, text,
+};
 use rune_kit::{
     Badge, BadgeVariant, Button, ButtonVariant, Dialog, Kit, ShortcutRecorder,
     ShortcutRecorderState, TextInput, shortcut_error_message,
@@ -47,13 +50,13 @@ enum Mode {
     Then { leader: Shortcut },
 }
 
-/// Keys another action holds, waiting for Reassign or Cancel.
+/// Keys other actions hold, waiting for Reassign or Cancel.
 #[derive(Clone, Debug)]
 struct Pending {
     action: Action,
     stored: Option<Value>,
     binding: Binding,
-    holder: Action,
+    holders: Vec<Action>,
 }
 
 pub(crate) fn is_open(state: &State) -> bool {
@@ -186,9 +189,6 @@ fn mode_of(state: &State, action: &Action) -> Mode {
     }
 }
 
-const CONTROL_ON_MAC: &str =
-    "Control isn’t available as a shortcut modifier on macOS. Use ⌘, ⌥, or ⇧.";
-
 /// The recorder of `action` heard keys: a combination to bind, a chord's leader to follow, or
 /// Backspace to unbind.
 fn recorded(
@@ -208,11 +208,9 @@ fn recorded(
         write_overrides(state, vec![(action.clone(), Some(Value::Null))], tx);
         return Ok(());
     };
-    if control_alone(shortcut) {
-        return Err(ShortcutError::Backend(CONTROL_ON_MAC.into()));
-    }
+    let stored = storable(shortcut)?;
     match mode_of(state, action) {
-        Mode::Combination => apply(state, action, Some(stored_combo(shortcut)), tx),
+        Mode::Combination => apply(state, action, Some(stored), tx),
         Mode::Leader => {
             let editor = &mut state.window.shortcut_editor;
             editor.then = ShortcutRecorderState::new(None);
@@ -243,19 +241,48 @@ fn recorded_then(
     let Some(then) = shortcut else {
         return Ok(());
     };
-    if control_alone(then) {
-        return Err(ShortcutError::Backend(CONTROL_ON_MAC.into()));
-    }
-    let chord = json!({"leader": stored_combo(&leader), "then": stored_combo(then)});
+    let chord = json!({"leader": storable(&leader)?, "then": storable(then)?});
     apply(state, &action, Some(chord), tx)?;
     state.window.shortcut_editor.recording = None;
     tx.focus(keys_key(&action), false);
     Ok(())
 }
 
-fn control_alone(shortcut: &Shortcut) -> bool {
+/// `shortcut` as `keybindings_config` stores it, refused when the keymap would read it back
+/// with other modifiers than the ones pressed: Control on macOS and Super elsewhere are not
+/// shortcut modifiers there.
+fn storable(shortcut: &Shortcut) -> Result<Value, ShortcutError> {
+    let platform = KeyPlatform::current();
+    let stored = stored_combo(shortcut);
+    let kept = match keymap::parse_binding(&stored, platform) {
+        Some(Binding::Chord(chord)) => chord.mods_on(platform),
+        _ => return Err(ShortcutError::InvalidAccelerator(shortcut.to_string())),
+    };
+    if kept == pressed_modifiers(shortcut).mods_on(platform) {
+        return Ok(stored);
+    }
+    let said = if platform == KeyPlatform::Mac {
+        "Control isn’t available as a shortcut modifier on macOS. Use ⌘, ⌥, or ⇧."
+    } else {
+        "Super isn’t available as a shortcut modifier. Use Ctrl, Alt, or Shift."
+    };
+    Err(ShortcutError::Backend(said.into()))
+}
+
+/// The modifier keys held for `shortcut`, as a chord on any key.
+fn pressed_modifiers(shortcut: &Shortcut) -> Chord {
     let mods = shortcut.modifiers();
-    KeyPlatform::current() == KeyPlatform::Mac && mods.ctrl && !mods.cmd
+    [
+        (mods.ctrl, ChordMod::Ctrl),
+        (mods.alt, ChordMod::Alt),
+        (mods.shift, ChordMod::Shift),
+        (mods.logo, ChordMod::Super),
+    ]
+    .into_iter()
+    .filter(|(held, _)| *held)
+    .fold(Chord::new(ChordKey::Char('a')), |chord, (_, m)| {
+        chord.with(m)
+    })
 }
 
 /// Binds `action` to `stored`, or back to its default for `None`, unless another action holds
@@ -274,19 +301,20 @@ fn apply(
     let Some(binding) = binding else {
         return Err(ShortcutError::InvalidAccelerator(String::new()));
     };
-    if let Some(holder) = keymap.holder(&binding, action) {
-        if holder.is_protected() {
-            return Err(ShortcutError::Backend(format!(
-                "{} is reserved by “{}” and can’t be reassigned.",
-                keymap.label(binding),
-                holder.label()
-            )));
-        }
+    let holders = keymap.holders(&binding, action);
+    if let Some(protected) = holders.iter().find(|holder| holder.is_protected()) {
+        return Err(ShortcutError::Backend(format!(
+            "{} is reserved by “{}” and can’t be reassigned.",
+            keymap.label(binding),
+            protected.label()
+        )));
+    }
+    if !holders.is_empty() {
         state.window.shortcut_editor.pending = Some(Pending {
             action: action.clone(),
             stored,
             binding,
-            holder,
+            holders,
         });
         return Ok(());
     }
@@ -322,11 +350,12 @@ fn reassign(state: &mut State, tx: &mut Tx) {
         .shortcut_editor
         .recorders
         .remove(&pending.action);
-    write_overrides(
-        state,
-        vec![(pending.action, value), (pending.holder, Some(Value::Null))],
-        tx,
-    );
+    let freed = pending
+        .holders
+        .into_iter()
+        .map(|holder| (holder, Some(Value::Null)));
+    let changes = std::iter::once((pending.action, value)).chain(freed);
+    write_overrides(state, changes.collect(), tx);
 }
 
 fn cancel_reassign(state: &mut State) {
@@ -694,9 +723,9 @@ fn action_row(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &K
 
 fn reassign_prompt(keymap: &Keymap, pending: &Pending, t: &Tokens, k: &Kit) -> El {
     let said = format!(
-        "{} is “{}”.",
+        "{} is {}.",
         keymap.label(pending.binding),
-        pending.holder.label()
+        quoted_list(&pending.holders)
     );
     row()
         .key("shortcut-editor.pending")
@@ -723,6 +752,18 @@ fn reassign_prompt(keymap: &Keymap, pending: &Pending, t: &Tokens, k: &Kit) -> E
                 .build(k)
                 .key("shortcut-editor.cancel"),
         )
+}
+
+/// “A”, “B” and “C”.
+fn quoted_list(actions: &[Action]) -> String {
+    let quoted: Vec<String> = actions
+        .iter()
+        .map(|action| format!("“{}”", action.label()))
+        .collect();
+    match quoted.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => quoted.concat(),
+    }
 }
 
 fn controls(state: &State, keymap: &Keymap, action: &Action, t: &Tokens, k: &Kit) -> El {

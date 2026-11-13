@@ -141,13 +141,13 @@ impl Keymap {
         Chord::parse(spec).ok().map(Binding::Chord)
     }
 
-    /// The action other than `except` that pressing `binding` could run, as dispatch decides:
+    /// The actions other than `except` that pressing `binding` could run, as dispatch decides:
     /// the close and send-annotations pairs share plain keys, but a sequence's leader still
-    /// collides with either.
-    pub fn holder(&self, binding: &Binding, except: &Action) -> Option<Action> {
+    /// collides with either. A chord collides with every sequence it leads.
+    pub fn holders(&self, binding: &Binding, except: &Action) -> Vec<Action> {
         self.entries
             .iter()
-            .find(|entry| {
+            .filter(|entry| {
                 entry.action != *except
                     && !(may_share_keys(except, &entry.action)
                         && matches!(
@@ -157,6 +157,7 @@ impl Keymap {
                     && binding.collides(&entry.binding, self.platform)
             })
             .map(|entry| entry.action.clone())
+            .collect()
     }
 
     /// Whether two bindings are the same keys on this keymap's platform.
