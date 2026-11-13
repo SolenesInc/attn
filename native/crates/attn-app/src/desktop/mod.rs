@@ -464,16 +464,16 @@ pub(crate) fn tile_session(desktop: &Desktop, tile: &str) -> Option<String> {
         })
 }
 
-/// The agents whose tiles this window shows: none at home, else the current desktop's
-/// columns on screen, or its one focused tile.
-pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
+/// The tiles this window shows: none at home, else the current desktop's columns on screen,
+/// or its one focused tile.
+pub(crate) fn on_screen_leaves(state: &crate::State) -> Vec<String> {
     if state.window.view == crate::shell::View::Home {
         return Vec::new();
     }
     let Some(desktop) = state.facts.current_desktop() else {
         return Vec::new();
     };
-    let leaves: Vec<String> = match state.window.desk.row(&desktop.id).view {
+    match state.window.desk.row(&desktop.id).view {
         View::Focused(leaf) => vec![leaf],
         _ => state
             .window
@@ -481,7 +481,15 @@ pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
             .plan(&state.facts, desktop)
             .map(|(_, plan)| plan.screen.into_iter().flat_map(|c| c.leaf_ids).collect())
             .unwrap_or_default(),
+    }
+}
+
+/// The agents whose tiles this window shows.
+pub(crate) fn on_screen_sessions(state: &crate::State) -> Vec<String> {
+    let Some(desktop) = state.facts.current_desktop() else {
+        return Vec::new();
     };
+    let leaves = on_screen_leaves(state);
     desktop
         .panes
         .iter()

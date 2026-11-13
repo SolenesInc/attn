@@ -97,14 +97,21 @@ impl Readings {
         self.revision += 1;
         self.tiles.get_mut(tile)
     }
+}
 
-    /// The tile whose toolbar or comment box is open.
-    fn open(&self) -> Option<String> {
-        self.tiles
-            .iter()
-            .find(|(_, r)| r.pending.is_some() || r.composer.is_some())
-            .map(|(tile, _)| tile.clone())
-    }
+/// The tile on screen whose toolbar or comment box is open. A box stays with its tile while
+/// the tile is off screen, and shows again with it.
+fn open(state: &State) -> Option<String> {
+    let mut open = state
+        .readings
+        .tiles
+        .iter()
+        .filter(|(_, r)| r.pending.is_some() || r.composer.is_some())
+        .peekable();
+    open.peek()?;
+    let shown = crate::desktop::on_screen_leaves(state);
+    open.find(|(tile, _)| shown.contains(tile))
+        .map(|(tile, _)| tile.clone())
 }
 
 /// The reader's key in tile `tile`, under which every piece of a selection in it sits.
@@ -355,7 +362,7 @@ fn save_comment(state: &mut State, tile: &str, tx: &mut Tx) {
 /// closes it, ⌥ and a digit picks the label the list numbers, a digit picks one while the
 /// list is open, and a character starts a comment with it. True when it took the key.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    let Some(tile) = state.readings.open() else {
+    let Some(tile) = open(state) else {
         return false;
     };
     let reading = &state.readings.tiles[&tile];
@@ -418,7 +425,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
 
 /// The toolbar or the comment box of the tile that has one open, over the window.
 pub(crate) fn layers(state: &State, cx: &Cx<State>, t: &Tokens) -> Vec<El> {
-    let Some(tile) = state.readings.open() else {
+    let Some(tile) = open(state) else {
         return Vec::new();
     };
     let reading = &state.readings.tiles[&tile];

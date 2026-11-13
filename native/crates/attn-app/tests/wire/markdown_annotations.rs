@@ -1108,3 +1108,107 @@ fn a_document_in_its_own_window_offers_no_annotations() {
     assert_eq!(marks(&kept).len(), 1);
     assert!(world.daemon.sent_of("markdown_annotations_save").is_empty());
 }
+
+#[test]
+fn a_comment_box_stays_with_its_document_when_the_desktop_changes() {
+    let (mut world, _) = start();
+    let arrange = |world: &mut World, current: &str| {
+        let mut away = desktop(row(vec![pane("c")]), 1);
+        away.id = "work/desktop_2".into();
+        away.name = "Desktop 2".into();
+        away.shortcut_slot = Some(2);
+        away.order_key = "2".into();
+        away.active_pane_id = "c".into();
+        away.panes = vec![DesktopPane {
+            desktop_id: away.id.clone(),
+            pane_id: "c".into(),
+            runtime_id: "r-c".into(),
+            session_id: "s-b".into(),
+            kind: "agent".into(),
+            ..DesktopPane::default()
+        }];
+        let mut here = desktop(
+            row(vec![
+                pane("a"),
+                pane("b"),
+                json!({
+                    "type": "tile",
+                    "tile_id": "m",
+                    "tile_kind": "markdown",
+                    "tile_params": json!({ "path": PLAN }).to_string(),
+                    "tile_session_id": "s-a",
+                }),
+            ]),
+            1,
+        );
+        here.active_pane_id = "m".into();
+        world.daemon.emit(ProfileArrangementChangedMessage {
+            profile: Profile {
+                id: "work".into(),
+                name: "Work".into(),
+                current_desktop_id: current.into(),
+                ..Profile::default()
+            },
+            desktops: vec![here, away],
+            ..ProfileArrangementChangedMessage::new()
+        });
+        world.settle();
+    };
+    let shown = |world: &World, part: &str| {
+        world
+            .screen()
+            .find(Target::key(format!("tile.m.document.{part}")))
+    };
+    let typed_into = |world: &World| -> Vec<String> {
+        world
+            .daemon
+            .sent_of("pty_input")
+            .iter()
+            .map(|m| m["id"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    };
+
+    select(&mut world, "b1", 10..21);
+    world.gesture(|app| app.type_text("Nice"));
+    world.settle();
+    assert!(shown(&world, "composer").is_some());
+
+    arrange(&mut world, "work/desktop_2");
+    assert!(
+        shown(&world, "composer").is_none(),
+        "the box leaves with its document:\n{}",
+        world.screen()
+    );
+    world.gesture(|app| app.type_text("x"));
+    world.settle();
+    assert_eq!(typed_into(&world), ["r-c"], "keys go to the desktop shown");
+
+    arrange(&mut world, "work/desktop_1");
+    let field = shown(&world, "composer.field").expect("the box comes back with its document");
+    assert_eq!(field.value.as_deref(), Some("Nice"));
+    assert!(field.is("focused"), "the box holds the keyboard again");
+    world.gesture(|app| app.type_text("!"));
+    world.settle();
+    assert_eq!(
+        shown(&world, "composer.field")
+            .and_then(|f| f.value)
+            .as_deref(),
+        Some("Nice!")
+    );
+    escape(&mut world);
+
+    select(&mut world, "b1", 10..21);
+    assert!(toolbar(&world));
+    arrange(&mut world, "work/desktop_2");
+    assert!(!toolbar(&world), "the toolbar leaves with its document");
+    world.gesture(|app| app.type_text("y"));
+    world.settle();
+    assert_eq!(typed_into(&world), ["r-c", "r-c"]);
+    arrange(&mut world, "work/desktop_1");
+    assert!(
+        shown(&world, "composer").is_none(),
+        "a key typed on another desktop starts no comment"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
