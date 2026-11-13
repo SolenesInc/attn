@@ -1,6 +1,7 @@
 //! A markdown tile's body: the document the daemon reads from disk, rendered.
 
 mod anchors;
+mod front_matter;
 mod images;
 mod links;
 
@@ -120,6 +121,10 @@ pub(crate) fn reader(
         .images(move |src| match links::resolve(&path, src) {
             Some(links::Target::Local(file)) => pictures.get(&file).cloned(),
             _ => None,
+        })
+        .front_matter_frame({
+            let t = *t;
+            move |_, yaml| front_matter::card(yaml, &t)
         })
         .image_frame(|shown: El, frame: &ImageFrame<'_>| {
             let (image, alt) = (frame.image.clone(), frame.alt.to_owned());

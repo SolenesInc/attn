@@ -451,3 +451,52 @@ fn a_documents_local_images_show_through_the_daemon_and_open_larger() {
     assert_eq!(world.daemon.sent_of("tile_asset_read").len(), 2);
     rest(&mut world);
 }
+
+#[test]
+fn a_documents_front_matter_shows_as_a_card_of_its_top_level_fields() {
+    let mut world = start();
+    world.daemon.emit(content(
+        "---\ntitle: \"Launch plan\"\ntags: [native, 'reader']\nowners:\n  - ana\n  - bo\n\
+         nested:\n  deep: hidden\n# a comment\n---\n# Body\n",
+    ));
+    world.settle();
+    let card: Vec<String> = world
+        .screen()
+        .descendants(Target::role("note").name("Front matter"))
+        .into_iter()
+        .filter_map(|n| n.name)
+        .collect();
+    assert_eq!(
+        card,
+        [
+            "title:",
+            "Launch plan",
+            "tags:",
+            "native",
+            "reader",
+            "owners:",
+            "ana",
+            "bo"
+        ]
+    );
+    let shown = shown(&world);
+    assert!(shown.iter().any(|t| t == "Body"), "{shown:?}");
+    assert!(
+        !shown
+            .iter()
+            .any(|t| t.contains("hidden") || t.contains("title: ")),
+        "{shown:?}"
+    );
+
+    world
+        .daemon
+        .emit(content("---\n# only a comment\n---\n# Body\n"));
+    world.settle();
+    assert!(
+        world
+            .screen()
+            .find(Target::role("note").name("Front matter"))
+            .is_none()
+    );
+    assert!(world.runtime_is_at_rest());
+}
