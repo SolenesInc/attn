@@ -186,7 +186,7 @@ pub(crate) fn verbs(state: &State, worktree: &Worktree) -> Vec<Verb> {
             .into_iter()
             .map(|s| Verb::GoTo {
                 name: if flagged(&s.id) {
-                    format!("⚑ {}", s.name)
+                    format!("{} · priority", s.name)
                 } else {
                     s.name
                 },
