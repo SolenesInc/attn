@@ -422,7 +422,8 @@ pub(super) fn split_at(
     };
     let mut direction = direction;
     if direction == Direction::Horizontal
-        && let (Some(tree), Some(area)) = (Node::parse(&desktop.tree_json), state.window.desk.area)
+        && let (Some(tree), Some(area)) =
+            (Node::parse(&desktop.tree_json), state.window.desk.area())
         && let Some(message) = layout::stack_limit_message(&tree, &pane.pane_id, area.h)
     {
         state.window.notify(message, tx);
@@ -476,6 +477,7 @@ pub(super) fn split_at(
 pub(super) fn focus_leaf(state: &mut State, desktop: &str, leaf: &str, tx: &mut Tx) {
     activate(state, desktop, leaf, tx);
     state.window.desk.row_mut(desktop).view = View::Focused(leaf.to_owned());
+    crate::sidebar::give_way_to_an_agent_alone(state, tx);
     tx.instant();
 }
 
@@ -503,6 +505,7 @@ fn toggle_view(state: &mut State, focus: bool, tx: &mut Tx) {
         (_, false) => View::Zoomed,
     };
     if was_alone != matches!(row.view, View::Focused(_)) {
+        crate::sidebar::give_way_to_an_agent_alone(state, tx);
         tx.instant();
     }
 }

@@ -35,8 +35,11 @@ pub(crate) use queue_view::AgentLine;
 
 /// The window's sidebar for its flow: the queue sidebar in queue flow, the desktop sidebar
 /// otherwise. Collapsed, desktop flow keeps the rail and queue flow keeps nothing here,
-/// since the queue bar moves into the title bar.
+/// since the queue bar moves into the title bar. An agent shown alone hides it in either flow.
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
+    if crate::desktop::shows_an_agent_alone(state) {
+        return None;
+    }
     let sidebar = match (actions::queue_flow(state), state.window.sidebar_hidden) {
         (true, false) => queue_view::view(state, t),
         (true, true) => return None,
@@ -70,7 +73,11 @@ pub(crate) fn dispatch(state: &mut State, action: &crate::Action, tx: &mut Tx) -
         Action::SessionGoToDashboard => state.window.go_home(),
         Action::OpenAgent { session } => open_agent(state, session, tx),
         Action::SessionJumpToWaiting => actions::jump_to_waiting(state, tx),
-        Action::SidebarAgentList if queue && !state.window.sidebar_hidden => {
+        Action::SidebarAgentList
+            if queue
+                && !state.window.sidebar_hidden
+                && !crate::desktop::shows_an_agent_alone(state) =>
+        {
             actions::toggle_agent_list(state, tx)
         }
         Action::SidebarAgentList => crate::palette::open(state, crate::palette::Face::Agents, tx),
@@ -667,6 +674,23 @@ fn pane_of(state: &State, session: &str) -> Option<(String, String)> {
         let pane = d.panes.iter().find(|p| p.session_id == session)?;
         Some((d.id.clone(), pane.pane_id.clone()))
     })
+}
+
+/// When an agent shows alone, the sidebar it hides lets go: its agent list closes, and the
+/// keyboard it held goes to the agent, as in the Tauri app.
+pub(crate) fn give_way_to_an_agent_alone(state: &mut State, tx: &mut Tx) {
+    if !crate::desktop::shows_an_agent_alone(state) {
+        return;
+    }
+    let window = &mut state.window;
+    let held =
+        window.agent_list_open || window.agent_filter.focused || window.queue_cursor.is_some();
+    window.agent_list_open = false;
+    window.agent_filter = rune::TextEdit::default();
+    window.queue_cursor = None;
+    if held {
+        keyboard_to_screen(state, tx);
+    }
 }
 
 /// Gives the keyboard back to the agent on screen, or lets go of it at home.

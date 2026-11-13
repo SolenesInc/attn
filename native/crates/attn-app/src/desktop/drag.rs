@@ -459,7 +459,7 @@ fn dock_target(state: &State, drag: &LeafDrag) -> Option<Dock> {
     let facts = &state.facts;
     let desk = &state.window.desk;
     let desktop = facts.current_desktop()?;
-    let area = desk.area?;
+    let area = desk.area()?;
     let (tree, plan) = desk.plan(facts, desktop)?;
     let view = desk.row(&desktop.id).view;
     let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);

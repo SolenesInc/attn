@@ -709,7 +709,7 @@ fn notice(reply: Option<&Reply>, blocked: Option<&str>) -> Option<String> {
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let peeks = &state.window.desk.peeks;
     let open = peeks.open.as_ref()?;
-    let area = state.window.desk.area?;
+    let area = state.window.desk.area()?;
     let desktop = state.facts.desktops.iter().find(|d| d.id == open.desktop)?;
     let tree = Node::parse(&desktop.tree_json)?;
     let title = super::shelf::title(desktop, &state.facts, &tree, &open.leaf);

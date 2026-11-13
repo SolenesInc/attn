@@ -12,6 +12,8 @@ use crate::State;
 use crate::shell::Holder;
 use crate::terminal::{Release, Terminals, accelerator};
 
+/// The tile area's element.
+pub(super) const TILES: &str = "tiles";
 /// The strip over the line between two tiles that drags it, as wide as the Tauri app's.
 pub(super) const DIVIDER_PX: f32 = 9.0;
 /// How far a tile shown alone sits in from the tile area's edges, as in the Tauri app.
@@ -59,7 +61,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
     });
     let row_state = desktop.map(|d| desk.row(&d.id));
     let area_bits = desk
-        .area
+        .area()
         .map(|a| [a.w, a.h, a.px_per_col].map(f32::to_bits));
     let dragging = desk
         .drag
@@ -129,7 +131,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
             ))
         })
     });
-    moves_with_the_row(col().key("tiles"))
+    moves_with_the_row(col().key(TILES))
         .on_drag(|state: &mut State, d: &mut rune::Drag, tx: &mut Tx| {
             super::drag::gesture(state, d, tx, super::drag::Owner::Tiles)
         })
@@ -138,20 +140,13 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .on_layout_tx(|state: &mut State, [x, y, w, h], tx: &mut Tx| {
-            let px_per_col = state.terminals.metrics().cell_w;
-            let area = Some(Area {
-                x,
-                y,
-                w,
-                h,
-                px_per_col,
-            });
-            if state.window.desk.area == area {
+        .on_layout_tx(|state: &mut State, rect, tx: &mut Tx| {
+            let area = Some(Area::at(rect, state.terminals.metrics().cell_w));
+            if state.window.desk.reported_area == area {
                 tx.live_only();
                 return;
             }
-            state.window.desk.area = area;
+            state.window.desk.reported_area = area;
             super::settle(state, tx);
         })
         .child(content)
@@ -362,7 +357,7 @@ fn screen(
 ) -> El {
     match desktop {
         None => empty(t, "No desktop"),
-        Some(_) if desk.area.is_none() => col(),
+        Some(_) if desk.area().is_none() => col(),
         Some(desktop) => match desk.plan(facts, desktop) {
             None => empty(t, "Empty desktop"),
             Some((tree, plan)) => {

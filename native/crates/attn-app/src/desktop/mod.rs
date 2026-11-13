@@ -58,8 +58,8 @@ use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowP
 pub struct Desk {
     /// Sessions whose older-terminal notice the person dismissed, for the rest of the run.
     pub(crate) stale_build_dismissed: std::collections::HashSet<String>,
-    /// The tile area in points and a terminal cell's width, once laid out.
-    pub(crate) area: Option<Area>,
+    /// The tile area in points and a terminal cell's width, as the last layout reported it.
+    pub(crate) reported_area: Option<Area>,
     pub(crate) rows: HashMap<String, RowState>,
     /// Tiles this window showed, oldest first, for ⌘[ and ⌘].
     pub(crate) history: History,
@@ -111,6 +111,18 @@ pub(crate) struct Area {
     pub w: f32,
     pub h: f32,
     pub px_per_col: f32,
+}
+
+impl Area {
+    pub(crate) fn at([x, y, w, h]: [f32; 4], px_per_col: f32) -> Area {
+        Area {
+            x,
+            y,
+            w,
+            h,
+            px_per_col,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -208,6 +220,15 @@ pub(crate) fn expire(state: &mut State, tx: &mut Tx) -> bool {
 }
 
 impl Desk {
+    /// The tile area. A view gets where this commit's layout puts the tiles, so what it builds
+    /// from the area lands in the frame of whatever moved them; a handler gets where the last
+    /// layout put them.
+    pub(crate) fn area(&self) -> Option<Area> {
+        let reported = self.reported_area?;
+        let laid_out = rune::memo::layout(view::TILES).map(|r| Area::at(r, reported.px_per_col));
+        laid_out.or(Some(reported))
+    }
+
     pub(crate) fn row(&self, desktop: &str) -> RowState {
         self.rows.get(desktop).cloned().unwrap_or_default()
     }
@@ -236,7 +257,7 @@ impl Desk {
     /// corner: each split at the ratio this window shows, and a tile shown alone inset as the
     /// Tauri app's focus mode insets it.
     pub(crate) fn placement(&self, rendered: &Node, alone: bool) -> layout::Placement {
-        let (w, h) = self.area.map_or((0.0, 0.0), |a| (a.w, a.h));
+        let (w, h) = self.area().map_or((0.0, 0.0), |a| (a.w, a.h));
         let inset = if alone { view::ALONE_INSET } else { 0.0 };
         let mut placed = layout::place(
             rendered,
@@ -267,7 +288,7 @@ impl Desk {
         if placed.splits.iter().any(|s| s.id == split) {
             return None;
         }
-        let area = self.area?;
+        let area = self.area()?;
         let ([x, y, w, h], direction) = *self.dividers.get(split)?;
         Some((split.to_owned(), direction, [x - area.x, y - area.y, w, h]))
     }
@@ -352,7 +373,7 @@ impl Desk {
     }
 
     pub(crate) fn measures(&self, facts: &Facts) -> Option<Measures> {
-        let area = self.area?;
+        let area = self.area()?;
         Some(Measures::new(
             area.w,
             Self::narrowest_cols(facts),
@@ -463,6 +484,19 @@ pub(crate) fn shown_alone(state: &State) -> Option<String> {
         View::Focused(leaf) => Some(leaf.clone()),
         _ => None,
     }
+}
+
+/// Whether the window shows an agent alone, which hides the sidebar as in the Tauri app; a
+/// document shown alone keeps it.
+pub(crate) fn shows_an_agent_alone(state: &State) -> bool {
+    let Some((desktop, leaf)) = state.facts.current_desktop().zip(shown_alone(state)) else {
+        return false;
+    };
+    state.window.view == crate::shell::View::Desktop
+        && desktop
+            .panes
+            .iter()
+            .any(|p| p.pane_id == leaf && !p.session_id.is_empty())
 }
 
 /// Whether `next` changes the tiles of the desktop the window shows, which then move as the

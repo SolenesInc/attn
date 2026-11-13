@@ -178,11 +178,13 @@ try {
     await driver.click({ key: `tile.${a.first.pane}.focus` });
     await driver.waitFor({ key: `tile.${a.below.pane}` }, { gone: true });
     await driver.waitFor({ key: `tile.${a.first.pane}.return` });
+    await driver.waitFor({ key: 'sidebar' }, { gone: true });
     await observer.waitFor(() => observer.desktop(a.desktop.id)?.active_pane_id === a.first.pane, 'the focused shell is the active tile');
     await driver.screenshot(path.join(runner.runDir, 'focus-mode.png'));
     await driver.click({ key: `tile.${a.first.pane}.return` });
     await shows([a.first, a.below], []);
     await driver.waitFor({ key: `tile.${a.first.pane}.return` }, { gone: true });
+    await driver.waitFor({ key: 'sidebar' });
   });
 
   await runner.step('leaving_the_desktop_ends_focus', async () => {

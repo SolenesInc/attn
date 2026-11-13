@@ -1242,6 +1242,7 @@ fn focusing(focused: bool) -> Recording {
 
 const ALONE: &str = "a tile is shown alone|a tile shown alone returns";
 const BY_DESIGN: &str = "showing a tile alone and returning it land at once, as in the Tauri app";
+const SIDEBAR_GOES: &str = "an agent shown alone hides the sidebar and gives the tiles its room at once, as in the Tauri app";
 const SPOTLIGHT_MARKS: &str =
     "the spotlight's corner marks come and go at once, as in the Tauri app";
 
@@ -1253,6 +1254,10 @@ const LANDS_AT_ONCE: &[AllowRow] = &[
     AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-in", "divider.", ALONE, BY_DESIGN).max(1),
     AllowRow::new("pop-out", "divider.", ALONE, BY_DESIGN).max(1),
+    AllowRow::new("jump", "regions/tiles", ALONE, SIDEBAR_GOES).max(4),
+    AllowRow::new("jump", "tiles.area", ALONE, SIDEBAR_GOES).max(4),
+    AllowRow::new("pop-out", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
+    AllowRow::new("pop-in", "sidebar.frame", ALONE, SIDEBAR_GOES).max(1),
     AllowRow::new(
         "text-swap",
         "titlebar.sidebar",
@@ -1371,14 +1376,96 @@ fn lands_at_once(rec: &Recording, leaf: &str) -> bool {
     looks.iter().all(|l| *l == looks[0] && l.1 == 1.0)
 }
 
+/// Whether the sidebar shows beside tile `leaf` on each frame `rec` drew the tile, from the
+/// frame the gesture landed on.
+fn sidebar_beside(rec: &Recording, leaf: &str) -> Vec<bool> {
+    let from = rec.inputs[0].0;
+    let drawn = |suffix: &str| {
+        rec.tracks
+            .iter()
+            .find(|t| t.path.ends_with(suffix))
+            .map(|t| {
+                t.frames
+                    .iter()
+                    .map(|(k, _)| *k)
+                    .filter(|k| *k >= from)
+                    .collect()
+            })
+            .unwrap_or_else(Vec::new)
+    };
+    let sidebar: Vec<usize> = drawn("/sidebar.frame");
+    drawn(&format!("/tile.{leaf}"))
+        .iter()
+        .map(|k| sidebar.contains(k))
+        .collect()
+}
+
 #[test]
 fn showing_a_tile_alone_and_returning_it_land_in_the_frame_of_the_key() {
     let alone = focusing(false);
-    assert!(
-        lands_at_once(&alone, "a") && looks_of(&alone, "a")[0].0[2] == TWO_FIT - 2.0 * ALONE_INSET
+    assert!(lands_at_once(&alone, "a"), "{:?}", looks_of(&alone, "a"));
+    assert_eq!(
+        looks_of(&alone, "a")[0].0[2],
+        TWO_FIT + BESIDE_TILES - 2.0 * ALONE_INSET,
+        "the agent alone takes the sidebar's room"
     );
+    assert!(sidebar_beside(&alone, "a").iter().all(|shown| !shown));
+
     let returned = focusing(true);
-    assert!(lands_at_once(&returned, "a") && looks_of(&returned, "a")[0].0[2] == TWO_FIT / 2.0);
+    assert!(
+        lands_at_once(&returned, "a"),
+        "{:?}",
+        looks_of(&returned, "a")
+    );
+    assert_eq!(looks_of(&returned, "a")[0].0[2], TWO_FIT / 2.0);
+    assert!(sidebar_beside(&returned, "a").iter().all(|shown| *shown));
+}
+
+#[test]
+fn escape_a_pick_and_a_desktop_switch_bring_the_sidebar_back_with_the_tiles_in_one_frame() {
+    let other = || desktop(2, "c", pane("c"));
+    let focused = || {
+        let mut world = start(TWO_FIT, None, vec![tiles("a", panes(["a", "b"])), other()]);
+        press(&mut world, Action::TerminalToggleMaximize);
+        world
+    };
+
+    let mut world = focused();
+    let escaped = world.record(60.0, 1.0, |_, app| app.press("escape"));
+    assert!(
+        lands_at_once(&escaped, "a"),
+        "{:?}",
+        looks_of(&escaped, "a")
+    );
+    assert_eq!(looks_of(&escaped, "a")[0].0[2], TWO_FIT / 2.0);
+    assert!(sidebar_beside(&escaped, "a").iter().all(|shown| *shown));
+    rest(&mut world);
+
+    let mut world = focused();
+    press(&mut world, Action::UiActionMenu);
+    let picked = world.record(60.0, 1.0, |_, app| {
+        app.click(Target::key("palette.row.agent:s-b"))
+    });
+    assert!(lands_at_once(&picked, "b"), "{:?}", looks_of(&picked, "b"));
+    assert_eq!(looks_of(&picked, "b")[0].0[2], TWO_FIT / 2.0);
+    assert!(sidebar_beside(&picked, "b").iter().all(|shown| *shown));
+    rest(&mut world);
+
+    let mut world = focused();
+    let switched = world.record(60.0, 1.0, |daemon, _| {
+        daemon.emit(arrangement(
+            "work/desktop_2",
+            vec![tiles("a", panes(["a", "b"])), other()],
+        ))
+    });
+    assert!(
+        lands_at_once(&switched, "c"),
+        "{:?}",
+        looks_of(&switched, "c")
+    );
+    assert_eq!(looks_of(&switched, "c")[0].0[2], TWO_FIT);
+    assert!(sidebar_beside(&switched, "c").iter().all(|shown| *shown));
+    rest(&mut world);
 }
 
 #[test]
@@ -1399,6 +1486,7 @@ fn a_tile_opened_while_another_shows_alone_and_an_agent_opened_from_home_land_at
         "{:?}",
         looks_of(&opened_tile, "a")
     );
+    assert!(sidebar_beside(&opened_tile, "a").iter().all(|shown| *shown));
 
     world.gesture(|app| {
         app.update(|state, tx| {

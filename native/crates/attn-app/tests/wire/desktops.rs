@@ -826,14 +826,126 @@ fn a_focused_tile_stays_alone_when_the_daemon_moves_on_and_gives_way_to_a_pick_o
     );
     assert!(shows(&world, "Agent a") && !shows(&world, "Agent b"));
 
-    world.gesture(|app| app.click(Target::key("sidebar.session.s-a")));
+    press(&mut world, Action::UiActionMenu);
+    world.gesture(|app| app.click(Target::key("palette.row.agent:s-a")));
     assert!(
         !shows(&world, "Agent b"),
         "picking the focused tile keeps it alone"
     );
 
-    world.gesture(|app| app.click(Target::key("sidebar.session.s-b")));
+    press(&mut world, Action::UiActionMenu);
+    world.gesture(|app| app.click(Target::key("palette.row.agent:s-b")));
     assert!(shows(&world, "Agent a") && shows(&world, "Agent b"));
+}
+
+#[test]
+fn showing_an_agent_alone_from_the_open_agent_list_closes_it_and_gives_the_agent_the_keyboard() {
+    let tree = row([pane("a"), pane("b")]);
+    let desktops = vec![desktop(1, "a", Some(tree))];
+    let mut world = World::start_sized(
+        Daemon::scripted().state(super::queue::queue(InitialStateMessage {
+            selected_profile_id: Some("work".into()),
+            profiles: Some(vec![profile(&desktops[0].id)]),
+            sessions: Some(vec![session("a"), session("b")]),
+            desktops: Some(desktops),
+            ..InitialStateMessage::new()
+        })),
+        TWO_FIT,
+    );
+    world.gesture(|app| {
+        app.update(|state, tx| {
+            let open = Action::OpenAgent {
+                session: "s-a".into(),
+            };
+            attn_app::dispatch(state, open, tx);
+        })
+    });
+    press(&mut world, Action::SidebarAgentList);
+    world.gesture(|app| app.type_text("b"));
+    world.gesture(|app| {
+        app.key(rune::KeyEvent {
+            key: rune::Key::Down,
+            mods: rune::Mods::default(),
+        })
+    });
+    assert_eq!(
+        world.screen().focused().and_then(|n| n.key).as_deref(),
+        Some("sidebar.queue"),
+        "the agent list holds the keyboard"
+    );
+
+    press(&mut world, Action::TerminalToggleMaximize);
+    assert!(!sidebar_shows(&world));
+    world.gesture(|app| app.type_text("x"));
+    let typed: Vec<_> = world
+        .daemon
+        .sent_of("pty_input")
+        .iter()
+        .map(|r| r["id"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    assert_eq!(typed, ["r-a"], "typing reaches the agent shown alone");
+
+    press(&mut world, Action::SidebarAgentList);
+    assert!(
+        world
+            .screen()
+            .find(Target::key("palette.row.agent:s-b"))
+            .is_some(),
+        "with the sidebar hidden, the agent-list key opens the Agents palette"
+    );
+    world.gesture(|app| app.press("escape"));
+    assert!(world.screen().find(Target::key("palette.field")).is_none());
+
+    world.gesture(|app| app.press("escape"));
+    assert!(sidebar_shows(&world));
+    assert!(
+        world
+            .screen()
+            .find(Target::key("queue.filter.field"))
+            .is_none(),
+        "the agent list came back closed"
+    );
+    press(&mut world, Action::SidebarAgentList);
+    assert_eq!(
+        world
+            .screen()
+            .find(Target::key("queue.filter.field"))
+            .and_then(|n| n.value),
+        Some(String::new()),
+        "with its filter empty"
+    );
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
+}
+
+fn sidebar_shows(world: &World) -> bool {
+    world.screen().find(Target::key("sidebar")).is_some()
+}
+
+#[test]
+fn an_agent_shown_alone_hides_the_sidebar_and_a_document_shown_alone_keeps_it() {
+    let tree = row([pane("a"), tile("m", "markdown")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree.clone()))]);
+    let row_width = width(&world, "a") + width(&world, "m");
+
+    press(&mut world, Action::TerminalToggleMaximize);
+    assert!(!sidebar_shows(&world));
+    assert!(
+        width(&world, "a") > row_width,
+        "the agent takes the sidebar's room"
+    );
+    press(&mut world, Action::TerminalToggleMaximize);
+    assert!(sidebar_shows(&world));
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![desktop(1, "m", Some(tree))],
+    );
+    press(&mut world, Action::TerminalToggleMaximize);
+    assert!(!shows(&world, "Agent a") && sidebar_shows(&world));
+    world.advance(Duration::from_secs(1));
+    assert!(world.runtime_is_at_rest());
 }
 
 #[test]

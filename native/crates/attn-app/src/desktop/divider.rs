@@ -155,7 +155,7 @@ fn column_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
             let area_cols = state
                 .window
                 .desk
-                .area
+                .area()
                 .map_or(0, |a| (a.w / a.px_per_col).floor() as i64);
             for (leaf, cols) in wanted {
                 let (desktop, before) = (drag.desktop.clone(), drag.pending.clone());
@@ -229,7 +229,7 @@ fn clear_beside(state: &mut State, drag: &ColumnDrag, tx: &mut Tx) {
 fn split_rect(state: &State, desktop: &str, split: &str) -> Option<[f32; 4]> {
     let facts = &state.facts;
     let desk = &state.window.desk;
-    let area = desk.area?;
+    let area = desk.area()?;
     let shown = facts.desktops.iter().find(|d| d.id == desktop)?;
     let (tree, plan) = desk.plan(facts, shown)?;
     let view = desk.row(desktop).view;
