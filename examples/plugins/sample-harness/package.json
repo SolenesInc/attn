@@ -4,6 +4,6 @@
   "type": "module",
   "version": "0.1.0",
   "dependencies": {
-    "@victorarias/attn-plugin": "0.2.0"
+    "@victorarias/attn-plugin": "0.3.0"
   }
 }
