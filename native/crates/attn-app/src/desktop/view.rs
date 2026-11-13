@@ -115,6 +115,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         desk.held_split().map(str::to_owned),
         super::arrival::keys(&desk.rings),
         facts.tile_contents.revision,
+        outpost_names(&facts.outposts),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -328,6 +329,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
         contents: &state.facts.tile_contents,
+        outposts: &state.facts.outposts,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         shared: &super::shared_conversation::notices(
             &state.facts.sessions,
@@ -397,6 +399,7 @@ fn screen(
                     holder,
                     terminals,
                     contents: &facts.tile_contents,
+                    outposts: &facts.outposts,
                     stale: &stale,
                     shared: &shared,
                     t,
@@ -466,6 +469,7 @@ struct TileCx<'a> {
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
     contents: &'a attn_client::TileContents,
+    outposts: &'a [attn_protocol::OutpostInfo],
     /// Sessions whose terminal runs an older build, with the notice still up.
     stale: &'a [String],
     /// Sessions whose conversation another terminal also has open, with where it is.
@@ -662,13 +666,20 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             }
         }
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
-        (LeafKind::Tile { kind, .. }, _) if kind == "markdown" => {
+        (LeafKind::Tile { kind, session, .. }, _) if kind == "markdown" => {
             let key = attn_client::TileKey {
                 desktop: desktop.id.clone(),
                 tile: leaf.id.clone(),
             };
             takes(
-                crate::markdown::body(&leaf.id, &title, cx.contents.get(&key), t),
+                crate::markdown::body(
+                    &leaf.id,
+                    &title,
+                    session.as_deref(),
+                    cx.contents.get(&key),
+                    cx.outposts,
+                    t,
+                ),
                 &holder,
             )
         }
@@ -737,6 +748,14 @@ fn tile_transition(kind: &LeafKind) -> rune::Transition {
 }
 
 /// `el`, where a press takes the tile into `holder`.
+/// Each outpost's id and name, which a view that names outposts reads.
+fn outpost_names(outposts: &[attn_protocol::OutpostInfo]) -> Vec<(String, String)> {
+    outposts
+        .iter()
+        .map(|o| (o.id.clone(), o.name.clone()))
+        .collect()
+}
+
 fn takes(el: El, holder: &Holder) -> El {
     let holder = holder.clone();
     el.on_press_tx(move |state: &mut State, tx: &mut Tx| press_tile(state, &holder, tx))

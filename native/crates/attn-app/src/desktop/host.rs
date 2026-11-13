@@ -12,13 +12,16 @@ const HOST_BORDER: f32 = 1.0;
 /// when no outpost row has it.
 pub(crate) fn name(session: &Session, outposts: &[OutpostInfo]) -> Option<String> {
     let host = session.host.as_deref().filter(|h| !h.is_empty())?;
-    Some(
-        outposts
-            .iter()
-            .find(|o| o.id == host)
-            .map_or(host, |o| o.name.as_str())
-            .to_owned(),
-    )
+    Some(outpost_name(host, outposts))
+}
+
+/// Outpost `host` by its name, or by its id when no outpost row has it.
+pub(crate) fn outpost_name(host: &str, outposts: &[OutpostInfo]) -> String {
+    outposts
+        .iter()
+        .find(|o| o.id == host)
+        .map_or(host, |o| o.name.as_str())
+        .to_owned()
 }
 
 /// The machine's name, or at `Level::Short` its mark, which names the machine to assistive tech.

@@ -108,6 +108,26 @@ impl Screen {
         Screen(top.clone()).nodes().into_iter().skip(1).collect()
     }
 
+    /// Where the element sits in window points, as `[x, y, width, height]`.
+    pub fn bounds(&self, target: Target) -> Option<[f32; 4]> {
+        let value = self
+            .values()
+            .into_iter()
+            .find(|v| target.matches(&node(v)))?;
+        let b = value.get("bounds")?.as_array()?;
+        let n = |i: usize| b.get(i).and_then(Value::as_f64).map(|v| v as f32);
+        Some([n(0)?, n(1)?, n(2)?, n(3)?])
+    }
+
+    /// How far the scroll view `target` has scrolled down, in points.
+    pub fn scrolled(&self, target: Target) -> Option<f32> {
+        let value = self
+            .values()
+            .into_iter()
+            .find(|v| target.matches(&node(v)))?;
+        value.get("scroll")?.get(1)?.as_f64().map(|y| y as f32)
+    }
+
     /// The element that has the keyboard, if any.
     pub fn focused(&self) -> Option<Node> {
         self.nodes().into_iter().find(|node| node.is("focused"))

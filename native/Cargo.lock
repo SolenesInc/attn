@@ -374,6 +374,7 @@ dependencies = [
  "base64",
  "libc",
  "percent-encoding",
+ "pulldown-cmark",
  "rune",
  "rune-kit",
  "rune-mac",

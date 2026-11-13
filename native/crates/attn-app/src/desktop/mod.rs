@@ -38,6 +38,7 @@ use crate::State;
 pub(crate) use actions::{activate_started, escape, give_keyboard, run, show_unseen};
 pub(crate) use close::{Closing, view as close_confirmation};
 pub(crate) use drag::{DesktopMark, overlay as drag_overlay};
+pub(crate) use host::outpost_name;
 pub(crate) use overview::view as overview;
 pub(crate) use peek::view as peek;
 pub(crate) use shelf::{cap_menu, settle, slot as shelf_slot, width_label};

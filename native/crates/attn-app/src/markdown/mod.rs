@@ -1,19 +1,27 @@
 //! A markdown tile's body: the document the daemon reads from disk, rendered.
 
+mod anchors;
+mod links;
+
 use attn_ui::Tokens;
 use rune::tok::{radius, space, type_};
-use rune::{El, ScrollSpec, col, memo, text};
+use rune::{El, LinkPaint, ScrollSpec, Span, Tx, col, memo, text};
 use rune_kit::Markdown;
+
+use crate::State;
 
 /// The reading column's width, as the Tauri reader's card caps it.
 const CARD_MAX_WIDTH: f32 = 832.0;
 const CARD_PADDING: f32 = 20.0;
 
-/// The body of the document tile `tile`, from what the daemon last sent for it.
+/// The body of the document tile `tile`, opened for `session`, from what the daemon last sent
+/// for it. `outposts` names the outpost a document is on.
 pub(crate) fn body(
     tile: &str,
     title: &str,
+    session: Option<&str>,
     content: Option<&attn_client::TileContent>,
+    outposts: &[attn_protocol::OutpostInfo],
     t: &Tokens,
 ) -> El {
     let Some(attn_client::TileContent {
@@ -29,10 +37,27 @@ pub(crate) fn body(
     if content.content.trim().is_empty() {
         return message(t, "This file is empty.", false);
     }
-    let version = (*revision, title, *t);
-    memo(format!("tile.{tile}.document"), version, || {
+    let view = format!("tile.{tile}.document");
+    let outpost = (content.host.as_deref().filter(|h| !h.is_empty())).map(|host| links::Outpost {
+        host: host.to_owned(),
+        name: crate::desktop::outpost_name(host, outposts),
+    });
+    let version = (
+        *revision,
+        title,
+        session,
+        outpost.as_ref().map(|o| o.name.clone()),
+        *t,
+    );
+    memo(view.clone(), version, || {
+        let document = links::Document {
+            path: content.path.clone(),
+            session: session.map(str::to_owned),
+            outpost,
+            view: view.clone(),
+        };
         col()
-            .key(format!("tile.{tile}.document"))
+            .key(view.clone())
             .role("document")
             .label(title)
             .w_full()
@@ -51,13 +76,36 @@ pub(crate) fn body(
                     .radius(radius::LG)
                     .fill(t.bg_panel)
                     .border(1.0, t.border.alpha(0.5))
-                    .child(
-                        Markdown::new(content.content.clone())
-                            .selectable(true)
-                            .build(&attn_ui::kit(t)),
-                    ),
+                    .child(markdown(&content.content, document, t)),
             )
     })
+}
+
+fn markdown(source: &str, document: links::Document, t: &Tokens) -> El {
+    let verdict = {
+        let path = document.path.clone();
+        let outpost = document.outpost.as_ref().map(|o| o.name.clone());
+        move |href: &str| links::verdict(links::resolve(&path, href).as_ref(), outpost.as_deref())
+    };
+    let help = verdict.clone();
+    let plain = verdict;
+    let text_color = t.text_primary;
+    Markdown::new(source.to_owned())
+        .selectable(true)
+        .block_keys(anchors::heading_keys(source))
+        .on_link_tx(move |state: &mut State, href: &str, tx: &mut Tx| {
+            links::follow(state, &document, href, tx)
+        })
+        .link_help(move |href| help(href).help)
+        .link_style(move |href| {
+            (!plain(href).follows).then(|| {
+                (
+                    Span::new(0, 0).color(text_color),
+                    LinkPaint::new().color(text_color),
+                )
+            })
+        })
+        .build(&attn_ui::kit(t))
 }
 
 fn message(t: &Tokens, message: &str, error: bool) -> El {
