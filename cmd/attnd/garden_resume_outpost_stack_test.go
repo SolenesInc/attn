@@ -96,12 +96,14 @@ func (w gardenOutpostSeed) reviewItem(t *testing.T) protocol.GardenReviewItem {
 }
 
 func (w gardenOutpostSeed) ageIntoReview() {
-	mark := w.pair.App.EventCount()
+	lost := w.pair.App.EventCount()
+	w.pair.Disconnect()
+	outpostReachSince(w.pair.App, lost, "outpost", protocol.OutpostReachUnreachable)
 	w.home.Advance(garden.DefaultStaleWindow)
-	stopRetries := w.home.FireTimers(bridge.RetryTimer)
-	defer stopRetries()
-	outpostReachSince(w.pair.App, mark, "outpost", protocol.OutpostReachUnreachable)
-	outpostReachSince(w.pair.App, w.pair.App.EventCount(), "outpost", protocol.OutpostReachReachable)
+	back := w.pair.App.EventCount()
+	w.pair.Reconnect()
+	defer w.home.FireTimers(bridge.RetryTimer)()
+	outpostReachSince(w.pair.App, back, "outpost", protocol.OutpostReachReachable)
 }
 
 func reviewEvidenceText(item protocol.GardenReviewItem) string {
