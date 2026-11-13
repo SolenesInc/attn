@@ -94,6 +94,7 @@ pub(crate) fn area(state: &State, t: &Tokens, scale: f32) -> El {
         state.terminals.find_bars(),
         state.terminals.filter_panels(),
         state.terminals.annotation_layers(),
+        stale_builds(&facts.sessions, desk),
     );
     let launcher = desktop
         .filter(|d| super::holds_nothing(d))
@@ -194,6 +195,7 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         dragging: None,
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
+        stale: &stale_builds(&state.facts.sessions, &state.window.desk),
         t,
         scale,
     };
@@ -219,6 +221,7 @@ fn screen(
                 let rendered = plan.rendered(&tree, &view, &desktop.active_pane_id);
                 let dragging = desk.drag.as_ref().and_then(|d| d.dragging());
                 let unsent = desk.peeks.unsent();
+                let stale = stale_builds(&facts.sessions, desk);
                 let cx = TileCx {
                     desktop,
                     sessions: &facts.sessions,
@@ -234,6 +237,7 @@ fn screen(
                     dragging,
                     holder,
                     terminals,
+                    stale: &stale,
                     t,
                     scale,
                 };
@@ -242,6 +246,17 @@ fn screen(
             }
         },
     }
+}
+
+/// The sessions whose terminal runs an older build than the daemon, unless the person
+/// dismissed the notice.
+fn stale_builds(sessions: &[Session], desk: &super::Desk) -> Vec<String> {
+    sessions
+        .iter()
+        .filter(|s| s.terminal_build_stale == Some(true))
+        .filter(|s| !desk.stale_build_dismissed.contains(&s.id))
+        .map(|s| s.id.clone())
+        .collect()
 }
 
 fn ratio_bits(
@@ -283,6 +298,8 @@ struct TileCx<'a> {
     dragging: Option<&'a str>,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
+    /// Sessions whose terminal runs an older build, with the notice still up.
+    stale: &'a [String],
     t: &'a Tokens,
     scale: f32,
 }
@@ -405,6 +422,11 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
                     t,
                 )),
                 None => slot,
+            };
+            let slot = if cx.stale.contains(&pane.session_id) {
+                slot.child(super::stale_build::notice(&pane.session_id, t))
+            } else {
+                slot
             };
             let slot = match cx.terminals.marking(&pane.runtime_id) {
                 Some(marking) => slot.children(super::annotating::layers(

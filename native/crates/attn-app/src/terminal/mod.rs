@@ -437,13 +437,13 @@ impl Terminals {
         }
     }
 
-    /// Takes what the link heard since the last frame. Output changes nothing in the view
-    /// beyond an open find bar's count: true when that count changed.
     /// What the terminals have to tell the person, once.
     pub(crate) fn take_said(&mut self) -> Option<String> {
         self.said.take()
     }
 
+    /// Takes what the link heard since the last frame. Output changes nothing in the view
+    /// beyond an open find bar's count: true when that count changed.
     pub(crate) fn drain(&mut self, tx: &mut Tx, daemon: &Commands) -> bool {
         let events = self.inbox.take();
         let heard = !events.is_empty();

@@ -11,6 +11,7 @@ pub mod layout;
 mod overview;
 mod peek;
 mod shelf;
+mod stale_build;
 mod terminal_menu;
 mod view;
 mod windows;
@@ -45,6 +46,8 @@ use layout::{DEFAULT_NARROWEST_COLS, FirstColumn, Measures, Node, RowInput, RowP
 /// how its active tile shows, and the order it used tiles in.
 #[derive(Default)]
 pub struct Desk {
+    /// Sessions whose older-terminal notice the person dismissed, for the rest of the run.
+    pub(crate) stale_build_dismissed: std::collections::HashSet<String>,
     /// The tile area in points and a terminal cell's width, once laid out.
     pub(crate) area: Option<Area>,
     pub(crate) rows: HashMap<String, RowState>,
