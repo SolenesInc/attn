@@ -113,10 +113,15 @@ impl State {
         then: impl FnOnce(&mut State, Answer, &mut Tx) + 'static,
         tx: &mut Tx,
     ) {
-        self.requests.next += 1;
-        let id = format!("native-{}", self.requests.next);
+        let id = self.next_request_id();
         let command = build(id.clone());
         self.ask_as(id, &command, then, tx);
+    }
+
+    /// An id no other request of this window has carried.
+    pub(crate) fn next_request_id(&mut self) -> String {
+        self.requests.next += 1;
+        format!("native-{}", self.requests.next)
     }
 
     /// Sends `command`, whose answer names `id`, and runs `then` with that answer.
@@ -151,8 +156,7 @@ impl State {
         done: impl FnOnce(&mut State, Reply, &mut Tx) + 'static,
         tx: &mut Tx,
     ) {
-        self.requests.next += 1;
-        let id = format!("native-{}", self.requests.next);
+        let id = self.next_request_id();
         let command = build(id.clone());
         self.act_as(id, &command, refused, done, tx);
     }

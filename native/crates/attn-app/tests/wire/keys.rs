@@ -184,7 +184,10 @@ fn every_shortcut_runs_its_own_action(category: Category) {
                 if *action != Action::AppQuit {
                     press(world, action);
                 }
-                if world.screen().find(Target::key("new-session")).is_some() {
+                let screen = world.screen();
+                if screen.find(Target::key("new-session")).is_some()
+                    || screen.find(Target::key("garden.full")).is_some()
+                {
                     world.gesture(|app| {
                         app.key(KeyEvent {
                             key: Key::Escape,

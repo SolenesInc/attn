@@ -3,8 +3,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use attn_protocol::{
-    AttachResultMessage, ClientHelloMessage, CommandErrorMessage, InitialStateMessage,
-    KittyImageResultMessage, KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
+    AttachResultMessage, ClientHelloMessage, CommandErrorMessage, GardenSeedsChangedMessage,
+    GardenSeedsUpdatedMessage, InitialStateMessage, KittyImageResultMessage,
+    KittyPlacementsMessage, OutpostsUpdatedMessage, PROTOCOL_VERSION,
     ProfileArrangementChangedMessage, ProfilesChangedMessage, PtyDesyncMessage, PtyResizedMessage,
     RuntimeRespawnedMessage, SessionExitedMessage, SessionMessagesChangedMessage,
     SessionRegisteredMessage, SessionUnregisteredMessage, SessionsUpdatedMessage,
@@ -456,6 +457,22 @@ impl Task {
                 let message: ProfileArrangementChangedMessage = parse(&header.event, text)?;
                 self.store
                     .apply_arrangement(message.profile, message.desktops);
+                None
+            }
+            "garden_seeds_updated" => {
+                let message: GardenSeedsUpdatedMessage = parse(&header.event, text)?;
+                self.store
+                    .set_garden(message.profile_id, message.seeds, message.total);
+                None
+            }
+            "garden_seeds_changed" => {
+                let message: GardenSeedsChangedMessage = parse(&header.event, text)?;
+                self.store.change_garden(
+                    message.profile_id,
+                    message.order,
+                    message.seeds,
+                    message.total,
+                );
                 None
             }
             "outposts_updated" => {

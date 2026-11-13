@@ -50,6 +50,21 @@ pub(crate) fn save(_: &mut State, _: &mut Tx) {
     });
 }
 
+/// The app's own setting `key`, as a string, from the main window's prefs.
+pub(crate) fn pref_string(key: &str) -> Option<String> {
+    MAIN.with_borrow(|main| main.as_ref()?.0.get::<String>(key))
+}
+
+/// Keeps the app's own setting `key` in the main window's prefs.
+pub(crate) fn set_pref_string(key: &str, value: &str) {
+    MAIN.with_borrow_mut(|main| {
+        let Some((prefs, _)) = main else { return };
+        if let Err(why) = prefs.set(key, &value.to_owned()) {
+            eprintln!("attn-app: {key} was not saved: {why}");
+        }
+    });
+}
+
 /// Where the main window's content starts on the desktop, in points: (0, 0) without one.
 pub(crate) fn main_content_origin() -> (f64, f64) {
     MAIN.with_borrow(|main| {

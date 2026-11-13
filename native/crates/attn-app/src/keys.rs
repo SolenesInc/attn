@@ -54,6 +54,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     {
         return true;
     }
+    if ev.key == Key::Escape && tx.focused().is_none() && crate::garden::escape(state) {
+        return true;
+    }
     if ev.key == Key::Escape && tx.focused().is_none() && crate::desktop::escape(state, tx) {
         return true;
     }

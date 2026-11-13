@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, Weak};
 
 use attn_protocol::{
-    Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Session,
+    Desktop, DesktopTileContentMessage, InitialStateMessage, OutpostInfo, Profile, Seed, Session,
 };
 
 /// The daemon's facts as this process last heard them. Each slice sits behind its own `Arc`,
@@ -21,6 +21,7 @@ pub struct Facts {
     pub outposts: Arc<Vec<OutpostInfo>>,
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
+    pub garden: Arc<Garden>,
 }
 
 /// Document tiles' contents by desktop and tile.
@@ -73,6 +74,36 @@ impl Facts {
     }
 }
 
+/// One profile's garden as the daemon pushes it: its newest seeds, newest first, and how many it
+/// holds in all. A seed the daemon did not change keeps its `Arc`, so a row built from it is
+/// reused.
+#[derive(Clone, Default)]
+pub struct Garden {
+    pub profile: String,
+    pub seeds: Vec<Arc<Seed>>,
+    pub total: i64,
+}
+
+impl Garden {
+    /// The seeds, when they are the profile's that `selected` names; none for another's.
+    pub fn of(&self, selected: &str) -> &[Arc<Seed>] {
+        if self.profile == selected {
+            &self.seeds
+        } else {
+            &[]
+        }
+    }
+
+    /// How many seeds the garden of the profile `selected` names holds.
+    pub fn total_of(&self, selected: &str) -> i64 {
+        if self.profile == selected {
+            self.total
+        } else {
+            0
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 pub struct Profiles {
     pub all: Vec<Profile>,
@@ -110,7 +141,8 @@ impl Slices {
     pub const SETTINGS: Slices = Slices(1 << 4);
     pub const OUTPOSTS: Slices = Slices(1 << 5);
     pub const TILE_CONTENTS: Slices = Slices(1 << 6);
-    pub const ALL: Slices = Slices((1 << 7) - 1);
+    pub const GARDEN: Slices = Slices(1 << 7);
+    pub const ALL: Slices = Slices((1 << 8) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -225,6 +257,17 @@ impl Store {
             }
             facts.settings = Arc::new(state.settings.unwrap_or_default());
             facts.outposts = Arc::new(state.outposts.unwrap_or_default());
+            let seeds: Vec<Arc<Seed>> = state
+                .seeds
+                .unwrap_or_default()
+                .into_iter()
+                .map(Arc::new)
+                .collect();
+            facts.garden = Arc::new(Garden {
+                profile: facts.profiles.selected.clone(),
+                total: state.seeds_total.unwrap_or(seeds.len() as i64),
+                seeds,
+            });
             Slices::ALL
         });
     }
@@ -243,6 +286,72 @@ impl Store {
         self.change(|facts| {
             facts.outposts = Arc::new(outposts);
             Slices::OUTPOSTS
+        });
+    }
+
+    /// The selected profile's whole garden window, as the daemon sends it on connect and profile
+    /// switch. A window for another profile arrived late and is dropped.
+    pub(crate) fn set_garden(&self, profile: String, seeds: Vec<Seed>, total: i64) {
+        self.change(|facts| {
+            if facts.profiles.selected != profile {
+                return Slices::NONE;
+            }
+            facts.garden = Arc::new(Garden {
+                profile,
+                seeds: seeds.into_iter().map(Arc::new).collect(),
+                total,
+            });
+            Slices::GARDEN
+        });
+    }
+
+    /// The garden window in the daemon's `order`, from the seeds that changed and the ones this
+    /// store already holds. A change for another garden than the selected profile's one held is
+    /// dropped: the whole window of the new profile comes first.
+    pub(crate) fn change_garden(
+        &self,
+        profile: String,
+        order: Vec<String>,
+        changed: Vec<Seed>,
+        total: i64,
+    ) {
+        self.change(|facts| {
+            if facts.garden.profile != profile || facts.profiles.selected != profile {
+                return Slices::NONE;
+            }
+            let mut known: std::collections::HashMap<&str, &Arc<Seed>> = facts
+                .garden
+                .seeds
+                .iter()
+                .map(|s| (s.id.as_str(), s))
+                .collect();
+            let changed: Vec<Arc<Seed>> = changed.into_iter().map(Arc::new).collect();
+            for seed in &changed {
+                known.insert(seed.id.as_str(), seed);
+            }
+            let mut missing = Vec::new();
+            let seeds = order
+                .iter()
+                .filter_map(|id| {
+                    let seed = known.get(id.as_str()).map(|s| Arc::clone(s));
+                    if seed.is_none() {
+                        missing.push(id.as_str());
+                    }
+                    seed
+                })
+                .collect();
+            if !missing.is_empty() {
+                eprintln!(
+                    "attn-app: a garden change lists seeds this app never received: {}",
+                    missing.join(", ")
+                );
+            }
+            facts.garden = Arc::new(Garden {
+                profile,
+                seeds,
+                total,
+            });
+            Slices::GARDEN
         });
     }
 

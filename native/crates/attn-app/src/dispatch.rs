@@ -21,7 +21,7 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
         Action::SessionToggleSidebar => window.sidebar_hidden = !window.sidebar_hidden,
         Action::DockAttention => window.toggle_drawer(Drawer::Attention),
         Action::DockAsks => window.toggle_drawer(Drawer::Asks),
-        Action::BoardOpen => window.toggle_drawer(Drawer::Garden),
+        Action::BoardOpen => crate::garden::toggle_frame(state, tx),
         Action::UiActionMenu => crate::palette::open(state, Face::Agents, tx),
         Action::UiCommandPalette => crate::palette::open(state, Face::Commands, tx),
         Action::FileOpen => window.toggle_layer(Layer::Palette(Palette::Files), tx),

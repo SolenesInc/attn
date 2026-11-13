@@ -6,6 +6,7 @@ mod wire {
     mod desktop_close;
     mod desktop_order;
     mod desktops;
+    mod garden;
     mod home;
     mod keys;
     mod markdown;

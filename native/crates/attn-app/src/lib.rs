@@ -7,6 +7,7 @@ mod deep_link;
 pub mod desktop;
 mod dispatch;
 mod frame;
+pub mod garden;
 pub mod headless;
 mod home;
 pub mod instance;
@@ -152,6 +153,7 @@ pub fn bind(
             sidebar::width::follow(state);
             palette::follow(state);
             sidebar::advance(state, tx);
+            garden::follow(state, tx);
             if state.window.tile.is_none() {
                 let keyboard = state.window.keyboard_terminal(&state.facts);
                 state

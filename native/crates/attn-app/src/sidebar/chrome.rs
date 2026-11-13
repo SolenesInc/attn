@@ -267,6 +267,17 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
                 crate::dispatch(state, crate::Action::SessionNew, tx);
             },
         ),
+        tool(
+            "titlebar.garden",
+            if crate::garden::mode(state) == crate::garden::Mode::Closed {
+                "Show the garden"
+            } else {
+                "Hide the garden"
+            },
+            attn_ui::icon::SEEDLING,
+            t,
+        )
+        .on_press_tx(crate::garden::toggle_from_icon),
         tool("titlebar.commands", "Commands", attn_ui::icon::BOLT, t).on_press_tx(
             |state: &mut State, tx: &mut Tx| {
                 crate::dispatch(state, crate::Action::UiCommandPalette, tx);

@@ -164,6 +164,28 @@ pub(crate) fn catalog(state: &State) -> Vec<Command> {
             .shortcut(desktop.shortcut_slot.and_then(Action::desktop_select)),
         );
     }
+    commands.push(
+        Command::new(
+            "garden-frame",
+            match crate::garden::mode(state) {
+                crate::garden::Mode::Full => "Move the garden to the sidebar",
+                crate::garden::Mode::Dock => "Open the garden fullscreen",
+                crate::garden::Mode::Closed => "Open the garden",
+            },
+            &[
+                "garden",
+                "seed",
+                "seeds",
+                "plot",
+                "board",
+                "expand",
+                "fullscreen",
+            ],
+            Action::BoardOpen,
+        )
+        .describe("Seeds and plots, the trail beside what you are reading")
+        .shortcut(Some(Action::BoardOpen)),
+    );
     commands.push(Command::new(
         "toggle-sidebar",
         if state.window.sidebar_hidden {

@@ -12,8 +12,8 @@ pub use link::{
 };
 pub use pulse::Pulse;
 pub use store::{
-    Connection, Facts, Profiles, Refusal, Slices, Store, Subscription, TileContent, TileContents,
-    TileKey,
+    Connection, Facts, Garden, Profiles, Refusal, Slices, Store, Subscription, TileContent,
+    TileContents, TileKey,
 };
 
 pub const CLIENT_KIND: &str = "native-app";

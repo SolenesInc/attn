@@ -61,6 +61,7 @@ pub struct Window {
     pub(crate) session_menu: Option<crate::sidebar::session_menu::Menu>,
     /// The popped-out leaf this window shows, when it is a tile window.
     pub(crate) tile: Option<crate::desktop::TileWindow>,
+    pub(crate) garden: crate::garden::Garden,
 }
 
 /// What the window's main area shows: home, or the current desktop's tiles.
@@ -402,7 +403,10 @@ fn shell(state: &State, t: &Tokens, scale: f32) -> El {
             View::Home => crate::home::view(state, t),
             View::Desktop => crate::desktop::area(state, t, scale),
         })
-        .children(window.drawer.map(|drawer| self::drawer(drawer, t)))
+        .children(window.drawer.map(|drawer| match drawer {
+            Drawer::Garden => crate::garden::panel(state, t),
+            drawer => self::drawer(drawer, t),
+        }))
 }
 
 impl Window {
@@ -468,6 +472,7 @@ fn layers(state: &State, t: &Tokens) -> Vec<El> {
             t,
         ));
     }
+    layers.extend(crate::garden::frame_layer(state, t));
     layers.extend(crate::desktop::cap_menu(state, t));
     layers.extend(crate::desktop::peek(state, t));
     layers.extend(crate::desktop::header_popover(state, t));
