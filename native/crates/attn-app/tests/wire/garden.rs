@@ -11,6 +11,7 @@ use rune::{Key, KeyEvent, Mods};
 use serde_json::Value;
 
 mod board;
+mod checks;
 mod tile;
 
 const PROFILE: &str = "work";

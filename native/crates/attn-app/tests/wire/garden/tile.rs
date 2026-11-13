@@ -250,3 +250,41 @@ fn escape_climbs_a_seed_tiles_plots_only_while_the_tile_holds_the_keyboard() {
     assert_eq!(moves[0]["tile_params"], "s-plot11");
     assert!(world.runtime_is_at_rest());
 }
+
+#[test]
+fn a_seed_tile_judges_its_checks_and_shows_the_reason_as_it_is_typed() {
+    let checked = with(cache(), |s| {
+        s.checks = Some(vec![attn_protocol::SeedCheck {
+            id: "C1".into(),
+            text: "the cache moves".into(),
+            state: "reported".into(),
+            ..attn_protocol::SeedCheck::default()
+        }])
+    });
+    let read = checked.clone();
+    let mut world = start("s-cache1", vec![checked], move |r| {
+        document(r, read.clone(), Vec::new(), &[])
+    });
+
+    world.gesture(|app| app.click(Target::role("button").name("Reject C1")));
+    world.gesture(|app| app.type_text("a run on Linux"));
+    assert_eq!(
+        world
+            .screen()
+            .get(Target::key("seed-tile.t.check.C1.reject"))
+            .value
+            .as_deref(),
+        Some("a run on Linux")
+    );
+    key(&mut world, Key::Enter);
+    let sent = world.daemon.sent_of("seed_check");
+    assert_eq!(
+        (&sent[0]["seed_id"], &sent[0]["verb"], &sent[0]["summary"]),
+        (
+            &json!("s-cache1"),
+            &json!("reject"),
+            &json!("a run on Linux")
+        )
+    );
+    assert!(world.runtime_is_at_rest());
+}

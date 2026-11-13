@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use attn_protocol::{Seed, SeedCheckTally, Session};
+use attn_protocol::{Seed, SeedCheck, SeedCheckTally, Session};
 
 /// The garden's seeds by id, with each plot's children, each seed's inbound relations and how
 /// many open seeds block it. A plot whose crown the push left out leaves its children as roots.
@@ -219,28 +219,46 @@ pub(crate) fn check_tally(seed: &Seed) -> Option<SeedCheckTally> {
     if let Some(progress) = &seed.plot_progress {
         return progress.checks.clone();
     }
-    let live: Vec<_> = seed
-        .checks
-        .iter()
-        .flatten()
-        .filter(|c| !c.removed)
-        .collect();
-    if live.is_empty() {
-        return None;
-    }
-    let mut tally = SeedCheckTally {
-        total: live.len() as i64,
-        ..SeedCheckTally::default()
-    };
-    for check in live {
-        match check.state.as_str() {
+    tally_of(seed.checks.iter().flatten())
+}
+
+/// The checks that are not removed, by state: none when every check is removed.
+pub(crate) fn tally_of<'a>(
+    checks: impl IntoIterator<Item = &'a SeedCheck>,
+) -> Option<SeedCheckTally> {
+    tally_states(
+        checks
+            .into_iter()
+            .filter(|c| !c.removed)
+            .map(|c| c.state.as_str()),
+    )
+}
+
+pub(crate) fn tally_states<'a>(
+    states: impl IntoIterator<Item = &'a str>,
+) -> Option<SeedCheckTally> {
+    let mut tally = SeedCheckTally::default();
+    for state in states {
+        tally.total += 1;
+        match state {
             "reported" => tally.reported += 1,
             "confirmed" => tally.confirmed += 1,
             "rejected" => tally.rejected += 1,
             _ => {}
         }
     }
-    Some(tally)
+    (tally.total > 0).then_some(tally)
+}
+
+pub(crate) fn tally_sentence(tally: &SeedCheckTally) -> String {
+    let mut parts = vec![format!("{} of {} confirmed", tally.confirmed, tally.total)];
+    if tally.reported > 0 {
+        parts.push(format!("{} to judge", tally.reported));
+    }
+    if tally.rejected > 0 {
+        parts.push(format!("{} rejected", tally.rejected));
+    }
+    parts.join(" · ")
 }
 
 pub(crate) fn tally_words(tally: &SeedCheckTally) -> String {

@@ -1,4 +1,5 @@
 mod board;
+mod checks;
 pub(crate) mod model;
 pub(crate) mod search;
 mod sheet;
@@ -56,8 +57,14 @@ pub(crate) struct Garden {
     pub(crate) trail_open: bool,
     /// Each shown seed's document, by seed.
     readings: HashMap<String, Reading>,
-    /// Rises with every answer a reading takes, for the views that show readings.
+    /// Rises with every change a seed page shows besides the seeds: a reading's answer, a
+    /// check's move, a fold opened.
     pub(crate) revision: u64,
+    /// The check move under way, or the reject being written.
+    judging: Option<checks::Judging>,
+    judge_words: TextEdit,
+    /// The folds open on seed pages, by the key of the control that opens each.
+    folds: HashSet<String>,
     pub(crate) board_walk: board::Board,
 }
 

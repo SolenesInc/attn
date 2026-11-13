@@ -16,6 +16,8 @@ pub(super) struct Sheet<'a> {
     pub(super) view: String,
     pub(super) go: Go,
     pub(super) names: &'a SessionNames,
+    pub(super) garden: &'a super::Garden,
+    pub(super) seeds: &'a [Arc<Seed>],
     pub(super) readings: &'a crate::markdown::Readings,
     pub(super) now_ms: i64,
     pub(super) t: &'a Tokens,
@@ -154,31 +156,6 @@ impl Sheet<'_> {
                     ))
             },
         )
-    }
-
-    pub(super) fn checks(&self, here: &Seed) -> Option<El> {
-        let checks: Vec<_> = here
-            .checks
-            .iter()
-            .flatten()
-            .filter(|c| !c.removed)
-            .collect();
-        if checks.is_empty() {
-            return None;
-        }
-        let mut list = self.section("checks", "Checks");
-        for check in checks {
-            let words = format!("{} {} · {}", check.id, check.text, check.state);
-            list = list.child(
-                text(words.clone())
-                    .key(self.key(&format!("check.{}", check.id)))
-                    .role("listitem")
-                    .label(words)
-                    .font(type_::BODY)
-                    .color(self.t.text_primary),
-            );
-        }
-        Some(list)
     }
 
     /// The seeds `rows` name, each a button that goes to it, under `title`.

@@ -35,6 +35,8 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
             tile: leaf.to_owned(),
         },
         names: &names,
+        garden: reads.garden,
+        seeds: reads.seeds,
         readings: reads.readings,
         now_ms: reads.now_ms,
         t,

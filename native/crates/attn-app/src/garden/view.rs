@@ -1054,6 +1054,8 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         .into(),
         go: Go::Garden,
         names: &place.names,
+        garden: &state.window.garden,
+        seeds: super::seeds(state),
         readings: &state.readings,
         now_ms: state.window.now_ms,
         t,
