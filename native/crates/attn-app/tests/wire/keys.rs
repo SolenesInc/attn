@@ -747,3 +747,14 @@ fn a_bound_chord_whose_action_does_not_run_goes_on_as_a_key_nothing_binds() {
     assert!(world.screen().find(Target::key("drawer.asks")).is_none());
     rest(&mut world);
 }
+
+#[test]
+fn a_click_on_a_title_bar_button_leaves_the_keyboard_with_the_terminal() {
+    let mut world = World::start(Daemon::scripted().state(state(two_terminals(), &[])));
+    world.open_desktop();
+
+    world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
+    world.gesture(|app| app.type_text("x"));
+
+    assert_eq!(typed(&world), [typed_into("r1", "x")]);
+}

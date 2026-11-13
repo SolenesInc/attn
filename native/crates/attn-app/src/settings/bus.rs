@@ -126,7 +126,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .child(
                     Button::new("Try again")
                         .on_press_tx(read)
-                        .build(&k)
+                        .build(k)
                         .key("settings.bus.try-again"),
                 ),
             None => text("Reading the event log…")
@@ -162,7 +162,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                         .label(format!("{level}: {}", finding.message))
                         .gap(space::S2)
                         .items_center()
-                        .child(Badge::new(level).build(&k))
+                        .child(Badge::new(level).build(k))
                         .child(
                             text(finding.message.clone())
                                 .font(CAPTION)
@@ -175,8 +175,8 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
         );
     }
     page.push(summary(status, now_ms, t));
-    page.extend(producers(bus, status, t, &k));
-    page.extend(consumers(bus, status, now_ms, t, &k));
+    page.extend(producers(bus, status, t, k));
+    page.extend(consumers(bus, status, now_ms, t, k));
     page.push(
         row()
             .key("settings.bus.footer")
@@ -186,7 +186,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 Button::new(if bus.loading { "Reading…" } else { "Refresh" })
                     .disabled(bus.loading)
                     .on_press_tx(read)
-                    .build(&k)
+                    .build(k)
                     .key("settings.bus.refresh")
                     .label("Refresh"),
             )

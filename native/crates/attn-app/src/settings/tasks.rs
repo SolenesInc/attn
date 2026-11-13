@@ -107,7 +107,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 .child(
                     Button::new("Try again")
                         .on_press_tx(read)
-                        .build(&k)
+                        .build(k)
                         .key("settings.tasks.try-again"),
                 ),
         ];
@@ -136,7 +136,7 @@ pub(super) fn page(state: &State, now_ms: i64, t: &Tokens) -> Vec<El> {
                 tasks
                     .list
                     .iter()
-                    .map(|task| row_of(tasks, task, now_ms, t, &k)),
+                    .map(|task| row_of(tasks, task, now_ms, t, k)),
             ),
     ]
 }

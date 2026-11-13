@@ -1,5 +1,5 @@
 use attn_ui::Tokens;
-use rune::tok::{space, type_};
+use rune::tok::type_;
 use rune::{Color, El, Key, KeyEvent, Span, Tx, col, el, row, text, text_input};
 
 use crate::State;
@@ -35,29 +35,26 @@ pub(super) fn panel(id: &str, filtering: &Filtering, results_height: f32, t: &To
         })
         .w(200.0)
         .color(t.text_primary);
-    let case = button(id, "case", "Aa", "Match case", t, |state, id, _| {
-        state.terminals.toggle_filter_case(id)
-    })
-    .fill(if filtering.case {
-        t.text_secondary.alpha(0.3)
-    } else {
-        Color::TRANSPARENT
-    })
-    .color(if filtering.case {
-        t.text_primary
-    } else {
-        t.text_secondary
-    });
+    let case = filter_button(
+        id,
+        "case",
+        "Aa",
+        "Match case",
+        filtering.case,
+        t,
+        |state, id, _| state.terminals.toggle_filter_case(id),
+    );
     let count = text(filtering.count())
         .key(format!("terminal.{id}.filter.count"))
         .font(type_::MONO_CAPTION)
         .color(t.text_secondary)
         .single_line();
-    let close = button(
+    let close = filter_button(
         id,
         "close",
         attn_ui::icon::CLOSE,
         "Close filter",
+        false,
         t,
         |state, id, tx| state.terminals.close_filter(id, tx),
     );
@@ -128,27 +125,28 @@ fn boxed(el: El, t: &Tokens) -> El {
     el.radius(6.0).fill(t.bg_elevated).border(1.0, t.border)
 }
 
-fn button(
+fn filter_button(
     id: &str,
     part: &str,
     glyph: &str,
     label: &str,
+    on: bool,
     t: &Tokens,
     press: impl Fn(&mut State, &str, &mut Tx) + 'static,
 ) -> El {
-    let (id, field) = (id.to_owned(), filter_field_key(id));
-    text(glyph)
-        .key(format!("terminal.{id}.filter.{part}"))
-        .role("button")
-        .label(label)
-        .font(type_::LABEL)
-        .color(t.text_secondary)
-        .px(space::S1)
-        .radius(4.0)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            press(state, &id, tx);
-            if state.terminals.filtering(&id).is_some() {
-                tx.focus(field.clone(), false);
-            }
-        })
+    let (pressed, open) = (id.to_owned(), id.to_owned());
+    super::find_bar::button(
+        format!("terminal.{id}.filter.{part}"),
+        glyph,
+        label,
+        on,
+        t,
+        move |state, tx| press(state, &pressed, tx),
+        move |state| {
+            state
+                .terminals
+                .filtering(&open)
+                .map(|_| filter_field_key(&open))
+        },
+    )
 }

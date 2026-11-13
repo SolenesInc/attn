@@ -97,16 +97,15 @@ pub(crate) fn piece(
     t: &Tokens,
 ) -> El {
     let pressed = (leaf.to_owned(), session.to_owned());
-    let badge = text(badge.text.clone())
-        .key(header_pop::anchor(leaf, What::Usage))
-        .role("button")
-        .label(badge.label.clone())
-        .font(font)
-        .color(t.text_tertiary)
-        .single_line()
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx)
-        });
+    let badge = header_pop::link(
+        badge.label.clone(),
+        badge.text.clone(),
+        font,
+        t.text_tertiary,
+        t,
+        move |state, tx| header_pop::press(state, &pressed.0, &pressed.1, What::Usage, tx),
+    )
+    .key(header_pop::anchor(leaf, What::Usage));
     header_pop::hovers(badge, leaf, session, What::Usage)
 }
 

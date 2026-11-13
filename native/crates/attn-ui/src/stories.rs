@@ -41,7 +41,7 @@ fn stage(cx: &Cx<Showcase>, body: impl FnOnce(&Kit, &mut Vec<El>) -> El) -> El {
     let t = tokens(cx.system_dark());
     let k = kit(&t);
     let mut layer = Vec::new();
-    let content = body(&k, &mut layer);
+    let content = body(k, &mut layer);
     el().w_full()
         .h_full()
         .fill(t.bg_app)

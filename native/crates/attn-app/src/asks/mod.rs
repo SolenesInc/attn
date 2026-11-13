@@ -606,5 +606,5 @@ pub(crate) fn toggle_snooze(state: &mut State, tx: &mut Tx) {
         return;
     }
     let name = from(ask, Some(&holder));
-    crate::sidebar::snooze::open(state, &holder.id, name, Some(view::SNOOZE.into()), tx);
+    crate::sidebar::snooze::open(state, &holder.id, name, Some(view::SNOOZE.into()), true, tx);
 }

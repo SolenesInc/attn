@@ -101,7 +101,7 @@ fn header(state: &State, t: &Tokens) -> El {
                 .variant(IconButtonVariant::Ghost)
                 .label("Close settings")
                 .on_press_tx(super::close)
-                .build(&kit)
+                .build(kit)
                 .key("settings.close"),
         )
 }

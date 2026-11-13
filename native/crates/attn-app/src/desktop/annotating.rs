@@ -1,6 +1,7 @@
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::type_;
 use rune::{Drag, El, Key, KeyEvent, Tx, col, el, row, text, text_input};
+use rune_kit::{Button, ButtonVariant};
 
 use crate::State;
 use crate::annotations::{self, QuickLabel, draft};
@@ -208,26 +209,23 @@ fn popup(
         .map(|label| {
             let on = mark.label == label.id;
             let picking = label.id;
+            let pressed = id.to_owned();
             chip(
                 id,
                 &format!("label.{}", label.id),
                 label.emoji,
                 label.text,
                 t,
+                move |state, tx| draft::pick_label(state, &pressed, picking, tx),
             )
             .fill(if on {
                 t.accent
             } else {
                 rune::Color::TRANSPARENT
             })
-            .on_press_tx({
-                let id = id.to_owned();
-                move |state: &mut State, tx: &mut Tx| {
-                    draft::pick_label(state, &id, picking, tx);
-                }
-            })
         })
         .collect();
+    let toggled = id.to_owned();
     chips.push(
         chip(
             id,
@@ -235,24 +233,25 @@ fn popup(
             in_picker.map_or("⚡", |l| l.emoji),
             "More labels",
             t,
+            move |state, _| draft::toggle_picker(state, &toggled),
         )
         .fill(if in_picker.is_some() {
             t.accent
         } else {
             rune::Color::TRANSPARENT
-        })
-        .on_press({
-            let id = id.to_owned();
-            move |state: &mut State| draft::toggle_picker(state, &id)
         }),
     );
     chips.push(el().w(1.0).h(18.0).mx(4.0).fill(t.border));
-    chips.push(
-        chip(id, "write", attn_ui::icon::COMMENT, "Write a comment", t).on_press_tx({
-            let id = id.to_owned();
-            move |state: &mut State, tx: &mut Tx| draft::write(state, &id, tx)
-        }),
-    );
+    let written = id.to_owned();
+    chips.push(chip(
+        id,
+        "write",
+        attn_ui::icon::COMMENT,
+        "Write a comment",
+        t,
+        move |state, tx| draft::write(state, &written, tx),
+    ));
+    let (removed, gone) = (id.to_owned(), mark.id.clone());
     chips.push(
         chip(
             id,
@@ -260,14 +259,11 @@ fn popup(
             attn_ui::icon::TRASH,
             "Remove this annotation",
             t,
+            move |state, tx| draft::remove(state, &removed, &gone, tx),
         )
         .ml(2.0)
         .fill(t.error.alpha(0.16))
-        .border(1.0, t.error.alpha(0.4))
-        .on_press_tx({
-            let (id, mark) = (id.to_owned(), mark.id.clone());
-            move |state: &mut State, tx: &mut Tx| draft::remove(state, &id, &mark, tx)
-        }),
+        .border(1.0, t.error.alpha(0.4)),
     );
     let hint = popup
         .hint
@@ -341,17 +337,23 @@ fn popup(
         .absolute(left, top)
 }
 
-fn chip(id: &str, part: &str, glyph: &str, label: &str, t: &Tokens) -> El {
+fn chip(
+    id: &str,
+    part: &str,
+    glyph: &str,
+    label: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
     let (hinted, hint) = (id.to_owned(), label.to_owned());
-    text(glyph.to_owned())
-        .key(format!("terminal.{id}.annotation.{part}"))
-        .role("button")
-        .label(label)
+    GlyphButton::new(glyph, label)
+        .variant(ButtonVariant::Ghost)
         .font(type_::BODY)
-        .color(t.text_primary)
+        .side(CHIP)
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
+        .key(format!("terminal.{id}.annotation.{part}"))
         .w(CHIP)
-        .h(CHIP)
-        .align(rune::Align::Center)
         .radius(7.0)
         .on_hover_change(move |state: &mut State, inside, _: &mut Tx| {
             draft::hint(state, &hinted, inside.then_some(hint.as_str()));
@@ -452,42 +454,43 @@ fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Toke
         .fill(t.bg_input)
         .border(1.0, t.border)
         .color(t.text_primary);
-    let button = |part: &str, title: &str| {
-        text(title.to_owned())
-            .key(format!("terminal.{id}.annotation.{part}"))
-            .role("button")
-            .font(type_::LABEL)
-            .px(10.0)
-            .py(4.0)
-            .radius(6.0)
-    };
+    let (removed, gone, dismissed, saved) =
+        (id.to_owned(), mark.id.clone(), id.to_owned(), id.to_owned());
     let actions = row()
         .items_center()
         .gap(6.0)
-        .child(button("delete", "Remove").color(t.error).on_press_tx({
-            let (id, mark) = (id.to_owned(), mark.id.clone());
-            move |state: &mut State, tx: &mut Tx| draft::remove(state, &id, &mark, tx)
-        }))
+        .child(compose_button(
+            id,
+            "delete",
+            "Remove",
+            t.error,
+            t,
+            move |state, tx| draft::remove(state, &removed, &gone, tx),
+        ))
         .child(el().grow(1.0))
         .child(
-            button("cancel", "Cancel")
-                .color(t.text_secondary)
-                .fill(t.bg_button)
-                .border(1.0, t.border)
-                .on_press_tx({
-                    let id = id.to_owned();
-                    move |state: &mut State, tx: &mut Tx| draft::dismiss(state, &id, tx)
-                }),
+            compose_button(
+                id,
+                "cancel",
+                "Cancel",
+                t.text_secondary,
+                t,
+                move |state, tx| draft::dismiss(state, &dismissed, tx),
+            )
+            .fill(t.bg_button)
+            .border(1.0, t.border),
         )
         .child(
-            button("comment", "Comment")
-                .color(t.text_secondary)
-                .fill(t.bg_button)
-                .border(1.0, t.border)
-                .on_press_tx({
-                    let id = id.to_owned();
-                    move |state: &mut State, tx: &mut Tx| draft::save_comment(state, &id, tx)
-                }),
+            compose_button(
+                id,
+                "comment",
+                "Comment",
+                t.text_secondary,
+                t,
+                move |state, tx| draft::save_comment(state, &saved, tx),
+            )
+            .fill(t.bg_button)
+            .border(1.0, t.border),
         );
     col()
         .w(COMPOSE_W)
@@ -505,6 +508,26 @@ fn compose(id: &str, popup: &Popup, mark: &crate::terminal::Annotation, t: &Toke
         )
         .child(field)
         .child(actions)
+}
+
+fn compose_button(
+    id: &str,
+    part: &str,
+    title: &str,
+    ink: rune::Color,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let face = title.to_owned();
+    Button::new(title)
+        .variant(ButtonVariant::Ghost)
+        .on_press_tx(press)
+        .label_with(move |_, _| text(face).font(type_::LABEL).color(ink))
+        .build(attn_ui::kit(t))
+        .key(format!("terminal.{id}.annotation.{part}"))
+        .h(type_::LABEL.line_px() + 8.0)
+        .px(10.0)
+        .radius(6.0)
 }
 
 /// Escape dismisses the popup and ⌘Enter, or Ctrl+Enter, keeps the comment.
@@ -614,32 +637,35 @@ fn panel(id: &str, marking: &Marking, send_key: Option<&str>, t: &Tokens) -> El 
             let sending = marking.outcome == Some(Outcome::Sending);
             let plural = if count == 1 { "" } else { "s" };
             let pressed = id.to_owned();
-            let mut button = row()
+            let (secondary, tertiary) = (t.text_secondary, t.text_tertiary);
+            let send_key = send_key.filter(|_| !sending).map(str::to_owned);
+            let button = Button::new("Send all").variant(ButtonVariant::GhostMuted);
+            let button = if sending {
+                button
+            } else {
+                button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                    draft::send(state, &pressed, tx);
+                })
+            };
+            let button = button
+                .label_with(move |_, _| {
+                    row()
+                        .items_center()
+                        .gap(6.0)
+                        .child(
+                            text(if sending { "Sending…" } else { "Send all" })
+                                .font(type_::LABEL)
+                                .color(secondary),
+                        )
+                        .children(send_key.map(|key| text(key).font(type_::LABEL).color(tertiary)))
+                })
+                .build(attn_ui::kit(t))
                 .key(format!("terminal.{id}.annotation.send"))
-                .role("button")
-                .label("Send all")
-                .items_center()
-                .gap(6.0)
+                .h(type_::LABEL.line_px() + 8.0)
                 .px(10.0)
-                .py(4.0)
                 .radius(6.0)
                 .fill(t.bg_button)
-                .border(1.0, t.border)
-                .child(
-                    text(if sending { "Sending…" } else { "Send all" })
-                        .font(type_::LABEL)
-                        .color(t.text_secondary),
-                )
-                .children(send_key.filter(|_| !sending).map(|key| {
-                    text(key.to_owned())
-                        .font(type_::LABEL)
-                        .color(t.text_tertiary)
-                }));
-            if !sending {
-                button = button.on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    draft::send(state, &pressed, tx);
-                });
-            }
+                .border(1.0, t.border);
             row()
                 .items_center()
                 .child(
@@ -717,16 +743,16 @@ fn card(id: &str, mark: &Annotation, t: &Tokens) -> El {
                 draft::open_card(state, &opened, &mark_id, at, tx);
             }
         });
-    let remove = text(attn_ui::icon::CLOSE)
-        .key(format!("terminal.{id}.annotation.card.{}.remove", mark.id))
-        .role("button")
-        .label("Remove annotation")
+    let remove = GlyphButton::new(attn_ui::icon::CLOSE, "Remove annotation")
+        .variant(ButtonVariant::GhostFaint)
         .font(type_::LABEL)
-        .color(t.text_tertiary)
-        .px(4.0)
+        .side(type_::LABEL.line_px())
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             draft::remove_card(state, &removed, &gone, tx);
-        });
+        })
+        .build(attn_ui::kit(t))
+        .key(format!("terminal.{id}.annotation.card.{}.remove", mark.id))
+        .px(4.0);
     row()
         .items_start()
         .gap(4.0)

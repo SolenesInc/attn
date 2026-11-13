@@ -1,6 +1,7 @@
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, el, row, text, text_input};
+use rune_kit::ButtonVariant;
 
 use crate::State;
 use crate::terminal::{Finding, Toward, find_field_key};
@@ -21,45 +22,44 @@ pub(super) fn bar(id: &str, finding: &Finding, t: &Tokens) -> El {
         })
         .w(160.0)
         .color(t.text_primary);
-    let case = button(id, "case", "Aa", "Match case", t, |state, id, _| {
-        state.terminals.toggle_find_case(id)
-    })
-    .fill(if finding.case {
-        t.text_secondary.alpha(0.3)
-    } else {
-        rune::Color::TRANSPARENT
-    })
-    .color(if finding.case {
-        t.text_primary
-    } else {
-        t.text_secondary
-    });
+    let case = find_button(
+        id,
+        "case",
+        "Aa",
+        "Match case",
+        finding.case,
+        t,
+        |state, id, _| state.terminals.toggle_find_case(id),
+    );
     let count = text(finding.count())
         .key(format!("terminal.{id}.find.count"))
         .font(type_::MONO_CAPTION)
         .color(t.text_secondary)
         .single_line();
-    let older = button(
+    let older = find_button(
         id,
         "prev",
         attn_ui::icon::CARET_UP,
         "Previous match",
+        false,
         t,
         |state, id, _| state.terminals.step_find(id, Toward::Older),
     );
-    let newer = button(
+    let newer = find_button(
         id,
         "next",
         attn_ui::icon::CARET_DOWN,
         "Next match",
+        false,
         t,
         |state, id, _| state.terminals.step_find(id, Toward::Newer),
     );
-    let close = button(
+    let close = find_button(
         id,
         "close",
         attn_ui::icon::CLOSE,
         "Close find",
+        false,
         t,
         |state, id, tx| state.terminals.close_find(id, tx),
     );
@@ -92,27 +92,65 @@ fn on_key(state: &mut State, id: &str, ev: &KeyEvent, tx: &mut Tx) -> bool {
     true
 }
 
-fn button(
+fn find_button(
     id: &str,
     part: &str,
     glyph: &str,
     label: &str,
+    on: bool,
     t: &Tokens,
     press: impl Fn(&mut State, &str, &mut Tx) + 'static,
 ) -> El {
-    let (id, field) = (id.to_owned(), find_field_key(id));
-    text(glyph)
-        .key(format!("terminal.{id}.find.{part}"))
-        .role("button")
-        .label(label)
+    let (pressed, open) = (id.to_owned(), id.to_owned());
+    button(
+        format!("terminal.{id}.find.{part}"),
+        glyph,
+        label,
+        on,
+        t,
+        move |state, tx| press(state, &pressed, tx),
+        move |state| {
+            state
+                .terminals
+                .finding(&open)
+                .map(|_| find_field_key(&open))
+        },
+    )
+}
+
+/// A glyph button on a terminal's find bar or filter panel, set in when `on`, that hands the
+/// keyboard back to the bar's `field` while the bar stays open.
+pub(super) fn button(
+    key: String,
+    glyph: &str,
+    label: &str,
+    on: bool,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+    field: impl Fn(&State) -> Option<String> + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
+        .variant(if on {
+            ButtonVariant::Ghost
+        } else {
+            ButtonVariant::GhostMuted
+        })
         .font(type_::LABEL)
-        .color(t.text_secondary)
+        .side(type_::LABEL.line_px())
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+            press(state, tx);
+            if let Some(field) = field(state) {
+                tx.focus(field, false);
+            }
+        })
+        .build(attn_ui::kit(t))
+        .key(key)
         .px(space::S1)
         .radius(4.0)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            press(state, &id, tx);
-            if state.terminals.finding(&id).is_some() {
-                tx.focus(field.clone(), false);
-            }
+        .hover(rune::Color::TRANSPARENT)
+        .fill(if on {
+            t.text_secondary.alpha(0.3)
+        } else {
+            rune::Color::TRANSPARENT
         })
 }

@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, GrowthSpec, ScrollSpec, Tx, col, memo, row, text, text_input};
+use rune_kit::{Button, ButtonVariant};
 
 use super::model::{AgentRow, display_name, ordered_desktops};
 use super::queue::{self, Bands, QueueRow};
@@ -422,22 +423,24 @@ fn waiting_head(key: String, waiting: usize, t: &Tokens) -> El {
     } else {
         format!("{waiting} waiting")
     };
-    row()
-        .key(key)
-        .role("button")
-        .label(label.clone())
+    let ink = if waiting == 0 {
+        t.text_muted
+    } else {
+        t.warning
+    };
+    Button::new(label.clone())
         .disabled(waiting == 0)
+        .variant(ButtonVariant::Ghost)
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::jump_to_waiting(state, tx))
+        .label_with(move |_, _| text(label).font(type_::SECTION).color(ink))
+        .build(attn_ui::kit(t))
+        .key(key)
         .w_full()
         .h(ROW_HEIGHT)
-        .items_center()
+        .px(0.0)
+        .justify_start()
         .radius(4.0)
         .hover(t.bg_elevated)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::jump_to_waiting(state, tx))
-        .child(text(label).font(type_::SECTION).color(if waiting == 0 {
-            t.text_muted
-        } else {
-            t.warning
-        }))
 }
 
 fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
@@ -446,28 +449,34 @@ fn agents_toggle(key: String, open: bool, more: usize, t: &Tokens) -> El {
         1 => "1 more agent".to_owned(),
         n => format!("{n} more agents"),
     };
-    row()
-        .key(key)
-        .role("button")
-        .label(label.clone())
+    let tokens = *t;
+    Button::new(label.clone())
         .expanded(open)
+        .variant(ButtonVariant::Ghost)
+        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .gap(space::S1)
+                .child(
+                    text(if open {
+                        attn_ui::icon::CARET_DOWN
+                    } else {
+                        attn_ui::icon::CARET_RIGHT
+                    })
+                    .font(type_::LABEL)
+                    .color(tokens.text_tertiary),
+                )
+                .child(text(label).font(type_::SECTION).color(tokens.text_tertiary))
+        })
+        .build(attn_ui::kit(t))
+        .key(key)
         .w_full()
         .h(ROW_HEIGHT)
-        .items_center()
-        .gap(space::S1)
+        .px(0.0)
+        .justify_start()
         .radius(4.0)
         .hover(t.bg_elevated)
-        .on_press_tx(|state: &mut State, tx: &mut Tx| super::actions::toggle_agent_list(state, tx))
-        .child(
-            text(if open {
-                attn_ui::icon::CARET_DOWN
-            } else {
-                attn_ui::icon::CARET_RIGHT
-            })
-            .font(type_::LABEL)
-            .color(t.text_tertiary),
-        )
-        .child(text(label).font(type_::SECTION).color(t.text_tertiary))
 }
 
 fn filter(state: &State, key: String, t: &Tokens) -> El {
@@ -559,13 +568,25 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
     let name = &a.agent.name;
     let settle = a.settle.then(|| {
         let id = id.clone();
-        control(key, "settle", format!("Settle {name}"), "✓", t)
-            .on_press(move |state: &mut State| super::actions::settle(state, &id))
+        control(
+            key,
+            "settle",
+            format!("Settle {name}"),
+            "✓",
+            t,
+            move |state, _| super::actions::settle(state, &id),
+        )
     });
     let unsnooze = a.unsnooze.then(|| {
         let id = id.clone();
-        control(key, "unsnooze", format!("Unsnooze {name}"), "↩", t)
-            .on_press(move |state: &mut State| super::actions::wake(state, &id))
+        control(
+            key,
+            "unsnooze",
+            format!("Unsnooze {name}"),
+            "↩",
+            t,
+            move |state, _| super::actions::wake(state, &id),
+        )
     });
     let snooze = a.snooze.then(|| {
         let (id, name, under) = (id.clone(), name.clone(), format!("{key}.snooze"));
@@ -575,10 +596,10 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
             format!("Snooze {name}"),
             attn_ui::icon::MOON,
             t,
+            move |state, tx| {
+                super::snooze::open(state, &id, name.clone(), Some(under.clone()), true, tx)
+            },
         )
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::snooze::open(state, &id, name.clone(), Some(under.clone()), tx)
-        })
     });
     Some(
         row()
@@ -592,19 +613,20 @@ fn row_controls(key: &str, a: &QueueAgent, t: &Tokens) -> Option<El> {
     )
 }
 
-pub(super) fn control(row_key: &str, name: &str, label: String, glyph: &str, t: &Tokens) -> El {
-    row()
+pub(super) fn control(
+    row_key: &str,
+    name: &str,
+    label: String,
+    glyph: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
+        .font(type_::LABEL)
+        .side(20.0)
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
         .key(format!("{row_key}.{name}"))
-        .role("button")
-        .label(label)
-        .w(20.0)
-        .h(20.0)
-        .center()
         .radius(4.0)
         .hover(t.bg_button)
-        .child(
-            text(glyph.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
 }

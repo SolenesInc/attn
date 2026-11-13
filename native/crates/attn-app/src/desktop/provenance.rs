@@ -2,6 +2,7 @@ use attn_protocol::{AutomationProvenance, Session, SessionPullRequest};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
@@ -237,36 +238,37 @@ pub(super) fn piece(
         } else {
             part.text
         };
-        let said = text(content).font(font).single_line();
+        let said = |ink| text(content.clone()).font(font).single_line().color(ink);
         let accent = if icons { t.accent } else { t.text_secondary };
         Some(match part.does {
-            Does::Say => said.color(t.text_tertiary),
-            Does::Title => said.color(t.text_secondary),
-            Does::Status(tone) => said.color(tone.color(t)),
+            Does::Say => said(t.text_tertiary),
+            Does::Title => said(t.text_secondary),
+            Does::Status(tone) => said(tone.color(t)),
             Does::OpenTarget(url) => {
                 let url = url.to_owned();
-                said.key(format!("tile.{leaf}.automation.target"))
-                    .role("button")
-                    .label(format!(
-                        "Open pull request {}",
-                        target_name.unwrap_or_default()
-                    ))
-                    .color(accent)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
+                header_pop::link(
+                    format!("Open pull request {}", target_name.unwrap_or_default()),
+                    content,
+                    font,
+                    accent,
+                    t,
+                    move |state, tx| open(state, &url, tx),
+                )
+                .key(format!("tile.{leaf}.automation.target"))
             }
             Does::ShowDetails => {
                 let pressed = (leaf.to_owned(), session.to_owned());
-                let details = said
-                    .key(header_pop::anchor(leaf, What::Details))
-                    .role("button")
-                    .label(format!(
-                        "Pull request {} details",
-                        pr_name.unwrap_or_default()
-                    ))
-                    .color(accent)
-                    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
+                let details = header_pop::link(
+                    format!("Pull request {} details", pr_name.unwrap_or_default()),
+                    content,
+                    font,
+                    accent,
+                    t,
+                    move |state, tx| {
                         header_pop::press(state, &pressed.0, &pressed.1, What::Details, tx)
-                    });
+                    },
+                )
+                .key(header_pop::anchor(leaf, What::Details));
                 header_pop::hovers(details, leaf, session, What::Details)
             }
         })
@@ -394,23 +396,30 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
         .w_full()
         .gap(space::S2)
         .items_center()
-        .child(
-            text(
-                current
-                    .title
-                    .clone()
-                    .filter(|t| !t.is_empty())
-                    .unwrap_or_else(|| identity.clone()),
-            )
-            .key(format!("{}.title", pop.surface()))
-            .role("button")
-            .label(format!("Open {identity} on GitHub"))
-            .font(type_::LABEL)
-            .color(t.text_primary)
-            .truncate()
-            .grow(1.0)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx)),
-        )
+        .child({
+            let title = current
+                .title
+                .clone()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| identity.clone());
+            Button::new(format!("Open {identity} on GitHub"))
+                .variant(ButtonVariant::Ghost)
+                .on_press_tx(move |state: &mut State, tx: &mut Tx| open(state, &url, tx))
+                .label_with(move |_, ink| {
+                    text(title)
+                        .font(type_::LABEL)
+                        .color(ink)
+                        .truncate()
+                        .grow(1.0)
+                })
+                .build(attn_ui::kit(t))
+                .key(format!("{}.title", pop.surface()))
+                .h(type_::LABEL.line_px())
+                .px(0.0)
+                .justify_start()
+                .min_w(0.0)
+                .grow(1.0)
+        })
         .child(
             text(identity.clone())
                 .font(type_::LABEL)

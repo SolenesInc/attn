@@ -2,6 +2,7 @@ use attn_protocol::{Desktop, DesktopCloseMessage};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::layout::Node;
 use crate::State;
@@ -99,16 +100,18 @@ fn confirm(state: &mut State, tx: &mut Tx) {
 pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
     let closing = state.window.closing_desktop.as_ref()?;
     let title = format!("Close {}?", closing.title);
-    let button = |key: &str, label: &str| {
-        text(label.to_owned())
+    let button = |key: &str, label: &str, fill, press: fn(&mut State, &mut Tx)| {
+        let face = label.to_owned();
+        Button::new(label)
+            .variant(ButtonVariant::Ghost)
+            .on_press_tx(press)
+            .label_with(move |_, ink| text(face).font(type_::BODY).color(ink))
+            .build(attn_ui::kit(t))
             .key(format!("close_desktop.{key}"))
-            .role("button")
-            .label(label)
-            .focusable(true)
-            .font(type_::BODY)
+            .h(type_::BODY.line_px() + 12.0)
             .px(12.0)
-            .py(6.0)
             .radius(6.0)
+            .fill(fill)
             .border(1.0, t.border)
     };
     let panel = col()
@@ -134,19 +137,8 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .w_full()
                 .gap(space::S2)
                 .child(el().grow(1.0))
-                .child(
-                    button("cancel", "Cancel")
-                        .autofocus()
-                        .color(t.text_primary)
-                        .fill(t.bg_button)
-                        .on_press_tx(cancel),
-                )
-                .child(
-                    button("confirm", "Close desktop")
-                        .color(t.text_primary)
-                        .fill(t.accent)
-                        .on_press_tx(confirm),
-                ),
+                .child(button("cancel", "Cancel", t.bg_button, cancel).autofocus())
+                .child(button("confirm", "Close desktop", t.accent, confirm)),
         );
     Some(
         el().key("close_desktop")

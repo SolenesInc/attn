@@ -254,7 +254,7 @@ fn preview(state: &State, reduced_motion: bool, t: &attn_ui::Tokens) -> Option<E
     .on_close(|s: &mut State, _| s.pictures.shown = None)
     .build(
         &state.pictures.zoom,
-        &attn_ui::kit(t),
+        attn_ui::kit(t),
         state.pictures.window,
         reduced_motion,
     );

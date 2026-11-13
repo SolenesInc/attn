@@ -1,8 +1,9 @@
 mod model;
 
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, ScrollSpec, Tx, col, memo, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use crate::asks::Item as AskItem;
 use crate::sidebar::{open_agent, state_mark};
@@ -65,13 +66,15 @@ fn header(t: &Tokens) -> El {
                         .color(t.text_tertiary),
                 ),
         )
-        .child(
-            button("home.settings", "Settings", attn_ui::icon::SETTINGS, t).on_press_tx(
-                |state: &mut State, tx: &mut Tx| {
-                    crate::dispatch(state, Action::UiOpenSettings, tx);
-                },
-            ),
-        )
+        .child(button(
+            "home.settings",
+            "Settings",
+            attn_ui::icon::SETTINGS,
+            t,
+            |state, tx| {
+                crate::dispatch(state, Action::UiOpenSettings, tx);
+            },
+        ))
 }
 
 fn all_settled(running: &str, follow: bool, t: &Tokens) -> El {
@@ -113,6 +116,7 @@ fn follow_check(follow: bool, t: &Tokens) -> El {
         .label(LABEL)
         .checked(follow)
         .focusable(true)
+        .preserve_focus_on_press(true)
         .items_center()
         .gap(space::S2)
         .on_press(|state: &mut State| {
@@ -209,8 +213,12 @@ fn sessions_card(home: &Home, asks: &[AskItem<'_>], snoozed_open: bool, t: &Toke
                         .color(t.text_primary)
                         .grow(1.0),
                 )
-                .child(button("home.new", "New session", "+ New", t).on_press_tx(
-                    |state: &mut State, tx: &mut Tx| {
+                .child(button(
+                    "home.new",
+                    "New session",
+                    "+ New",
+                    t,
+                    |state, tx| {
                         crate::dispatch(state, Action::SessionNew, tx);
                     },
                 )),
@@ -246,6 +254,7 @@ fn group_label(label: &str, count: Option<usize>, t: &Tokens) -> El {
 }
 
 fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
+    let (tokens, count) = (*t, rows.len());
     col()
         .key("home.group.snoozed")
         .role("list")
@@ -253,29 +262,34 @@ fn snoozed(rows: &[HomeAgent], open: bool, t: &Tokens) -> El {
         .w_full()
         .gap(2.0)
         .child(
-            row()
-                .key("home.group.snoozed.toggle")
-                .role("button")
-                .label("Snoozed")
+            Button::new("Snoozed")
                 .expanded(open)
-                .focusable(true)
-                .gap(space::S1)
-                .items_center()
-                .radius(4.0)
-                .hover(t.bg_elevated)
+                .variant(ButtonVariant::Ghost)
                 .on_press(|state: &mut State| {
                     state.window.home_snoozed_open = !state.window.home_snoozed_open
                 })
-                .child(
-                    text(if open {
-                        attn_ui::icon::CARET_DOWN
-                    } else {
-                        attn_ui::icon::CARET_RIGHT
-                    })
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary),
-                )
-                .child(group_label("Snoozed", Some(rows.len()), t)),
+                .label_with(move |_, _| {
+                    row()
+                        .gap(space::S1)
+                        .items_center()
+                        .child(
+                            text(if open {
+                                attn_ui::icon::CARET_DOWN
+                            } else {
+                                attn_ui::icon::CARET_RIGHT
+                            })
+                            .font(type_::LABEL)
+                            .color(tokens.text_tertiary),
+                        )
+                        .child(group_label("Snoozed", Some(count), &tokens))
+                })
+                .build(attn_ui::kit(t))
+                .key("home.group.snoozed.toggle")
+                .h(20.0)
+                .px(0.0)
+                .self_start()
+                .radius(4.0)
+                .hover(t.bg_elevated),
         )
         .children(
             open.then(|| rows.iter().map(|agent| session_row(agent, t)))
@@ -289,6 +303,7 @@ fn ask_row(item: &AskItem<'_>, t: &Tokens) -> El {
     row()
         .key(format!("home.ask.{id}"))
         .role("button")
+        .focusable(true)
         .label(format!("{}: {}", item.from, item.ask.subject))
         .w_full()
         .min_h(32.0)
@@ -329,8 +344,8 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
                 &format!("Unsnooze {}", a.agent.name),
                 "↩",
                 t,
+                move |state, _| crate::sidebar::wake(state, &id),
             )
-            .on_press(move |state: &mut State| crate::sidebar::wake(state, &id))
         });
         let trailing = [&a.age, &a.snoozed_until]
             .into_iter()
@@ -339,6 +354,7 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
         row()
             .key(key.clone())
             .role("button")
+            .focusable(true)
             .label(format!("Open {}", a.agent.name))
             .a11y_value(a.agent.state.wire())
             .w_full()
@@ -396,20 +412,20 @@ fn session_row(a: &HomeAgent, t: &Tokens) -> El {
     })
 }
 
-fn button(key: &str, label: &str, glyph: &str, t: &Tokens) -> El {
-    row()
+fn button(
+    key: &str,
+    label: &str,
+    glyph: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
+        .font(type_::LABEL)
+        .side(24.0)
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
         .key(key.to_owned())
-        .role("button")
-        .label(label.to_owned())
-        .focusable(true)
         .px(space::S2)
-        .h(24.0)
-        .items_center()
         .radius(4.0)
         .hover(t.bg_elevated)
-        .child(
-            text(glyph.to_owned())
-                .font(type_::LABEL)
-                .color(t.text_secondary),
-        )
 }

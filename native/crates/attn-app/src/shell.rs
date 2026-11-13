@@ -362,6 +362,7 @@ pub(crate) fn expire(state: &mut State, _: f64, tx: &mut Tx) -> bool {
 }
 
 pub(crate) fn view(state: &State, cx: &mut Cx<State>) -> El {
+    cx.controls_keep_focus();
     let appearance =
         Appearance::from_setting(state.facts.settings.get("theme").map(String::as_str));
     let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));

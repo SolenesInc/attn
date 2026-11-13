@@ -1,6 +1,7 @@
-use attn_ui::{Tokens, icon};
+use attn_ui::{GlyphButton, Tokens, icon};
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, el, row, text, text_input};
+use rune_kit::{Button, ButtonVariant};
 
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Picker, Which, agents, listed, numbered, paths};
@@ -197,13 +198,8 @@ fn controls(state: &State, picker: &Picker, t: &Tokens) -> El {
                         .color(t.text_secondary),
                 )
                 .child(
-                    text("Retry")
-                        .key(format!("{w}.agents.retry"))
-                        .role("button")
-                        .label("Retry")
-                        .font(type_::LABEL)
-                        .color(t.accent)
-                        .on_press_tx(super::retry_catalog),
+                    link("Retry", type_::LABEL, t, super::retry_catalog)
+                        .key(format!("{w}.agents.retry")),
                 ),
         ),
         Catalog::Loaded(_) => None,
@@ -558,13 +554,14 @@ fn chooser_view(picker: &Picker, chooser: &Chooser, t: &Tokens) -> Vec<El> {
                         .color(t.text_primary),
                 )
                 .child(
-                    text(icon::REFRESH)
-                        .key(format!("{w}.repo.reroll"))
-                        .role("button")
-                        .label("Pick another name")
-                        .help("Pick another name (⌃R)")
+                    GlyphButton::new(icon::REFRESH, "Pick another name")
+                        .variant(ButtonVariant::Ghost)
                         .font(type_::BODY)
-                        .on_press_tx(move |state: &mut State, _: &mut Tx| reroll(state, which)),
+                        .side(type_::BODY.line_px())
+                        .help("Pick another name (⌃R)")
+                        .on_press(move |state: &mut State| reroll(state, which))
+                        .build(attn_ui::kit(t))
+                        .key(format!("{w}.repo.reroll")),
                 ),
         )
         .child(start(
@@ -692,13 +689,10 @@ fn delete_prompt(w: &str, delete: &Delete, t: &Tokens) -> El {
 pub(crate) fn worktree_setup(state: &State, t: &Tokens) -> Option<El> {
     let setup = state.window.launching.worktree.as_ref()?;
     if let (Some(error), true) = (&setup.failed, setup.opened) {
-        let dismiss = text("Dismiss")
-            .key("worktree-setup.dismiss")
-            .role("button")
-            .label("Dismiss")
-            .font(type_::BODY)
-            .color(t.accent)
-            .on_press_tx(|state: &mut State, _: &mut Tx| state.window.launching.worktree = None);
+        let dismiss = link("Dismiss", type_::BODY, t, |state, _| {
+            state.window.launching.worktree = None
+        })
+        .key("worktree-setup.dismiss");
         return Some(
             el().key("worktree-setup.layer")
                 .absolute(0.0, 0.0)
@@ -849,4 +843,21 @@ fn footer(hints: &[&str], t: &Tokens) -> El {
             .iter()
             .map(|h| text(*h).font(type_::LABEL).color(t.text_tertiary)),
     )
+}
+
+/// A word in the accent colour that is pressed as a button named by it.
+fn link(
+    word: &'static str,
+    font: rune::TextStyle,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let ink = t.accent;
+    Button::new(word)
+        .variant(ButtonVariant::GhostMuted)
+        .on_press_tx(press)
+        .label_with(move |_, _| text(word).font(font).color(ink))
+        .build(attn_ui::kit(t))
+        .h(font.line_px())
+        .px(0.0)
 }

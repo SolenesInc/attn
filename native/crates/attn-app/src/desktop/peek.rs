@@ -10,6 +10,7 @@ use attn_protocol::{
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, ScrollSpec, TextEdit, Tx, col, el, row, text, text_input};
+use rune_kit::{Button, ButtonVariant};
 
 use super::layout::{LeafKind, Node};
 use super::shelf::Shelf;
@@ -638,20 +639,6 @@ impl Peeks {
 /// The strip under an agent's terminal that keeps a reply the peek could not send.
 pub(crate) fn unsent_strip(runtime: &str, text_: &str, t: &Tokens) -> El {
     let (copied, discarded) = (text_.to_owned(), runtime.to_owned());
-    let button = |key: String, label: &str| {
-        row()
-            .key(key)
-            .role("button")
-            .label(label.to_owned())
-            .px(space::S2)
-            .radius(4.0)
-            .fill(t.bg_button)
-            .child(
-                text(label.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-    };
     row()
         .key(format!("tile.unsent.{runtime}"))
         .role("status")
@@ -669,17 +656,48 @@ pub(crate) fn unsent_strip(runtime: &str, text_: &str, t: &Tokens) -> El {
                 .truncate()
                 .grow(1.0),
         )
-        .child(
-            button(format!("tile.unsent.{runtime}.copy"), "Copy")
-                .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(copied.clone())),
-        )
-        .child(
-            button(format!("tile.unsent.{runtime}.discard"), "Discard").on_press(
-                move |state: &mut State| {
-                    state.window.desk.peeks.replies.remove(&discarded);
-                },
-            ),
-        )
+        .child(button(
+            format!("tile.unsent.{runtime}.copy"),
+            "Copy",
+            None,
+            t,
+            move |_, tx| tx.copy(copied.clone()),
+        ))
+        .child(button(
+            format!("tile.unsent.{runtime}.discard"),
+            "Discard",
+            None,
+            t,
+            move |state, _| {
+                state.window.desk.peeks.replies.remove(&discarded);
+            },
+        ))
+}
+
+/// A button of the peek or the unsent strip: its word, and the key that does the same.
+fn button(
+    key: String,
+    label: &str,
+    kbd: Option<&str>,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    let (face, kbd, tertiary) = (label.to_owned(), kbd.map(str::to_owned), t.text_tertiary);
+    Button::new(label)
+        .variant(ButtonVariant::GhostMuted)
+        .on_press_tx(press)
+        .label_with(move |_, ink| {
+            row()
+                .gap(space::S1)
+                .child(text(face).font(type_::LABEL).color(ink))
+                .children(kbd.map(|kbd| text(kbd).font(type_::LABEL).color(tertiary)))
+        })
+        .build(attn_ui::kit(t))
+        .key(key)
+        .h(type_::LABEL.line_px())
+        .px(space::S2)
+        .radius(4.0)
+        .fill(t.bg_button)
 }
 
 fn notice(reply: Option<&Reply>, blocked: Option<&str>) -> Option<String> {
@@ -817,26 +835,6 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
             .fill(t.bg_panel)
             .child(text(words).font(type_::LABEL).color(t.text_secondary))
     });
-    let button = |key: &str, label: &str, kbd: &str| {
-        row()
-            .key(key.to_owned())
-            .role("button")
-            .label(label.to_owned())
-            .gap(space::S1)
-            .px(space::S2)
-            .radius(4.0)
-            .fill(t.bg_button)
-            .child(
-                text(label.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
-            .child(
-                text(kbd.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_tertiary),
-            )
-    };
     let field = text_input(&peeks.field, type_::LABEL)
         .key(field_key(&open.leaf))
         .single_line()
@@ -871,12 +869,22 @@ fn terminal(state: &State, open: &Open, runtime: &str, t: &Tokens) -> Vec<El> {
         .border_sides([0.0, 0.0, 1.0, 0.0], t.border)
         .child(text("❯").font(type_::LABEL).color(t.text_secondary))
         .child(field)
-        .child(button("shelf.peek.open", "Open", "↵").on_press_tx(open_tile))
-        .child(
-            button("shelf.peek.close", "Close", "esc").on_press(|state: &mut State| {
+        .child(button(
+            "shelf.peek.open".to_owned(),
+            "Open",
+            Some("↵"),
+            t,
+            open_tile,
+        ))
+        .child(button(
+            "shelf.peek.close".to_owned(),
+            "Close",
+            Some("esc"),
+            t,
+            |state, _| {
                 close(state);
-            }),
-        );
+            },
+        ));
     let mut parts = vec![screen];
     parts.extend(notice);
     parts.push(reply_row);

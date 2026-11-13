@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, Tx, col, row, text};
+use rune_kit::Button;
 
 use super::model::{desktop_title, ordered_desktops};
 use super::queue::Bands;
@@ -101,36 +102,41 @@ pub(crate) fn chip(
     let desktop = chip.desktop.clone();
     let asks = if chip.asks { ", has open asks" } else { "" };
     let label = format!("{}{}{asks}", chip.title, waiting_words(chip.waiting, mark));
-    let el = row()
+    let slot = chip.slot;
+    let waiting = chip.waiting;
+    let asks_mark = chip.asks;
+    let tokens = *t;
+    let el = Button::new(label)
+        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .child(
+                    text(slot.to_string())
+                        .font(type_::MONO_CAPTION)
+                        .color(tokens.text_secondary),
+                )
+                .children(waiting_mark(waiting, mark, &tokens))
+                .children(asks_mark.then(|| {
+                    text("?")
+                        .font(type_::MONO_CAPTION)
+                        .color(tokens.accent)
+                        .ml(2.0)
+                }))
+        })
+        .build(attn_ui::kit(t))
         .key(format!("{prefix}.{}", chip.slot))
-        .role("button")
-        .label(label)
         .a11y_value(if chip.current { "current" } else { "" })
         .h(22.0)
         .min_w(22.0)
         .px(4.0)
-        .center()
         .radius(4.0)
         .fill(if chip.current {
             t.bg_selected
         } else {
             t.bg_button
         })
-        .hover(t.bg_elevated)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| open_desktop(state, &desktop, tx))
-        .child(
-            text(chip.slot.to_string())
-                .font(type_::MONO_CAPTION)
-                .color(t.text_secondary),
-        )
-        .children(waiting_mark(chip.waiting, mark, t))
-        .children(chip.asks.then(|| {
-            text("?")
-                .key(format!("{prefix}.{}.ask", chip.slot))
-                .font(type_::MONO_CAPTION)
-                .color(t.accent)
-                .ml(2.0)
-        }));
+        .hover(t.bg_elevated);
     match drop {
         None => el,
         Some(DesktopMark::Source) => el.opacity(0.4),
@@ -165,29 +171,31 @@ fn waiting_mark(waiting: usize, mark: Mark, t: &Tokens) -> Option<El> {
 fn extras_chip(key: &str, extras: Extras, mark: Mark, t: &Tokens) -> Option<El> {
     let Extras { count, waiting } = extras;
     (count > 0).then(|| {
-        row()
-            .key(key.to_owned())
-            .role("button")
-            .label(format!(
-                "{count} more desktop{} without a shortcut{}",
-                if count == 1 { "" } else { "s" },
-                waiting_words(waiting, mark)
-            ))
-            .h(22.0)
-            .px(4.0)
-            .center()
-            .radius(4.0)
-            .fill(t.bg_button)
-            .hover(t.bg_elevated)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, crate::Action::DesktopOverview, tx);
-            })
-            .child(
-                text(format!("+{count}"))
-                    .font(type_::MONO_CAPTION)
-                    .color(t.text_secondary),
-            )
-            .children(waiting_mark(waiting, mark, t))
+        let tokens = *t;
+        Button::new(format!(
+            "{count} more desktop{} without a shortcut{}",
+            if count == 1 { "" } else { "s" },
+            waiting_words(waiting, mark)
+        ))
+        .on_press_tx(|state: &mut State, tx: &mut Tx| {
+            crate::dispatch(state, crate::Action::DesktopOverview, tx);
+        })
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .child(
+                    text(format!("+{count}"))
+                        .font(type_::MONO_CAPTION)
+                        .color(tokens.text_secondary),
+                )
+                .children(waiting_mark(waiting, mark, &tokens))
+        })
+        .build(attn_ui::kit(t))
+        .key(key.to_owned())
+        .h(22.0)
+        .px(4.0)
+        .radius(4.0)
+        .hover(t.bg_elevated)
     })
 }
 
@@ -224,36 +232,24 @@ pub(crate) fn rail(state: &State, t: &Tokens) -> El {
         .fill(t.bg_panel)
         .border_sides([0.0, 1.0, 0.0, 0.0], t.border_subtle)
         .child(
-            row()
+            GlyphButton::new(attn_ui::icon::HOME, "Home")
+                .font(type_::BODY)
+                .on_press(|state: &mut State| state.window.go_home())
+                .build(attn_ui::kit(t))
                 .key("rail.home")
-                .role("button")
-                .label("Home")
                 .a11y_value(if home { "current" } else { "" })
-                .h(22.0)
-                .min_w(22.0)
-                .center()
                 .radius(4.0)
                 .fill(if home { t.bg_selected } else { t.bg_panel })
-                .hover(t.bg_elevated)
-                .on_press(|state: &mut State| state.window.go_home())
-                .child(
-                    text(attn_ui::icon::HOME)
-                        .font(type_::BODY)
-                        .color(t.text_secondary),
-                ),
+                .hover(t.bg_elevated),
         )
         .child(
-            row()
-                .key("rail.expand")
-                .role("button")
-                .label("Expand sidebar")
-                .h(22.0)
-                .min_w(22.0)
-                .center()
-                .radius(4.0)
-                .hover(t.bg_elevated)
+            GlyphButton::new("»", "Expand sidebar")
+                .font(type_::BODY)
                 .on_press(|state: &mut State| state.window.sidebar_hidden = false)
-                .child(text("»").font(type_::BODY).color(t.text_secondary)),
+                .build(attn_ui::kit(t))
+                .key("rail.expand")
+                .radius(4.0)
+                .hover(t.bg_elevated),
         )
         .children(
             chips
@@ -279,11 +275,9 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
         "Collapse sidebar"
     };
     vec![
-        tool("titlebar.new", "New agent", "New", t).on_press_tx(
-            |state: &mut State, tx: &mut Tx| {
-                crate::dispatch(state, crate::Action::SessionNew, tx);
-            },
-        ),
+        tool("titlebar.new", "New agent", "New", t, |state, tx| {
+            crate::dispatch(state, crate::Action::SessionNew, tx);
+        }),
         tool(
             "titlebar.garden",
             if crate::garden::mode(state) == crate::garden::Mode::Closed {
@@ -293,10 +287,14 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
             },
             attn_ui::icon::SEEDLING,
             t,
-        )
-        .on_press_tx(crate::garden::toggle_from_icon),
-        tool("titlebar.commands", "Commands", attn_ui::icon::BOLT, t).on_press_tx(
-            |state: &mut State, tx: &mut Tx| {
+            crate::garden::toggle_from_icon,
+        ),
+        tool(
+            "titlebar.commands",
+            "Commands",
+            attn_ui::icon::BOLT,
+            t,
+            |state, tx| {
                 crate::dispatch(state, crate::Action::UiCommandPalette, tx);
             },
         ),
@@ -309,33 +307,33 @@ pub(crate) fn title_controls(state: &State, t: &Tokens) -> Vec<El> {
                 attn_ui::icon::LIST
             },
             t,
-        )
-        .on_press_tx(actions::toggle_flow),
+            actions::toggle_flow,
+        ),
         tool(
             "titlebar.sidebar",
             sidebar,
             if collapsed { "»" } else { "«" },
             t,
-        )
-        .on_press(|state: &mut State| state.window.sidebar_hidden = !state.window.sidebar_hidden),
+            |state, _| state.window.sidebar_hidden = !state.window.sidebar_hidden,
+        ),
     ]
 }
 
-fn tool(key: &str, label: &str, glyph: &str, t: &Tokens) -> El {
-    row()
+fn tool(
+    key: &str,
+    label: &str,
+    glyph: &str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
+        .font(type_::BODY)
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
         .key(key.to_owned())
-        .role("button")
-        .label(label.to_owned())
-        .h(22.0)
         .min_w(24.0)
-        .center()
         .radius(4.0)
         .hover(t.bg_elevated)
-        .child(
-            text(glyph.to_owned())
-                .font(type_::BODY)
-                .color(t.text_secondary),
-        )
 }
 
 /// Queue flow with the sidebar collapsed: the waiting pill, then the desktops' chips, in
@@ -361,6 +359,11 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
     if more > 0 {
         pill.push_str(&format!(" +{more}"));
     }
+    let pill_ink = if waiting == 0 {
+        t.text_tertiary
+    } else {
+        t.text_primary
+    };
     let (chips, extras) = chips(state, Some(bands));
     row()
         .key("queue-bar")
@@ -370,25 +373,19 @@ pub(crate) fn queue_bar(state: &State, bands: &Bands<'_>, t: &Tokens) -> El {
         .items_center()
         .gap(space::S2)
         .child(
-            row()
-                .key("queue-bar.pill")
-                .role("button")
-                .label(pill.clone())
-                .a11y_value(waiting.to_string())
-                .h(22.0)
-                .px(space::S2)
-                .items_center()
-                .radius(11.0)
-                .fill(t.bg_button)
-                .hover(t.bg_elevated)
+            Button::new(pill.clone())
                 .on_press_tx(|state: &mut State, tx: &mut Tx| {
                     crate::dispatch(state, crate::Action::UiActionMenu, tx);
                 })
-                .child(text(pill).font(type_::LABEL).color(if waiting == 0 {
-                    t.text_tertiary
-                } else {
-                    t.text_primary
-                })),
+                .label_with(move |_, _| text(pill).font(type_::LABEL).color(pill_ink))
+                .build(attn_ui::kit(t))
+                .key("queue-bar.pill")
+                .a11y_value(waiting.to_string())
+                .h(22.0)
+                .px(space::S2)
+                .radius(11.0)
+                .fill(t.bg_button)
+                .hover(t.bg_elevated),
         )
         .children(chips.iter().map(|c| {
             let drop = drop_on(state, &c.desktop);

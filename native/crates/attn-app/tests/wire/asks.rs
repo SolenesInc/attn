@@ -1068,8 +1068,8 @@ fn the_collapsed_rail_counts_open_asks_and_marks_the_desktops_that_hold_them() {
     world.gesture(|app| app.click(Target::role("button").name("Collapse sidebar")));
 
     assert!(name(&world, "titlebar.asks").starts_with("1 open ask"));
-    assert!(has(&world, "rail.desktop.1.ask"));
-    assert!(!has(&world, "rail.desktop.2.ask"));
+    assert!(name(&world, "rail.desktop.1").ends_with(", has open asks"));
+    assert!(!name(&world, "rail.desktop.2").contains("asks"));
     click(&mut world, "titlebar.asks");
     assert_eq!(shown(&world).as_deref(), Some("Cache store"));
 }

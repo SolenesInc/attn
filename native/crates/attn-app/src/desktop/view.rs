@@ -1,8 +1,9 @@
 use attn_protocol::{Desktop, DesktopPane, Session};
 use attn_term::mouse;
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{Drag, El, Mods, PointerButton, Tx, col, el, memo, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::Area;
 use super::fit::{Level, Piece, Row, Widths, fit};
@@ -1004,6 +1005,7 @@ fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) 
             &pane.session_id,
             cx.keys.keep.as_deref(),
             sub.is_some_and(|sub| sub.headline_level(Piece::Settling) == Level::Icon),
+            t,
         )),
         _ => headline,
     };
@@ -1114,13 +1116,15 @@ fn subline(key: &str, leaf: &str, session: &str, sub: Option<&Subline>, t: &Toke
         .children(usage)
         .children(provenance)
         .children(shows_id.then(|| {
-            text(short.clone())
-                .key(format!("{key}.id"))
-                .role("button")
-                .label(format!("Copy session id {short}"))
-                .font(SUBLINE_TYPE)
-                .color(t.text_tertiary)
+            let face = short.clone();
+            Button::new(format!("Copy session id {short}"))
+                .variant(ButtonVariant::GhostFaint)
                 .on_press_tx(move |_: &mut State, tx: &mut Tx| tx.copy(id.clone()))
+                .label_with(move |_, ink| text(face).font(SUBLINE_TYPE).color(ink))
+                .build(attn_ui::kit(t))
+                .key(format!("{key}.id"))
+                .h(SUBLINE_TYPE.line_px())
+                .px(0.0)
         }))
 }
 
@@ -1132,10 +1136,10 @@ fn rename_button(key: &str, session: &Session, title: &str, t: &Tokens) -> El {
         format!("Rename session {title}"),
         attn_ui::icon::PENCIL,
         t,
+        move |state, tx| {
+            crate::sidebar::session_menu::rename_session(state, &id, under.clone(), tx)
+        },
     )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        crate::sidebar::session_menu::rename_session(state, &id, under.clone(), tx)
-    })
 }
 
 /// The header's button that shows this tile alone on its desktop.
@@ -1146,10 +1150,8 @@ fn focus_button(key: &str, desktop: &str, leaf: &str, title: &str, cx: &TileCx) 
         with_key(&format!("Focus agent {title}"), cx.keys.focus.as_ref()),
         attn_ui::icon::EXPAND,
         cx.t,
+        move |state, tx| super::actions::focus_leaf(state, &desktop, &leaf, tx),
     )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        super::actions::focus_leaf(state, &desktop, &leaf, tx)
-    })
 }
 
 /// The header's button that puts the tile shown alone back in its row.
@@ -1160,22 +1162,25 @@ fn return_to_row(key: &str, desktop: &str, cx: &TileCx) -> El {
         with_key("Return to row", cx.keys.focus.as_ref()),
         attn_ui::icon::COMPRESS,
         cx.t,
+        move |state, tx| super::actions::return_to_row(state, &desktop, tx),
     )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        super::actions::return_to_row(state, &desktop, tx)
-    })
 }
 
-fn header_button(key: String, label: String, glyph: &'static str, t: &Tokens) -> El {
-    text(glyph)
-        .key(key)
-        .role("button")
-        .label(label)
+fn header_button(
+    key: String,
+    label: String,
+    glyph: &'static str,
+    t: &Tokens,
+    press: impl Fn(&mut State, &mut Tx) + 'static,
+) -> El {
+    GlyphButton::new(glyph, label)
         .font(type_::LABEL)
-        .color(t.text_secondary)
-        .hover(t.bg_elevated)
-        .radius(4.0)
+        .side(type_::LABEL.line_px())
+        .on_press_tx(press)
+        .build(attn_ui::kit(t))
+        .key(key)
         .px(space::S1)
+        .radius(4.0)
 }
 
 /// The header's button that pops the tile out into its own window, or brings it back.
@@ -1186,16 +1191,13 @@ fn pop_out_button(desktop: &str, leaf: &str, popped: bool, cx: &TileCx) -> El {
         ("Pop out tile", attn_ui::icon::POP_OUT)
     };
     let (desktop, leaf_id) = (desktop.to_owned(), leaf.to_owned());
-    text(glyph)
-        .key(format!("tile.{leaf}.popout"))
-        .role("button")
-        .label(with_key(label, cx.keys.pop_out.as_ref()))
-        .font(type_::LABEL)
-        .color(cx.t.text_secondary)
-        .px(space::S1)
-        .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-            super::windows::toggle_leaf(state, &desktop, &leaf_id, tx)
-        })
+    header_button(
+        format!("tile.{leaf}.popout"),
+        with_key(label, cx.keys.pop_out.as_ref()),
+        glyph,
+        cx.t,
+        move |state, tx| super::windows::toggle_leaf(state, &desktop, &leaf_id, tx),
+    )
 }
 
 /// The settling violet, which the Tauri app keeps out of its theme so packaged apps match.
@@ -1233,6 +1235,7 @@ fn settling_chip(
     session: &str,
     keep_key: Option<&str>,
     icon: bool,
+    t: &Tokens,
 ) -> El {
     let (label, words, verb, fill, edge, ink) = match settle {
         Settle::Counting(_) => ("Keep this turn", "SETTLING…", "keep", 0.16, 0.55, "#e2d9fd"),
@@ -1266,42 +1269,52 @@ fn settling_chip(
         ..type_::LABEL
     };
     let session = session.to_owned();
-    row()
-        .key(format!("tile.{leaf}.settling"))
-        .role("button")
-        .label(label)
-        .items_center()
-        .gap(7.0)
-        .px(9.0)
-        .py(2.0)
-        .radius(5.0)
-        .fill(settling(fill))
-        .border(1.0, settling(edge))
+    let keep_key = keep_key.filter(|_| !icon).map(str::to_owned);
+    let face_h = match (icon, &keep_key) {
+        (true, _) => 6.0,
+        (false, None) => font.line_px(),
+        (false, Some(_)) => font.line_px() + 4.0,
+    };
+    Button::new(label)
+        .variant(ButtonVariant::Ghost)
         .on_press(move |state: &mut State| {
             let _ = state.daemon.send(&attn_protocol::CancelCountdownMessage {
                 session_id: session.clone(),
                 ..attn_protocol::CancelCountdownMessage::new()
             });
         })
-        .child(mark)
-        .children((!icon).then(|| text(words).font(font).color(ink).single_line()))
-        .children(keep_key.filter(|_| !icon).map(|key| {
+        .label_with(move |_, _| {
             row()
                 .items_center()
-                .gap(4.0)
-                .opacity(0.8)
-                .child(
-                    row().px(4.0).py(2.0).radius(3.0).border(1.0, ink).child(
-                        text(key.to_owned())
-                            .font(rune::TextStyle {
-                                weight: 700.0,
-                                ..font
-                            })
-                            .color(ink),
-                    ),
-                )
-                .child(text(verb).font(font).color(ink))
-        }))
+                .gap(7.0)
+                .child(mark)
+                .children((!icon).then(|| text(words).font(font).color(ink).single_line()))
+                .children(keep_key.map(|key| {
+                    row()
+                        .items_center()
+                        .gap(4.0)
+                        .opacity(0.8)
+                        .child(
+                            row().px(4.0).py(2.0).radius(3.0).border(1.0, ink).child(
+                                text(key)
+                                    .font(rune::TextStyle {
+                                        weight: 700.0,
+                                        ..font
+                                    })
+                                    .color(ink),
+                            ),
+                        )
+                        .child(text(verb).font(font).color(ink))
+                }))
+        })
+        .build(attn_ui::kit(t))
+        .key(format!("tile.{leaf}.settling"))
+        .h(face_h + 4.0)
+        .px(9.0)
+        .radius(5.0)
+        .fill(settling(fill))
+        .border(1.0, settling(edge))
+        .hover(settling(0.12))
 }
 
 /// The hairline along the header's foot that drains to the countdown's deadline, or stands

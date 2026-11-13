@@ -1,5 +1,7 @@
-use rune::Color;
+use std::sync::OnceLock;
+
 use rune::color::hex;
+use rune::{Color, Shadow};
 
 /// attn's colors, from the Tauri app's CSS variables (`app/src/App.css`). Each field names
 /// the variable it carries: `bg_app` is `--color-bg-app`.
@@ -124,8 +126,16 @@ pub fn tokens(dark: bool) -> Tokens {
     }
 }
 
-/// rune-kit's tokens, painted with attn's colors, for the kit's components.
-pub fn kit(t: &Tokens) -> rune_kit::Kit {
+/// rune-kit's tokens, painted with attn's colors, for the kit's components. Each appearance's
+/// kit is made once: every button of every view reads it.
+pub fn kit(t: &Tokens) -> &'static rune_kit::Kit {
+    static DARK: OnceLock<rune_kit::Kit> = OnceLock::new();
+    static LIGHT: OnceLock<rune_kit::Kit> = OnceLock::new();
+    let once = if t.dark { &DARK } else { &LIGHT };
+    once.get_or_init(|| painted(t))
+}
+
+fn painted(t: &Tokens) -> rune_kit::Kit {
     let mut kit = rune_kit::Kit::neutral(t.dark);
     let p = &mut kit.c;
     p.page = t.bg_app;
@@ -149,7 +159,20 @@ pub fn kit(t: &Tokens) -> rune_kit::Kit {
     p.hover = t.bg_elevated;
     p.pressed = t.bg_selected;
     p.scrim = t.bg_overlay;
+    kit.elevation.button_neutral = Vec::new();
+    kit.elevation.floating = vec![popover_shadow()];
+    kit.elevation.overlay = vec![popover_shadow()];
     kit
+}
+
+/// The Tauri app's popover shadow, `0 16px 36px rgba(0, 0, 0, 0.42)` in both appearances.
+fn popover_shadow() -> Shadow {
+    Shadow {
+        y: 16.0,
+        blur: 36.0,
+        color: Color::BLACK.alpha(0.42),
+        ..Shadow::default()
+    }
 }
 
 /// The faces attn draws its text in: Inter for the interface, and Symbols Nerd Font Mono for
@@ -172,6 +195,8 @@ pub const FAMILIES: (&str, &str) = (
     "Iosevka, Menlo, Monaco, DejaVu Sans Mono, Courier New, ui-monospace, Symbols Nerd Font Mono",
 );
 
+mod glyph_button;
 pub mod icon;
+pub use glyph_button::GlyphButton;
 mod stories;
 pub use stories::{STORIES, Showcase, playground};

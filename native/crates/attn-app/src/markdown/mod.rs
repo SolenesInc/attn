@@ -206,7 +206,7 @@ pub(crate) fn reader(
         Some(root),
     ) = (marking, root)
     else {
-        return markdown.build(&attn_ui::kit(t));
+        return markdown.build(attn_ui::kit(t));
     };
     let pressed = tile.clone();
     markdown
@@ -214,7 +214,7 @@ pub(crate) fn reader(
         .on_highlight(move |state: &mut State, key: &str, _: &mut Tx| {
             annotating::mark_pressed(state, &pressed, key)
         })
-        .build(&attn_ui::kit(t))
+        .build(attn_ui::kit(t))
         .key(root)
         .on_selection_change(move |state: &mut State, change, tx: &mut Tx| {
             annotating::selection_changed(state, &tile, &uri, change, tx)

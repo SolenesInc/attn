@@ -1,6 +1,7 @@
 use attn_ui::Tokens;
 use rune::tok::type_;
 use rune::{El, col, el, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use crate::State;
 
@@ -32,22 +33,22 @@ pub(super) fn notice(session: &str, t: &Tokens) -> El {
                 .wrap()
                 .pt(2.0),
         );
-    let dismiss = text(attn_ui::icon::CLOSE)
-        .key(format!("session.{session}.stale-build.dismiss"))
-        .role("button")
-        .label("Dismiss older-terminal notice")
-        .font(type_::LABEL)
-        .color(t.text_muted)
-        .px(5.0)
-        .py(2.0)
-        .radius(4.0)
+    let ink = t.text_muted;
+    let dismiss = Button::new("Dismiss older-terminal notice")
+        .variant(ButtonVariant::GhostMuted)
         .on_press(move |state: &mut State| {
             state
                 .window
                 .desk
                 .stale_build_dismissed
                 .insert(dismissed.clone());
-        });
+        })
+        .label_with(move |_, _| text(attn_ui::icon::CLOSE).font(type_::LABEL).color(ink))
+        .build(attn_ui::kit(t))
+        .key(format!("session.{session}.stale-build.dismiss"))
+        .h(type_::LABEL.line_px() + 4.0)
+        .px(5.0)
+        .radius(4.0);
     let card = row()
         .key(format!("session.{session}.stale-build"))
         .role("status")

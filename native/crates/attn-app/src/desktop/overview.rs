@@ -7,6 +7,7 @@ use attn_protocol::{
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::layout::{Direction, LeafKind, Node};
 use crate::State;
@@ -381,21 +382,21 @@ fn card(
         .child(mini);
     let target = desktop.id.clone();
     let send_button = can_send.then(|| {
-        row()
+        Button::new("Send focused pane here ⇧↵")
+            .variant(ButtonVariant::GhostMuted)
+            .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &target, tx))
+            .label_with(|_, ink| {
+                text("Send focused pane here ⇧↵")
+                    .font(type_::LABEL)
+                    .color(ink)
+            })
+            .build(attn_ui::kit(t))
             .key(format!("overview.send.{}", desktop.id))
-            .role("button")
-            .label("Send focused pane here ⇧↵")
+            .h(type_::LABEL.line_px() + 4.0)
             .px(space::S2)
-            .py(2.0)
             .radius(5.0)
             .fill(t.bg_button)
             .border(1.0, t.border)
-            .on_press_tx(move |state: &mut State, tx: &mut Tx| send(state, &target, tx))
-            .child(
-                text("Send focused pane here ⇧↵")
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
     });
     let card = col()
         .grow(1.0)
@@ -415,21 +416,16 @@ fn card(
 }
 
 fn new_card(t: &Tokens) -> El {
-    col()
+    Button::new("New desktop")
+        .variant(ButtonVariant::GhostFaint)
+        .on_press_tx(create)
+        .label_with(|_, ink| text("+ New desktop").font(type_::BODY).color(ink))
+        .build(attn_ui::kit(t))
         .key("overview.new")
-        .role("button")
-        .label("New desktop")
         .grow(1.0)
         .min_w(0.0)
-        .min_h(110.0)
-        .center()
+        .h(110.0)
         .radius(8.0)
         .fill(t.bg_elevated)
         .border(1.0, t.border)
-        .on_press_tx(create)
-        .child(
-            text("+ New desktop")
-                .font(type_::BODY)
-                .color(t.text_tertiary),
-        )
 }

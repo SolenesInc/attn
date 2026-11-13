@@ -2,7 +2,7 @@ use attn_protocol::{AskAnswer, AskQuestion, Session};
 use attn_ui::Tokens;
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, Tx, col, el, row, text, text_input};
-use rune_kit::Markdown;
+use rune_kit::{Button, ButtonVariant, Markdown};
 
 use super::{Chip, Item, Kind, Lists, questions};
 use crate::State;
@@ -340,12 +340,12 @@ fn article(state: &State, item: &Item<'_>, t: &Tokens) -> El {
                     Some(answers) => Shown::Replied(answers.iter().find(|a| a.key == question.key)),
                     None => Shown::Draft(draft.and_then(|d| d.answers.get(&question.key))),
                 };
-                question_card(&ask.id, index, question, answer, &kit, t)
+                question_card(&ask.id, index, question, answer, kit, t)
             }
             None => col()
                 .key(format!("asks.part.{at}"))
                 .w_full()
-                .child(Markdown::new(part.markdown.clone().unwrap_or_default()).build(&kit)),
+                .child(Markdown::new(part.markdown.clone().unwrap_or_default()).build(kit)),
         });
     let note_placeholder = if item.holder.is_some() || ask.seed_id.is_none() {
         format!("Anything else for {}?", item.from)
@@ -1079,31 +1079,35 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> Option<El> {
         n => format!("{n} open asks{keys}"),
     };
     let open = state.window.shows(crate::shell::Drawer::Asks);
+    let tokens = *t;
     Some(
-        row()
+        Button::new(label)
+            .variant(ButtonVariant::GhostMuted)
+            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
+            .label_with(move |_, _| {
+                row()
+                    .gap(2.0)
+                    .items_center()
+                    .child(text("?").font(type_::BODY).color(tokens.text_secondary))
+                    .children((count > 0).then(|| {
+                        text(count.to_string())
+                            .font(type_::MONO_CAPTION)
+                            .color(tokens.accent)
+                    }))
+            })
+            .build(attn_ui::kit(t))
             .key("titlebar.asks")
-            .role("button")
-            .label(label)
             .a11y_value(count.to_string())
             .checked(open)
             .h(22.0)
             .min_w(24.0)
             .px(space::S1)
-            .gap(2.0)
-            .center()
             .radius(4.0)
             .fill(if open {
                 t.bg_selected
             } else {
                 rune::Color::TRANSPARENT
             })
-            .hover(t.bg_elevated)
-            .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-            .child(text("?").font(type_::BODY).color(t.text_secondary))
-            .children((count > 0).then(|| {
-                text(count.to_string())
-                    .font(type_::MONO_CAPTION)
-                    .color(t.accent)
-            })),
+            .hover(t.bg_elevated),
     )
 }

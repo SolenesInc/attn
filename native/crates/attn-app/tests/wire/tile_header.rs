@@ -1425,8 +1425,7 @@ struct Fitted {
 fn fitted(world: &World) -> Fitted {
     let shown = |key: &str| world.screen().find(Target::key(key)).is_some();
     Fitted {
-        role: shown("tile.a.role")
-            .then(|| texts(world, "tile.a.role").iter().any(|t| t == "Builder")),
+        role: shown("tile.a.role").then(|| world.runtime().presented("tile.a.role.name").is_some()),
         host: shown("tile.a.host").then(|| texts(world, "tile.a.host").join("")),
         usage: shown("tile.a.usage"),
         provenance: shown("tile.a.provenance").then(|| {

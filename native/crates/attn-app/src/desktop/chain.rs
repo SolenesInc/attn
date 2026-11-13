@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use attn_protocol::{ActorView, Session};
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{El, Key, KeyEvent, Side, TextStyle, Tx, col, el, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::fit::{Level, Widths, text_w};
 use super::header_pop::{self, Pop, What};
@@ -150,24 +151,31 @@ pub(crate) fn piece(
     } else {
         t.text_tertiary
     };
-    let label = (level == Level::Full).then(|| {
-        text(trigger.text.clone())
-            .font(font)
-            .color(color)
-            .single_line()
-    });
-    let role = row()
-        .key(header_pop::anchor(leaf, What::Chain))
-        .role("button")
-        .label(trigger.label.clone())
-        .items_center()
-        .gap(MARK_GAP)
-        .px(TRIGGER_PAD)
-        .child(trigger.mark.el(MARK_PX, font, color))
-        .children(label)
+    let (mark, words) = (trigger.mark.clone(), trigger.text.clone());
+    let full = level == Level::Full;
+    let name_key = format!("{}.name", header_pop::anchor(leaf, What::Chain));
+    let role = Button::new(trigger.label.clone())
+        .variant(ButtonVariant::GhostMuted)
         .on_press_tx(move |state: &mut State, tx: &mut Tx| {
             header_pop::press(state, &pressed.0, &pressed.1, What::Chain, tx)
-        });
+        })
+        .label_with(move |_, _| {
+            row()
+                .items_center()
+                .gap(MARK_GAP)
+                .child(mark.el(MARK_PX, font, color))
+                .children(full.then(|| {
+                    text(words)
+                        .key(name_key)
+                        .font(font)
+                        .color(color)
+                        .single_line()
+                }))
+        })
+        .build(attn_ui::kit(t))
+        .key(header_pop::anchor(leaf, What::Chain))
+        .h(font.line_px().max(MARK_PX))
+        .px(TRIGGER_PAD);
     header_pop::hovers(role, leaf, session, What::Chain)
 }
 
@@ -187,13 +195,13 @@ pub(crate) fn popover(state: &State, pop: &Pop, t: &Tokens) -> Option<El> {
     let current = sessions.iter().find(|s| s.id == pop.session)?;
     let (rows, earlier) = tree(&pop.session, sessions);
     let picked = state.window.desk.header_pop.picked;
-    let close = text("×")
-        .key(format!("{}.close", pop.surface()))
-        .role("button")
-        .label("Close delegation chain")
+    let close = GlyphButton::new("×", "Close delegation chain")
+        .variant(ButtonVariant::GhostFaint)
         .font(type_::LABEL)
-        .color(t.text_tertiary)
-        .on_press(|state: &mut State| header_pop::close(state));
+        .side(type_::LABEL.line_px())
+        .on_press(|state: &mut State| header_pop::close(state))
+        .build(attn_ui::kit(t))
+        .key(format!("{}.close", pop.surface()));
     let heading = row()
         .w_full()
         .items_center()

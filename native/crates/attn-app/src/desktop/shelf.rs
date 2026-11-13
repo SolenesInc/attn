@@ -4,9 +4,10 @@
 use attn_protocol::{
     Desktop, DesktopMoveLeafMessage, DesktopSetWantedColsMessage, SetSettingMessage,
 };
-use attn_ui::Tokens;
+use attn_ui::{GlyphButton, Tokens};
 use rune::tok::{space, type_};
 use rune::{Drag, El, Phase, Tx, col, row, text};
+use rune_kit::{Button, ButtonVariant};
 
 use super::drag::{Owner, Source};
 
@@ -590,31 +591,28 @@ fn cap(side: Edge, chips: &[Chip], open: bool, drop: bool, t: &Tokens) -> Option
     };
     let key = format!("shelf.cap.{name}");
     let recorded = key.clone();
-    let cap = row()
-        .key(key)
-        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
-            record(state, &recorded, rect, tx)
-        })
-        .role("button")
-        .label(format!("{n} more this way"))
-        .px(space::S2)
-        .py(space::S1)
-        .radius(4.0)
-        .border(1.0, t.border)
+    let ink = if chips.iter().any(|c| c.needs) {
+        t.warning
+    } else {
+        t.text_secondary
+    };
+    let cap = Button::new(format!("{n} more this way"))
+        .variant(ButtonVariant::Ghost)
         .on_press(move |state: &mut State| {
             let desk = &mut state.window.desk;
             desk.cap_open = (desk.cap_open != Some(side)).then_some(side);
         })
+        .label_with(move |_, _| text(caption).font(type_::LABEL).color(ink))
+        .build(attn_ui::kit(t))
+        .key(key)
+        .on_layout_tx(move |state: &mut State, rect, tx: &mut Tx| {
+            record(state, &recorded, rect, tx)
+        })
         .a11y_value(if open { "open" } else { "" })
-        .child(
-            text(caption)
-                .font(type_::LABEL)
-                .color(if chips.iter().any(|c| c.needs) {
-                    t.warning
-                } else {
-                    t.text_secondary
-                }),
-        );
+        .h(type_::LABEL.line_px() + 2.0 * space::S1)
+        .px(space::S2)
+        .radius(4.0)
+        .border(1.0, t.border);
     Some(drop_bar(cap, drop.then_some(side), t))
 }
 
@@ -677,19 +675,15 @@ fn menu_gesture(state: &mut State, d: &mut Drag, tx: &mut Tx) {
 
 fn width_control(shown: usize, cols: u32, t: &Tokens) -> El {
     let button = |key: &str, label: &str, glyph: &str, action: Action| {
-        row()
-            .key(key.to_owned())
-            .role("button")
-            .label(label.to_owned())
-            .px(space::S1)
+        GlyphButton::new(glyph, label)
+            .font(type_::LABEL)
+            .side(type_::LABEL.line_px())
             .on_press_tx(move |state: &mut State, tx: &mut Tx| {
                 crate::dispatch::dispatch(state, action.clone(), tx);
             })
-            .child(
-                text(glyph.to_owned())
-                    .font(type_::LABEL)
-                    .color(t.text_secondary),
-            )
+            .build(attn_ui::kit(t))
+            .key(key.to_owned())
+            .px(space::S1)
     };
     row()
         .key("shelf.width")

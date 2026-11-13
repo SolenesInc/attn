@@ -44,7 +44,7 @@ pub(crate) fn title_button(state: &State, t: &Tokens) -> El {
                 .children(unread.then(|| el().size(6.0, 6.0).radius(3.0).fill(dot)))
         })
         .on_press_tx(|state: &mut State, tx: &mut Tx| super::toggle(state, tx))
-        .build(&attn_ui::kit(t))
+        .build(attn_ui::kit(t))
         .key(BELL)
         .a11y_value(counts.unread.to_string())
 }
@@ -89,7 +89,7 @@ pub(crate) fn critical_strip(counts: &Notifications, t: &Tokens) -> Option<El> {
                     .children(shown.map(|n| text(n).font(type_::MONO_CAPTION).color(t.error)))
             })
             .on_press_tx(|state: &mut State, tx: &mut Tx| super::open(state, tx))
-            .build(&attn_ui::kit(&t))
+            .build(attn_ui::kit(&t))
             .key("sidebar.critical")
             .a11y_value(badge.unwrap_or_default())
             .w_full()
@@ -124,7 +124,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
                 .control_size(ControlSize::Small)
                 .disabled(unread == 0)
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::mark_all_read(state, tx))
-                .build(&k)
+                .build(k)
                 .key("notifications.mark-all"),
         )
         .child(
@@ -132,7 +132,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
                 .variant(IconButtonVariant::Ghost)
                 .label("Close")
                 .on_press_tx(|state: &mut State, tx: &mut Tx| super::close(state, tx))
-                .build(&k)
+                .build(k)
                 .key("notifications.close"),
         );
     let body = col()
@@ -148,7 +148,7 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
                 .px(space::S2)
                 .pb(space::S2)
                 .gap(space::S1)
-                .children(body(state, &k, t)),
+                .children(body(state, k, t)),
         ));
     let surface = col()
         .key(PANEL)
@@ -165,8 +165,8 @@ pub(crate) fn panel(state: &State, t: &Tokens) -> El {
         .child(header)
         .child(body);
     popover::anchored(
-        &k,
-        popover::raised(&k, surface, k.radius.md),
+        k,
+        popover::raised(k, surface, k.radius.md),
         BELL,
         Placement::BottomEnd,
         4.0,

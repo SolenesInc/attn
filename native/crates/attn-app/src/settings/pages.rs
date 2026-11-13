@@ -87,7 +87,7 @@ pub(super) fn named_button(
 ) -> El {
     Button::new(shown)
         .on_press_tx(press)
-        .build(&attn_ui::kit(t))
+        .build(attn_ui::kit(t))
         .key(key)
         .label(label.to_owned())
 }
@@ -106,7 +106,7 @@ pub(super) fn switch(
         .hide_label()
         .control_size(ControlSize::Mini)
         .on_toggle_tx(toggle)
-        .build(&attn_ui::kit(t))
+        .build(attn_ui::kit(t))
         .key(key);
     row()
         .gap(space::S2)
@@ -217,7 +217,7 @@ pub(super) fn segmented(
         .label(label)
         .fit()
         .on_pick(move |state: &mut State, i: usize, tx: &mut Tx| choose(state, options[i].0, tx))
-        .build(&attn_ui::kit(t))
+        .build(attn_ui::kit(t))
         .key(format!("settings.choice.{key}"));
     row().child(control)
 }

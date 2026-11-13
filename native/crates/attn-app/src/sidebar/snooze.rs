@@ -122,6 +122,9 @@ pub struct Menu {
     pub name: String,
     /// The key of what it opened under; none opens it in the middle of the window.
     pub under: Option<String>,
+    /// Whether it opened from a press on `under`, which takes the keyboard back as it closes;
+    /// opened by a key, the keyboard goes back to where it was.
+    pub pressed: bool,
     pub standby: bool,
     pub opened_ms: i64,
 }
@@ -132,6 +135,7 @@ pub(crate) fn open(
     session: &str,
     name: String,
     under: Option<String>,
+    pressed: bool,
     tx: &mut Tx,
 ) {
     tx.focus(format!("{MENU}.snooze.{}", CHOICES[0].id()), true);
@@ -140,6 +144,7 @@ pub(crate) fn open(
         session: session.to_owned(),
         name,
         under,
+        pressed,
         standby: false,
         opened_ms: state.window.now_ms,
     });
@@ -262,9 +267,10 @@ pub(crate) fn view(state: &State, t: &Tokens) -> Option<El> {
                 .py(space::S1),
         );
     let surface = match &menu.under {
-        Some(under) => surface
+        Some(under) if menu.pressed => surface
             .anchored(under.clone(), Side::Bottom, rune::Align::Start, 4.0)
             .focus_return(under.clone()),
+        Some(under) => surface.anchored(under.clone(), Side::Bottom, rune::Align::Start, 4.0),
         None => surface,
     };
     Some(match menu.under {

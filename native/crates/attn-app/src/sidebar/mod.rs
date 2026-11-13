@@ -246,6 +246,7 @@ pub(crate) fn home_row(home: bool, t: &Tokens) -> El {
     row()
         .key("sidebar.home")
         .role("button")
+        .focusable(true)
         .label("Home")
         .a11y_value(if home { "current" } else { "" })
         .w_full()
@@ -343,6 +344,7 @@ fn new_desktop_drop(over: bool, t: &Tokens) -> El {
     row()
         .key("sidebar.new_desktop")
         .role("button")
+        .focusable(true)
         .label("New desktop")
         .a11y_value(if over { "drop here" } else { "" })
         .w_full()
@@ -367,6 +369,7 @@ fn desktop_row(key: String, desktop: &DesktopHeader, t: &Tokens) -> El {
     row()
         .key(key)
         .role("button")
+        .focusable(true)
         .label(format!("Open {}", desktop.title))
         .a11y_value(match (desktop.current, desktop.empty) {
             (true, true) => "current, Empty desktop",
@@ -421,6 +424,7 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
     row()
         .key(key.clone())
         .role("button")
+        .focusable(true)
         .label(format!("Open {}", agent.name))
         .a11y_value(agent.state.wire())
         .w_full()
@@ -452,8 +456,13 @@ fn agent_row(key: String, agent: &AgentRow, t: &Tokens) -> El {
 /// The × button that closes a desktop, asking first when it holds tiles.
 fn close_desktop_button(row_key: &str, desktop: &DesktopHeader, t: &Tokens) -> El {
     let id = desktop.id.clone();
-    queue_view::control(row_key, "close", format!("Close {}", desktop.title), "×", t).on_press_tx(
-        move |state: &mut State, tx: &mut Tx| {
+    queue_view::control(
+        row_key,
+        "close",
+        format!("Close {}", desktop.title),
+        "×",
+        t,
+        move |state, tx| {
             crate::dispatch::dispatch(
                 state,
                 Action::CloseDesktop {
@@ -478,10 +487,8 @@ pub(crate) fn actions_button(row_key: &str, agent: &AgentRow, t: &Tokens) -> El 
         format!("Actions for {}", agent.name),
         "•••",
         t,
+        move |state, tx| session_menu::open(state, &id, name.clone(), under.clone(), tx),
     )
-    .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-        session_menu::open(state, &id, name.clone(), under.clone(), tx)
-    })
 }
 
 /// One auto-settle countdown's drain: full when first seen, empty at its deadline.
@@ -607,6 +614,7 @@ fn tile_row(key: String, tile: &TileRow, t: &Tokens) -> El {
     row()
         .key(key)
         .role("button")
+        .focusable(true)
         .label(format!("Open {}", tile.title))
         .w_full()
         .h(ROW_HEIGHT)
