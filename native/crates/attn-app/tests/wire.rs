@@ -7,6 +7,7 @@ mod wire {
     mod desktop_close;
     mod desktop_order;
     mod desktops;
+    mod field_keys;
     mod garden;
     mod home;
     mod keys;

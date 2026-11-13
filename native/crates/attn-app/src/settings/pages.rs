@@ -12,7 +12,6 @@ use crate::State;
 /// The small print under a setting, and a block's gap.
 pub(super) const CAPTION: rune::TextStyle = rune::TextStyle::new(12.0, 400.0);
 pub(super) const S4: f32 = 16.0;
-use crate::keys::FIELD_KEY_SUFFIX;
 use crate::setting;
 
 /// A titled block of a page: its title and what it is for, then its controls.
@@ -130,7 +129,6 @@ pub(super) fn setting_field(
     t: &Tokens,
 ) -> El {
     let field_key = super::field_key(key);
-    debug_assert!(field_key.ends_with(FIELD_KEY_SUFFIX));
     let draft = state.window.settings.autosave.field(key).map(|f| &f.draft);
     let empty = rune::TextEdit::default();
     let input = text_input(draft.unwrap_or(&empty), type_::BODY)

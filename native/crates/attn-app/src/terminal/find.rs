@@ -244,7 +244,7 @@ fn focus(finding: &mut Finding, vt: &mut Vt, at: Option<usize>) {
 
 /// The field key of terminal `id`'s find bar.
 pub(crate) fn find_field_key(id: &str) -> String {
-    format!("terminal.{id}.find{}", crate::keys::FIELD_KEY_SUFFIX)
+    format!("terminal.{id}.find.field")
 }
 
 /// Each row a match covers, with the columns it covers there.

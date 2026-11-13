@@ -42,7 +42,8 @@ pub(crate) fn run(state: &mut State, action: Action, tx: &mut Tx) -> Outcome {
             Outcome::Unavailable
         };
     }
-    if crate::sidebar::dispatch(state, &action, tx)
+    if crate::palette::queue_action(state, &action, tx)
+        || crate::sidebar::dispatch(state, &action, tx)
         || crate::desktop::run(state, &action, tx)
         || crate::settings::dispatch(state, &action, tx)
     {

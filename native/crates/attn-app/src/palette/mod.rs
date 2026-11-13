@@ -316,23 +316,34 @@ pub(crate) fn edited(state: &mut State, _: &mut Tx) {
     search.highlight = None;
 }
 
+/// Settle, priority and snooze while the palette is open: they act on the highlighted agent of
+/// the agents face and on nothing elsewhere in the palette. Whether the palette took `action`.
+pub(crate) fn queue_action(state: &mut State, action: &Action, tx: &mut Tx) -> bool {
+    if !is_open(state)
+        || !matches!(
+            action,
+            Action::SessionSettle | Action::SessionPriority | Action::SessionSnooze
+        )
+    {
+        return false;
+    }
+    let listing = listing(state);
+    let at = highlighted(&state.window.search, &listing.rows);
+    if let (Mode::Agents, Some(Look::Agent { agent, .. })) =
+        (&listing.mode, at.map(|i| &listing.rows[i].look))
+    {
+        act_on(state, action.clone(), &agent.id.clone(), tx);
+    }
+    true
+}
+
 /// Arrows move the highlight over the rows that can be picked, without wrapping; Enter picks
-/// the highlighted row. The settle, priority and snooze keys act on the highlighted agent of
-/// the agents face and on nothing elsewhere in the palette; choosing a snooze, Escape goes back
-/// to the agents.
+/// the highlighted row; choosing a snooze, Escape goes back to the agents.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     let listing = listing(state);
     let at = highlighted(&state.window.search, &listing.rows);
     if matches!(listing.mode, Mode::Snooze { .. }) && ev.key == Key::Escape {
         leave_snooze(state);
-        return true;
-    }
-    if let Some(action) = queue_action(state, ev, tx) {
-        if let (Mode::Agents, Some(Look::Agent { agent, .. })) =
-            (&listing.mode, at.map(|i| &listing.rows[i].look))
-        {
-            act_on(state, action, &agent.id.clone(), tx);
-        }
         return true;
     }
     if ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
@@ -365,21 +376,6 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         _ => false,
     }
-}
-
-/// The queue action whose own single chord `ev` is; a chord that leads a sequence never
-/// fires here.
-fn queue_action(state: &State, ev: &KeyEvent, tx: &Tx) -> Option<Action> {
-    [
-        Action::SessionSettle,
-        Action::SessionPriority,
-        Action::SessionSnooze,
-    ]
-    .into_iter()
-    .find(|action| match state.keymap.binding(action) {
-        Some(Binding::Chord(chord)) => state.keymap.matches(&chord, ev, tx),
-        _ => false,
-    })
 }
 
 fn act_on(state: &mut State, action: Action, agent: &str, tx: &mut Tx) {

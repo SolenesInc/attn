@@ -7,7 +7,6 @@ use super::pages::{CAPTION, S4};
 use super::sections::{self, Section};
 use super::{analytics, appearance, bus, pages, tasks, updates};
 use crate::State;
-use crate::keys::FIELD_KEY_SUFFIX;
 use crate::setting;
 
 const SEARCH_FIELD: &str = "settings.search.field";
@@ -17,7 +16,6 @@ pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
     if !super::is_open(state) {
         return None;
     }
-    debug_assert!(SEARCH_FIELD.ends_with(FIELD_KEY_SUFFIX));
     let panel = col()
         .key("settings.dialog")
         .role("dialog")

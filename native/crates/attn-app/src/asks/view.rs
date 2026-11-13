@@ -669,7 +669,6 @@ fn field(
     t: &Tokens,
 ) -> El {
     let empty = rune::TextEdit::default();
-    debug_assert!(key.ends_with(crate::keys::FIELD_KEY_SUFFIX));
     text_input(edit.unwrap_or(&empty), type_::BODY)
         .key(key.to_owned())
         .label(label.to_owned())
@@ -787,11 +786,6 @@ fn toggle_replied(state: &mut State, tx: &mut Tx) {
     super::follow(state, tx);
 }
 
-fn in_text_field(tx: &Tx) -> bool {
-    tx.focused()
-        .is_some_and(|k| k.ends_with(crate::keys::FIELD_KEY_SUFFIX))
-}
-
 /// The drawer's keys while it or a control in it holds focus: ⌘↩ sends from anywhere in it;
 /// the letters act only outside a text field.
 fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
@@ -804,7 +798,7 @@ fn drawer_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         crate::shell::escape_drawers(state, tx);
         return true;
     }
-    if in_text_field(tx) || m.cmd || m.ctrl || m.alt {
+    if tx.in_text_field() || m.cmd || m.ctrl || m.alt {
         return false;
     }
     let Key::Text(typed) = &ev.key else {

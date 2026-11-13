@@ -50,15 +50,15 @@ enum Leave {
 }
 
 const FIELD_PREFIX: &str = "settings.input.";
+const FIELD_SUFFIX: &str = ".field";
 
 /// The key of the text field that edits `setting`.
 pub(crate) fn field_key(setting: &str) -> String {
-    format!("{FIELD_PREFIX}{setting}{}", crate::keys::FIELD_KEY_SUFFIX)
+    format!("{FIELD_PREFIX}{setting}{FIELD_SUFFIX}")
 }
 
 fn setting_of_field(key: &str) -> Option<&str> {
-    key.strip_prefix(FIELD_PREFIX)?
-        .strip_suffix(crate::keys::FIELD_KEY_SUFFIX)
+    key.strip_prefix(FIELD_PREFIX)?.strip_suffix(FIELD_SUFFIX)
 }
 
 pub(crate) fn is_open(state: &State) -> bool {

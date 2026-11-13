@@ -153,7 +153,7 @@ pub(crate) fn persist(state: &mut State, id: &str, tx: &mut Tx) {
 
 /// The comment box of terminal `id`'s popup.
 pub(crate) fn comment_field_key(id: &str) -> String {
-    format!("terminal.{id}.annotation{}", crate::keys::FIELD_KEY_SUFFIX)
+    format!("terminal.{id}.annotation.field")
 }
 
 /// Whether terminal `id`'s popup is writing a comment, which takes the keyboard back to its

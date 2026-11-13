@@ -43,7 +43,7 @@ fn profile(current: &str) -> Profile {
 }
 
 /// One profile whose current desktop shows `desktops[0]`, with these settings.
-fn state(desktops: Vec<Desktop>, settings: &[(&str, &str)]) -> InitialStateMessage {
+pub(super) fn state(desktops: Vec<Desktop>, settings: &[(&str, &str)]) -> InitialStateMessage {
     InitialStateMessage {
         selected_profile_id: Some("work".into()),
         profiles: Some(vec![profile(
@@ -60,7 +60,7 @@ fn state(desktops: Vec<Desktop>, settings: &[(&str, &str)]) -> InitialStateMessa
     }
 }
 
-fn two_terminals() -> Vec<Desktop> {
+pub(super) fn two_terminals() -> Vec<Desktop> {
     vec![desktop(
         "d1",
         "t1",
@@ -69,7 +69,7 @@ fn two_terminals() -> Vec<Desktop> {
 }
 
 /// The keys `action` has by default on this platform.
-fn chord(action: &Action) -> KeyEvent {
+pub(super) fn chord(action: &Action) -> KeyEvent {
     match Keymap::from_setting(None, KeyPlatform::current()).binding(action) {
         Some(Binding::Chord(chord)) => key_event(&chord),
         other => panic!("{} has no single chord: {other:?}", action.id()),
@@ -100,7 +100,7 @@ fn typed_into(runtime: &str, data: &str) -> (String, String) {
     (runtime.to_owned(), data.to_owned())
 }
 
-fn shortcut_records(world: &World) -> Vec<String> {
+pub(super) fn shortcut_records(world: &World) -> Vec<String> {
     world
         .daemon
         .sent_of("record_analytics")

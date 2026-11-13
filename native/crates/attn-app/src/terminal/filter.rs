@@ -179,7 +179,7 @@ impl Terminals {
 
 /// The field key of terminal `id`'s filter.
 pub(crate) fn filter_field_key(id: &str) -> String {
-    format!("terminal.{id}.filter{}", crate::keys::FIELD_KEY_SUFFIX)
+    format!("terminal.{id}.filter.field")
 }
 
 /// The output lines that hold `query`, each with its matches, as the Tauri terminal filters a

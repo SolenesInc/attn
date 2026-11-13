@@ -6,7 +6,6 @@ use rune_kit::{Button, ButtonVariant};
 use super::repo::{self, Chooser, Delete, Start, Zone};
 use super::{Catalog, Picker, Which, agents, listed, numbered, paths};
 use crate::State;
-use crate::keys::FIELD_KEY_SUFFIX;
 
 /// The New Session dialog over the app.
 pub(crate) fn dialog(state: &State, t: &Tokens) -> Option<El> {
@@ -269,7 +268,6 @@ fn path_view(state: &State, picker: &Picker, t: &Tokens) -> Vec<El> {
         Which::Inline => format!("New agent on {}", desktop_label(state, picker)),
     };
     let field_key = picker.field_key();
-    debug_assert!(field_key.ends_with(FIELD_KEY_SUFFIX));
     let rows = picker.rows(launching);
     let ghost = picker
         .ghost(&rows)

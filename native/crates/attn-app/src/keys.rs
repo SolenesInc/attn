@@ -9,16 +9,14 @@ use crate::dispatch::{Outcome, run};
 use crate::keymap::{Focus, Press};
 use crate::shell::{LEADER_TIMEOUT, Leader};
 
-/// Keys a text field that attn draws has passed on reach the keymap with this suffix on the
-/// field's key, so the keymap leaves the field the keys it keeps for itself.
-pub(crate) const FIELD_KEY_SUFFIX: &str = ".field";
-
 /// A key the window hears: from Rune when nothing has focus, or after a focused control
-/// passed it on. A focused text field has already taken typing and its edit commands.
+/// passed it on. A focused text field has already offered it to `on_field_key` and taken
+/// typing and its edit commands.
 ///
 /// The order: a pending sequence takes the next key; the terminal holding the keyboard keeps
-/// what types text and the shell's own Ctrl keys on Linux; then the keymap; then the terminal;
-/// then nothing. A modal dialog keeps every bound key from acting, and from the menu bar.
+/// what types text and the shell's own Ctrl keys on Linux; then the keymap, unless a text field
+/// passed the key on; then the terminal; then nothing. A modal dialog keeps every bound key
+/// from acting, and from the menu bar.
 pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if matches!(ev.key, Key::Modifier { .. }) {
         return false;
@@ -41,7 +39,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    let field = in_field(tx);
+    let field = tx.in_text_field();
     if !field && crate::markdown::annotating::on_key(state, ev, tx) {
         return true;
     }
@@ -73,6 +71,9 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     if ev.key == Key::Escape && crate::garden::climb_tile(state, tx) {
         return true;
     }
+    if field {
+        return false;
+    }
     let terminal = match tx.focused() {
         None => state.window.typing_terminal(&state.facts),
         Some(_) => None,
@@ -87,7 +88,7 @@ pub(crate) fn on_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
         return send_to_terminal(state, terminal, ev, tx);
     }
     let focus = Focus {
-        field,
+        field: false,
         terminal: terminal.is_some(),
     };
     match state.keymap.press(ev, tx, focus) {
@@ -272,16 +273,15 @@ pub(crate) fn on_paste(state: &mut State, content: &ClipboardContent, tx: &mut T
     }
 }
 
-/// The keymap's turn ahead of a focused field's editor, as the Tauri app's shortcuts run
-/// before an input hears the key: a ⌘ or Ctrl chord bound to an action the field does not keep
-/// runs it. The editor would otherwise take the bound chords on the keys it moves the caret
-/// with, such as the row keys on the arrows.
-pub(crate) fn shortcut_before_field(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-    if matches!(ev.key, Key::Modifier { .. }) || modal(state) || !(ev.mods.cmd || ev.mods.ctrl) {
+/// A key pressed in a focused text field, before the field hears it, as the Tauri app's
+/// shortcuts run before an input does: a chord bound to an action the field does not keep runs
+/// it. A field never starts a sequence, and a modal dialog's field hears every key first.
+pub(crate) fn on_field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
+    if modal(state) {
         return false;
     }
     let focus = Focus {
-        field: in_field(tx),
+        field: true,
         terminal: false,
     };
     match state.keymap.press(ev, tx, focus) {
@@ -300,15 +300,10 @@ fn modal(state: &State) -> bool {
 
 fn bound(state: &State, ev: &KeyEvent, tx: &Tx) -> bool {
     let focus = Focus {
-        field: in_field(tx),
+        field: tx.in_text_field(),
         terminal: false,
     };
     state.keymap.press(ev, tx, focus) != Press::Unbound
-}
-
-fn in_field(tx: &Tx) -> bool {
-    tx.focused()
-        .is_some_and(|key| key.ends_with(FIELD_KEY_SUFFIX))
 }
 
 /// Whether the shortcut's action ran.

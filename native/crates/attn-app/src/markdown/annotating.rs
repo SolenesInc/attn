@@ -572,10 +572,7 @@ fn composer_box(
         "Ctrl+Enter"
     };
     let field = text_input(&composer.text, type_::BODY)
-        .key(key(
-            tile,
-            &format!("composer{}", crate::keys::FIELD_KEY_SUFFIX),
-        ))
+        .key(key(tile, "composer.field"))
         .label(if overall { "Overall note" } else { "Comment" })
         .placeholder(
             if overall {

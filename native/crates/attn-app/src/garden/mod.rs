@@ -496,11 +496,6 @@ pub(crate) fn field_key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     }
 }
 
-fn typing(tx: &Tx) -> bool {
-    tx.focused()
-        .is_some_and(|key| key.ends_with(crate::keys::FIELD_KEY_SUFFIX))
-}
-
 /// The garden's keys while focus is inside it: `/` or ⌘F goes to the search field, the arrows
 /// walk the rows of the place it stands in, → drills into the focused row in columns, ← climbs
 /// out, and Escape closes the garden.
@@ -512,14 +507,14 @@ pub(crate) fn key(state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
     };
     let slash = matches!(&ev.key, Key::Text(t) if t == "/");
     let find = matches!(&ev.key, Key::Command(c) if c.eq_ignore_ascii_case(&'f')) && accel;
-    if find || (slash && !typing(tx)) {
+    if find || (slash && !tx.in_text_field()) {
         focus_search(state, tx);
         return true;
     }
     if ev.key == Key::Escape {
         return crate::shell::escape_drawers(state, tx);
     }
-    if typing(tx) || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
+    if tx.in_text_field() || ev.mods.cmd || ev.mods.ctrl || ev.mods.alt {
         return false;
     }
     match ev.key {

@@ -288,6 +288,7 @@ pub fn app() -> rune::App<State> {
     })
     .titlebar(Titlebar::new(shell::TITLE_BAR_HEIGHT))
     .on_ime(keys::on_ime)
+    .on_field_key(keys::on_field_key)
     .on_open_url(open_link)
     .on_modifiers(keys::on_modifiers)
 }
@@ -304,6 +305,7 @@ pub fn tile_window_app(size: (f32, f32)) -> rune::App<State> {
         ..AppSpec::new("attn", size, State::default, desktop::windows_view)
     })
     .on_ime(keys::on_ime)
+    .on_field_key(keys::on_field_key)
     .on_focus(desktop::window_focus)
     .on_quit(desktop::tile_window_quits)
     .on_close(desktop::tile_window_closed)
