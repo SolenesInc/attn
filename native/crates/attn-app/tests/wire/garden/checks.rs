@@ -149,7 +149,7 @@ fn rejecting_a_check_asks_what_would_prove_it_and_escape_puts_the_reason_away() 
     assert!(
         world
             .screen()
-            .find(Target::key("garden.check.C1.reject"))
+            .find(Target::key("garden.check.C1.field"))
             .is_none()
     );
     assert_eq!(
@@ -175,7 +175,7 @@ fn rejecting_a_check_asks_what_would_prove_it_and_escape_puts_the_reason_away() 
     assert!(
         world
             .screen()
-            .find(Target::key("garden.check.C2.reject"))
+            .find(Target::key("garden.check.C2.field"))
             .is_none()
     );
     assert_eq!(

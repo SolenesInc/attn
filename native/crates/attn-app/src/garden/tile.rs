@@ -87,6 +87,7 @@ pub(crate) fn body(desktop: &str, leaf: &str, id: &str, reads: &Reads, t: &Token
         .gap(space::S2)
         .children(back)
         .child(sheet.head(here, to_garden))
+        .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here))
         .children(sheet.seeds("plot", "Plot", children))

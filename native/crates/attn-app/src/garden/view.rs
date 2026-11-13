@@ -1065,6 +1065,7 @@ fn page(state: &State, place: &Place, here: &Arc<Seed>, stacked: bool, t: &Token
         .padding(space::S3)
         .gap(space::S2)
         .child(sheet.head(here, open_as_tile(&here.id, t)))
+        .child(sheet.authorization(here))
         .child(sheet.plan(here))
         .children(sheet.checks(here));
     if stacked && model::is_plot(here) {

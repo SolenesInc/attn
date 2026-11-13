@@ -271,7 +271,7 @@ fn a_seed_tile_judges_its_checks_and_shows_the_reason_as_it_is_typed() {
     assert_eq!(
         world
             .screen()
-            .get(Target::key("seed-tile.t.check.C1.reject"))
+            .get(Target::key("seed-tile.t.check.C1.field"))
             .value
             .as_deref(),
         Some("a run on Linux")

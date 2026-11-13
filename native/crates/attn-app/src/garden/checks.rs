@@ -1,24 +1,13 @@
-use attn_protocol::{
-    ActorView, Seed, SeedCheck, SeedCheckMessage, SeedCheckResultMessage, SeedSharedCheck,
-};
+use attn_protocol::{ActorView, Seed, SeedCheck, SeedCheckMessage, SeedSharedCheck};
 use attn_ui::GlyphButton;
 use rune::tok::{space, type_};
-use rune::{El, Key, KeyEvent, Tx, col, row, text, text_input};
+use rune::{El, KeyEvent, Tx, col, row, text, text_input};
 
 use super::model::{self, SessionNames};
 use super::sheet::{Sheet, meta_word};
+use super::spot::Spot;
 use super::view::kit_button;
 use crate::State;
-
-/// A check move under way on one seed page, or the reason a reject is being written.
-pub(crate) struct Judging {
-    at: String,
-    seed: String,
-    check: String,
-    rejecting: bool,
-    busy: bool,
-    failure: Option<String>,
-}
 
 fn box_glyph(state: &str) -> &'static str {
     match state {
@@ -64,22 +53,7 @@ fn evidence_label(evidence: &attn_protocol::SeedCheckEvidence) -> String {
         .to_owned()
 }
 
-fn box_key(at: &str, check: &str) -> String {
-    format!("{at}.check.{check}.box")
-}
-
-fn reject_key(at: &str, check: &str) -> String {
-    format!("{at}.check.{check}.reject")
-}
-
 impl Sheet<'_> {
-    fn judging(&self, seed: &str, check: &str) -> Option<&Judging> {
-        self.garden
-            .judging
-            .as_ref()
-            .filter(|j| j.at == self.prefix && j.seed == seed && j.check == check)
-    }
-
     /// The seed's checks, each with the moves that judge it, then the checks it shares with
     /// every child, then the removed ones while shown.
     pub(super) fn checks(&self, here: &Seed) -> Option<El> {
@@ -142,10 +116,9 @@ impl Sheet<'_> {
     fn check_row(&self, here: &Seed, check: &SeedCheck) -> El {
         let t = self.t;
         let kit = attn_ui::kit(t);
-        let at = self.prefix.clone();
-        let judging = self.judging(&here.id, &check.id);
-        let busy = judging.is_some_and(|j| j.busy);
-        let rejecting = judging.is_some_and(|j| j.rejecting);
+        let spot = Spot::new(&self.prefix, &here.id, &format!("check.{}", check.id));
+        let shown = self.garden.shown(&spot);
+        let (busy, rejecting) = (shown.busy, shown.writing);
         let state = check.state.as_str();
         let mark = if check.removed {
             text(box_glyph(state))
@@ -160,7 +133,7 @@ impl Sheet<'_> {
             } else {
                 ("uncheck", "Uncheck")
             };
-            let mover = Move::new(&at, &here.id, &check.id);
+            let pressed = spot.clone();
             GlyphButton::new(box_glyph(state), format!("{word} {}", check.id))
                 .help(format!(
                     "{state}: {}",
@@ -171,10 +144,10 @@ impl Sheet<'_> {
                     }
                 ))
                 .on_press_tx(move |state: &mut State, tx: &mut Tx| {
-                    mover.send(state, verb, None, tx)
+                    judge(&pressed, state, verb, None, tx)
                 })
                 .build(kit)
-                .key(box_key(&at, &check.id))
+                .key(spot.key("box"))
                 .border(1.0, t.border)
         };
         let mut line = row()
@@ -254,20 +227,21 @@ impl Sheet<'_> {
             );
         }
         if rejecting {
-            let mover = Move::new(&at, &here.id, &check.id);
+            let typed = spot.clone();
             main = main.child(
-                text_input(&self.garden.judge_words, type_::BODY)
-                    .key(reject_key(&at, &check.id))
+                text_input(&self.garden.words, type_::BODY)
+                    .key(spot.field())
                     .single_line()
                     .label(format!("Reject {}: what would prove it", check.id))
                     .placeholder("what would prove it", t.text_muted)
                     .on_edit(|state: &mut State| {
                         let garden = &mut state.window.garden;
                         garden.revision += 1;
-                        &mut garden.judge_words
+                        &mut garden.words
                     })
                     .on_input_key(move |state: &mut State, ev: &KeyEvent, tx: &mut Tx| {
-                        mover.reject_key(state, ev, tx)
+                        let home = typed.key("box");
+                        typed.field_key(state, ev, &home, |s, w, tx| reject(&typed, s, w, tx), tx)
                     })
                     .w_full()
                     .color(t.text_primary)
@@ -277,7 +251,7 @@ impl Sheet<'_> {
                     .padding(space::S1),
             );
         }
-        if let Some(failure) = judging.and_then(|j| j.failure.clone()) {
+        if let Some(failure) = shown.failure.map(str::to_owned) {
             main = main.child(
                 text(failure.clone())
                     .key(self.key(&format!("check.{}.error", check.id)))
@@ -291,12 +265,12 @@ impl Sheet<'_> {
         let mut actions = row().gap(space::S1);
         if !check.removed && !rejecting {
             let action = |word: &str, verb: &'static str, name: String, part: &str| {
-                let mover = Move::new(&at, &here.id, &check.id);
+                let pressed = spot.clone();
                 kit_button(word)
                     .disabled(busy)
                     .on_press_tx(move |state: &mut State, tx: &mut Tx| match verb {
-                        "reject" => mover.begin_reject(state, tx),
-                        verb => mover.send(state, verb, None, tx),
+                        "reject" => pressed.write(state, "", tx),
+                        verb => judge(&pressed, state, verb, None, tx),
                     })
                     .build(kit)
                     .key(self.key(&format!("check.{}.{part}", check.id)))
@@ -386,137 +360,36 @@ fn toggle_fold(state: &mut State, key: &str) {
     garden.revision += 1;
 }
 
-/// One check on one seed page, and the moves that judge it.
-#[derive(Clone)]
-struct Move {
-    at: String,
-    seed: String,
-    check: String,
+/// Sends `verb` for the check at `spot`, whose keyboard home is its box.
+fn judge(spot: &Spot, state: &mut State, verb: &'static str, summary: Option<String>, tx: &mut Tx) {
+    let (seed_id, check_id) = (spot.seed().to_owned(), check_of(spot));
+    spot.send(
+        state,
+        |request_id| SeedCheckMessage {
+            seed_id,
+            check_id: Some(check_id),
+            verb: verb.into(),
+            summary,
+            request_id: Some(request_id),
+            ..SeedCheckMessage::new()
+        },
+        spot.key("box"),
+        tx,
+    );
 }
 
-impl Move {
-    fn new(at: &str, seed: &str, check: &str) -> Move {
-        Move {
-            at: at.to_owned(),
-            seed: seed.to_owned(),
-            check: check.to_owned(),
-        }
-    }
+fn check_of(spot: &Spot) -> String {
+    spot.part().trim_start_matches("check.").to_owned()
+}
 
-    fn busy(state: &State) -> bool {
-        state.window.garden.judging.as_ref().is_some_and(|j| j.busy)
-    }
-
-    fn begin_reject(&self, state: &mut State, tx: &mut Tx) {
-        if Move::busy(state) {
-            return;
-        }
-        let garden = &mut state.window.garden;
-        garden.judging = Some(Judging {
-            at: self.at.clone(),
-            seed: self.seed.clone(),
-            check: self.check.clone(),
-            rejecting: true,
-            busy: false,
-            failure: None,
-        });
-        garden.judge_words = Default::default();
-        garden.revision += 1;
-        tx.focus(reject_key(&self.at, &self.check), true);
-    }
-
-    fn reject_key(&self, state: &mut State, ev: &KeyEvent, tx: &mut Tx) -> bool {
-        match ev.key {
-            Key::Enter => {
-                let reason = state.window.garden.judge_words.text.trim().to_owned();
-                if reason.is_empty() {
-                    if let Some(judging) = state.window.garden.judging.as_mut() {
-                        judging.failure = Some(format!(
-                            "rejecting {} needs a reason: say what would prove it",
-                            self.check
-                        ));
-                    }
-                    state.window.garden.revision += 1;
-                } else {
-                    self.send(state, "reject", Some(reason), tx);
-                }
-                true
-            }
-            Key::Escape => {
-                self.close(state, tx);
-                true
-            }
-            _ => false,
-        }
-    }
-
-    fn close(&self, state: &mut State, tx: &mut Tx) {
-        let garden = &mut state.window.garden;
-        garden.judging = None;
-        garden.revision += 1;
-        tx.focus(box_key(&self.at, &self.check), true);
-    }
-
-    fn send(&self, state: &mut State, verb: &'static str, summary: Option<String>, tx: &mut Tx) {
-        if Move::busy(state) {
-            return;
-        }
-        let rejecting = verb == "reject";
-        let garden = &mut state.window.garden;
-        garden.judging = Some(Judging {
-            at: self.at.clone(),
-            seed: self.seed.clone(),
-            check: self.check.clone(),
-            rejecting,
-            busy: true,
-            failure: None,
-        });
-        garden.revision += 1;
-        let (seed_id, check_id) = (self.seed.clone(), self.check.clone());
-        let moved = self.clone();
-        state.ask(
-            |request_id| SeedCheckMessage {
-                seed_id,
-                check_id: Some(check_id),
-                verb: verb.into(),
-                summary,
-                request_id: Some(request_id),
-                ..SeedCheckMessage::new()
-            },
-            move |state, answer, tx| {
-                let outcome = answer.outcome().and_then(|reply| {
-                    reply
-                        .parse::<SeedCheckResultMessage>()
-                        .map(|_| ())
-                        .ok_or_else(|| "The check did not move".to_owned())
-                });
-                moved.settle(state, rejecting, outcome, tx);
-            },
-            tx,
+fn reject(spot: &Spot, state: &mut State, reason: String, tx: &mut Tx) {
+    if reason.is_empty() {
+        let check = check_of(spot);
+        spot.fail(
+            state,
+            format!("rejecting {check} needs a reason: say what would prove it"),
         );
+        return;
     }
-
-    fn settle(&self, state: &mut State, rejecting: bool, outcome: Result<(), String>, tx: &mut Tx) {
-        let garden = &mut state.window.garden;
-        garden.revision += 1;
-        let ours = garden
-            .judging
-            .as_ref()
-            .is_some_and(|j| j.at == self.at && j.seed == self.seed && j.check == self.check);
-        if !ours {
-            return;
-        }
-        match outcome {
-            Ok(()) if rejecting => self.close(state, tx),
-            Ok(()) => garden.judging = None,
-            Err(reason) => {
-                let judging = garden.judging.as_mut().expect("ours");
-                judging.busy = false;
-                judging.failure = Some(reason);
-                if rejecting {
-                    tx.focus(reject_key(&self.at, &self.check), true);
-                }
-            }
-        }
-    }
+    judge(spot, state, "reject", Some(reason), tx);
 }
