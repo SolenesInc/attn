@@ -651,6 +651,98 @@ fn zoom_widens_the_active_tile_and_focus_shows_it_alone_each_until_pressed_again
     );
 }
 
+/// How strongly the veil over `leaf`'s body dims it.
+fn veil(world: &World, leaf: &str) -> f32 {
+    let (_, opacity) = world
+        .runtime()
+        .presented(&format!("tile.{leaf}.veil"))
+        .unwrap_or_else(|| panic!("{leaf} has a veil"));
+    (opacity * 100.0).round() / 100.0
+}
+
+/// The tiles that show the spotlight's corner marks.
+fn spotlit(world: &World) -> Vec<String> {
+    let mut leaves: Vec<String> = world
+        .runtime()
+        .elements()
+        .into_iter()
+        .filter(|e| !e.exiting)
+        .filter_map(|e| {
+            let key = e.key?;
+            let leaf = key.strip_prefix("tile.")?.strip_suffix(".spotlight.top")?;
+            Some(leaf.to_owned())
+        })
+        .collect();
+    leaves.sort();
+    leaves
+}
+
+#[test]
+fn the_active_agent_is_spotlit_while_the_others_are_veiled_and_only_focus_draws_a_border() {
+    let first = || desktop(1, "a", Some(row([pane("a"), pane("b")])));
+    let mut world = start(vec![first()]);
+    world.advance(Duration::from_secs(1));
+    assert_eq!((veil(&world, "a"), veil(&world, "b")), (0.0, 0.42));
+    assert_eq!(spotlit(&world), ["a"]);
+
+    arrange(
+        &mut world,
+        "work/desktop_1",
+        vec![with_active(first(), "b")],
+    );
+    world.advance(Duration::from_secs(1));
+    assert_eq!((veil(&world, "a"), veil(&world, "b")), (0.42, 0.0));
+    assert_eq!(spotlit(&world), ["b"]);
+
+    press(&mut world, Action::TerminalToggleZoom);
+    world.advance(Duration::from_secs(1));
+    assert_eq!(
+        veil(&world, "a"),
+        0.28,
+        "zoom veils the others more lightly"
+    );
+    assert_eq!(spotlit(&world), ["b"]);
+    press(&mut world, Action::TerminalToggleZoom);
+
+    let ringed = |world: &World| {
+        let pose = world
+            .runtime()
+            .presented_pose("tile.b")
+            .expect("b is drawn");
+        pose.shadows().iter().any(|s| s.spread == 1.0 && !s.inset)
+    };
+    assert!(!ringed(&world), "a tile in the row has no border");
+    press(&mut world, Action::TerminalToggleMaximize);
+    world.advance(Duration::from_secs(1));
+    assert!(ringed(&world), "the tile shown alone in focus has one");
+    assert_eq!(
+        spotlit(&world),
+        Vec::<String>::new(),
+        "alone, nothing needs telling apart"
+    );
+    press(&mut world, Action::TerminalToggleMaximize);
+    world.advance(Duration::from_secs(1));
+    assert_eq!(spotlit(&world), ["b"]);
+    assert!(world.runtime_is_at_rest());
+}
+
+#[test]
+fn a_tile_that_is_not_an_agent_fades_while_another_is_active_and_less_under_zoom() {
+    let tree = row([pane("a"), tile("m", "markdown")]);
+    let mut world = start(vec![desktop(1, "a", Some(tree))]);
+    let faded = |world: &mut World| {
+        world.advance(Duration::from_secs(1));
+        let (_, opacity) = world.runtime().presented("tile.m").expect("m is drawn");
+        (opacity * 100.0).round() / 100.0
+    };
+    assert_eq!(faded(&mut world), 0.58);
+    press(&mut world, Action::TerminalToggleZoom);
+    assert_eq!(faded(&mut world), 0.72);
+    press(&mut world, Action::TerminalToggleZoom);
+    assert_eq!(faded(&mut world), 0.58);
+    assert!(world.runtime_is_at_rest());
+}
+
 #[test]
 fn escape_leaves_focus_before_the_terminal_hears_it() {
     let tree = row([pane("a"), pane("b")]);

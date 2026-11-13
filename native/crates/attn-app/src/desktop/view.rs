@@ -215,6 +215,12 @@ pub(super) fn lone(state: &State, desktop: &Desktop, leaf: &Leaf, t: &Tokens, sc
         dividers: false,
         dragging: None,
         rings: &[],
+        screen: super::spotlight::Screen {
+            many: false,
+            zoomed: false,
+            focus: false,
+            lone: true,
+        },
         holder: state.window.keyboard.as_ref(),
         terminals: &state.terminals,
         stale: &stale_builds(&state.facts.sessions, &state.window.desk),
@@ -258,6 +264,12 @@ fn screen(
                     dividers: view == super::layout::View::Normal,
                     dragging,
                     rings: &desk.rings,
+                    screen: super::spotlight::Screen {
+                        many: rendered.leaves().len() > 1,
+                        zoomed: view == super::layout::View::Zoomed,
+                        focus: matches!(view, super::layout::View::Focused(_)),
+                        lone: false,
+                    },
                     holder,
                     terminals,
                     stale: &stale,
@@ -322,6 +334,7 @@ struct TileCx<'a> {
     dragging: Option<&'a str>,
     /// Tiles that ring because they arrived on screen.
     rings: &'a [super::arrival::Ring],
+    screen: super::spotlight::Screen,
     holder: Option<&'a Holder>,
     terminals: &'a Terminals,
     /// Sessions whose terminal runs an older build, with the notice still up.
@@ -492,8 +505,14 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
         (LeafKind::Pane, _) => takes(empty(t, "Starting…"), &holder),
         (LeafKind::Tile { kind, .. }, _) => takes(empty(t, tile_kind_label(kind)), &holder),
     };
+    let look = super::spotlight::Look::of(
+        matches!(leaf.kind, LeafKind::Pane),
+        active,
+        cx.dragging == Some(leaf.id.as_str()),
+        cx.screen,
+    );
     let recorded = format!("tile.{}", leaf.id);
-    col()
+    let frame = col()
         .key(recorded.clone())
         .min_w(0.0)
         .min_h(0.0)
@@ -506,27 +525,21 @@ fn tile(leaf: &Leaf, cx: &TileCx) -> El {
             rects.insert(recorded.clone(), rect);
         })
         .fill(t.bg_tile)
-        .border(
-            1.0,
-            if held {
-                t.accent
-            } else if active {
-                t.border_focus
-            } else {
-                t.border
-            },
-        )
         .role("group")
         .label(title.clone())
-        .transition(tile_transition(&leaf.kind))
-        .opacity(if cx.dragging == Some(leaf.id.as_str()) {
-            0.5
-        } else {
-            1.0
-        })
-        .child(header(leaf, &title, cx))
+        .transition(tile_transition(&leaf.kind));
+    let key = format!("tile.{}", leaf.id);
+    let below = header_height(pane_of(desktop, &leaf.id).is_some());
+    look.frame(frame, t)
+        .child(header(leaf, &title, &look, cx))
         .child(body)
+        .children(look.veil(&key, below, t))
+        .children(look.marks(&key, t))
         .children(super::arrival::overlay(cx.rings, &leaf.id, t))
+}
+
+fn header_height(agent: bool) -> f32 {
+    if agent { AGENT_HEADER_PX } else { HEADER_PX }
 }
 
 /// The spring the Tauri app moves a row's tiles on.
@@ -577,7 +590,7 @@ pub(crate) fn header_source(state: &State, leaf: &str) -> Option<super::drag::So
 
 /// A tile's header, which the tile area drags the tile by. An agent's header carries a second
 /// line under its name.
-fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
+fn header(leaf: &Leaf, title: &str, look: &super::spotlight::Look, cx: &TileCx) -> El {
     let t = cx.t;
     let key = format!("tile.{}", leaf.id);
     let settle = cx
@@ -595,7 +608,7 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
         .items_center()
         .gap(2.0)
         .pl(space::S1)
-        .fill(t.bg_tile)
+        .fill(look.header_fill(t).unwrap_or(t.bg_tile))
         .group_opacity(0.0, 1.0)
         .children(session.map(|s| rename_button(&key, s, title, t)))
         .children(
@@ -621,7 +634,7 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
                     .child(
                         text(title.to_owned())
                             .font(type_::LABEL)
-                            .color(t.text_secondary)
+                            .color(look.title(t))
                             .single_line()
                             .truncate()
                             .grow(1.0),
@@ -641,11 +654,7 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
     let headline = headline
         .children(pops_out.then(|| pop_out_button(&cx.desktop.id, &leaf.id, popped, cx)))
         .children(focused.then(|| return_to_row(&key, &cx.desktop.id, cx)));
-    let height = if pane.is_some() {
-        AGENT_HEADER_PX
-    } else {
-        HEADER_PX
-    };
+    let height = header_height(pane.is_some());
     let track = match (settle, pane) {
         (Some(settle), Some(pane)) => {
             settling_track(&leaf.id, settle, cx.drains.get(&pane.session_id), height)
@@ -654,11 +663,14 @@ fn header(leaf: &Leaf, title: &str, cx: &TileCx) -> El {
     };
     col()
         .key(format!("{key}.header"))
+        .fill(look.header_fill(t).unwrap_or(rune::Color::TRANSPARENT))
         .w_full()
         .h(height)
         .hover_group()
         .child(headline)
-        .children(pane.map(|pane| subline(&key, &leaf.id, &pane.session_id, session, t)))
+        .children(pane.map(|pane| {
+            subline(&key, &leaf.id, &pane.session_id, session, t).opacity(look.subline_opacity())
+        }))
         .children(track)
 }
 

@@ -14,6 +14,7 @@ mod overview;
 mod peek;
 mod provenance;
 mod shelf;
+mod spotlight;
 mod stale_build;
 mod terminal_menu;
 mod usage;

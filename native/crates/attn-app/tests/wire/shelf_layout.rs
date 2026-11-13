@@ -1198,8 +1198,12 @@ fn focusing(focused: bool) -> Recording {
 
 const ALONE: &str = "a tile is shown alone|a tile shown alone returns";
 const BY_DESIGN: &str = "showing a tile alone and returning it land at once, as in the Tauri app";
+const SPOTLIGHT_MARKS: &str =
+    "the spotlight's corner marks come and go at once, as in the Tauri app";
 
 const LANDS_AT_ONCE: &[AllowRow] = &[
+    AllowRow::new("pop-in", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
+    AllowRow::new("pop-out", ".spotlight.", "", SPOTLIGHT_MARKS).max(4),
     AllowRow::new("jump", "tile.a", ALONE, BY_DESIGN).max(22),
     AllowRow::new("pop-in", "tile.", ALONE, BY_DESIGN).max(2),
     AllowRow::new("pop-out", "tile.", ALONE, BY_DESIGN).max(2),
