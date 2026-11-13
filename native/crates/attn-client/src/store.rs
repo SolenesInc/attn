@@ -22,6 +22,14 @@ pub struct Facts {
     /// What each document tile holds, as the daemon last sent it.
     pub tile_contents: Arc<TileContents>,
     pub garden: Arc<Garden>,
+    pub github: Arc<GitHub>,
+}
+
+/// The GitHub hosts the daemon found signed in, or why it does not look for pull requests.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GitHub {
+    pub hosts: Vec<String>,
+    pub polling_off_reason: Option<String>,
 }
 
 /// Document tiles' contents by desktop and tile.
@@ -142,7 +150,8 @@ impl Slices {
     pub const OUTPOSTS: Slices = Slices(1 << 5);
     pub const TILE_CONTENTS: Slices = Slices(1 << 6);
     pub const GARDEN: Slices = Slices(1 << 7);
-    pub const ALL: Slices = Slices((1 << 8) - 1);
+    pub const GITHUB: Slices = Slices(1 << 8);
+    pub const ALL: Slices = Slices((1 << 9) - 1);
 
     pub fn intersects(self, other: Slices) -> bool {
         self.0 & other.0 != 0
@@ -268,6 +277,10 @@ impl Store {
                 total: state.seeds_total.unwrap_or(seeds.len() as i64),
                 seeds,
             });
+            facts.github = Arc::new(GitHub {
+                hosts: state.github_hosts.unwrap_or_default(),
+                polling_off_reason: state.github_polling_off_reason.filter(|r| !r.is_empty()),
+            });
             Slices::ALL
         });
     }
@@ -279,6 +292,16 @@ impl Store {
             }
             facts.settings = Arc::new(settings);
             Slices::SETTINGS
+        });
+    }
+
+    pub(crate) fn set_github(&self, github: GitHub) {
+        self.change(|facts| {
+            if *facts.github == github {
+                return Slices::NONE;
+            }
+            facts.github = Arc::new(github);
+            Slices::GITHUB
         });
     }
 

@@ -12,7 +12,7 @@ pub use link::{
 };
 pub use pulse::Pulse;
 pub use store::{
-    Connection, Facts, Garden, Profiles, Refusal, Slices, Store, Subscription, TileContent,
+    Connection, Facts, Garden, GitHub, Profiles, Refusal, Slices, Store, Subscription, TileContent,
     TileContents, TileKey,
 };
 

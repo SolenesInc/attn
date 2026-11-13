@@ -94,6 +94,10 @@ pub struct Setting {
 pub struct Feature {
     pub key: &'static str,
     pub name: &'static str,
+    pub summary: &'static str,
+    pub note: &'static str,
+    pub group: &'static str,
+    pub timing: &'static str,
     pub stage: &'static str,
     pub applies: &'static str,
     pub search: &'static str,
@@ -191,15 +195,15 @@ pub const SETTINGS: &[Setting] = &[
 ];
 
 pub const FEATURES: &[Feature] = &[
-    Feature { key: "asks_enabled", name: "Asks", stage: "on by default", applies: "New agents", search: "questions answer decisions drawer" },
-    Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", stage: "experimental", applies: "Now", search: "one-screen one screen new-session new session project path" },
-    Feature { key: "outposts_enabled", name: "Outposts", stage: "experimental", applies: "Now", search: "remote computers bridge ssh" },
-    Feature { key: "phone_access_enabled", name: "Phone access", stage: "experimental", applies: "Now", search: "mobile iphone pair" },
-    Feature { key: "analytics.enabled", name: "Usage analytics", stage: "experimental", applies: "Now", search: "telemetry vents record" },
-    Feature { key: "self_update_enabled", name: "Self-update", stage: "experimental", applies: "Now", search: "update upgrade version release install" },
-    Feature { key: "direct_agent_launch_enabled", name: "Direct agent launches", stage: "on by default", applies: "New agents", search: "memory launcher" },
-    Feature { key: "code_review_enabled", name: "Code review", stage: "experimental", applies: "Now", search: "review diff change walkthrough attn review" },
-    Feature { key: "pty_shared_host_enabled", name: "Shared terminal host", stage: "on by default", applies: "New terminals", search: "terminal hosting pty backend rust workers memory" },
+    Feature { key: "asks_enabled", name: "Asks", summary: "Answer agents' questions from one drawer.", note: "", group: "Agents", timing: "Starts with the next agent you open.", stage: "on by default", applies: "New agents", search: "questions answer decisions drawer" },
+    Feature { key: "new_session_launcher_enabled", name: "Launcher 2.0", summary: "Pick a path, repository and worktree for a new agent or terminal in one dialog.", note: "", group: "Interface", timing: "", stage: "experimental", applies: "Now", search: "one-screen one screen new-session new session project path" },
+    Feature { key: "outposts_enabled", name: "Outposts", summary: "Connect this home to attn on other computers.", note: "", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "remote computers bridge ssh" },
+    Feature { key: "phone_access_enabled", name: "Phone access", summary: "Let phones you pair see this home's agents.", note: "Turning it off disconnects every phone.", group: "Connections", timing: "", stage: "experimental", applies: "Now", search: "mobile iphone pair" },
+    Feature { key: "analytics.enabled", name: "Usage analytics", summary: "Keep a redacted record of how attn is used, here and on outposts.", note: "Nothing is sent unless you turn on sharing.", group: "Data", timing: "", stage: "experimental", applies: "Now", search: "telemetry vents record" },
+    Feature { key: "self_update_enabled", name: "Self-update", summary: "See how attn was installed and whether an update is available.", note: "", group: "Under the hood", timing: "", stage: "experimental", applies: "Now", search: "update upgrade version release install" },
+    Feature { key: "direct_agent_launch_enabled", name: "Direct agent launches", summary: "Launch agents using less memory.", note: "", group: "Under the hood", timing: "Starts with the next agent you open.", stage: "on by default", applies: "New agents", search: "memory launcher" },
+    Feature { key: "code_review_enabled", name: "Code review", summary: "Agents present a change as a review document that resolves against its repository.", note: "", group: "Agents", timing: "", stage: "experimental", applies: "Now", search: "review diff change walkthrough attn review" },
+    Feature { key: "pty_shared_host_enabled", name: "Shared terminal host", summary: "Reduce memory use by sharing a host process across terminals, and stream output only to the terminals the window shows.", note: "", group: "Under the hood", timing: "Starts with the next terminal you open.", stage: "on by default", applies: "New terminals", search: "terminal hosting pty backend rust workers memory" },
 ];
 
 pub mod prompts {

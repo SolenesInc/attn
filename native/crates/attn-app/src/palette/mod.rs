@@ -127,6 +127,9 @@ pub(crate) struct Listing {
 /// `wanted` and otherwise turns it to `wanted`, keeping what the user typed. Choosing a
 /// snooze, either face's keys leave the choices for that face.
 pub(crate) fn open(state: &mut State, wanted: Face, tx: &mut Tx) {
+    if matches!(state.window.layer, Some(Layer::Settings | Layer::Shortcuts)) {
+        return;
+    }
     if is_open(state) {
         let snoozing = state.window.search.snoozing.is_some();
         leave_snooze(state);

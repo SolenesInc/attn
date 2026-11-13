@@ -350,6 +350,7 @@ pub(crate) fn view(state: &State, cx: &mut rune::Cx<State>) -> El {
     let appearance =
         attn_ui::Appearance::from_setting(state.facts.settings.get("theme").map(String::as_str));
     let t = attn_ui::tokens(appearance.is_dark(cx.system_dark()));
+    cx.zoom(crate::settings::text_scale(&state.facts.settings));
     let shown = state.window.tile.as_ref().and_then(|tile| {
         let desktop = state.facts.desktops.iter().find(|d| d.id == tile.desktop)?;
         let tree = Node::parse(&desktop.tree_json)?;

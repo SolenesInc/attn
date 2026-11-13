@@ -50,9 +50,10 @@ impl Hooks<State> for AppHooks {
                 "keyboard": window.keyboard.as_ref().map(|h| json!({"desktop": h.desktop, "pane": h.pane})),
                 "notice": window.notice.as_ref().map(|n| n.text.clone()),
             }),
+            "settings" => crate::settings::automation_state(state),
             "build" => build_identity()?,
             _ => {
-                return Err("slices: connection, sessions, desktops, profiles, window, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
+                return Err("slices: connection, sessions, desktops, profiles, window, settings, build, terminal:<runtime id>, terminal-view:<runtime id>".into());
             }
         }))
     }

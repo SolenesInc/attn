@@ -13,7 +13,10 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
     if state.window.tile.is_some() {
         return crate::desktop::forward_to_main(state, action);
     }
-    if crate::sidebar::dispatch(state, &action, tx) || crate::desktop::run(state, &action, tx) {
+    if crate::sidebar::dispatch(state, &action, tx)
+        || crate::desktop::run(state, &action, tx)
+        || crate::settings::dispatch(state, &action, tx)
+    {
         return true;
     }
     let window = &mut state.window;
@@ -26,7 +29,6 @@ pub fn dispatch(state: &mut State, action: Action, tx: &mut Tx) -> bool {
         Action::UiCommandPalette => crate::palette::open(state, Face::Commands, tx),
         Action::FileOpen => window.toggle_layer(Layer::Palette(Palette::Files), tx),
         Action::SessionsOpen => window.toggle_layer(Layer::Palette(Palette::Sessions), tx),
-        Action::UiOpenSettings => window.toggle_layer(Layer::Settings, tx),
         Action::UiShowShortcuts => window.toggle_layer(Layer::Shortcuts, tx),
         Action::AppQuit => tx.quit(),
         Action::SetSetting { key, value } => {

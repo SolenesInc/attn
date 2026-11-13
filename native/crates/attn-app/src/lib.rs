@@ -21,6 +21,7 @@ pub mod prompts;
 mod requests;
 pub mod screen;
 mod setting;
+mod settings;
 mod shell;
 pub mod sidebar;
 #[cfg(target_os = "macos")]
@@ -152,6 +153,7 @@ pub fn bind(
             sidebar::session_menu::follow(state);
             sidebar::width::follow(state);
             palette::follow(state);
+            settings::follow(state);
             sidebar::advance(state, tx);
             garden::follow(state, tx);
             if state.window.tile.is_none() {
@@ -225,7 +227,9 @@ fn poll(state: &mut State, now: f64, tx: &mut Tx) -> bool {
     }
     let drains = sidebar::follow_countdowns(state, state.wall_ms(tx))
         | desktop::follow_settling(state, state.wall_ms(tx));
+    let settings = settings::poll(state, now, tx);
     shell::expire(state, now, tx)
+        || settings
         || recounted
         || told
         || aged
