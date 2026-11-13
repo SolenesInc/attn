@@ -26,6 +26,7 @@ tempfile = "3"
 
 [dev-dependencies]
 attn-testkit = { path = "../attn-testkit" }
+sha2 = "0.10"
 skrifa = "0.44"
 tempfile = "3"
 

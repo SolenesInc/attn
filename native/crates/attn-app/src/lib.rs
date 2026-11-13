@@ -1,4 +1,5 @@
 mod action;
+pub mod annotations;
 pub mod automation;
 mod connection;
 pub mod daemon;
@@ -14,6 +15,7 @@ mod keys;
 pub mod launch;
 mod palette;
 mod picker;
+pub mod prompts;
 mod requests;
 pub mod screen;
 mod setting;
